@@ -4024,6 +4024,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? { at: entry.at, note: noteText(entry.note) ?? "" }
       : null;
 
+  /** His answer to a pick in his own words, as `entry` keeps it (core choices.ts `ownWordsEntry`); null while it is none. */
+  const wordsOf = (entry: ChoiceEntry | undefined): ParkedItem["words"] => {
+    const words = noteText(entry?.note);
+    return entry?.ownWords && words ? { at: entry.at, words } : null;
+  };
+
   /** A design graph's pick between `directions` (core parked.ts `ParkedPick`). */
   const parkedPick = (
     row: ArtifactRow,
@@ -4039,12 +4045,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? value
         : null;
     const judged = on.stateOf("judge");
+    const words = wordsOf(kept);
     return {
       kind: "directions",
       key: "judge",
       artifact: on.artifact,
       askedAt: on.askedAt,
       dismissed: dismissedOf(kept),
+      words,
       ask: row.ask,
       path: "path" in row.source ? (row.source.path ?? "") : "",
       directions: directions.map((one) => ({
@@ -4055,8 +4063,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       })),
       picked,
       pickedAt: picked && kept ? kept.at : null,
-      // Open until a direction is picked: a note or a value alone answers his judgement, not the pick.
-      state: picked === null && judged === "answered" ? "open" : judged,
+      // Open until a direction is picked or he answers in his own words: a note or a value alone answers his judgement, not the pick.
+      state:
+        picked === null && words === null && judged === "answered"
+          ? "open"
+          : judged,
     };
   };
 
@@ -4077,9 +4088,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       artifact: on.artifact,
       askedAt: on.askedAt,
       dismissed: dismissedOf(entry),
+      words: wordsOf(entry),
       card,
       answer:
-        entry && !entry.dismissed && (pickMade(card, entry) || note !== "")
+        entry &&
+        !entry.dismissed &&
+        !entry.ownWords &&
+        (pickMade(card, entry) || note !== "")
           ? { at: entry.at, options, note }
           : null,
       state: on.stateOf(`card:${card.id}`),

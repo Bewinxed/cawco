@@ -41171,6 +41171,51 @@
                 ]
               }
             ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "words"
+                    ]
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "earlierRevision": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "at",
+                  "note"
+                ]
+              }
+            ]
           }
         ]
       },
@@ -54423,7 +54468,7 @@
         "type": "object",
         "properties": {
           "answer": {
-            "description": "His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either, and once he dismissed it.",
+            "description": "His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either, once he dismissed it, and while he answered in his own words.",
             "type": "object",
             "properties": {
               "at": {
@@ -54456,7 +54501,7 @@
             "$ref": "#/components/schemas/DecisionCard"
           },
           "dismissed": {
-            "description": "Put down without a pick (its Dismiss, or his own words in its place): when, and those words, empty for none; null while it is not.",
+            "description": "Put down without a pick (its Dismiss): when, and the words a dismissal recorded before answers in his own words existed holds, empty for none; null while it is not.",
             "type": "object",
             "properties": {
               "at": {
@@ -54483,6 +54528,22 @@
           },
           "state": {
             "$ref": "#/components/schemas/ParkedState"
+          },
+          "words": {
+            "description": "Answered in his own words with no pick (its Other line): when, and those words; null while it is not.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "words": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "words"
+            ]
           }
         },
         "required": [
@@ -54552,7 +54613,7 @@
             }
           },
           "dismissed": {
-            "description": "Put down without a pick (its Dismiss, or his own words in its place): when, and those words, empty for none; null while it is not.",
+            "description": "Put down without a pick (its Dismiss): when, and the words a dismissal recorded before answers in his own words existed holds, empty for none; null while it is not.",
             "type": "object",
             "properties": {
               "at": {
@@ -54591,6 +54652,22 @@
           },
           "state": {
             "$ref": "#/components/schemas/ParkedState"
+          },
+          "words": {
+            "description": "Answered in his own words with no pick (its Other line): when, and those words; null while it is not.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "words": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "words"
+            ]
           }
         },
         "required": [
@@ -54741,7 +54818,7 @@
         ]
       },
       "ParkedState": {
-        "description": "How an item stands with the agent: `open` while it waits on the person;\n`answered` once he did; `dismissed` once he put it down without a pick\n(a pick of his after it answers it again); `taken` once the agent acted\non his answer or his words elsewhere; `withdrawn` when the agent took it\nback unanswered.",
+        "description": "How an item stands with the agent: `open` while it waits on the person;\n`answered` once he did, by a pick or in his own words; `dismissed` once\nhe put it down without a pick or a word\n(a pick of his after it answers it again); `taken` once the agent acted\non his answer or his words elsewhere; `withdrawn` when the agent took it\nback unanswered.",
         "type": "string",
         "enum": [
           "answered",

@@ -11,13 +11,15 @@
  * held, not an option's media on a page, its folder not gone):
  *
  * - **card**: each card of a decision page (each `data-cawco-choice` of an
- *   HTML page). Answered by a pick (core `pickMade`), a note on it, or a pin
+ *   HTML page). Answered by a pick (core `pickMade`), his own words in place
+ *   of one (core choices.ts `ownWordsEntry`), a note on it, or a pin
  *   standing on it ({@link pinCard}) that the agent replied to and resolved;
- *   dismissed by his Dismiss on it (core choices.ts `dismissedEntry`).
+ *   dismissed by his Dismiss on it (`dismissedEntry`).
  * - **judge**: a canvas or preview to judge, the artifact itself. Answered
  *   by any value, pick or note the person set on it (a direction picked,
- *   `cawco.set`), never by one he is only trying out (core `answersIn`:
- *   a dial, a tuned move); dismissed by his Dismiss on its pick (`picked`).
+ *   his own words in place of a pick, `cawco.set`), never by one he is only
+ *   trying out (core `answersIn`: a dial, a tuned move); dismissed by his
+ *   Dismiss on its pick (`picked`).
  *
  * Any artifact of the person's (not a draft, not handed up or held, not an
  * option's media, not a working canvas: `draw`) also asks on each pin the agent's reply asked on
@@ -55,7 +57,7 @@ export interface QuestionAnswer {
   by: SessionAnswerHow;
   /** The options he picked, by label; a pick only. */
   options?: string[];
-  /** His words: the note, the set keys, the pin's or reply's text, what he said with a dismissal; empty for a resolve or a dismissal without words. */
+  /** His words: the note, his own words in place of a pick, the set keys, the pin's or reply's text, what a dismissal recorded before answers in his own words existed holds; empty for a resolve or a dismissal without words. */
   said: string;
 }
 
@@ -140,21 +142,25 @@ const answeredPin = (pin: Pin): pin is Pin & { resolvedAt: string } =>
 const opening = (pin: Pin): string =>
   pin.thread.find((entry) => entry.by === "person")?.text ?? "";
 
-/** A dismissal of his, when `entry` is one: when, and what he said with it. */
-const dismissal = (entry: ChoiceEntry | undefined): QuestionAnswer | null =>
-  entry?.dismissed
+/** His answer without a pick, when `entry` is one: his own words in place of a pick, or his dismissal, when, and what he said. */
+const pickless = (entry: ChoiceEntry | undefined): QuestionAnswer | null => {
+  if (entry?.ownWords) {
+    return { by: "words", at: entry.at, said: noteText(entry.note) ?? "" };
+  }
+  return entry?.dismissed
     ? { by: "dismiss", at: entry.at, said: noteText(entry.note) ?? "" }
     : null;
+};
 
-/** A card's answer: his dismissal, else his pick, else his note, else a pin on it answered and resolved. */
+/** A card's answer: his own words or his dismissal, else his pick, else his note, else a pin on it answered and resolved. */
 const cardAnswer = (
   asked: { card?: DecisionCard; id: string },
   entry: ChoiceEntry | undefined,
   pins: readonly Pin[]
 ): QuestionAnswer | null => {
-  const dismissed = dismissal(entry);
-  if (dismissed) {
-    return dismissed;
+  const unpicked = pickless(entry);
+  if (unpicked) {
+    return unpicked;
   }
   const note = noteText(entry?.note);
   if (entry && pickMade(asked.card, entry)) {
@@ -174,13 +180,13 @@ const cardAnswer = (
   return pin ? { by: "pin", at: pin.resolvedAt, said: opening(pin) } : null;
 };
 
-/** A judgement's answer: his dismissal of its pick, else every value, pick or note he set on it, at the newest. */
+/** A judgement's answer: his own words or his dismissal on its pick, else every value, pick or note he set on it, at the newest. */
 const judgeAnswer = (
   state: Readonly<Record<string, ChoiceEntry>>
 ): QuestionAnswer | null => {
-  const dismissed = dismissal(state.picked);
-  if (dismissed) {
-    return dismissed;
+  const unpicked = pickless(state.picked);
+  if (unpicked) {
+    return unpicked;
   }
   const set = Object.entries(state).filter(
     ([, entry]) =>

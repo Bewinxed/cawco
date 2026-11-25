@@ -6,9 +6,10 @@
    * anatomy an answered question settles into (QuestionCard: its state's
    * mark and words on the rail, what it asked, what was picked as the kit's
    * option chips, chosen, and his note under them), read-only. One he
+   * answered in his own words settles as a question answered so does:
+   * "answered", no option chosen, and his words under what it asked. One he
    * dismissed settles as a dismissed question does: the muted close mark,
-   * "dismissed", no option left, and the words he wrote in its place under
-   * what it asked. While a pick
+   * "dismissed", no option left. While a pick
    * still waits, the composer holds it (ParkedPrompt) and nothing stands
    * here but the call. The picks are the pane's (parked-queue.svelte.ts), as
    * the hub keeps them, by the artifact the call's answer names.
@@ -75,7 +76,7 @@
       return at < 0 ? [] : [{ at, label: item.card.options[at]?.label ?? id }];
     });
   };
-  /** Its state as its pill says it: a pick picked, a card answered, either dismissed or withdrawn. */
+  /** Its state as its pill says it: a pick picked, a card or his own words answered, either dismissed or withdrawn. */
   const stateWord = (item: ParkedItem): string => {
     if (item.state === "withdrawn") {
       return words.withdrawn;
@@ -83,13 +84,19 @@
     if (dismissedOf(item)) {
       return words.dismissed;
     }
-    return item.kind === "directions" ? words.picked : words.answered;
+    return item.kind === "directions" && !item.words
+      ? words.picked
+      : words.answered;
   };
   /** What he wrote with it, and how its label names it: his note with a pick, or his own words in place of one. */
   const noteOf = (item: ParkedItem): { label: string; text: string } | null => {
     if (item.state === "withdrawn") {
       return null;
     }
+    if (item.words) {
+      return { label: words.yourWords, text: item.words.words };
+    }
+    // A dismissal recorded before answers in his own words existed may hold them.
     if (item.dismissed) {
       return item.dismissed.note
         ? { label: words.yourWords, text: item.dismissed.note }

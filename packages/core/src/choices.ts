@@ -14,8 +14,9 @@ export interface ChoiceEntry {
   at: string;
   /**
    * The person put the question down without a pick (a parked pick's
-   * Dismiss, or words of his own in its place): `note` holds those words,
-   * null for none, and `options` is empty. A pick of his replaces it.
+   * Dismiss): `options` is empty and `note` null. A dismissal recorded
+   * before answers in his own words existed (`ownWords`) may hold them in
+   * `note`. A pick of his replaces it, and so do words he writes on it.
    */
   dismissed?: true;
   /**
@@ -27,6 +28,13 @@ export interface ChoiceEntry {
   note: string | null;
   /** Options picked, in the order picked; empty when cleared. */
   options: string[];
+  /**
+   * The person answered the question in his own words, with no pick (a
+   * parked pick's Other line): `note` holds those words and `options` is
+   * empty. It answers the question as a pick does; a pick of his replaces
+   * it.
+   */
+  ownWords?: true;
   pageHash: string;
   /**
    * Who settled the pick, when it was not the person (hub settling.ts, the
@@ -193,7 +201,9 @@ export const choiceEntryProblem = (
     return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
   }
   return (
-    dismissedProblem(key, entry, entry.options) ?? recordsProblem(key, entry)
+    dismissedProblem(key, entry, entry.options) ??
+    ownWordsProblem(key, entry, entry.options, entry.note) ??
+    recordsProblem(key, entry)
   );
 };
 
@@ -229,6 +239,31 @@ const dismissedProblem = (
   }
   return options.length > 0
     ? `${key} is dismissed: a dismissal holds no options.`
+    : null;
+};
+
+/** Why an entry's answer in his own words ({@link ChoiceEntry.ownWords}) is not one, or null when it is or there is none: true, on words and no options, never dismissed. */
+const ownWordsProblem = (
+  key: string,
+  entry: object,
+  options: readonly unknown[],
+  note: string | null
+): string | null => {
+  const own = "ownWords" in entry ? entry.ownWords : undefined;
+  if (own === undefined) {
+    return null;
+  }
+  if (own !== true) {
+    return `${key}'s ownWords is true or absent.`;
+  }
+  if (options.length > 0) {
+    return `${key} is answered in his own words: such an answer holds no options.`;
+  }
+  if (!note?.trim()) {
+    return `${key} is answered in his own words: its note holds them.`;
+  }
+  return "dismissed" in entry && entry.dismissed !== undefined
+    ? `${key} is both dismissed and answered in his own words: it is one or the other.`
     : null;
 };
 
@@ -317,8 +352,10 @@ export const noteText = (note: string | null | undefined): string | null =>
  * The entry `change` makes of `before` (absent: nothing kept yet), stamped
  * `at`. A pick the hub settled, or recorded from the person's words, keeps
  * its record until the person picks otherwise: a note or a value beside it
- * leaves it as it is, and his own pick replaces it whole. A dismissal
- * stands until he picks: a note beside it is its words.
+ * leaves it as it is, and his own pick replaces it whole. An answer in his
+ * own words stands while its words do: a pick or a value replaces it. A
+ * dismissal stands until he picks or writes: words he writes on it are his
+ * words, never the dismissal's.
  */
 export const changedEntry = (
   before: ChoiceEntry | undefined,
@@ -328,31 +365,47 @@ export const changedEntry = (
   const options =
     "options" in change ? change.options : (before?.options ?? []);
   const same = before !== undefined && sameOptions(before.options, options);
+  const note =
+    "note" in change ? noteText(change.note) : (before?.note ?? null);
   return {
     options,
-    note: "note" in change ? noteText(change.note) : (before?.note ?? null),
+    note,
     value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
     pageHash: change.pageHash,
     at,
     ...(same && before.settled ? { settled: before.settled } : {}),
     ...(same && before.from ? { from: before.from } : {}),
-    ...(before?.dismissed && options.length === 0
+    ...(before?.ownWords && "note" in change && note !== null
+      ? { ownWords: true as const }
+      : {}),
+    ...(before?.dismissed && !("note" in change) && options.length === 0
       ? { dismissed: true as const }
       : {}),
   };
 };
 
 /**
- * The entry the person's Dismiss makes, stamped `at` on page `pageHash`:
- * no pick, and his words with it (`note`), none when he wrote none.
+ * The entry the person's answer in his own words makes (a parked pick's
+ * Other line), stamped `at` on page `pageHash`: no pick, and `words` as his
+ * answer.
  */
-export const dismissedEntry = (
-  note: string,
+export const ownWordsEntry = (
+  words: string,
   pageHash: string,
   at: string
 ): ChoiceEntry => ({
   options: [],
-  note: noteText(note),
+  note: noteText(words),
+  value: null,
+  pageHash,
+  at,
+  ownWords: true,
+});
+
+/** The entry the person's Dismiss makes, stamped `at` on page `pageHash`: no pick and no words. */
+export const dismissedEntry = (pageHash: string, at: string): ChoiceEntry => ({
+  options: [],
+  note: null,
   value: null,
   pageHash,
   at,

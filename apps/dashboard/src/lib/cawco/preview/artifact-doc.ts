@@ -4,6 +4,7 @@ import {
   changedEntry,
   choiceEntryProblem,
   dismissedEntry,
+  ownWordsEntry,
 } from "@cawco/core/choices";
 import {
   type ActivityLine,
@@ -118,6 +119,12 @@ export type ListHold = "quiet" | "reading" | "ready" | { failed: string };
 
 export interface ArtifactDoc {
   /**
+   * The person answers question `key` in his own words, with no pick (core
+   * `ownWordsEntry`): a card's id, or a design graph's `picked`; a sentence
+   * when it was not kept.
+   */
+  answerInWords: (key: string, words: string) => string | null;
+  /**
    * The person's pick or note on choice `key` of a page, as the page's own
    * option and note write it (core `changedEntry`: a pick replaces the
    * options and keeps the note, a note keeps the options); a sentence when it
@@ -131,12 +138,11 @@ export interface ArtifactDoc {
   delete: (pin: string) => string | null;
   destroy: () => void;
   /**
-   * The person puts question `key` down without a pick (core
-   * `dismissedEntry`): a card's id, or a design graph's `picked`, with the
-   * words he wrote in its place, empty for none; a sentence when it was not
-   * kept.
+   * The person puts question `key` down without a pick or a word (core
+   * `dismissedEntry`): a card's id, or a design graph's `picked`; a
+   * sentence when it was not kept.
    */
-  dismiss: (key: string, note: string) => string | null;
+  dismiss: (key: string) => string | null;
   /**
    * A value kept under `key` on a page, as its own `cawco.set` keeps one
    * (a setup's stages, drawn as the board in the project's page): the hub
@@ -495,6 +501,24 @@ export function joinArtifact(
       });
   }
 
+  /** A question answered without a pick, `made` on the page the person sees now, kept under `key`; a sentence when it was not. */
+  function keepPickless(
+    key: string,
+    made: (pageHash: string, at: string) => ChoiceEntry
+  ): string | null {
+    const pageHash = getMeta(doc, "pageHash");
+    if (typeof pageHash !== "string") {
+      return previewWords.notKeptYet;
+    }
+    const entry = made(pageHash, new Date().toISOString());
+    const problem = choiceEntryProblem(key, entry);
+    if (problem) {
+      return problem;
+    }
+    doc.getMap<ChoiceEntry>("state").set(key, entry);
+    return null;
+  }
+
   return {
     reply: (pin, said) => replyToPin(doc, pin, said),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
@@ -542,19 +566,10 @@ export function joinArtifact(
       state.set(key, entry);
       return null;
     },
-    dismiss: (key, note) => {
-      const pageHash = getMeta(doc, "pageHash");
-      if (typeof pageHash !== "string") {
-        return previewWords.notKeptYet;
-      }
-      const entry = dismissedEntry(note, pageHash, new Date().toISOString());
-      const problem = choiceEntryProblem(key, entry);
-      if (problem) {
-        return problem;
-      }
-      doc.getMap<ChoiceEntry>("state").set(key, entry);
-      return null;
-    },
+    dismiss: (key) =>
+      keepPickless(key, (pageHash, at) => dismissedEntry(pageHash, at)),
+    answerInWords: (key, words) =>
+      keepPickless(key, (pageHash, at) => ownWordsEntry(words, pageHash, at)),
     keepTuned: (records) => {
       const pageHash = getMeta(doc, "pageHash");
       if (typeof pageHash !== "string") {

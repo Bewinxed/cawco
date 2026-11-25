@@ -1299,6 +1299,7 @@
                 item={drawn.item}
                 onanswered={drawn.onanswered}
                 onchoose={drawn.onchoose}
+                onwords={drawn.onwords}
                 ondismiss={drawn.ondismiss}
                 onminimize={() => grown.minimizeAsk()}
                 onopen={drawn.onopen}

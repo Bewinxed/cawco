@@ -82,7 +82,11 @@ const answerOf = (
       : {}),
     ...(note ? { note } : {}),
   };
-  // Put down without a pick: his words with it, if any, are its note.
+  // Answered in his own words, with no pick.
+  if (entry.ownWords && said.note) {
+    return { id, ...question, answer: "words", ...said, note: said.note };
+  }
+  // Put down without a pick: a dismissal recorded before answers in his own words existed holds them as its note.
   if (entry.dismissed) {
     return { id, ...question, answer: "dismissed", ...said };
   }

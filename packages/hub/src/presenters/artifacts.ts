@@ -192,7 +192,7 @@ export const artifactListWords = (list: ArtifactList): string => {
 const answerLine = (answer: DecisionAnswer, now: number): string => {
   const asked = `${answer.id}${answer.question ? ` ${quote(answer.question, 100)}` : ""}`;
   const note =
-    answer.answer !== "open" && answer.note
+    answer.answer !== "open" && answer.answer !== "words" && answer.note
       ? `; note ${verbatim(answer.note)}`
       : "";
   const earlier =
@@ -206,6 +206,8 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
       return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}${answer.from ? `. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}` : ""}`;
     case "cleared":
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
+    case "words":
+      return `- ${asked}: answered in his own words, no pick: ${verbatim(answer.note)} ${ago(answer.at, now)}${earlier}`;
     case "dismissed":
       return `- ${asked}: dismissed without a pick ${ago(answer.at, now)}${earlier}${answer.note ? `, saying ${verbatim(answer.note)}` : ", with no words"}`;
     case "gone":
@@ -228,7 +230,14 @@ const valueLines = (read: ArtifactRead, now: number): string[] => {
         ...(entry.value === null || entry.value === undefined
           ? []
           : [`set ${valueWords(entry.value)}`]),
-        ...(entry.note ? [`note ${verbatim(entry.note)}`] : []),
+        ...(entry.dismissed ? ["dismissed without a pick"] : []),
+        ...(entry.note
+          ? [
+              entry.ownWords
+                ? `answered in his own words, no pick: ${verbatim(entry.note)}`
+                : `note ${verbatim(entry.note)}`,
+            ]
+          : []),
       ];
       return `- ${key}: ${said.length > 0 ? said.join("; ") : "cleared"} ${ago(entry.at, now)}${entry.earlierRevision ? ", on an earlier revision" : ""}`;
     });
@@ -313,13 +322,18 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
   ...(render.alike ?? []).map(stageRenderWords.alike),
 ];
 
-/** The direction the person picked, or his dismissal of the pick, on a design with directions. */
+/** The direction the person picked, his answer in his own words, or his dismissal of the pick, on a design with directions. */
 const pickedLines = (
-  read: Pick<ComponentRead, "dismissed" | "picked">
+  read: Pick<ComponentRead, "dismissed" | "picked" | "words">
 ): string[] => {
-  const { dismissed, picked } = read;
+  const { dismissed, picked, words } = read;
   if (picked === undefined) {
     return [];
+  }
+  if (words) {
+    return [
+      `The person answered the pick in his own words, no pick: ${verbatim(words.words)}.`,
+    ];
   }
   if (dismissed) {
     return [

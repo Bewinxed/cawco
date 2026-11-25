@@ -21,11 +21,11 @@
    *   note goes with a pick, never alone. Open page opens its page in the
    *   panel at the card.
    *
-   * Either is put down as a question is (Prompt): its Other chip opens a
+   * Either is answered as a question is (Prompt): its Other chip opens a
    * line for an answer in the person's own words, which Answer or Enter
-   * sends, and Dismiss puts it down without a word. Both keep it on its
-   * artifact as dismissed, with those words or none (parked-queue
-   * `dismiss`), and its session hears it as it hears a pick. A pick made
+   * sends, kept on its artifact as his answer with no pick (parked-queue
+   * `answerInWords`); Dismiss puts it down without a word (parked-queue
+   * `dismiss`). Its session hears either as it hears a pick. A pick made
    * after the line opened is the answer, and the line goes back to
    * waiting, its words unsent.
    *
@@ -73,6 +73,7 @@
     drawing,
     onpick,
     onchoose,
+    onwords,
     ondismiss,
     onanswered,
     onopen,
@@ -98,8 +99,10 @@
       card: string,
       change: { options: string[] } | { note: string }
     ) => string | null;
-    /** Put down here without a pick, with the words written in its place (empty for none): kept on its artifact; a sentence when it was not. */
-    ondismiss: (note: string) => string | null;
+    /** Answered here in the person's own words, with no pick: kept on its artifact; a sentence when it was not. */
+    onwords: (words: string) => string | null;
+    /** Put down here without a pick or a word: kept on its artifact; a sentence when it was not. */
+    ondismiss: () => string | null;
     /** Answered or dismissed here: the composer folds back and the next comes in. */
     onanswered: () => void;
     /** Where it lives, opened in the panel. */
@@ -112,8 +115,14 @@
   let body = $state<HTMLElement>();
   /** Why the last write wasn't kept; null once one was. */
   let refused = $state<string | null>(null);
-  /** The last write was a dismissal, not a pick: what the refusal says. */
-  let dismissing = $state(false);
+  /** What the last write was, for what its refusal says: a pick, his own words, or a dismissal. */
+  let writing = $state<keyof typeof NOT_KEPT>("pick");
+  /** What a refusal says, by what was written. */
+  const NOT_KEPT = {
+    pick: words.notKept,
+    words: words.wordsNotKept,
+    dismiss: words.dismissNotKept,
+  };
 
   /** A direction's pick, as its graph keeps it. */
   const pickedFile = $derived.by(() => {
@@ -129,7 +138,7 @@
 
   function pick(file: string) {
     otherOpen = false;
-    dismissing = false;
+    writing = "pick";
     refused = onpick(file);
     if (refused === null) {
       onanswered();
@@ -160,10 +169,19 @@
     otherField?.focus();
   }
 
-  /** Put down without a pick, with `text` as what he said (empty for nothing): the pick folds away and its session hears it. */
-  function dismissWith(text: string) {
-    dismissing = true;
-    refused = ondismiss(text.trim());
+  /** Answered in his own words, the line's: the pick folds away and its session hears it. */
+  function answerInWords() {
+    writing = "words";
+    refused = onwords(own.trim());
+    if (refused === null) {
+      onanswered();
+    }
+  }
+
+  /** Put down without a pick or a word: the pick folds away and its session hears it. */
+  function dismiss() {
+    writing = "dismiss";
+    refused = ondismiss();
     if (refused === null) {
       onanswered();
     }
@@ -186,7 +204,7 @@
     event.preventDefault();
     event.stopPropagation();
     if (ownAnswer) {
-      dismissWith(own);
+      answerInWords();
     }
   }
 
@@ -223,7 +241,7 @@
     pick: (choice, options) => {
       // A pick is the answer: the line's words go back to waiting, unsent.
       otherOpen = false;
-      dismissing = false;
+      writing = "pick";
       refused = onchoose(choice, { options });
       if (refused !== null) {
         return;
@@ -246,10 +264,10 @@
   /** Answer: his own words when the line holds them; else a several-pick card's picks, its note with them. */
   function answer() {
     if (ownAnswer) {
-      dismissWith(own);
+      answerInWords();
       return;
     }
-    dismissing = false;
+    writing = "pick";
     if (note.trim() !== "") {
       refused = onchoose(cardId, { note });
     }
@@ -532,7 +550,7 @@
       </p>
     {:else if refused}
       <p class="mb-space-2 type-meta text-status-fail-ink" role="alert">
-        {dismissing ? words.dismissNotKept(refused) : words.notKept(refused)}
+        {NOT_KEPT[writing](refused)}
       </p>
     {/if}
     <div class="flex flex-wrap items-center gap-space-2">
@@ -549,7 +567,7 @@
       <Button
         fit="prompt"
         label={words.dismiss}
-        onclick={() => dismissWith("")}
+        onclick={dismiss}
         size="sm"
         variant="outline"
       />

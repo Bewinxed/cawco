@@ -14,9 +14,9 @@ import type { ArtifactStop } from "./artifact-needs";
 /** What a question is: a decision card, a canvas or preview to judge, a pin the agent's reply asked on. */
 export type SessionQuestionKind = "card" | "judge" | "pin";
 
-/** How he answered: a pick, a note, a value set, a pin or a reply written, a pin resolved, or the question dismissed without a pick. */
+/** How he answered: a pick, a note, his own words in place of a pick, a value set, a pin or a reply written, a pin resolved, or the question dismissed without a pick. */
 export type SessionAnswerHow =
-  "pick" | "note" | "value" | "pin" | "reply" | "resolve" | "dismiss";
+  "pick" | "note" | "words" | "value" | "pin" | "reply" | "resolve" | "dismiss";
 
 export interface SessionQuestion {
   /** His answer, as the list shows it under the question; null while open. */

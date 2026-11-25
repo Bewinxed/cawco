@@ -243,7 +243,9 @@ export type DecisionAnswer = {
       from?: PickFrom;
     }
   | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
-  /** He put it down without a pick: `note` is what he said with it, absent for nothing. */
+  /** He answered in his own words, with no pick: `note` holds them. */
+  | { answer: "words"; at: string; earlierRevision?: true; note: string }
+  /** He put it down without a pick: `note` is what a dismissal recorded before answers in his own words existed holds, absent for nothing. */
   | { answer: "dismissed"; at: string; earlierRevision?: true; note?: string }
   | {
       answer: "gone";
@@ -349,7 +351,7 @@ export interface ArtifactRead {
  */
 export interface ComponentRead extends ArtifactRead {
   dials?: unknown;
-  /** He dismissed the pick between its directions without picking one: when, and what he said with it, null for nothing. */
+  /** He dismissed the pick between its directions without picking one: when, and what a dismissal recorded before answers in his own words existed holds, null for nothing. */
   dismissed?: { at: string; note: string | null };
   errors: ReturnType<typeof errorsSaid>;
   frame?: ReturnType<typeof stateSaid>;
@@ -370,6 +372,8 @@ export interface ComponentRead extends ArtifactRead {
     name: string;
   };
   tuned?: unknown;
+  /** He answered the pick between its directions in his own words, with no pick: when, and those words. */
+  words?: { at: string; words: string };
 }
 
 /**

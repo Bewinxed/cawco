@@ -14,8 +14,8 @@
    * at night (`DIRECTION_GREYS`). The mock stands at the queue's data: a pick
    * is written to the artifact's choices here and answers the item, as the
    * pane's queue does (parked-queue.svelte.ts), the composer folding back
-   * and the next coming in, its record joining the turns; its Other line
-   * and Dismiss put it down the same way. `picked`: the pick made on the
+   * and the next coming in, its record joining the turns; an answer on its
+   * Other line, and Dismiss, settle it the same way. `picked`: the pick made on the
    * graph meanwhile, said in the composer before it folds.
    */
   import type { ChoiceEntry } from "@cawco/core/choices";
@@ -149,13 +149,24 @@
   function answer(item: ParkedItem) {
     const kept = choices[item.artifact.id] ?? {};
     const put = kept[item.kind === "directions" ? "picked" : item.card.id];
+    if (put?.ownWords) {
+      answered = [
+        ...answered,
+        {
+          ...item,
+          state: "answered",
+          words: { at: put.at, words: put.note ?? "" },
+        },
+      ];
+      return;
+    }
     if (put?.dismissed) {
       answered = [
         ...answered,
         {
           ...item,
           state: "dismissed",
-          dismissed: { at: put.at, note: put.note ?? "" },
+          dismissed: { at: put.at, note: "" },
         },
       ];
       return;
@@ -220,11 +231,19 @@
           };
           return null;
         },
-        ondismiss: (note) => {
+        onwords: (words) => {
           const key = first.kind === "directions" ? "picked" : first.card.id;
           choices[first.artifact.id] = {
             ...kept,
-            [key]: entry({ dismissed: true, note: note || null }),
+            [key]: entry({ ownWords: true, note: words }),
+          };
+          return null;
+        },
+        ondismiss: () => {
+          const key = first.kind === "directions" ? "picked" : first.card.id;
+          choices[first.artifact.id] = {
+            ...kept,
+            [key]: entry({ dismissed: true }),
           };
           return null;
         },

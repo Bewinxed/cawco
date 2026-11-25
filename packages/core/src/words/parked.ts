@@ -15,19 +15,23 @@ export const parkedWords = {
   openPage: "Open page",
   /** A several-pick card's answer, once its options are picked. */
   answer: "Answer",
-  /** Puts the pick down without picking, with the words written on its Other line, if any. */
+  /** Puts the pick down without a pick or a word. */
   dismiss: "Dismiss",
   /** The chip that opens the line for an answer of his own words, as a question's does. */
   other: "Other",
   /** A write the artifact's doc did not keep, in the error formula. */
   notKept: (why: string) => `Your pick wasn't kept: ${why} Pick again.`,
+  /** An answer in his own words its doc did not keep, in the same formula. */
+  wordsNotKept: (why: string) => `Your answer wasn't kept: ${why} Try again.`,
   /** A dismissal its doc did not keep, in the same formula. */
-  dismissNotKept: (why: string) => `Your answer wasn't kept: ${why} Try again.`,
+  dismissNotKept: (why: string) => `It wasn't dismissed: ${why} Try again.`,
   /** The doc on its way: nothing can be kept yet. */
   joining: "Reaching the pick's page…",
   /** Picked where it lives while it stood here. */
   pickedThere: (where: "graph" | "page", what: string) =>
     `Picked on the ${where}: ${what}`,
+  /** Answered in his own words from another screen while it stood here. */
+  answeredThere: "Answered on another screen",
   /** Dismissed from another screen while it stood here. */
   dismissedThere: "Dismissed on another screen",
   /** The minimized bar's words: what it asks. */
@@ -40,6 +44,6 @@ export const parkedWords = {
   dismissed: "dismissed",
   /** Its note, under what was picked. */
   yourNote: "Your note",
-  /** What he wrote when he dismissed it, under its question, as a question's answer in his words is labelled. */
+  /** His answer in his own words, under its question, as a question's answer in his words is labelled; also what an earlier dismissal kept. */
   yourWords: "In your own words",
 };

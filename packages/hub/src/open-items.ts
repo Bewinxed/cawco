@@ -166,6 +166,8 @@ const answerWords = (answer: QuestionAnswer, detailed: boolean): string => {
       return `picked ${(answer.options ?? []).map((one) => quoted(one, detailed, 60)).join(", ")}${answer.said ? `, note ${quoted(answer.said, detailed)}` : ""}`;
     case "note":
       return `note ${quoted(answer.said, detailed)}`;
+    case "words":
+      return `in his own words, no pick: ${quoted(answer.said, detailed)}`;
     case "value":
       return `set ${answer.said}`;
     case "pin":
@@ -198,7 +200,7 @@ const questionLines = (
   const { answer } = question;
   const head =
     (question.state === "answered" || question.state === "dismissed") && answer
-      ? `${question.state}, ${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`
+      ? `${question.state}${answer.by === "words" ? " " : ", "}${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`
       : "open";
   return [
     `  - ${head}: ${question.link}`,
@@ -228,7 +230,7 @@ const questionsPart = (
   const shown = all.slice(page.cursor, page.cursor + QUESTIONS_PAGE);
   const lines: string[] = [
     "### Questions you and your delegates put to the person",
-    "An open one waits on him; an answered or dismissed one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies). A dismissed one he put down without a pick: don't ask it again in the same words.",
+    "An open one waits on him; an answered or dismissed one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies). One answered in his own words is him talking to you: answer what he said, then take it as the option it plainly approves, or ask again in place with what it raised. A dismissed one he put down without a pick: don't ask it again in the same words.",
   ];
   shown.forEach(({ of, question }, n) => {
     if (shown[n - 1]?.of !== of) {

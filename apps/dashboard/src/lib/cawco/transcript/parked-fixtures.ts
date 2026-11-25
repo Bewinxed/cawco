@@ -32,6 +32,7 @@ const GREYS: ParkedPick = {
   askedAt: "2026-11-24T09:12:00.000Z",
   state: "open",
   dismissed: null,
+  words: null,
   ask: "Which grey do hovered rows and buttons use on the dark side?",
   path: "/__cawco/canvas?file=apps/dashboard/src/lib/tokens/HoverOneStep.stories.ts",
   picked: null,
@@ -81,6 +82,7 @@ export const DECISION_CARD: ParkedCard = {
   askedAt: "2026-11-24T09:20:00.000Z",
   state: "open",
   dismissed: null,
+  words: null,
   answer: null,
   card: {
     id: "minimized-bar",
@@ -132,14 +134,32 @@ export const PICKED: ParkedPick = {
   pickedAt: "2026-11-24T09:15:00.000Z",
 };
 
-/** The two directions, put down with his own words in place of a pick. */
-export const DISMISSED_WITH_WORDS: ParkedPick = {
+/** The two directions, answered in his own words with no pick. */
+export const DIRECTIONS_IN_WORDS: ParkedPick = {
+  ...TWO_DIRECTIONS,
+  state: "answered",
+  words: {
+    at: "2026-11-24T09:16:00.000Z",
+    words:
+      "Neither: both greys vanish on the raised panel. Try one that also lifts the row's text a step.",
+  },
+};
+
+/** The card, answered in his own words with no pick. */
+export const CARD_IN_WORDS: ParkedCard = {
+  ...DECISION_CARD,
+  state: "answered",
+  words: {
+    at: "2026-11-24T09:26:00.000Z",
+    words: "Isn't there a setting for this already? I'm confused.",
+  },
+};
+
+/** The two directions, dismissed without a word. */
+export const DISMISSED_PICK: ParkedPick = {
   ...TWO_DIRECTIONS,
   state: "dismissed",
-  dismissed: {
-    at: "2026-11-24T09:16:00.000Z",
-    note: "Neither: both greys vanish on the raised panel. Try one that also lifts the row's text a step.",
-  },
+  dismissed: { at: "2026-11-24T09:16:00.000Z", note: "" },
 };
 
 /** The card, dismissed without a word. */
