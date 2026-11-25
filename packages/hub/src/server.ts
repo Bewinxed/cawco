@@ -10881,7 +10881,6 @@ export const createServer = (
     // made further down: no connection is written before the hub serves.
     projectsWritten: (connection, dropped) =>
       ingress.followConnection(connection, dropped),
-    connectionGoing: (connection) => ingress.connectionGoing(connection),
     // A push-only service connected (§5.5): each project with no relay for
     // its provider has its Caw woken to offer one (caw.ts `offerRelay`).
     pushOnlyConnected: (connection, projects) => {

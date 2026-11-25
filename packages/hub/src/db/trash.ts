@@ -41,6 +41,7 @@ import {
 import { TrashedRowsSchema } from "./stored-shapes";
 import type { TrashedRows, TrashKind } from "./stored-types";
 import type { Tx } from "./tx";
+import { type Rehomed, rehome, unrehome } from "./watches";
 
 /**
  * How long a deleted config item can be brought back whole: past the life
@@ -168,6 +169,64 @@ const part = (table: string, where: SQL, kept = true): Part => ({
 /** The GitHub watches a connection reads that only the poller reads: no tracker binding syncs them. */
 const watchesOf = (connection: string): SQL =>
   sql`${watches.provider} = 'github' and ${watches.sync} = 'off' and ${watches.connection} = ${connection}`;
+
+/**
+ * The trash entry's record of the GitHub watches a connection's removal
+ * moved to another connection (db/watches.ts `rehome`), one row a move,
+ * which its Undo moves back (`unrehome`). Not a table: no row is put back
+ * from it.
+ */
+const MOVED = "watches:moved";
+
+/** A move as the trash keeps it. */
+const movedRow = (move: Rehomed): Record<string, string | null> => ({
+  id: move.id,
+  projectId: move.projectId,
+  container: move.container,
+  field: move.field,
+  from: move.from,
+  to: move.to,
+});
+
+/** A move's row as the trash keeps it ({@link movedRow}). */
+const RehomedRowSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  container: z.string(),
+  field: z.enum(["connection", "pollerConnection"]),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+});
+
+/** A kept move read back; nothing for a row that is not one. */
+const rehomedOf = (row: Record<string, string | number | null>): Rehomed[] => {
+  const read = RehomedRowSchema.safeParse(row);
+  return read.success ? [read.data] : [];
+};
+
+/** Whether any row of `share` is there. */
+const isThere = (tx: Tx, share: Part): boolean =>
+  tx.all(sql`select 1 from ${sql.identifier(share.table)} where ${share.where}`)
+    .length > 0;
+
+/**
+ * A connection's GitHub watches moved to the connection each project
+ * follows by from now, before its parts are read: the trash takes only
+ * those left with none, and its Undo moves the rest back. Nothing for any
+ * other item.
+ */
+const movedFor = (tx: Tx, item: TrashItem): Rehomed[] => {
+  if (item.kind !== "connection") {
+    return [];
+  }
+  const moved = rehome(tx, item.key, undefined, true);
+  for (const move of moved.filter((one) => one.field === "connection")) {
+    console.log(
+      `[trash] project ${move.projectId}: ${move.container} ${move.to ? `polled with ${move.to}` : "no longer polled"}, in place of ${item.key}`
+    );
+  }
+  return moved;
+};
 
 /** Each kind's parts, by its key: its own table first. */
 const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
@@ -400,6 +459,11 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
         .where(lt(configTrash.deletedAt, new Date(at - UNDO_MS)))
         .run();
       const parts = partsOf(item);
+      // No row of its own: there is no such item.
+      if (!(parts[0] && isThere(tx, parts[0]))) {
+        return;
+      }
+      const moved = movedFor(tx, item);
       const kept: TrashedRows[] = parts
         .filter((each) => each.kept)
         .map((each) => ({
@@ -410,11 +474,6 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
             )
             .map((row) => keepable(each.table, row)),
         }));
-      // No row of its own: there is no such item.
-      const own = kept[0]?.rows[0];
-      if (!own) {
-        return;
-      }
       // What hangs off the item goes first, so nothing is left pointing at
       // a row that is gone.
       for (const each of parts.toReversed()) {
@@ -427,7 +486,10 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
         .values({
           kind: item.kind,
           key: item.key,
-          rows: kept,
+          rows:
+            moved.length > 0
+              ? [...kept, { table: MOVED, rows: moved.map(movedRow) }]
+              : kept,
           deletedAt: new Date(at),
         })
         .returning({ id: configTrash.id })
@@ -454,7 +516,16 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
         if (own) {
           putOwnBack(tx, own);
         }
-        putHangingBack(tx, hanging);
+        putHangingBack(
+          tx,
+          hanging.filter((each) => each.table !== MOVED)
+        );
+        unrehome(
+          tx,
+          hanging.flatMap((each) =>
+            each.table === MOVED ? each.rows.flatMap(rehomedOf) : []
+          )
+        );
         tx.delete(configTrash).where(eq(configTrash.id, id)).run();
         return { ok: true, kind: entry.kind, key: entry.key };
       });

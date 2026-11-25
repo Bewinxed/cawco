@@ -1163,7 +1163,9 @@ export const createIngress = ({
 
   /** What moving watches off a connection did, one log line each. */
   const sayRehomed = (gone: string, moved: readonly Rehomed[]): void => {
-    for (const { projectId, container, to } of moved) {
+    for (const { projectId, container, to } of moved.filter(
+      (move) => move.field === "connection"
+    )) {
       console.log(
         `[ingress] project ${projectId}: ${container} ${to ? `polled with ${to}` : "no longer polled"}, in place of ${gone}`
       );
@@ -1192,7 +1194,7 @@ export const createIngress = ({
     if (!reads || dropped.length > 0) {
       sayRehomed(
         connection,
-        store.rehome(connection, reads ? dropped : undefined, false)
+        store.rehome(connection, reads ? dropped : undefined)
       );
     }
     if (!reads) {
@@ -1208,16 +1210,6 @@ export const createIngress = ({
         );
       }
     }
-  };
-
-  /**
-   * A connection is being removed (connections.ts `remove`): each GitHub
-   * watch read through it moves to the connection its project follows by
-   * from now; one with none is left for the trash to take with the
-   * connection, and comes back with its Undo.
-   */
-  const connectionGoing = (connection: string): void => {
-    sayRehomed(connection, store.rehome(connection, undefined, true));
   };
 
   /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
@@ -1688,7 +1680,6 @@ export const createIngress = ({
         : taskLinkWords.noGitHub;
     },
     createPoll,
-    connectionGoing,
     createRoute,
     deletePoll,
     deleteRoute,

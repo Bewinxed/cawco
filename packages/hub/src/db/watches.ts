@@ -258,6 +258,12 @@ export const followLink = (
 /** A GitHub watch moved off a connection: to the one named, or `null` when none was left and it went (or was left for the trash). */
 export interface Rehomed {
   container: string;
+  /** What moved: the watch's own connection, or the one the poller reads a syncing watch through once its binding's is gone (`settings.pollerConnection`). */
+  field: "connection" | "pollerConnection";
+  /** What it held before. */
+  from: string | null;
+  /** The watch's id. */
+  id: string;
   projectId: string;
   to: string | null;
 }
@@ -274,7 +280,7 @@ export interface Rehomed {
  * poller reads through it while the binding's no longer names the project
  * ({@link GitHubWatch.reads}) and once the binding goes.
  */
-const rehome = (
+export const rehome = (
   tx: Writer,
   gone: string,
   of: readonly string[] | undefined,
@@ -307,7 +313,14 @@ const rehome = (
     } else if (!leave) {
       tx.delete(watches).where(eq(watches.id, watch.id)).run();
     }
-    moved.push({ projectId: watch.projectId, container: watch.container, to });
+    moved.push({
+      id: watch.id,
+      projectId: watch.projectId,
+      container: watch.container,
+      field: "connection",
+      from: gone,
+      to,
+    });
   }
   for (const watch of tx
     .select()
@@ -329,9 +342,61 @@ const rehome = (
         })
         .where(eq(watches.id, watch.id))
         .run();
+      moved.push({
+        id: watch.id,
+        projectId: watch.projectId,
+        container: watch.container,
+        field: "pollerConnection",
+        from: was,
+        to,
+      });
     }
   }
   return moved;
+};
+
+/**
+ * Puts back what {@link rehome} moved, newest first (a connection's Undo,
+ * db/trash.ts): each watch still holding what the move gave it gets what
+ * it held before; one changed since keeps its own.
+ */
+export const unrehome = (tx: Writer, moved: readonly Rehomed[]): void => {
+  for (const move of moved.toReversed()) {
+    if (move.to === null && move.field === "connection") {
+      continue;
+    }
+    const watch = tx
+      .select()
+      .from(watches)
+      .where(eq(watches.id, move.id))
+      .get();
+    if (!watch) {
+      continue;
+    }
+    if (
+      move.field === "connection" &&
+      move.from &&
+      watch.connection === move.to
+    ) {
+      tx.update(watches)
+        .set({ connection: move.from })
+        .where(eq(watches.id, watch.id))
+        .run();
+    }
+    if (
+      move.field === "pollerConnection" &&
+      (watch.settings.pollerConnection ?? null) === move.to
+    ) {
+      tx.update(watches)
+        .set({
+          settings: settingsWith(watch.settings, {
+            pollerConnection: move.from,
+          }),
+        })
+        .where(eq(watches.id, watch.id))
+        .run();
+    }
+  }
 };
 
 /** One repository's cursors, each resource's. */
@@ -366,11 +431,10 @@ export interface GitHubWatchesDb {
   readonly githubWatches: (projectId?: string) => GitHubWatch[];
   /** Each poll's outcome kept, in one transaction. */
   readonly keepGitHubPoll: (polled: readonly GitHubWatchPolled[]) => void;
-  /** {@link rehome} in one transaction. */
+  /** {@link rehome} in one transaction, each watch left with no connection gone (a connection's removal rehomes in db/trash.ts). */
   readonly rehome: (
     gone: string,
-    of: readonly string[] | undefined,
-    leave: boolean
+    of: readonly string[] | undefined
   ) => Rehomed[];
 }
 
@@ -477,8 +541,7 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
     },
     followGitHub: (projectId, connection) =>
       db.transaction((tx) => followGitHub(tx, projectId, connection)),
-    rehome: (gone, of, leave) =>
-      db.transaction((tx) => rehome(tx, gone, of, leave)),
+    rehome: (gone, of) => db.transaction((tx) => rehome(tx, gone, of, false)),
   };
 };
 
