@@ -13,7 +13,13 @@
  * The tool's `tool` is an enum of CawCo's own tool names, so a report on
  * anything else is refused by its schema (ask_f10aaf6f). What the hub knows
  * to be private is taken out of every field before it leaves
- * (`scrubPrivate`): the issues are public.
+ * (`scrubPrivate`), CawCo's own names kept: the issues are public.
+ *
+ * Every report of one problem lands on one issue: its fingerprint is the
+ * tool and the refusal's identity (core `refusalIdentity`). The hub keeps
+ * each session's refusals of each tool as the tool door hands them back
+ * (`heard`), so a report quoting one is filed by the code the hub refused
+ * with, whatever lists, counts and ids the agent's copy of its words holds.
  */
 
 import type { ForgeAsk } from "@cawco/core/forge-post";
@@ -26,7 +32,10 @@ import {
   feedbackFingerprint,
   feedbackMarker,
   feedbackTitle,
+  firstClause,
+  type HeardRefusal,
   type PrivateKnown,
+  refusalIdentity,
   scrubPrivate,
 } from "@cawco/core/usability-feedback";
 import {
@@ -38,7 +47,7 @@ import { problem } from "elysia";
 import { z } from "zod";
 import type { ForgeCall } from "./forge-posts";
 import { awayProblem } from "./machine-answers";
-import { defineTool } from "./mcp-tool";
+import { defineTool, refusalCode, withoutRefusalCode } from "./mcp-tool";
 
 /** What a report came to: a new issue, or a comment on the one already open. */
 interface Filed {
@@ -125,10 +134,22 @@ export const feedbackDefinition = (names: readonly string[]) => {
   return built.definition;
 };
 
+/** A result's words: its text parts, joined. */
+const wordsOf = (result: CallToolResult): string =>
+  result.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n");
+
 export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
   /** The machines whose gh signs in to GitHub, as last read on each. */
   const senders = new Set<string>();
   const on = (): boolean => deps.consent() === true && senders.size > 0;
+  /**
+   * The refusals each session was sent while feedback was on, by session
+   * and tool, oldest first: one of each (its code and first clause), the
+   * newest time it came. Held until the session's row goes (`forget`).
+   */
+  const heardBy = new Map<string, Map<string, HeardRefusal[]>>();
 
   /** Runs `change`, and says so when it turned feedback on or off. */
   const moving = (change: () => void): void => {
@@ -167,9 +188,10 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
     return [...senders].find((machineId) => online.has(machineId));
   };
 
-  /** `actor`'s report, scrubbed, filed once: a new issue, or a comment on the open one. */
+  /** `actor`'s report, scrubbed, filed once: a new issue, or a comment on the open one; `names` are CawCo's own tools, kept by the scrub. */
   const file = async (
     actor: InstanceRow,
+    names: readonly string[],
     asked: { got: string; tool: string; wanted: string; workaround?: string }
   ) => {
     if (!on()) {
@@ -182,16 +204,23 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       return awayProblem(away, words.noSender);
     }
     const known = deps.privateKnown(actor);
+    const scrub = (text: string): string => scrubPrivate(text, known, names);
     const report = {
       tool: asked.tool,
       harness: actor.harness,
-      wanted: scrubPrivate(asked.wanted, known),
-      got: scrubPrivate(asked.got, known),
-      ...(asked.workaround
-        ? { workaround: scrubPrivate(asked.workaround, known) }
-        : {}),
+      wanted: scrub(asked.wanted),
+      got: scrub(asked.got),
+      ...(asked.workaround ? { workaround: scrub(asked.workaround) } : {}),
     };
-    const fingerprint = feedbackFingerprint(report.tool, report.got);
+    // The refusals heard are scrubbed as the report is, so the two compare
+    // alike.
+    const heard = (heardBy.get(actor.id)?.get(report.tool) ?? []).map(
+      (refusal) => ({ ...refusal, words: scrub(refusal.words) })
+    );
+    const fingerprint = feedbackFingerprint(
+      report.tool,
+      refusalIdentity(report.got, heard)
+    );
     const called = await deps.forge(sender, {
       repo: deps.repo,
       write: {
@@ -256,7 +285,40 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
     },
     /** The tool, bound to the session that calls it, its enum CawCo's own tools `names`. */
     tool: (actor: InstanceRow, names: readonly string[]) =>
-      feedbackDefinition(names).run((asked) => file(actor, asked)),
+      feedbackDefinition(names).run((asked) => file(actor, names, asked)),
+    /**
+     * The tool door's hand-back of `actorId`'s call of `name`: a refusal,
+     * while feedback is on, kept for a report of it to be grouped by
+     * (`file`). Answers the result without the refusal's code, as the
+     * harness reads it (mcp-tool.ts `REFUSAL_CODE_META`).
+     */
+    heard: (
+      actorId: string,
+      name: string,
+      result: CallToolResult
+    ): CallToolResult => {
+      const sent = withoutRefusalCode(result);
+      if (!(result.isError && on()) || name === USABILITY_FEEDBACK_TOOL) {
+        return sent;
+      }
+      const code = refusalCode(result);
+      const said = wordsOf(sent);
+      const clause = firstClause(said);
+      const tools = heardBy.get(actorId) ?? new Map<string, HeardRefusal[]>();
+      const refusals = (tools.get(name) ?? []).filter(
+        (each) => each.code !== code || firstClause(each.words) !== clause
+      );
+      tools.set(name, [
+        ...refusals,
+        { ...(code ? { code } : {}), words: said },
+      ]);
+      heardBy.set(actorId, tools);
+      return sent;
+    },
+    /** A session's row went: its refusals heard go with it. */
+    forget: (actorId: string): void => {
+      heardBy.delete(actorId);
+    },
     /**
      * A tool's result as the agent reads it: a refusal of one of CawCo's own
      * tools ends with the line naming usability_feedback while feedback is

@@ -127,10 +127,12 @@ export const githubForge: ForgeAdapter = {
         if (fresh) {
           return fresh.number;
         }
-        const { data: found } = await octokit.request("GET /search/issues", {
-          q: `repo:${target.owner}/${target.repo} is:issue is:open in:body ${search}`,
-          per_page: MARKED_PAGE,
-        });
+        const { data: found } = await octokit.rest.search.issuesAndPullRequests(
+          {
+            q: `repo:${target.owner}/${target.repo} is:issue is:open in:body ${search}`,
+            per_page: MARKED_PAGE,
+          }
+        );
         return found.items.find(marked)?.number;
       },
       pullRequest: async ({ base, head, title, body }) => {

@@ -27,8 +27,17 @@ import { NOT_HUB } from "./not-hub";
 /** The agent's source, from the repository's root. */
 export const AGENT_SOURCE = "packages/agent/src";
 const TEST_FILE = /\.(test|spec)\.ts$|\/__tests__\//u;
+/**
+ * A hub path's first segment: every path the agent asks its hub is under
+ * one of these, whichever way it is written. A path under no other is
+ * another service's (GitHub's `/search/issues`, asked through Octokit).
+ */
+const HUB_ROOT = "(?:api|ws|mcp|health)";
 /** Where a hub path starts in a built string: at its start, or right after a piece (`${hub}`). */
-const HUB_PATH = /(?:^|\0)(\/(?:api|ws|mcp|health)(?=[/?#\0]|$)[^\s"'`?#]*)/gu;
+const HUB_PATH = new RegExp(
+  `(?:^|\\0)(\\/${HUB_ROOT}(?=[/?#\\0]|$)[^\\s"'\`?#]*)`,
+  "gu"
+);
 /** A piece of a path that is not a known string. */
 const PIECE = "\0";
 /** No string folds to more paths than this: past it, the piece is any value. */
@@ -131,9 +140,20 @@ function render(
  * plugin's source, which the agent writes out and OpenCode runs
  * (`cawcoBase + "/api/instances"`).
  */
-const EMBEDDED = /["'](\/(?:api|ws|mcp|health)(?=[/?#"']|$)[^\s"'`?#]*)/gu;
-/** A route literal of core's former request door, which shipped agents up to nightly 7813 named: its method, then the path as the hub declares it. */
-const DOOR_ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE) (\/[^\s\0]*)$/u;
+const EMBEDDED = new RegExp(
+  `["'](\\/${HUB_ROOT}(?=[/?#"']|$)[^\\s"'\`?#]*)`,
+  "gu"
+);
+/**
+ * A route literal of core's former request door, which shipped agents up to
+ * nightly 7813 named: its method, then the path as the hub declares it,
+ * under a hub root like every other hub path. The same shape is any HTTP
+ * client's route (Octokit's `"GET /search/issues"`), which is not the hub's.
+ */
+const DOOR_ROUTE = new RegExp(
+  `^(?:GET|POST|PUT|PATCH|DELETE) (\\/${HUB_ROOT}(?=[/?#]|$)[^\\s\\0]*)$`,
+  "u"
+);
 
 /**
  * A built path as a pattern: each segment a piece touches is `*`; a path

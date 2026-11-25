@@ -46,6 +46,36 @@ export const answered = <R>(answer: R): answer is Answered<R> =>
 const refusalWords = (refused: unknown): string =>
   refused instanceof ElysiaStatus ? refused.response.detail : String(refused);
 
+/**
+ * The `_meta` key a refusal's result carries its problem's `code` under:
+ * which refusal it is, for usability feedback to group reports of it by
+ * (usability-feedback.ts). The tool door takes it off before the result
+ * leaves the hub (delegation-mcp.ts `answer`).
+ */
+const REFUSAL_CODE_META = "cawco/refusalCode";
+
+/** A refusal's `_meta`: its problem's code, when it has one. */
+const refusalMeta = (refused: unknown): Pick<CallToolResult, "_meta"> =>
+  refused instanceof ElysiaStatus && typeof refused.response.code === "string"
+    ? { _meta: { [REFUSAL_CODE_META]: refused.response.code } }
+    : {};
+
+/** The code a refusal's result carries ({@link REFUSAL_CODE_META}), when it carries one. */
+export const refusalCode = (result: CallToolResult): string | undefined => {
+  const code = result._meta?.[REFUSAL_CODE_META];
+  return typeof code === "string" ? code : undefined;
+};
+
+/** `result` without the refusal's code ({@link REFUSAL_CODE_META}), as a harness reads it. */
+export const withoutRefusalCode = (result: CallToolResult): CallToolResult => {
+  if (!(result._meta && REFUSAL_CODE_META in result._meta)) {
+    return result;
+  }
+  const { [REFUSAL_CODE_META]: _code, ...meta } = result._meta;
+  const { _meta: _all, ...rest } = result;
+  return Object.keys(meta).length > 0 ? { ...rest, _meta: meta } : rest;
+};
+
 /** What a presenter gives: words, or words with pictures. */
 export type Presented = string | { pictures: Picture[]; text: string };
 
@@ -296,11 +326,13 @@ export const toolOn =
         // Legitimate, as above (https://github.com/colinhacks/zod/issues/4619).
         const asked = rest as z.infer<z.ZodObject<T>>;
         const answer = await run(asked, format ?? "concise", on);
-        // A refusal the run returned is the call's error, in its own words.
+        // A refusal the run returned is the call's error, in its own words,
+        // its code beside them.
         if (!answered(answer)) {
           return {
             isError: true,
             content: [{ type: "text", text: refusalWords(answer) }],
+            ...refusalMeta(answer),
           };
         }
         const detailed = options.detailed ?? asJson;

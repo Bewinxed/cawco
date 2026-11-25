@@ -11854,6 +11854,7 @@ export const createServer = (
       settleBackoff.delete(id);
       unanswered.delete(id);
       forgetSessionRuntime(id);
+      usabilityFeedback.forget(id);
       startModelMoves.forget(id);
       releaseHeld(id);
     }

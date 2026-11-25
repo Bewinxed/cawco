@@ -78,7 +78,7 @@ import {
 } from "./hub-tools";
 import { INGRESS_DEFINITIONS, INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape } from "./lifetime";
-import { bindTool, type ToolDefinition } from "./mcp-tool";
+import { bindTool, type ToolDefinition, withoutRefusalCode } from "./mcp-tool";
 import { MEMORY_DEFINITIONS, MEMORY_TOOLS, type Memory } from "./memory";
 import {
   mayMakeProject,
@@ -626,10 +626,11 @@ export function createDelegationMcp(options: {
   sendToUser: (actor: InstanceRow, message: string) => void;
   /**
    * Usability feedback (usability-feedback.ts): while it is on, its tool is
-   * listed, every refusal of a CawCo tool ends with the line naming it, and
-   * memory_note's description says where tool trouble goes.
+   * listed, every refusal of a CawCo tool ends with the line naming it and
+   * is kept for a report of it to be grouped by, and memory_note's
+   * description says where tool trouble goes.
    */
-  feedback?: Pick<UsabilityFeedback, "on" | "tool" | "withLine">;
+  feedback?: Pick<UsabilityFeedback, "heard" | "on" | "tool" | "withLine">;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
   shownRefusal?: (
     actor: InstanceRow,
@@ -1248,6 +1249,15 @@ export function createDelegationMcp(options: {
     callId?: string,
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
+    // The session whose call this is, once its credential is read: what it
+    // is answered passes usability feedback's `heard`, which keeps a
+    // refusal for a report of it and takes the refusal's code off. A
+    // connection's tool is its service's, which the feedback cannot name.
+    let caller: InstanceRow | undefined;
+    const handed = (result: CallToolResult): CallToolResult =>
+      caller && options.feedback && !parseConnectionTool(name)
+        ? options.feedback.heard(caller.id, name, result)
+        : withoutRefusalCode(result);
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
       const { __cawco: _context, ...asked } = args;
@@ -1267,9 +1277,10 @@ export function createDelegationMcp(options: {
             `[delegation] ${binding ?? "an unbound caller"} passed a session credential to ${name}; it was replaced before the call ran`
           );
         }
-        return catalog;
+        return withoutRefusalCode(catalog);
       }
       const actor = actorOf(binding, args, authorization);
+      caller = actor;
       if (redacted > 0) {
         console.warn(
           `[delegation] ${actor.id} passed a session credential to ${name}; it was replaced before the call ran`
@@ -1284,12 +1295,12 @@ export function createDelegationMcp(options: {
       if (!allows(actor, name)) {
         throw new Error(refusal(actor, name));
       }
-      return (
+      return handed(
         (await route(actor, name, input, toolUseId, cut)) ??
-        (await sessionCall(actor, name, input, callId, cut))
+          (await sessionCall(actor, name, input, callId, cut))
       );
     } catch (error) {
-      return {
+      return handed({
         isError: true,
         content: [
           {
@@ -1297,7 +1308,7 @@ export function createDelegationMcp(options: {
             text: error instanceof Error ? error.message : String(error),
           },
         ],
-      };
+      });
     }
   };
 

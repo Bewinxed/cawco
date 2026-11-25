@@ -1,8 +1,9 @@
 /**
  * An agent's usability feedback on a CawCo tool (the hub's
  * `usability_feedback`, hub usability-feedback.ts), as it reaches CawCo's
- * public repository: scrubbed of what the hub knows to be private, grouped
- * by a fingerprint of the tool and its refusal's words, and written so
+ * public repository: scrubbed of what the hub knows to be private (CawCo's
+ * own names kept), grouped by a fingerprint of the tool and the refusal's
+ * identity ({@link feedbackFingerprint}), and written so
  * nothing in it reaches anyone on the forge (no mention, no reference, no
  * markup runs).
  *
@@ -66,6 +67,14 @@ const TRAILING_SEPARATORS = /[/\\]+$/u;
 /** A project name shorter than this is a common word as often as a name, so it stays. */
 const NAME_MIN = 3;
 
+/**
+ * CawCo's own names, in any case: the product's (its `cawco:` link scheme
+ * among them) and, beside them, its tools' ({@link scrubPrivate}'s `ours`).
+ * A project or machine named one of them is not taken out by its name, so
+ * an issue still reads `cawco:session/…` and `artifact_read`.
+ */
+const CAWCO_NAMES = ["cawco", "caw&co", "caw"] as const;
+
 /** Address-shaped text: `someone@example.com`. */
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gu;
 /** An IPv4 address. */
@@ -81,10 +90,11 @@ const ANY_HOME = /(?:\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s"'`]+/gu;
 /**
  * A path outside the repository: absolute (or from `~`), with a folder and
  * a name at least, never a URL's path (the lookbehind keeps a host or a
- * scheme in front of it out).
+ * scheme in front of it out), nor the rest of one a placeholder already
+ * stands for (`<path>/src/a.ts`).
  */
 const PATH =
-  /(?<![\w.:/~-])(?:~|[A-Za-z]:)?[/\\](?:[\w.@+-]+[/\\])+[\w.@+-]*/gu;
+  /(?<!<path>)(?<![\w.:/~-])(?:~|[A-Za-z]:)?[/\\](?:[\w.@+-]+[/\\])+[\w.@+-]*/gu;
 
 /** `text` with every `values` (longest first, case aside) replaced by `placeholder`. */
 const replaceAll = (
@@ -104,14 +114,29 @@ const replaceAll = (
   }, text);
 };
 
+/** `names` less every one of CawCo's own (`ours`, case aside): a name of CawCo's is never taken out as private. */
+const notOurs = (
+  names: readonly string[],
+  ours: ReadonlySet<string>
+): string[] => names.filter((name) => !ours.has(name.trim().toLowerCase()));
+
 /**
  * `text` with what the hub knows to be private taken out, before it is
  * posted where anyone reads it: the repository's own folder made relative,
  * project folders and names, home folders (the reporting machines' and any
  * user's), every other path outside the repository, hostnames and the
- * hub's and previews' hosts, addresses, and emails.
+ * hub's and previews' hosts, addresses, and emails. CawCo's own names (the
+ * product's and `ours`, its tools') stay: a project or machine of that name
+ * keeps it, and a name is taken out only as a whole word.
  */
-export const scrubPrivate = (text: string, known: PrivateKnown): string => {
+export const scrubPrivate = (
+  text: string,
+  known: PrivateKnown,
+  ours: readonly string[]
+): string => {
+  const kept = new Set(
+    [...CAWCO_NAMES, ...ours].map((name) => name.toLowerCase())
+  );
   let out = text;
   const repository = known.repository?.replace(TRAILING_SEPARATORS, "");
   if (repository) {
@@ -132,14 +157,20 @@ export const scrubPrivate = (text: string, known: PrivateKnown): string => {
   out = out.replace(EMAIL, PLACEHOLDER.email);
   out = replaceAll(out, known.hosts, PLACEHOLDER.host);
   out = out.replace(PRIVATE_NAME, PLACEHOLDER.host);
-  out = replaceAll(out, known.hostnames, PLACEHOLDER.machine, true);
+  out = replaceAll(
+    out,
+    notOurs(known.hostnames, kept),
+    PLACEHOLDER.machine,
+    true
+  );
   out = out.replace(IPV4, PLACEHOLDER.address);
   out = out.replace(IPV6, PLACEHOLDER.address);
   out = replaceAll(
     out,
-    known.projects
-      .map((project) => project.name)
-      .filter((name) => name.trim().length >= NAME_MIN),
+    notOurs(
+      known.projects.map((project) => project.name),
+      kept
+    ).filter((name) => name.trim().length >= NAME_MIN),
     PLACEHOLDER.project,
     true
   );
@@ -156,25 +187,75 @@ const VARYING = [
   /\d+(?:[.,:]\d+)*/gu,
 ];
 const NOT_A_WORD = /[^\p{L}\p{N}#]+/gu;
-
 /**
- * A refusal's words with what varies between two reports of it taken out
- * (numbers, ids, handles, quoted values, private placeholders), lowercased
- * and spaced alike: one refusal reads the same each time it is reported.
+ * Where a refusal's first clause ends: a sentence's or a clause's mark
+ * before a space or the end, a dash between spaces, a line. What
+ * follows (the lists, counts and names it offers) changes between two
+ * reports of one refusal.
  */
-const refusalShape = (words: string): string =>
+const CLAUSE_END = /[.!?;:](?=\s|$)|\s[—–-]\s|\n/u;
+
+/** `words` with what varies between two reports of one refusal taken out, lowercased and spaced alike. */
+const shapeOf = (words: string): string =>
   VARYING.reduce((into, pattern) => into.replace(pattern, "#"), words)
     .toLowerCase()
     .replace(NOT_A_WORD, " ")
     .trim();
 
+/**
+ * A refusal's first clause, shaped ({@link shapeOf}): the part that says
+ * which refusal it is, the same each time it is reported (`no artifact is
+ * #` of `No artifact is "cawco:session/…". Yours: …, and 978 more`).
+ */
+export const firstClause = (words: string): string => {
+  const varied = VARYING.reduce(
+    (into, pattern) => into.replace(pattern, "#"),
+    words.trim()
+  );
+  const end = CLAUSE_END.exec(varied)?.index;
+  return shapeOf(end === undefined ? varied : varied.slice(0, end));
+};
+
+/**
+ * A refusal the hub sent a session: the code its problem carries
+ * (`problem(status, { code, detail })`), when it carries one, and the words
+ * the agent read.
+ */
+export interface HeardRefusal {
+  readonly code?: string;
+  readonly words: string;
+}
+
+/**
+ * Which problem a report is about. The refusal it quotes, when `heard` holds
+ * one whose first clause its words carry: the code the hub refused with,
+ * or that refusal's first clause when it carried none. Else (the hub sent
+ * none it quotes, as with a tool that answered and left no route) the first
+ * clause of what the agent says it got. `heard` and `got` are compared
+ * scrubbed alike; the newest refusal heard wins.
+ */
+export const refusalIdentity = (
+  got: string,
+  heard: readonly HeardRefusal[]
+): string => {
+  // Spaced at both ends, so a clause is found as whole words.
+  const quoted = ` ${shapeOf(got)} `;
+  for (const refusal of heard.toReversed()) {
+    const clause = firstClause(refusal.words);
+    if (clause && quoted.includes(` ${clause} `)) {
+      return refusal.code ? `code ${refusal.code}` : `clause ${clause}`;
+    }
+  }
+  return `clause ${firstClause(got)}`;
+};
+
 /** A fingerprint's length in hex digits. */
 const FINGERPRINT_DIGITS = 12;
 
-/** One problem's fingerprint: the tool and its refusal's shape, hashed. */
-export const feedbackFingerprint = (tool: string, got: string): string =>
+/** One problem's fingerprint: the tool and its {@link refusalIdentity}, hashed. */
+export const feedbackFingerprint = (tool: string, identity: string): string =>
   new Bun.CryptoHasher("sha256")
-    .update(`${tool}\n${refusalShape(got)}`)
+    .update(`${tool}\n${identity}`)
     .digest("hex")
     .slice(0, FINGERPRINT_DIGITS);
 
