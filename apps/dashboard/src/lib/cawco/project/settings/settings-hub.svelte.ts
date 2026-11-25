@@ -16,7 +16,7 @@
  */
 import { accountNameAmong } from "@cawco/core/accounts";
 import type { GhRepoList } from "@cawco/core/connections";
-import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
+import { type ConnectionView, connectionApi } from "@cawco/core/connections";
 import type { DecidesTable } from "@cawco/core/decides";
 import { machineLabel } from "@cawco/core/machine-names";
 import { MOVE_JOB_STEPS, type MoveJob, moveSize } from "@cawco/core/move";
@@ -1190,7 +1190,7 @@ export class SettingsHub {
               (each) =>
                 each.service.toLowerCase() === ask.home &&
                 (ask.home === "github"
-                  ? readsGitHubApi(each.auth)
+                  ? connectionApi(each)?.provider === "github"
                   : each.auth === "app" || each.auth === "bearer")
             );
             this.#setupConnections = {

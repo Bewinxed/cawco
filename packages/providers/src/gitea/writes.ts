@@ -1,5 +1,5 @@
 /**
- * Gitea's writes (provider spec §2.3 `Writes`), and Forgejo's: an issue, a
+ * Gitea's writes (provider spec §2.3 `Writes`): an issue, a
  * comment on an issue or a pull request (one numbering for both, a pull
  * request's conversation its issue's), and a pull request opened, through
  * gitea-mcp's tools (gitea/client.ts). They are made only through the hub's

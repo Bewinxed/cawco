@@ -1,7 +1,7 @@
 /**
  * Where gh, glab and tea keep their files on the host, read as each CLI
  * reads them: under `$XDG_CONFIG_HOME`, else `$HOME/.config`
- * (docs/forge-adapters.md §3.4).
+ * (docs/forge-adapters.md §3.3).
  */
 import { homedir } from "node:os";
 import { join } from "node:path";

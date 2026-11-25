@@ -29,8 +29,6 @@
  *   `issue.create` ({@link Writes.issueOnce}).
  */
 import {
-  FORGE_NAMES,
-  FORGES,
   type ForgeAsk,
   type ForgeVerdict,
   isMachineWrite,
@@ -39,6 +37,7 @@ import {
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { isOneOf } from "@cawco/core/one-of";
 import { secondsOf } from "@cawco/core/time";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import { changeRequestWords } from "@cawco/core/words/forge";
 import { eventKeys } from "@cawco/providers/event-keys";
 import type { GitHubClient } from "@cawco/providers/github/client";
@@ -269,9 +268,7 @@ const rowsOf = (
 
 /** What a session reads of a machine's write. */
 export const madeWords = (op: MachineWriteOp, made: MachineWritten): string => {
-  const name = isOneOf(FORGES, made.provider)
-    ? FORGE_NAMES[made.provider]
-    : made.provider;
+  const name = externalItemWords.source[made.provider];
   const url = made.comment?.url ?? made.item?.url ?? "";
   switch (op.op) {
     case "change-request.open": {

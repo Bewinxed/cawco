@@ -5,7 +5,7 @@
  * holds the registry of logins; each login reads this file, so imports run
  * one way.
  */
-import type { Forge } from "@cawco/core/forge-post";
+import type { ForgeId } from "@cawco/providers/provider";
 
 /** The host's own sign-in on a forge's host, as that forge's CLI keeps it. */
 export interface ForgeSignIn {
@@ -21,7 +21,7 @@ export interface ForgeSignIn {
 
 /** One forge's CLI on this machine: the host's sign-in it keeps. */
 export interface ForgeLogin {
-  readonly forge: Forge;
+  readonly forge: ForgeId;
   /** The host's sign-in for `host`, or why it holds none it can use; undefined when this forge's CLI keeps nothing for it. */
   readonly signIn: (host: string) => Promise<ForgeSignIn | string | undefined>;
 }

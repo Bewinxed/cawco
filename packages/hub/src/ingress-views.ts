@@ -1,6 +1,6 @@
 /**
- * A project's ingress as its routes and tools answer it (ingress.ts makes
- * it), and as the words that show it (presenters/project.ts) read it.
+ * A project's ingress as its routes and tools answer it (event-routes.ts
+ * and clock.ts make it), and as the words that show it (presenters/project.ts) read it.
  */
 
 import type { OfferedMode } from "@cawco/core/harness/modes";

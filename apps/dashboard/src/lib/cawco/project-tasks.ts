@@ -278,7 +278,7 @@ export const syncTracker = (projectId: string, client: HubClient = hub) =>
   );
 
 /**
- * The project's GitHub poll run now (the hub's ingress.ts `pollGitHubNow`):
+ * The project's GitHub poll run now (the hub's clock.ts `pollGitHubNow`):
  * among what it reads are the GitHub links due a read, a link whose last
  * read failed among them.
  */

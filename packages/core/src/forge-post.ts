@@ -27,17 +27,6 @@ export type MachineWriteOp = Extract<
 export const isMachineWrite = (op: WriteOp): op is MachineWriteOp =>
   MACHINE_WRITE_OPS.some((one) => one === op.op);
 
-/** The forges CawCo posts to with a machine's sign-in. */
-export const FORGES = ["github", "gitlab", "gitea"] as const;
-export type Forge = (typeof FORGES)[number];
-
-/** Each forge as a person names it. */
-export const FORGE_NAMES: Readonly<Record<Forge, string>> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  gitea: "Gitea",
-};
-
 /**
  * The machine control the write door reaches (agent forges/forge.ts
  * `forgePost`): args `[ForgeAsk]`; answers what the write came to there.

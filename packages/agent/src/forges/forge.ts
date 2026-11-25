@@ -12,18 +12,14 @@
  * The credential is read on the host, used here, and never sent anywhere but
  * its forge.
  */
-import {
-  FORGE_NAMES,
-  type Forge,
-  type ForgeAsk,
-  type ForgeVerdict,
-} from "@cawco/core/forge-post";
+import type { ForgeAsk, ForgeVerdict } from "@cawco/core/forge-post";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import { giteaWrites } from "@cawco/providers/gitea/writes";
 import { githubTokenClient } from "@cawco/providers/github/client";
 import { githubWrites } from "@cawco/providers/github/writes";
 import { gitlabClient } from "@cawco/providers/gitlab/client";
 import { gitlabWrites } from "@cawco/providers/gitlab/writes";
-import type { WriteMade } from "@cawco/providers/provider";
+import type { ForgeId, WriteMade } from "@cawco/providers/provider";
 import {
   failureWords,
   type ProviderFailure,
@@ -47,7 +43,7 @@ const FORGE_LOGINS: readonly ForgeLogin[] = [
 const CALL_MS = 60_000;
 
 /** Each forge's CLI, as the person signs it in. */
-const CLI_OF: Record<Forge, string> = {
+const CLI_OF: Record<ForgeId, string> = {
   github: "gh",
   gitlab: "glab",
   gitea: "tea",
@@ -63,7 +59,7 @@ const CLI_OF: Record<Forge, string> = {
  */
 const forgeOn = async (
   host: string
-): Promise<{ forge: Forge; signIn: ForgeSignIn } | string> => {
+): Promise<{ forge: ForgeId; signIn: ForgeSignIn } | string> => {
   const found = await Promise.all(
     FORGE_LOGINS.map(async (login) => ({
       forge: login.forge,
@@ -71,7 +67,7 @@ const forgeOn = async (
     }))
   );
   const logins = found.filter(
-    (each): each is { forge: Forge; signIn: ForgeSignIn | string } =>
+    (each): each is { forge: ForgeId; signIn: ForgeSignIn | string } =>
       each.signIn !== undefined
   );
   const [only] = logins;
@@ -79,8 +75,8 @@ const forgeOn = async (
     const named = logins
       .map(({ forge, signIn }) =>
         typeof signIn === "object"
-          ? `${FORGE_NAMES[forge]} through ${CLI_OF[forge]} at ${signIn.host}`
-          : `${FORGE_NAMES[forge]} through ${CLI_OF[forge]}`
+          ? `${externalItemWords.source[forge]} through ${CLI_OF[forge]} at ${signIn.host}`
+          : `${externalItemWords.source[forge]} through ${CLI_OF[forge]}`
       )
       .join(", ");
     const example =
@@ -99,7 +95,7 @@ const forgeOn = async (
 
 /** One write through the forge's provider, its client made from the host's sign-in. */
 const written = (
-  forge: Forge,
+  forge: ForgeId,
   signIn: ForgeSignIn,
   path: string,
   op: ForgeAsk["op"]
@@ -153,7 +149,7 @@ export const forgePost = async (ask: ForgeAsk): Promise<ForgeVerdict> => {
     return { kind: "refused", why: `cawco: nothing was posted: ${found}` };
   }
   const { forge, signIn } = found;
-  const what = `${FORGE_NAMES[forge]} on ${signIn.host}`;
+  const what = `${externalItemWords.source[forge]} on ${signIn.host}`;
   const outcome = await Effect.runPromise(
     Effect.result(
       written(forge, signIn, at.path, ask.op).pipe(

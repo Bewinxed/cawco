@@ -45,7 +45,7 @@ export interface TrackerBindingRow {
   boundAt: Date;
   /** The connection's name (connections.ts). */
   connection: string;
-  /** Which way it syncs: `both`, or `inbound`, which writes nothing to the tracker (sync.ts `outboundOf`). */
+  /** Which way it syncs: `both`, or `inbound`, which writes nothing to the tracker (sync.ts `writerOf`). */
   direction: TrackerDirection;
   /**
    * When its direction last changed on a binding kept as it stood; null
@@ -55,7 +55,7 @@ export interface TrackerBindingRow {
   directionAt: Date | null;
   /** GitHub: the Project's issues and their Status as its board stream last read them; null before it did. */
   githubBoard: GithubBoard | null;
-  /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
+  /** GitHub: the Project its stages show on through Status (providers github/board.ts); null when none. */
   githubProject: GithubProject | null;
   /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
   githubProjectReason: string | null;

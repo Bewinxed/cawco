@@ -11,7 +11,7 @@
  *   repositories, the project's linked items due a read are read
  *   (links.ts `readLinks`), and what they say goes through the door too.
  *   A project follows GitHub through a connection that reads GitHub's API
- *   (core `readsGitHubApi`) from the moment it names the project
+ *   (core `connectionApi`) from the moment it names the project
  *   ({@link Clock.followConnection}).
  *   A watch the project's tracker syncs is read whether or not the project
  *   links its repository, with its board stream after the rest, and what
@@ -41,6 +41,7 @@
 
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import {
   type ConnectorCursor,
   connectionIngest,
@@ -105,13 +106,6 @@ import type { Links } from "./links";
 const noLinkOn = (host: string): string =>
   `Not polling. No linked repository on ${host}.`;
 
-/** Each forge's name, for its poll's sentences. */
-const SERVICE_NAMES: Readonly<Record<Forge["provider"], string>> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  gitea: "Gitea",
-};
-
 /** A forge's poll's state in a sentence: polled, or why not; one template for every forge. */
 const pollState = (
   forge: Pick<Forge, "host" | "provider">,
@@ -127,7 +121,7 @@ const pollState = (
     return noLinkOn(forge.host);
   }
   if (linked.length === 0) {
-    return `Not polling ${named}. Grant the project a ${SERVICE_NAMES[forge.provider]} connection in ${configurePage("connections")}.`;
+    return `Not polling ${named}. Grant the project a ${externalItemWords.source[forge.provider]} connection in ${configurePage("connections")}.`;
   }
   return reason
     ? `Polling ${named} with ${connection}. Last poll stopped: ${reason}`

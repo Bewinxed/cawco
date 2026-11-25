@@ -57,23 +57,6 @@ export const CONNECTION_AUTHS = [
 ] as const;
 export type ConnectionAuth = (typeof CONNECTION_AUTHS)[number];
 
-/**
- * The ways a `github` connection reads GitHub's REST API with its own token,
- * so a project's poller, its tracker and the relay can sign in with it: a
- * token, a GitHub App's installation, a machine's gh, or a code sign-in. An
- * MCP OAuth sign-in's token is for GitHub's MCP server alone.
- */
-const GITHUB_API_AUTHS: readonly ConnectionAuth[] = [
-  "bearer",
-  "app",
-  "gh",
-  "device",
-];
-
-/** Whether a `github` connection signed in this way reads GitHub's REST API ({@link GITHUB_API_AUTHS}). */
-export const readsGitHubApi = (auth: ConnectionAuth): boolean =>
-  GITHUB_API_AUTHS.includes(auth);
-
 /** The services whose API a connection is read with to follow a project's repositories: the forges' provider ids. */
 export type ApiProvider = ForgeId;
 
@@ -88,6 +71,14 @@ type ApiNamed = Pick<
   ConnectionView,
   "args" | "auth" | "service" | "transport" | "url"
 >;
+
+/** The sign-ins with which a `github` connection reads GitHub's REST API ({@link connectionApi}). */
+const GITHUB_REST_SIGN_INS: ReadonlySet<ConnectionAuth> = new Set([
+  "bearer",
+  "app",
+  "gh",
+  "device",
+]);
 
 const HOST_FLAGS: ReadonlySet<string> = new Set(["-H", "-host", "--host"]);
 
@@ -129,8 +120,10 @@ const argsOrigin = (args: readonly string[]): string | undefined => {
  * Where a connection reads its service's API, so a project it names
  * follows that service's repositories it links (hub db/watches.ts): undefined
  * for a connection that reads none.
- * - **GitHub**: a `github` connection whose sign-in reads GitHub's REST API
- *   ({@link readsGitHubApi}), on github.com.
+ * - **GitHub**: a `github` connection that reads GitHub's REST API with its
+ *   own token, on github.com: a token (`bearer`), a GitHub App's
+ *   installation, a machine's gh, or a code sign-in (`device`). An MCP
+ *   OAuth sign-in's token is for GitHub's MCP server alone.
  * - **GitLab**: a `gitlab` connection with a key (`bearer`: a personal,
  *   project or group access token, which "you can use … to authenticate
  *   with the API", docs.gitlab.com/api/rest/authentication; one with the
@@ -154,7 +147,7 @@ export const connectionApi = (
   const command = connection.transport === "stdio";
   switch (service) {
     case "github":
-      return readsGitHubApi(connection.auth)
+      return GITHUB_REST_SIGN_INS.has(connection.auth)
         ? { provider: "github", origin: "https://github.com" }
         : undefined;
     case "gitlab":

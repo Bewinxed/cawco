@@ -1,8 +1,8 @@
 /**
  * A project's routines page as the hub holds it, read together: its
  * routines with their newest runs (routines.ts `RoutineView`), what fires
- * them (ingress.ts: event routes, connector polls and the repository's
- * GitHub poller; relay.ts: its relays), and the actions its sessions
+ * them (event-routes.ts: event routes and connector polls; clock.ts: the
+ * repository's GitHub poll; relay.ts: its relays), and the actions its sessions
  * proposed (actions.ts). A row's actions are the hub's routine routes; a
  * refusal is thrown in the hub's own sentence.
  */
@@ -27,7 +27,7 @@ type IngressRead = Treaty.Data<
   ReturnType<typeof hub.api.projects>["ingress"]["get"]
 >;
 
-/** A route that sends a service's events to a routine (ingress.ts `EventRouteView`), with the service its source is, as a provider mark names it (lower case). */
+/** A route that sends a service's events to a routine (event-routes.ts `EventRouteView`), with the service its source is, as a provider mark names it (lower case). */
 type EventRoute = IngressRead["routes"][number] & { service: string };
 
 /** A source read on a schedule: a connector poll, or the repository's GitHub poller. */

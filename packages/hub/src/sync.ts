@@ -29,7 +29,7 @@
  *   is opened for a task, and no field, state, label, comment, Status or
  *   Status option goes out; a task's own changes stay in CawCo. Every
  *   write the sync makes is a member of the binding's {@link Outbound},
- *   made in one place from its direction (`outboundOf`), which an inbound
+ *   made in one place from its direction (`writerOf`), which an inbound
  *   binding does not have. Linear's GitHub sync offers the same choice:
  *   "One-way: issues created in GitHub will create a synced copy in
  *   Linear" (linear.app/docs/github). An inbound binding through a GitHub
@@ -92,7 +92,7 @@
  *   issue's item in a Status option (the one set in the binding's form, else
  *   the option named as the stage), and a Status moved on GitHub moves the
  *   task, with the same last-agreed rule as every field
- *   (tracker-github-project.ts). The Project is read as the watch's board
+ *   (providers github/board.ts). The Project is read as the watch's board
  *   stream (providers github/board.ts) through its connection, and each
  *   read lands here; one the connection may not read leaves Status alone,
  *   the binding saying GitHub's words, and issues sync as before. Sync now
@@ -2300,7 +2300,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   /**
    * GitHub: each stage the hub has not yet made sure of a Status option for
    * on the binding's Project given one, as binding gives them
-   * (tracker-github-project.ts `statusOptionsAdded`), the options it has
+   * (providers github/writes.ts `board.columns`), the options it has
    * kept as they are; then named made, so it is never given one again. A
    * stage that has one by its name is named made with no call. GitHub's
    * refusal goes on the binding in its words, the other stages' Status
@@ -2931,7 +2931,7 @@ export const createTrackers = (deps: TrackersDeps) => {
    * (left out) the first linked to the repository, each stage on the Status
    * option named as it, ignoring case (core `statusOptionFor`). A stage
    * whose name no option carries has one added on GitHub as it binds
-   * (tracker-github-project.ts `statusOptionsAdded`), every option it had
+   * (providers github/writes.ts `board.columns`), every option it had
    * kept with its items, and every stage is named made on it
    * (`statusesOwed`); GitHub's refusal of that refuses the binding in its
    * words, so the person can pick no Project or grant what it needs. A

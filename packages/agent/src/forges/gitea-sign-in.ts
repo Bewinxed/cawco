@@ -1,5 +1,5 @@
 /**
- * Gitea's sign-in on this machine, and Forgejo's: the host's tea, the login
+ * Gitea's sign-in on this machine: the host's tea, the login
  * in tea's `config.yml` (`<config home>/tea`, "Configuration is persisted in
  * $XDG_CONFIG_HOME/tea", gitea.com/gitea/tea) whose `url` is on the host,
  * and its `token`.
