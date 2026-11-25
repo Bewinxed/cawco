@@ -32,6 +32,7 @@ import type { HarnessKind } from "./harness/kinds";
 import type { SessionChosenMode } from "./harness/modes";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
+import type { OutsiderRule } from "./outsiders";
 import { questionsOf } from "./question";
 import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
@@ -1481,6 +1482,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_events",
   "set_hears_tasks",
   "set_attempts_hear_comments",
+  "set_outsiders",
   "set_account",
   "set_account_at_limit",
   "set_area",
@@ -1518,6 +1520,8 @@ export type ProjectSettingChange =
   | { hearsTasks: boolean; kind: "set_hears_tasks" }
   /** Whether the person's comment on a task reaches its attempt (hub jev-tasks.ts). */
   | { attemptsHearComments: boolean; kind: "set_attempts_hear_comments" }
+  /** What an event from someone an outside service does not vouch for does (core outsiders.ts). */
+  | { kind: "set_outsiders"; outsiders: OutsiderRule }
   /**
    * The account the project's sessions start on (hub project-edit.ts
    * `account`), by id, with its name as the change was checked; null: the
@@ -1635,6 +1639,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectSettingsWords.attemptsHearComments(
         change.attemptsHearComments
       );
+    case "set_outsiders":
+      return projectSettingsWords.outsiders(change.outsiders);
     case "set_account":
       return projectAccountWords.change(change.name);
     case "set_account_at_limit":

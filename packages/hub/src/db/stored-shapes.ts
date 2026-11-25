@@ -38,6 +38,7 @@ import {
   SendAttachmentShape,
   SendPayloadShape,
   SendRefusalShape,
+  WatchSyncModeShape,
 } from "@cawco/core/stored-shapes";
 import { declared } from "@cawco/core/stored-types";
 import type { OAuthDiscoveryState as OAuthDiscoveryStateType } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -1002,8 +1003,8 @@ export type TrimOfferAnswerOutput = z.output<typeof TrimOfferAnswerShape>;
 const WatchCursorShape = declared(
   z.object({
     etag: z.string().nullable().optional(),
+    refusedAt: z.number().optional(),
     since: z.number().optional(),
-    unread: z.string().optional(),
   }),
   "WatchCursor",
   "packages/hub/src/db/stored-types.ts"
@@ -1011,9 +1012,24 @@ const WatchCursorShape = declared(
 export const WatchCursorSchema: z.ZodType<WatchCursorType> = WatchCursorShape;
 export type WatchCursorOutput = z.output<typeof WatchCursorShape>;
 
+const GithubBoardShape = declared(
+  z.object({
+    complete: z.boolean(),
+    items: z.record(
+      z.string(),
+      z.object({ itemId: z.string(), optionId: z.string().nullable() })
+    ),
+    projectId: z.string(),
+  }),
+  "GithubBoard",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type GithubBoardOutput = z.output<typeof GithubBoardShape>;
+
 const WatchSettingsShape = declared(
   z.object({
     args: z.record(z.string(), z.unknown()).optional(),
+    githubBoard: GithubBoardShape.nullable().optional(),
     githubProject: GithubProjectShape.nullable().optional(),
     githubProjectReason: z.string().nullable().optional(),
     githubStatusesAdded: GithubStatusesAddedShape.nullable().optional(),
@@ -1023,9 +1039,7 @@ const WatchSettingsShape = declared(
     intervalS: z.number().optional(),
     itemsPath: z.string().optional(),
     pollerConnection: z.string().nullable().optional(),
-    syncPolledAt: z.number().nullable().optional(),
-    syncReason: z.string().nullable().optional(),
-    syncResumeAt: z.number().nullable().optional(),
+    syncProblem: z.string().nullable().optional(),
     tool: z.string().optional(),
     versionPath: z.string().optional(),
   }),
@@ -1037,7 +1051,7 @@ export const WatchSettingsSchema: z.ZodType<WatchSettingsType> =
 export type WatchSettingsOutput = z.output<typeof WatchSettingsShape>;
 
 const WatchSyncShape = declared(
-  z.enum(["off", "inbound", "both"]),
+  WatchSyncModeShape,
   "WatchSync",
   "packages/hub/src/db/stored-types.ts"
 );

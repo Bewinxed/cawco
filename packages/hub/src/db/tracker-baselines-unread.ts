@@ -135,7 +135,7 @@ export const trackerBaselinesKept = (client: Database): Kept[] =>
  * Every task with no baseline yet, by `project/task`: a record link
  * (`issue:`) in a project bound to a tracker with no `tracker_links` row.
  * 0407 changes nothing of them; the next sync links each again from the
- * task as it stands, as before (tracker.ts `relink`).
+ * task as it stands, as before (sync.ts `relink`).
  */
 export const baselinesUnset = (client: Database): string[] =>
   client

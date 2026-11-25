@@ -312,6 +312,7 @@ export class FixtureCaw {
   #viewOf(on: boolean): ProjectConversationView {
     return {
       attemptsHearComments: true,
+      outsiders: "hold",
       changesSettings: false,
       harness: CHAT.harness,
       hearsTasks: true,

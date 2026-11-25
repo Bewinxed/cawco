@@ -93,8 +93,14 @@ import type {
   WatchView,
   Within,
 } from "../provider";
+import { answered as answeredBy, polledFailure, Stop } from "../read-stop";
 import { itemOfUrl } from "../registry";
-import { githubActorOf, outsideActorOf, RawUserSchema } from "./actor";
+import {
+  githubActorOf,
+  outsideActorOf,
+  RawUserSchema,
+  unvouchedOf,
+} from "./actor";
 import {
   cutShort,
   graphqlErrorsOf,
@@ -103,6 +109,7 @@ import {
   type OctokitRefusal,
   refusalOf,
 } from "./answer";
+import { BOARD_STREAM, boardStreams, pollBoard } from "./board";
 
 /** A client signed in as a GitHub connection (hub connections.ts `githubClient`). */
 export type GitHubClient = Octokit;
@@ -120,6 +127,8 @@ export type GitHubStream = (typeof GITHUB_STREAMS)[number];
 /** Where one stream's read stands: its ETag and its mark. */
 export interface GitHubStreamCursor {
   etag: string | null;
+  /** A board's stream: when the connection was last refused it, ms (github/board.ts). */
+  refusedAt?: number;
   /** The newest `updated_at` taken in, ms: changes at or after it are looked for. */
   since: number;
 }
@@ -393,18 +402,45 @@ const pullRead = (pr: Pull, only?: "opened" | "closed"): Ingested => {
   return { revisions: [pullRevision(pr, ref)], events };
 };
 
-const issueRevision = (one: Issue, ref: MirroredRef): ItemRevision => ({
-  item: ref,
-  version: String(ms(one.updated_at)),
-  snapshot: {
-    externalId: one.node_id ?? "",
-    title: one.title,
-    ...issueState(one.state, one.state_reason),
-    author: githubActorOf(one.user),
-    labels: labelsOf(one.labels),
-    body: one.body ?? null,
-  },
-});
+/**
+ * GitHub's issue state as a write names it back (the tracker sync's state
+ * token): open, or closed with its reason ("`state_reason` … Can be one of:
+ * `completed`, `not_planned`, `duplicate`, `reopened`", docs.github.com,
+ * update an issue); a close with no reason is a completed one.
+ */
+const issueStateToken = (
+  state: string,
+  reason: string | null | undefined
+): string => {
+  if (state !== "closed") {
+    return "open";
+  }
+  return reason === "not_planned" || reason === "duplicate"
+    ? `closed:${reason}`
+    : "closed:completed";
+};
+
+const issueRevision = (one: Issue, ref: MirroredRef): ItemRevision => {
+  const author = githubActorOf(one.user);
+  return {
+    item: ref,
+    version: String(ms(one.updated_at)),
+    snapshot: {
+      externalId: one.node_id ?? "",
+      title: one.title,
+      ...issueState(one.state, one.state_reason),
+      stateToken: issueStateToken(one.state, one.state_reason),
+      author,
+      labels: labelsOf(one.labels),
+      body: one.body ?? null,
+      createdAt: ms(one.created_at),
+      unvouched: unvouchedOf(
+        author?.login ?? "someone",
+        one.author_association
+      ),
+    },
+  };
+};
 
 /**
  * An issue's revision and events: polled, its opening and its close (its
@@ -991,31 +1027,8 @@ const waitOf = (headers: Headers, now: number): number | null => {
     : null;
 };
 
-/** A read stopped short, in the words the project's ingress view reads. */
-class Stop extends Error {
-  readonly resumeAt: number | null;
-  constructor(message: string, resumeAt: number | null = null) {
-    super(message);
-    this.resumeAt = resumeAt;
-  }
-}
-
-/** A request GitHub did not answer in time: the read ends there and moves nothing. */
-class Unanswered extends Error {
-  readonly after: number;
-  constructor(after: number) {
-    super(`GitHub did not answer within ${after} ms`);
-    this.after = after;
-  }
-}
-
-/** A bounded read's answer, or {@link Unanswered} thrown. */
-const answered = <T>(asked: Asked<T>): T => {
-  if (asked.kind === "unanswered") {
-    throw new Unanswered(asked.after);
-  }
-  return asked.value;
-};
+/** A bounded read's answer, or `Unanswered` thrown. */
+const answered = <T>(asked: Asked<T>): T => answeredBy("GitHub", asked);
 
 /** Why GitHub refused a request, in words for the project's ingress view. */
 const refusal = (
@@ -1319,6 +1332,15 @@ const poll: GitHubIngest["poll"] = async (input) => {
     within: input.within,
   };
   const { stream } = input;
+  if (stream.startsWith(BOARD_STREAM)) {
+    return await pollBoard({
+      cursor: input.cursor && { ...input.cursor, etag: null },
+      now: input.now,
+      octokit: input.client,
+      watch: input.watch,
+      within: input.within,
+    });
+  }
   if (!isStream(stream)) {
     return {
       kind: "stopped",
@@ -1330,27 +1352,23 @@ const poll: GitHubIngest["poll"] = async (input) => {
       ? await pollDiscussions(read)
       : await pollList(stream, read);
   } catch (error) {
-    if (error instanceof Unanswered) {
-      return { kind: "unanswered", after: error.after };
-    }
-    return {
-      kind: "stopped",
-      problem:
-        error instanceof Stop
-          ? { words: error.message, resumeAt: error.resumeAt }
-          : {
-              words: `GitHub could not be reached: ${error instanceof Error ? error.message : String(error)}`,
-              resumeAt: null,
-            },
-    };
+    return polledFailure("GitHub", error);
   }
 };
 
-/** GitHub's ingest: a repository's five streams every 60 s, and reopens read off its revisions. */
+/**
+ * GitHub's ingest: a repository's five streams every 60 s, and a syncing
+ * watch's board after them (github/board.ts); reopens read off its
+ * revisions.
+ */
 export const githubIngest: GitHubIngest = {
   everyMs: () => EVERY_MS,
-  streams: () => GITHUB_STREAMS,
-  readsBy: (watch: WatchView) => [watch.container, watch.connection],
+  streams: (watch) => [...GITHUB_STREAMS, ...boardStreams(watch)],
+  readsBy: (watch: WatchView) => [
+    watch.container,
+    watch.connection,
+    watch.sync,
+  ],
   poll,
   moved: githubMoved,
 };

@@ -212,7 +212,7 @@ interface HubStore {
   readonly taskWaitFlags: TaskWaitFlagsDb;
   /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
   readonly toolCallKeys: ToolCallKeysDb;
-  /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (tracker.ts). */
+  /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (sync.ts). */
   readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
   readonly trash: TrashDb;

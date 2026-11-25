@@ -54,6 +54,7 @@ import { HARNESSES } from "@cawco/core/harness/kinds";
 import { markerTag } from "@cawco/core/injected";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { itemOfUrl } from "@cawco/providers/registry";
 import type { ContinuationAsker } from "../src/db/stored-types";
 import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { newestNightly } from "./shipped";
@@ -1135,6 +1136,7 @@ function seedTracker(db: HubDb, projects: string[]): void {
   const boundAt = new Date(Date.UTC(2026, 9, 1));
   const since = boundAt.getTime() + 30 * HOUR_MS;
   db.trackers.bind({
+    watchId: `${projectId}:github:${TRACKED.target}`,
     projectId,
     provider: "github",
     connection: "github-dev",
@@ -1144,11 +1146,12 @@ function seedTracker(db: HubDb, projects: string[]): void {
     boundAt,
     direction: "both",
     directionAt: null,
-    cursor: { since, etag: null, commentsSince: since, commentsEtag: null },
     state: "synced",
     reason: null,
+    problem: null,
     polledAt: new Date(since),
     resumeAt: null,
+    githubBoard: null,
     githubProject: null,
     githubProjectReason: null,
     githubStatusStages: null,
@@ -1192,19 +1195,27 @@ function seedTracker(db: HubDb, projects: string[]): void {
       status: null,
     };
     const url = `${TRACKED.url}/issues/${number}`;
-    const revision = {
-      externalId: `I_kwDOfixture${number}`,
-      title: synced.title,
-      state: synced.state === "open" ? ("open" as const) : ("closed" as const),
-      stateName: synced.state === "open" ? "Open" : "Closed",
-      author: null,
-      labels: synced.labels,
-      version: String(since),
-      readAt: new Date(since),
-      problem: null,
-    };
+    const item = itemOfUrl(url);
+    if (item) {
+      // The issue as the sync read it, through the door's store.
+      db.intake.own(projectId, [
+        {
+          item,
+          version: String(since),
+          snapshot: {
+            externalId: `I_kwDOfixture${number}`,
+            title: synced.title,
+            state: synced.state === "open" ? "open" : "closed",
+            stateName: synced.state === "open" ? "Open" : "Closed",
+            stateToken: synced.state,
+            author: null,
+            labels: synced.labels,
+          },
+        },
+      ]);
+    }
     if (taskId === "tsk-7") {
-      db.taskLinks.putRef({ projectId, taskId, url, mode: "record" }, revision);
+      // Its file names the issue; its record link is written by hand (seedTrackerBaselines).
       continue;
     }
     db.trackers.putLink(
@@ -1215,7 +1226,7 @@ function seedTracker(db: HubDb, projects: string[]): void {
         linkedAt: boundAt,
         unvouched: number === 43 ? "a person GitHub does not vouch for" : null,
       },
-      { url, revision }
+      url
     );
   }
 }
@@ -1230,6 +1241,12 @@ function seedTracker(db: HubDb, projects: string[]): void {
  */
 function seedTrackerBaselines(dbPath: string): void {
   const sqlite = new Database(dbPath);
+  // tsk-7's file names an issue the hub keeps no tracker link for: its record link alone.
+  sqlite.run(
+    `INSERT INTO task_links (project_id, task_id, url, mode, item_id)
+     SELECT project_id, 'tsk-7', 'https://github.com/dev/project-2/issues/47', 'record', id
+     FROM external_items WHERE container = 'dev/project-2' AND kind = 'issue' AND key = '47'`
+  );
   sqlite.run(
     "UPDATE tracker_links SET synced = json_remove(synced, '$.status') WHERE task_id = 'tsk-1'"
   );

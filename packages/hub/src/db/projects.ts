@@ -441,6 +441,7 @@ export interface ProjectsDb {
         | "conversationInstanceId"
         | "hearsTasks"
         | "attemptsHearComments"
+        | "outsiders"
         | "cawChangesSettings"
       >
     >

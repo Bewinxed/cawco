@@ -4,21 +4,21 @@
  * task as data, through one door.
  *
  * - **Comments.** {@link Links.fileComment} is the one door a comment
- *   written on a source comes through, from the tracker sync's poll
- *   (tracker.ts) and from the door's events alike: filed once on its task
+ *   written on a source comes through, from the door's comment events
+ *   (a synced issue's as any other's): filed once on its task
  *   as an entry headed by its author's login, the source and its URL, kept
  *   in `external_comments` under the source's own id; filed again with new
- *   words (the source says it was edited since), its entry is rewritten in
- *   place (tasks.ts `editComment`). A comment the hub posted out is never
+ *   words (the source says it was edited since, which the door hands over
+ *   as an edit, db/intake.ts), its entry is rewritten in place (tasks.ts
+ *   `editComment`). A comment the hub posted out is never
  *   filed back.
  * - **An event** (intake.ts, step 1 of the door's subscribers) names its
  *   item's mirror row: the task it is about is that item's thread task, its
  *   record task else the lowest-numbered task linking it
  *   ({@link Links.onEvent}); matching is the link lookup alone (db
  *   task-links.ts `byItem`), never a text field. A comment on a linked item
- *   is filed there; one on an issue a syncing watch's task holds as its
- *   record is the tracker sync's to file while it keeps its own poll. An
- *   item no task links is about no task.
+ *   is filed there, a synced issue's as any other's. An item no task links
+ *   is about no task.
  * - **An item moved.** The door writes each revision on the item's one
  *   mirror row; a moved state or title tells the project's tasks
  *   (`linksMoved`), so a wait on a pull request or a run settles.
@@ -49,7 +49,6 @@ import { ElysiaStatus } from "elysia";
 import type { ItemRow } from "./db/external-items";
 import type { ItemState } from "./db/stored-types";
 import type { LinkedItem, TaskLinksDb } from "./db/task-links";
-import type { TrackersDb } from "./db/trackers";
 import type { Arrived } from "./intake";
 import type { AnyProblem } from "./refusal";
 import type { GitHubWaitState } from "./task-waits";
@@ -71,7 +70,6 @@ const COMMENTS: ReadonlySet<string> = new Set([
 export interface LinksDeps {
   readonly db: {
     readonly taskLinks: TaskLinksDb;
-    readonly trackers: Pick<TrackersDb, "binding">;
   };
   /** A link's state or title moved: the project's tasks look again, so a wait on it settles (tasks.ts `waitsMoved`). */
   readonly linksMoved: (projectId: string) => void;
@@ -198,26 +196,12 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   };
 
   /**
-   * Whether a comment on `row`'s item is the tracker sync's to file: the
-   * item is the record of a task the project's syncing watch keeps, which
-   * its own poll reads the comments of until it subscribes to the door.
-   */
-  const syncFiles = (projectId: string, row: LinkedItem): boolean => {
-    const binding = db.trackers.binding(projectId);
-    return (
-      row.link.mode === "record" &&
-      binding !== undefined &&
-      binding.provider === row.item.provider &&
-      binding.target.toLowerCase() === row.item.container.toLowerCase()
-    );
-  };
-
-  /**
    * Step 1 of the door's subscribers: the task the event is about, its
    * item's thread task (its record task, else the lowest-numbered task
-   * linking it); a comment on the item filed there, unless the tracker sync
-   * files it ({@link syncFiles}). Null when no task links the item. A task's
-   * refusal of the comment is answered: the event runs again at the next start.
+   * linking it); a comment on the item filed there, whatever watch it came
+   * through, a syncing watch's included: this is its one reader. Null when
+   * no task links the item. A task's refusal of the comment is answered: the
+   * event runs again after the project's next read.
    */
   const onEvent = async ({
     event,
@@ -234,13 +218,7 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     }
     const { item, link } = thread;
     const source = isOneOf(PROVIDER_IDS, item.provider) ? item.provider : null;
-    if (
-      COMMENTS.has(event.kind) &&
-      event.comment &&
-      event.url &&
-      source &&
-      !syncFiles(row.projectId, thread)
-    ) {
+    if (COMMENTS.has(event.kind) && event.comment && event.url && source) {
       const filed = await fileComment(
         row.projectId,
         link.taskId,
@@ -290,22 +268,14 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
    * whose last read stopped short, then every open pull request and every
    * Actions run not yet green, the longest since read first, read again
    * each poll (no event says a draft was marked ready or a run completed).
-   * An item a bound project's task holds as its record is its tracker
-   * sync's to read.
+   * A synced issue is one of them like any other: what a read finds goes
+   * through the door to the sync.
    */
   const dueItems = (projectId: string): ItemRow[] => {
-    const bound = db.trackers.binding(projectId) !== undefined;
     const rows = db.taskLinks
       .ofProject(projectId)
       .filter(({ item }) => item.provider === "github");
-    const synced = new Set(
-      bound
-        ? rows
-            .filter(({ link }) => link.mode === "record")
-            .map(({ item }) => item.id)
-        : []
-    );
-    const items = itemsOf(rows).filter((item) => !synced.has(item.id));
+    const items = itemsOf(rows);
     const unread = items.filter(
       (item) => item.readAt === null || item.problem !== null
     );

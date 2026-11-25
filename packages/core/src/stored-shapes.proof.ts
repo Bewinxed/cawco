@@ -12,6 +12,7 @@ import type {
   ExternalActor as ExternalActorType,
   ExternalState as ExternalStateType,
   ProviderId as ProviderIdType,
+  WatchSyncMode as WatchSyncModeType,
 } from "@cawco/providers/provider";
 import type {
   AccountCheck as AccountCheckType,
@@ -913,6 +914,7 @@ import type {
   UserQuestionResultOutput,
   VerbOutput,
   WaitReasonOutput,
+  WatchSyncModeOutput,
   WorkInFlightOutput,
   WorkItemStateOutput,
   WorkspaceAppliedOutput,
@@ -1460,6 +1462,7 @@ prove<
     Same<GithubProjectOutput, GithubProjectType>,
     Same<GithubStatusesAddedOutput, GithubStatusesAddedType>,
     Same<GithubStatusStagesOutput, GithubStatusStagesType>,
+    Same<WatchSyncModeOutput, WatchSyncModeType>,
     Same<WorkInFlightOutput, WorkInFlightType>,
     Same<ChangeVersionOutput, ChangeVersionType>,
     Same<WorkspaceConflictOutput, WorkspaceConflictType>,

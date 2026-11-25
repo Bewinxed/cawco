@@ -3368,6 +3368,13 @@
       "when": 1795593751784,
       "tag": "0488_inbound_events_door",
       "breakpoints": true
+    },
+    {
+      "idx": 489,
+      "version": "6",
+      "when": 1795596184757,
+      "tag": "0489_sync_subscribes",
+      "breakpoints": true
     }
   ]
 }

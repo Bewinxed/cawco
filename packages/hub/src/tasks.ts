@@ -22,7 +22,7 @@
  *   (you at the dashboard, a session through the tools). Needs you is worked
  *   out on every read from the stage's kind and never stored.
  * - **Tracker.** Every task is a file whatever the project's tracker. With
- *   GitHub Issues or Linear (tracker.ts), a task's issue fields (title,
+ *   GitHub Issues or Linear (sync.ts), a task's issue fields (title,
  *   description, labels, stage, comments) are one record with its issue,
  *   which its file names (`issue:`); the sync writes what the tracker holds
  *   through the same calls as everyone, as an actor marked `tracker`.
@@ -229,7 +229,7 @@ export interface TaskActor {
   /** The routine making the move, for the mover `routine` (waits.ts: `waits`). */
   routineId?: string;
   /**
-   * The tracker sync writing what the project's tracker holds (tracker.ts):
+   * The tracker sync writing what the project's tracker holds (sync.ts):
    * its own changes are never sent back to the tracker they came from.
    */
   tracker?: IssueTracker;
@@ -6478,7 +6478,7 @@ export const createTasks = (store: TaskStore) => {
 
     /**
      * Names the issue a task is one record with (`issue:`, its URL), or
-     * takes the name out: the tracker sync's own write (tracker.ts), never a
+     * takes the name out: the tracker sync's own write (sync.ts), never a
      * person's or a session's, so the link is the issue the sync made or
      * read. Listeners hear the task changed.
      */
@@ -6559,7 +6559,7 @@ const fieldParams = (params: URLSearchParams): Record<string, string> => {
 /**
  * The dashboard's routes for a project's tasks, under
  * `/api/projects/:id/tasks`, its stages, and the stage templates (its
- * tracker's are tracker.ts's). Changes from here are the operator's ("you").
+ * tracker's are sync.ts's). Changes from here are the operator's ("you").
  */
 export const taskRoutes = (tasks: Tasks) =>
   new Elysia()

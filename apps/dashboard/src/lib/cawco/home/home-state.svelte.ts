@@ -437,11 +437,18 @@ interface WatchItem {
  * project never declared. It leaves once answered. It opens where it is
  * about: the task that raised the design offer, or the project's settings.
  */
+/** An offer Needs you draws: an outsider's held words wait in the hub's list until their row is drawn. */
+export type DrawnOffer = Exclude<WaitingOffer, { kind: "outsider" }>;
+
+/** Whether Needs you draws an offer. */
+const drawn = (offer: WaitingOffer): offer is DrawnOffer =>
+  offer.kind !== "outsider";
+
 interface OfferItem {
   href: string;
   key: string;
   kind: "offer";
-  offer: WaitingOffer;
+  offer: DrawnOffer;
   place: string;
   /** Its project, named and marked as the rail marks it. */
   project: ProjectMarking | null;
@@ -669,7 +676,7 @@ export type NeedsItem =
 
 /** An offer's row key, title and where it opens: the task that raised a design offer, or the project's settings. */
 const offerFacts = (
-  offer: WaitingOffer
+  offer: DrawnOffer
 ): { href: string; key: string; title: string } => {
   const at = `/project/${encodeURIComponent(offer.projectId)}`;
   switch (offer.kind) {
@@ -1242,21 +1249,23 @@ class Home {
         raisedAt: notice.at,
       };
     });
-    const offered: NeedsItem[] = needsStore.offers.map((offer) => {
-      const project = projectsStore.projects.find(
-        (one) => one.id === offer.projectId
-      );
-      return {
-        kind: "offer",
-        offer,
-        ...offerFacts(offer),
-        place: project?.name ?? "",
-        project: project
-          ? { name: project.name, hue: markHue(folderOf(project)) }
-          : null,
-        raisedAt: offer.offeredAt,
-      };
-    });
+    const offered: NeedsItem[] = needsStore.offers
+      .filter(drawn)
+      .map((offer) => {
+        const project = projectsStore.projects.find(
+          (one) => one.id === offer.projectId
+        );
+        return {
+          kind: "offer",
+          offer,
+          ...offerFacts(offer),
+          place: project?.name ?? "",
+          project: project
+            ? { name: project.name, hue: markHue(folderOf(project)) }
+            : null,
+          raisedAt: offer.offeredAt,
+        };
+      });
     // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
     const tailnet = tailnetStore.tailnetHttps;
     const secured: NeedsItem[] =

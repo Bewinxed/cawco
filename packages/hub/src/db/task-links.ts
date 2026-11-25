@@ -3,7 +3,7 @@
  * task and a source (core external-items.ts): one row per task and URL,
  * each pointing at its item's mirror row (db external-items.ts, schema
  * `external_items`), the one record of what the source holds of it. The
- * tracker sync (tracker.ts) and the GitHub poller's reads and events
+ * tracker sync (sync.ts) and the GitHub poller's reads and events
  * (links.ts) find a task here ({@link TaskLinksDb.byItem}).
  *
  * A task's rows follow its file: every time the file is indexed, its
@@ -34,13 +34,8 @@ import {
 import { itemOfUrl } from "@cawco/providers/registry";
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import {
-  type ItemPatch,
-  type ItemRow,
-  mirrorRefOf,
-  writeItem,
-  writeItemById,
-} from "./external-items";
+import { type ItemPatch, type ItemRow, writeItemById } from "./external-items";
+import { itemFor } from "./intake";
 import {
   externalComments,
   externalItems,
@@ -233,8 +228,7 @@ export const syncTaskLinks = (
       continue;
     }
     const row = held.get(url);
-    const itemId =
-      row?.itemId ?? writeItem(tx, projectId, mirrorRefOf(item)).item.id;
+    const itemId = row?.itemId ?? itemFor(tx, projectId, item).id;
     const mode = modeOf(tx, taskId, itemId, record, row?.mode);
     if (row) {
       if (row.mode !== mode) {
@@ -252,7 +246,7 @@ export const syncTaskLinks = (
   }
 };
 
-/** The rows tracker.ts and links.ts keep: links with their items, and comments carried. */
+/** The rows sync.ts and links.ts keep: links with their items, and comments carried. */
 export interface TaskLinksDb {
   /**
    * THE matcher: the links naming an item, each task's record first and
@@ -283,11 +277,6 @@ export interface TaskLinksDb {
   readonly ofTask: (projectId: string, taskId: string) => LinkedItem[];
   /** Keeps a comment carried, once: a second of the same id writes nothing. */
   readonly putComment: (row: ExternalCommentRow) => void;
-  /** Links a task to the item its URL names, its mirror written with `revision`: a task file's link as the source holds it. */
-  readonly putRef: (
-    link: Omit<TaskLinkColumns, "itemId">,
-    revision: ItemPatch
-  ) => void;
   /** A task's record link; undefined while it has none. */
   readonly record: (
     projectId: string,
@@ -388,27 +377,6 @@ export const taskLinksDb = (db: BunSQLiteDatabase): TaskLinksDb => {
         .all(),
     putComment: (row) => {
       db.insert(externalComments).values(row).onConflictDoNothing().run();
-    },
-    putRef: (link, revision) => {
-      const named = itemOfUrl(link.url);
-      if (!named) {
-        return;
-      }
-      db.transaction((tx) => {
-        const { item } = writeItem(
-          tx,
-          link.projectId,
-          mirrorRefOf(named),
-          revision
-        );
-        tx.insert(taskLinks)
-          .values({ ...link, itemId: item.id })
-          .onConflictDoUpdate({
-            target: [taskLinks.projectId, taskLinks.taskId, taskLinks.url],
-            set: { mode: link.mode, itemId: item.id },
-          })
-          .run();
-      });
     },
     revise: (itemId, revision) =>
       db.transaction(

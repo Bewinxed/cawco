@@ -44,6 +44,9 @@
  *   conversation reads what the person writes on tasks (task-input.ts), and
  *   whether their comment reaches the task's attempt (jev-tasks.ts), through
  *   the same `configure`.
+ * - `set_outsiders`: what an event from someone an outside service does
+ *   not vouch for does (outsiders.ts): `hold` it for the person, or `start`
+ *   a session on it, through the same `configure`.
  * - `set_account`: the account the project's sessions start on when a start
  *   names none (an account's id, nickname or email; null for the fleet's
  *   routing), checked and written as the person's own edit is
@@ -106,6 +109,7 @@ import {
   type SessionChosenMode,
 } from "@cawco/core/harness/modes";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
+import { OUTSIDER_RULES, type OutsiderRule } from "@cawco/core/outsiders";
 import {
   PROJECT_LANDS,
   PROJECT_SETTING_KINDS,
@@ -196,6 +200,7 @@ const ASKED_CHANGE = z.object({
   events: z.boolean().optional(),
   hears_tasks: z.boolean().optional(),
   attempts_hear_comments: z.boolean().optional(),
+  outsiders: z.enum(OUTSIDER_RULES).optional(),
   account: z
     .string()
     .nullable()
@@ -294,6 +299,10 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
       kind: literal("set_attempts_hear_comments"),
     }),
     object({
+      kind: literal("set_outsiders"),
+      outsiders: picklist(OUTSIDER_RULES),
+    }),
+    object({
       account: nullable(string()),
       kind: literal("set_account"),
       name: nullable(string()),
@@ -383,6 +392,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
         kind: change.kind,
         attempts_hear_comments: change.attemptsHearComments,
       };
+    case "set_outsiders":
+      return { kind: change.kind, outsiders: change.outsiders };
     case "set_account":
       return { kind: change.kind, account: change.account };
     case "set_account_at_limit":
@@ -541,6 +552,7 @@ export interface ProjectSettingsDeps {
       | { on: boolean }
       | { hearsTasks: boolean }
       | { attemptsHearComments: boolean }
+      | { outsiders: OutsiderRule }
       | {
           harness?: HarnessKind;
           mode?: SessionChosenMode | null;
@@ -783,6 +795,27 @@ export const createProjectSettings = ({
     return {
       kind: asked.kind,
       attemptsHearComments: on,
+    } satisfies ProjectSettingChange;
+  };
+
+  /** What an outsider's event does, refused when it does that already. */
+  const outsidersSet = (project: ProjectRow, asked: AskedChange) => {
+    const rule = asked.outsiders;
+    if (rule === null || rule === undefined) {
+      return problem(400, {
+        code: "outsiders",
+        detail: projectSettingsWords.needs.outsiders,
+      });
+    }
+    if (rule === project.outsiders) {
+      return problem(400, {
+        code: "outsiders",
+        detail: projectSettingsWords.already.outsiders(rule),
+      });
+    }
+    return {
+      kind: "set_outsiders",
+      outsiders: rule,
     } satisfies ProjectSettingChange;
   };
 
@@ -1061,6 +1094,8 @@ export const createProjectSettings = ({
       case "set_hears_tasks":
       case "set_attempts_hear_comments":
         return writingSet(project, { ...asked, kind: asked.kind });
+      case "set_outsiders":
+        return outsidersSet(project, asked);
       case "set_account":
         return changesAllowed(project) ?? accountSet(project, asked);
       case "set_account_at_limit":
@@ -1227,6 +1262,9 @@ export const createProjectSettings = ({
         break;
       case "set_attempts_hear_comments":
         caw(project.id, { attemptsHearComments: change.attemptsHearComments });
+        break;
+      case "set_outsiders":
+        caw(project.id, { outsiders: change.outsiders });
         break;
       case "set_account": {
         const answered = await edit(project.id, {
@@ -1430,6 +1468,7 @@ export const createProjectSettings = ({
       events: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
+      outsiders: project.outsiders,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
       reviewLimit: now.reviewLimit,

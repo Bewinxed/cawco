@@ -305,9 +305,15 @@ import {
  * name so a report on anything else is refused by its schema, and
  * memory_note's line pointing there; measured on (worker 33,849, delegate
  * 14,380 measured). Both budgets are raised to it.
+ * 2026-11-25: project_settings takes `outsiders` (`set_outsiders`), the
+ * project's rule for an event from someone an outside service does not
+ * vouch for, held for the person or started on (provider spec §2.5, the
+ * owner's decision on outsiders that day: readable and settable through
+ * the project's settings tools) (worker 33,865 measured); the worker's
+ * budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 33_849,
+  worker: 33_865,
   delegate: 14_380,
   overseer: 770,
   "web-facing": 3400,

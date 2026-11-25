@@ -1,7 +1,7 @@
 /**
  * Where a project's tasks live (Projects spec D2, §5.2): CawCo's files alone,
  * or GitHub Issues or Linear as the record of each task's issue fields.
- * Every task stays a file; with a tracker, the hub's sync (hub tracker.ts)
+ * Every task stays a file; with a tracker, the hub's sync (hub sync.ts)
  * keeps each linked task's title, description, labels, stage and comments
  * one record with its issue, and CawCo keeps rank, edges, attempts and
  * checks.
@@ -10,7 +10,7 @@
 import type { GhRepo } from "./connections";
 
 export const TRACKERS = ["cawco", "github", "linear"] as const;
-/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
+/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (hub sync.ts). */
 export type Tracker = (typeof TRACKERS)[number];
 /** A tracker that is an outside service. */
 export type IssueTracker = Exclude<Tracker, "cawco">;
@@ -23,7 +23,7 @@ export const TRACKER_NAMES: Readonly<Record<Tracker, string>> = {
 };
 
 /**
- * Which way a binding syncs (hub tracker.ts): `both` keeps each linked
+ * Which way a binding syncs (hub sync.ts): `both` keeps each linked
  * task and its issue one record and files each new task as an issue;
  * `inbound` brings issues in as tasks and writes nothing to the tracker.
  */
@@ -64,7 +64,7 @@ export interface GithubProject {
 
 /**
  * The stages the hub has made sure of a Status option for on one GitHub
- * Project (hub tracker.ts): each had an option named as it, or the hub
+ * Project (hub sync.ts): each had an option named as it, or the hub
  * added one. A stage named here is never given one again, so an option the
  * person removes or renames on GitHub stays as they left it.
  */
@@ -77,7 +77,7 @@ export interface GithubStatusStages {
 
 /**
  * The Status options the hub last added to one GitHub Project (hub
- * tracker.ts), each named as a board column the Project had no option for.
+ * sync.ts), each named as a board column the Project had no option for.
  * Kept on the binding and read beside it, so the person finds it where the
  * board's link is.
  */
@@ -91,7 +91,7 @@ export interface GithubStatusesAdded {
 }
 
 /** A GitHub Project a connection reaches, offered in the binding's form. */
-export interface GithubProjectChoice {
+interface GithubProjectChoice {
   fieldId: string | null;
   id: string;
   /** Linked to the bound repository on GitHub: the form's first pick. */

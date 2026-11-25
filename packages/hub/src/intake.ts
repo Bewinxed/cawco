@@ -14,28 +14,42 @@
  *   stores its revisions and keeps its events as already handled.
  * - **Answered at once.** `take` returns as soon as the store is done; a
  *   webhook is answered then, and the poll loop keeps its cursor only then.
- * - **In order, in the project's turn.** The subscribers run after, per
- *   item, oldest event first, one project at a time: links (the tasks that
- *   link the item hear it moved, and a comment on a linked item is filed on
- *   its thread task), sync (empty while the tracker sync keeps its own
- *   poll), lifecycle (a merged pull request an attempt opened moves its
- *   task, dispatch.ts), routing last (event-routes.ts: a route's routine,
- *   else a trigger on the task that links the item, else on the item).
+ * - **In order, in the project's turn.** The subscribers run after, one
+ *   project at a time ({@link Intake.turn}), per item, oldest event first:
+ *   1. links: the tasks that link the item hear it moved, and a comment on
+ *      a linked item is filed on its thread task (links.ts);
+ *   2. sync: a revision of an issue on the project's syncing watch is filed
+ *      as a task or reconciled with the task that holds it (sync.ts), and
+ *      a board read lands before the items;
+ *   3. lifecycle: a merged pull request an attempt opened moves its task
+ *      (dispatch.ts);
+ *   4. outsiders: an event from someone the service does not vouch for is
+ *      held, or goes on, by the project's rule (outsiders.ts);
+ *   5. routing last (event-routes.ts): a route's routine, else a trigger
+ *      on the task that links the item (the one step 2 filed included),
+ *      else on the item.
+ *   So a new issue on a synced repository is one task before any route or
+ *   trigger sees its event.
  * - **Run again after a stop.** Each event is marked `processed_at` once
- *   its subscribers ran to the end; at start the hub runs every event left
- *   unmarked again ({@link Intake.start}). Every subscriber is safe to
- *   repeat: a comment is filed once under its own id, a merge's move finds
- *   its task moved, and routing passes over an event a route or a trigger
- *   already took.
+ *   its subscribers ran to the end, and each mirror row `synced_version`
+ *   once the sync took it in; what a stopped hub, or a step that stopped
+ *   short, left runs again at the hub's start ({@link Intake.start}) and
+ *   after the project's next take. Every subscriber is safe to repeat: a
+ *   comment is filed once under its own id, an issue a task links files no
+ *   task, a merge's move finds its task moved, and routing passes over an
+ *   event a route or a trigger already took.
  */
 import { detach } from "@cawco/core/detach";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { githubIngest } from "@cawco/providers/github/ingest";
+import { linearIngest } from "@cawco/providers/linear/ingest";
 import type {
+  BoardRead,
   Ingested,
+  ItemRevision,
   MirrorProvider,
   SourceEvent,
 } from "@cawco/providers/provider";
-import AsyncLock from "async-lock";
 import type { DbShape } from "./db";
 import type { ItemRow } from "./db/external-items";
 import type { InboundEventRow } from "./db/ingress";
@@ -106,7 +120,7 @@ const storedPayload = (source: SourceEvent): string => {
 /** The events a revision's move says, by the provider whose item it is (provider spec §2.3 `Ingest.moved`). */
 const MOVED: Partial<
   Record<MirrorProvider, NonNullable<typeof githubIngest.moved>>
-> = { github: githubIngest.moved };
+> = { github: githubIngest.moved, linear: linearIngest.moved };
 
 /** Where a take comes from: its project, the watch it came through (none for a relay's generic delivery), and whose items it holds. */
 export interface IntakeAt {
@@ -123,13 +137,24 @@ export interface Arrived {
 
 /** What the routing step knows from the steps before it. */
 export interface Routing {
+  /** The event's author is someone the service does not vouch for, and the project holds their events: no route, no trigger. */
+  held: boolean;
   /** A merged pull request moved its task: no trigger. */
   lifecycle: boolean;
+  /** The item is an issue on the project's syncing watch: the sync took its revision in. */
+  synced: boolean;
   /** The task the event is about; null when none links its item. */
   taskId: string | null;
 }
 
-/** The subscribers that run for a stored event, in order (provider spec §2.5). */
+/** What the sync step did with an item: the task it filed or that holds it, whether the item is the syncing watch's, and whether it took a version in now. */
+export interface Synced {
+  syncs: boolean;
+  taskId: string | null;
+  took: boolean;
+}
+
+/** The subscribers that run for what the door stored, in order (provider spec §2.5). */
 export interface IntakeSubscribers {
   /** A merged pull request an attempt opened moves its task: the task, when it is this project's. */
   readonly lifecycle: (arrived: Arrived) => Promise<string | undefined>;
@@ -137,8 +162,31 @@ export interface IntakeSubscribers {
   readonly links: (arrived: Arrived) => Promise<string | null | AnyProblem>;
   /** The items whose state or title a take moved: the tasks that link them look again (links.ts `moved`). */
   readonly linksMoved: (projectId: string, items: readonly ItemRow[]) => void;
+  /** Whether an event's author is held by the project's outsider rule, its task or item held for the person (outsiders.ts `hold`). */
+  readonly outsiders: (
+    arrived: Arrived,
+    taskId: string | null,
+    synced: boolean
+  ) => Promise<boolean>;
   /** Routes, then a trigger (event-routes.ts `route`). */
   readonly route: (arrived: Arrived, routing: Routing) => Promise<void>;
+  /** The tracker sync (sync.ts). */
+  readonly sync: {
+    /** A board read of the project's syncing watch: its tasks' Status taken in. */
+    readonly board: (
+      projectId: string,
+      watchId: string,
+      board: BoardRead
+    ) => Promise<void>;
+    /** A mirror row past what the sync took in: filed or reconciled when it is an issue of the syncing watch, from `revision` when the take holds it, else read now; its refusal leaves the row to run again. */
+    readonly revision: (
+      projectId: string,
+      item: ItemRow,
+      revision: ItemRevision | undefined
+    ) => Promise<Synced | AnyProblem>;
+  };
+  /** Whether an item is an issue of the project's syncing watch (sync.ts `syncs`). */
+  readonly syncs: (projectId: string, itemId: string | null) => boolean;
 }
 
 export interface IntakeDeps {
@@ -148,89 +196,221 @@ export interface IntakeDeps {
   readonly subscribers: IntakeSubscribers;
 }
 
+/** What one project's run of the subscribers takes: events, edited comments, revisions and rows to sync, moved items and board reads. */
+interface Batch {
+  boards: { board: BoardRead; watchId: string }[];
+  /** It carries what the project left to run: the next batch of the project may carry it again once this one starts. */
+  carriesLeft?: true;
+  edited: InboundEventRow[];
+  moved: ItemRow[];
+  rows: InboundEventRow[];
+  /** Each item to sync, by its id, with the revision the take holds of it, when it does. */
+  unsynced: Map<string, { item: ItemRow; revision?: ItemRevision }>;
+}
+
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
-  /** Each project's turn: its events' subscribers run one at a time. */
-  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  /** Each project's turn: what came through the door, and the sync's own work, run one at a time. */
+  const turns = makeKeyedLock<string>();
+  /** The projects whose queued batch carries what they left to run: one read's several takes carry it once. */
+  const leftQueued = new Set<string>();
 
-  /** The four subscribers for one stored event, in order; marked processed once they all ran. */
-  const runOne = async (row: InboundEventRow): Promise<void> => {
+  /** Runs `work` in the project's turn: nothing else of the project's door or sync runs meanwhile. */
+  const turn = <T>(projectId: string, work: () => Promise<T>): Promise<T> =>
+    turns.run(projectId, work);
+
+  /** Step 2 for an item, once: undefined when it has nothing to sync, else what the sync did, or its refusal. */
+  const syncItem = async (
+    batch: Batch,
+    projectId: string,
+    itemId: string | null
+  ): Promise<Synced | AnyProblem | undefined> => {
+    const due = itemId ? batch.unsynced.get(itemId) : undefined;
+    if (!(due && itemId)) {
+      return;
+    }
+    batch.unsynced.delete(itemId);
+    const said = `[intake] ${due.item.provider} ${due.item.ref}`;
+    const synced = await subscribers.sync.revision(
+      projectId,
+      due.item,
+      due.revision
+    );
+    if (isProblem(synced)) {
+      console.warn(
+        `${said}: the sync stopped short, and runs again after the project's next read: ${synced.response.detail}`
+      );
+    } else if (synced.took) {
+      console.log(
+        `${said}: sync${synced.taskId ? `, its task ${synced.taskId}` : ", no task"}`
+      );
+    }
+    return synced;
+  };
+
+  /** Steps 1 and 2 for one stored event: its thread task, and what the sync did with its item; undefined when either stopped short (the event stays unprocessed). */
+  const linkAndSync = async (
+    batch: Batch,
+    arrived: Arrived,
+    said: string
+  ): Promise<
+    { linked: string | null; synced: Synced | undefined } | undefined
+  > => {
+    const { row } = arrived;
+    const linked = await subscribers.links(arrived);
+    if (isProblem(linked)) {
+      console.warn(
+        `${said} stays unprocessed, and runs again after the project's next read: ${linked.response.detail}`
+      );
+      return;
+    }
+    console.log(
+      `${said}: links${linked ? `, linked to ${linked}` : ", linked to no task"}`
+    );
+    const synced = await syncItem(batch, row.projectId, row.itemId);
+    if (synced !== undefined && isProblem(synced)) {
+      console.warn(
+        `${said} stays unprocessed, and runs again after the project's next read`
+      );
+      return;
+    }
+    return { linked, synced };
+  };
+
+  /** The five steps for one stored event, in order; marked processed once they all ran. */
+  const runOne = async (
+    batch: Batch,
+    stored: InboundEventRow
+  ): Promise<void> => {
+    const row = db.ingress.event(stored.id) ?? stored;
+    if (row.processedAt !== null) {
+      return;
+    }
     const said = `[intake] ${row.source} ${row.deliveryKey}`;
     const event = storedEvent(row);
     const arrived: Arrived = { event, row };
-    try {
-      const linked = await subscribers.links(arrived);
+    const before = await linkAndSync(batch, arrived, said);
+    if (before === undefined) {
+      return;
+    }
+    const { linked, synced } = before;
+    let taskId = linked ?? synced?.taskId ?? null;
+    const syncs = synced?.syncs ?? subscribers.syncs(row.projectId, row.itemId);
+    const moved = await subscribers.lifecycle(arrived);
+    if (moved) {
+      taskId = moved;
+    }
+    console.log(
+      `${said}: lifecycle${moved ? ` moved ${moved}` : ", nothing moved"}`
+    );
+    if (taskId !== row.taskId) {
+      db.ingress.setEvent(row.id, { taskId });
+    }
+    const held = await subscribers.outsiders(arrived, taskId, syncs);
+    if (held) {
+      console.log(`${said}: outsiders, held for the person`);
+    }
+    const fresh = db.ingress.event(row.id) ?? row;
+    await subscribers.route(
+      { event, row: { ...fresh, taskId } },
+      { taskId, lifecycle: moved !== undefined, synced: syncs, held }
+    );
+    console.log(`${said}: routing done`);
+    db.ingress.setEvent(row.id, { processedAt: new Date() });
+  };
+
+  /** Comments edited since their events were stored: each entry rewritten on its task (links.ts `fileComment`), nothing routed. */
+  const fileEdits = async (rows: readonly InboundEventRow[]): Promise<void> => {
+    for (const row of rows) {
+      const linked = await subscribers.links({ event: storedEvent(row), row });
       if (isProblem(linked)) {
         console.warn(
-          `${said} stays unprocessed, and runs again at the hub's next start: ${linked.response.detail}`
+          `[intake] ${row.source} ${row.deliveryKey}: its edit was not filed: ${linked.response.detail}`
         );
-        return;
       }
-      let taskId = linked;
-      console.log(
-        `${said}: links${taskId ? `, linked to ${taskId}` : ", linked to no task"}`
-      );
-      const moved = await subscribers.lifecycle(arrived);
-      if (moved) {
-        taskId = moved;
-        console.log(`${said}: lifecycle moved ${moved}`);
-      }
-      if (taskId !== row.taskId) {
-        db.ingress.setEvent(row.id, { taskId });
-      }
-      const fresh = db.ingress.event(row.id) ?? row;
-      await subscribers.route(
-        { event, row: { ...fresh, taskId } },
-        { taskId, lifecycle: moved !== undefined }
-      );
-      console.log(`${said}: routing done`);
-      db.ingress.setEvent(row.id, { processedAt: new Date() });
-    } catch (error) {
-      console.warn(
-        `${said} stays unprocessed, and runs again at the hub's next start: ${wordsOf(error)}`
-      );
     }
   };
 
-  /** A project's stored events run in its turn, per item, oldest event first. */
-  const process = (
-    projectId: string,
-    rows: readonly InboundEventRow[],
-    moved: readonly ItemRow[]
-  ): Promise<void> =>
-    turns.acquire(projectId, async () => {
-      if (moved.length > 0) {
-        subscribers.linksMoved(projectId, moved);
-      }
-      const atOf = (row: InboundEventRow): number => {
-        const { at } = storedEvent(row);
-        return at > 0 ? at : row.receivedAt.getTime();
-      };
-      const byItem = new Map<string, InboundEventRow[]>();
-      for (const row of [...rows].sort((a, b) => atOf(a) - atOf(b))) {
-        const key = row.itemId ?? row.id;
-        byItem.set(key, [...(byItem.get(key) ?? []), row]);
-      }
-      for (const group of byItem.values()) {
+  /** A batch's events, per item, oldest first: a group stops at the first that throws. */
+  const runEvents = async (batch: Batch): Promise<void> => {
+    const atOf = (row: InboundEventRow): number => {
+      const { at } = storedEvent(row);
+      return at > 0 ? at : row.receivedAt.getTime();
+    };
+    const byItem = new Map<string, InboundEventRow[]>();
+    for (const row of [...batch.rows].sort((a, b) => atOf(a) - atOf(b))) {
+      const key = row.itemId ?? row.id;
+      byItem.set(key, [...(byItem.get(key) ?? []), row]);
+    }
+    for (const group of byItem.values()) {
+      try {
         for (const row of group) {
-          await runOne(row);
+          await runOne(batch, row);
         }
+      } catch (error) {
+        console.warn(
+          `[intake] an event on item ${group[0]?.itemId ?? "none"} stays unprocessed, and runs again after the project's next read: ${wordsOf(error)}`
+        );
       }
+    }
+  };
+
+  /** The rows left to sync that no event named. */
+  const runUnsynced = async (
+    projectId: string,
+    batch: Batch
+  ): Promise<void> => {
+    for (const itemId of [...batch.unsynced.keys()]) {
+      try {
+        const synced = await syncItem(batch, projectId, itemId);
+        if (synced !== undefined && isProblem(synced)) {
+          console.log(
+            `[intake] item ${itemId} runs again after the project's next read`
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `[intake] item ${itemId}: the sync stopped short, and runs again after the project's next read: ${wordsOf(error)}`
+        );
+      }
+    }
+  };
+
+  /** One project's batch, in its turn: boards, edits, then per item, oldest event first, then the items with no event. */
+  const process = (projectId: string, batch: Batch): Promise<void> =>
+    turn(projectId, async () => {
+      if (batch.carriesLeft) {
+        leftQueued.delete(projectId);
+      }
+      if (batch.moved.length > 0) {
+        subscribers.linksMoved(projectId, batch.moved);
+      }
+      for (const { watchId, board } of batch.boards) {
+        await subscribers.sync.board(projectId, watchId, board);
+      }
+      await fileEdits(batch.edited);
+      await runEvents(batch);
+      await runUnsynced(projectId, batch);
     });
 
-  /** Runs a project's stored events, detached: a take answers before they run. */
-  const later = (
-    projectId: string,
-    rows: readonly InboundEventRow[],
-    moved: readonly ItemRow[]
-  ): void => {
-    if (rows.length === 0 && moved.length === 0) {
+  /** Runs a project's batch, detached: a take answers before it runs. */
+  const later = (projectId: string, batch: Batch): void => {
+    if (
+      batch.rows.length === 0 &&
+      batch.moved.length === 0 &&
+      batch.edited.length === 0 &&
+      batch.boards.length === 0 &&
+      batch.unsynced.size === 0
+    ) {
+      if (batch.carriesLeft) {
+        leftQueued.delete(projectId);
+      }
       return;
     }
     detach(
-      process(projectId, rows, moved).catch((error: unknown) =>
+      process(projectId, batch).catch((error: unknown) =>
         console.warn(
           `[intake] project ${projectId}'s events did not run: ${wordsOf(error)}`
         )
@@ -239,10 +419,30 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
     );
   };
 
+  /** What a project left to run (an event unprocessed, a row unsynced), beside `batch`, unless a batch of the project queued already carries it: a step that stopped short runs again, once a read. */
+  const withLeft = (projectId: string, batch: Batch): Batch => {
+    if (leftQueued.has(projectId)) {
+      return batch;
+    }
+    leftQueued.add(projectId);
+    const known = new Set(batch.rows.map((row) => row.id));
+    const rows = [
+      ...batch.rows,
+      ...db.intake.unprocessed(projectId).filter((row) => !known.has(row.id)),
+    ];
+    const unsynced = new Map(batch.unsynced);
+    for (const item of db.intake.unsynced(projectId)) {
+      if (!unsynced.has(item.id)) {
+        unsynced.set(item.id, { item });
+      }
+    }
+    return { ...batch, rows, unsynced, carriesLeft: true };
+  };
+
   /**
    * THE door: one read or delivery stored once, then its subscribers run
-   * in the project's turn. Answers how many events it stored, once the
-   * store is done.
+   * in the project's turn, with whatever the project left to run. Answers
+   * how many events it stored, once the store is done.
    */
   const take = (
     at: IntakeAt,
@@ -270,37 +470,57 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
     }
     later(
       at.projectId,
-      taken.events.map(({ row }) => row),
-      taken.moved
+      withLeft(at.projectId, {
+        rows: taken.events.map(({ row }) => row),
+        edited: taken.edited.map(({ row }) => row),
+        moved: taken.moved,
+        boards:
+          ingested.board && at.watchId
+            ? [{ watchId: at.watchId, board: ingested.board }]
+            : [],
+        unsynced: new Map(
+          taken.revised.map(({ item, revision }) => [
+            item.id,
+            { item, revision },
+          ])
+        ),
+      })
     );
     return taken.events.length;
   };
 
-  /** Hub start: every event a stopped hub left unprocessed runs again, in its project's turn. */
+  /** Hub start: every event a stopped hub left unprocessed, and every row the sync has not taken in, runs again in its project's turn. */
   const start = (): void => {
     const left = db.intake.unprocessed();
-    if (left.length > 0) {
+    const unsynced = db.intake.unsynced();
+    if (left.length > 0 || unsynced.length > 0) {
       console.log(
-        `[intake] ${left.length} event${left.length === 1 ? "" : "s"} a stopped hub left unprocessed run again`
+        `[intake] a stopped hub left ${left.length} event${left.length === 1 ? "" : "s"} unprocessed and ${unsynced.length} item${unsynced.length === 1 ? "" : "s"} the sync had not taken in: they run again`
       );
     }
-    const byProject = new Map<string, InboundEventRow[]>();
-    for (const row of left) {
-      byProject.set(row.projectId, [
-        ...(byProject.get(row.projectId) ?? []),
-        row,
-      ]);
-    }
-    for (const [projectId, rows] of byProject) {
-      later(projectId, rows, []);
+    const projects = new Set([
+      ...left.map((row) => row.projectId),
+      ...unsynced.map((item) => item.projectId),
+    ]);
+    for (const projectId of projects) {
+      later(
+        projectId,
+        withLeft(projectId, {
+          rows: [],
+          edited: [],
+          moved: [],
+          boards: [],
+          unsynced: new Map(),
+        })
+      );
     }
   };
 
   /** Resolves once every project's events taken so far have run: for a caller that reads what they did. */
   const settled = (projectId: string): Promise<void> =>
-    turns.acquire(projectId, () => Promise.resolve());
+    turn(projectId, () => Promise.resolve());
 
-  return { settled, start, take };
+  return { settled, start, take, turn };
 };
 
 export type Intake = ReturnType<typeof createIntake>;

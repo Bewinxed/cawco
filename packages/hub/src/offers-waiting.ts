@@ -1,8 +1,9 @@
 /**
  * The hub's offers waiting on the person's answer, as Needs you lists them
- * (core `WaitingOffer`): the design-system offer (design-offers.ts) and an
+ * (core `WaitingOffer`): the design-system offer (design-offers.ts), an
  * LFS server a checkout named that the project never declared
- * (routes/lfs.ts). None is a line in the project's Caw chat (the
+ * (routes/lfs.ts), and an outsider's words held on an item no task links
+ * (outsiders.ts). None is a line in the project's Caw chat (the
  * owner's "Where triggers go", 2026-11-23: what needs the person goes to
  * Needs you).
  *
@@ -22,6 +23,8 @@ export interface OffersWaitingDeps {
   /** Sends a frame to every dashboard. */
   readonly broadcast: (frame: OffersWaitingFrame) => void;
   readonly db: Pick<DbShape, "designOffers" | "lfsRefusals" | "project">;
+  /** An outsider's words held on items no task links, folded by item (outsiders.ts `held`). */
+  readonly outsiders: () => WaitingOffer[];
   /** What a project's design system would be built from, in words (design-offers.ts `sourcesOf`); none when it cannot be read now. */
   readonly sources: (projectId: string) => string[];
 }
@@ -29,6 +32,7 @@ export interface OffersWaitingDeps {
 export const createOffersWaiting = ({
   broadcast,
   db,
+  outsiders,
   sources,
 }: OffersWaitingDeps) => {
   /** Every offer waiting now, oldest first. */
@@ -48,7 +52,7 @@ export const createOffersWaiting = ({
       projectId: row.projectId,
       root: row.root,
     }));
-    return [...design, ...refused]
+    return [...design, ...refused, ...outsiders()]
       .filter((offer) => db.project(offer.projectId) !== undefined)
       .sort((a, b) => a.offeredAt - b.offeredAt);
   };

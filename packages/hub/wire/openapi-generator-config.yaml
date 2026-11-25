@@ -153,6 +153,7 @@ typeOverrides:
     NeutralStatus: OpenEnums.NeutralStatus
     NeutralUserMessageRole: OpenEnums.NeutralUserMessageRole
     OnCap: OpenEnums.OnCap
+    OutsiderRule: OpenEnums.OutsiderRule
     OwedMoveWait: OpenEnums.OwedMoveWait
     OwnToolsChosenHelpers: OpenEnums.OwnToolsChosenHelpers
     OwnToolsChosenStepLists: OpenEnums.OwnToolsChosenStepLists

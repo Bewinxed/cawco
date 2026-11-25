@@ -13,6 +13,11 @@
  *   A project follows GitHub through a connection that reads GitHub's API
  *   (core `readsGitHubApi`) from the moment it names the project
  *   ({@link Clock.followConnection}).
+ *   A watch the project's tracker syncs is read whether or not the project
+ *   links its repository, with its board stream after the rest, and what
+ *   it reads reaches the tracker sync through the door (sync.ts).
+ * - **Linear** (providers linear/ingest.ts): a synced team's issues and
+ *   comments every 60 s, through its watch's connection.
  * - **Connector polls** (providers connection/ingest.ts): a connection's
  *   read-only tool on its own interval, 60 s or more.
  * - **The cursor after the store.** A stream's cursor is kept only once
@@ -38,11 +43,17 @@ import {
   connectionIngest,
   type ToolCaller,
 } from "@cawco/providers/connection/ingest";
+import { BOARD_STREAM } from "@cawco/providers/github/board";
 import {
   type GitHubClient,
   type GitHubStreamCursor,
   githubIngest,
 } from "@cawco/providers/github/ingest";
+import {
+  type LinearClientFor,
+  type LinearStreamCursor,
+  linearIngest,
+} from "@cawco/providers/linear/ingest";
 import type {
   Ingest,
   ItemRevision,
@@ -117,15 +128,23 @@ const latest = (
 ): number =>
   Math.max(0, ...followed.map((watch) => watch[key]?.getTime() ?? 0));
 
+/** The providers the poll reads, by a watch's stored name. */
+const POLLED: Readonly<Record<string, WatchView["provider"]>> = {
+  github: "github",
+  linear: "linear",
+  connection: "connection",
+};
+
 /** A watch as its provider reads it: read through the connection the poll reads it with. */
 const viewOf = (watch: PolledWatch): WatchView => ({
   id: watch.id,
   projectId: watch.projectId,
-  provider: watch.provider === "connection" ? "connection" : "github",
+  provider: POLLED[watch.provider] ?? "connection",
   host: watch.host,
   container: watch.container,
   connection: watch.reads,
   settings: watch.settings,
+  sync: watch.sync,
 });
 
 /** A GitHub stream's kept mark as its provider reads it. */
@@ -133,7 +152,21 @@ const githubCursorOf = (
   kept: StreamCursor | undefined
 ): GitHubStreamCursor | null =>
   kept && typeof kept.cursor.since === "number"
-    ? { etag: kept.cursor.etag ?? null, since: kept.cursor.since }
+    ? {
+        etag: kept.cursor.etag ?? null,
+        since: kept.cursor.since,
+        ...(kept.cursor.refusedAt === undefined
+          ? {}
+          : { refusedAt: kept.cursor.refusedAt }),
+      }
+    : null;
+
+/** A Linear stream's kept mark as its provider reads it. */
+const linearCursorOf = (
+  kept: StreamCursor | undefined
+): LinearStreamCursor | null =>
+  kept && typeof kept.cursor.since === "number"
+    ? { since: kept.cursor.since }
     : null;
 
 /** A connector poll's kept mark: there once it has looked. */
@@ -143,7 +176,7 @@ const connectorCursorOf = (
 
 /** One provider as the loop reads it: its ingest, how it opens a client, and how a kept mark reads. */
 interface Reader<Client, Cursor> {
-  client: (watch: PolledWatch) => Client;
+  client: (watch: PolledWatch) => Client | Promise<Client>;
   cursorOf: (kept: StreamCursor | undefined) => Cursor | null;
   ingest: Ingest<Client, Cursor>;
   /** A provider's mark as its watch keeps it. */
@@ -164,10 +197,10 @@ interface WatchPolled {
 export interface ClockDeps {
   readonly connections: Pick<
     Connections,
-    "callConnection" | "get" | "githubClient"
+    "callConnection" | "get" | "githubClient" | "linearClient"
   >;
   readonly db: Pick<DbShape, "ingress" | "project">;
-  readonly intake: Pick<Intake, "take">;
+  readonly intake: Pick<Intake, "settled" | "take">;
   readonly lifetime: HubLifetimeShape;
   readonly links: Pick<Links, "readLinks">;
 }
@@ -187,8 +220,16 @@ export const createClock = ({
   const github: Reader<GitHubClient, GitHubStreamCursor> = {
     ingest: githubIngest,
     cursorOf: githubCursorOf,
-    keep: ({ etag, since }) => ({ etag, since }),
+    keep: ({ etag, since, refusedAt }) =>
+      refusedAt === undefined ? { etag, since } : { etag, since, refusedAt },
     client: (watch) => connections.githubClient(watch.reads),
+    via: "poll",
+  };
+  const linear: Reader<LinearClientFor, LinearStreamCursor> = {
+    ingest: linearIngest,
+    cursorOf: linearCursorOf,
+    keep: ({ since }) => ({ since }),
+    client: (watch) => connections.linearClient(watch.reads),
     via: "poll",
   };
   const connector: Reader<ToolCaller, ConnectorCursor> = {
@@ -295,12 +336,12 @@ export const createClock = ({
   };
 
   /** A client for a watch, or why its connection could not sign in, in words. */
-  const clientFor = <Client, Cursor>(
+  const clientFor = async <Client, Cursor>(
     watch: PolledWatch,
     reader: Reader<Client, Cursor>
-  ): { client: Client } | { words: string } => {
+  ): Promise<{ client: Client } | { words: string }> => {
     try {
-      return { client: reader.client(watch) };
+      return { client: await reader.client(watch) };
     } catch (error) {
       return { words: wordsOf(error) };
     }
@@ -343,13 +384,16 @@ export const createClock = ({
     }
     const polledAt = new Date();
     const linked = linkedWatches(project.links, followed);
+    const synced = followed.filter(
+      (watch) => watch.sync !== "off" && !linked.includes(watch)
+    );
     for (const watch of followed) {
-      if (!linked.includes(watch)) {
+      if (!(linked.includes(watch) || synced.includes(watch))) {
         store.keepWatch(watch.id, { reason: NO_GITHUB_LINK, polledAt });
       }
     }
-    for (const watch of linked) {
-      const opened = clientFor(watch, github);
+    for (const watch of [...linked, ...synced]) {
+      const opened = await clientFor(watch, github);
       if ("words" in opened) {
         store.keepWatch(watch.id, { reason: opened.words, polledAt });
         continue;
@@ -372,6 +416,21 @@ export const createClock = ({
     );
   };
 
+  /** One read of a Linear team's watch. */
+  const pollLinear = async (id: string): Promise<void> => {
+    const watch = store.polledWatch(id);
+    if (watch?.provider !== "linear") {
+      return;
+    }
+    const polledAt = new Date();
+    const opened = await clientFor(watch, linear);
+    if ("words" in opened) {
+      store.keepWatch(watch.id, { reason: opened.words, polledAt });
+      return;
+    }
+    keepRead(watch, await readWatch(watch, linear, opened.client), polledAt);
+  };
+
   /** One call of a connector poll. */
   const pollConnector = async (id: string): Promise<void> => {
     const watch = store.polledWatch(id);
@@ -379,7 +438,7 @@ export const createClock = ({
       return;
     }
     const polledAt = new Date();
-    const opened = clientFor(watch, connector);
+    const opened = await clientFor(watch, connector);
     if ("words" in opened) {
       store.keepWatch(watch.id, { reason: opened.words, polledAt });
       return;
@@ -402,6 +461,26 @@ export const createClock = ({
     return going;
   };
 
+  /** A Linear team's watch or a connector poll, read on its own when it is due. */
+  const lookAlone = (watch: PolledWatch, now: number): void => {
+    const linearWatch = watch.provider === "linear";
+    const every = (linearWatch ? linear : connector).ingest.everyMs(
+      viewOf(watch)
+    );
+    const due =
+      (watch.polledAt?.getTime() ?? 0) + every <= now &&
+      (watch.resumeAt?.getTime() ?? 0) <= now;
+    if (!due) {
+      return;
+    }
+    detach(
+      linearWatch
+        ? once(`linear:${watch.id}`, () => pollLinear(watch.id))
+        : once(`conn:${watch.id}`, () => pollConnector(watch.id)),
+      `${watch.provider} poll`
+    );
+  };
+
   /** Every watch that is due starts its read. */
   const look = (now: number = Date.now()): void => {
     const byProject = new Map<string, PolledWatch[]>();
@@ -413,16 +492,7 @@ export const createClock = ({
         ]);
         continue;
       }
-      const every = connector.ingest.everyMs(viewOf(watch));
-      if (
-        (watch.polledAt?.getTime() ?? 0) + every <= now &&
-        (watch.resumeAt?.getTime() ?? 0) <= now
-      ) {
-        detach(
-          once(`conn:${watch.id}`, () => pollConnector(watch.id)),
-          "connector poll"
-        );
-      }
+      lookAlone(watch, now);
     }
     for (const [projectId, followed] of byProject) {
       const every = Math.min(
@@ -519,6 +589,25 @@ export const createClock = ({
     await once(`github:${projectId}`, () => pollGitHub(projectId));
   };
 
+  /**
+   * Reads the project's syncing watch now (the tracker's Sync now): a
+   * board refused before asked again at once; resolves once the read is
+   * stored and what it brought has run through the door.
+   */
+  const pollSyncNow = async (projectId: string): Promise<void> => {
+    const watch = store
+      .polledWatches()
+      .find((one) => one.projectId === projectId && one.sync !== "off");
+    if (!watch) {
+      return;
+    }
+    store.dropStreams(watch.id, BOARD_STREAM);
+    await (watch.provider === "linear"
+      ? once(`linear:${watch.id}`, () => pollLinear(watch.id))
+      : once(`github:${projectId}`, () => pollGitHub(projectId)));
+    await intake.settled(projectId);
+  };
+
   /** Calls a connector poll now. */
   const pollConnectorNow = (id: string): Promise<void> =>
     once(`conn:${id}`, () => pollConnector(id));
@@ -581,6 +670,7 @@ export const createClock = ({
     githubView,
     pollConnectorNow,
     pollGitHubNow,
+    pollSyncNow,
     start,
   };
 };

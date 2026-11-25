@@ -26,7 +26,7 @@
  * with again once the binding goes ({@link stopSyncing}).
  */
 import { CONNECTION_AUTHS, readsGitHubApi } from "@cawco/core/connections";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, like, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   connectionProjects,
@@ -47,14 +47,11 @@ type Writer = Pick<
 
 export const GITHUB_HOST = "github.com";
 
-/** The tracker sync's own streams, beside the GitHub poller's resources, until it reads the event poll. */
-export const SYNC_STREAMS = {
-  issues: "sync:issues",
-  comments: "sync:comments",
-} as const;
+/** The providers whose watches the poll loop reads (clock.ts): a GitHub repository, a Linear team, a connector poll. */
+const POLLED_PROVIDERS = ["github", "linear", "connection"] as const;
 
-/** The providers whose watches the poll loop reads (clock.ts): a GitHub repository, a connector poll. */
-const POLLED_PROVIDERS = ["github", "connection"] as const;
+/** What a syncing watch's board stream is called, before its Project's id (providers github/board.ts). */
+const BOARD_STREAMS = "board:%";
 
 /** The auths a `github` connection reads GitHub's REST API with (core `readsGitHubApi`), as stored. */
 const READS_GITHUB_API = CONNECTION_AUTHS.filter(readsGitHubApi);
@@ -416,6 +413,8 @@ export type StreamKept =
 
 /** The rows the poll loop (clock.ts) reads and writes. */
 export interface PolledWatchesDb {
+  /** A watch's streams whose names start with `prefix` let go, so their next read starts afresh (a refused board asked again). */
+  readonly dropStreams: (watchId: string, prefix: string) => void;
   /** The connection project `projectId`'s GitHub watches read with (one that only follows first), or nothing while it follows none. */
   readonly followedBy: (projectId: string) => string | undefined;
   /** {@link followGitHub}: the repositories now watched, none while the project links none on github.com. */
@@ -533,6 +532,16 @@ export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
           .where(and(eq(watches.id, id), polled))
           .all()
       )[0],
+    dropStreams: (watchId, prefix) => {
+      db.delete(watchCursors)
+        .where(
+          and(
+            eq(watchCursors.watchId, watchId),
+            like(watchCursors.stream, `${prefix}%`)
+          )
+        )
+        .run();
+    },
     keepStream: (watchId, stream, kept) => {
       const now = new Date();
       const set =
@@ -586,14 +595,13 @@ export const settingsWith = (
 
 /** A watch's settings with every part only its tracker sync keeps gone. */
 const unsynced = ({
+  githubBoard: _board,
   githubProject: _project,
   githubProjectReason: _projectReason,
   githubStatusStages: _stages,
   githubStatusesRefused: _refused,
   githubStatusesAdded: _added,
-  syncReason: _reason,
-  syncPolledAt: _polledAt,
-  syncResumeAt: _resumeAt,
+  syncProblem: _problem,
   pollerConnection: _poller,
   ...own
 }: WatchSettings): WatchSettings => own;
@@ -610,16 +618,24 @@ export const unboundConnection = (
   followConnectionOf(tx, watch.projectId, [watch.settings.pollerConnection]);
 
 /**
- * A watch no longer syncs. One the GitHub poller reads keeps reading,
- * through `connection`, its sync's settings and streams gone; one made
- * only for the sync, or with no connection to read through, goes.
+ * A watch no longer syncs. A GitHub repository the project links and
+ * follows keeps being read, through `connection`, its sync's settings and
+ * board stream gone; any other (a Linear team, a repository the project
+ * does not link, one with no connection to read through) goes, cursors
+ * and all.
  */
 export const stopSyncing = (
   tx: Writer,
   watch: WatchRow,
   connection: string | undefined
 ): void => {
-  if (!(watch.enabled && connection)) {
+  const followed =
+    watch.provider === "github" &&
+    connection !== undefined &&
+    linkedRepos(tx, watch.projectId).some(
+      (repo) => repo.toLowerCase() === watch.container.toLowerCase()
+    );
+  if (!(followed && connection)) {
     tx.delete(watches).where(eq(watches.id, watch.id)).run();
     return;
   }
@@ -638,7 +654,7 @@ export const stopSyncing = (
     .where(
       and(
         eq(watchCursors.watchId, watch.id),
-        inArray(watchCursors.stream, Object.values(SYNC_STREAMS))
+        like(watchCursors.stream, BOARD_STREAMS)
       )
     )
     .run();

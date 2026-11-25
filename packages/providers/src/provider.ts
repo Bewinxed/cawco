@@ -110,6 +110,8 @@ interface ItemSnapshot {
   body?: string | null;
   /** A pull request's head branch, for an event a revision raises; never stored in the mirror. */
   branch?: string | null;
+  /** When it was opened, ms: the tracker sync files an issue opened after it began syncing (hub sync.ts). */
+  createdAt?: number;
   /** A generic record, as the tool answered it. */
   data?: unknown;
   /** GitHub's node id, Linear's uuid; empty for a record. */
@@ -118,7 +120,11 @@ interface ItemSnapshot {
   state: MirrorState | null;
   /** The source's own word: "Open", "Closed as not planned", a run's conclusion. */
   stateName: string;
+  /** The service's own state, as a write names it back: `open`, `closed:not_planned`, a Linear state's id. */
+  stateToken?: string;
   title: string;
+  /** Why the service does not vouch for its author, in words; null when it does or says nothing. */
+  unvouched?: string | null;
 }
 
 /** One item as the service holds it at one version. */
@@ -173,8 +179,40 @@ export interface SourceEvent {
   url: string | null;
 }
 
+/** One item of a board as a read found it: its id on the board, and the column option it stands in (null: none). */
+export interface BoardItem {
+  itemId: string;
+  optionId: string | null;
+}
+
+/**
+ * A board whose column carries a tracker's stages (a GitHub Project's
+ * Status), as one read of it found it: its column field and options, and
+ * the container's issues on it by key; the service's words when the
+ * connection may not read it; or none to read.
+ */
+export type BoardRead =
+  | {
+      /** Every item was read: an issue missing from `items` is not on it. */
+      complete: boolean;
+      fieldId: string | null;
+      /** The board's id (a Project's node id). */
+      id: string;
+      items: Record<string, BoardItem>;
+      kind: "read";
+      number: number;
+      options: { id: string; name: string }[];
+      title: string;
+      url: string;
+    }
+  | { kind: "refused"; words: string }
+  /** The connection reads the Projects now, and none is linked to the container: no board. */
+  | { kind: "none" };
+
 /** What one read or delivery holds. */
 export interface Ingested {
+  /** A board stream's read: what the tracker sync reads its stages' column off (hub sync.ts). */
+  board?: BoardRead;
   events: SourceEvent[];
   revisions: ItemRevision[];
   /**
@@ -201,6 +239,9 @@ export type Within = <T>(
   read: (signal: AbortSignal) => Promise<T>
 ) => Promise<Asked<T>>;
 
+/** Whether a watch's container is synced with its project's tasks: `off` only reads it; `inbound` and `both` are a tracker's directions. */
+export type WatchSyncMode = "off" | "inbound" | "both";
+
 /** A watch as a provider reads it: its row without its cursors. */
 export interface WatchView {
   connection: string;
@@ -209,8 +250,10 @@ export interface WatchView {
   id: string;
   projectId: string;
   provider: MirrorProvider;
-  /** The provider's own part of the watch (a connector poll's call), read field by field. */
+  /** The provider's own part of the watch (a connector poll's call, a tracker's board), read field by field. */
   settings: object;
+  /** Whether the tracker sync reads its revisions: `off`, or the binding's direction. */
+  sync: WatchSyncMode;
 }
 
 /** What one stream's read came to. */

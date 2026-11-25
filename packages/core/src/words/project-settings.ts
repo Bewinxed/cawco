@@ -8,6 +8,7 @@
 import type { StartingSet } from "../delegate-types";
 import { type HarnessKind, harnessName } from "../harness/kinds";
 import type { OfferedMode } from "../harness/modes";
+import type { OutsiderRule } from "../outsiders";
 import type { TriggerKind } from "../triggers";
 import { areaWords } from "./areas";
 import { triggerKindWords } from "./caw-settings";
@@ -144,6 +145,8 @@ export interface SettingsRead {
   name: string;
   /** What reaching the cap does, in effect. */
   onCap: SettingRead;
+  /** What an event from someone an outside service does not vouch for does. */
+  outsiders: OutsiderRule;
   /** Why dispatch starts nothing now; null when it would. */
   paused: string | null;
   /** Tasks waiting in review now. */
@@ -181,6 +184,7 @@ export const projectSettingsWords = {
       `- Triggers (comments, moves, routines, events) start sessions: ${onOff(now.events)} (set_events)`,
       `- A session reads what the person writes on a task no session is on: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
       `- The person's comment on a task reaches its attempt: ${onOff(now.attemptsHearComments)} (set_attempts_hear_comments)`,
+      `- An issue or comment from someone GitHub or Linear does not vouch for: ${now.outsiders === "hold" ? "held in Needs you, no session started" : "starts a session, their words as data"} (set_outsiders)`,
       `- Start attempts at ready tasks on their own: ${onOff(now.dispatch)} (set_dispatch)`,
       `- Attempts at once: at most ${now.maxAttempts} (set_max_attempts)`,
       `- Dispatch pauses at ${now.reviewLimit} tasks waiting for review (set_review_limit)`,
@@ -242,6 +246,10 @@ export const projectSettingsWords = {
     on
       ? "Send your comment on a task to its attempt"
       : "Keep your comments on a task from its attempt",
+  outsiders: (rule: OutsiderRule): string =>
+    rule === "hold"
+      ? "Hold issues and comments from people GitHub or Linear does not vouch for in Needs you, starting no session until you move them on"
+      : "Start a session on issues and comments from people GitHub or Linear does not vouch for, their words read as data",
 
   /** What Caw's chat runs as, changed: each field it names. */
   chat: (change: ChatChange): string =>
@@ -331,6 +339,8 @@ export const projectSettingsWords = {
       `A session reading what you write on tasks is ${onOff(on)} for this project already.`,
     attemptsHearComments: (on: boolean) =>
       `Comments reaching their task's attempt is ${onOff(on)} for this project already.`,
+    outsiders: (rule: OutsiderRule) =>
+      `This project ${rule === "hold" ? "holds" : "starts a session on"} what someone the service does not vouch for writes already.`,
     runsOn: (to: string | null) =>
       `This project's attempts run on ${to ?? "any machine"} already.`,
     startingSet: "This project's sessions start with that set already.",
@@ -345,6 +355,8 @@ export const projectSettingsWords = {
     hearsTasks: "set_hears_tasks says on (hears_tasks: true) or off (false).",
     attemptsHearComments:
       "set_attempts_hear_comments says on (attempts_hear_comments: true) or off (false).",
+    outsiders:
+      "set_outsiders names outsiders: hold (held in Needs you, no session) or start (a session, their words as data).",
     startingSet:
       "set_starting_set names starting_set: { skills: [...], servers: [...] }, or null for everything.",
     chat: "set_caw names harness, model (null: its default) or mode (null: the fleet's).",

@@ -21373,6 +21373,13 @@
                   },
                   "on": {
                     "type": "boolean"
+                  },
+                  "outsiders": {
+                    "type": "string",
+                    "enum": [
+                      "hold",
+                      "start"
+                    ]
                   }
                 }
               }
@@ -24321,6 +24328,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjectsByIdMoves422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/outsiders/answer": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "accept",
+                      "decline"
+                    ]
+                  },
+                  "itemId": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "itemId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdOutsidersAnswer",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdOutsidersAnswer 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdOutsidersAnswer200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdOutsidersAnswer 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdOutsidersAnswer404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdOutsidersAnswer 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdOutsidersAnswer422"
                 }
               }
             }
@@ -53852,6 +53934,13 @@
           "step"
         ]
       },
+      "OutsiderRule": {
+        "type": "string",
+        "enum": [
+          "hold",
+          "start"
+        ]
+      },
       "OwedMoveWait": {
         "description": "What a move a session owes waits on before it runs: the session's turn's\nend; the work its process holds for later (a background task) ending, or\nthe restart bound; or its machine connected again (hub `owed_moves.waits`).",
         "type": "string",
@@ -56722,6 +56811,10 @@
           "on": {
             "type": "boolean"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule",
+            "description": "What an event from someone an outside service does not vouch for does\n(core outsiders.ts): `hold` it on its task or item in Needs you until\nthe person moves it on, or `start` a session on it as on anyone's."
+          },
           "problem": {
             "description": "Why Caw could not start now, on or off, or why its last start failed; null when he could.",
             "type": "string"
@@ -56752,6 +56845,7 @@
           "harness",
           "hearsTasks",
           "on",
+          "outsiders",
           "running",
           "spendUsd",
           "starting"
@@ -65306,7 +65400,7 @@
         ]
       },
       "Tracker": {
-        "description": "Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts).",
+        "description": "Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (hub sync.ts).",
         "type": "string",
         "enum": [
           "cawco",
@@ -67484,7 +67578,7 @@
         ]
       },
       "WaitingOffer": {
-        "description": "An offer of the hub's waiting on the person's answer, as Needs you lists\nit (hub offers-waiting.ts): never a line in the project's Caw chat.\n\n- `design`: a design-shaped task entered an active stage in a project with\n  no design system (hub design-offers.ts); Build and Not now answer it\n  through `/api/projects/:id/design-offer`.\n- `lfs-refused`: a checkout's `.lfsconfig` names an LFS server the project\n  never declared, so its large files stayed pointers (hub routes/lfs.ts);\n  declared in the project's settings, or put away with Dismiss through\n  `/api/lfs-refusals/dismiss`.",
+        "description": "An offer of the hub's waiting on the person's answer, as Needs you lists\nit (hub offers-waiting.ts): never a line in the project's Caw chat.\n\n- `design`: a design-shaped task entered an active stage in a project with\n  no design system (hub design-offers.ts); Build and Not now answer it\n  through `/api/projects/:id/design-offer`.\n- `lfs-refused`: a checkout's `.lfsconfig` names an LFS server the project\n  never declared, so its large files stayed pointers (hub routes/lfs.ts);\n  declared in the project's settings, or put away with Dismiss through\n  `/api/lfs-refusals/dismiss`.\n- `outsider`: someone an outside service does not vouch for opened or\n  commented on an item no task links, and the project holds outsiders\n  (core outsiders.ts): what they wrote waits here, folded by item, until\n  the person lets it through (it is routed as any event, a session\n  reading their words as data) or drops it, through\n  `/api/projects/:id/outsiders/answer` (hub outsiders.ts).",
         "anyOf": [
           {
             "type": "object",
@@ -67554,6 +67648,72 @@
               "kind",
               "offeredAt",
               "projectId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "actor": {
+                "description": "Who wrote it, as the service names them.",
+                "type": "string"
+              },
+              "count": {
+                "description": "How many of their events wait on the item.",
+                "type": "number"
+              },
+              "firstLine": {
+                "description": "The first line of the first of them, as data: what they wrote.",
+                "type": "string"
+              },
+              "itemId": {
+                "description": "The item's mirror row (hub `external_items`), which the answer names.",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "outsider"
+                ]
+              },
+              "lastAt": {
+                "description": "When the newest of them came, ms epoch.",
+                "type": "number"
+              },
+              "offeredAt": {
+                "description": "When the first of them came, ms epoch.",
+                "type": "number"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "ref": {
+                "description": "`#12`, `ENG-123`.",
+                "type": "string"
+              },
+              "title": {
+                "description": "The item's title; empty when it was not read.",
+                "type": "string"
+              },
+              "unvouched": {
+                "description": "Why the service does not vouch for them, in its words.",
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "actor",
+              "count",
+              "firstLine",
+              "itemId",
+              "kind",
+              "lastAt",
+              "offeredAt",
+              "projectId",
+              "ref",
+              "title",
+              "unvouched"
             ]
           }
         ]
@@ -77611,6 +77771,9 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -77724,6 +77887,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "places",
           "reviewLimit",
           "tracker"
@@ -99459,6 +99623,9 @@
             "onCap": {
               "$ref": "#/components/schemas/OnCap"
             },
+            "outsiders": {
+              "$ref": "#/components/schemas/OutsiderRule"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -99572,6 +99739,7 @@
             "links",
             "maxAttempts",
             "name",
+            "outsiders",
             "places",
             "reviewLimit",
             "tracker"
@@ -122350,6 +122518,9 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -122463,6 +122634,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "places",
           "reviewLimit",
           "tracker"
@@ -166468,6 +166640,9 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
+          },
           "place": {
             "type": "object",
             "properties": {
@@ -166646,6 +166821,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "place",
           "placeAdded",
           "places",
@@ -175592,6 +175768,156 @@
           }
         ]
       },
+      "postApiProjectsByIdOutsidersAnswer200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiProjectsByIdOutsidersAnswer404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "outsider-held-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdOutsidersAnswer422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
       "postApiProjectsByIdPlaces200": {
         "type": "object",
         "properties": {
@@ -175687,6 +176013,9 @@
           },
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
+          },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
           },
           "place": {
             "type": "object",
@@ -175866,6 +176195,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "place",
           "placeAdded",
           "places",
@@ -176257,6 +176587,9 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -176370,6 +176703,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "places",
           "reviewLimit",
           "tracker"
@@ -230269,6 +230603,9 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
+          "outsiders": {
+            "$ref": "#/components/schemas/OutsiderRule"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -230382,6 +230719,7 @@
           "links",
           "maxAttempts",
           "name",
+          "outsiders",
           "places",
           "reviewLimit",
           "tracker"

@@ -1,5 +1,5 @@
 /**
- * Linear as a project's tracker (tracker.ts): one team's issues through
+ * Linear as a project's tracker (sync.ts): one team's issues through
  * `@linear/sdk`, Linear's official SDK, signed in by the project's
  * connection (connections.ts `linearClient`).
  *
@@ -7,12 +7,9 @@
  *   client and its error parsing: "it's always recommended to write your own
  *   custom GraphQL queries and use filters to narrow down the data as much
  *   as possible" (linear.app/developers/rate-limiting).
- * - **Polling.** "If you have to poll recent changes, order results by
- *   returning recently updated issue first" and "Filter issues in your
- *   GraphQL request" (linear.app/developers/graphql): the team's issues with
- *   `updatedAt` after the cursor, newest first. Linear has no ETag; a poll
- *   that finds nothing costs one request of the 2,500 an hour an API key has
- *   (5,000 for an OAuth app).
+ * - **Reading.** What changed on the team comes through the door from
+ *   the Linear provider's poll (providers linear/ingest.ts); this reads one
+ *   issue at a time, when the sync has no revision of it in hand.
  * - **States** are the team's workflow states with their categories; a new
  *   issue with no state goes to "the team's first state in the Backlog
  *   workflow state category", so the sync always names one.
@@ -29,6 +26,11 @@ import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import { cutShort } from "@cawco/core/words/helpers";
+import {
+  LINEAR_ISSUE_FIELDS,
+  type LinearPage,
+  type LinearRawIssue,
+} from "@cawco/providers/linear/ingest";
 import { linkOfUrl } from "@cawco/providers/registry";
 import {
   LinearError,
@@ -40,12 +42,9 @@ import { ElysiaStatus, problem } from "elysia";
 import type { LinearClientFor } from "./connections";
 import {
   type Issue,
-  type IssueComment,
   type IssueDraft,
   type IssuePatch,
   type IssueState,
-  type ListCursor,
-  type Listed,
   labelSet,
   type StateType,
   type TrackerAdapter,
@@ -54,10 +53,6 @@ import {
 
 /** One request. Our choice. */
 const REQUEST_MS = 30_000;
-/** The edge of the window read again each poll. Our choice, as GitHub's. */
-const OVERLAP_MS = 2 * 60_000;
-/** Linear's default page; a connection's complexity stays low. */
-const PER_PAGE = 50;
 
 /**
  * One request within {@link REQUEST_MS}, through a client made for it with
@@ -97,19 +92,8 @@ const within = async <T>(
   return read.value.data;
 };
 
-const ISSUE = `
-  id
-  identifier
-  url
-  title
-  description
-  createdAt
-  updatedAt
-  state { id name type }
-  labels(first: 50) { nodes { name } pageInfo { hasNextPage endCursor } }
-  creator { name }
-  botActor { name }
-`;
+/** An issue's fields: the Linear provider's, which its poll reads too. */
+const ISSUE = LINEAR_ISSUE_FIELDS;
 
 const TEAM_QUERY = `query CawcoTeam($id: String!) {
   team(id: $id) {
@@ -149,20 +133,6 @@ const ISSUE_QUERY = `query CawcoIssue($id: String!) {
   issue(id: $id) { ${ISSUE} team { id } }
 }`;
 
-const ISSUES_QUERY = `query CawcoIssues($team: ID!, $since: DateTimeOrDuration!, $after: String) {
-  issues(first: ${PER_PAGE}, after: $after, orderBy: updatedAt, filter: { team: { id: { eq: $team } }, updatedAt: { gt: $since } }) {
-    nodes { ${ISSUE} }
-    pageInfo { hasNextPage endCursor }
-  }
-}`;
-
-const COMMENTS_QUERY = `query CawcoComments($team: ID!, $since: DateTimeOrDuration!, $after: String) {
-  comments(first: ${PER_PAGE}, after: $after, orderBy: updatedAt, filter: { issue: { team: { id: { eq: $team } } }, createdAt: { gt: $since } }) {
-    nodes { id body url createdAt editedAt issue { id } user { name } botActor { name } }
-    pageInfo { hasNextPage endCursor }
-  }
-}`;
-
 const CREATE_MUTATION = `mutation CawcoIssueCreate($input: IssueCreateInput!) {
   issueCreate(input: $input) { success issue { ${ISSUE} } }
 }`;
@@ -175,26 +145,8 @@ const COMMENT_MUTATION = `mutation CawcoCommentCreate($input: CommentCreateInput
   commentCreate(input: $input) { success comment { id createdAt url } }
 }`;
 
-interface RawIssue {
-  /** The integration that made it (Slack, Sentry, an Ask), when no member did. */
-  botActor?: { name?: string | null } | null;
-  createdAt: string;
-  /** The workspace member who made it; null for an integration's. */
-  creator?: { name?: string | null } | null;
-  description?: string | null;
-  id: string;
-  identifier: string;
-  labels?: Page<{ name: string }> | null;
-  state: { id: string; name: string; type: string };
-  title: string;
-  updatedAt: string;
-  url: string;
-}
-
-interface Page<T> {
-  nodes: T[];
-  pageInfo: { endCursor?: string | null; hasNextPage: boolean };
-}
+type RawIssue = LinearRawIssue;
+type Page<T> = LinearPage<T>;
 
 /** The nodes of a connection past its first page: each next page asked with the cursor the last one ended at. */
 const restOf = async <N>(
@@ -455,48 +407,6 @@ export const linearAdapter = (
     return names.flatMap((name) => byName.get(name.toLowerCase()) ?? []);
   };
 
-  /** A list since the cursor, newest change first, page by page to its last page. */
-  const listSince = async <Raw, T>(
-    what: string,
-    query: string,
-    field: "comments" | "issues",
-    cursor: ListCursor,
-    fill: (raw: Raw) => Promise<Raw | TrackerProblem>,
-    read: (raw: Raw) => T,
-    stamp: (raw: Raw) => number
-  ): Promise<Listed<T> | TrackerProblem> => {
-    const since = new Date(
-      Math.max(0, cursor.since - OVERLAP_MS)
-    ).toISOString();
-    const items: T[] = [];
-    let newest = cursor.since;
-    let after: string | null = null;
-    for (;;) {
-      const data = await ask<Record<string, Page<Raw>>>(what, query, {
-        team: teamId,
-        since,
-        after,
-      });
-      if (data instanceof ElysiaStatus) {
-        return data;
-      }
-      const listed: Page<Raw> = data[field];
-      for (const raw of listed.nodes) {
-        newest = Math.max(newest, stamp(raw));
-        const full = await fill(raw);
-        if (full instanceof ElysiaStatus) {
-          return full;
-        }
-        items.push(read(full));
-      }
-      if (!(listed.pageInfo.hasNextPage && listed.pageInfo.endCursor)) {
-        break;
-      }
-      after = listed.pageInfo.endCursor;
-    }
-    return { kind: "read", items, cursor: { since: newest, etag: null } };
-  };
-
   const issueInput = async (patch: IssuePatch) => {
     const ids =
       patch.labels === undefined ? undefined : await labelIds(patch.labels);
@@ -613,56 +523,6 @@ export const linearAdapter = (
       const full = await whole(issueUpdate.issue);
       return full instanceof ElysiaStatus ? full : issueOf(full);
     },
-
-    changed: (cursor) =>
-      listSince<RawIssue, Issue>(
-        "list its issues",
-        ISSUES_QUERY,
-        "issues",
-        cursor,
-        whole,
-        issueOf,
-        (raw) => Date.parse(raw.updatedAt)
-      ),
-
-    comments: (cursor) =>
-      listSince<
-        {
-          body: string;
-          botActor?: { name?: string | null } | null;
-          createdAt: string;
-          editedAt?: string | null;
-          id: string;
-          issue?: { id: string } | null;
-          url: string;
-          user?: { name: string } | null;
-        },
-        IssueComment
-      >(
-        "list its comments",
-        COMMENTS_QUERY,
-        "comments",
-        cursor,
-        (raw) => Promise.resolve(raw),
-        (raw) => {
-          const author =
-            raw.user?.name ?? raw.botActor?.name ?? "an integration";
-          return {
-            id: raw.id,
-            issueKey: raw.issue?.id ?? "",
-            url: raw.url,
-            author: linearActorOf(author, !raw.user),
-            editedAt: raw.editedAt ? Date.parse(raw.editedAt) : null,
-            // An integration's comment (Slack, an Ask), no member behind it.
-            unvouched: raw.user
-              ? null
-              : `${author}, with no member of the workspace behind it`,
-            body: raw.body.replaceAll("\r\n", "\n").trim(),
-            createdAt: Date.parse(raw.createdAt),
-          };
-        },
-        (raw) => Date.parse(raw.createdAt)
-      ),
 
     comment: async (issue, author, body) => {
       const created = await ask<{

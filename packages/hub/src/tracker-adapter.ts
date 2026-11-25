@@ -1,7 +1,9 @@
 /**
- * What the tracker sync (tracker.ts) asks of GitHub Issues and of Linear
- * alike: one target's issues, their states and comments, read and written
- * through each service's own SDK (tracker-github.ts, tracker-linear.ts).
+ * What the tracker sync (sync.ts) asks of GitHub Issues and of Linear
+ * alike: one target's states and issues, an issue read one at a time, and
+ * the sync's writes, through each service's own SDK (tracker-github.ts,
+ * tracker-linear.ts). What changed on the target comes through the door
+ * (intake.ts) from each provider's ingest, never from here.
  *
  * - **States.** An issue's state has one of Linear's six categories:
  *   "statuses belong to fixed categories: triage, backlog, unstarted,
@@ -71,23 +73,6 @@ export interface Issue {
   url: string;
 }
 
-/** A comment on one of the target's issues. */
-export interface IssueComment {
-  /** Who wrote it, as the tracker names them. */
-  author: ExternalActor;
-  body: string;
-  createdAt: number;
-  /** When its words were last changed on the tracker; null when never. */
-  editedAt: number | null;
-  id: string;
-  /** The issue it is on, by its key. */
-  issueKey: string;
-  /** Who wrote it, in words, when the tracker does not vouch for them (as {@link Issue}'s opener); null when it does. */
-  unvouched: string | null;
-  /** Where it reads on the tracker: its issue's URL with its anchor. */
-  url: string;
-}
-
 /** What a new issue is made of. */
 export interface IssueDraft {
   description: string;
@@ -98,16 +83,6 @@ export interface IssueDraft {
 
 /** What a change to an issue sets; what it leaves out stays. */
 export type IssuePatch = Partial<IssueDraft>;
-
-/** Where a list stands: the newest change it took in, and the tracker's ETag for it. */
-export interface ListCursor {
-  etag: string | null;
-  since: number;
-}
-
-/** A list read since a cursor: what changed, and the cursor to keep; `unchanged` when the tracker said nothing moved. */
-export type Listed<T> =
-  { cursor: ListCursor; items: T[]; kind: "read" } | { kind: "unchanged" };
 
 /** An issue as a write names it: its key for the tracker, its ref for sentences. */
 type IssueRef = Pick<Issue, "key" | "ref">;
@@ -151,7 +126,7 @@ export type TrackerProblem =
   | Said<"tracker-linear-issue-not-changed">
   | Said<"tracker-linear-comment-not-taken">;
 
-/** Whether the tracker's rate limit holds the calls back, until {@link resumeOf}. */
+/** Whether the tracker's rate limit holds the calls back. */
 export const heldByRate = (misfit: AnyProblem): boolean =>
   misfit.response.code === "tracker-rate";
 
@@ -164,26 +139,14 @@ export const deniesConnection = (misfit: AnyProblem): boolean =>
   misfit.response.code === "tracker-sign-in" ||
   misfit.response.code === "tracker-scope";
 
-/** When a rate limit lets the next call go, in ms; null for any other problem. */
-export const resumeOf = (misfit: AnyProblem): number | null =>
-  "resumeAt" in misfit.response && typeof misfit.response.resumeAt === "number"
-    ? misfit.response.resumeAt
-    : null;
-
 /** What each call answers when the tracker would not do it: its {@link TrackerProblem}. */
 export interface TrackerAdapter {
-  /** The target's issues changed since the cursor, pull requests left out. */
-  changed: (cursor: ListCursor) => Promise<Listed<Issue> | TrackerProblem>;
   /** Writes a comment on an issue, as `author` where the tracker lets the app say so. */
   comment: (
     issue: IssueRef,
     author: string,
     body: string
   ) => Promise<{ createdAt: number; id: string; url: string } | TrackerProblem>;
-  /** The target's issues' comments written since the cursor, oldest first. */
-  comments: (
-    cursor: ListCursor
-  ) => Promise<Listed<IssueComment> | TrackerProblem>;
   create: (draft: IssueDraft) => Promise<Issue | TrackerProblem>;
   /** The target as the connection reaches it: reading it is the first proof of the connection's scope. */
   describe: () => Promise<TrackerTarget | TrackerProblem>;

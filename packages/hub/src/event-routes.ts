@@ -17,7 +17,10 @@
  *   it), else on the item itself (thing `event`, keyed by its URL, so a run
  *   of events on one item reaches one session); never the project's Caw
  *   conversation. A merged pull request whose task the lifecycle step
- *   moved raises none. While the project's triggers are off it is held on
+ *   moved raises none. On an issue the tracker sync took in, an opening
+ *   (on the task the sync filed for it) and a comment raise one; a close,
+ *   a reopen or a label, which the sync took into its task, none. An event
+ *   the outsider rule held (outsiders.ts) goes to no route and raises none. While the project's triggers are off it is held on
  *   the project, and the session that starts when they are switched on
  *   reads it with the rest.
  * - **Data, never instructions.** An event reaches a model only inside a
@@ -75,6 +78,17 @@ import { normaliseTaskRef } from "./task-file";
 import { MODE } from "./tasks";
 import type { TriggerEvent } from "./trigger-event";
 import type { Routed } from "./triggers";
+
+/**
+ * The events on a synced issue that raise a trigger when no route took
+ * them (provider spec §2.5's table, with the owner's "Opened" cell): its
+ * opening, on the task the sync filed for it, and a comment, filed there.
+ * A close, a reopen or a label the sync took into its task raises none.
+ */
+const SYNCED_TRIGGERS: ReadonlySet<string> = new Set([
+  "issue.opened",
+  "comment.created",
+]);
 
 /**
  * What a route's regex reads at most: what is stored of an event
@@ -469,6 +483,7 @@ export const createEventRoutes = ({
     routing: Routing
   ): Promise<void> => {
     if (
+      routing.held ||
       row.handledAt !== null ||
       (row.routedTo !== null && row.routedTo !== TO_CONVERSATION)
     ) {
@@ -492,6 +507,14 @@ export const createEventRoutes = ({
       store.setEvent(row.id, { handledAt: new Date() });
       console.log(
         `[routing] ${row.source} ${row.deliveryKey}: its task ${routing.taskId} moved on the merge, so no trigger`
+      );
+      return;
+    }
+    if (routing.synced && !SYNCED_TRIGGERS.has(event.kind)) {
+      // The tracker sync moved or changed its task already (step 2).
+      store.setEvent(row.id, { handledAt: new Date() });
+      console.log(
+        `[routing] ${row.source} ${row.deliveryKey}: the sync took it into ${routing.taskId ?? "its task"}, so no trigger`
       );
       return;
     }

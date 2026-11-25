@@ -46,7 +46,7 @@
  *   `review_limit` tasks or more wait in `you` stages.
  * - **Hooks.** A task entering an `active` stage with `runs: <type>`, by
  *   anyone's move but the hub's own (a move the tracker sync brings from
- *   GitHub or Linear is the person's who made it there: tracker.ts holds
+ *   GitHub or Linear is the person's who made it there: sync.ts holds
  *   back the issues of openers the tracker does not vouch for), or filed
  *   straight into one, starts an
  *   attempt (of the task's own type when it names one, else that type),

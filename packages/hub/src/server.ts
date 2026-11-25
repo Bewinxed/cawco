@@ -572,6 +572,7 @@ import {
 } from "./notifications";
 import { createOffersWaiting, offersWaitingRoutes } from "./offers-waiting";
 import { createOpenItems } from "./open-items";
+import { createOutsiders, outsiderRoutes } from "./outsiders";
 import { watchPairingRequests } from "./pairing-requests";
 import { createPasskeyRelay } from "./passkey-relay";
 import {
@@ -777,6 +778,7 @@ import { isStoredShapeError, keptAs } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
+import { createTrackers, trackerRoutes } from "./sync";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { normaliseTaskRef } from "./task-file";
@@ -795,7 +797,6 @@ import { createToolCallKeys } from "./tool-call-keys";
 import { createToolFacts } from "./tool-facts";
 import { createToolInstalls } from "./tool-installs";
 import { ToolReleases } from "./tool-releases";
-import { createTrackers, trackerRoutes } from "./tracker";
 import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
 import { PROJECT_ORIGIN } from "./trigger-event";
@@ -8511,6 +8512,7 @@ export const createServer = (
     broadcast: (frame) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     db,
+    outsiders: () => outsiders.held(),
     sources: (projectId) => designOffers.sources(projectId),
   });
   // A plain folder made a git repository when it is first needed as one.
@@ -8913,6 +8915,9 @@ export const createServer = (
     drop: db.dropTaskIndex,
     links: (projectId, taskId) => {
       const held = db.trackers.held(projectId, taskId);
+      // The sync's own problem is its record link's, never the item's: a
+      // related link of another task does not show it.
+      const synced = db.trackers.problem(projectId, taskId);
       return db.taskLinks
         .ofTask(projectId, taskId)
         .flatMap((row): ExternalRef[] => {
@@ -8920,9 +8925,11 @@ export const createServer = (
           if (!ref) {
             return [];
           }
-          return held && ref.mode === "record"
-            ? [{ ...ref, baselineUnread: true }]
-            : [ref];
+          if (ref.mode !== "record") {
+            return [ref];
+          }
+          const record = { ...ref, problem: synced ?? ref.problem };
+          return held ? [{ ...record, baselineUnread: true }] : [record];
         });
     },
     carried: (projectId, taskId) =>
@@ -10973,17 +10980,35 @@ export const createServer = (
       },
     },
   });
-  // Tracker sync (tracker.ts): a project's tasks one record with their
+  // Tracker sync (sync.ts): a project's tasks one record with their
   // GitHub or Linear issues, through each service's own SDK.
   const trackers = createTrackers({
     connections,
     db,
-    links,
     lifetime,
+    linksMoved: (projectId, items) => links.moved(projectId, items),
+    pollNow: (projectId) => clock.pollSyncNow(projectId),
     tasks,
+    turn: (projectId, work) => intake.turn(projectId, work),
+  });
+  // Outsiders (outsiders.ts): the words of someone an outside service does
+  // not vouch for, held for the person or let through by the project's rule.
+  const outsiders = createOutsiders({
+    db,
+    offersChanged: () => offersWaiting.changed(),
+    route: (arrived) =>
+      eventRoutes.route(arrived, {
+        taskId: arrived.row.taskId,
+        lifecycle: false,
+        synced: false,
+        held: false,
+      }),
+    tasks,
+    turn: (projectId, work) => intake.turn(projectId, work),
   });
   // The door (intake.ts): everything read from an outside service stored
-  // once, then links, lifecycle and routing in the project's turn.
+  // once, then links, sync, lifecycle, outsiders and routing in the
+  // project's turn.
   const intake = createIntake({
     db,
     // An event from outside changes what the project's routines could take
@@ -10992,6 +11017,12 @@ export const createServer = (
     subscribers: {
       links: (arrived) => links.onEvent(arrived),
       linksMoved: (projectId, items) => links.moved(projectId, items),
+      // The tracker sync takes in what its watch's read stored (sync.ts).
+      sync: trackers.subscriber,
+      syncs: (projectId, itemId) =>
+        trackers.subscriber.syncs(projectId, itemId),
+      outsiders: (arrived, taskId, synced) =>
+        outsiders.hold(arrived, taskId, synced),
       // A merged pull request an attempt opened moves its task (dispatch.ts).
       lifecycle: async ({ event, row }) => {
         if (event.kind !== "pr.merged" || !event.url) {
@@ -14147,6 +14178,7 @@ export const createServer = (
         projectOfferRoutes(projectOffers),
         designOfferRoutes(designOffers, YOU_ACTOR),
         offersWaitingRoutes(offersWaiting),
+        outsiderRoutes(outsiders),
         starterRoutes(projectStarters),
         planRoutes(plans),
         planChangeRoutes(changesOfPlans),

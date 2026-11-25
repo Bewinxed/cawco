@@ -60,7 +60,6 @@
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { needLinkOf } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
-  import type { WaitingOffer } from "@cawco/core/project-conversation";
   import { questionsOf } from "@cawco/core/question";
   import type {
     TailnetHttps,
@@ -150,6 +149,7 @@
   import {
     askView,
     clock,
+    type DrawnOffer,
     type NeedsItem,
     type ProjectMarking,
   } from "./home-state.svelte";
@@ -257,7 +257,7 @@
   });
 
   /** An offer's line: what it asks, in the hub's words for its kind. */
-  function offerLine(offer: WaitingOffer): string {
+  function offerLine(offer: DrawnOffer): string {
     switch (offer.kind) {
       case "design":
         return offerWords.designLine(

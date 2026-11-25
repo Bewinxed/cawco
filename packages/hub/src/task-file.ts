@@ -181,7 +181,7 @@ export interface TaskFields {
   /** Its attempts' group under their parent: one combined report once all have ended. */
   group: string | null;
   /**
-   * The GitHub issue or Linear issue it is one record with (tracker.ts), by
+   * The GitHub issue or Linear issue it is one record with (sync.ts), by
    * its URL; only the hub's tracker sync writes it. Null when none.
    */
   issue: string | null;

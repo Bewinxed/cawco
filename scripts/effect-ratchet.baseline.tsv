@@ -1,16 +1,4 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
-async-lock	async-lock	packages/hub/src/artifact-events.ts	1
-async-lock	async-lock	packages/hub/src/at-limit.ts	1
-async-lock	async-lock	packages/hub/src/event-routes.ts	1
-async-lock	async-lock	packages/hub/src/intake.ts	1
-async-lock	async-lock	packages/hub/src/landing.ts	1
-async-lock	async-lock	packages/hub/src/plan-changes.ts	1
-async-lock	async-lock	packages/hub/src/plans.ts	1
-async-lock	async-lock	packages/hub/src/project-folder.ts	1
-async-lock	async-lock	packages/hub/src/tasks.ts	1
-async-lock	async-lock	packages/hub/src/tracker.ts	1
-async-lock	async-lock	packages/hub/src/usability-feedback.ts	1
-async-lock	async-lock	packages/hub/src/workspaces.ts	1
 per-key-chain	converting	packages/agent/src/object-pool.ts	1
 per-key-chain	decisionWrites	packages/agent/src/boundary/decisions.ts	1
 per-key-chain	keepingFolders	packages/agent/src/workspace-records.ts	1
@@ -49,7 +37,6 @@ promise-chain	this.#landing	packages/agent/src/browser/cdp-takeover.ts	1
 promise-chain	this.#saving	packages/agent/src/browser/gate.ts	1
 promise-chain	this.#writes	packages/agent/src/harnesses/opencode-server.ts	1
 promise-chain	this.#writing	packages/agent/src/fleet-desired.ts	1
-promise-chain	weighing	packages/agent/src/stage.ts	1
 promise-chain	writes	packages/agent/src/agent-state.ts	1
 promise-chain	writes	packages/agent/src/made-folders.ts	1
 promise-chain	writes	packages/agent/src/seen-folders.ts	1

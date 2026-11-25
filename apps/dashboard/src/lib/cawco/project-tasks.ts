@@ -242,7 +242,7 @@ export const listTasks = (projectId: string) =>
     refusedOrUnreached
   );
 
-/** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
+/** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's sync.ts). */
 export const readTracker = (projectId: string, client: HubClient = hub) =>
   hubData(
     client.api.projects({ id: projectId }).tracker.get(),

@@ -61,6 +61,7 @@ import {
 } from "@cawco/core/harness/kinds";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { OutsiderRule } from "@cawco/core/outsiders";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,
@@ -593,6 +594,25 @@ export interface CawDeps {
   readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
 
+/** The project's switches and mode after a change: each it names, the rest as they stand. */
+const switchesAfter = (
+  project: ProjectRow,
+  change: {
+    attemptsHearComments?: boolean;
+    changesSettings?: boolean;
+    hearsTasks?: boolean;
+    mode?: OfferedMode | null;
+    outsiders?: OutsiderRule;
+  }
+) => ({
+  mode: change.mode === undefined ? project.cawMode : change.mode,
+  hearsTasks: change.hearsTasks ?? project.hearsTasks,
+  attemptsHearComments:
+    change.attemptsHearComments ?? project.attemptsHearComments,
+  changesSettings: change.changesSettings ?? project.cawChangesSettings,
+  outsiders: change.outsiders ?? project.outsiders,
+});
+
 export const createCaw = ({
   answered,
   blocks,
@@ -1091,6 +1111,7 @@ export const createCaw = ({
       on: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
+      outsiders: project.outsiders,
       changesSettings: project.cawChangesSettings,
       harness: project.cawHarness,
       model: project.cawModel,
@@ -1354,6 +1375,7 @@ export const createCaw = ({
       mode: OfferedMode | null;
       on: boolean;
       changesSettings: boolean;
+      outsiders: OutsiderRule;
     },
     moves: {
       harness: HarnessKind | undefined;
@@ -1367,6 +1389,7 @@ export const createCaw = ({
       cawMode: next.mode,
       hearsTasks: next.hearsTasks,
       attemptsHearComments: next.attemptsHearComments,
+      outsiders: next.outsiders,
       cawChangesSettings: next.changesSettings,
       ...(moves.harness ? { cawHarness: moves.harness } : {}),
     });
@@ -1378,6 +1401,7 @@ export const createCaw = ({
       next.mode !== project.cawMode ||
       next.hearsTasks !== project.hearsTasks ||
       next.attemptsHearComments !== project.attemptsHearComments ||
+      next.outsiders !== project.outsiders ||
       next.changesSettings !== project.cawChangesSettings
     ) {
       projectsChanged();
@@ -1528,7 +1552,9 @@ export const createCaw = ({
      * `hearsTasks` and `attemptsHearComments` are the switches of the
      * person's writing on tasks: whether the conversation reads it
      * (task-input.ts), and whether a comment reaches the task's attempt
-     * (jev-tasks.ts). `changesSettings`: whether its sessions may change
+     * (jev-tasks.ts). `outsiders`: what an event from someone an outside
+     * service does not vouch for does, held for the person or started on
+     * (outsiders.ts). `changesSettings`: whether its sessions may change
      * what his chat and each kind of trigger run as (project-settings.ts
      * `set_caw`, `set_trigger`, `set_account`), Caw's settings panel's
      * switch.
@@ -1544,6 +1570,7 @@ export const createCaw = ({
         model?: string | null;
         on?: boolean;
         changesSettings?: boolean;
+        outsiders?: OutsiderRule;
       }
     ) {
       const project = projectOf(projectId);
@@ -1569,15 +1596,12 @@ export const createCaw = ({
       }
       configured(
         project,
+        { on, ...switchesAfter(project, change) },
         {
-          on,
-          mode: change.mode === undefined ? project.cawMode : change.mode,
-          hearsTasks: change.hearsTasks ?? project.hearsTasks,
-          attemptsHearComments:
-            change.attemptsHearComments ?? project.attemptsHearComments,
-          changesSettings: change.changesSettings ?? project.cawChangesSettings,
-        },
-        { model, harness, moved }
+          model,
+          harness,
+          moved,
+        }
       );
       return view(projectId);
     },
@@ -1986,6 +2010,10 @@ export const cawRoutes = (caw: Caw) =>
           hearsTasks: t.Optional(t.Boolean()),
           // Whether the person's comment on a task reaches its attempt (jev-tasks.ts).
           attemptsHearComments: t.Optional(t.Boolean()),
+          // What an outsider's event does: held for the person, or a session started (outsiders.ts).
+          outsiders: t.Optional(
+            t.Union([t.Literal("hold"), t.Literal("start")])
+          ),
           // Whether its sessions may change what his chat and each kind of
           // trigger run as (project-settings.ts `set_caw`, `set_trigger`,
           // `set_account`): Caw's settings panel's switch.

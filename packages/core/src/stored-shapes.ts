@@ -6131,6 +6131,13 @@ export const GithubStatusStagesShape = declared(
 );
 export type GithubStatusStagesOutput = z.output<typeof GithubStatusStagesShape>;
 
+export const WatchSyncModeShape = declared(
+  z.enum(["off", "inbound", "both"]),
+  "WatchSyncMode",
+  "packages/providers/src/provider.ts"
+);
+export type WatchSyncModeOutput = z.output<typeof WatchSyncModeShape>;
+
 const WorkInFlightShape = declared(
   z.object({ since: z.number().nullable(), why: z.string() }),
   "WorkInFlight",

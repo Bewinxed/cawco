@@ -11804,6 +11804,13 @@
       "both"
     ]
   },
+  "projects.outsiders": {
+    "type": "string",
+    "enum": [
+      "hold",
+      "start"
+    ]
+  },
   "projects.tapped": {
     "type": "string",
     "enum": [
@@ -14237,11 +14244,11 @@
           "null"
         ]
       },
-      "since": {
+      "refusedAt": {
         "type": "number"
       },
-      "unread": {
-        "type": "string"
+      "since": {
+        "type": "number"
       }
     }
   },
@@ -14254,6 +14261,53 @@
           "type": "string"
         },
         "additionalProperties": {}
+      },
+      "githubBoard": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "complete": {
+                "type": "boolean"
+              },
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "itemId": {
+                      "type": "string"
+                    },
+                    "optionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "itemId",
+                    "optionId"
+                  ]
+                }
+              },
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "complete",
+              "items",
+              "projectId"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "githubProject": {
         "anyOf": [
@@ -14392,21 +14446,9 @@
           "null"
         ]
       },
-      "syncPolledAt": {
-        "type": [
-          "number",
-          "null"
-        ]
-      },
-      "syncReason": {
+      "syncProblem": {
         "type": [
           "string",
-          "null"
-        ]
-      },
-      "syncResumeAt": {
-        "type": [
-          "number",
           "null"
         ]
       },

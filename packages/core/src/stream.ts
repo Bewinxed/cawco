@@ -552,12 +552,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `pick` quick or enlarged (hub artifacts/service.ts `pickUnsaid`). A
  *    page built for 108 reads each route's 400 codes closed, so it reloads
  *    first.
+ * 110: an `offers.waiting` frame may carry an offer of kind `outsider`, an
+ *    outside service's unvouched author's words held on an item no task
+ *    links (hub outsiders.ts). A page built for 109 reads the offers'
+ *    kinds closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 109;
+export const WIRE_PROTOCOL = 110;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

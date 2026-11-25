@@ -1,12 +1,12 @@
 /**
  * The hub's mirror of outside items (schema `external_items`, provider spec
  * §2.3): one row per project and item, and THE writer of it. Every path
- * that learns what an item holds writes it here and nowhere else: the
- * door's store of a provider's read or delivery (db/intake.ts, through
- * {@link takeRevision}), a task's link made from its URL (db task-links.ts
- * `syncTaskLinks`), a link read that stopped short (links.ts `readLinks`,
- * its problem alone), and the tracker sync's record (db trackers.ts
- * `putLink`, `updateLink`) until it subscribes to the door.
+ * that learns what an item holds writes it here and nowhere else, through
+ * the door's store (db/intake.ts, by {@link takeRevision}): a provider's
+ * read or delivery, what the tracker sync read or wrote of an issue, and
+ * the empty row a task's link or record names before it was read
+ * (db/intake.ts `itemFor`). A link read that stopped short writes only its
+ * problem and time (links.ts `readLinks`, {@link writeItemById}).
  *
  * A revision carries a `version` (the source's updated-at in ms, or a
  * record's version) when it knows one: one older than the version held
@@ -125,7 +125,7 @@ const itemOf = (
  * THE writer: the project's mirror row of `ref`, made when it has none,
  * with `revision` written over it (nothing, when it says nothing).
  */
-export const writeItem = (
+const writeItem = (
   tx: Writer,
   projectId: string,
   ref: MirrorRef,

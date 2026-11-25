@@ -49,7 +49,7 @@ import type {
   GithubStatusStages,
 } from "@cawco/core/trackers";
 import type { GitHubStream } from "@cawco/providers/github/ingest";
-import type { ProviderId } from "@cawco/providers/provider";
+import type { ProviderId, WatchSyncMode } from "@cawco/providers/provider";
 
 /** The session being continued, as the header names it. */
 export interface ContinuationSource {
@@ -792,18 +792,25 @@ export type ItemState = ExternalState | "running" | "green" | "red";
  * `watches.sync`): `off` only reads it; `inbound` and `both` are the
  * tracker's directions (core `TrackerDirection`).
  */
-export type WatchSync = "off" | "inbound" | "both";
+export type WatchSync = WatchSyncMode;
 
 /**
  * A watch's own settings (schema `watches.settings`), each provider's part
  * of it. GitHub: the Project its stages show on, and what the hub made sure
  * of there. A connector poll (provider `connection`): the tool it calls,
  * with what, how often, and where its answer's items, ids and versions are.
- * `sync*`: where the tracker sync's own poll stands, beside the event poll
- * the row's columns hold, until the sync reads the event poll's revisions.
+ * GitHub, on a watch that syncs: its board as last read, and the sync's
+ * own problem (`syncProblem`); the one poll's state is the row's columns.
  */
 export interface WatchSettings {
   args?: Record<string, unknown>;
+  /**
+   * GitHub, on a watch that syncs: the binding's Project's items as its
+   * board stream last read them, each issue's Status by its number, and
+   * whether the read reached every item; the sync's own Status writes keep
+   * it current between reads (hub sync.ts).
+   */
+  githubBoard?: GithubBoard | null;
   githubProject?: GithubProject | null;
   /** GitHub's words for why stages do not show on the Project; set, that part of the sync does not run. */
   githubProjectReason?: string | null;
@@ -822,29 +829,34 @@ export interface WatchSettings {
    * with again once the binding goes; null or absent when they were one.
    */
   pollerConnection?: string | null;
-  /** When the tracker sync last polled, ms. */
-  syncPolledAt?: number | null;
-  /** Why the tracker sync's last poll stopped short, or null. */
-  syncReason?: string | null;
-  /** The tracker's rate limit holds the sync's polls back until then, ms. */
-  syncResumeAt?: number | null;
+  /** Why the tracker sync's last run stopped short, in words (its own refusal, or a task's problem); null when it all went through. */
+  syncProblem?: string | null;
   tool?: string;
   /** A dot path to each item's version (`updated_at`). */
   versionPath?: string;
+}
+
+/** A GitHub Project's issues as a board read found them (providers github/board.ts), kept on its watch. */
+export interface GithubBoard {
+  /** Every item was read: an issue missing from `items` is not on the Project. */
+  complete: boolean;
+  /** Each of the repository's issues on it, by number: its item and Status option. */
+  items: Record<string, { itemId: string; optionId: string | null }>;
+  /** The Project read. */
+  projectId: string;
 }
 
 /**
  * Where one stream of a watch stands (schema `watch_cursors.cursor`): the
  * newest change it took in, ms, and the service's ETag for its list as it
  * last asked it. A connector poll's one stream keeps none: its row says the
- * poll has looked, and its items are what it saw. `unread`: a tracker
- * cursor migration 0431 kept as stored because it did not read; the next
- * poll that goes through writes the cursor without it.
+ * poll has looked, and its items are what it saw. `refusedAt`: a board's
+ * stream, when the connection was last refused it, ms.
  */
 export interface WatchCursor {
   etag?: string | null;
+  refusedAt?: number;
   since?: number;
-  unread?: string;
 }
 
 /** What a machine's agent says of its Claude sign-in (schema `agents.auth`): a word it may claim, or `unknown` until it said one. */

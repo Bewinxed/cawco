@@ -1,6 +1,6 @@
 /**
  * What the person reads when the hub has added Status options to a GitHub
- * Project a project's board syncs with (hub tracker.ts): under the tie's
+ * Project a project's board syncs with (hub sync.ts): under the tie's
  * row in the project's settings, the options it added last.
  */
 import { andList } from "./helpers";

@@ -40,6 +40,7 @@ import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { OUTSIDER_RULES } from "@cawco/core/outsiders";
 import { HELPERS, STEP_LISTS } from "@cawco/core/own-tools";
 import {
   PLAN_EDIT_KINDS,
@@ -632,7 +633,7 @@ export const projects = sqliteTable("projects", {
   /**
    * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
    * files in the project folder, alone or with GitHub Issues or Linear as
-   * the record of each task's issue fields (tracker.ts, its watch that syncs: `watches`).
+   * the record of each task's issue fields (sync.ts, its watch that syncs: `watches`).
    */
   tracker: storedEnum(z.enum(TRACKERS))("tracker").notNull().default("cawco"),
   /**
@@ -666,6 +667,15 @@ export const projects = sqliteTable("projects", {
   attemptsHearComments: integer("attempts_hear_comments", { mode: "boolean" })
     .notNull()
     .default(true),
+  /**
+   * What an event from someone the outside service does not vouch for does
+   * (core outsiders.ts): `hold` it on its task or item in Needs you until
+   * the person moves it on, nothing started; or `start` a session as for
+   * anyone's, their words inside the untrusted-data block.
+   */
+  outsiders: storedEnum(z.enum(OUTSIDER_RULES))("outsiders")
+    .notNull()
+    .default("hold"),
   /**
    * Whether the project's sessions, Caw among them, may change what his
    * chat and each kind of trigger run as (project-settings.ts `set_caw`,
@@ -789,7 +799,7 @@ export const projects = sqliteTable("projects", {
   createdAt: stampedNow("created_at"),
 });
 
-/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
+/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (sync.ts). */
 export type Tracker = import("@cawco/core/trackers").Tracker;
 
 /**
@@ -6760,16 +6770,15 @@ export const eventRouteKinds = sqliteTable(
  * repository, `owner/repo`, on `host` github.com), `linear` (a team, by
  * its id, on linear.app) or `connection` (a connector poll, its container
  * its own id). It replaces the project's GitHub poller (clock.ts), its
- * tracker binding (tracker.ts: `sync` not `off`) and its connector polls.
+ * tracker binding (sync.ts: `sync` not `off`) and its connector polls.
  *
- * Until the tracker sync reads the event poll's revisions, two polls read
- * a GitHub watch that syncs: the event poll, whose state is the row's
- * `reason`, `polled_at` and `resume_at` and whose streams are the
- * GitHub provider's streams (providers github/ingest.ts), and the sync's own, whose state is in
- * `settings` (`sync*`) and whose streams are `sync:issues` and
- * `sync:comments`. `enabled`: the event poll reads it (a GitHub watch the
- * project follows, a connector poll switched on); a watch made only by
- * binding a tracker is not, and the sync reads it all the same.
+ * One poll reads a watch (clock.ts), its state the row's `reason`,
+ * `polled_at` and `resume_at`, its streams its provider's (providers
+ * github/ingest.ts, linear/ingest.ts); a watch that syncs (`sync` not
+ * `off`) has the tracker sync read the revisions and comments that poll
+ * hands the door (sync.ts). `enabled`: the poll reads it (a GitHub watch
+ * the project follows, every watch that syncs, a connector poll switched
+ * on).
  */
 export const watches = sqliteTable(
   "watches",
@@ -6796,9 +6805,9 @@ export const watches = sqliteTable(
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     /** Where its sync stands (core `TrackerSyncState`); null while it does not sync. */
     state: storedEnum(TrackerSyncStateSchema)("state"),
-    /** Why its event poll stopped short, or null. */
+    /** Why its poll stopped short, or null. */
     reason: text("reason"),
-    /** The service's rate limit holds its event poll back until then. */
+    /** The service's rate limit holds its poll back until then. */
     resumeAt: timestamp("resume_at"),
     polledAt: timestamp("polled_at"),
     /** `owner`, or the id of the session that made it. */
@@ -6822,8 +6831,8 @@ export const watches = sqliteTable(
 /**
  * Where one stream of a watch stands ({@link WatchCursor}): a GitHub
  * resource's (`issues`, `pulls`, `comments`, `issueEvents`,
- * `discussions`), the tracker sync's own (`sync:issues`, `sync:comments`),
- * or a connector poll's (`items`: there once it has looked, its items its
+ * `discussions`, a syncing watch's `board:<project id>`), a Linear team's
+ * (`issues`, `comments`), or a connector poll's (`items`: there once it has looked, its items its
  * `external_items` of kind `record`).
  */
 export const watchCursors = sqliteTable(
@@ -6843,7 +6852,7 @@ export const watchCursors = sqliteTable(
 );
 
 /**
- * A task linked to its issue by the tracker sync (tracker.ts): what the
+ * A task linked to its issue by the tracker sync (sync.ts): what the
  * two last agreed on (the baseline of their three-way merge: the `synced_`
  * columns and the {@link trackerLinkSyncedLabels} rows), and who opened
  * the issue. The issue itself is the task's record link (`task_links`,
@@ -6868,7 +6877,7 @@ export const trackerLinks = sqliteTable(
     syncedDescription: text("synced_description"),
     /** The stage the task stood in when they agreed. */
     syncedStage: text("synced_stage"),
-    /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
+    /** The issue's state, as sync.ts names it (`open`, `closed:completed`, a Linear state's id). */
     syncedState: text("synced_state"),
     /** GitHub: the Status option its Project item stood in; null when not on the Project, no Status, or no Project. */
     syncedStatus: text("synced_status"),
@@ -6882,6 +6891,13 @@ export const trackerLinks = sqliteTable(
      * never put its task where an agent takes it: they wait for you.
      */
     unvouched: text("unvouched"),
+    /**
+     * Why the sync's last round of this task and its issue stopped short
+     * (an update or a comment the tracker refused, a move the task
+     * refused), in words; null when it all went through. The issue's own
+     * read problems stay on its mirror row.
+     */
+    problem: text("problem"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
 );

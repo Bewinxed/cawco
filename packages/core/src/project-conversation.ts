@@ -8,6 +8,7 @@
 import type { OnCap, ProjectCap } from "./areas";
 import type { HarnessKind } from "./harness/kinds";
 import type { OfferedMode, PermissionMode } from "./harness/modes";
+import type { OutsiderRule } from "./outsiders";
 import type { ItemEnd } from "./work-items";
 
 /**
@@ -69,6 +70,12 @@ export interface ProjectConversationView {
   /** The model Caw's session runs; null: its harness's default. */
   model: string | null;
   on: boolean;
+  /**
+   * What an event from someone an outside service does not vouch for does
+   * (core outsiders.ts): `hold` it on its task or item in Needs you until
+   * the person moves it on, or `start` a session on it as on anyone's.
+   */
+  outsiders: OutsiderRule;
   /** Why Caw could not start now, on or off, or why its last start failed; null when he could. */
   problem: string | null;
   /**
@@ -243,6 +250,12 @@ export interface DesignOfferState {
  *   never declared, so its large files stayed pointers (hub routes/lfs.ts);
  *   declared in the project's settings, or put away with Dismiss through
  *   `/api/lfs-refusals/dismiss`.
+ * - `outsider`: someone an outside service does not vouch for opened or
+ *   commented on an item no task links, and the project holds outsiders
+ *   (core outsiders.ts): what they wrote waits here, folded by item, until
+ *   the person lets it through (it is routed as any event, a session
+ *   reading their words as data) or drops it, through
+ *   `/api/projects/:id/outsiders/answer` (hub outsiders.ts).
  */
 export type WaitingOffer =
   | {
@@ -264,6 +277,29 @@ export type WaitingOffer =
       projectId: string;
       /** The checkout whose large files stayed pointers; null when it was not said. */
       root: string | null;
+    }
+  | {
+      /** Who wrote it, as the service names them. */
+      actor: string;
+      /** How many of their events wait on the item. */
+      count: number;
+      /** The first line of the first of them, as data: what they wrote. */
+      firstLine: string;
+      /** The item's mirror row (hub `external_items`), which the answer names. */
+      itemId: string;
+      kind: "outsider";
+      /** When the newest of them came, ms epoch. */
+      lastAt: number;
+      /** When the first of them came, ms epoch. */
+      offeredAt: number;
+      projectId: string;
+      /** `#12`, `ENG-123`. */
+      ref: string;
+      /** The item's title; empty when it was not read. */
+      title: string;
+      /** Why the service does not vouch for them, in its words. */
+      unvouched: string;
+      url: string | null;
     };
 
 /** Hub-originated: every offer waiting on the person, whole, on each change. */
