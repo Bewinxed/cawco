@@ -336,7 +336,7 @@ export interface ClosureContext {
   anchors: Map<string, string>;
   announceMcp: () => void;
   announceSkill: (name: string, source: string) => void;
-  answeredFrom: (socket: ClientSocket) => AnswerFrom;
+  answeredFrom: (socket: ClientSocket) => AnswerFrom | undefined;
   answeringPermissions: Map<
     string,
     { answer: AskAnswer; outcome?: "answered" | "cancelled" | undefined }

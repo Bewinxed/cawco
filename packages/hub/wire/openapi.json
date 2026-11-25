@@ -38527,7 +38527,7 @@
         ]
       },
       "CallerKind": {
-        "description": "What a request is to the hub. `browser`: a page in a project's browser an\nagent drives, which reads the dashboard and changes nothing (hub\nhub-auth.ts `BROWSER_READS`).",
+        "description": "What a request is to the hub. `browser`: a page in a project's browser an\nagent drives, which acts as an agent of its project and never does the\nperson's own acts (hub hub-auth.ts `browserReaches`, person-acts.ts).",
         "type": "string",
         "enum": [
           "anonymous",

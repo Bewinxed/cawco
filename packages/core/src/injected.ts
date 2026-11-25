@@ -414,8 +414,8 @@ export const withInputsLine = (
  * Where a delegate's browser opens the live dashboard (hub dashboard-url.ts
  * `delegateDashboard`): its browser runs in a container whose loopback is
  * its own, and opens the dashboard signed in as its agent through its
- * machine's dashboard door (agent browser/dashboard-door.ts), reading every
- * screen and changing nothing, so it is told an address on the hub's own
+ * machine's dashboard door (agent browser/dashboard-door.ts), acting as its
+ * agent and never doing the person's own acts, so it is told an address on the hub's own
  * names, which nothing stands in front of.
  * - `own`: at `url`, the hub's tailnet or LAN address;
  * - `elsewhere`: the hub knows only `url`, an address the person opens (a
@@ -440,12 +440,12 @@ export const withDashboardLine = (
     case "own":
       return afterMarker(
         text,
-        `Your browser tools open the live dashboard at ${reach.url}, signed in as your agent: every screen reads, and nothing you press there changes anything. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
+        `Your browser tools open the live dashboard at ${reach.url}, signed in as your agent: you act there as yourself, and what is the person's alone (a permission prompt, their asks and picks, pairing, sign-ins, passkeys) is refused. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
       );
     case "elsewhere":
       return afterMarker(
         text,
-        `The hub knows its live dashboard only at ${reach.url}, an address the person opens that may stop your browser at a sign-in; past it, your browser is signed in as your agent and changes nothing. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
+        `The hub knows its live dashboard only at ${reach.url}, an address the person opens that may stop your browser at a sign-in; past it, your browser is signed in as your agent, and what is the person's alone is refused. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
       );
     case "none":
       return afterMarker(

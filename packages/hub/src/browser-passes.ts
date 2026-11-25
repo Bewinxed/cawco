@@ -2,7 +2,8 @@
  * A project's browser's pass to the dashboard (core `BROWSER_PASS_SCHEME`):
  * what its machine's dashboard door puts on every request that browser makes
  * to the dashboard (agent browser/dashboard-door.ts), so the hub reads it as
- * that browser (hub-auth.ts `browserReads`) and never as the person.
+ * that browser, an agent of its project (hub-auth.ts `browserReaches`),
+ * and never as the person.
  *
  * A pass is signed, not stored: its body names the machine, the browser's
  * key and when it stops standing, under an HMAC of a key derived from the
@@ -113,59 +114,3 @@ export const browserPassRoutes = ({ callerOf, origins }: BrowserPassDeps) =>
         } satisfies BrowserPass;
       }
     );
-
-/**
- * The frames a project's browser's dashboard socket is sent: the board and
- * what moves on it, the projects and their tasks, decisions, blocks and
- * stops, the moves and the person's waits, by each frame's kind. An
- * allowlist, as the reads are (hub-auth.ts `BROWSER_READS`): the installs
- * and their one-time codes, the pairings, the MCP servers, the passkeys,
- * the browsers' take-overs, the permission asks and every transcript stay
- * the person's. A message that is no frame is sent only as the stream's
- * heartbeat.
- */
-const BROWSER_FRAMES: ReadonlySet<string> = new Set([
-  "instances",
-  "board",
-  "pulse",
-  "usage",
-  "work_item",
-  "stopped",
-  "asleep",
-  "moves",
-  "move_progress",
-  "folder_move_progress",
-  "actions",
-  "artifact.needs",
-  "blocks.changed",
-  "decisions.changed",
-  "delegate_event",
-  "hub.restart",
-  "offers.waiting",
-  "project.cap",
-  "project_offer",
-  "projects.changed",
-  "project.stop",
-  "questions.moved",
-  "starters.changed",
-  "tasks.changed",
-  "fleet_watch.notices",
-]);
-
-/** Whether a project's browser's dashboard socket is sent `message` ({@link BROWSER_FRAMES}). */
-export const browserSees = (message: object): boolean => {
-  if ("type" in message) {
-    return message.type === "heartbeat";
-  }
-  if (!("verb" in message && message.verb === "frames")) {
-    return false;
-  }
-  const payload = "payload" in message ? message.payload : undefined;
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    "kind" in payload &&
-    typeof payload.kind === "string" &&
-    BROWSER_FRAMES.has(payload.kind)
-  );
-};

@@ -110,6 +110,12 @@ type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
 
 /** A joined client: the hub sends it every update another made. */
 export interface ArtifactClient {
+  /**
+   * A page in an agent's browser (hub-auth.ts, a `browser` caller, or a
+   * preview opened with a session's pass): what it writes is the agent's,
+   * and it writes no pick (artifacts/gate.ts).
+   */
+  agent?: true;
   /** Sends it the hub's beat (sync.ts): a message it applies as nothing, every {@link RESYNC_MS}. */
   beat: () => void;
   /** Ends its socket: the artifact was removed ({@link ArtifactDocs.drop}). */
@@ -229,13 +235,14 @@ export interface ArtifactDocs {
   /** The main views joined to the artifact now, in the order they joined ({@link ArtifactClient.placer}). */
   placers: (id: string) => MainView[];
   /**
-   * Why `update`, from a person's client, may not be applied to the
-   * artifact's doc; null when it may, the caller applying it next (sync.ts
+   * Why `update`, from a client (`agent`: an agent's browser,
+   * {@link ArtifactClient.agent}), may not be applied to the artifact's
+   * doc; null when it may, the caller applying it next (sync.ts
    * `takeUpdate`). Read by the doc's gate (gate.ts), which costs the update,
    * not the doc: made from the doc once, it takes every update the doc
    * takes after.
    */
-  problem: (id: string, update: Uint8Array) => string | null;
+  problem: (id: string, update: Uint8Array, agent: boolean) => string | null;
   /** How many screens (canvas host pages) are joined to the artifact now. */
   screens: (id: string) => number;
   /**
@@ -396,7 +403,7 @@ export const createArtifactDocs = (deps: {
     changed: { keys: string[]; elements: Map<string, CanvasAuthor> }
   ) => {
     const client = clientOf(origin);
-    const by: CanvasAuthor = client ? "person" : "agent";
+    const by: CanvasAuthor = client && !client.agent ? "person" : "agent";
     deps.db.append(id, update, {
       ...Object.fromEntries(changed.keys.map((key) => [key, by])),
       ...Object.fromEntries(changed.elements),
@@ -563,10 +570,10 @@ export const createArtifactDocs = (deps: {
       }
     },
     pins: (id) => load(id).pins.read(),
-    problem: (id, update) => {
+    problem: (id, update, agent) => {
       const entry = load(id);
       entry.gate ??= createGate(entry.doc);
-      const why = entry.gate.problem(update);
+      const why = entry.gate.problem(update, agent);
       if (why) {
         letGate(entry);
       }

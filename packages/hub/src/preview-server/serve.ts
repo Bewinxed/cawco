@@ -104,6 +104,7 @@ import { composePage, type EmbedAt } from "./document";
 import { type HubLink, hubOrigin } from "./link";
 import type { PreviewStore } from "./store";
 import {
+  AGENT_VIEWER,
   LOCK_HEADER,
   ORIGIN_PATH,
   REACHED_HEADER,
@@ -112,6 +113,8 @@ import {
   SYNC_PATH,
   TOKEN_HEADER,
   type UpstreamAnswer,
+  VIEWER_HEADER,
+  VIEWER_PARAM,
 } from "./wire";
 
 /** A socket a listener carries: a previewed app's, relayed to its machine, or a doc socket relayed to the hub. */
@@ -422,6 +425,15 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     headers.set(TOKEN_HEADER, env.link.token);
     headers.set(REACHED_HEADER, url.href);
     headers.set(LOCK_HEADER, lock.domain ?? "port");
+    // Whose pass opened the page: a session's is an agent's, which picks
+    // nothing (hub person-acts.ts). Said here alone, whatever the page sent.
+    const agent = Boolean(passOf(request, lock, key)?.instanceId);
+    headers.delete(VIEWER_HEADER);
+    url.searchParams.delete(VIEWER_PARAM);
+    if (agent) {
+      headers.set(VIEWER_HEADER, AGENT_VIEWER);
+      url.searchParams.set(VIEWER_PARAM, AGENT_VIEWER);
+    }
     if (asksUpgrade(request)) {
       const synced = url.pathname.match(ARTIFACT_PATH);
       const stored = url.pathname.match(STORE_PATH)?.[1];

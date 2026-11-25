@@ -92,6 +92,12 @@ const refusal = (why: string): Uint8Array => {
 
 /** What the listener keeps on an artifact's socket. */
 export interface ArtifactSocket {
+  /**
+   * A page in an agent's browser: a dashboard pane's link a `browser`
+   * caller opened, or a preview's page opened with a session's pass
+   * (`?viewer=agent` from the preview server). It writes no pick.
+   */
+  agent?: true;
   artifactId: string;
   /** The preview origin it joined on, by its key (preview.ts): none for a dashboard pane's link. */
   at?: string;
@@ -352,7 +358,7 @@ const takeUpdate = (
   update: Uint8Array,
   origin: { client: ArtifactClient } | undefined
 ): string | null => {
-  const why = docs.problem(artifactId, update);
+  const why = docs.problem(artifactId, update, origin?.client.agent === true);
   if (why) {
     return why;
   }
@@ -448,6 +454,7 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       // The artifact was removed: core ARTIFACT_GONE, on which a device lets its copy go.
       close: () => socket.close(ARTIFACT_GONE, "This artifact was removed."),
       screen: socket.data.screen,
+      ...(socket.data.agent ? { agent: true as const } : {}),
       ...(socket.data.placer
         ? { placer: { id: socket.data.placer, shown: true } }
         : {}),

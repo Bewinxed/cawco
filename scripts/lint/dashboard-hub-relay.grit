@@ -1,0 +1,25 @@
+language js
+
+// The dashboard's server reaches the hub through its `/api` relay alone
+// (apps/dashboard/src/routes/api/[...path]/+server.ts), which carries the
+// request's own `Authorization` and the person's device cookie on. A
+// project's browser an agent drives is told apart from the person by that
+// `Authorization` alone (hub hub-auth.ts, the browser pass its dashboard door
+// stamps): a server-side call to the hub made any other way would carry
+// none, and a hub that trusts its network reads a request with no
+// credential as the person. So outside the relay no dashboard source names
+// where the hub is: `CAWCO_ENV.hubUrl`, `.devHubUrl`, `.hubPort`, their
+// variables' names, or core's `CAWCO_HUB_PORT`. A server load reaches the
+// hub with its own `fetch` through the relay (lib/platform/hub.ts
+// `hubThrough`), which SvelteKit hands the request's credentials.
+or {
+  `CAWCO_ENV.$key` as $hit where { $key <: r"hubUrl|devHubUrl|hubPort" },
+  `CAWCO_HUB_PORT` as $hit,
+  or { JsStringLiteralExpression(), JsTemplateExpression() } as $hit where {
+    $hit <: r"(?s).*CAWCO_(?:DEV_)?HUB_(?:URL|PORT).*"
+  }
+} where {
+  $filename <: includes "apps/dashboard/src/",
+  $filename <: not includes "routes/api/[...path]/+server.ts",
+  register_diagnostic(span=$hit, message="The dashboard's server reaches the hub through its /api relay alone (routes/api/[...path]/+server.ts), which carries the request's Authorization, so an agent's browser stays its agent: fetch through the relay (hubThrough with the load's fetch), never the hub's address.")
+}

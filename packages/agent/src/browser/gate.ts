@@ -26,8 +26,9 @@
  * Refused always, each with its sentence: ending the browser, reading or
  * clearing its cookies, opening its own pages (`chrome://`,
  * `chrome-untrusted://`, `devtools://`, `file://`), a loopback address
- * other than a hub's preview the agent entered by its `artifact_browse`
- * address, another session's pages,
+ * other than the hub's own dashboard (dashboard-door.ts) and a hub's
+ * preview the agent entered by its `artifact_browse` address, another
+ * session's pages,
  * and the methods that speak for every page at once (a browser-level
  * session, tracing or interception at the browser's level). Chromium's
  * tracing records the whole browser whichever page asks, so a page's trace
@@ -77,6 +78,7 @@ import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
 import { withFeedbackLine } from "../feedback-line";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
+import { isDashboardOrigin } from "./dashboard-door";
 import { browserDir } from "./state";
 
 /** What a refusal says, one sentence each. */
@@ -1527,8 +1529,9 @@ class Link {
   /**
    * Why the agent may not load `url`: one of the browser's own pages, or a
    * loopback address ({@link loopbackOrigin}), whatever host the browser runs
-   * on, so every machine keeps one rule. The hub's previews on a loopback
-   * name pass: each opens first by its `artifact_browse` address (core
+   * on, so every machine keeps one rule. The hub's dashboard origins pass
+   * (dashboard-door.ts `isDashboardOrigin`), and so do its previews on a
+   * loopback name: each opens first by its `artifact_browse` address (core
    * `PREVIEW_ENTER_PATH`), and its origin then loads by any path.
    */
   #closedAddress(url: unknown): string | undefined {
@@ -1537,6 +1540,12 @@ class Link {
     }
     const origin = loopbackOrigin(url);
     if (!(origin && typeof url === "string")) {
+      return;
+    }
+    // The hub's own dashboard on this machine's loopback: its browser's
+    // dashboard door signs it in as the agent (dashboard-door.ts), and no
+    // other loopback address passes for it.
+    if (isDashboardOrigin(this.#gate.key, origin)) {
       return;
     }
     const asked = new URL(url);

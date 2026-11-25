@@ -12,8 +12,8 @@
  * person's device cookie, a forwarded word, a CawCo header), puts the
  * browser's pass on it (core `BROWSER_PASS_SCHEME`, hub browser-passes.ts)
  * and sends it on to that origin itself. The hub reads such a request as
- * the browser (hub-auth.ts `BROWSER_READS`): it reads the dashboard and
- * changes nothing.
+ * the browser, an agent of its project (hub-auth.ts `browserReaches`),
+ * refused only the person's own acts (hub person-acts.ts).
  *
  * The door is a forward proxy, per browser, on its slot's door port on
  * 127.0.0.1 (core `browserPorts`), and for a container on a native engine
@@ -398,6 +398,53 @@ const stamped = (
   return out;
 };
 
+/**
+ * `headers` of a preview's request bound for the hub's own ports on this
+ * machine (agent preview.ts), as the door would send them: every credential,
+ * hop and forwarded word ({@link UNSENT}, CawCo's own but presence) taken
+ * off, the person's cookie too, and browser `key`'s pass put on. So a
+ * dashboard opened as a preview of its own port is its agent's, never the
+ * person's, whoever's browser loads the preview.
+ */
+export const stampHubRequest = async (
+  headers: Headers,
+  key: BrowserKey
+): Promise<void> => {
+  const { pass } = await passOf(key);
+  for (const name of [...headers.keys()]) {
+    if (
+      UNSENT.has(name) ||
+      (name.startsWith(CAWCO_HEADER) && name !== PRESENCE)
+    ) {
+      headers.delete(name);
+    }
+  }
+  const cookie = withoutOwner(headers.get("cookie") ?? undefined);
+  if (cookie) {
+    headers.set("cookie", cookie);
+  }
+  headers.set("authorization", `${BROWSER_PASS_SCHEME} ${pass}`);
+};
+
+/**
+ * Whether `origin` (a URL's origin, its port written or not) is one of the
+ * hub's dashboard origins as browser `key`'s door last read them: the one
+ * loopback address its gate lets the agent load (gate.ts `#closedAddress`).
+ */
+export const isDashboardOrigin = (key: BrowserKey, origin: string): boolean => {
+  if (!URL.canParse(origin)) {
+    return false;
+  }
+  const { protocol, hostname, port } = new URL(origin);
+  const scheme = protocol === "https:" ? "https" : "http";
+  const written = originOf(
+    scheme,
+    hostname.replace(BRACKETS, ""),
+    Number(port || (scheme === "https" ? 443 : 80))
+  );
+  return knownOrigins.get(key)?.has(written) === true;
+};
+
 /** An answer's headers as they go back: every `Set-Cookie` but the person's device cookie. */
 const answered = (headers: IncomingHttpHeaders): IncomingHttpHeaders => {
   const { "set-cookie": setCookie, ...out } = headers;
@@ -776,6 +823,9 @@ export const openDoor = async (
     return { port, servers };
   })();
   open.set(key, opening);
+  // Its origins read now, so its gate knows the dashboard's loopback ones
+  // before a page asks (gate.ts `#closedAddress`).
+  doorOrigins(key).catch(() => undefined);
   try {
     await opening;
   } catch (error) {

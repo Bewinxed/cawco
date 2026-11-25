@@ -24,8 +24,8 @@ export type HubAuthMode = "trusted" | "pairing";
 
 /**
  * What a request is to the hub. `browser`: a page in a project's browser an
- * agent drives, which reads the dashboard and changes nothing (hub
- * hub-auth.ts `BROWSER_READS`).
+ * agent drives, which acts as an agent of its project and never does the
+ * person's own acts (hub hub-auth.ts `browserReaches`, person-acts.ts).
  */
 export type CallerKind =
   "owner" | "session" | "machine" | "browser" | "anonymous";

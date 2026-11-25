@@ -33,7 +33,6 @@ import { BROWSER_PAGE, type BrowserPageArgs } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
   dashboardOriginOf,
-  GATED_PAGE_PARAM,
   PRESENCE_HEADER,
   PRESENCE_ID,
   pageOrigin,
@@ -367,11 +366,7 @@ import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
 import { answered as browserAnswered } from "./browser-answered";
-import {
-  browserPassRoutes,
-  browserSees,
-  openBrowserPass,
-} from "./browser-passes";
+import { browserPassRoutes, openBrowserPass } from "./browser-passes";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
@@ -579,6 +574,7 @@ import {
   outlivesSession,
   type PendingShape,
 } from "./pending";
+import { notPersonsOwn, PERSON_SOCKET_WORDS } from "./person-acts";
 import { createPlaceRepos } from "./place-repo";
 import {
   createPlanChanges,
@@ -834,7 +830,7 @@ import {
   sendToMachine as writeToMachine,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
-import { isHubParent, isLive } from "./work-item-state";
+import { isHubParent } from "./work-item-state";
 import {
   blockWords,
   createWorkItems,
@@ -7001,16 +6997,9 @@ export const createServer = (
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket<ClientSocket>, string | null>();
   /**
-   * Each dashboard socket opened from a page in an agent's own browser, by
-   * its id: the gate id its DevTools gate marked the page with (core
-   * `GATED_PAGE_MARK`), which the page's socket names (`GATED_PAGE_PARAM`),
-   * a workspace's or a session's.
-   */
-  const gatedPages = new Map<string, string>();
-  /**
    * Each dashboard socket a project's browser an agent drives opened, by its
-   * id (hub-auth.ts, a `browser` caller): sent what the board draws, heard
-   * for its heartbeat alone.
+   * id (hub-auth.ts, a `browser` caller): an agent of its project, sent and
+   * heard all but the person's own (person-acts.ts).
    */
   const browserDashboards = new Set<string>();
   /**
@@ -7050,15 +7039,9 @@ export const createServer = (
       ...(device ? { name: device.name } : {}),
     });
   };
-  const answeredFrom = (socket: ClientSocket): AnswerFrom => {
-    const from = dashboardClients.get(socket.id);
-    if (!from) {
-      throw new Error(
-        "An answer came on a dashboard socket the hub never opened."
-      );
-    }
-    return from;
-  };
+  /** Where the person answered from: their dashboard `socket`; undefined for a socket that is not the person's (an agent's browser's). */
+  const answeredFrom = (socket: ClientSocket): AnswerFrom | undefined =>
+    dashboardClients.get(socket.id);
 
   /** The SSH add record whose forward `ws` came through (ssh-door.ts), if it came through one. */
   const sshRecordOf = (ws: AuthSocket): string | undefined =>
@@ -12463,47 +12446,22 @@ export const createServer = (
   };
 
   /**
-   * The session that owns the page a dashboard socket was opened from, when
-   * an agent's browser opened it (`gatedPages`): the session whose gate id
-   * it is, or the session of its workspace's live item (else its newest).
-   */
-  const gatedOwner = (ws: ClientSocket): string | undefined => {
-    const gate = gatedPages.get(ws.id);
-    if (!gate) {
-      return;
-    }
-    const [own] = db.getInstancesByIds([gate]);
-    if (own) {
-      return own.id;
-    }
-    const items = db.workItemsIn(gate);
-    return (items.find((item) => isLive(item.state)) ?? items[0])?.instanceId;
-  };
-
-  /**
-   * Who a dashboard's start is, as its row opens: a page an agent opened in
-   * its browser starts that agent's check, nested under it ({@link
-   * gatedOwner}); every other start here is the person's, under the parent
-   * it names, if any. Its project as {@link projectOfStart} gives it. A row
-   * that exists (`known`) keeps the origin and parent it opened with.
+   * Who a dashboard's start is, as its row opens: the person's, under the
+   * parent it names, if any (a socket of an agent's browser starts nothing:
+   * person-acts.ts `PERSON_SOCKET_WORDS`). Its project as
+   * {@link projectOfStart} gives it.
    */
   const dashboardStartOf = (
-    ws: ClientSocket,
     message: ClientEnvelope<"spawn">,
-    known: boolean,
     cwd: string
   ): {
     origin: SessionOrigin;
     parent: ReturnType<typeof peekParent>;
     projectId: string | undefined;
   } => {
-    const checker = known ? undefined : gatedOwner(ws);
-    const origin: SessionOrigin = checker ? "check" : "person";
-    const parent = checker
-      ? { parentInstanceId: checker }
-      : peekParent(message.payload);
+    const parent = peekParent(message.payload);
     return {
-      origin,
+      origin: "person",
       parent,
       projectId: projectOfStart(
         parent.parentInstanceId,
@@ -12554,12 +12512,7 @@ export const createServer = (
     before: { projectId?: string | null } | undefined,
     payload: NamedSpawn
   ) => {
-    const start = dashboardStartOf(
-      ws,
-      message,
-      before !== undefined,
-      payload.cwd
-    );
+    const start = dashboardStartOf(message, payload.cwd);
     const projectId = before?.projectId ?? start.projectId;
     const begins = startingSetOf({ ...payload, projectId });
     if ("refusal" in begins) {
@@ -13851,19 +13804,32 @@ export const createServer = (
    * refused with why; then its verb's handler ({@link dashboardVerbs}).
    * What any of it throws is answered by {@link dashboardThrew}.
    */
+  /**
+   * Why a message is one the hub would record as the person's, by its
+   * Ledger command's kind or its envelope's verb (person-acts.ts
+   * `PERSON_SOCKET_WORDS`); undefined for any other.
+   */
+  const personsSocketAct = (message: unknown): string | undefined => {
+    if (!isRecord(message)) {
+      return;
+    }
+    const named = message.type === "command" ? message.kind : message.verb;
+    return typeof named === "string"
+      ? PERSON_SOCKET_WORDS.get(named)
+      : undefined;
+  };
+
   const dashboardMessage = (ws: DashboardSocket, message: unknown): void => {
-    // A project's browser's socket is heard for its heartbeat alone: it
-    // follows no transcript and asks nothing of a session or machine.
+    // A project's browser's socket sends nothing the hub would record as
+    // the person's (person-acts.ts `PERSON_SOCKET_WORDS`); the person's own
+    // controls are refused where every control goes (relay-control.ts).
     if (browserDashboards.has(ws.id)) {
-      if (isRecord(message) && message.type === "heartbeat") {
-        streams.handleClientMessage(ws, message);
+      const refused = personsSocketAct(message);
+      if (refused) {
+        console.warn(`[hub] an agent's browser: ${refused}`);
+        sendToClient(ws, refusalFrame(message, refused));
         return;
       }
-      const fault =
-        "an agent's browser reads the dashboard and changes nothing: its socket takes heartbeat alone";
-      console.warn(`[hub] ${fault}`);
-      sendToClient(ws, refusalFrame(message, fault));
-      return;
     }
     if (streams.handleClientMessage(ws, message)) {
       return;
@@ -14005,6 +13971,13 @@ export const createServer = (
       )
       .use(
         previewRoutes({
+          agentAsks: (headers) =>
+            hubAuth.classify(
+              (name) => headers[name],
+              "GET",
+              "/ws/artifact",
+              null
+            ).kind === "browser",
           deviceOf: (request) => {
             const caller = hubAuth.callerOf(request, null);
             return caller.kind === "owner" ? (caller.device?.id ?? null) : null;
@@ -14280,7 +14253,9 @@ export const createServer = (
             `${ARTIFACT_SESSION_PATH}${artifact}`,
             ws.remoteAddress ?? null
           );
-          if (caller.kind !== "owner") {
+          // The person's, or an agent's browser (an agent of its project).
+          const agent = caller.kind === "browser" && caller.pass !== null;
+          if (!(caller.kind === "owner" || agent)) {
             ws.close(ARTIFACT_SESSION_REFUSED.unpaired, PAIRING_REQUIRED);
             return;
           }
@@ -14293,11 +14268,20 @@ export const createServer = (
           }
           artifactDevices.set(ws.id, {
             socket: ws,
-            device: caller.device?.id ?? null,
+            device:
+              caller.kind === "owner" ? (caller.device?.id ?? null) : null,
           });
           // An artifact's own tab frames its preview from this origin; a
-          // tab the preview listener relayed names none (`dashboardOriginOf`).
-          noteParent(dashboardOriginOf(ws.headers));
+          // tab the preview listener relayed names none (`dashboardOriginOf`),
+          // nor does an agent's browser: what may frame a preview is the
+          // person's dashboards' to say.
+          if (!agent) {
+            noteParent(dashboardOriginOf(ws.headers));
+          }
+          // The person's own material is not sent to an agent's browser.
+          if (agent) {
+            limitLine(ws, notPersonsOwn);
+          }
           artifactSessions.open(ws, instance, artifact);
         },
         message: guardedDashboardMessage((ws, message) => {
@@ -14361,12 +14345,13 @@ export const createServer = (
             ws.remoteAddress ?? null
           );
           if (caller.kind === "browser" && caller.pass) {
-            // Sent only what the board draws (browser-passes.ts
-            // `browserSees`), from before its first frame; heard only for
-            // its heartbeat (`dashboardMessage`). Its page's origin is
+            // An agent of its project: sent everything but the person's own
+            // material (person-acts.ts `notPersonsOwn`), from before its
+            // first frame; heard for all but what the hub would record as
+            // the person's (`dashboardMessage`). Its page's origin is
             // recorded nowhere: the hub's links and previews' framing are
             // the person's dashboards' alone.
-            limitLine(ws, browserSees);
+            limitLine(ws, notPersonsOwn);
             browserDashboards.add(ws.id);
             greetDashboard(
               ws,
@@ -14381,12 +14366,6 @@ export const createServer = (
             return;
           }
           dashboardDevices.set(ws, caller.device?.id ?? null);
-          // A page an agent opened in its project's browser: what it starts
-          // is that agent's check (`startFromDashboard`).
-          const gatedBy = ws.query[GATED_PAGE_PARAM];
-          if (gatedBy) {
-            gatedPages.set(ws.id, gatedBy);
-          }
           if (hubAuth.mode() === "pairing") {
             sendToClient(ws, {
               verb: "frames",
@@ -14450,7 +14429,6 @@ export const createServer = (
           closeLine(ws);
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);
-          gatedPages.delete(ws.id);
           browserDashboards.delete(ws.id);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command

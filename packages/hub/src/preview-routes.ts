@@ -54,6 +54,8 @@ export const previewSettings = (deps: {
 });
 
 export const previewRoutes = (deps: {
+  /** Whether a socket's headers are an agent's browser's (hub-auth.ts, a `browser` caller): its doc link writes no pick. */
+  agentAsks: (headers: Record<string, string | undefined>) => boolean;
   /** The paired device a request comes from (hub-auth.ts); null on a trusted hub, which pairs none. */
   deviceOf: (request: Request) => string | null;
   /** Whether the hub knows session `id`. */
@@ -204,7 +206,11 @@ export const previewRoutes = (deps: {
             return;
           }
           const pane: ArtifactSocketEnd = {
-            data: { artifactId: artifact, screen: false },
+            data: {
+              artifactId: artifact,
+              screen: false,
+              ...(deps.agentAsks(ws.headers) ? { agent: true as const } : {}),
+            },
             send: (message) => ws.send(message),
             close: (code, reason) => ws.close(code, reason),
           };

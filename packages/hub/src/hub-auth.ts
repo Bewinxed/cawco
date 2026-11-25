@@ -42,11 +42,15 @@
  * page in a project's browser an agent drives, in either mode: the agent's
  * dashboard door puts the pass on every request that browser makes to the
  * dashboard, in place of whatever the page sent (agent
- * browser/dashboard-door.ts), so no request of that browser reaches the
- * dashboard without it, whatever the agent has the page do. It reads what
- * the dashboard shows ({@link BROWSER_READS}) and changes nothing.
+ * browser/dashboard-door.ts), and a preview of the hub's own ports carries
+ * it too (agent preview.ts), so no request of that browser reaches the hub
+ * without it, whatever the agent has the page do. It acts as an agent of
+ * its project: every route the person reaches but the person's own acts
+ * (person-acts.ts), refused to every caller that is not the person, and a
+ * fleet setting, which its agent's admin tools write.
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { ARTIFACT_SESSION_PATH } from "@cawco/core/artifact-session";
 import { pageOrigin } from "@cawco/core/browser-gate";
 import {
   BROWSER_PASS_SCHEME,
@@ -75,6 +79,11 @@ import { Elysia, problem, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import type { RecordHubEvent } from "./hub-record";
 import type { RouteSet } from "./machine-answers";
+import {
+  FLEET_SETTING_WORDS,
+  fleetSettingWrite,
+  personActOf,
+} from "./person-acts";
 
 /** A machine's own row, which its join wait reads (cli await-joined.ts). */
 const AGENT_ROW = /^\/api\/agents\/([^/]+)$/u;
@@ -178,63 +187,42 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/folder-moves\/relay\/[^/]+$/u, "machine"],
 ];
 
-/** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */
-const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/u;
-const TAKEOVER_REFUSED = "Only the person takes over";
-/** Forgetting a browser's sign-ins (browsers.ts `/remove`): the person's alone, in the same words' shape. */
-const REMOVE_ROUTE = /^\/api\/browsers\/[^/]+\/remove$/u;
-const REMOVE_REFUSED = "Only the person forgets a browser's sign-ins";
-
 /** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
 const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/u;
 
-/**
- * What a project's browser an agent drives reads, `GET` or `HEAD` alone: the
- * dashboard's socket and the reads its board, projects and sessions' plans
- * and waits are drawn from. An allowlist, as every route starts closed: what
- * is left out holds a credential, the person's sign-ins or their devices
- * (`/api/installs`, `/api/pair/requests`, `/api/devices`, the connections
- * and MCP servers, the accounts), acts though it is a `GET`
- * (`/api/stream-relay/try` mints a relay credential, an OAuth callback
- * completes a sign-in), or reads files and transcripts. No open route
- * either: pairing, git and the cawco MCP are no reads of the dashboard.
- */
-const BROWSER_READS: readonly RegExp[] = [
-  /^\/ws\/dashboard$/u,
-  /^\/api\/auth$/u,
-  /^\/api\/(?:instances|pulses|agents|areas|pending|artifact-needs|moves|decides|delegate-types|stage-templates|jev|rules|project-offers|model-windows|tool-updates|spend-settings|preview-settings|session-limits)$/u,
-  /^\/api\/(?:actions|offers|find)\/waiting$/u,
-  /^\/api\/fleet-watch(?:\/notices)?$/u,
-  /^\/api\/usage\/(?:limits|spend|summary)$/u,
-  /^\/api\/agents\/[^/]+(?:\/busy)?$/u,
-  /^\/api\/areas\/[^/]+$/u,
-  /^\/api\/projects(?:\/held|\/forgotten)?$/u,
-  /^\/api\/projects\/[^/]+\/(?:tasks(?:\/[^/]+(?:\/history)?)?|stages|views|running|decides|decisions(?:\/[^/]+)?|blocks|caw|delegate-types|spend|design-offer)$/u,
-  /^\/api\/decides\/(?:kinds\/[^/]+\/waiting|pages\/[^/]+)$/u,
-  /^\/api\/routines\/[^/]+$/u,
-  /^\/api\/rules\/[^/]+\/activity$/u,
-  /^\/api\/workspaces\/held$/u,
-  /^\/api\/workspaces\/[^/]+\/(?:held|waiting)$/u,
-  /^\/api\/instances\/[^/]+\/(?:plan|parked|open-items|questions)$/u,
-];
-
-/** Whether a project's browser may make `method path` ({@link BROWSER_READS}). */
-const browserReads = (method: string, path: string): boolean =>
-  (method === "GET" || method === "HEAD") &&
-  BROWSER_READS.some((pattern) => pattern.test(path));
-
-/** The refusal of a project's browser's request: a change it may not make, or a pass the hub did not give. */
-const browserRefusal = (verified: boolean, method: string, path: string) =>
+/** The refusal of a project's browser's request: a pass the hub did not give, or a fleet setting its agent's admin tools write. */
+const browserRefusal = (verified: boolean) =>
   verified
     ? problem(403, {
-        code: "browser-reads-only",
-        detail: `An agent's browser reads the dashboard and changes nothing: ${method} ${path} is the person's.`,
+        code: "browser-fleet-setting",
+        detail: FLEET_SETTING_WORDS,
       })
     : problem(403, {
         code: "browser-pass-refused",
         detail:
           "This browser's pass is not one the hub gave, so it reaches nothing.",
       });
+
+/**
+ * Whether a project's browser reaches `method path`, of access `access`, as
+ * an agent of its project: every route of the person's, the hub's word on
+ * what it is (`/api/auth`), an artifact's own tab's socket (which reads
+ * its caller at its open, server.ts), and the reads of the session and tool routes
+ * the dashboard draws from (`/api/instances`, a work item). Never an MCP
+ * endpoint, git, a machine's route or another open route that reads its own
+ * caller: none of them is the dashboard's.
+ */
+const browserReaches = (
+  access: Access | "owner",
+  method: string,
+  path: string
+): boolean =>
+  access === "owner" ||
+  path === "/api/auth" ||
+  path.startsWith(ARTIFACT_SESSION_PATH) ||
+  ((access === "tool" || access === "session") &&
+    (method === "GET" || method === "HEAD") &&
+    !path.startsWith("/mcp/"));
 
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
@@ -309,7 +297,7 @@ const accessOf = (method: string, path: string): Access | "owner" => {
   return "owner";
 };
 
-/** Who reaches each access, a project's browser aside ({@link browserReads}). */
+/** Who reaches each access, a project's browser aside ({@link browserReaches}). */
 const ALLOWED: Record<
   Access | "owner",
   ReadonlySet<Exclude<CallerKind, "browser">>
@@ -726,10 +714,18 @@ export const createHubAuth = ({
 
   /** Whether `caller` may reach `method path` in the hub's mode. */
   const allows = (caller: Caller, method: string, path: string): boolean => {
-    if (caller.kind === "browser") {
-      return caller.pass !== null && browserReads(method, path);
+    // The person's own acts are theirs alone, whoever else asks.
+    if (caller.kind !== "owner" && personActOf(method, path)) {
+      return false;
     }
     const access = accessOf(method, path);
+    if (caller.kind === "browser") {
+      return (
+        caller.pass !== null &&
+        browserReaches(access, method, path) &&
+        !fleetSettingWrite(method, path)
+      );
+    }
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
     }
@@ -752,17 +748,16 @@ export const createHubAuth = ({
     path: string,
     set: RouteSet
   ) => {
+    if (caller.kind === "browser" && !caller.pass) {
+      return browserRefusal(false);
+    }
+    const personAct =
+      caller.kind === "anonymous" ? undefined : personActOf(method, path);
+    if (personAct) {
+      return problem(403, { code: "person-act", detail: personAct });
+    }
     if (caller.kind === "browser") {
-      return browserRefusal(caller.pass !== null, method, path);
-    }
-    if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
-      return problem(403, {
-        code: "takeover-refused",
-        detail: TAKEOVER_REFUSED,
-      });
-    }
-    if (caller.kind === "session" && REMOVE_ROUTE.test(path)) {
-      return problem(403, { code: "remove-refused", detail: REMOVE_REFUSED });
+      return browserRefusal(true);
     }
     const read = sessionReadOf(method, path);
     // An unpaired client is told to pair, as on any route.

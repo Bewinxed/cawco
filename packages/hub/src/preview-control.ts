@@ -34,12 +34,14 @@ import type { StoreKey } from "./db/page-stores";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import type { PreviewsDb } from "./db/previews";
 import { hidden } from "./hidden";
+import { PICK_WORDS } from "./person-acts";
 import type { PreviewListeners, PreviewServerHand } from "./preview";
 import { enter, lockedResponse, type PassLock } from "./preview-access";
 import { labelOf, originFor, parsePattern } from "./preview-hosts";
 import { HOP } from "./preview-origin";
 import { PAGE_SHAPE_PATH } from "./preview-paths";
 import {
+  AGENT_VIEWER,
   CONTROL_PATH,
   DOCUMENT_PATH,
   type HubSays,
@@ -57,6 +59,8 @@ import {
   TOKEN_HEADER,
   UPSTREAM_PATH,
   type UpstreamAnswer,
+  VIEWER_HEADER,
+  VIEWER_PARAM,
 } from "./preview-server/wire";
 import { staleEntry } from "./preview-stale";
 import type { TailnetLive } from "./tailnet-doors";
@@ -234,7 +238,7 @@ export type PreviewLink = ReturnType<typeof createPreviewLink>;
 /** A relayed request as the browser sent it: its address restored, and the lock it met. */
 const asSent = (
   request: Request
-): { sent: Request; lockDomain: string | null } | null => {
+): { agent: boolean; sent: Request; lockDomain: string | null } | null => {
   const reached = request.headers.get(REACHED_HEADER);
   if (!reached) {
     return null;
@@ -244,6 +248,8 @@ const asSent = (
   headers.delete(TOKEN_HEADER);
   const lock = headers.get(LOCK_HEADER);
   headers.delete(LOCK_HEADER);
+  const agent = headers.get(VIEWER_HEADER) === AGENT_VIEWER;
+  headers.delete(VIEWER_HEADER);
   const hasBody = !(request.method === "GET" || request.method === "HEAD");
   return {
     sent: new Request(reached, {
@@ -252,6 +258,7 @@ const asSent = (
       ...(hasBody ? { body: request.body } : {}),
     }),
     lockDomain: lock === null || lock === "port" ? null : lock,
+    agent,
   };
 };
 
@@ -302,7 +309,8 @@ export const previewControlRoutes = (
   const onArtifact = async (
     sent: Request,
     pathname: string,
-    key: string
+    key: string,
+    agent: boolean
   ): Promise<Response> => {
     const { origin } = deps;
     const [, artifactId, action] = pathname.match(ARTIFACT_PATH) ?? [];
@@ -324,6 +332,14 @@ export const previewControlRoutes = (
     }
     switch (action) {
       case "/send": {
+        // A page's Send is the person's picks: an agent's page sends none.
+        if (agent) {
+          return problemResponse({
+            status: 403,
+            code: "person-act",
+            detail: PICK_WORDS,
+          });
+        }
         if (sent.method !== "POST") {
           return problemResponse(
             { status: 405, code: "send-post", detail: "Send is a POST." },
@@ -386,7 +402,8 @@ export const previewControlRoutes = (
   const onOrigin = (
     sent: Request,
     key: string | undefined,
-    lockDomain: string | null
+    lockDomain: string | null,
+    agent: boolean
   ): Promise<Response> | Response => {
     const url = new URL(sent.url);
     const { pathname } = url;
@@ -411,7 +428,7 @@ export const previewControlRoutes = (
         ? origin.keepShape(sent, shaped)
         : new Response("This origin serves no such page.", { status: 404 });
     }
-    return onArtifact(sent, pathname, key);
+    return onArtifact(sent, pathname, key, agent);
   };
 
   return new Elysia()
@@ -471,7 +488,12 @@ export const previewControlRoutes = (
         }
         const key = params.key === "-" ? undefined : params.key;
         try {
-          return await onOrigin(relayed.sent, key, relayed.lockDomain);
+          return await onOrigin(
+            relayed.sent,
+            key,
+            relayed.lockDomain,
+            relayed.agent
+          );
         } catch (error) {
           previewFailed(
             HOP,
@@ -499,6 +521,11 @@ export const previewControlRoutes = (
             at: key,
             screen: ws.query.screen === "1",
             placer: placerOf(ws.query.placer),
+            // The preview server's word on whose pass opened the page
+            // (preview-server/serve.ts `toHub`): a session's is an agent's.
+            ...(ws.query[VIEWER_PARAM] === AGENT_VIEWER
+              ? { agent: true as const }
+              : {}),
           },
           send: (message) => ws.send(message),
           close: (code, reason) => ws.close(code, reason),

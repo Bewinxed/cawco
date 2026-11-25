@@ -97,6 +97,9 @@
     // The hub's control loop reads its large tables by key; whole-table
     // reads are the views thread's (packages/hub/src/views/).
     "./scripts/lint/control-loop-keyed-reads.grit",
+    // The dashboard's server reaches the hub through its /api relay alone,
+    // which carries the browser pass that keeps an agent's browser its agent.
+    "./scripts/lint/dashboard-hub-relay.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

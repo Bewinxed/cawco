@@ -9,7 +9,6 @@
 
 import { backoffWait } from "@cawco/core/backoff";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import type { FsOp } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
 import type { ClientEnvelope } from "@cawco/core/envelopes";
@@ -435,17 +434,11 @@ function connect(): void {
   // older one the snapshot that reloads it and no delta it would misread.
   // …and that it reads parts (`WIRE_PARTS_PARAM`), so a large board can come
   // as parts; a tab from before parts says nothing and is sent it whole.
-  // A page an agent opened in its project's browser names the gate that
-  // owns it (core `GATED_PAGE_MARK`), so what it starts is that agent's check.
   const query = new URLSearchParams({ protocol: String(WIRE_PROTOCOL) });
   // …and the board it holds, by its run and version, so a socket that opens
   // again is sent only what moved meanwhile (core `BOARD_HELD_PARAM`).
   if (socketRun !== null && boardVersion !== null && !connectionState.older) {
     query.set(BOARD_HELD_PARAM, boardHeld(socketRun, boardVersion));
-  }
-  const gatedBy: unknown = Reflect.get(globalThis, GATED_PAGE_MARK);
-  if (typeof gatedBy === "string" && gatedBy) {
-    query.set(GATED_PAGE_PARAM, gatedBy);
   }
   const socket = new WebSocket(announcingParts(`${hubSocketUrl()}?${query}`));
 

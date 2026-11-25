@@ -679,6 +679,22 @@ const canvasProblem = (change: Change): string | null => {
   );
 };
 
+/**
+ * The words that refuse a pick written by an agent's browser: a page's
+ * picks are the person's alone (hub person-acts.ts).
+ */
+const AGENT_PICK =
+  "A pick on a decision card is the person's alone: an agent's browser writes none.";
+
+/** Whether the change wrote a pick (`state`) other than as it stood. */
+const pickWritten = (change: Change): boolean => {
+  const before = change.before.getMap("state");
+  const after = change.after.getMap("state");
+  return [...keysOf(change, "state")].some(
+    (key) => !Bun.deepEquals(after.get(key), before.get(key))
+  );
+};
+
 /** Why a person's update may not be kept; null when it may. */
 const stateProblem = (change: Change): string | null => {
   const kind = getMeta(change.before, "kind");
@@ -747,11 +763,12 @@ export interface Gate {
   /** An update the doc took (anyone's, the hub's own included): the copy takes it too. */
   follow: (update: Uint8Array) => void;
   /**
-   * Why `update`, from a person's client, may not be applied to the doc;
-   * null when it may, the copy holding it already. After a refusal the
+   * Why `update`, from a client, may not be applied to the doc; null when
+   * it may, the copy holding it already. `agent`: the client is an agent's
+   * browser, which writes no pick ({@link AGENT_PICK}). After a refusal the
    * copy holds what the doc won't: the gate is let go (docs.ts).
    */
-  problem: (update: Uint8Array) => string | null;
+  problem: (update: Uint8Array, agent: boolean) => string | null;
 }
 
 /** A gate on `doc`: its copy made from the doc's whole state, once. */
@@ -792,12 +809,13 @@ export const createGate = (doc: Doc): Gate => {
   return {
     destroy: () => copy.destroy(),
     follow: (update) => ledger.keep(take(update)),
-    problem: (update) => {
+    problem: (update, agent) => {
       let why: string | null;
       let moved: Moved | undefined;
       try {
         moved = take(update);
-        why = stateProblem({ after: copy, before: doc, ledger, moved });
+        const change = { after: copy, before: doc, ledger, moved };
+        why = agent && pickWritten(change) ? AGENT_PICK : stateProblem(change);
       } catch {
         why = "That is not a Yjs update.";
       }

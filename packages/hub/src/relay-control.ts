@@ -55,9 +55,9 @@ import type { ClosureContext } from "./closure-context";
 import type { PublicInstanceRow } from "./db/instances";
 import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
+import { PERSON_CONTROLS } from "./person-acts";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
 import { type SettingPick, settingPickOf } from "./setting-pick-shapes";
@@ -499,6 +499,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       failed(ANSWER_UNREAD);
       return true;
     }
+    const from = ctx.answeredFrom(dashboard);
+    if (!from) {
+      failed(PERSON_CONTROLS.get(RESOLVE_PERMISSION) ?? ANSWER_UNREAD);
+      return true;
+    }
     // The correlation id belongs to the control; args[0] belongs to the ask.
     // A receipt is sent only after delivery AND the pending ledger settlement.
     answerPermission(
@@ -506,7 +511,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       message.instanceId ?? message.payload.instanceId ?? "",
       answer.requestId,
       answer.result,
-      ctx.answeredFrom(dashboard)
+      from
     ).then(
       (refused) =>
         refused
@@ -699,6 +704,31 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     return true;
   };
 
+  /** A control refused with `error`, its receipt on the socket that asked (a frame, or the Ledger command's settlement). */
+  const refuseControl = (
+    message: HubEnvelope<"control">,
+    dashboard: ClientSocket,
+    replyAsFrame: boolean,
+    error: string
+  ): void => {
+    const requestId = message.requestId ?? message.payload.requestId;
+    const frame: ControlResult = {
+      kind: "control_result",
+      requestId,
+      ok: false,
+      error,
+    };
+    if (replyAsFrame) {
+      ctx.sendToClient(dashboard, {
+        ...message,
+        verb: "frames",
+        payload: frame,
+      });
+    } else {
+      ctx.streams.settleCommand(requestId, frame);
+    }
+  };
+
   const relayControl = (
     asked: HubEnvelope<"control">,
     dashboard: ClientSocket,
@@ -706,6 +736,13 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
     const message = ctx.byIdNow(asked);
+    // The person's own controls are answered on the person's dashboard
+    // alone (person-acts.ts), never on an agent's browser.
+    const personOnly = PERSON_CONTROLS.get(message.payload.method);
+    if (personOnly && !ctx.answeredFrom(dashboard)) {
+      refuseControl(message, dashboard, replyAsFrame, personOnly);
+      return true;
+    }
     if (relaySettingPick(message, dashboard, replyAsFrame)) {
       return true;
     }
@@ -716,22 +753,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // every stage control: only the hub resolves where a stage may run.
     const hubOwned = hubOwnedControl(message.payload.method);
     if (hubOwned) {
-      const requestId = message.requestId ?? message.payload.requestId;
-      const frame: ControlResult = {
-        kind: "control_result",
-        requestId,
-        ok: false,
-        error: hubOwned,
-      };
-      if (replyAsFrame) {
-        ctx.sendToClient(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(requestId, frame);
-      }
+      refuseControl(message, dashboard, replyAsFrame, hubOwned);
       return true;
     }
     if (relayPermissionAnswer(message, dashboard, replyAsFrame)) {

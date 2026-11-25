@@ -61,6 +61,16 @@ export const TOKEN_HEADER = "x-cawco-preview-server";
 export const REACHED_HEADER = "x-cawco-preview-reached";
 /** The lock the relayed request met: `port`, or host mode's domain. */
 export const LOCK_HEADER = "x-cawco-preview-lock";
+/**
+ * Whose pass opened the relayed request's page, said by the preview server
+ * alone ({@link TOKEN_HEADER} beside it): {@link AGENT_VIEWER} for a
+ * session's (`artifact_browse`), absent for the person's. The same on a doc
+ * socket as the query parameter {@link VIEWER_PARAM}. An agent's page
+ * writes no pick and sends none (hub person-acts.ts).
+ */
+export const VIEWER_HEADER = "x-cawco-preview-viewer";
+export const VIEWER_PARAM = "viewer";
+export const AGENT_VIEWER = "agent";
 
 const TOKEN_LABEL = "cawco preview server v1";
 
