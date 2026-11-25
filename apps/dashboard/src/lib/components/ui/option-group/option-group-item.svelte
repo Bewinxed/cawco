@@ -65,7 +65,7 @@
     group.layout === "tiles" &&
       (tile === "picture"
         ? "size-16 min-h-0 place-items-center justify-center rounded-lg p-space-1"
-        : "row-span-2 grid h-full min-w-0 grid-rows-subgrid items-box-start justify-items-start gap-y-space-1 control-dashed-off px-space-3 py-space-2 text-start disabled:bg-transparent disabled:text-tx-2"),
+        : "row-span-2 grid h-full min-w-0 grid-rows-subgrid items-box-start justify-items-start gap-y-space-1 control-dashed-off mark-py-space-2 text-start disabled:bg-transparent disabled:text-tx-2"),
     className
   )}
   aria-checked={chosen}
@@ -90,25 +90,24 @@
   {...restProps}
 >
   {#if group.layout !== "tiles"}
-    <!-- A cell one line box tall, so the mark stands centred on the label's
-         first line however many lines the option runs to (`mark-cell`). -->
-    <span aria-hidden="true" class="mark-cell" data-box>
-      <span
-        class={[
-          "grid size-icon-md flex-none place-items-center transition-[border-color,border-width,background-color] duration-(--duration-fast) ease-out",
-          group.multiple ? "rounded-xs" : "rounded-pill",
-          !chosen && "border border-ui-3 bg-bg",
-          chosen &&
-            (group.multiple
-              ? "border border-accent bg-accent text-on-accent"
-              : "radio-on"),
-        ]}
-        data-slot="option-mark"
-      >
-        {#if chosen && group.multiple}
-          <IconTick class="size-icon-sm" />
-        {/if}
-      </span>
+    <!-- The chip's mark (a mark box's `mark-icon`): centred on the label's
+         first line however many lines the option runs to. -->
+    <span
+      aria-hidden="true"
+      class={[
+        "mark-icon grid size-icon-md place-items-center transition-[border-color,border-width,background-color] duration-(--duration-fast) ease-out",
+        group.multiple ? "rounded-xs" : "rounded-pill",
+        !chosen && "border border-ui-3 bg-bg",
+        chosen &&
+          (group.multiple
+            ? "border border-accent bg-accent text-on-accent"
+            : "radio-on"),
+      ]}
+      data-slot="option-mark"
+    >
+      {#if chosen && group.multiple}
+        <IconTick class="size-icon-sm" />
+      {/if}
     </span>
   {/if}
   {@render children?.()}

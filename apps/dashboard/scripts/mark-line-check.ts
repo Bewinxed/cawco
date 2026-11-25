@@ -10,14 +10,25 @@
  * the centring lands on the words' middle, and that reaches only an
  * element: bare text beside a mark is an anonymous box no property reaches.
  *
+ * The kit's boxes that lead with a mark (a button, a badge, a chip, a menu
+ * item: design.css `mark-box`) trim nothing: their words keep their line
+ * boxes, whose middle is their capitals' middle in Figtree, and their marks
+ * stand on the first line by their own margins. A row on one of them needs
+ * none of what follows but the box itself.
+ *
  * For each element or component in a `.svelte` file whose children (through
  * `{#if}`, `{#each}` and `{#key}`) hold a mark and words:
- *  - the words are not bare text or a `{value}` beside the mark: wrap them;
- *  - the row is a mark line: it carries one of the recipe's classes
- *    (`mark-line`, `rail-line`), or a kit recipe whose base draws it
- *    (`chipVariants`, `menuItemVariants`, `sectionHeadVariants`), or it is a
- *    kit primitive that draws the recipe in its own class (PRIMITIVES), or a
- *    kit part given a look that draws it (LOOKS).
+ *  - the row is a mark box (it carries `mark-box`, or is a kit primitive or
+ *    a kit part given a look that is one: BOX_PRIMITIVES, BOX_LOOKS, and the
+ *    recipes `chipVariants` and `menuItemVariants`), or a mark line: it
+ *    carries one of the recipe's classes (`mark-line`, `rail-line`), or a
+ *    kit recipe whose base draws it (`sectionHeadVariants`), or it is a kit
+ *    primitive that draws the recipe in its own class (PRIMITIVES), or a
+ *    kit part given a look that draws it (LOOKS);
+ *    A row whose marks are each a `mark-icon` (the mark box's rule for a
+ *    mark, set on a cell inside a box) needs neither;
+ *  - on a mark line, the words are not bare text or a `{value}` beside the
+ *    mark: wrap them.
  * And on every mark line, each child is one the recipe can tell: words (an
  * element holding text, which it trims), what it leaves alone (an svg, an
  * img, an icon component, the kit's cells), or a box that says so with
@@ -40,8 +51,7 @@
  * takes the recipe's padding on top of it.
  *
  * A mark component (`…Mark`, `…Face`, `…Dot`) says `data-box` on its own
- * root, or draws an svg. A kit box (BOXES: the badge) holds its words in an
- * element whether or not a mark stands beside them.
+ * root, or draws an svg.
  *
  * A mark that is not beside the words (stacked above them, or the row is
  * not centred on one cross axis) is said in a comment directly above it:
@@ -65,17 +75,23 @@ const CLASS_PREFIX = /^class=/u;
 const CLASS_NAME = /^\{([A-Z][A-Z0-9_]*)\}$/u;
 /** The recipe's utilities (app.css, the mark line). */
 const RECIPE = /(?:^|[\s"'`{[,])(?:mark-line|rail-line)(?=$|[\s"'`},\]])/u;
-/** Kit recipes whose base draws the mark line (ui/chip, ui/menu-item, ui/section-header). */
-const RECIPE_CALL =
-  /\b(?:chipVariants|menuItemVariants|sectionHeadVariants)\(/u;
+/** Kit recipes whose base draws the mark line (ui/section-header). */
+const RECIPE_CALL = /\bsectionHeadVariants\(/u;
+/** The mark box's utility (design.css). */
+const BOX_RECIPE = /(?:^|[\s"'`{[,])mark-box(?=$|[\s"'`},\]])/u;
+/** Kit recipes that are mark boxes (ui/chip, ui/menu-item). */
+const BOX_RECIPE_CALL = /\b(?:chipVariants|menuItemVariants)\(/u;
 /**
  * Kit parts that draw the mark line for some of their looks: the prop and
  * the values that do (`true`: any value).
  */
 const LOOKS: Record<string, Record<string, readonly string[] | true>> = {
-  BarItem: { form: ["title"] },
   "Collapsible.Trigger": { look: ["head", "note", "fold"] },
   "Dialog.Title": { lead: ["glyph"] },
+};
+/** Kit parts that are mark boxes for some of their looks, as LOOKS. */
+const BOX_LOOKS: Record<string, Record<string, readonly string[] | true>> = {
+  BarItem: { form: ["title", "words"] },
   "DropdownMenu.Trigger": {
     face: ["title", "count"],
     size: true,
@@ -84,7 +100,9 @@ const LOOKS: Record<string, Record<string, readonly string[] | true>> = {
   "Popover.Trigger": { look: ["chip", "state", "meter"] },
 };
 /** Kit primitives whose own class draws the recipe. */
-const PRIMITIVES = new Set([
+const PRIMITIVES = new Set(["Sidebar.MenuButton", "Sidebar.MenuSubButton"]);
+/** Kit primitives that are mark boxes. */
+const BOX_PRIMITIVES = new Set([
   "Badge",
   "Button",
   "Command.Item",
@@ -97,8 +115,6 @@ const PRIMITIVES = new Set([
   "DropdownMenu.RadioItem",
   "DropdownMenu.SubTrigger",
   "Select.Item",
-  "Sidebar.MenuButton",
-  "Sidebar.MenuSubButton",
   "Toggle",
   "ToggleGroup.Item",
 ]);
@@ -126,20 +142,15 @@ const WORDS_FILE =
   /(?:^|\/)(?:pending-content|morph-text|JumpMatch|menu-shortcut)\.svelte$/u;
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/u;
 const RULE = /([^{}]*)\{([^{}]*)\}/gu;
-/**
- * Kit boxes whose words are always an element, mark or none: the box
- * centres its words' x-height only when the recipe can reach them.
- */
-const BOXES = new Set(["Badge"]);
 /** Components that draw a mark: icons, glyphs, avatars, rings, dots. */
 const MARK_COMPONENT =
   /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|UsageRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/u;
 /** Elements the kit and its rows use as a mark's cell. A button's icon slot
     is an `.icon-swap`; a keycap is a Kbd that says `data-box`. */
 const MARK_CLASS =
-  /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/u;
+  /^(?:rail-cell|icon-swap|mark-cell|mark-icon|dot|mark|glyph|icon|ic)$/u;
 /** What the recipe leaves alone by class (app.css). */
-const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/u;
+const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell|mark-icon)$/u;
 /** Components whose root is an svg, which the recipe leaves alone. */
 const SVG_COMPONENT =
   /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|UsageRing|ProviderLogo|Glyph|Check|action\.icon)$/u;
@@ -409,9 +420,13 @@ function attributeText(
     .replace(/^["'{]|["'}]$/gu, "");
 }
 
-/** Whether a kit part is given a look that draws the mark line. */
-function looksLine(node: Node, source: string): boolean {
-  const looks = LOOKS[node.name ?? ""];
+/** Whether a kit part is given one of `table`'s looks. */
+function given(
+  table: Record<string, Record<string, readonly string[] | true>>,
+  node: Node,
+  source: string
+): boolean {
+  const looks = table[node.name ?? ""];
   if (node.type !== "Component" || !looks) {
     return false;
   }
@@ -421,11 +436,18 @@ function looksLine(node: Node, source: string): boolean {
   });
 }
 
+/** A row on the trim recipe: a mark line. */
 const isLine = (r: Reading, node: Node): boolean =>
   RECIPE.test(` ${classText(node, r.source)} `) ||
   RECIPE_CALL.test(classText(node, r.source)) ||
   (node.type === "Component" && PRIMITIVES.has(node.name ?? "")) ||
-  looksLine(node, r.source);
+  given(LOOKS, node, r.source);
+/** A mark box: it trims nothing, so its words and boxes ask nothing. */
+const isBox = (r: Reading, node: Node): boolean =>
+  BOX_RECIPE.test(` ${classText(node, r.source)} `) ||
+  BOX_RECIPE_CALL.test(classText(node, r.source)) ||
+  (node.type === "Component" && BOX_PRIMITIVES.has(node.name ?? "")) ||
+  given(BOX_LOOKS, node, r.source);
 const hit = (r: Reading, node: Node, what: string): void => {
   r.hits.push({
     file: r.file,
@@ -435,8 +457,16 @@ const hit = (r: Reading, node: Node, what: string): void => {
   });
 };
 
-/** Words beside a mark are elements, on a row that draws the recipe. */
+/** Words beside a mark stand on a mark box, or are elements on a mark line. */
 function checkBeside(r: Reading, node: Node, kids: Node[]): void {
+  // A mark box, or a row whose marks each place themselves on the first
+  // line (`mark-icon`, the mark box's rule for a mark).
+  const placed = kids
+    .filter((k) => isMark(k, r.source))
+    .every((k) => classes(k, r.source).includes("mark-icon"));
+  if (isBox(r, node) || placed) {
+    return;
+  }
   if (kids.some(isBare)) {
     hit(r, node, "bare words beside a mark: wrap them in an element");
   }
@@ -444,7 +474,7 @@ function checkBeside(r: Reading, node: Node, kids: Node[]): void {
     hit(
       r,
       node,
-      'words beside a mark on a row that is not a mark line: add class="mark-line"'
+      'words beside a mark on a row that is neither a mark box nor a mark line: give a box of its own room class="mark-box", a row in a line class="mark-line"'
     );
   }
 }
@@ -519,18 +549,6 @@ function inspect(
     kids.some((k) => isWords(k, r.source));
   if (beside && !allowedAt(siblings, index)) {
     checkBeside(r, node, kids);
-  }
-  if (
-    !beside &&
-    node.type === "Component" &&
-    BOXES.has(node.name ?? "") &&
-    kids.some(isBare)
-  ) {
-    hit(
-      r,
-      node,
-      "bare words in a box: wrap them in an element so the box centres their x-height"
-    );
   }
   if (isLine(r, node)) {
     checkBoxes(r, kids);
@@ -607,8 +625,8 @@ if (import.meta.main) {
     find: check,
     said: (one) => `${one.tag}  ${one.what}`,
     failed: (count) =>
-      `mark-line:check: ${count} row(s) set words beside a mark that the mark line cannot centre. Give the row the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts; DESIGN.md, Alignment: a mark sits nearer its text than anything else).`,
+      `mark-line:check: ${count} row(s) set words beside a mark that neither the mark box nor the mark line can place. Give a box with room of its own class="mark-box" (or a kit primitive that is one); give a row in a line the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts; DESIGN.md, Alignment: a mark sits nearer its text than anything else).`,
     passed: (files) =>
-      `mark-line:check: ${files} file(s), every mark line's words are elements on the recipe`,
+      `mark-line:check: ${files} file(s), every mark beside words stands on a mark box or on a mark line with its words in elements`,
   });
 }

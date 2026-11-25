@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line mark-cap inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-ui px-space-2 text-tx type-meta font-medium leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    base: "group/badge mark-box mark-h-icon-lg [--mark-size:var(--spacing-icon-sm)] inline-flex h-icon-lg w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap rounded-xs bg-ui text-tx type-meta font-medium leading-none transition-colors [&>svg]:pointer-events-none",
     variants: {
       variant: {
         default: "",
@@ -54,9 +54,9 @@
        * `space-1`, giving that room back to the words.
        */
       size: {
-        cell: "min-h-6 gap-1.5 px-2",
+        cell: "min-h-6 mark-h-6",
         "cell-tall":
-          "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
+          "h-auto min-h-6 mark-py-space-1 items-start whitespace-normal text-start",
         count:
           "pointer-events-none px-[clamp(var(--spacing-space-1),calc(var(--spacing-space-2)_-_var(--tight,0px)_*_1000),var(--spacing-space-2))] type-meta tabular-nums",
         /** A count standing in its row (a filter's, a section's faults): at least square, its figures in the meta role and tabular widths, centred. */
@@ -166,8 +166,7 @@
   {:else if variant === "attn"}
     <span
       aria-hidden="true"
-      class="size-1.5 shrink-0 rounded-pill bg-caution"
-      data-box
+      class="mark-icon rounded-pill bg-caution [--mark-size:--spacing(1.5)]"
       data-slot="badge-dot"
     ></span>
   {/if}<!-- no space between: a count's words are its children's alone -->{@render children?.()}

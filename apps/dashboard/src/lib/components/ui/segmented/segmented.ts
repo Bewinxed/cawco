@@ -26,8 +26,9 @@ export const SEGMENTED_TRACK =
 /**
  * The kit's segmented parts: the track (its recipe above), the lens that
  * {@link segmentedLens} places over the picked segment, and the segments:
- * label weight at line-height 1, muted until picked, each a mark line, so
- * its words stand on their x-height, and always above the lens, never
+ * label weight at line-height 1, muted until picked, each a mark box at the
+ * segment's height (design.css `mark-box`), so its words stand centred on
+ * their capitals with the same room at their sides, and always above the lens, never
  * under its blur (the lens comes first in the track, each segment is
  * positioned after it). An unpicked segment under a resting pointer takes
  * the track's hover fill and presses with the tint (`press-tint`); the
@@ -42,16 +43,17 @@ export const segmentedVariants = tv({
     group: `group/segmented relative inline-flex items-center gap-space-1 ${SEGMENTED_TRACK}`,
     lens: "pointer-events-none absolute top-0 left-0 rounded-(--shape) lens opacity-0 loops group-data-pending/segmented:breathe motion-safe:transition-[scale] motion-safe:duration-(--duration-base) motion-safe:ease-spring motion-safe:data-pressed:scale-[1.08_1.24]",
     segment:
-      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-space-3 mark-line py-0 font-sans text-base leading-none font-medium whitespace-nowrap text-tx-2 transition-control not-data-[state=active]:not-data-[state=on]:press-tint hover:not-data-[state=active]:not-data-[state=on]:not-aria-expanded:bg-ui-2 data-[state=active]:touch-pan-y data-[state=active]:text-tx data-[state=on]:touch-pan-y data-[state=on]:text-tx",
+      "relative mark-box inline-flex h-(--item) items-center justify-center rounded-(--shape) font-sans text-base leading-none font-medium whitespace-nowrap text-tx-2 mark-h-(--item) transition-control not-data-[state=active]:not-data-[state=on]:press-tint hover:not-data-[state=active]:not-data-[state=on]:not-aria-expanded:bg-ui-2 data-[state=active]:touch-pan-y data-[state=active]:text-tx data-[state=on]:touch-pan-y data-[state=on]:text-tx",
   },
   variants: {
     /**
      * A segment carrying a mark and a count beside its words (the
-     * repository picker's owner chips): its side room the compact pad, its
-     * parts the scale's smallest step apart.
+     * repository picker's owner chips). Its side room and the room beside
+     * its mark are the mark box's, as every segment's are; the look adds
+     * nothing and goes with the app pass that drops it from its callers.
      */
     compact: {
-      true: { segment: "gap-space-1 px-space-2" },
+      true: { segment: "" },
     },
   },
 });

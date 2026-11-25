@@ -727,12 +727,33 @@
    svelte-sonner draws them). Its own sheet stands in the `vendor` layer
    (vite.config.ts, vendorComponentSheets), so these win by layer. */
 @layer components {
-  /* The kit's floating surface, over sonner's own box. */
+  /* The kit's floating surface, over sonner's own box: a mark box
+     (design.css `mark-box`), its glyph (sonner's `data-icon` cell, as
+     big as its icon) on its title's first line, its title and line on the
+     toast's own line height. */
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+    @apply mark-box mark-py-space-3;
+    /* Sonner's 1px edge, which the room beside its glyph takes in. */
+    --box-edge: 1px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
       var(--font-sans);
+  }
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] > [data-icon] {
+    @apply mark-icon;
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-styled="true"]
+    > [data-icon]
+    > svg {
+    margin: 0;
+  }
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-title],
+  [data-sonner-toaster]
+    [data-sonner-toast][data-styled="true"]
+    [data-description] {
+    line-height: inherit;
   }
   /* The toast's action and cancel buttons: the label role, an item's radius,
      and the press every control gives. */

@@ -13,7 +13,7 @@
         "current-busy":
           "aria-busy:opacity-50 aria-current:text-tx aria-current:data-[variant=destructive]:text-tx aria-current:data-[variant=destructive]:focus:text-tx",
       },
-      row: { artifact: "min-h-control-lg" },
+      row: { artifact: "min-h-control-lg mark-h-control-lg" },
     },
   });
 
@@ -44,15 +44,15 @@
   class={cn(
     menuItemVariants(),
     "group/dropdown-menu-item relative flex",
-    "cursor-default select-none items-center gap-2.5 type-label",
+    "cursor-default select-none type-label",
     "outline-hidden data-disabled:pointer-events-none",
-    "data-inset:pl-space-8",
+    "data-inset:ps-[calc(var(--mark-px)+1cap+var(--mark-gap))]",
     "data-[variant=destructive]:text-danger",
     "data-disabled:opacity-50",
     "data-[variant=destructive]:focus:text-danger",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    "px-2.5 data-[variant=destructive]:[&>svg]:text-danger",
+    "data-[variant=destructive]:[&>svg]:text-danger",
     dropdownMenuItemVariants({ marks, row }),
     className
   )}

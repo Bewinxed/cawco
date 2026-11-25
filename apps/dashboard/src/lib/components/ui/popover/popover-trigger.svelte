@@ -42,7 +42,7 @@
       look: {
         chip: chipVariants({ variant: "setting" }),
         state:
-          "mark-line type-meta inline-flex h-space-6 items-center gap-space-1 whitespace-nowrap rounded-sm bg-bg-2 px-space-2 text-tx-2 transition-chip-settle not-data-fail:hover:bg-ui data-fail:bg-bg-2 data-fail:text-danger motion-safe:pressed:scale-(--press-scale)",
+          "mark-box mark-h-space-6 [--mark-size:var(--spacing-icon-sm)] type-meta inline-flex h-space-6 items-center whitespace-nowrap rounded-sm bg-bg-2 text-tx-2 transition-chip-settle not-data-fail:hover:bg-ui data-fail:bg-bg-2 data-fail:text-danger motion-safe:pressed:scale-(--press-scale)",
         count:
           "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-tx leading-none",
         strip:
@@ -55,7 +55,7 @@
         segment: `${segmentedVariants().segment()} num focus-fill shrink-0 aria-expanded:lens aria-expanded:text-tx`,
         "segment-compact": `${segmentedVariants({ compact: true }).segment()} num focus-fill shrink-0 aria-expanded:lens aria-expanded:text-tx`,
         meter:
-          "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-tx-2 type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui data-compacting:text-tx data-critical:not-data-compacting:text-danger data-warn:not-data-critical:not-data-compacting:text-caution",
+          "mark-box mark-h-row-compact flex h-row-compact items-center rounded-sm text-tx-2 type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui data-compacting:text-tx data-critical:not-data-compacting:text-danger data-warn:not-data-critical:not-data-compacting:text-caution",
       },
     },
   });

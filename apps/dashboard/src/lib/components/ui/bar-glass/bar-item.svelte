@@ -26,21 +26,22 @@
    * buttons, MediaPlayer) takes this recipe on that element.
    */
   export const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-tx transition-control hitbox pointer-coarse:hitbox:touch-area press-tint hover:not-data-lit:not-data-open:bg-ui data-open:not-data-lit:unhovered:bg-ui data-open:not-data-lit:hover:bg-ui-2 data-lit:bg-ui data-lit:text-accent [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
+    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-tx transition-control hitbox pointer-coarse:hitbox:touch-area press-tint hover:not-data-lit:not-data-open:bg-ui data-open:not-data-lit:unhovered:bg-ui data-open:not-data-lit:hover:bg-ui-2 data-lit:bg-ui data-lit:text-accent [--mark-size:--spacing(4.5)] [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
         symbol: "",
-        /* Its words at the label's inset, the chevron closer; it gives up
-           width before its neighbours, its words cut at their end, where
-           its glass stands short of room (a design graph's folded tools at
-           390: the stepper's name, so the row holds to one line). */
-        title:
-          "mark-line min-w-0 max-w-full shrink gap-space-1 ps-space-2 pe-space-1",
+        /* A mark box at the item's height (design.css `mark-box`): its
+           words with even room round them, its symbol and chevron each
+           taking the cap height's width; it gives up width before its
+           neighbours, its words cut at their end, where its glass stands
+           short of room (a design graph's folded tools at 390: the
+           stepper's name, so the row holds to one line). */
+        title: "mark-box mark-h-row-compact min-w-0 max-w-full shrink",
         /* A word action (Cancel, a count said in words): its words at the
            label's size, an even inset either side, cut at their end. */
         words:
-          "mark-line min-w-0 max-w-full px-space-2 text-base font-medium text-tx num",
+          "mark-box mark-h-row-compact min-w-0 max-w-full text-base font-medium text-tx num",
         /* His head in one cell, a circle a symbol's box wide whatever the
            strips' boxes (the beat's reach past it); on the phone's glass his
            ring over his own box, as the sidebar toggle's is, and a finger's

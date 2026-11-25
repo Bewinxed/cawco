@@ -3,18 +3,17 @@
   import { tv } from "#lib/utils.js";
 
   const toggleVariants = tv({
-    base: "control control-toggle group/toggle mark-line hitbox pointer-coarse:hitbox:touch-area inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "control control-toggle group/toggle mark-box hitbox pointer-coarse:hitbox:touch-area inline-flex items-center justify-center whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default: "control-quiet",
         outline: "control-outline [--hit-edge:1px]",
       },
       size: {
-        default:
-          "h-control-md min-w-control-md px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "h-space-6 min-w-space-6 gap-1.5 px-2 type-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "h-control-sm min-w-control-sm glass-item:h-row-compact glass-item:min-w-row-compact px-2.5 glass-item:px-space-1 glass-item:[&_svg:not([class*='size-'])]:size-4.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-control-lg min-w-control-lg px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        default: "h-control-md min-w-control-md mark-h-control-md",
+        xs: "h-space-6 min-w-space-6 mark-h-space-6 type-meta [--mark-size:var(--spacing-icon-sm)] [&_svg:not([class*='size-'])]:size-icon-sm",
+        sm: "h-control-sm min-w-control-sm mark-h-control-sm glass-item:h-row-compact glass-item:min-w-row-compact glass-item:mark-h-row-compact glass-item:[--mark-size:--spacing(4.5)] glass-item:[&_svg:not([class*='size-'])]:size-4.5",
+        lg: "h-control-lg min-w-control-lg mark-h-control-lg",
       },
     },
     defaultVariants: {

@@ -10,7 +10,7 @@
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line mark-cap hitbox pointer-coarse:hitbox:touch-area inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-box [--btn-icon:var(--mark-size)] [--btn-gap:var(--mark-gap)] hitbox pointer-coarse:hitbox:touch-area inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* Its look on the control surface (theme.css `control`): every
          edge, fill and state is the surface's, set by these names. */
@@ -33,20 +33,19 @@
         link: "control-quiet control-steady text-accent underline-draw",
       },
       size: {
-        default:
-          "h-9 btn-pad gap-(--btn-gap) [--btn-pad:var(--spacing-space-3)] [--btn-word-pad:var(--spacing-space-1)] [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)]",
-        xs: "h-6 btn-pad gap-(--btn-gap) type-label [--btn-pad:calc(var(--spacing)_*_1.5)] [--btn-word-pad:calc(var(--spacing)_*_0.5)] [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] [&_svg:not([class*='size-'])]:size-icon-sm",
+        default: "h-9 mark-h-9",
+        xs: "h-6 mark-h-6 type-label [--mark-size:var(--spacing-icon-sm)] [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
-           words not drawn, it stands as its glyph: the icon size's square,
+           words not drawn, it stands as its glyph: the mark box's sides
+           round the glyph's cap-wide footprint make it the height's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
-        sm: "h-control-sm glass-item:h-row-compact in-form-compact:min-w-control-sm btn-pad gap-(--btn-gap) [--btn-pad:var(--spacing-space-2)] [--btn-word-pad:var(--spacing-space-1)] in-form-compact:[--btn-pad:var(--spacing-space-2)] in-form-compact:[--btn-word-pad:0px] type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)]",
-        lg: "h-11 btn-pad gap-(--btn-gap) [--btn-pad:var(--spacing-space-3)] [--btn-word-pad:var(--spacing-space-1)] [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)]",
+        sm: "h-control-sm mark-h-control-sm glass-item:h-row-compact glass-item:mark-h-row-compact in-form-compact:min-w-control-sm type-label",
+        lg: "h-11 mark-h-11",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
-        composer:
-          "h-control-md btn-pad gap-(--btn-gap) [--btn-pad:var(--spacing-space-3)] [--btn-word-pad:var(--spacing-space-1)] [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)]",
+        composer: "h-control-md mark-h-control-md",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm":
@@ -88,8 +87,8 @@
       /** Its box: a prompt's answer (the label size at medium weight, the
           small corner), or 24px square. */
       fit: {
-        prompt: "gap-(--btn-gap) rounded-sm px-space-3 type-label",
-        "prompt-wide": "gap-(--btn-gap) rounded-sm px-space-4 type-label",
+        prompt: "rounded-sm type-label",
+        "prompt-wide": "rounded-sm px-space-4 type-label",
         "square-24": "h-6 w-6",
       },
       /** A control inset in a composer shell takes its concentric corner:

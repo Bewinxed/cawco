@@ -3,7 +3,12 @@
    * Canonical subgrid row (`ui/row`): spans every column of its enclosing
    * `RowList` (`row-cells`) so lead marks, body text, trailing controls, and
    * optional `below` content stay on the same vertical rails across every row
-   * without per-row `calc()` offsets.
+   * without per-row `calc()` offsets. Its lead stands on the body's first
+   * line however many lines the body runs to (design.css `mark-icon`, the
+   * mark box's rule for a mark, at the lead column's size), the row's block
+   * room what its least height leaves round one line, so a one-line row is
+   * that height with its body and lead centred in it; its trail stands
+   * centred on the row.
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
@@ -33,13 +38,16 @@
 <svelte:element
   this={as}
   data-slot="row-item"
-  class={cn("row-cells min-h-row gap-y-space-1 py-space-2", className)}
+  class={cn(
+    "row-cells min-h-row mark-h-row items-start gap-y-space-1 py-(--mark-py)",
+    className
+  )}
   {...rest}
 >
   {#if lead}
     <span
       data-slot="row-lead"
-      class="col-start-1 grid place-items-center"
+      class="col-start-1 mark-icon mx-0 grid place-items-center [--mark-size:var(--spacing-row-compact)]"
       data-box
     >
       {@render lead()}
@@ -51,7 +59,7 @@
   {#if trail}
     <span
       data-slot="row-trail"
-      class="col-start-3 flex items-center justify-self-end gap-space-2"
+      class="col-start-3 flex items-center self-center justify-self-end gap-space-2"
       data-box
     >
       {@render trail()}

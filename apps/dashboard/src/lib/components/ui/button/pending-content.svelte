@@ -287,7 +287,7 @@
     class={[
       "w-(--btn-icon) flex-none",
       inRow
-        ? "me-(--btn-gap) transition-[width,margin-inline-end] duration-(--duration-slow) ease-spring data-empty:me-0 data-empty:w-0 motion-reduce:transition-off"
+        ? "ms-(--slot-trim) me-[calc(var(--slot-trim)+var(--btn-gap))] [--slot-trim:calc((1cap-var(--btn-icon))/2)] transition-[width,margin-inline] duration-(--duration-slow) ease-spring data-empty:ms-0 data-empty:me-0 data-empty:w-0 motion-reduce:transition-off"
         : "data-over:absolute data-over:inset-0 data-over:w-auto",
     ]}
     data-empty={(inRow && shows === null) || undefined}
@@ -360,10 +360,10 @@
   {#if !beside}
     {@render slot(false)}
   {/if}
-  <!-- The run the mark line trims: a block, the reason a block under the
-       label, so the trim reaches its first and last lines (text-box-trim
-       reaches no flex or grid container, which kept its whole line and the
-       recipe's padding on top: a refused menu item stood 10px tall). -->
+  <!-- The words: a block, the reason a block under the label. Beside a
+       rest icon the slot stands in the words' row, its footprint the cap
+       height's width (`--slot-trim` each side, as the mark box takes a
+       mark), `--btn-gap` from the words. -->
   <span
     ><span
       data-slot="label-text"
@@ -384,14 +384,12 @@
           >{#each wordings as one (one.key)}<span
               aria-hidden="true"
               class={[
-                "invisible col-start-1 row-start-1 px-(--btn-word-pad,0px)",
-                beside &&
-                  "ps-[calc(var(--btn-icon)+var(--btn-gap)+var(--btn-word-pad,0px))]",
+                "invisible col-start-1 row-start-1",
+                beside && "ps-[calc(1cap+var(--btn-gap))]",
               ]}>{one.text}</span
             >{/each}<span
             class="col-start-1 row-start-1 flex items-baseline justify-center contain-inline-size"
             >{#if beside}{@render slot(true)}{/if}<span
-              class="px-(--btn-word-pad,0px)"
               ><MorphText {clock} text={drawnText} /></span
             ></span
           ></span
@@ -399,7 +397,7 @@
       {:else}
         <span class="inline-flex items-baseline"
           >{#if beside}{@render slot(true)}{/if}<span
-            class="px-(--btn-word-pad,0px)"><MorphText text={label} /></span
+            ><MorphText text={label} /></span
           ></span
         >
       {/if}{#if swapsLabel && !beside}
@@ -413,7 +411,7 @@
     >
     {#if reason}
       <span
-        class="block max-w-ch-32 px-(--btn-word-pad,0px) wrap-anywhere whitespace-normal text-danger type-meta"
+        class="block max-w-ch-32 wrap-anywhere whitespace-normal text-danger type-meta"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

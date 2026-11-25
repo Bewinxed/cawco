@@ -21,7 +21,7 @@
 <DropdownMenuPrimitive.CheckboxItem
   class={cn(
     menuItemVariants(),
-    "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 type-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "relative cursor-default select-none pe-space-8 type-label outline-hidden data-[disabled]:pointer-events-none data-inset:ps-[calc(var(--mark-px)+1cap+var(--mark-gap))] data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-menu-item

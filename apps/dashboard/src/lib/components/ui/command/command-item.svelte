@@ -15,7 +15,7 @@
 <CommandPrimitive.Item
   class={cn(
     menuItemVariants(),
-    "group/command-item relative flex cursor-default select-none items-center gap-2 px-2.5 type-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-tx data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:[&>svg]:text-tx",
+    "group/command-item relative cursor-default select-none type-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-tx data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:[&>svg]:text-tx",
     className
   )}
   data-menu-item

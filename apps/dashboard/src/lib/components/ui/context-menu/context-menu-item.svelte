@@ -19,15 +19,15 @@
   class={cn(
     menuItemVariants(),
     "group/context-menu-item relative flex",
-    "cursor-default select-none items-center gap-2.5 type-label",
+    "cursor-default select-none type-label",
     "outline-hidden data-disabled:pointer-events-none",
-    "data-inset:pl-9.5",
+    "data-inset:ps-[calc(var(--mark-px)+1cap+var(--mark-gap))]",
     "data-[variant=destructive]:text-danger",
     "data-disabled:opacity-50",
     "data-[variant=destructive]:focus:text-danger",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    "px-2.5 data-[variant=destructive]:[&>svg]:text-danger",
+    "data-[variant=destructive]:[&>svg]:text-danger",
     className
   )}
   data-inset={inset}

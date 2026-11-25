@@ -16,8 +16,12 @@ import { tv } from "#lib/utils.js";
  * take the surface's whole radius instead of the radius less the inset. The control transition, and a
  * floor of `c-menu-item-h`: 32px under a fine pointer, 44px under a finger
  * (the token's coarse mode; The 44 Touch Rule: "Menu items and nav rows are
- * 44px tall on touch"). A mark line: its mark and words share one centre
- * (The Mark Line Rule).
+ * 44px tall on touch). A mark box (design.css `mark-box`) at that height:
+ * its words stand centred on their capitals with the same room at their
+ * sides, and its mark stands on their first line when they wrap. A row
+ * with no mark that lines up under those that have one (`data-inset`)
+ * starts its words where theirs start: the side room, the mark's cap-wide
+ * footprint and the room beside it.
  *
  * Every row also carries `data-menu-item`: the surface's one highlight
  * (components/ui/highlight) finds its rows by it, and a menu's quicker tick
@@ -35,5 +39,5 @@ import { tv } from "#lib/utils.js";
 export { markMenuEnds } from "./ends.js";
 
 export const menuItemVariants = tv({
-  base: "data-menu-first:sc-t-concentric-xs data-menu-last:sc-b-concentric-xs min-h-control-sm [border-radius:var(--radius-xs)] mark-line transition-control coarse:min-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-tx-2",
+  base: "data-menu-first:sc-t-concentric-xs data-menu-last:sc-b-concentric-xs mark-box min-h-control-sm [border-radius:var(--radius-xs)] mark-h-control-sm transition-control coarse:min-h-control-lg coarse:mark-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-tx-2",
 });

@@ -159,6 +159,11 @@ const twMergeConfig = {
       "rail-step": [{ "rail-step": arbitrary }],
       "prompt-fs": [{ "prompt-fs": arbitrary }],
       "fade-inset-end": [{ "fade-inset-end": arbitrary }],
+      // A mark box's block padding, by a step or by its control's height
+      // (design.css `mark-box`): either sets `--mark-py`, so the later wins.
+      "mark-py": [
+        { "mark-py": [validators.isAny], "mark-h": [validators.isAny] },
+      ],
     },
     // A `font` shorthand class (a type role, `font-inherit`) resets every
     // font longhand, so it replaces an earlier class that set one, as a
@@ -243,6 +248,7 @@ const twMerge = extendTailwindMerge<
   | "rail-step"
   | "prompt-fs"
   | "fade-inset-end"
+  | "mark-py"
 >(mergeExtension);
 
 /** `tv` for kit recipes, merging with the same theme as `cn`. */

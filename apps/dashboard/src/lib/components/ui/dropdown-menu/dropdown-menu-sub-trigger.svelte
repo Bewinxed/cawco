@@ -18,7 +18,7 @@
 <DropdownMenuPrimitive.SubTrigger
   class={cn(
     menuItemVariants(),
-    "flex cursor-default select-none items-center gap-2 px-2.5 type-label outline-hidden data-open:bg-ui data-inset:pl-space-8 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "cursor-default select-none type-label outline-hidden data-open:bg-ui data-inset:ps-[calc(var(--mark-px)+1cap+var(--mark-gap))] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-inset={inset}

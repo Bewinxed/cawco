@@ -2,8 +2,12 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
+  /* A mark box (design.css `mark-box`) laid out as a grid: its glyph in the
+     first column, spanning the title and its line and standing on the
+     title's first line; the room round its words, and between them and the
+     glyph and the action, the box's own. */
   const alertVariants = tv({
-    base: "group/alert relative grid w-full grid-cols-[1fr] gap-y-space-1 rounded-sm px-space-3 py-space-3 text-left type-body has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-space-2 has-data-[slot=alert-action]:gap-x-space-3 [&>:not(svg,[data-slot=alert-action])]:col-start-[-2] [&>svg:not([class*='size-'])]:size-icon-md [&>svg]:row-span-2 [&>svg]:translate-y-0.5 [&>svg]:text-current",
+    base: "group/alert mark-box mark-py-space-3 relative grid w-full grid-cols-[1fr] gap-y-space-1 rounded-sm text-left type-body has-[>svg]:grid-cols-[auto_1fr] [&>:not(svg,[data-slot=alert-action])]:col-start-[-2] [&>svg]:row-span-2 [&>svg]:text-current",
     variants: {
       variant: {
         default: "bg-bg-2 text-tx",

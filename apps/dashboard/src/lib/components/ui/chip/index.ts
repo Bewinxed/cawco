@@ -6,6 +6,9 @@ import { tv } from "#lib/utils.js";
  * radius, keycap digits)"; Typography: the label role for chips). A chip is
  * written on the element its caller already has (a button, a bits-ui toggle
  * item, a record's span), so the part is its recipe, applied as a class.
+ * Every chip but `inline` is a mark box (design.css `mark-box`): its side
+ * room and the room beside its mark follow from its height, and its mark
+ * stands on its first line.
  *
  * - `option`: a choice, 30px tall including its edge under every pointer (a
  *   finger's 44px is the chip's `hitbox` (`touch-area`), never a taller chip), wrapping
@@ -73,21 +76,21 @@ import { tv } from "#lib/utils.js";
  * edge", the same at rest, under the pointer and sunk).
  */
 export const chipVariants = tv({
-  base: "inline-flex items-center rounded-sm mark-line text-tx type-label",
+  base: "inline-flex items-center rounded-sm text-tx type-label",
   variants: {
     variant: {
       option:
-        "group/option control hitbox min-h-control-sm max-w-full gap-space-2 px-space-3 py-space-1 text-start hit-edge-hair motion-safe:duration-(--duration-fast) motion-safe:ease-out pointer-coarse:hitbox:touch-area",
-      tray: "pointer-events-auto hitbox relative isolate h-row-compact touch-manipulation gap-space-2 border-0 bg-transparent px-space-2 transition-[color] duration-(--duration-fast) ease-out select-none [--tray-chip-fill:var(--color-bg)] touch-callout-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-ui before:bg-(color:--tray-chip-fill) before:shadow-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-out motion-safe:transition-[color,transform] motion-safe:active:[transform:scale(var(--press-scale))] can-hover:hover:[--tray-chip-fill:var(--color-ui)] pointer-coarse:hitbox:touch-area [&>svg]:size-icon-md [&>svg]:flex-none",
+        "group/option control hitbox mark-box min-h-control-sm max-w-full items-start text-start hit-edge-hair mark-h-control-sm motion-safe:duration-(--duration-fast) motion-safe:ease-out pointer-coarse:hitbox:touch-area",
+      tray: "pointer-events-auto hitbox relative isolate mark-box h-row-compact touch-manipulation border-0 bg-transparent transition-[color] duration-(--duration-fast) ease-out select-none [--tray-chip-fill:var(--color-bg)] mark-h-row-compact touch-callout-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-ui before:bg-(color:--tray-chip-fill) before:shadow-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-out motion-safe:transition-[color,transform] motion-safe:active:[transform:scale(var(--press-scale))] can-hover:hover:[--tray-chip-fill:var(--color-ui)] pointer-coarse:hitbox:touch-area",
       inline:
         "-my-space-1 max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--spacing-space-1))] bg-bg-2 py-space-1 ps-space-1 pe-space-2 align-baseline leading-4.5 whitespace-nowrap inset-ring inset-ring-ui motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-ui [&>[data-slot=label]]:max-w-ch-32 [&>[data-slot=label]]:min-w-0 [&>[data-slot=label]]:self-baseline [&>[data-slot=label]]:overflow-clip [&>[data-slot=label]]:text-ellipsis [&>svg]:size-icon-md [&>svg]:flex-none",
       setting:
-        "control hitbox h-control-sm max-w-full gap-space-2 px-space-2 leading-none whitespace-nowrap hit-edge-hair aria-disabled:opacity-50 variant-static:control-static pointer-coarse:hitbox:touch-area [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-tx-2 [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
+        "control hitbox mark-box h-control-sm max-w-full leading-none whitespace-nowrap hit-edge-hair mark-h-control-sm aria-disabled:opacity-50 variant-static:control-static pointer-coarse:hitbox:touch-area [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:text-tx-2 [&>[data-slot=chevron]]:[--mark-size:var(--spacing-icon-sm)]",
     },
     size: {
       regular: "",
       compact:
-        "h-row-compact gap-space-1 max-phone:not-data-account-chip:[&>[data-slot=chevron]]:hidden",
+        "h-row-compact mark-h-row-compact max-phone:not-data-account-chip:[&>[data-slot=chevron]]:hidden",
     },
     /** A setting chip's tone; its classes are the setting chip's own (below). */
     tone: { muted: "", fail: "", grant: "" },

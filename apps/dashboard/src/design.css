@@ -2839,6 +2839,82 @@
     padding-block: calc((1lh - 1ex) / 2);
   }
 }
+/* The mark box: a kit box that leads with a mark beside its words (owner's
+   pick, 2026-11-25, after Diego Haz's rule). Its words keep their whole
+   line boxes, untrimmed, in every browser. Figtree's ascent stands above its
+   cap height by exactly its descent (950 - 700 = 250 units), so a line
+   box's middle is the middle of its capitals at any line-height, and the
+   room above the capitals is the room below the baseline: the box's block
+   padding plus half of what the line has over the cap height. The box's
+   sides take that same sum (`--mark-px`), so the visible room round its
+   words is even on every side; the mark stands that room from the words
+   (`--mark-gap`: the side padding and the box's edge, `--box-edge`).
+   - `--mark-py`, its block padding: a spacing step (`mark-py-*`), or what a
+     control of one height leaves round its line inside its edge
+     (`mark-h-*`, less `--box-edge`, which the control surface sets to its
+     edge's width: a button, a badge, a menu item, whose words then stand
+     centred on their capitals by the same arithmetic).
+   - Its marks, the svg, img or `.mark-icon` cell set first beside the
+     words (and a button's icon slot), are `mark-icon`: centred on the first
+     line box however many lines the words run to, and taking the cap
+     height's width in the row, so the room beside a mark reads the same
+     whatever the mark's size. `--mark-size` is the mark's size: a mark
+     sized by a class of its own says it there too.
+   The box lays out as a flex row from the start; a box that is a grid of
+   its own (an alert, a listed option) keeps its grid and takes the rest.
+   Every declaration is at no specificity, so a component's own layout
+   class wins over the box's. */
+@utility mark-icon {
+  /* A mark is never a box of words; the selector says so, and is its own. */
+  :where(&:not(.mark-box)) {
+    flex: none;
+    margin-block: calc((1lh - var(--mark-size)) / 2);
+    margin-inline: calc((1cap - var(--mark-size)) / 2);
+  }
+  :where(&):where(:not([class*="size-"])) {
+    inline-size: var(--mark-size);
+    block-size: var(--mark-size);
+  }
+}
+@utility mark-box {
+  /* A box of words is never a mark; the selector says so, and is its own. */
+  :where(&:not(.mark-icon)) {
+    --mark-py: 0px;
+    --mark-size: var(--spacing-icon-md);
+    --mark-px: calc(var(--mark-py) + (1lh - 1cap) / 2);
+    --mark-gap: calc(var(--mark-px) + var(--box-edge, 0px));
+    display: flex;
+    align-items: start;
+    gap: var(--mark-gap);
+    padding: var(--mark-py) var(--mark-px);
+  }
+  /* `mark-icon` on the box's marks, one selector to a kind, so each is
+     filed under what it names (universal-key-check.ts). */
+  :where(&) > :where(svg),
+  :where(&) > :where(img),
+  :where(&) > :where(.mark-icon),
+  :where(&) > :where(.icon-swap) {
+    flex: none;
+    margin-block: calc((1lh - var(--mark-size)) / 2);
+    margin-inline: calc((1cap - var(--mark-size)) / 2);
+  }
+  :where(&) > :where(svg):where(:not([class*="size-"])),
+  :where(&) > :where(img):where(:not([class*="size-"])) {
+    inline-size: var(--mark-size);
+    block-size: var(--mark-size);
+  }
+}
+@utility mark-py-* {
+  --mark-py: --value(--spacing-*, [*]);
+  --mark-py: calc(var(--spacing) * --value(number));
+}
+@utility mark-h-* {
+  --mark-py: calc((--value(--spacing-*, [*]) - 1lh) / 2 - var(--box-edge, 0px));
+  --mark-py: calc(
+    (var(--spacing) * --value(number) - 1lh) / 2 - var(--box-edge, 0px)
+  );
+}
+
 /* A row of a mark and its words: every run of words in it is trimmed. What
    is centred as a box is left alone: an svg or img, the kit's cells
    (.rail-cell, .icon-swap, a button's icon slot among them, .mark-cell),
@@ -2859,7 +2935,9 @@
      inside the compound it files a rule under, so every element it
      restyled tested the rule (universal-key-check.ts). */
   :where(&)
-    > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
+    > :where(
+      :not(svg, img, .rail-cell, .icon-swap, .mark-cell, .mark-icon, [data-box])
+    ) {
     text-box: trim-both var(--mark-edge, ex) alphabetic;
     padding-block: calc((1lh - var(--mark-band, 1ex)) / 2);
   }

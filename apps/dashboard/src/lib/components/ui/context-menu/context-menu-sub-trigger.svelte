@@ -2,9 +2,11 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: its glyph and words a menu item's gap apart. */
+  /** Its callers' looks: its glyph and words a menu item's gap apart,
+      which every menu item now has as a mark box; `item` adds nothing and
+      goes with the app pass that drops it from its callers. */
   const contextMenuSubTriggerVariants = tv({
-    variants: { gap: { item: "gap-2.5" } },
+    variants: { gap: { item: "" } },
   });
 
   type ContextMenuSubTriggerLooks = VariantProps<
@@ -34,7 +36,7 @@
 <ContextMenuPrimitive.SubTrigger
   class={cn(
     menuItemVariants(),
-    "flex cursor-default select-none items-center px-2.5 type-label outline-hidden data-open:bg-ui data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "cursor-default select-none type-label outline-hidden data-open:bg-ui data-inset:ps-[calc(var(--mark-px)+1cap+var(--mark-gap))] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     contextMenuSubTriggerVariants({ gap }),
     className
   )}

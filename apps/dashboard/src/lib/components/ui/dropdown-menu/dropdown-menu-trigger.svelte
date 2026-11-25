@@ -7,7 +7,8 @@
    * title, the name of what is on show (the artifact switcher), its glyph
    * and chevron on its words' line: the label role and the strong ink, as
    * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
-   * Size Rule, The Mark Line Rule), its padding the title's inset there,
+   * Size Rule; a mark box, as every button is), its side padding the
+   * title's inset there,
    * its corner concentric with the card whose head's corner it stands in
    * (The Concentric Rule; `sc-concentric-sm`, the small corner where no card sets one).
    * `count`: a glyph and the count it holds on one line (a pane head's
@@ -21,9 +22,8 @@
   const dropdownMenuTriggerVariants = tv({
     variants: {
       face: {
-        title:
-          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-tx sc-concentric-sm",
-        count: "mark-line px-space-2",
+        title: "type-label min-w-0 px-space-2 text-tx sc-concentric-sm",
+        count: "px-space-2",
       },
       look: {
         attach:

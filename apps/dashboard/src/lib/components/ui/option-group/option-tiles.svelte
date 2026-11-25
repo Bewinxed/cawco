@@ -82,9 +82,9 @@
     >
       {#if glyph}
         <span
-          class="row-span-2 grid w-full min-w-0 grid-cols-auto-fluid items-start gap-x-space-2 mark-line"
+          class="row-span-2 grid w-full min-w-0 grid-cols-auto-fluid items-start gap-x-(--mark-gap)"
         >
-          <span class="mark-cell type-label" data-box
+          <span class="mark-icon grid place-items-center type-label"
             >{@render glyph(option.id)}</span
           >
           <span class="wrap-anywhere type-label">{option.name}</span>

@@ -18,7 +18,7 @@
 <SelectPrimitive.Item
   class={cn(
     menuItemVariants(),
-    "relative flex w-full cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 type-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 [&>span:last-child]:flex [&>span:last-child]:items-center [&>span:last-child]:gap-2",
+    "relative w-full cursor-default select-none whitespace-nowrap pe-space-8 type-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-menu-item
@@ -34,17 +34,11 @@
     >
       <IconTick class={tickVariants({ clock: "menu" })} data-on={selected} />
     </span>
-    <!-- The mark line the item's own words and marks stand on: a box to the
-         item around it. -->
-    <span
-      class="mark-line flex flex-1 gap-2 shrink-0 whitespace-nowrap"
-      data-box
-    >
-      {#if childrenProp}
-        {@render childrenProp({ selected, highlighted })}
-      {:else}
-        {label || value}
-      {/if}
-    </span>
+    <!-- The item's own words and marks, straight on its mark box. -->
+    {#if childrenProp}
+      {@render childrenProp({ selected, highlighted })}
+    {:else}
+      <span>{label || value}</span>
+    {/if}
   {/snippet}
 </SelectPrimitive.Item>

@@ -13,8 +13,9 @@
     ...restProps
   }: ToggleGroupPrimitive.ItemProps & {
     /**
-     * A segment carrying a mark and a count beside its words: the compact
-     * side room, its parts a step apart (segmentedVariants `compact`).
+     * A segment carrying a mark and a count beside its words
+     * (segmentedVariants `compact`, which now adds nothing: its room is the
+     * mark box's, as every segment's is).
      */
     compact?: boolean;
     /**
