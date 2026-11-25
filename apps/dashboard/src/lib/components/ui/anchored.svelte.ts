@@ -47,6 +47,7 @@ import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
 import { createAttachmentKey } from "svelte/attachments";
 import type { HTMLAttributes } from "svelte/elements";
+import { frameObserver } from "#lib/platform/frame-observer.js";
 import { PLACED, type Placed } from "#lib/platform/layer-placed.js";
 import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
@@ -411,6 +412,15 @@ function meetOf(layer: DOMRect, anchor: DOMRect, side: LayerSide) {
   }
 }
 
+/** Where it meets its anchor, written on the surface: its transform-origin and its arrow's place. */
+function meetAt(
+  surface: HTMLElement,
+  meet: { along: number; x: number; y: number }
+): void {
+  surface.style.setProperty("--kit-origin", `${meet.x}px ${meet.y}px`);
+  surface.style.setProperty("--kit-arrow-at", `${meet.along}px`);
+}
+
 /** The point of the anchor its layer stands on: the middle of the side it faces. */
 const facing: Record<LayerSide, { x: number; y: number }> = {
   bottom: { x: 0.5, y: 1 },
@@ -477,6 +487,8 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
     } | null = null;
     let frame = 0;
     let wasOpen = false;
+    /** The side it took at its last placing. */
+    let took: LayerSide | null = null;
 
     const hold = (next: Element | null, glide = false) => {
       const el = next && anchorable(next) ? next : null;
@@ -592,11 +604,10 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
       }
       const box = layer.getBoundingClientRect();
       const side = sideOf(box, at, wanted);
-      const meet = meetOf(box, at, side);
+      took = side;
       surface.dataset.side = side;
       surface.dataset.align = alignOf(box, at, side);
-      surface.style.setProperty("--kit-origin", `${meet.x}px ${meet.y}px`);
-      surface.style.setProperty("--kit-arrow-at", `${meet.along}px`);
+      meetAt(surface, meetOf(box, at, side));
       if (entering) {
         // Its closed look takes the side before it opens from it.
         getComputedStyle(surface).getPropertyValue("translate");
@@ -652,6 +663,25 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
       }
       wasOpen = open;
     };
+    // Its size changing while it stands open (a tooltip's words gliding to
+    // the next item's, a list filtering): where it meets its anchor is read
+    // again, on the layout that frame has just done; its side stays.
+    const sized = frameObserver(null, {
+      inside: () => {
+        const surface = surfaceOf(layer);
+        if (!(wasOpen && took && anchor && surface)) {
+          return;
+        }
+        const side = took;
+        const meet = meetOf(
+          layer.getBoundingClientRect(),
+          anchor.getBoundingClientRect(),
+          side
+        );
+        return () => meetAt(surface, meet);
+      },
+    });
+    sized.observe(layer);
     const states = new MutationObserver(sync);
     states.observe(layer, {
       attributes: true,
@@ -666,6 +696,7 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
 
     return () => {
       cancelAnimationFrame(frame);
+      sized.disconnect();
       states.disconnect();
       if (anchor) {
         nameOff(anchor, name);
