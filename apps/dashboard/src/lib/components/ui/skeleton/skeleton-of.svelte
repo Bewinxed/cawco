@@ -8,9 +8,11 @@
   /**
    * The skeleton of a piece, taken from the piece itself (boneyard-js,
    * owner's pick 2026-11-24): where a piece waits for its data, its bones
-   * stand at exactly the boxes it will draw, so the wait never moves
-   * anything when the piece arrives, and no hand-drawn shape drifts from the
-   * piece it stands for.
+   * stand at exactly the boxes it will draw, and its words' bones where
+   * their ink stands (capitals to baseline, one per line), so lines that
+   * read apart in the piece read apart in its skeleton, the wait never
+   * moves anything when the piece arrives, and no hand-drawn shape drifts
+   * from the piece it stands for.
    *
    * The bones are captured at build time and shipped as data (decision
    * d646f8d3, "Captured at build time"): `bun run bones` (scripts/bones.ts)
