@@ -10,6 +10,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  not,
   notExists,
   notInArray,
   or,
@@ -25,6 +26,7 @@ import {
   watches,
 } from "./schema";
 import {
+  isHookWatch,
   type PolledWatchesDb,
   polledWatchesDb,
   settingsWith,
@@ -162,7 +164,8 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     }
     return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
   };
-  const isPoll = eq(watches.provider, "connection");
+  // A relay's sender's watch is of provider `connection` too, and is no poll.
+  const isPoll = and(eq(watches.provider, "connection"), not(isHookWatch));
   /** A connector poll's records (schema `external_items`, kind `record`): its watch's id is their container. */
   const recordsOf = (ids: string[]) =>
     and(

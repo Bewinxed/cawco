@@ -130,7 +130,7 @@ export interface LinearRawIssue {
   url: string;
 }
 
-interface RawComment {
+export interface LinearRawComment {
   body: string;
   botActor?: { name?: string | null } | null;
   createdAt: string;
@@ -269,8 +269,8 @@ const refOf = (url: string): MirroredRef | undefined => {
     : undefined;
 };
 
-/** An issue's revision and its opening and close. */
-const issueRead = (raw: LinearRawIssue): Ingested => {
+/** An issue's revision and its opening and close: a poll's and a webhook's alike. */
+export const linearIssueRead = (raw: LinearRawIssue): Ingested => {
   const ref = refOf(raw.url);
   if (!ref) {
     return { revisions: [], events: [] };
@@ -330,10 +330,10 @@ const issueRead = (raw: LinearRawIssue): Ingested => {
 /** One issue as Linear answers it, as its revision; undefined for one whose URL names no Linear issue. */
 export const linearIssueRevision = (
   raw: LinearRawIssue
-): ItemRevision | undefined => issueRead(raw).revisions[0];
+): ItemRevision | undefined => linearIssueRead(raw).revisions[0];
 
-/** A comment on one of the team's issues, as a `comment.created` on its issue. */
-const commentRead = (raw: RawComment): SourceEvent[] => {
+/** A comment on one of the team's issues, as a `comment.created` on its issue: a poll's and a webhook's alike. */
+export const linearCommentRead = (raw: LinearRawComment): SourceEvent[] => {
   const ref = raw.issue ? refOf(raw.issue.url) : undefined;
   if (!ref) {
     return [];
@@ -466,7 +466,7 @@ const poll: LinearIngest["poll"] = (input) => {
           wholeIssue(read.client, read.requestMs, raw).pipe(
             Effect.flatMap((full) =>
               Effect.sync(() => {
-                const one = issueRead(full);
+                const one = linearIssueRead(full);
                 ingested.revisions.push(...one.revisions);
                 ingested.events.push(...one.events);
               })
@@ -474,14 +474,14 @@ const poll: LinearIngest["poll"] = (input) => {
           )
       ).pipe(Effect.map(polled));
     case "comments":
-      return readPages<RawComment>(
+      return readPages<LinearRawComment>(
         read,
         "list the team's comments",
         COMMENTS_QUERY,
         "comments",
         (raw) =>
           Effect.sync(() => {
-            ingested.events.push(...commentRead(raw));
+            ingested.events.push(...linearCommentRead(raw));
           })
       ).pipe(Effect.map(polled));
     default:

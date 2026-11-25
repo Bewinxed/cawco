@@ -46,8 +46,14 @@
  *   comment is filed once under its own id, an issue a task links files no
  *   task, a merge's move finds its task moved, and routing passes over an
  *   event a route or a trigger already took.
+ * - **Written in Effect.** `take` is an Effect whose store is synchronous
+ *   and whose subscribers run on a fiber of their own (`Effect.forkDetach`);
+ *   the project's turn is a one-permit Semaphore per project
+ *   (core keyed-lock.ts). The subscribers are promise code (links.ts,
+ *   sync.ts, event-routes.ts, outsiders.ts, dispatch.ts), each run as one
+ *   step whose rejection is a typed {@link SubscriberFailed}; `turn` is the
+ *   promise edge the sync and the outsider rule take the turn by.
  */
-import { detach } from "@cawco/core/detach";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { githubIngest } from "@cawco/providers/github/ingest";
 import { linearIngest } from "@cawco/providers/linear/ingest";
@@ -58,6 +64,7 @@ import type {
   MirrorProvider,
   SourceEvent,
 } from "@cawco/providers/provider";
+import { Cause, Effect, Schema } from "effect";
 import type { DbShape } from "./db";
 import type { ItemRow } from "./db/external-items";
 import type { InboundEventRow } from "./db/ingress";
@@ -227,6 +234,31 @@ interface Batch {
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
+/** A subscriber (promise code: links.ts, sync.ts, event-routes.ts, outsiders.ts, dispatch.ts) that threw: its step and its words. */
+class SubscriberFailed extends Schema.TaggedError<SubscriberFailed>()(
+  "SubscriberFailed",
+  { step: Schema.String, words: Schema.String }
+) {}
+
+/** One subscriber's promise as a step of the door: its rejection a {@link SubscriberFailed}. */
+const step = <A>(
+  name: string,
+  run: () => Promise<A>
+): Effect.Effect<A, SubscriberFailed> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) =>
+      new SubscriberFailed({ step: name, words: wordsOf(error) }),
+  });
+
+/** What stopped a run, in words: a subscriber's failure, or what threw. */
+const causeWords = (cause: Cause.Cause<SubscriberFailed>): string => {
+  const failed = Cause.squash(cause);
+  return failed instanceof SubscriberFailed
+    ? `${failed.step}: ${failed.words}`
+    : wordsOf(failed);
+};
+
 export const createIntake = ({
   db,
   eventLanded,
@@ -243,22 +275,20 @@ export const createIntake = ({
     turns.run(projectId, work);
 
   /** Step 2 for an item, once: undefined when it has nothing to sync, else what the sync did, or its refusal. */
-  const syncItem = async (
+  const syncItem = Effect.fnUntraced(function* (
     batch: Batch,
     projectId: string,
     itemId: string | null
-  ): Promise<Synced | AnyProblem | undefined> => {
+  ): Effect.fn.Return<Synced | AnyProblem | undefined, SubscriberFailed> {
     const due = itemId ? batch.unsynced.get(itemId) : undefined;
     if (!(due && itemId)) {
       return;
     }
     batch.unsynced.delete(itemId);
     const said = `[intake] ${due.item.provider} ${due.item.ref}`;
-    await settledOwn(projectId, due.item);
-    const synced = await subscribers.sync.revision(
-      projectId,
-      due.item,
-      due.revision
+    yield* settledOwn(projectId, due.item);
+    const synced = yield* step("sync", () =>
+      subscribers.sync.revision(projectId, due.item, due.revision)
     );
     if (isProblem(synced)) {
       console.warn(
@@ -270,7 +300,7 @@ export const createIntake = ({
       );
     }
     return synced;
-  };
+  });
 
   /**
    * What CawCo writes to the item's container recorded first (a session's
@@ -278,28 +308,28 @@ export const createIntake = ({
    * the project's tasks linked to that task: so nothing after reads CawCo's
    * own as someone else's, and no second task is filed for it.
    */
-  const settledOwn = async (
+  const settledOwn = Effect.fnUntraced(function* (
     projectId: string,
     item: ItemRow | undefined
-  ): Promise<void> => {
+  ): Effect.fn.Return<void, SubscriberFailed> {
     if (!item || item.provider === "connection") {
       return;
     }
-    await writes.settled(item.host, item.container);
-    await subscribers.adopt(projectId, item);
-  };
+    yield* step("writes", () => writes.settled(item.host, item.container));
+    yield* step("adopt", () => subscribers.adopt(projectId, item));
+  });
 
   /**
    * Who caused a stored event, as the write ledger says once CawCo's writes
    * to its item's container are recorded: one recorded since the event was
    * stored is CawCo's own all the same. Kept on the event.
    */
-  const originNow = async (
+  const originNow = Effect.fnUntraced(function* (
     row: InboundEventRow,
     event: InboundEvent
-  ): Promise<InboundOrigin> => {
+  ): Effect.fn.Return<InboundOrigin, SubscriberFailed> {
     const item = row.itemId ? db.intake.item(row.itemId) : undefined;
-    await settledOwn(row.projectId, item);
+    yield* settledOwn(row.projectId, item);
     const origin = db.writes.origin({
       item: item ?? null,
       kind: event.kind,
@@ -310,18 +340,19 @@ export const createIntake = ({
       db.ingress.setEvent(row.id, { origin });
     }
     return origin;
-  };
+  });
 
   /** Steps 1 and 2 for one stored event: its thread task, and what the sync did with its item; undefined when either stopped short (the event stays unprocessed). */
-  const linkAndSync = async (
+  const linkAndSync = Effect.fnUntraced(function* (
     batch: Batch,
     arrived: Arrived,
     said: string
-  ): Promise<
-    { linked: string | null; synced: Synced | undefined } | undefined
-  > => {
+  ): Effect.fn.Return<
+    { linked: string | null; synced: Synced | undefined } | undefined,
+    SubscriberFailed
+  > {
     const { row } = arrived;
-    const linked = await subscribers.links(arrived);
+    const linked = yield* step("links", () => subscribers.links(arrived));
     if (isProblem(linked)) {
       console.warn(
         `${said} stays unprocessed, and runs again after the project's next read: ${linked.response.detail}`
@@ -331,7 +362,7 @@ export const createIntake = ({
     console.log(
       `${said}: links${linked ? `, linked to ${linked}` : ", linked to no task"}`
     );
-    const synced = await syncItem(batch, row.projectId, row.itemId);
+    const synced = yield* syncItem(batch, row.projectId, row.itemId);
     if (synced !== undefined && isProblem(synced)) {
       console.warn(
         `${said} stays unprocessed, and runs again after the project's next read`
@@ -339,30 +370,32 @@ export const createIntake = ({
       return;
     }
     return { linked, synced };
-  };
+  });
 
   /** The five steps for one stored event, in order; marked processed once they all ran. */
-  const runOne = async (
+  const runOne = Effect.fnUntraced(function* (
     batch: Batch,
     stored: InboundEventRow
-  ): Promise<void> => {
+  ): Effect.fn.Return<void, SubscriberFailed> {
     const row = db.ingress.event(stored.id) ?? stored;
     if (row.processedAt !== null) {
       return;
     }
     const said = `[intake] ${row.source} ${row.deliveryKey}`;
     const event = storedEvent(row);
-    const origin = await originNow(row, event);
+    const origin = yield* originNow(row, event);
     const ours = origin === "ours";
     const arrived: Arrived = { event, row: { ...row, origin } };
-    const before = await linkAndSync(batch, arrived, said);
+    const before = yield* linkAndSync(batch, arrived, said);
     if (before === undefined) {
       return;
     }
     const { linked, synced } = before;
     let taskId = linked ?? synced?.taskId ?? null;
     const syncs = synced?.syncs ?? subscribers.syncs(row.projectId, row.itemId);
-    const moved = await subscribers.lifecycle(arrived);
+    const moved = yield* step("lifecycle", () =>
+      subscribers.lifecycle(arrived)
+    );
     if (moved) {
       taskId = moved;
     }
@@ -375,33 +408,43 @@ export const createIntake = ({
     // CawCo's own write is no outsider's.
     const held = ours
       ? false
-      : await subscribers.outsiders(arrived, taskId, syncs);
+      : yield* step("outsiders", () =>
+          subscribers.outsiders(arrived, taskId, syncs)
+        );
     if (held) {
       console.log(`${said}: outsiders, held for the person`);
     }
     const fresh = db.ingress.event(row.id) ?? row;
-    await subscribers.route(
-      { event, row: { ...fresh, taskId } },
-      { taskId, lifecycle: moved !== undefined, synced: syncs, held, ours }
+    yield* step("route", () =>
+      subscribers.route(
+        { event, row: { ...fresh, taskId } },
+        { taskId, lifecycle: moved !== undefined, synced: syncs, held, ours }
+      )
     );
     console.log(`${said}: routing done`);
     db.ingress.setEvent(row.id, { processedAt: new Date() });
-  };
+  });
 
   /** Comments edited since their events were stored: each entry rewritten on its task (links.ts `fileComment`), nothing routed. */
-  const fileEdits = async (rows: readonly InboundEventRow[]): Promise<void> => {
+  const fileEdits = Effect.fnUntraced(function* (
+    rows: readonly InboundEventRow[]
+  ): Effect.fn.Return<void, SubscriberFailed> {
     for (const row of rows) {
-      const linked = await subscribers.links({ event: storedEvent(row), row });
+      const linked = yield* step("links", () =>
+        subscribers.links({ event: storedEvent(row), row })
+      );
       if (isProblem(linked)) {
         console.warn(
           `[intake] ${row.source} ${row.deliveryKey}: its edit was not filed: ${linked.response.detail}`
         );
       }
     }
-  };
+  });
 
   /** A batch's events, per item, oldest first: a group stops at the first that throws. */
-  const runEvents = async (batch: Batch): Promise<void> => {
+  const runEvents = Effect.fnUntraced(function* (
+    batch: Batch
+  ): Effect.fn.Return<void> {
     const atOf = (row: InboundEventRow): number => {
       const { at } = storedEvent(row);
       return at > 0 ? at : row.receivedAt.getTime();
@@ -412,58 +455,67 @@ export const createIntake = ({
       byItem.set(key, [...(byItem.get(key) ?? []), row]);
     }
     for (const group of byItem.values()) {
-      try {
-        for (const row of group) {
-          await runOne(batch, row);
-        }
-      } catch (error) {
-        console.warn(
-          `[intake] an event on item ${group[0]?.itemId ?? "none"} stays unprocessed, and runs again after the project's next read: ${wordsOf(error)}`
-        );
-      }
+      yield* Effect.forEach(group, (row) => runOne(batch, row), {
+        discard: true,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            console.warn(
+              `[intake] an event on item ${group[0]?.itemId ?? "none"} stays unprocessed, and runs again after the project's next read: ${causeWords(cause)}`
+            )
+          )
+        )
+      );
     }
-  };
+  });
 
   /** The rows left to sync that no event named. */
-  const runUnsynced = async (
+  const runUnsynced = Effect.fnUntraced(function* (
     projectId: string,
     batch: Batch
-  ): Promise<void> => {
+  ): Effect.fn.Return<void> {
     for (const itemId of [...batch.unsynced.keys()]) {
-      try {
-        const synced = await syncItem(batch, projectId, itemId);
-        if (synced !== undefined && isProblem(synced)) {
-          console.log(
-            `[intake] item ${itemId} runs again after the project's next read`
-          );
-        }
-      } catch (error) {
-        console.warn(
-          `[intake] item ${itemId}: the sync stopped short, and runs again after the project's next read: ${wordsOf(error)}`
+      const synced = yield* syncItem(batch, projectId, itemId).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync((): undefined => {
+            console.warn(
+              `[intake] item ${itemId}: the sync stopped short, and runs again after the project's next read: ${causeWords(cause)}`
+            );
+          })
+        )
+      );
+      if (synced !== undefined && isProblem(synced)) {
+        console.log(
+          `[intake] item ${itemId} runs again after the project's next read`
         );
       }
     }
-  };
+  });
 
   /** One project's batch, in its turn: boards, edits, then per item, oldest event first, then the items with no event. */
-  const process = (projectId: string, batch: Batch): Promise<void> =>
-    turn(projectId, async () => {
-      if (batch.carriesLeft) {
-        leftQueued.delete(projectId);
-      }
-      if (batch.moved.length > 0) {
-        subscribers.linksMoved(projectId, batch.moved);
-      }
-      for (const { watchId, board } of batch.boards) {
-        await subscribers.sync.board(projectId, watchId, board);
-      }
-      await fileEdits(batch.edited);
-      await runEvents(batch);
-      await runUnsynced(projectId, batch);
-    });
+  const process = (projectId: string, batch: Batch) =>
+    turns.withLock(
+      projectId,
+      Effect.gen(function* () {
+        if (batch.carriesLeft) {
+          leftQueued.delete(projectId);
+        }
+        if (batch.moved.length > 0) {
+          subscribers.linksMoved(projectId, batch.moved);
+        }
+        for (const { watchId, board } of batch.boards) {
+          yield* step("board", () =>
+            subscribers.sync.board(projectId, watchId, board)
+          );
+        }
+        yield* fileEdits(batch.edited);
+        yield* runEvents(batch);
+        yield* runUnsynced(projectId, batch);
+      })
+    );
 
-  /** Runs a project's batch, detached: a take answers before it runs. */
-  const later = (projectId: string, batch: Batch): void => {
+  /** Runs a project's batch on a fiber of its own: a take answers before it runs. */
+  const later = (projectId: string, batch: Batch): Effect.Effect<void> => {
     if (
       batch.rows.length === 0 &&
       batch.moved.length === 0 &&
@@ -471,18 +523,24 @@ export const createIntake = ({
       batch.boards.length === 0 &&
       batch.unsynced.size === 0
     ) {
-      if (batch.carriesLeft) {
-        leftQueued.delete(projectId);
-      }
-      return;
+      return Effect.sync(() => {
+        if (batch.carriesLeft) {
+          leftQueued.delete(projectId);
+        }
+      });
     }
-    detach(
-      process(projectId, batch).catch((error: unknown) =>
-        console.warn(
-          `[intake] project ${projectId}'s events did not run: ${wordsOf(error)}`
+    return Effect.asVoid(
+      Effect.forkDetach(
+        process(projectId, batch).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              console.warn(
+                `[intake] project ${projectId}'s events did not run: ${causeWords(cause)}`
+              )
+            )
+          )
         )
-      ),
-      "run a project's inbound events"
+      )
     );
   };
 
@@ -508,15 +566,16 @@ export const createIntake = ({
 
   /**
    * THE door: one read or delivery stored once, then its subscribers run
-   * in the project's turn, with whatever the project left to run. Answers
-   * how many events it stored, once the store is done.
+   * in the project's turn, on a fiber of their own, with whatever the
+   * project left to run. Answers how many events it stored, once the store
+   * is done and before any subscriber runs.
    */
-  const take = (
+  const take = Effect.fnUntraced(function* (
     at: IntakeAt,
     ingested: Ingested,
     via: InboundVia,
     baseline: boolean
-  ): number => {
+  ): Effect.fn.Return<number> {
     const moved = MOVED[at.provider];
     const taken = db.intake.take({
       projectId: at.projectId,
@@ -535,7 +594,7 @@ export const createIntake = ({
     if (taken.events.length > 0) {
       eventLanded(at.projectId);
     }
-    later(
+    yield* later(
       at.projectId,
       withLeft(at.projectId, {
         rows: taken.events.map(({ row }) => row),
@@ -554,7 +613,7 @@ export const createIntake = ({
       })
     );
     return taken.events.length;
-  };
+  });
 
   /** Hub start: every event a stopped hub left unprocessed, and every row the sync has not taken in, runs again in its project's turn. */
   const start = (): void => {
@@ -569,23 +628,28 @@ export const createIntake = ({
       ...left.map((row) => row.projectId),
       ...unsynced.map((item) => item.projectId),
     ]);
-    for (const projectId of projects) {
-      later(
-        projectId,
-        withLeft(projectId, {
-          rows: [],
-          edited: [],
-          moved: [],
-          boards: [],
-          unsynced: new Map(),
-        })
-      );
-    }
+    Effect.runSync(
+      Effect.forEach(
+        projects,
+        (projectId) =>
+          later(
+            projectId,
+            withLeft(projectId, {
+              rows: [],
+              edited: [],
+              moved: [],
+              boards: [],
+              unsynced: new Map(),
+            })
+          ),
+        { discard: true }
+      )
+    );
   };
 
-  /** Resolves once every project's events taken so far have run: for a caller that reads what they did. */
-  const settled = (projectId: string): Promise<void> =>
-    turn(projectId, () => Promise.resolve());
+  /** Done once every project's events taken so far have run: for a caller that reads what they did. */
+  const settled = (projectId: string): Effect.Effect<void> =>
+    turns.withLock(projectId, Effect.void);
 
   return { settled, start, take, turn };
 };

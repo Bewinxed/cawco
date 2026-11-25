@@ -48,6 +48,7 @@ import type {
   GithubStatusesAdded,
   GithubStatusStages,
 } from "@cawco/core/trackers";
+import type { HookScheme } from "@cawco/providers/connection/descriptor";
 import type { GitHubStream } from "@cawco/providers/github/ingest";
 import type { ProviderId, WatchSyncMode } from "@cawco/providers/provider";
 
@@ -817,8 +818,8 @@ export interface WatchSettings {
   githubStatusesAdded?: GithubStatusesAdded | null;
   githubStatusesRefused?: string | null;
   githubStatusStages?: GithubStatusStages | null;
-  /** A dot path to each item's id. */
-  idPath?: string;
+  /** A dot path to each item's id; a relay's watch: to its event's id, null for none. */
+  idPath?: string | null;
   /** Seconds between calls, 60 or more. */
   intervalS?: number;
   /** A dot path to the array of items in the answer; empty: the answer is the array. */
@@ -829,8 +830,17 @@ export interface WatchSettings {
    * with again once the binding goes; null or absent when they were one.
    */
   pollerConnection?: string | null;
+  /**
+   * A relay's watch of provider `connection` (providers connection/webhook.ts):
+   * how its sender signs. A connector poll holds none.
+   */
+  scheme?: HookScheme;
+  /** A relay's watch, `hmac-header`: the header its hex HMAC-SHA256 comes in, lower case. */
+  signatureHeader?: string | null;
   /** Why the tracker sync's last run stopped short, in words (its own refusal, or a task's problem); null when it all went through. */
   syncProblem?: string | null;
+  /** A relay's watch, `hmac-header`: a header with the Unix time its signature covers, lower case. */
+  timestampHeader?: string | null;
   tool?: string;
   /** A dot path to each item's version (`updated_at`). */
   versionPath?: string;

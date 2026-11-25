@@ -5,7 +5,13 @@
  */
 
 /** Who signs a relay's deliveries, and how. */
-export const RELAY_PROVIDERS = ["github", "stripe", "generic"] as const;
+export const RELAY_PROVIDERS = [
+  "github",
+  "linear",
+  "stripe",
+  "generic",
+  "standard-webhooks",
+] as const;
 export type RelayProvider = (typeof RELAY_PROVIDERS)[number];
 
 /**

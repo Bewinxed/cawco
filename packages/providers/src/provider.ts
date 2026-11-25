@@ -1,5 +1,9 @@
 import type { Effect } from "effect";
-import type { ProviderFailure } from "./read-stop";
+import type {
+  DeliveryUnread,
+  DeliveryUnverified,
+  ProviderFailure,
+} from "./read-stop";
 
 /**
  * One provider per outside service (GitHub, Linear, GitLab, Gitea, and the
@@ -233,6 +237,8 @@ export type WatchSyncMode = "off" | "inbound" | "both";
 export interface WatchView {
   connection: string;
   container: string;
+  /** The container as the person knows it: `owner/repo`, `ENG · Engineering`. */
+  containerName: string;
   host: string;
   id: string;
   projectId: string;
@@ -276,6 +282,75 @@ export interface Ingest<Client, Cursor> {
   readsBy: (watch: WatchView) => unknown;
   /** The streams a watch polls, in order. */
   streams: (watch: WatchView) => readonly string[];
+}
+
+// --- webhooks -----------------------------------------------------------------
+
+/** One delivery as the hub's receiver took it in: its headers, its raw body, and when it arrived, ms. */
+export interface RawDelivery {
+  body: Uint8Array;
+  headers: Headers;
+  now: number;
+}
+
+/** Where a watch's relay is reached: its public URL and its id (the path's last part). */
+export interface HookAt {
+  relay: string;
+  url: string;
+}
+
+/** What a verified delivery says: revisions and events, the service's test delivery, or nothing the watch takes. */
+type DeliveryRead = Ingested | "ping" | "ignored";
+
+/**
+ * The hub registers and removes a watch's webhook itself (provider spec
+ * §2.3 `lifecycle`, "register, verify, and clean up", n8n): all three or
+ * none. Each request within `requestMs`.
+ */
+export interface WebhookLifecycle<Client> {
+  /** Whether the webhook `hookId` is still there. */
+  exists: (
+    client: Client,
+    watch: WatchView,
+    hookId: string,
+    requestMs: number
+  ) => Effect.Effect<boolean, ProviderFailure>;
+  /** Makes the webhook at `url`, signed with `secret`: its id. A refusal of kind `scope` or `input` leaves the person the manual step. */
+  register: (
+    client: Client,
+    watch: WatchView,
+    hook: { secret: string; url: string },
+    requestMs: number
+  ) => Effect.Effect<{ hookId: string }, ProviderFailure>;
+  /** Deletes the webhook `hookId`; one already gone is done. */
+  unregister: (
+    client: Client,
+    watch: WatchView,
+    hookId: string,
+    requestMs: number
+  ) => Effect.Effect<void, ProviderFailure>;
+}
+
+/**
+ * How a watch's service pushes (provider spec §2.3 `Ingest.webhook`): a
+ * webhook is a faster way into the watch, never a second source, so what
+ * `read` gives goes through the same door under the same keys as a poll.
+ */
+export interface Webhook<Client> {
+  lifecycle?: WebhookLifecycle<Client>;
+  /** What the person does where, when the hub does not register the webhook: `why` it does not, then the step. */
+  manualStep: (watch: WatchView, hook: HookAt, why: string) => string;
+  /** A verified delivery as what it says; its body that does not read is its failure. */
+  read: (
+    delivery: RawDelivery,
+    watch: WatchView
+  ) => Effect.Effect<DeliveryRead, DeliveryUnread>;
+  /** Whether `secret` signed the delivery: runs before the body is parsed; why not, in words, its failure. */
+  verify: (
+    delivery: RawDelivery,
+    secret: string,
+    watch: WatchView
+  ) => Effect.Effect<void, DeliveryUnverified>;
 }
 
 /** What one read of one item came to: its revision, nothing new (a 304), or gone; a refusal or no answer is its failure. */

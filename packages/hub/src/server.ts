@@ -10932,11 +10932,7 @@ export const createServer = (
         return;
       }
       for (const projectId of projects) {
-        if (
-          !db.relays
-            .ofProject(projectId)
-            .some((open) => open.provider === provider && open.state !== "off")
-        ) {
+        if (!relays.hasRelay(projectId, provider)) {
           caw.offerRelay(projectId, connection, provider);
         }
       }

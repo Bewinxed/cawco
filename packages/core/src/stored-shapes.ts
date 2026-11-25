@@ -3,6 +3,7 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
+import { HOOK_SCHEMES } from "@cawco/providers/connection/descriptor";
 import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { z } from "zod";
 import type {
@@ -6215,6 +6216,13 @@ export const GithubStatusStagesShape = declared(
   "packages/core/src/trackers.ts"
 );
 export type GithubStatusStagesOutput = z.output<typeof GithubStatusStagesShape>;
+
+export const HookSchemeShape = declared(
+  z.enum(HOOK_SCHEMES),
+  "HookScheme",
+  "packages/providers/src/connection/descriptor.ts"
+);
+export type HookSchemeOutput = z.output<typeof HookSchemeShape>;
 
 export const WatchSyncModeShape = declared(
   z.enum(["off", "inbound", "both"]),

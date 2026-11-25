@@ -8,6 +8,7 @@ import type {
   DocAuthor as DocAuthorType,
   PlaceKind as PlaceKindType,
 } from "@cawco/jsonl-parser";
+import type { HookScheme as HookSchemeType } from "@cawco/providers/connection/descriptor";
 import type {
   BoardAt as BoardAtType,
   ExternalActor as ExternalActorType,
@@ -671,6 +672,7 @@ import type {
   HookMatchTestOutput,
   HookMcpToolHandlerOutput,
   HookPromptHandlerOutput,
+  HookSchemeOutput,
   HostOutputListedOutput,
   HostOutputsListedOutput,
   HostOutputsOutput,
@@ -1480,6 +1482,7 @@ prove<
     Same<GithubProjectOutput, GithubProjectType>,
     Same<GithubStatusesAddedOutput, GithubStatusesAddedType>,
     Same<GithubStatusStagesOutput, GithubStatusStagesType>,
+    Same<HookSchemeOutput, HookSchemeType>,
     Same<WatchSyncModeOutput, WatchSyncModeType>,
     Same<WorkInFlightOutput, WorkInFlightType>,
     Same<ChangeVersionOutput, ChangeVersionType>,

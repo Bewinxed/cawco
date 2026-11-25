@@ -75,3 +75,15 @@ export const failureWords = (failure: ProviderFailure): string =>
   failure._tag === "ProviderRefused"
     ? failure.words
     : `${failure.service} did not answer within the ${failure.after} ms it was given.`;
+
+/** A webhook delivery whose signature does not hold, why in words: for the hub's log, never its caller. */
+export class DeliveryUnverified extends Schema.TaggedError<DeliveryUnverified>()(
+  "DeliveryUnverified",
+  { words: Schema.String }
+) {}
+
+/** A verified delivery whose body does not read as what its service sends, why in words. */
+export class DeliveryUnread extends Schema.TaggedError<DeliveryUnread>()(
+  "DeliveryUnread",
+  { words: Schema.String }
+) {}

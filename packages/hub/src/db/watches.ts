@@ -26,12 +26,13 @@
  * with again once the binding goes ({@link stopSyncing}).
  */
 import { CONNECTION_AUTHS, readsGitHubApi } from "@cawco/core/connections";
-import { and, asc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, like, ne, not, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   connectionProjects,
   connections,
   projectLinks,
+  relays,
   watchCursors,
   watches,
 } from "./schema";
@@ -67,6 +68,38 @@ const githubRepoOfLink = (remote: string): string | undefined => {
 /** The GitHub repositories, `owner/repo`, among a project's links, oldest first. */
 export const githubReposOf = (links: readonly string[]): string[] =>
   links.flatMap((link) => githubRepoOfLink(link) ?? []);
+
+/**
+ * A watch that only holds how a relay's sender signs (settings `scheme`,
+ * providers connection/webhook.ts): no poll reads it, and it is no
+ * connector poll.
+ */
+export const isHookWatch = sql`json_extract(${watches.settings}, '$.scheme') IS NOT NULL`;
+
+/** Whether a relay that is not off belongs to watch `watchId`. */
+const heldByRelay = (tx: Writer, watchId: string): boolean =>
+  tx
+    .select({ id: relays.id })
+    .from(relays)
+    .where(and(eq(relays.watchId, watchId), ne(relays.state, "off")))
+    .limit(1)
+    .get() !== undefined;
+
+/**
+ * A watch nothing follows any more goes, cursors and all; one a relay
+ * holds stays for it, not polled, so the relay's deliveries go on landing
+ * and the webhook it registered can still be deleted through it.
+ */
+const letGo = (tx: Writer, watch: WatchRow): void => {
+  if (heldByRelay(tx, watch.id)) {
+    tx.update(watches)
+      .set({ enabled: false })
+      .where(eq(watches.id, watch.id))
+      .run();
+    return;
+  }
+  tx.delete(watches).where(eq(watches.id, watch.id)).run();
+};
 
 /** One GitHub repository's watch of a project: `owner/repo` compared as GitHub does, without case. */
 const githubWatchOf = (
@@ -192,8 +225,13 @@ const watchRepo = (
   if (!was) {
     madeGitHubWatch(tx, projectId, repo, connection);
   } else if (!was.enabled) {
+    // One a relay alone held (no poll read it) is read from now through
+    // the connection the project follows by.
     tx.update(watches)
-      .set({ enabled: true })
+      .set({
+        enabled: true,
+        ...(was.sync === "off" ? { connection, reason: null } : {}),
+      })
       .where(eq(watches.id, was.id))
       .run();
   }
@@ -298,7 +336,7 @@ export const rehome = (
         .where(eq(watches.id, watch.id))
         .run();
     } else if (!leave) {
-      tx.delete(watches).where(eq(watches.id, watch.id)).run();
+      letGo(tx, watch);
     }
     moved.push({
       id: watch.id,
@@ -494,7 +532,8 @@ export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
   };
   const polled = and(
     inArray(watches.provider, [...POLLED_PROVIDERS]),
-    eq(watches.enabled, true)
+    eq(watches.enabled, true),
+    not(isHookWatch)
   );
   return {
     followedBy: (projectId) => followedOf(db, projectId)[0]?.connection,
@@ -635,7 +674,8 @@ export const stopSyncing = (
     linkedRepos(tx, watch.projectId).some(
       (repo) => repo.toLowerCase() === watch.container.toLowerCase()
     );
-  if (!(followed && connection)) {
+  const held = heldByRelay(tx, watch.id);
+  if (!((followed && connection) || held)) {
     tx.delete(watches).where(eq(watches.id, watch.id)).run();
     return;
   }
@@ -645,8 +685,10 @@ export const stopSyncing = (
       syncSince: null,
       syncDirectionAt: null,
       state: null,
-      connection,
+      connection: connection ?? watch.connection,
       settings: unsynced(watch.settings),
+      // One a relay alone holds stays for it, not polled.
+      ...(followed && connection ? {} : { enabled: false }),
     })
     .where(eq(watches.id, watch.id))
     .run();
@@ -701,5 +743,55 @@ export const foldWatches = (tx: Writer, dupId: string, keepId: string) => {
     .where(eq(projectLinks.projectId, dupId))
     .all()) {
     followLink(tx, keepId, remote);
+  }
+  foldRelayWatches(tx, dupId, keepId);
+};
+
+/**
+ * The watches of `dupId` a relay holds, which would go with its row: each
+ * relay goes into the kept project's watch of the same container, else
+ * its watch moves there, no longer syncing and not polled, as one only a
+ * relay holds.
+ */
+const foldRelayWatches = (tx: Writer, dupId: string, keepId: string) => {
+  for (const watch of tx
+    .select()
+    .from(watches)
+    .where(eq(watches.projectId, dupId))
+    .all()) {
+    if (!heldByRelay(tx, watch.id)) {
+      continue;
+    }
+    const kept = tx
+      .select()
+      .from(watches)
+      .where(
+        and(
+          eq(watches.projectId, keepId),
+          eq(watches.provider, watch.provider),
+          eq(watches.host, watch.host),
+          sql`lower(${watches.container}) = lower(${watch.container})`
+        )
+      )
+      .get();
+    if (kept) {
+      tx.update(relays)
+        .set({ watchId: kept.id })
+        .where(eq(relays.watchId, watch.id))
+        .run();
+      continue;
+    }
+    tx.update(watches)
+      .set({
+        projectId: keepId,
+        sync: "off",
+        syncSince: null,
+        syncDirectionAt: null,
+        state: null,
+        settings: unsynced(watch.settings),
+        enabled: false,
+      })
+      .where(eq(watches.id, watch.id))
+      .run();
   }
 };

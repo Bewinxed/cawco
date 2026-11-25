@@ -25185,6 +25185,8 @@
                     "enum": [
                       "generic",
                       "github",
+                      "linear",
+                      "standard-webhooks",
                       "stripe"
                     ],
                     "type": "string"
@@ -25305,6 +25307,8 @@
                     "enum": [
                       "generic",
                       "github",
+                      "linear",
+                      "standard-webhooks",
                       "stripe"
                     ],
                     "type": "string"
@@ -58438,6 +58442,8 @@
         "enum": [
           "generic",
           "github",
+          "linear",
+          "standard-webhooks",
           "stripe"
         ]
       },

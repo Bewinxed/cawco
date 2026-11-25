@@ -12074,14 +12074,6 @@
       "title"
     ]
   },
-  "relays.provider": {
-    "type": "string",
-    "enum": [
-      "github",
-      "stripe",
-      "generic"
-    ]
-  },
   "relays.secret_from": {
     "type": "string",
     "enum": [
@@ -14450,7 +14442,10 @@
         ]
       },
       "idPath": {
-        "type": "string"
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "intervalS": {
         "type": "number"
@@ -14464,7 +14459,27 @@
           "null"
         ]
       },
+      "scheme": {
+        "type": "string",
+        "enum": [
+          "stripe",
+          "hmac-header",
+          "standard-webhooks"
+        ]
+      },
+      "signatureHeader": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "syncProblem": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "timestampHeader": {
         "type": [
           "string",
           "null"

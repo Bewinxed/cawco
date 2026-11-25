@@ -2,7 +2,7 @@
  * GitHub's answer to one Octokit call, whether it made the change or refused
  * it: Octokit throws its answer for any status of 300 or more
  * (@octokit/request-error `RequestError`: its `status` and `response`), and
- * that is read back as an answer here. A failure to reach GitHub is thrown.
+ * that is read back here. A failure to reach GitHub is thrown.
  */
 import { Result, Schema } from "effect";
 import type { RefusalKind } from "../read-stop";
@@ -59,21 +59,6 @@ export const graphqlErrorsOf = (
 ): (typeof GraphqlFailureSchema)["Type"]["errors"] => {
   const read = Schema.decodeUnknownResult(GraphqlFailureSchema)(error);
   return Result.isSuccess(read) ? read.success.errors : [];
-};
-
-/** GitHub's answer to `call`: what it gave, or the refusal Octokit threw for it. */
-export const octokitAnswer = async (
-  call: () => Promise<{ data: unknown; status: number }>
-): Promise<{ data: unknown; status: number }> => {
-  try {
-    return await call();
-  } catch (error) {
-    const refused = refusalOf(error);
-    if (refused) {
-      return { status: refused.status, data: refused.data };
-    }
-    throw error;
-  }
 };
 
 /** An error's HTTP status and headers, as Octokit's RequestError carries them, and its words. */

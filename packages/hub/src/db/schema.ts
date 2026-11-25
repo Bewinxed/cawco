@@ -53,7 +53,7 @@ import {
   type SendPayload,
   type SpawnPayload,
 } from "@cawco/core/protocol";
-import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
+import { RELAY_STATES } from "@cawco/core/relays";
 import {
   CHECK_OUTCOMES,
   ROUTINE_OUTCOMES,
@@ -7228,17 +7228,17 @@ export const actions = sqliteTable(
   ]
 );
 
-/** Who signs a relay's deliveries (relay.ts). */
-export type RelayProvider = import("@cawco/core/relays").RelayProvider;
 /** Where a relay is (relay.ts): asked for, live, waiting on one step of yours, or turned off. */
 export type RelayState = import("@cawco/core/relays").RelayState;
 
 /**
  * A relay (Projects spec §5.5 Relay, relay.ts): one public path,
- * `/hooks/<id>`, through Tailscale Funnel to the hub's receiver, for one
- * project and one provider. The row is the wanted state; the hub host applies
- * it at start and whenever a relay comes or goes. `secret` is sealed and no
- * route or tool answers it.
+ * `/hooks/<id>`, through Tailscale Funnel to the hub's receiver, into one
+ * watch (provider spec §2.4: "A relay belongs to a watch"): a GitHub
+ * repository's, a Linear team's, or a `connection` watch that only holds
+ * how a sender signs (its settings' `scheme`, its id the relay's). The row
+ * is the wanted state; the hub host applies it at start and whenever a
+ * relay comes or goes. `secret` is sealed and no route or tool answers it.
  */
 export const relays = sqliteTable(
   "relays",
@@ -7246,22 +7246,16 @@ export const relays = sqliteTable(
     /** 128 random bits, base64url: the path's last part. */
     id: text("id").primaryKey(),
     projectId: projectKey(),
-    provider: storedEnum(z.enum(RELAY_PROVIDERS))("provider").notNull(),
+    /** The watch its deliveries go into, through that watch's provider's webhook. */
+    watchId: text("watch_id")
+      .notNull()
+      .references(() => watches.id, { onDelete: "cascade" }),
     /** What deliveries are signed with: minted for a webhook the hub registers, else the owner's (`cawco relay set-secret`). */
     secret: sealedText("secret"),
     /** `minted` (the hub made it and gave it to the provider), `owner` (set from the owner's terminal), or null: none yet. */
     secretFrom: storedEnum(RelaySecretFromSchema)("secret_from"),
-    /** The connection the webhook is registered through (GitHub). */
-    connection: text("connection"),
-    /** GitHub: the repository, `owner/repo`, one of the project's links, whose webhook it is. */
-    repo: text("repo"),
-    /** GitHub's id for the webhook the hub registered, so removing the relay deletes it. */
+    /** The service's id for the webhook the hub registered, so removing the relay deletes it. */
     hookId: text("hook_id"),
-    /** generic: the header carrying the hex HMAC-SHA256, and an optional timestamp header. */
-    signatureHeader: text("signature_header"),
-    timestampHeader: text("timestamp_header"),
-    /** generic: a dot path to the event's id in the body; the body's SHA-256 without one. */
-    idPath: text("id_path"),
     /** The machine whose Tailscale serves the path: the hub's. */
     host: text("host").notNull(),
     /** `https://<machine>.<tailnet>.ts.net:10000/hooks/<id>`, once Funnel says it is live. */
@@ -7276,7 +7270,10 @@ export const relays = sqliteTable(
     createdBy: sessionColumn("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
   },
-  (table) => [index("relays_project").on(table.projectId)]
+  (table) => [
+    index("relays_project").on(table.projectId),
+    index("relays_watch").on(table.watchId),
+  ]
 );
 
 /**

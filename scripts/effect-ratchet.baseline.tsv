@@ -75,7 +75,6 @@ timed-loop	Bun.sleep	packages/agent/src/tools.ts	1
 timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
 timed-loop	Bun.sleep	packages/hub/src/fleet-mcp-relay.ts	1
 timed-loop	Bun.sleep	packages/hub/src/landing.ts	1
-timed-loop	Bun.sleep	packages/hub/src/relay.ts	1
 timed-loop	Bun.sleep	packages/hub/src/ssh-tunnels.ts	2
 timed-loop	Bun.sleep	packages/hub/src/wire-socket.ts	1
 timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.ts	1

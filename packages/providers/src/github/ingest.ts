@@ -843,19 +843,6 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
 export const readGitHub = (kind: GitHubKind, payload: unknown): Ingested =>
   READERS[kind](payload);
 
-/** The webhook events a relay's GitHub hook sends: what the poll reads, as webhooks. */
-export const GITHUB_WEBHOOK_EVENTS = [
-  "pull_request",
-  "issues",
-  "issue_comment",
-  "discussion",
-  "discussion_comment",
-] as const satisfies readonly GitHubKind[];
-
-/** A webhook delivery's event name as one {@link readGitHub} reads; undefined for any other. */
-export const webhookKind = (event: string): GitHubKind | undefined =>
-  GITHUB_WEBHOOK_EVENTS.find((one) => one === event);
-
 /** The states a reopen moves an item out of. */
 const SHUT: ReadonlySet<MirrorState> = new Set(["closed", "canceled"]);
 /** The states a reopen moves it into. */

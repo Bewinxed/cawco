@@ -7,6 +7,14 @@
  * its watch's id. Pure: no SDK.
  */
 
+/** How a relay's sender signs, as its watch's settings hold it (connection/webhook.ts). */
+export const HOOK_SCHEMES = [
+  "stripe",
+  "hmac-header",
+  "standard-webhooks",
+] as const;
+export type HookScheme = (typeof HOOK_SCHEMES)[number];
+
 /** The shortest interval a connector poll takes, s. */
 export const CONNECTOR_MIN_S = 60;
 

@@ -2,7 +2,8 @@
  * `cawco relay`: a project's public webhook path (Projects spec §5.5 Relay;
  * the hub's relay.ts), from a terminal.
  *
- * - `on <project> [--provider github|stripe|generic] [--connection <name>]
+ * - `on <project> [--provider github|linear|stripe|generic|standard-webhooks]
+ *   [--connection <name>]
  *   [--signature-header <h>] [--timestamp-header <h>] [--id-path <path>]`:
  *   inside a CawCo session it is that session's `relay_create`, which waits
  *   for the owner to approve it like any admin write. In the owner's own
@@ -127,7 +128,7 @@ const describe = (view: RelayView): string[] => [
   `Relay ${view.id} (${view.provider}): ${view.state}`,
   ...(view.publicUrl ? [`Public URL: ${view.publicUrl}`] : []),
   ...(view.reason ? [`Needs: ${view.reason}`] : []),
-  view.inbound,
+  ...(view.inbound ? [view.inbound] : []),
   ...(view.testedAt
     ? [`Test delivery: ${new Date(view.testedAt).toISOString()}`]
     : []),

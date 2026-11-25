@@ -31,10 +31,15 @@
  *   watch's read there, its words the watch's reason and its rate limit the
  *   watch's resume time; a request not answered in time leaves the watch as
  *   it was and says so in the log.
+ * - **Written in Effect.** The loop is one fiber repeating its look on
+ *   `Schedule.spaced`, interrupted when the hub closes; each poll runs on a
+ *   fiber of its own, one per project's GitHub or per watch, a second ask
+ *   joining the first; providers' reads and the door are Effects, and the
+ *   link reads (links.ts) stay promise code. The routes and the sync reach
+ *   it through its promise edges.
  */
 
 import { readsGitHubApi } from "@cawco/core/connections";
-import { detach } from "@cawco/core/detach";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import {
@@ -58,7 +63,7 @@ import type {
   ItemRevision,
   WatchView,
 } from "@cawco/providers/provider";
-import { Effect, Result } from "effect";
+import { Cause, Effect, Fiber, Result, Schedule } from "effect";
 import { problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -71,7 +76,7 @@ import {
 } from "./db/watches";
 import type { IngressView } from "./ingress-views";
 import type { Intake } from "./intake";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import type { Links } from "./links";
 
 /** What the poll says of a project that links no GitHub repository. */
@@ -140,6 +145,7 @@ const viewOf = (watch: PolledWatch): WatchView => ({
   provider: POLLED[watch.provider] ?? "connection",
   host: watch.host,
   container: watch.container,
+  containerName: watch.containerName,
   connection: watch.reads,
   settings: watch.settings,
   sync: watch.sync,
@@ -211,9 +217,10 @@ export const createClock = ({
   links,
 }: ClockDeps) => {
   const store = db.ingress;
-  /** Polls under way, by `github:<project>` or `conn:<watch id>`: one at a time each. */
-  const running = new Map<string, Promise<void>>();
-  let timer: HubTimer | undefined;
+  /** Polls under way, by `github:<project>` or `conn:<watch id>`: one at a time each, a second ask joining the first. */
+  const running = new Map<string, Fiber.Fiber<void>>();
+  /** The loop's fiber, while the hub runs. */
+  let looping: Fiber.Fiber<void> | undefined;
 
   const github: Reader<GitHubClient, GitHubStreamCursor> = {
     ingest: githubIngest,
@@ -245,11 +252,11 @@ export const createClock = ({
    * that stops ends the read. A watch that moved in what it reads by while
    * a read was out drops what it read, and nothing is written.
    */
-  const readWatch = async <Client, Cursor>(
+  const readWatch = Effect.fnUntraced(function* <Client, Cursor>(
     watch: PolledWatch,
     reader: Reader<Client, Cursor>,
     client: Client
-  ): Promise<WatchPolled> => {
+  ): Effect.fn.Return<WatchPolled> {
     const view = viewOf(watch);
     const shape = reader.ingest.readsBy(view);
     const out: WatchPolled = {
@@ -259,17 +266,15 @@ export const createClock = ({
       unanswered: null,
     };
     for (const stream of reader.ingest.streams(view)) {
-      const outcome = await Effect.runPromise(
-        Effect.result(
-          reader.ingest.poll({
-            client,
-            watch: view,
-            stream,
-            cursor: reader.cursorOf(watch.cursors.get(stream)),
-            now: Date.now(),
-            requestMs,
-          })
-        )
+      const outcome = yield* Effect.result(
+        reader.ingest.poll({
+          client,
+          watch: view,
+          stream,
+          cursor: reader.cursorOf(watch.cursors.get(stream)),
+          now: Date.now(),
+          requestMs,
+        })
       );
       const now = store.polledWatch(watch.id);
       if (!(now && Bun.deepEquals(reader.ingest.readsBy(viewOf(now)), shape))) {
@@ -292,7 +297,7 @@ export const createClock = ({
         store.keepStream(watch.id, stream, { kind: "unchanged" });
         continue;
       }
-      out.landed += intake.take(
+      out.landed += yield* intake.take(
         {
           projectId: watch.projectId,
           provider: view.provider,
@@ -309,7 +314,7 @@ export const createClock = ({
       });
     }
     return out;
-  };
+  });
 
   /** A watch's read's outcome on its row: its problem and resume time, unless a request went unanswered, which leaves them as they were. */
   const keepRead = (
@@ -342,16 +347,14 @@ export const createClock = ({
   };
 
   /** A client for a watch, or why its connection could not sign in, in words. */
-  const clientFor = async <Client, Cursor>(
+  const clientFor = <Client, Cursor>(
     watch: PolledWatch,
     reader: Reader<Client, Cursor>
-  ): Promise<{ client: Client } | { words: string }> => {
-    try {
-      return { client: await reader.client(watch) };
-    } catch (error) {
-      return { words: wordsOf(error) };
-    }
-  };
+  ): Effect.Effect<{ client: Client } | { words: string }> =>
+    Effect.tryPromise({
+      try: async () => ({ client: await reader.client(watch) }),
+      catch: wordsOf,
+    }).pipe(Effect.catch((words) => Effect.succeed({ words })));
 
   /** The revisions a project's link reads found, through the door, each with its repository's watch. */
   const storeReads = (projectId: string, revisions: ItemRevision[]): void => {
@@ -366,11 +369,15 @@ export const createClock = ({
       groups.set(repo, [...(groups.get(repo) ?? []), revision]);
     }
     for (const [repo, group] of groups) {
-      intake.take(
-        { projectId, provider: "github", watchId: byRepo.get(repo) ?? null },
-        { revisions: group, events: [] },
-        "poll",
-        false
+      // Called back from inside the link reads (promise code): the door's
+      // store is synchronous, and its subscribers run on a fiber of their own.
+      Effect.runSync(
+        intake.take(
+          { projectId, provider: "github", watchId: byRepo.get(repo) ?? null },
+          { revisions: group, events: [] },
+          "poll",
+          false
+        )
       );
     }
   };
@@ -382,7 +389,9 @@ export const createClock = ({
    * cursors, unread. Every watch of the project is dated, so the project is
    * due again together.
    */
-  const pollGitHub = async (projectId: string): Promise<void> => {
+  const pollGitHub = Effect.fnUntraced(function* (
+    projectId: string
+  ): Effect.fn.Return<void> {
     const followed = store.githubWatches(projectId);
     const project = db.project(projectId);
     if (!(followed.length > 0 && project)) {
@@ -399,12 +408,12 @@ export const createClock = ({
       }
     }
     for (const watch of [...linked, ...synced]) {
-      const opened = await clientFor(watch, github);
+      const opened = yield* clientFor(watch, github);
       if ("words" in opened) {
         store.keepWatch(watch.id, { reason: opened.words, polledAt });
         continue;
       }
-      keepRead(watch, await readWatch(watch, github, opened.client), polledAt);
+      keepRead(watch, yield* readWatch(watch, github, opened.client), polledAt);
     }
     const followedBy = store.followedBy(projectId);
     if (followedBy === undefined) {
@@ -417,55 +426,78 @@ export const createClock = ({
       // The connection could not sign in: its watches' reads said why, and the links are read on the next poll.
       return;
     }
-    await links.readLinks(projectId, client, requestMs, (revisions) =>
-      storeReads(projectId, revisions)
+    yield* Effect.promise(() =>
+      links.readLinks(projectId, client, requestMs, (revisions) =>
+        storeReads(projectId, revisions)
+      )
     );
-  };
+  });
 
   /** One read of a Linear team's watch. */
-  const pollLinear = async (id: string): Promise<void> => {
+  const pollLinear = Effect.fnUntraced(function* (
+    id: string
+  ): Effect.fn.Return<void> {
     const watch = store.polledWatch(id);
     if (watch?.provider !== "linear") {
       return;
     }
     const polledAt = new Date();
-    const opened = await clientFor(watch, linear);
+    const opened = yield* clientFor(watch, linear);
     if ("words" in opened) {
       store.keepWatch(watch.id, { reason: opened.words, polledAt });
       return;
     }
-    keepRead(watch, await readWatch(watch, linear, opened.client), polledAt);
-  };
+    keepRead(watch, yield* readWatch(watch, linear, opened.client), polledAt);
+  });
 
   /** One call of a connector poll. */
-  const pollConnector = async (id: string): Promise<void> => {
+  const pollConnector = Effect.fnUntraced(function* (
+    id: string
+  ): Effect.fn.Return<void> {
     const watch = store.polledWatch(id);
     if (watch?.provider !== "connection") {
       return;
     }
     const polledAt = new Date();
-    const opened = await clientFor(watch, connector);
+    const opened = yield* clientFor(watch, connector);
     if ("words" in opened) {
       store.keepWatch(watch.id, { reason: opened.words, polledAt });
       return;
     }
-    keepRead(watch, await readWatch(watch, connector, opened.client), polledAt);
-  };
+    keepRead(
+      watch,
+      yield* readWatch(watch, connector, opened.client),
+      polledAt
+    );
+  });
 
-  /** Runs one poll at a time per key; a failure is logged, never lost. */
-  const once = (key: string, poll: () => Promise<void>): Promise<void> => {
-    const live = running.get(key);
-    if (live !== undefined) {
-      return live;
-    }
-    const going = poll()
-      .catch((error: unknown) =>
-        console.warn(`[clock] ${key} poll failed: ${wordsOf(error)}`)
-      )
-      .finally(() => running.delete(key));
-    running.set(key, going);
-    return going;
-  };
+  /**
+   * Runs one poll at a time per key, on a fiber of its own; asked while it
+   * runs, the ask joins it. A failure is logged, never lost.
+   */
+  const once = (key: string, poll: Effect.Effect<void>): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const live = running.get(key);
+      if (live !== undefined) {
+        return Fiber.join(live);
+      }
+      const going = Effect.runFork(
+        // Yielded first, so the fiber is kept before it can end.
+        Effect.yieldNow.pipe(
+          Effect.andThen(poll),
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              console.warn(
+                `[clock] ${key} poll failed: ${wordsOf(Cause.squash(cause))}`
+              )
+            )
+          ),
+          Effect.ensuring(Effect.sync(() => running.delete(key)))
+        )
+      );
+      running.set(key, going);
+      return Fiber.join(going);
+    });
 
   /** A Linear team's watch or a connector poll, read on its own when it is due. */
   const lookAlone = (watch: PolledWatch, now: number): void => {
@@ -479,11 +511,10 @@ export const createClock = ({
     if (!due) {
       return;
     }
-    detach(
+    Effect.runFork(
       linearWatch
-        ? once(`linear:${watch.id}`, () => pollLinear(watch.id))
-        : once(`conn:${watch.id}`, () => pollConnector(watch.id)),
-      `${watch.provider} poll`
+        ? once(`linear:${watch.id}`, pollLinear(watch.id))
+        : once(`conn:${watch.id}`, pollConnector(watch.id))
     );
   };
 
@@ -508,33 +539,32 @@ export const createClock = ({
         latest(followed, "polledAt") + every <= now &&
         latest(followed, "resumeAt") <= now
       ) {
-        detach(
-          once(`github:${projectId}`, () => pollGitHub(projectId)),
-          "github poll"
-        );
+        Effect.runFork(once(`github:${projectId}`, pollGitHub(projectId)));
       }
     }
   };
 
-  const tickAgain = (): void => {
+  /** The loop: a look now, then every {@link LOOK_MS}; a look that throws is logged, and the next goes on. */
+  const loop = Effect.sync(() => look()).pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() =>
+        console.error(`[clock] a look failed: ${wordsOf(Cause.squash(cause))}`)
+      )
+    ),
+    Effect.repeat(Schedule.spaced(LOOK_MS)),
+    Effect.asVoid
+  );
+
+  /** Hub start: the watches are read from their kept cursors, on the loop's fiber until the hub closes. */
+  const start = (): void => {
     if (lifetime.closed()) {
       return;
     }
-    timer = lifetime.after("clock look", LOOK_MS, () => {
-      try {
-        look();
-      } catch (error) {
-        console.error(`[clock] a look failed: ${wordsOf(error)}`);
-      }
-      tickAgain();
-    });
-  };
-
-  /** Hub start: the watches are read from their kept cursors. */
-  const start = (): void => {
-    lifetime.cancel(timer);
-    look();
-    tickAgain();
+    const was = looping;
+    looping = Effect.runFork(loop);
+    if (was) {
+      Effect.runFork(Fiber.interrupt(was));
+    }
   };
 
   /** A project's GitHub poll as its ingress view says it. */
@@ -577,7 +607,7 @@ export const createClock = ({
   };
 
   /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
-  const pollGitHubNow = async (projectId: string) => {
+  const pollGitHubNow = Effect.fnUntraced(function* (projectId: string) {
     const followed = store.githubWatches(projectId);
     if (followed.length === 0) {
       return problem(409, {
@@ -592,15 +622,17 @@ export const createClock = ({
         detail: `GitHub's rate limit holds polls until ${new Date(resumeAt).toISOString()}.`,
       });
     }
-    await once(`github:${projectId}`, () => pollGitHub(projectId));
-  };
+    yield* once(`github:${projectId}`, pollGitHub(projectId));
+  });
 
   /**
    * Reads the project's syncing watch now (the tracker's Sync now): a
    * board refused before asked again at once; resolves once the read is
    * stored and what it brought has run through the door.
    */
-  const pollSyncNow = async (projectId: string): Promise<void> => {
+  const pollSyncNow = Effect.fnUntraced(function* (
+    projectId: string
+  ): Effect.fn.Return<void> {
     const watch = store
       .polledWatches()
       .find((one) => one.projectId === projectId && one.sync !== "off");
@@ -608,15 +640,15 @@ export const createClock = ({
       return;
     }
     store.dropStreams(watch.id, BOARD_STREAM);
-    await (watch.provider === "linear"
-      ? once(`linear:${watch.id}`, () => pollLinear(watch.id))
-      : once(`github:${projectId}`, () => pollGitHub(projectId)));
-    await intake.settled(projectId);
-  };
+    yield* watch.provider === "linear"
+      ? once(`linear:${watch.id}`, pollLinear(watch.id))
+      : once(`github:${projectId}`, pollGitHub(projectId));
+    yield* intake.settled(projectId);
+  });
 
   /** Calls a connector poll now. */
   const pollConnectorNow = (id: string): Promise<void> =>
-    once(`conn:${id}`, () => pollConnector(id));
+    Effect.runPromise(once(`conn:${id}`, pollConnector(id)));
 
   /** What moving watches off a connection did, one log line each. */
   const sayRehomed = (gone: string, moved: readonly Rehomed[]): void => {
@@ -669,14 +701,23 @@ export const createClock = ({
     }
   };
 
-  lifetime.onClose(() => lifetime.cancel(timer));
+  lifetime.onClose(() => {
+    if (looping) {
+      Effect.runFork(Fiber.interrupt(looping));
+      looping = undefined;
+    }
+  });
 
   return {
     followConnection,
     githubView,
     pollConnectorNow,
-    pollGitHubNow,
-    pollSyncNow,
+    /** The promise edge of a project's GitHub poll now: what its route answers. */
+    pollGitHubNow: (projectId: string) =>
+      Effect.runPromise(pollGitHubNow(projectId)),
+    /** The promise edge of the tracker's Sync now (sync.ts). */
+    pollSyncNow: (projectId: string) =>
+      Effect.runPromise(pollSyncNow(projectId)),
     start,
   };
 };

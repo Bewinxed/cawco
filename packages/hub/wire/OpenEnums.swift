@@ -7927,6 +7927,8 @@ public enum OpenEnums {
     public enum RelayProvider: OpenEnum {
         case generic
         case github
+        case linear
+        case standardWebhooks
         case stripe
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
@@ -7935,6 +7937,8 @@ public enum OpenEnums {
             switch rawValue {
             case "generic": self = .generic
             case "github": self = .github
+            case "linear": self = .linear
+            case "standard-webhooks": self = .standardWebhooks
             case "stripe": self = .stripe
             default: self = .unrecognized(rawValue)
             }
@@ -7944,6 +7948,8 @@ public enum OpenEnums {
             switch self {
             case .generic: "generic"
             case .github: "github"
+            case .linear: "linear"
+            case .standardWebhooks: "standard-webhooks"
             case .stripe: "stripe"
             case let .unrecognized(rawValue): rawValue
             }
@@ -7953,7 +7959,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.generic, .github, .stripe]
+        public static let allCases: [Self] = [.generic, .github, .linear, .standardWebhooks, .stripe]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
