@@ -89,7 +89,6 @@ import {
   EndedBySchema,
   EnvelopeShape,
   ExternalActorSchema,
-  ExternalStateSchema,
   FiledRecordsSchema,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
@@ -151,7 +150,7 @@ import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
-import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
+import { ITEM_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -191,6 +190,8 @@ import {
   InboundViaSchema,
   InstanceKindSchema,
   InstanceTitleSourceSchema,
+  ItemProviderSchema,
+  ItemStateSchema,
   KeepAliveStoppedSchema,
   LandingPhaseSchema,
   LimitCompactionStageSchema,
@@ -6805,8 +6806,8 @@ export const watches = sqliteTable(
  * Where one stream of a watch stands ({@link WatchCursor}): a GitHub
  * resource's (`issues`, `pulls`, `comments`, `issueEvents`,
  * `discussions`), the tracker sync's own (`sync:issues`, `sync:comments`),
- * or a connector poll's (`items`: there once it has looked, its items in
- * `connector_poll_items`).
+ * or a connector poll's (`items`: there once it has looked, its items its
+ * `external_items` of kind `record`).
  */
 export const watchCursors = sqliteTable(
   "watch_cursors",
@@ -6822,20 +6823,6 @@ export const watchCursors = sqliteTable(
     updatedAt: timestamp("updated_at"),
   },
   (table) => [primaryKey({ columns: [table.watchId, table.stream] })]
-);
-
-/** What a connector poll's last call saw: each item's id and version. */
-export const connectorPollItems = sqliteTable(
-  "connector_poll_items",
-  {
-    /** The poll's watch (provider `connection`), which keeps the poll's id. */
-    pollId: text("poll_id")
-      .notNull()
-      .references(() => watches.id, { onDelete: "cascade" }),
-    itemId: text("item_id").notNull(),
-    version: text("version").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.pollId, table.itemId] })]
 );
 
 /**
@@ -6900,14 +6887,96 @@ export const trackerLinkSyncedLabels = sqliteTable(
 );
 
 /**
- * An external item a task links (core external-items.ts): one row per task
+ * The hub's mirror of an outside item (provider spec §2.3, §2.6): one row
+ * per project and item, whatever names it. A task's or plan's link to it
+ * ({@link taskLinks}), a read of it, an event about it and the tracker
+ * sync all land on this one row, written only through db
+ * external-items.ts `writeItem`. An issue, pull request, discussion or
+ * Actions run is keyed as its URL names it (providers registry.ts
+ * `itemOfUrl`); a connector poll's record by its poll's watch id (its
+ * `container`) and the record's id, its version what the poll's diff reads.
+ * The item's body is never kept here: it is the task's or the event's.
+ */
+export const externalItems = sqliteTable(
+  "external_items",
+  {
+    /**
+     * A random UUID; one migration 0487 made is its natural key as a JSON
+     * array (`["<project>","github","github.com","owner/repo","issue","12"]`),
+     * so the same rows make the same ids.
+     */
+    id: text("id").primaryKey(),
+    projectId: projectKey(),
+    provider: storedEnum(ItemProviderSchema)("provider").notNull(),
+    /** `github.com`, `linear.app`; empty for a record. */
+    host: text("host").notNull(),
+    /** `owner/repo` in lower case, the Linear workspace, a connector poll's watch id. */
+    container: text("container").notNull(),
+    kind: storedEnum(z.enum(ITEM_KINDS))("kind").notNull(),
+    /** What the service's API takes: `12`, `ENG-123`, a run's or a record's id. */
+    key: text("key").notNull(),
+    /** `#12`, `ENG-123`, `run 7735`, a record's id. */
+    ref: text("ref").notNull(),
+    /** The item's own URL; null for a record. */
+    url: text("url"),
+    /** GitHub's node id, Linear's uuid; empty until the item was read. */
+    externalId: text("external_id").notNull().default(""),
+    /** Empty until the item was read; an Actions run's workflow name. */
+    title: text("title").notNull().default(""),
+    /** Null until the item was read. */
+    state: storedEnum(ItemStateSchema)("state"),
+    /** The source's own word: "Open", "Closed", "In Progress"; empty until read. */
+    stateName: text("state_name").notNull().default(""),
+    author: storedJson(ExternalActorSchema)("author"),
+    labels: storedJson(z.array(z.string()))("labels").notNull().default([]),
+    /**
+     * Orders two revisions of it: the source's updated-at in ms, as text,
+     * or a record's version as its poll reads it; null before it was read.
+     * A revision older than the one held writes none of what it says.
+     */
+    version: text("version"),
+    /** Its ETag from its last read: the next is asked with it, and a 304 costs no rate limit. */
+    etag: text("etag"),
+    /** When the hub last read it, or a poll last saw it; null before it first did. */
+    readAt: timestamp("read_at"),
+    /** Why the last read or sync of it stopped short, in the source's words. */
+    problem: text("problem"),
+    /** The version the tracker sync last took in (provider spec §2.5); null before it did. */
+    syncedVersion: text("synced_version"),
+  },
+  (table) => [
+    uniqueIndex("external_items_item").on(
+      table.projectId,
+      table.provider,
+      table.host,
+      table.container,
+      table.kind,
+      table.key
+    ),
+    index("external_items_external").on(
+      table.projectId,
+      table.provider,
+      table.externalId
+    ),
+    // A container's items whatever project holds them: a connector poll's records.
+    index("external_items_container").on(
+      table.provider,
+      table.host,
+      table.container
+    ),
+  ]
+);
+
+/**
+ * An outside item a task names (core external-items.ts): one row per task
  * and URL, the file's `issue:` (mode `record`), `links:` and `waits_on:`
- * pull requests, each kept as the source last said it. The file names the
- * URL; this row mirrors what the source holds and is read again whenever it
- * changes, so every inbound event and poll finds its task here
- * ({@link TaskLinksDb.byItem}), never in a text field. A plan step's wait on
- * a pull request is a row of its session's plan (`plan:<session id>`, db
- * task-links.ts `planLinkOwner`), so it settles as a task's does.
+ * pull requests and Actions runs, each pointing at its item's mirror row
+ * ({@link externalItems}). The file names the URL; the mirror holds what
+ * the source says of the item, so every inbound event and poll finds its
+ * tasks here ({@link TaskLinksDb.byItem}), never in a text field. A plan
+ * step's wait on a pull request or run is a row of its session's plan
+ * (`plan:<session id>`, db task-links.ts `planLinkOwner`), so it settles as
+ * a task's does. An item is one task's record at most.
  */
 export const taskLinks = sqliteTable(
   "task_links",
@@ -6917,45 +6986,17 @@ export const taskLinks = sqliteTable(
     taskId: text("task_id").notNull(),
     /** As the task file or plan step writes it. */
     url: text("url").notNull(),
-    source: storedEnum(z.enum(PROVIDER_IDS))("source").notNull(),
-    kind: storedEnum(z.enum(LINK_KINDS))("kind").notNull(),
-    /** GitHub's node id, Linear's uuid; empty until the item was read. */
-    externalId: text("external_id").notNull().default(""),
-    /** GitHub's #12; null on Linear. */
-    number: integer("number"),
-    /** `#12`, `ENG-123`. */
-    ref: text("ref").notNull(),
-    title: text("title").notNull().default(""),
-    /** Null until the item was read. */
-    state: storedEnum(ExternalStateSchema)("state"),
-    stateName: text("state_name").notNull().default(""),
-    author: storedJson(ExternalActorSchema)("author"),
-    labels: storedJson(z.array(z.string()))("labels").notNull().default([]),
     mode: storedEnum(LinkModeSchema)("mode").notNull(),
-    /** When the source last changed it, ms; null before it was read. */
-    remoteUpdatedAt: integer("remote_updated_at"),
-    /** When the hub last read it; null before it first did. */
-    syncedAt: timestamp("synced_at"),
-    /** Why the last read or sync of it stopped short, in the source's words. */
-    problem: text("problem"),
-    /** A pull request's ETag from its last read: the next is asked with it, and a 304 costs no rate limit. */
-    etag: text("etag"),
+    /** The item it names. */
+    itemId: text("item_id")
+      .notNull()
+      .references(() => externalItems.id, { onDelete: "cascade" }),
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.taskId, table.url] }),
-    index("task_links_item").on(
-      table.projectId,
-      table.source,
-      table.kind,
-      table.number
-    ),
-    index("task_links_external").on(
-      table.projectId,
-      table.source,
-      table.externalId
-    ),
+    index("task_links_item").on(table.itemId),
     uniqueIndex("task_links_record")
-      .on(table.projectId, table.url)
+      .on(table.itemId)
       .where(sql`${table.mode} = 'record'`),
   ]
 );

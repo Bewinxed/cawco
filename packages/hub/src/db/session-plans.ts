@@ -28,7 +28,7 @@ import {
   sessionPlanSteps,
   sessionPlans,
 } from "./schema";
-import { planLinkOwner, planWaitLinks, syncTaskLinks } from "./task-links";
+import { planLinkOwner, syncTaskLinks, waitLinks } from "./task-links";
 import type { Tx } from "./tx";
 
 /**
@@ -179,7 +179,7 @@ const waitsOf = (tx: Reader, instanceId: string): string[] => [
   ),
 ];
 
-/** Its waits on pull requests are its plan's link rows, as a task's are its file's. */
+/** Its waits on pull requests and Actions runs are its plan's link rows, as a task's are its file's. */
 const syncPlanLinks = (tx: Tx, instanceId: string): void => {
   const projectId = tx
     .select({ projectId: instances.projectId })
@@ -191,7 +191,7 @@ const syncPlanLinks = (tx: Tx, instanceId: string): void => {
       tx,
       projectId,
       planLinkOwner(instanceId),
-      planWaitLinks(waitsOf(tx, instanceId))
+      waitLinks(waitsOf(tx, instanceId))
     );
   }
 };

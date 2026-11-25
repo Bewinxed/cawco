@@ -51,13 +51,11 @@
  *   event goes to still hears it and judges; it never files.
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
- * - **Waits on GitHub** (task-waits.ts): each Actions run a task or plan
- *   step waits on is read by the project's own poll, with its poller's
- *   connection, until it settles (green); its state is what the resolver
- *   reads ({@link Ingress.githubWait}), and a change tells the project's
- *   tasks ({@link IngressDeps.waitsMoved}). A pull request waited on is a
- *   task link like any other, its state the link row's (external-items.ts
- *   `prWait`), kept by the events and reads above. A project with no GitHub
+ * - **Waits on GitHub** (task-waits.ts): each pull request or Actions run
+ *   a task or plan step waits on is a link like any other, its item's
+ *   mirror row read by the project's own poll (external-items.ts
+ *   `readLinks`) and kept by the events above; a wait reads its state
+ *   there (external-items.ts `githubWait`). A project with no GitHub
  *   poller is refused either wait where it is written.
  */
 import { readsGitHubApi } from "@cawco/core/connections";
@@ -67,8 +65,7 @@ import {
   SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/modes";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { HOUR_MS, secondsOf } from "@cawco/core/time";
-import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
+import { secondsOf } from "@cawco/core/time";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { configurePage } from "@cawco/core/words/configure";
 import { cutShort } from "@cawco/core/words/helpers";
@@ -91,7 +88,7 @@ import type { InboundVia } from "./db/stored-types";
 import type { GitHubWatch, Rehomed } from "./db/watches";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
-import { githubReposOf, pollRepo, readRunWait } from "./github";
+import { githubReposOf, pollRepo } from "./github";
 import { byHandle } from "./handles";
 import { eventData, type InboundEvent } from "./inbound-event";
 import type {
@@ -114,7 +111,6 @@ import {
 } from "./presenters/project";
 import type { Routines } from "./routines";
 import { normaliseTaskRef } from "./task-file";
-import type { GitHubWaitState } from "./task-waits";
 import { MODE } from "./tasks";
 import type { TriggerEvent } from "./trigger-event";
 import type { Routed } from "./triggers";
@@ -398,17 +394,7 @@ export interface IngressDeps {
   readonly routines: Pick<Routines, "runForEvent">;
   /** A trigger on an event no route took, to the router (triggers.ts `route`). */
   readonly trigger: (projectId: string, event: TriggerEvent) => Promise<Routed>;
-  /** A run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
-  readonly waitsMoved?: (projectId: string) => void;
 }
-
-/** How long a run nobody has asked about stays on the poll's list. Our choice. */
-const WAIT_ASKED_MS = HOUR_MS;
-/** The states a wait on a run keeps for good: the poll stops asking. */
-const FINAL_WAITS: ReadonlySet<GitHubWaitState> = new Set(["green"]);
-
-/** A wait on an Actions run, the one wait this poll reads itself. */
-type RunTarget = Extract<WaitTarget, { kind: "run" }>;
 
 /** Each route's last delivery by its id (`IngressDb.deliveries`). */
 const deliveredBy = (deliveries: Delivery[]): Map<string, number> =>
@@ -509,22 +495,8 @@ export const createIngress = ({
   lifetime,
   routines,
   trigger,
-  waitsMoved,
 }: IngressDeps) => {
   const store = db.ingress;
-  /**
-   * Each run waited on, by URL: the project that asked, when it last asked,
-   * and its state as the last poll read it.
-   */
-  const waits = new Map<
-    string,
-    {
-      asked: number;
-      projectId: string;
-      state: GitHubWaitState;
-      title: string | null;
-    }
-  >();
   /** Polls under way, by `github:<project>` or `conn:<poll id>`: one at a time each. */
   const running = new Map<string, Promise<void>>();
   let timer: HubTimer | undefined;
@@ -835,56 +807,9 @@ export const createIngress = ({
     const followedBy = store.followedBy(projectId);
     const octokit = followedBy ? clientOf(followedBy) : undefined;
     if (octokit !== undefined && typeof octokit !== "string") {
-      await readWaits(projectId, octokit);
       await externalItems.readLinks(projectId, octokit);
     }
     keepGitHubPoll(now, followed, polls);
-  };
-
-  /**
-   * The runs project `projectId` waits on, read with its poller's client,
-   * each until it settles; one nobody asked about for an hour leaves the
-   * list, settled or not (a reader asks again on its next read, and it comes
-   * back). A state that moved tells the project's tasks.
-   */
-  const readWaits = async (
-    projectId: string,
-    octokit: ReturnType<Connections["githubClient"]>
-  ): Promise<void> => {
-    let moved = false;
-    for (const [url, target] of waitsDue(projectId)) {
-      const read = await readRunWait(octokit, target).catch(() => undefined);
-      const wait = waits.get(url);
-      if (
-        wait &&
-        read &&
-        (read.state !== wait.state || read.title !== wait.title)
-      ) {
-        waits.set(url, { ...wait, ...read });
-        moved = true;
-      }
-    }
-    if (moved) {
-      waitsMoved?.(projectId);
-    }
-  };
-
-  /** The waits project `projectId`'s poll reads now, the ones nobody asked about for an hour taken off the list. */
-  const waitsDue = (projectId: string): [string, RunTarget][] => {
-    const now = Date.now();
-    const due: [string, RunTarget][] = [];
-    for (const [url, wait] of waits) {
-      const target = githubTarget(url);
-      if (wait.projectId !== projectId || target?.kind !== "run") {
-        continue;
-      }
-      if (now - wait.asked > WAIT_ASKED_MS) {
-        waits.delete(url);
-      } else if (!FINAL_WAITS.has(wait.state)) {
-        due.push([url, target]);
-      }
-    }
-    return due;
   };
 
   /**
@@ -1756,24 +1681,6 @@ export const createIngress = ({
   lifetime.onClose(() => lifetime.cancel(timer));
 
   return {
-    /**
-     * A run's state as project `projectId`'s poll last read it (task-waits.ts
-     * `settled`); asking puts it on the poll's list, so a wait first read
-     * says `checking` until the next poll.
-     */
-    githubWait(
-      projectId: string,
-      target: RunTarget
-    ): { state: GitHubWaitState; title: string | null } {
-      const known = waits.get(target.url);
-      waits.set(target.url, {
-        projectId,
-        state: known?.state ?? "checking",
-        title: known?.title ?? null,
-        asked: Date.now(),
-      });
-      return known ?? { state: "checking", title: null };
-    },
     /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
     githubWaitRefusal(projectId: string): string | undefined {
       return store.githubWatches(projectId).length > 0

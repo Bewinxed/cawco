@@ -14,7 +14,11 @@ import {
   projectTasks,
   taskTriggers,
 } from "./schema";
-import { summaryOf as linkSummaryOf, syncTaskLinks } from "./task-links";
+import {
+  summaryOf as linkSummaryOf,
+  syncTaskLinks,
+  waitLinks,
+} from "./task-links";
 import type { Tx } from "./tx";
 
 /**
@@ -56,8 +60,9 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
   /**
    * The external items its file links (`issue:`, mode `record`, then
    * `links:`), as `task_links` holds them: written, each URL becomes the
-   * task's row (task-links.ts `syncTaskLinks`); read, each row as the source
-   * last said it.
+   * task's row (task-links.ts `syncTaskLinks`), beside a row for each pull
+   * request and Actions run `waitsOn` names; read, each link as its
+   * item's mirror holds it, an Actions run's left out (it shows as a wait).
    */
   links: TaskLinkSummary[];
   /**
@@ -153,7 +158,7 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
       >();
       const linksOf = Map.groupBy(
         taskLinksOf.ofProject(projectId),
-        (row) => row.taskId
+        (row) => row.link.taskId
       );
       const lists = (file: string) => {
         const known = ofTask.get(file);
@@ -213,7 +218,9 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
         .map((row) => ({
           ...row,
           ...lists(row.path),
-          links: (linksOf.get(row.id) ?? []).map(linkSummaryOf),
+          links: (linksOf.get(row.id) ?? []).flatMap(
+            (linked) => linkSummaryOf(linked) ?? []
+          ),
         }));
     },
     taskWaiters: (projectId, taskId) =>
@@ -265,15 +272,14 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
           ...row
         } of kept) {
           const { projectId, path: file } = row;
-          syncTaskLinks(
-            tx,
-            projectId,
-            row.id,
-            links.map((link) => ({
+          syncTaskLinks(tx, projectId, row.id, [
+            ...links.map((link) => ({
               url: link.url,
               record: link.mode === "record",
-            }))
-          );
+            })),
+            // A wait on a run is a link row too, so it is read and settles as a pull request's.
+            ...waitLinks(waitsOn),
+          ]);
           tx.insert(projectTasks)
             .values(row)
             .onConflictDoUpdate({

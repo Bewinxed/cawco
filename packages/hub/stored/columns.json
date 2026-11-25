@@ -5111,6 +5111,123 @@
       "gitea"
     ]
   },
+  "external_items.author": {
+    "type": "object",
+    "properties": {
+      "avatarUrl": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "type": "string",
+        "enum": [
+          "person",
+          "bot",
+          "app"
+        ]
+      },
+      "login": {
+        "type": "string"
+      },
+      "memberId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "name": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "source": {
+        "type": "string",
+        "enum": [
+          "github",
+          "linear",
+          "gitlab",
+          "gitea"
+        ]
+      },
+      "url": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "avatarUrl",
+      "kind",
+      "login",
+      "memberId",
+      "name",
+      "source",
+      "url"
+    ]
+  },
+  "external_items.kind": {
+    "type": "string",
+    "enum": [
+      "issue",
+      "pr",
+      "discussion",
+      "run",
+      "record"
+    ]
+  },
+  "external_items.labels": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "external_items.provider": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "github",
+          "linear",
+          "gitlab",
+          "gitea"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "connection"
+      }
+    ]
+  },
+  "external_items.state": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "open",
+          "draft",
+          "merged",
+          "closed",
+          "canceled"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "running"
+      },
+      {
+        "type": "string",
+        "const": "green"
+      },
+      {
+        "type": "string",
+        "const": "red"
+      }
+    ]
+  },
   "fleet_harness_config.kind": {
     "type": "string",
     "enum": [
@@ -13782,78 +13899,6 @@
       "agent"
     ]
   },
-  "task_links.author": {
-    "type": "object",
-    "properties": {
-      "avatarUrl": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "kind": {
-        "type": "string",
-        "enum": [
-          "person",
-          "bot",
-          "app"
-        ]
-      },
-      "login": {
-        "type": "string"
-      },
-      "memberId": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "name": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "source": {
-        "type": "string",
-        "enum": [
-          "github",
-          "linear",
-          "gitlab",
-          "gitea"
-        ]
-      },
-      "url": {
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
-    "required": [
-      "avatarUrl",
-      "kind",
-      "login",
-      "memberId",
-      "name",
-      "source",
-      "url"
-    ]
-  },
-  "task_links.kind": {
-    "type": "string",
-    "enum": [
-      "issue",
-      "pr",
-      "discussion"
-    ]
-  },
-  "task_links.labels": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
   "task_links.mode": {
     "type": "string",
     "enum": [
@@ -13861,25 +13906,6 @@
       "closes",
       "refs",
       "related"
-    ]
-  },
-  "task_links.source": {
-    "type": "string",
-    "enum": [
-      "github",
-      "linear",
-      "gitlab",
-      "gitea"
-    ]
-  },
-  "task_links.state": {
-    "type": "string",
-    "enum": [
-      "open",
-      "draft",
-      "merged",
-      "closed",
-      "canceled"
     ]
   },
   "task_runs.outcome": {

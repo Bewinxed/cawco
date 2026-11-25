@@ -7,6 +7,7 @@ import {
   AccountMoveSchema,
   AuthStateShape,
   EffortLevelShape,
+  ExternalStateShape,
   ExtractedShape,
   FolderMoveCopiedShape,
   FolderMoveLeftShape,
@@ -33,6 +34,7 @@ import {
   MoveStepShape,
   PermissionModeShape,
   PresenceClientShape,
+  ProviderIdShape,
   SendAttachmentShape,
   SendPayloadShape,
   SendRefusalShape,
@@ -75,6 +77,8 @@ import type {
   InstallsRecord as InstallsRecordType,
   InstanceKind as InstanceKindType,
   InstanceTitleSource as InstanceTitleSourceType,
+  ItemProvider as ItemProviderType,
+  ItemState as ItemStateType,
   KeepAliveStopped as KeepAliveStoppedType,
   LandingPhase as LandingPhaseType,
   LimitCompactionStage as LimitCompactionStageType,
@@ -493,6 +497,28 @@ export const InstanceTitleSourceSchema: z.ZodType<InstanceTitleSourceType> =
 export type InstanceTitleSourceOutput = z.output<
   typeof InstanceTitleSourceShape
 >;
+
+const ItemProviderShape = declared(
+  z.union([ProviderIdShape, z.literal("connection")]),
+  "ItemProvider",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ItemProviderSchema: z.ZodType<ItemProviderType> =
+  ItemProviderShape;
+export type ItemProviderOutput = z.output<typeof ItemProviderShape>;
+
+const ItemStateShape = declared(
+  z.union([
+    ExternalStateShape,
+    z.literal("running"),
+    z.literal("green"),
+    z.literal("red"),
+  ]),
+  "ItemState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ItemStateSchema: z.ZodType<ItemStateType> = ItemStateShape;
+export type ItemStateOutput = z.output<typeof ItemStateShape>;
 
 const KeepAliveStoppedShape = declared(
   z.literal("stopped-cap"),

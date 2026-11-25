@@ -1191,28 +1191,20 @@ function seedTracker(db: HubDb, projects: string[]): void {
       state: "open",
       status: null,
     };
-    const record = {
-      projectId,
-      taskId,
-      url: `${TRACKED.url}/issues/${number}`,
-      source: "github" as const,
-      kind: "issue" as const,
+    const url = `${TRACKED.url}/issues/${number}`;
+    const revision = {
       externalId: `I_kwDOfixture${number}`,
-      number,
-      ref: `#${number}`,
       title: synced.title,
       state: synced.state === "open" ? ("open" as const) : ("closed" as const),
       stateName: synced.state === "open" ? "Open" : "Closed",
       author: null,
       labels: synced.labels,
-      mode: "record" as const,
-      remoteUpdatedAt: since,
-      syncedAt: new Date(since),
+      version: String(since),
+      readAt: new Date(since),
       problem: null,
-      etag: null,
     };
     if (taskId === "tsk-7") {
-      db.taskLinks.putRef(record);
+      db.taskLinks.putRef({ projectId, taskId, url, mode: "record" }, revision);
       continue;
     }
     db.trackers.putLink(
@@ -1223,7 +1215,7 @@ function seedTracker(db: HubDb, projects: string[]): void {
         linkedAt: boundAt,
         unvouched: number === 43 ? "a person GitHub does not vouch for" : null,
       },
-      record
+      { url, revision }
     );
   }
 }

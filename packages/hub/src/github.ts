@@ -53,7 +53,6 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { isRecord } from "@cawco/core/is-record";
 import { unhandled } from "@cawco/core/unhandled";
-import type { WaitTarget } from "@cawco/core/wait-targets";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
 import {
@@ -72,6 +71,7 @@ import {
   unknown,
 } from "valibot";
 import { z } from "zod";
+import type { ItemRevision } from "./db/external-items";
 import type { GitHubCursor } from "./db/schema";
 import type { GitHubResource } from "./db/stored-types";
 import { GITHUB_RESOURCES } from "./db/watches";
@@ -82,7 +82,6 @@ import {
   type OctokitRefusal,
   refusalOf,
 } from "./octokit-answer";
-import type { GitHubWaitState } from "./task-waits";
 
 /** What {@link normalizeGitHub} reads: a polled object's kind, or a webhook's event name. */
 export type GitHubKind =
@@ -1210,34 +1209,43 @@ const GREEN_RUNS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * An Actions run's state as a task's wait reads it (task-waits.ts
- * `settled`): `running` until it completes, then `green` or `red`. Read
- * with the project's own client within {@link REQUEST_MS}; undefined when
- * GitHub did not answer in time. A pull request's is its link row's
- * (external-items.ts `prWait`).
+ * An Actions run as its mirror row keeps it (db external-items.ts), which a
+ * task's or plan step's wait on it reads (task-waits.ts `settled`): state
+ * `running` until it completes, then `green` or `red`; its workflow's name
+ * as its title. Read with the project's own client within
+ * {@link REQUEST_MS}; GitHub's silence past that is thrown, kept as the
+ * run's problem, and it is read again on the next poll.
  */
-export const readRunWait = async (
+export const readRun = async (
   octokit: Octokit,
-  target: Extract<WaitTarget, { kind: "run" }>
-): Promise<{ state: GitHubWaitState; title: string | null } | undefined> => {
-  const [owner = "", repo = ""] = target.repo.split("/");
-  const read = await readWithin(
-    REQUEST_MS,
-    (signal): Promise<{ state: GitHubWaitState; title: string | null }> =>
-      octokit.rest.actions
-        .getWorkflowRun({
-          owner,
-          repo,
-          run_id: Number(target.id),
-          request: { signal },
-        })
-        .then(({ data }) => {
-          let state: GitHubWaitState = "running";
-          if (data.status === "completed") {
-            state = GREEN_RUNS.has(data.conclusion ?? "") ? "green" : "red";
-          }
-          return { state, title: data.name ?? null };
-        })
-  );
-  return read.kind === "answered" ? read.value : undefined;
+  owner: string,
+  repo: string,
+  id: string
+): Promise<ItemRevision> => {
+  const read = await readWithin(REQUEST_MS, async (signal) => {
+    const { data } = await octokit.rest.actions.getWorkflowRun({
+      owner,
+      repo,
+      run_id: Number(id),
+      request: { signal },
+    });
+    return data;
+  });
+  if (read.kind !== "answered") {
+    throw new Error(
+      `GitHub did not answer the read of run ${id} within ${REQUEST_MS / 1000} s.`
+    );
+  }
+  const run = read.value;
+  let state: ItemRevision["state"] = "running";
+  if (run.status === "completed") {
+    state = GREEN_RUNS.has(run.conclusion ?? "") ? "green" : "red";
+  }
+  return {
+    externalId: run.node_id,
+    title: run.name ?? "",
+    state,
+    stateName: run.conclusion ?? run.status ?? "",
+    version: String(Date.parse(run.updated_at)),
+  };
 };

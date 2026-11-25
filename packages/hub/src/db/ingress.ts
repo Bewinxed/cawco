@@ -15,10 +15,11 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { writeItem } from "./external-items";
 import {
-  connectorPollItems,
   eventRouteKinds,
   eventRoutes,
+  externalItems,
   inboundEvents,
   watchCursors,
   watches,
@@ -62,7 +63,7 @@ export interface ConnectorPollRow {
   reason: string | null;
   seen: number | null;
   /**
-   * When a call last kept what it saw (`connector_poll_items`); null until
+   * When a call last kept what it saw (its records, `external_items`); null until
    * its first call, and after an edit to what it lists or keys by, when
    * the next call only looks.
    */
@@ -176,6 +177,14 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
   };
   const isPoll = eq(watches.provider, "connection");
+  /** A connector poll's records (schema `external_items`, kind `record`): its watch's id is their container. */
+  const recordsOf = (ids: string[]) =>
+    and(
+      eq(externalItems.provider, "connection"),
+      eq(externalItems.host, ""),
+      inArray(externalItems.container, ids),
+      eq(externalItems.kind, "record")
+    );
   /** Each watch read as its connector poll, with how many items its last call kept (null until it looked). */
   const pollsOf = (rows: WatchRow[]): ConnectorPollRow[] => {
     if (rows.length === 0) {
@@ -197,10 +206,10 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     );
     const counts = new Map(
       db
-        .select({ id: connectorPollItems.pollId, n: sql<number>`count(*)` })
-        .from(connectorPollItems)
-        .where(inArray(connectorPollItems.pollId, ids))
-        .groupBy(connectorPollItems.pollId)
+        .select({ id: externalItems.container, n: sql<number>`count(*)` })
+        .from(externalItems)
+        .where(recordsOf(ids))
+        .groupBy(externalItems.container)
         .all()
         .map(({ id, n }) => [id, n])
     );
@@ -267,8 +276,8 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
   };
   /** The poll has not looked: what it saw goes with its stream's row. */
   const unlooked = (tx: Pick<BunSQLiteDatabase, "delete">, id: string) => {
-    tx.delete(connectorPollItems)
-      .where(eq(connectorPollItems.pollId, id))
+    tx.delete(externalItems)
+      .where(recordsOf([id]))
       .run();
     tx.delete(watchCursors)
       .where(
@@ -436,14 +445,11 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     connectorPollItems: (id) =>
       new Map(
         db
-          .select({
-            itemId: connectorPollItems.itemId,
-            version: connectorPollItems.version,
-          })
-          .from(connectorPollItems)
-          .where(eq(connectorPollItems.pollId, id))
+          .select({ key: externalItems.key, version: externalItems.version })
+          .from(externalItems)
+          .where(recordsOf([id]))
           .all()
-          .map(({ itemId, version }) => [itemId, version])
+          .map(({ key, version }) => [key, version ?? ""])
       ),
     createConnectorPoll: (row) => {
       db.transaction((tx) => {
@@ -474,19 +480,39 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     },
     keepConnectorPollItems: (id, items, polledAt) => {
       db.transaction((tx) => {
-        tx.delete(connectorPollItems)
-          .where(eq(connectorPollItems.pollId, id))
-          .run();
-        if (items.size > 0) {
-          tx.insert(connectorPollItems)
-            .values(
-              [...items].map(([itemId, version]) => ({
-                pollId: id,
-                itemId,
-                version,
-              }))
+        const poll = tx
+          .select({ projectId: watches.projectId })
+          .from(watches)
+          .where(and(eq(watches.id, id), isPoll))
+          .get();
+        if (!poll) {
+          return;
+        }
+        // What this call saw, each record through the mirror's one writer;
+        // a record it no longer lists goes, so its return is new again.
+        tx.delete(externalItems)
+          .where(
+            and(
+              recordsOf([id]),
+              notInArray(externalItems.key, [...items.keys()])
             )
-            .run();
+          )
+          .run();
+        for (const [key, version] of items) {
+          writeItem(
+            tx,
+            poll.projectId,
+            {
+              provider: "connection",
+              host: "",
+              container: id,
+              kind: "record",
+              key,
+              ref: key,
+              url: null,
+            },
+            { version, readAt: polledAt }
+          );
         }
         looked(tx, id, polledAt);
         tx.update(watches)
@@ -512,6 +538,13 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         } else if (seenAt) {
           looked(tx, id, seenAt);
         }
+        if (projectId !== undefined && projectId !== was.projectId) {
+          // Its records go with it: what it saw is the poll's, wherever it is.
+          tx.update(externalItems)
+            .set({ projectId })
+            .where(recordsOf([id]))
+            .run();
+        }
         const settings = settingsWith(was.settings, settingsOf(patch));
         const columns = withoutUndefined({
           projectId,
@@ -531,10 +564,19 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         return pollOf(id);
       }),
     deleteConnectorPoll: (id) =>
-      db
-        .delete(watches)
-        .where(and(eq(watches.id, id), isPoll))
-        .returning()
-        .all().length > 0,
+      db.transaction((tx) => {
+        const gone =
+          tx
+            .delete(watches)
+            .where(and(eq(watches.id, id), isPoll))
+            .returning()
+            .all().length > 0;
+        if (gone) {
+          tx.delete(externalItems)
+            .where(recordsOf([id]))
+            .run();
+        }
+        return gone;
+      }),
   };
 };

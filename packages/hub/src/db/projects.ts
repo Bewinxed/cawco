@@ -34,6 +34,7 @@ import {
   areas,
   artifacts,
   connectionProjects,
+  externalItems,
   fleetMemoryDocProjects,
   type HubFolder,
   instances,
@@ -1271,6 +1272,16 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
             // Its watches (db/watches.ts `foldWatches`).
             watches: () => {
               foldWatches(tx, dupId, keepId);
+              // What each connector poll saw goes with it.
+              tx.update(externalItems)
+                .set({ projectId: keepId })
+                .where(
+                  and(
+                    eq(externalItems.projectId, dupId),
+                    eq(externalItems.provider, "connection")
+                  )
+                )
+                .run();
             },
             // A memory document of both stays one link to the kept project.
             fleet_memory_doc_projects: () => {

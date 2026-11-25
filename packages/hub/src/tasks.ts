@@ -1022,7 +1022,7 @@ const linksOf = (links: string[]) => {
 /**
  * A task's links as its index row carries them: the file's `issue:` its
  * record, then `links:`, then each pull request it waits on (`waits_on:`),
- * so a wait on one reads the same link row (external-items.ts `prWait`).
+ * so a wait on one reads the same item (external-items.ts `githubWait`).
  * An item named twice is one link, the first naming.
  */
 const fileLinksOf = (

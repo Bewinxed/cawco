@@ -8849,9 +8849,9 @@ export const createServer = (
     "actionMoves",
     () => false
   );
-  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
+  /** Whether a project can wait on GitHub at all: its poll reads what a wait names (ingress.ts); set once ingress is made. */
   const githubWaitsPort = portOf<
-    Pick<Ingress, "githubWait" | "githubWaitRefusal"> | undefined
+    Pick<Ingress, "githubWaitRefusal"> | undefined
   >("githubWaits", undefined);
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
@@ -8909,11 +8909,15 @@ export const createServer = (
       const held = db.trackers.held(projectId, taskId);
       return db.taskLinks
         .ofTask(projectId, taskId)
-        .map((row): ExternalRef =>
-          held && row.mode === "record"
-            ? { ...linkRefOf(row), baselineUnread: true }
-            : linkRefOf(row)
-        );
+        .flatMap((row): ExternalRef[] => {
+          const ref = linkRefOf(row);
+          if (!ref) {
+            return [];
+          }
+          return held && ref.mode === "record"
+            ? [{ ...ref, baselineUnread: true }]
+            : [ref];
+        });
     },
     carried: (projectId, taskId) =>
       db.taskLinks.comments(projectId, taskId).map((row) => ({
@@ -8948,14 +8952,8 @@ export const createServer = (
     waitWorld: (projectId) => ({
       card: (artifactId, card) => artifacts.waitCard(artifactId, card),
       pin: (artifactId, number) => artifacts.waitPin(artifactId, number),
-      // A pull request's state is its link row's (external-items.ts); a run's, the poll's.
-      github: (target) =>
-        target.kind === "pr"
-          ? externalItems.prWait(projectId, target)
-          : (githubWaitsPort.now()?.githubWait(projectId, target) ?? {
-              state: "checking",
-              title: null,
-            }),
+      // A pull request's or run's state is its item's mirror row's (external-items.ts).
+      github: (target) => externalItems.githubWait(projectId, target),
       session: (instanceId) => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (!row) {
@@ -10994,19 +10992,6 @@ export const createServer = (
     routines,
     // An event no route took, a trigger on what it is about (triggers.ts).
     trigger: (projectId, event) => triggers.route(projectId, event),
-    // A pull request or run a task waits on moved: its project looks again.
-    waitsMoved: (projectId) => {
-      detach(
-        tasks.waitsMoved(projectId).then((refused) => {
-          if (refused) {
-            console.warn(
-              `[task waits moved] failed: ${refused.response.detail}`
-            );
-          }
-        }),
-        "task waits moved"
-      );
-    },
   });
   githubWaitsPort.fill(ingress);
   // The relay (relay.ts): a project's one public webhook path through

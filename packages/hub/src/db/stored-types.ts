@@ -13,6 +13,7 @@ import type {
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
 import type { MayStart } from "@cawco/core/delegate-types";
+import type { ExternalState } from "@cawco/core/external-items";
 import type {
   FolderMoveCopied,
   FolderMoveLeft,
@@ -47,6 +48,7 @@ import type {
   GithubStatusesAdded,
   GithubStatusStages,
 } from "@cawco/core/trackers";
+import type { ProviderId } from "@cawco/providers/provider";
 
 /** The session being continued, as the header names it. */
 export interface ContinuationSource {
@@ -771,6 +773,19 @@ export type SessionLineKind =
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
 export type GitHubResource =
   "pulls" | "issues" | "comments" | "issueEvents" | "discussions";
+
+/**
+ * Whose item a mirror row is (schema `external_items.provider`): a
+ * provider's, or `connection` for a connector poll's record.
+ */
+export type ItemProvider = ProviderId | "connection";
+
+/**
+ * An item's state as the mirror keeps it (schema `external_items.state`):
+ * an issue's, pull request's or discussion's (core `ExternalState`), or an
+ * Actions run's: `running`, then `green` or `red` once it completes.
+ */
+export type ItemState = ExternalState | "running" | "green" | "red";
 
 /**
  * Whether a watch's container is synced with the project's tasks (schema

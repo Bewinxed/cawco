@@ -120,7 +120,8 @@ import { connectionsWords } from "@cawco/core/words/connections";
 import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
-import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
+import type { ItemRevision } from "./db/external-items";
+import type { ItemKey, TaskLinksDb } from "./db/task-links";
 import type {
   TrackerAgreement,
   TrackerBindingRow,
@@ -409,17 +410,16 @@ const fileFields = (view: TaskView): Fields => ({
   labels: labelSet(view.labels),
 });
 
-/** What the issue holds, as its task's record link keeps it (db task-links.ts). */
-const heldOf = (issue: Issue) => ({
+/** What the issue holds, as its mirror keeps it (db external-items.ts), read now. */
+const heldOf = (issue: Issue): ItemRevision => ({
   externalId: issue.id,
-  number: issue.number,
-  ref: issue.ref,
   title: issue.title,
   state: externalStateOf(issue.state),
   stateName: issue.state.name,
   author: issue.author,
   labels: issue.labels,
-  remoteUpdatedAt: issue.updatedAt,
+  version: String(issue.updatedAt),
+  readAt: new Date(),
 });
 
 /** A binding's GitHub Project columns: the Project, why there is none, the stages made sure of on it, GitHub's words on the options it refused, and the options last added. */
@@ -1289,7 +1289,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (!synced) {
       db.trackers.updateLink(sync.projectId, link.taskId, {
         ...heldOf(issue),
-        syncedAt: new Date(),
         problem: null,
       });
       return;
@@ -1342,7 +1341,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     db.trackers.updateLink(sync.projectId, link.taskId, {
       synced: round.next,
       ...heldOf(round.issue),
-      syncedAt: new Date(),
       problem: round.said.length > 0 ? round.said.join(" ") : null,
     });
   };
@@ -1449,8 +1447,8 @@ export const createTrackers = (deps: TrackersDeps) => {
   const linkOfIssue = (sync: Sync, key: string): TrackerLinkRow | undefined => {
     const record = db.taskLinks
       .byItem(sync.projectId, itemOf(sync.binding, key), "any")
-      .find((row) => row.mode === "record");
-    return record && db.trackers.link(sync.projectId, record.taskId);
+      .find((row) => row.link.mode === "record");
+    return record && db.trackers.link(sync.projectId, record.link.taskId);
   };
 
   /** Links a task to its issue: what they agree on from now, and its record link as the issue holds it. */
@@ -1473,19 +1471,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       linkedAt,
       unvouched,
     };
-    const record: TaskLinkRow = {
-      projectId: sync.projectId,
-      taskId: task.id,
+    db.trackers.putLink(agreement, {
       url: issue.url,
-      source: sync.binding.provider,
-      kind: "issue",
-      mode: "record",
-      ...heldOf(issue),
-      syncedAt: new Date(),
-      problem: null,
-      etag: null,
-    };
-    db.trackers.putLink(agreement, record);
+      revision: { ...heldOf(issue), problem: null },
+    });
   };
 
   /**

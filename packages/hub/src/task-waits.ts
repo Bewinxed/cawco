@@ -19,9 +19,9 @@
  * a card answered differently since is told apart from one answered the
  * same way again.
  *
- * A PR's state is its task link row's (external-items.ts `prWait`), which
- * the project's GitHub poll reads and its events keep; a run's comes from
- * that poll itself (ingress.ts `githubWait`). A project with no GitHub
+ * A PR's and a run's state is its item's mirror row's (external-items.ts
+ * `githubWait`), which the project's GitHub poll reads and its events keep,
+ * so it outlives a restart. A project with no GitHub
  * poller is refused either target where it is written ({@link readWait}).
  *
  * A task that is a routine (§5.5) settles only by its stop: its task in a
@@ -58,7 +58,7 @@ import { problem } from "elysia";
 import type { WorkItemState } from "./db/schema";
 import { type RoutineFacts, stopViewOf } from "./routine-stop";
 
-/** A pull request's state as its link row holds it, or an Actions run's as the poller last read it. */
+/** A pull request's or an Actions run's state as its mirror row holds it; `checking` before the poll read it. */
 export type GitHubWaitState =
   "open" | "merged" | "closed" | "running" | "green" | "red" | "checking";
 
@@ -77,7 +77,7 @@ export interface WaitWorld {
         value: string | null;
       }
     | undefined;
-  /** A pull request's state and title as its link row holds them; a run's as the project's poller last read them. */
+  /** A pull request's or run's state and title as its mirror row holds them. */
   readonly github: (target: Extract<WaitTarget, { kind: "pr" | "run" }>) => {
     state: GitHubWaitState;
     title: string | null;

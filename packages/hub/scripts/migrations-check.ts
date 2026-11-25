@@ -1439,6 +1439,16 @@ const MOVES: readonly Move[] = [
       "`id` = ? AND (`state` = 'open' OR (`state` = 'withdrawn' AND json_extract(`record`, '$.withdrawn.by') = 'hub'))",
     why: "an admin write parked before the ask became an open `approve` ask (core asks.ts)",
   },
+  {
+    migration: "0487_external_items",
+    from: "connector_poll_items",
+    rows: "1=1",
+    key: "`poll_id` || ' ' || `item_id`",
+    to: "external_items",
+    arrived:
+      "`provider` = 'connection' AND `kind` = 'record' AND `container` || ' ' || `key` = ?",
+    why: "what a connector poll's last call saw is its records in the mirror (provider spec §4)",
+  },
 ];
 
 /** The names of the tables `sqlite` has. */

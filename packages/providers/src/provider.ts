@@ -16,7 +16,11 @@ export const LINK_KINDS = ["issue", "pr", "discussion"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 
 /** What a URL names on a service: a link's kind, or an Actions run a wait names. */
-type ItemKind = LinkKind | "run";
+type UrlItemKind = LinkKind | "run";
+
+/** Every kind of item the hub mirrors: what a URL names, or a connector poll's record. */
+export const ITEM_KINDS = [...LINK_KINDS, "run", "record"] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
 
 /** One item, named without reading the service. */
 export interface ItemRef {
@@ -26,7 +30,7 @@ export interface ItemRef {
   host: string;
   /** What the service's API takes: `12`, `ENG-123`, a run's id. */
   key: string;
-  kind: ItemKind;
+  kind: UrlItemKind;
   provider: ProviderId;
   /** `#12`, `ENG-123`, `!7`, `run 7735`. */
   ref: string;

@@ -41,6 +41,7 @@ import { logGatePassesUnread } from "./gate-passes-unread";
 import { logItemBlocksUnread } from "./item-blocks-unread";
 import { logLandedUnread } from "./landed-unread";
 import { logLimitLinesUnread } from "./limit-lines-unread";
+import { placeLinkItems } from "./link-items";
 import { logMachineColumnsUnread } from "./machine-columns-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
@@ -426,6 +427,16 @@ export const MIGRATION_STEPS: readonly Step[] = [
       // different connections, and every poller 0486 makes no watch of,
       // read before it runs; the pollers' connections set aside.
       logWatchesFromPollers(client);
+    },
+  },
+  {
+    name: "link-items",
+    before: "0487_external_items",
+    at: "migrator",
+    run: (client) => {
+      // The item each task link's URL names, read by the hub's own parser,
+      // and a link for each Actions run a wait names, for 0487 to group.
+      placeLinkItems(client);
     },
   },
   {

@@ -22,10 +22,7 @@ import type {
 } from "./browser";
 import type { ConnectionState as ConnectionStateType } from "./connections";
 import { SESSION_ROLES } from "./delegate-types";
-import type {
-  ExternalState as ExternalStateType,
-  LinkMode as LinkModeType,
-} from "./external-items";
+import type { LinkMode as LinkModeType } from "./external-items";
 import type {
   FleetRefreshOutcome as FleetRefreshOutcomeType,
   McpPlatform as McpPlatformType,
@@ -2018,7 +2015,7 @@ export const EnvelopeShape = declared(
 );
 export type EnvelopeOutput = z.output<typeof EnvelopeShape>;
 
-const ProviderIdShape = declared(
+export const ProviderIdShape = declared(
   z.enum(PROVIDER_IDS),
   "ProviderId",
   "packages/providers/src/provider.ts"
@@ -2040,15 +2037,6 @@ const ExternalActorShape = declared(
 );
 export const ExternalActorSchema = ExternalActorShape;
 export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
-
-const ExternalStateShape = declared(
-  z.enum(["open", "draft", "merged", "closed", "canceled"]),
-  "ExternalState",
-  "packages/core/src/external-items.ts"
-);
-export const ExternalStateSchema: z.ZodType<ExternalStateType> =
-  ExternalStateShape;
-export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 
 const FiledRecordsShape = declared(
   z.object({
@@ -3353,6 +3341,13 @@ const InstanceStatusShape = declared(
 export const InstanceStatusSchema: z.ZodType<InstanceStatusType> =
   InstanceStatusShape;
 export type InstanceStatusOutput = z.output<typeof InstanceStatusShape>;
+
+export const ExternalStateShape = declared(
+  z.enum(["open", "draft", "merged", "closed", "canceled"]),
+  "ExternalState",
+  "packages/core/src/external-items.ts"
+);
+export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 
 const WorkspaceToolShape = declared(
   z.object({
