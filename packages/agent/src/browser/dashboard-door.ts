@@ -26,7 +26,8 @@
  *   its key alone (`--ignore-certificate-errors-spki-list`), and plain bytes
  *   (Chromium tunnels `ws://` through a proxy too) are read as they come.
  *   No byte is ever spliced to a dashboard origin.
- * - any other host on the hub's ports (hub-ports.ts): refused, as before;
+ * - any other host on the hub's ports (hub-ports.ts), and the machine's own
+ *   services (hub-pac.ts `CLOSED_HOSTS`): refused;
  * - anything else: carried as it is (a tunnel, or a forward), which only the
  *   local host's Chromium sends here: a container's PAC sends nothing else
  *   (hub-pac.ts).
@@ -82,6 +83,7 @@ import {
 import { delegationHubUrl } from "../delegation";
 import { hubPorts } from "../hub-ports";
 import { provenFetch } from "../hub-proof";
+import { CLOSED_HOSTS } from "./hub-pac";
 import { browsersDir } from "./state";
 
 /** Where a container's door socket is bound, and the socket's name in it. */
@@ -452,6 +454,12 @@ const refuse = (socket: Socket, words: string): void => {
 
 const HUB_REFUSED =
   "CawCo's dashboard door: this browser reaches the hub only at its dashboard's own address, signed in as its agent.";
+const CLOSED_REFUSED =
+  "CawCo's dashboard door: this address is the machine's own service (Tailscale's or the cloud's metadata), closed to an agent's browser.";
+
+/** The words a refused target is refused in. */
+const refusedWords = (reach: Reach): string =>
+  reach.kind === "closed" ? CLOSED_REFUSED : HUB_REFUSED;
 
 /** One request to dashboard origin `origin`, stamped ({@link stamped}) and answered as the origin answers. */
 const forwardStamped = (
@@ -557,7 +565,10 @@ const forwardPlain = (url: URL, req: IncomingMessage, res: ServerResponse) => {
 
 /** What a target is to the door. */
 type Reach =
-  { kind: "dashboard"; origins: string[] } | { kind: "hub" } | { kind: "else" };
+  | { kind: "dashboard"; origins: string[] }
+  | { kind: "hub" }
+  | { kind: "closed" }
+  | { kind: "else" };
 
 /**
  * Whether `host:port` is a dashboard origin (and which schemes of it), a
@@ -570,6 +581,9 @@ const reachOf = async (
   host: string,
   port: number
 ): Promise<Reach> => {
+  if (CLOSED_HOSTS.includes(host.includes(":") ? `[${host}]` : host)) {
+    return { kind: "closed" };
+  }
   const onHubPort = hubPorts().includes(port);
   const named = async (reread: boolean) => {
     let origins: ReadonlySet<string> | undefined;
@@ -655,7 +669,7 @@ const doorServer = async (key: BrowserKey): Promise<Server> => {
         } else if (reach.kind === "else") {
           forwardPlain(url, req, res);
         } else {
-          res.writeHead(403, { connection: "close" }).end(HUB_REFUSED);
+          res.writeHead(403, { connection: "close" }).end(refusedWords(reach));
         }
       },
       (error: unknown) =>
@@ -672,8 +686,8 @@ const doorServer = async (key: BrowserKey): Promise<Server> => {
     }
     reachOf(key, host, port).then(
       (reach) => {
-        if (reach.kind === "hub") {
-          refuse(client, HUB_REFUSED);
+        if (reach.kind === "hub" || reach.kind === "closed") {
+          refuse(client, refusedWords(reach));
           return;
         }
         if (reach.kind === "else") {

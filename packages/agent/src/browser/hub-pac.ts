@@ -10,6 +10,23 @@ const CONTAINER_DOOR_PORT = 9230;
 
 const DOOR = `PROXY 127.0.0.1:${CONTAINER_DOOR_PORT}`;
 
+/**
+ * The addresses a machine's own services answer on, which no agent's
+ * browser opens (the door refuses them, dashboard-door.ts): Tailscale's
+ * "quad 100", its local web client and DNS ("100.100.100.100 … also
+ * fd7a:115c:a1e0::53", tailscale.com/kb/1381/what-is-quad100), which shows
+ * the machine's tailnet account, name and address and changes its
+ * settings; and the cloud's instance metadata (169.254.169.254, and AWS's
+ * fd00:ec2::254), which hands out the machine's credentials. Written as a
+ * URL's host is, IPv6 bracketed.
+ */
+export const CLOSED_HOSTS: readonly string[] = [
+  "100.100.100.100",
+  "[fd7a:115c:a1e0::53]",
+  "169.254.169.254",
+  "[fd00:ec2::254]",
+];
+
 /** `origin`'s `host:port` as a PAC reads a URL's: the host lowercased, an IPv6 one in brackets, the port written out. */
 const hostPort = (origin: string): string => {
   const { hostname, port, protocol } = new URL(origin);
@@ -22,7 +39,8 @@ const hostPort = (origin: string): string => {
  * host, and every dashboard origin on another port (`origins`, the hub's
  * list as the browser's door last read it: a proxy domain on 443), go to
  * the browser's dashboard door, which signs the dashboard's in as the
- * browser and refuses the rest (dashboard-door.ts); everything else is
+ * browser and refuses the rest (dashboard-door.ts), as it refuses the
+ * machine's own services ({@link CLOSED_HOSTS}); everything else is
  * `DIRECT`. A hub that trusts its network takes a request with no
  * credential as the owner (hub hub-auth.ts `classify`), so none of them
  * may go direct.
@@ -50,6 +68,7 @@ const hubPac = (origins: readonly string[]): string => {
     var scheme = m[1].toLowerCase();
     var port = m[3] || (scheme === "https" || scheme === "wss" ? "443" : "80");
     if (${ports}.indexOf(port) >= 0) return "${DOOR}";
+    if (${JSON.stringify(CLOSED_HOSTS)}.indexOf(m[2].toLowerCase()) >= 0) return "${DOOR}";
     if (${off}.indexOf(m[2].toLowerCase() + ":" + port) >= 0) return "${DOOR}";
     return "DIRECT";
   } catch (e) {
