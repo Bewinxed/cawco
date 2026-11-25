@@ -557,6 +557,9 @@ const gated: Gated[] = [
   // Each file's swallowed failures, casts around the type checker and
   // silenced checks may fall, never rise.
   bun("scripts/escape-hatch-ratchet.ts"),
+  // The hub's and the agent's hand-written locks, chains and timed loops,
+  // what Effect provides (CLAUDE.md, "Backend internals"), may fall, never rise.
+  bun("scripts/effect-ratchet.ts"),
   // A comment names files and symbols that are there. It reads every code
   // file's identifiers and the platform's types, which bun.lock pins.
   bun("scripts/stale-references-check.ts"),

@@ -143,6 +143,8 @@ export default {
         "scripts/import-rules-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/escape-hatch-ratchet.ts",
+        // scripts/check.ts, beside escape-hatch-ratchet.ts
+        "scripts/effect-ratchet.ts",
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/stale-references-check.ts",
         // scripts/check.ts, beside css-scope-check.ts

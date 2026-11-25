@@ -37,6 +37,16 @@ permissions and questions from the lock screen.
   `apps/dashboard/.impeccable/surfaces/` (`impeccable surface-brief read <file>`).
 - **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to `design/DESIGN.md`'s Words section.
 
+## Backend internals
+
+`packages/hub` and `packages/agent` internals are written in Effect v4: services and layers,
+typed errors, and `Schema` where the server needs a schema. Retries and polls are `Schedule`;
+one key's work at a time is a `Semaphore` per key held in an `RcMap` (`PartitionedSemaphore` is
+a shared pool, not a per-key lock); a gate is a `Latch`; a caller that wants a promise gets one
+from `Effect.runPromise` at its edge. Load the `effect-ts` skill before writing it. The SvelteKit
+app stays as it is. `scripts/effect-ratchet.ts` (in `bun run check`) holds the hand-written
+locks, promise chains and timed loops left in these packages to their count.
+
 ## Tests
 
 Run `bun run check` before `finish_item`: the hub rebases and pushes your commits as they are.

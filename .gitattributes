@@ -1,2 +1,3 @@
 scripts/import-rules.baseline.tsv merge=union
 scripts/escape-hatch-ratchet.baseline.tsv merge=union
+scripts/effect-ratchet.baseline.tsv merge=union
