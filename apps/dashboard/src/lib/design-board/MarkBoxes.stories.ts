@@ -10,17 +10,17 @@ import MarkBoxes from "./MarkBoxes.svelte";
 export default {
   title: "Design system/Mark boxes",
   component: MarkBoxes,
-  args: { lines: 1, size: "small" },
+  args: { lines: "one", size: "small" },
 };
 
 /** Each box's words on one line, in its smaller size. */
 export const OneLine = {};
 
 /** Each box's words wrapped to two lines where the box wraps. */
-export const TwoLines = { args: { lines: 2 } };
+export const TwoLines = { args: { lines: "two" } };
 
 /** One line, each box in its larger size. */
 export const OneLineLarge = { args: { size: "large" } };
 
 /** Two lines, each box in its larger size. */
-export const TwoLinesLarge = { args: { lines: 2, size: "large" } };
+export const TwoLinesLarge = { args: { lines: "two", size: "large" } };

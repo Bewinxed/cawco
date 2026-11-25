@@ -32,14 +32,14 @@
     size,
   }: {
     /** Its words on one line, or wrapped to two where the box wraps. */
-    lines: 1 | 2;
+    lines: "one" | "two";
     /** Each box in its smaller size, or its larger where it has one. */
     size: "small" | "large";
   } = $props();
 
   const id = $props.id();
   const large = $derived(size === "large");
-  const two = $derived(lines === 2);
+  const two = $derived(lines === "two");
   const words = $derived({
     option: two
       ? "Keep the session running on its machine while it updates"
