@@ -387,7 +387,7 @@ export function storyDirectionsOf(
 
 /** What a design folder's create answers beside its link: what the person can do there, and its next reads. */
 export const designHint = (content: DesignContent | undefined): string =>
-  `The design graph shows ${content ? `this ${content} at the panel's own width, in the person's scheme,` : `each page at ${GRAPH_WIDTHS_SAID} wide, light and dark,`} with its cssVar dials and the person's pins, served by Vite. artifact_update({ id, html | dir | directions }) changes it in place, and the open panel takes the change by hot reload, picks and pins kept; \`errors\` names each compile error, which the page shows too. artifact_read({ id }) answers their pins, dials and pick.`;
+  `The design graph shows ${content ? `this ${content} at the panel's own width, in the person's scheme,` : `each page at ${GRAPH_WIDTHS_SAID} wide, light and dark,`} with its cssVar dials and the person's pins, served by Vite. artifact_update({ id, html | dir | directions }) changes it in place, and the open panel takes the change by hot reload, picks and pins kept; \`errors\` names each compile error, which the page shows too. artifact_read({ id }) answers their pins, dials and pick, and png: true adds its picture. artifact_browse({ id }) opens it in your browser tool.`;
 
 /** The canvas's spec its page is given: its name, edges, groups, dials and directions (each its states file as the stage names it). */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({

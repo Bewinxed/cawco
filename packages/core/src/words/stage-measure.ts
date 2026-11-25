@@ -84,7 +84,7 @@ export const measureWords = {
     "measure.play runs the story's own play from its from story: send { play: true } alone, or { press, on } for one press.",
   /** A design folder: no stories to play. */
   designFolder: (name: string) =>
-    `${name} is a design folder. A measurement plays a story on a design graph's stage: open the piece from its states file (kind "component" with file) and measure that.`,
+    `${name} is a design folder. A measurement plays a story on a design graph's stage: open the piece from its states file (kind "component" with file) and measure that. To look at the folder, artifact_read({ id: "${name}", png: true }) draws its first page, and artifact_browse({ id: "${name}" }) opens each page in your browser tool.`,
   /** A story with no move of its own. */
   noPlay: (story: string) =>
     `${story} has no from and play to measure. Measure a one-off press from it instead: measure: { press: "click", on: { role: "button", name: "…" } }.`,
