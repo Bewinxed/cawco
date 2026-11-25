@@ -14353,6 +14353,12 @@
       "itemsPath": {
         "type": "string"
       },
+      "pollerConnection": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "syncPolledAt": {
         "type": [
           "number",

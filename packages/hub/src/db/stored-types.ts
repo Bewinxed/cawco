@@ -801,6 +801,12 @@ export interface WatchSettings {
   intervalS?: number;
   /** A dot path to the array of items in the answer; empty: the answer is the array. */
   itemsPath?: string;
+  /**
+   * GitHub, while a tracker binding's connection reads the watch: the
+   * connection the project's GitHub poller followed it by, which it reads
+   * with again once the binding goes; null or absent when they were one.
+   */
+  pollerConnection?: string | null;
   /** When the tracker sync last polled, ms. */
   syncPolledAt?: number | null;
   /** Why the tracker sync's last poll stopped short, or null. */

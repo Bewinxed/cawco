@@ -26,6 +26,7 @@ import {
   SYNC_STREAMS,
   settingsWith,
   stopSyncing,
+  unboundConnection,
   type WatchRow,
 } from "./watches";
 
@@ -493,7 +494,7 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
           .get();
         if (was && was.id !== target?.id) {
           forget(tx, row.projectId);
-          stopSyncing(tx, was);
+          stopSyncing(tx, was, unboundConnection(tx, was));
         }
         const columns = {
           container: row.target,
@@ -505,10 +506,18 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
           syncDirectionAt: row.directionAt,
           state: row.state,
         };
-        const settings = settingsWith(
-          target?.settings ?? {},
-          settingsPatch(row)
-        );
+        // A repository the poller follows keeps the connection it followed
+        // it by, to read with again once the binding goes.
+        const followed =
+          target?.enabled &&
+          target.sync === "off" &&
+          target.connection !== row.connection
+            ? { pollerConnection: target.connection }
+            : {};
+        const settings = settingsWith(target?.settings ?? {}, {
+          ...settingsPatch(row),
+          ...followed,
+        });
         let watchId = target?.id;
         if (watchId) {
           tx.update(watches)
@@ -601,7 +610,7 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
       db.transaction((tx) => {
         const was = syncingOf(tx, projectId);
         if (was) {
-          stopSyncing(tx, was);
+          stopSyncing(tx, was, unboundConnection(tx, was));
         }
         forget(tx, projectId);
         tx.update(projects)

@@ -15,6 +15,15 @@
  *   with the connection the project follows by ({@link githubFollower}).
  * A repository the project no longer links keeps its watch and its cursors,
  * unread, until the project stops following.
+ *
+ * A project that some connection reading GitHub's API names keeps
+ * following its repositories: when a watch's connection stops naming the
+ * project, stops reading GitHub's API or is removed, the watch moves to the
+ * connection the project follows by ({@link followConnectionOf}), and goes
+ * only when there is none ({@link rehome}). A tracker binding's connection
+ * reads its repository's watch while it syncs; the connection the poller
+ * followed it by is kept beside it (`settings.pollerConnection`) and read
+ * with again once the binding goes ({@link stopSyncing}).
  */
 import { CONNECTION_AUTHS, readsGitHubApi } from "@cawco/core/connections";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -106,13 +115,8 @@ const followedOf = (tx: Writer, projectId: string): WatchRow[] =>
     .orderBy(sql`${watches.sync} != 'off'`, asc(watches.createdAt))
     .all();
 
-/**
- * The connection project `projectId` follows GitHub by: its GitHub
- * watches' (one that only follows first), else the first connection by
- * name that reads GitHub's API and names it; nothing when neither.
- */
-const githubFollower = (tx: Writer, projectId: string): string | undefined =>
-  followedOf(tx, projectId)[0]?.connection ??
+/** The connections that read GitHub's API and name project `projectId`, by name. */
+const readersOf = (tx: Writer, projectId: string): string[] =>
   tx
     .select({ name: connections.name })
     .from(connections)
@@ -128,7 +132,41 @@ const githubFollower = (tx: Writer, projectId: string): string | undefined =>
       )
     )
     .orderBy(asc(connections.name))
-    .get()?.name;
+    .all()
+    .map(({ name }) => name);
+
+/**
+ * The connection project `projectId` follows GitHub by from now, other
+ * than `gone`: the first of `kept` that still reads GitHub's API and names
+ * it, else its GitHub watches' (one that only follows first) that does,
+ * else the first by name that does; nothing when none does.
+ */
+const followConnectionOf = (
+  tx: Writer,
+  projectId: string,
+  kept: readonly (string | null | undefined)[],
+  gone?: string
+): string | undefined => {
+  const readers = new Set(readersOf(tx, projectId));
+  readers.delete(gone ?? "");
+  return [
+    ...kept,
+    ...followedOf(tx, projectId).map((watch) => watch.connection),
+    ...readers,
+  ].find(
+    (name): name is string =>
+      name !== null && name !== undefined && readers.has(name)
+  );
+};
+
+/**
+ * The connection project `projectId` follows GitHub by, for a repository
+ * linked to it: its GitHub watches' (one that only follows first), else
+ * the first connection by name that reads GitHub's API and names it;
+ * nothing when neither.
+ */
+const githubFollower = (tx: Writer, projectId: string): string | undefined =>
+  followedOf(tx, projectId)[0]?.connection ?? readersOf(tx, projectId)[0];
 
 /** A new GitHub watch the poller reads, of `repo` through `connection`. */
 const madeGitHubWatch = (
@@ -215,38 +253,83 @@ export const followLink = (
   }
 };
 
+/** A GitHub watch moved off a connection: to the one named, or `null` when none was left and it went (or was left for the trash). */
+export interface Rehomed {
+  container: string;
+  projectId: string;
+  to: string | null;
+}
+
 /**
- * The project stops following GitHub: each watch only the poller read
- * goes, cursors and all; one a tracker binding syncs stays for the sync,
- * no longer read by the poller, its resources' cursors gone.
+ * Connection `gone` no longer follows the projects in `of` (every project
+ * when undefined): it stopped naming them, stopped reading GitHub's API,
+ * or is being removed. Each GitHub watch the poller reads through it moves
+ * to the connection its project follows by from now
+ * ({@link followConnectionOf}); one with none goes, cursors and all, or,
+ * with `leave`, stays for the connection's trash to take. A watch a tracker
+ * binding syncs keeps the binding's connection, which the sync reads with;
+ * the one the poller followed it by is found again the same way, and the
+ * poller reads through it while the binding's no longer names the project
+ * ({@link GitHubWatch.reads}) and once the binding goes.
  */
-const unfollowGitHub = (tx: Writer, projectId: string): void => {
-  const followed = followedOf(tx, projectId);
-  const kept = followed.filter((watch) => watch.sync !== "off");
-  tx.delete(watches)
-    .where(
-      inArray(
-        watches.id,
-        followed.filter((watch) => watch.sync === "off").map((w) => w.id)
-      )
-    )
-    .run();
-  if (kept.length === 0) {
-    return;
-  }
-  const ids = kept.map((watch) => watch.id);
-  tx.update(watches)
-    .set({ enabled: false, reason: null, resumeAt: null, polledAt: null })
-    .where(inArray(watches.id, ids))
-    .run();
-  tx.delete(watchCursors)
+const rehome = (
+  tx: Writer,
+  gone: string,
+  of: readonly string[] | undefined,
+  leave: boolean
+): Rehomed[] => {
+  const scoped =
+    of === undefined ? undefined : inArray(watches.projectId, [...of]);
+  const moved: Rehomed[] = [];
+  for (const watch of tx
+    .select()
+    .from(watches)
     .where(
       and(
-        inArray(watchCursors.watchId, ids),
-        sql`${watchCursors.stream} NOT LIKE 'sync:%'`
+        eq(watches.provider, "github"),
+        eq(watches.enabled, true),
+        eq(watches.connection, gone),
+        scoped
       )
     )
-    .run();
+    .all()) {
+    if (watch.sync !== "off") {
+      continue;
+    }
+    const to = followConnectionOf(tx, watch.projectId, [], gone) ?? null;
+    if (to) {
+      tx.update(watches)
+        .set({ connection: to, reason: null })
+        .where(eq(watches.id, watch.id))
+        .run();
+    } else if (!leave) {
+      tx.delete(watches).where(eq(watches.id, watch.id)).run();
+    }
+    moved.push({ projectId: watch.projectId, container: watch.container, to });
+  }
+  for (const watch of tx
+    .select()
+    .from(watches)
+    .where(
+      and(eq(watches.provider, "github"), sql`${watches.sync} != 'off'`, scoped)
+    )
+    .all()) {
+    const was = watch.settings.pollerConnection ?? null;
+    if (watch.connection !== gone && was !== gone) {
+      continue;
+    }
+    const kept = was === gone ? null : was;
+    const to = followConnectionOf(tx, watch.projectId, [kept], gone) ?? null;
+    if (to !== was) {
+      tx.update(watches)
+        .set({
+          settings: settingsWith(watch.settings, { pollerConnection: to }),
+        })
+        .where(eq(watches.id, watch.id))
+        .run();
+    }
+  }
+  return moved;
 };
 
 /** One repository's cursors, each resource's. */
@@ -255,6 +338,13 @@ export type GitHubCursors = Partial<Record<GitHubResource, GitHubCursor>>;
 /** A GitHub watch the poller reads, with each resource's cursor. */
 export interface GitHubWatch extends WatchRow {
   cursors: GitHubCursors;
+  /**
+   * The connection the poller reads it through: its own, but on a watch a
+   * binding syncs whose connection no longer reads GitHub's API and names
+   * the project, the one the poller followed it by
+   * (`settings.pollerConnection`), while that one does.
+   */
+  reads: string;
 }
 
 /** What one poll of one watch keeps: its row's outcome and each resource's cursor over the one it had. */
@@ -273,7 +363,12 @@ export interface GitHubWatchesDb {
   readonly githubWatches: (projectId?: string) => GitHubWatch[];
   /** Each poll's outcome kept, in one transaction. */
   readonly keepGitHubPoll: (polled: readonly GitHubWatchPolled[]) => void;
-  readonly unfollowGitHub: (projectId: string) => void;
+  /** {@link rehome} in one transaction. */
+  readonly rehome: (
+    gone: string,
+    of: readonly string[] | undefined,
+    leave: boolean
+  ) => Rehomed[];
 }
 
 export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
@@ -304,7 +399,31 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
         cursors.set(row.watchId, kept);
       }
     }
-    return rows.map((row) => ({ ...row, cursors: cursors.get(row.id) ?? {} }));
+    const readers = new Map<string, Set<string>>();
+    const readerOf = (projectId: string): Set<string> => {
+      const known = readers.get(projectId);
+      if (known) {
+        return known;
+      }
+      const made = new Set(readersOf(db, projectId));
+      readers.set(projectId, made);
+      return made;
+    };
+    const readsOf = (row: WatchRow): string => {
+      const poller = row.settings.pollerConnection;
+      if (row.sync === "off" || !poller) {
+        return row.connection;
+      }
+      const named = readerOf(row.projectId);
+      return named.has(row.connection) || !named.has(poller)
+        ? row.connection
+        : poller;
+    };
+    return rows.map((row) => ({
+      ...row,
+      cursors: cursors.get(row.id) ?? {},
+      reads: readsOf(row),
+    }));
   };
   return {
     followedBy: (projectId) => followedOf(db, projectId)[0]?.connection,
@@ -355,8 +474,8 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
     },
     followGitHub: (projectId, connection) =>
       db.transaction((tx) => followGitHub(tx, projectId, connection)),
-    unfollowGitHub: (projectId) =>
-      db.transaction((tx) => unfollowGitHub(tx, projectId)),
+    rehome: (gone, of, leave) =>
+      db.transaction((tx) => rehome(tx, gone, of, leave)),
   };
 };
 
@@ -381,15 +500,32 @@ const unsynced = ({
   syncReason: _reason,
   syncPolledAt: _polledAt,
   syncResumeAt: _resumeAt,
+  pollerConnection: _poller,
   ...own
 }: WatchSettings): WatchSettings => own;
 
 /**
- * A watch no longer syncs: one the GitHub poller reads keeps reading, its
- * sync's settings and streams gone; one made only for the sync goes.
+ * The connection a watch a binding syncs is read with once the binding
+ * goes: the one the poller followed it by, else the one its project
+ * follows by ({@link followConnectionOf}); nothing when none.
  */
-export const stopSyncing = (tx: Writer, watch: WatchRow): void => {
-  if (!watch.enabled) {
+export const unboundConnection = (
+  tx: Writer,
+  watch: WatchRow
+): string | undefined =>
+  followConnectionOf(tx, watch.projectId, [watch.settings.pollerConnection]);
+
+/**
+ * A watch no longer syncs. One the GitHub poller reads keeps reading,
+ * through `connection`, its sync's settings and streams gone; one made
+ * only for the sync, or with no connection to read through, goes.
+ */
+export const stopSyncing = (
+  tx: Writer,
+  watch: WatchRow,
+  connection: string | undefined
+): void => {
+  if (!(watch.enabled && connection)) {
     tx.delete(watches).where(eq(watches.id, watch.id)).run();
     return;
   }
@@ -399,6 +535,7 @@ export const stopSyncing = (tx: Writer, watch: WatchRow): void => {
       syncSince: null,
       syncDirectionAt: null,
       state: null,
+      connection,
       settings: unsynced(watch.settings),
     })
     .where(eq(watches.id, watch.id))
@@ -411,4 +548,48 @@ export const stopSyncing = (tx: Writer, watch: WatchRow): void => {
       )
     )
     .run();
+};
+
+/**
+ * Project `dupId` folds into `keepId` (db/projects.ts `foldProject`): its
+ * connector polls move; its GitHub watches the poller reads move where the
+ * kept project follows none, both polling the repositories they share,
+ * each no longer syncing (its tracker binding goes with it, as every other
+ * watch of it does) and read through the connection the poller followed it
+ * by; a repository the kept project already watches keeps that watch. Then
+ * each repository it linked is watched where the kept project follows
+ * GitHub ({@link followLink}), as a link added to it.
+ */
+export const foldWatches = (tx: Writer, dupId: string, keepId: string) => {
+  tx.update(watches)
+    .set({ projectId: keepId })
+    .where(
+      and(eq(watches.projectId, dupId), eq(watches.provider, "connection"))
+    )
+    .run();
+  if (followedOf(tx, keepId).length === 0) {
+    for (const watch of followedOf(tx, dupId)) {
+      if (githubWatchOf(tx, keepId, watch.container)) {
+        continue;
+      }
+      if (watch.sync !== "off") {
+        stopSyncing(
+          tx,
+          watch,
+          watch.settings.pollerConnection ?? watch.connection
+        );
+      }
+      tx.update(watches)
+        .set({ projectId: keepId })
+        .where(eq(watches.id, watch.id))
+        .run();
+    }
+  }
+  for (const { remote } of tx
+    .select({ remote: projectLinks.remote })
+    .from(projectLinks)
+    .where(eq(projectLinks.projectId, dupId))
+    .all()) {
+    followLink(tx, keepId, remote);
+  }
 };

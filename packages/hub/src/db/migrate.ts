@@ -62,7 +62,10 @@ import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 import { logTrackerCursorsUnread } from "./tracker-cursors-unread";
 import { logWaitHistoryUnread } from "./wait-history-unread";
 import { logWaitsUnread } from "./waits-unread";
-import { logWatchesFromPollers } from "./watches-from-pollers";
+import {
+  logWatchesFromPollers,
+  placePollerConnections,
+} from "./watches-from-pollers";
 import { logWorkspaceHeadsUnread } from "./workspace-heads-unread";
 
 /** Where a step's work runs. */
@@ -421,8 +424,18 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every project whose poller and binding read one repository with
       // different connections, and every poller 0486 makes no watch of,
-      // read before it runs.
+      // read before it runs; the pollers' connections set aside.
       logWatchesFromPollers(client);
+    },
+  },
+  {
+    name: "poller-connections",
+    after: "latest",
+    at: "open",
+    run: (client) => {
+      // Each poller's connection the step before 0486 set aside, placed on
+      // its repository's watch (watches-from-pollers.ts).
+      placePollerConnections(client);
     },
   },
   {

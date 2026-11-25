@@ -309,6 +309,12 @@ export interface ConnectionsDeps {
   readonly areaExists: (id: string) => boolean;
   /** Something a session's tool list depends on moved. */
   readonly changed: () => void;
+  /**
+   * A connection is about to go into the trash: the GitHub watches read
+   * through it move to the connection each project follows by from now
+   * (ingress.ts `connectionGoing`); the rest go with it.
+   */
+  readonly connectionGoing: (connection: string) => void;
   readonly db: ConnectionsDb;
   /** The fleet machines' gh (agent host-gh.ts), for `gh` connections. */
   readonly gh: {
@@ -2890,6 +2896,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     ghRead.delete(r.id);
     deps.lifetime.cancel(devicePolls.get(r.id));
     devicePolls.delete(r.id);
+    deps.connectionGoing(name);
     const restore =
       deps.trash(name) ?? misfit(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);

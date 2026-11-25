@@ -986,6 +986,7 @@ const WatchSettingsShape = declared(
     idPath: z.string().optional(),
     intervalS: z.number().optional(),
     itemsPath: z.string().optional(),
+    pollerConnection: z.string().nullable().optional(),
     syncPolledAt: z.number().nullable().optional(),
     syncReason: z.string().nullable().optional(),
     syncResumeAt: z.number().nullable().optional(),

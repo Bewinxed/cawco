@@ -88,7 +88,7 @@ import type {
   InboundEventRow,
 } from "./db/ingress";
 import type { InboundVia } from "./db/stored-types";
-import type { GitHubWatch } from "./db/watches";
+import type { GitHubWatch, Rehomed } from "./db/watches";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
 import { githubReposOf, pollRepo, readRunWait } from "./github";
@@ -811,14 +811,14 @@ export const createIngress = ({
     };
     const polls: RepoPolled[] = [];
     for (const watch of linked) {
-      const octokit = clientOf(watch.connection);
+      const octokit = clientOf(watch.reads);
       const repo = watch.container;
       if (typeof octokit === "string") {
         polls.push({ watch, repo, polled: unsigned(octokit), landed: 0 });
         continue;
       }
       const polled = await pollRepo({
-        connection: watch.connection,
+        connection: watch.reads,
         cursors: watch.cursors,
         now,
         octokit,
@@ -1181,7 +1181,7 @@ export const createIngress = ({
     const repos = githubReposOf(project.links);
     const followed = store.githubWatches(projectId);
     const linked = linkedWatches(project.links, followed);
-    const reading = [...new Set(linked.map((watch) => watch.connection))];
+    const reading = [...new Set(linked.map((watch) => watch.reads))];
     const connection =
       reading.length > 0
         ? reading.join(", ")
@@ -1236,14 +1236,25 @@ export const createIngress = ({
     return seen;
   };
 
+  /** What moving watches off a connection did, one log line each. */
+  const sayRehomed = (gone: string, moved: readonly Rehomed[]): void => {
+    for (const { projectId, container, to } of moved) {
+      console.log(
+        `[ingress] project ${projectId}: ${container} ${to ? `polled with ${to}` : "no longer polled"}, in place of ${gone}`
+      );
+    }
+  };
+
   /**
    * A connection's projects were written (connections.ts `writeProjects`):
    * while it reads GitHub's API, each project it names that follows GitHub
    * with no connection follows it through this one from now, a watch of
    * each github.com repository it links (db/watches.ts `followGitHub`); a
    * project following another keeps that one. Each project it dropped, or
-   * every one once it no longer reads GitHub's API, whose watches read with
-   * it stops following.
+   * every one once it no longer reads GitHub's API, has its watches that
+   * read through it moved to the connection the project follows by from
+   * now, and stops following only where none is left (db/watches.ts
+   * `rehome`).
    */
   const followConnection = (
     connection: string,
@@ -1253,14 +1264,11 @@ export const createIngress = ({
     const reads =
       found.service.trim().toLowerCase() === "github" &&
       readsGitHubApi(found.auth);
-    for (const projectId of byProject(store.githubWatches()).keys()) {
-      if (
-        store.followedBy(projectId) === connection &&
-        (!reads || dropped.includes(projectId))
-      ) {
-        store.unfollowGitHub(projectId);
-        console.log(`[ingress] project ${projectId}: no longer polls GitHub`);
-      }
+    if (!reads || dropped.length > 0) {
+      sayRehomed(
+        connection,
+        store.rehome(connection, reads ? dropped : undefined, false)
+      );
     }
     if (!reads) {
       return;
@@ -1273,6 +1281,16 @@ export const createIngress = ({
         );
       }
     }
+  };
+
+  /**
+   * A connection is being removed (connections.ts `remove`): each GitHub
+   * watch read through it moves to the connection its project follows by
+   * from now; one with none is left for the trash to take with the
+   * connection, and comes back with its Undo.
+   */
+  const connectionGoing = (connection: string): void => {
+    sayRehomed(connection, store.rehome(connection, undefined, true));
   };
 
   /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
@@ -1761,6 +1779,7 @@ export const createIngress = ({
         : taskLinkWords.noGitHub;
     },
     createPoll,
+    connectionGoing,
     createRoute,
     deletePoll,
     deleteRoute,
