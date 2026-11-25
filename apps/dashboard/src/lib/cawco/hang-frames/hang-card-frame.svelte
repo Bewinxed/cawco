@@ -48,7 +48,6 @@
         onOpenAutoFocus={(event) => event.preventDefault()}
         side="bottom"
         sideOffset={placement.sideOffset}
-        strategy="fixed"
         trapFocus={false}
         bind:joined
       >

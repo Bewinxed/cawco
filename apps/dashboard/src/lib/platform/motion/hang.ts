@@ -17,11 +17,12 @@
  * `.join`); the card writes the neck from what `hang` reports.
  *
  * `hang` is the card's attachment. It keeps the neck where the card really
- * stands once bits-ui has placed it (every placement, open, a glide, a
- * resize, a scroll, is a write to its floating wrapper's transform), and it
- * plays the card's open and close:
+ * stands once its layer has placed it (every placement, an open or a new
+ * anchor, is its layer's box's `kit-placed`: kit anchored.svelte.ts; the
+ * box moves with its anchor through a scroll by CSS, which moves nothing
+ * between the two), and it plays the card's open and close:
  *
- * The card comes down out of the anchor's foot: its floating wrapper is cut
+ * The card comes down out of the anchor's foot: its layer's box is cut
  * at the card's top edge, the anchor's foot, and the card slides down from
  * behind that cut by its own height, revealing what is in it as the foot
  * passes; nothing inside fades. A finger pulling a tab's menu out draws the
@@ -39,7 +40,7 @@
  * still open), while it composites the individual transform properties
  * (bugs.webkit.org/show_bug.cgi?id=217842). On a phone's Safari the open
  * stalled behind whatever else the press did. The card is held shut
- * (`data-shown` absent: up behind the cut) until bits-ui has placed it, and
+ * (`data-shown` absent: up behind the cut) until its layer has placed it, and
  * starts coming down only then: started with the mount, the frame that
  * mounted it ate the first part of the motion.
  *
@@ -57,17 +58,16 @@
  *
  * A card that rises (`rises`: a menu from a glass standing at the foot of
  * its surface, BarMenu) is the same card stood on its head: it stands on
- * its anchor's top, its wrapper cut at the card's foot, and it slides up
+ * its anchor's top, its layer's box cut at the card's foot, and it slides up
  * out of the anchor's top from behind that cut and back down into it, the
  * same translate on the same clocks.
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
+import { PLACED } from "../layer-placed";
 import { dur, ease, motionOk } from "./curves.svelte";
 import { keyed } from "./keyed.svelte";
 
-/** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
-const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/u;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
 
@@ -191,25 +191,28 @@ export interface Hang {
   rises?: boolean;
 }
 
-/** The card's attachment: on the popover's content, inside its floating wrapper. */
+/** The card's attachment: on the popover's content, inside its layer's box. */
 export function hang(options: Hang): Attachment<HTMLElement> {
   return (node) => {
-    const wrapper = node.parentElement;
-    if (!wrapper) {
+    const layer = node.parentElement;
+    if (!layer) {
       return;
     }
     const motion = options.grow
       ? growMotion(node, options, options.grow)
       : slideMotion(node, options);
-    // Untracked: the attachment's own effect runs the first one, and the
-    // anchor and neck it reads are not reasons to attach again.
-    const sync = () =>
+    // Untracked: the anchor and neck it reads are not reasons to attach
+    // again. The box its layer placed (anchored.svelte.ts `PLACED`).
+    const sync = (event: Event) =>
       untrack(() => {
-        const at = TRANSLATE_X.exec(wrapper.style.transform);
-        if (!at) {
+        const box =
+          event instanceof CustomEvent && event.detail?.box instanceof DOMRect
+            ? event.detail.box
+            : null;
+        if (!box) {
           return;
         }
-        const neck = options.neckAt(Number(at[1]));
+        const neck = options.neckAt(box.left);
         if (!neck) {
           return;
         }
@@ -218,11 +221,9 @@ export function hang(options: Hang): Attachment<HTMLElement> {
         motion.placed();
         options.onneck(neck);
       });
-    const observer = new MutationObserver(sync);
-    observer.observe(wrapper, { attributes: true, attributeFilter: ["style"] });
-    sync();
+    layer.addEventListener(PLACED, sync);
     return () => {
-      observer.disconnect();
+      layer.removeEventListener(PLACED, sync);
       motion.stop();
     };
   };

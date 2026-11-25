@@ -13,6 +13,7 @@
    * them, or pressed through one, it stays shut.
    */
   import type { Snippet } from "svelte";
+  import type { AnchorPair } from "../anchored.svelte.js";
   import type { Glide } from "./glide";
   import Root from "./tooltip.svelte";
   import Content from "./tooltip-content.svelte";
@@ -40,8 +41,8 @@
     disabled?: boolean;
     /** A touch press opens it, as a resting pointer does. */
     tap?: boolean;
-    /** What it stands beside, where that is more than its trigger. */
-    anchor?: { getBoundingClientRect: () => DOMRect };
+    /** What it stands beside, where that is more than its trigger: an element, or a box across one and along another. */
+    anchor?: Element | AnchorPair;
     /** It opened or closed. */
     ontoggle?: (open: boolean) => void;
     /** Its glass's one tooltip (glide.ts): this tip is a trigger of it, its words its payload, and the tooltip glides here from a neighbour. Not with `anchor`, `tap` or `ontoggle`, which need a tooltip of their own. */
@@ -125,7 +126,7 @@
       {/snippet}
     </Trigger>
     <!-- 8px clear of the viewport's edges: it never touches one. -->
-    <Content collisionPadding={8} customAnchor={anchor ?? null} {side}>
+    <Content collisionPadding={8} customAnchor={anchor} {side}>
       <span class="whitespace-pre-line"
         >{#if title}
           <strong data-slot="block" class="block font-medium">{title}</strong>

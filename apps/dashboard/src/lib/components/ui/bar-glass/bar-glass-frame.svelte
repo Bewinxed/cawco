@@ -8,8 +8,8 @@
    *
    * What hangs from the glass (`children`, HangCard's frame) stands in the
    * same shell, drawn in place: the shell is its fixed place's box
-   * (`contain: layout`, which a container has already, said so floating-ui
-   * places the card in it), as tall as `height` asks.
+   * (`contain: layout`, which a container has already, so the card's fixed
+   * box stands in it), as tall as `height` asks.
    */
   import type { Snippet } from "svelte";
   import { IconSearch, IconServerLinear } from "#lib/icons.js";

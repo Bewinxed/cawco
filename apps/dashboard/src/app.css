@@ -1015,26 +1015,6 @@
   initial-value: 0px;
 }
 @layer components {
-  /* bits-ui rewrites where the card may stand a few times a frame as it opens
-     and follows its tab; only the card reads those properties (its
-     max-height, HangCard's `details` frame), so they stop at its children
-     and restyle nothing inside. So with a glide popover's surface
-     (glide-popover, NsPopover and NsPopoverGroup's `data-ns-pop`): placed
-     as it opened, each write restyled its every row (the accounts tray, its
-     ~120 elements recalculated twice more in the press's frame). */
-  [data-session-details-popover] > *,
-  [data-ns-pop] > * {
-    --bits-floating-transform-origin: initial;
-    --bits-floating-available-width: initial;
-    --bits-floating-available-height: initial;
-    --bits-floating-anchor-width: initial;
-    --bits-floating-anchor-height: initial;
-    --bits-popover-content-transform-origin: initial;
-    --bits-popover-content-available-width: initial;
-    --bits-popover-content-available-height: initial;
-    --bits-popover-anchor-width: initial;
-    --bits-popover-anchor-height: initial;
-  }
   /* A tab's rim's ink at the strength it wears it now, read off the tab
      alone (--hang-rim does not inherit). */
   [data-session-tabs] [data-slot="tab"] [data-slot="ff-tab"] {
@@ -1051,16 +1031,12 @@
       var(--color-ui-2)
     );
   }
-  /* A pinned card follows its tab as the strip scrolls, frame by frame, on a
-     layer of its own; its glide to another tab is the wrapper's move and the
-     card's height together (`data-details-morph`). */
-  [data-bits-floating-content-wrapper][data-session-details] {
+  /* A pinned card follows its tab as the strip scrolls, on a layer of its
+     own; its glide to another tab is its layer's box moving from where it
+     was drawn (`data-anchor-glide`, kit anchored.svelte.ts) and the card's
+     height together. */
+  [data-kit-layer][data-session-details] {
     will-change: transform;
-  }
-  [data-bits-floating-content-wrapper][data-details-morph] {
-    @variant motion-safe {
-      transition: transform var(--duration-slow) var(--ease-drawer);
-    }
   }
 }
 

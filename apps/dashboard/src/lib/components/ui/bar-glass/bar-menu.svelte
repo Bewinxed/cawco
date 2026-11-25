@@ -20,6 +20,7 @@
    */
   import type { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import type { LayerPlacement } from "#lib/components/ui/anchored.svelte.js";
   import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { cn } from "#lib/utils.js";
@@ -34,8 +35,8 @@
     children,
     ...rest
   }: Omit<
-    DropdownMenuPrimitive.ContentProps,
-    "child" | "children" | "align" | "side" | "sideOffset" | "customAnchor"
+    DropdownMenuPrimitive.ContentStaticProps,
+    "child" | "children" | keyof LayerPlacement
   > & {
     /** What it holds, read out. */
     label: string;
@@ -57,7 +58,7 @@
   anchor={glass.node}
   aria-label={label}
   as={DropdownMenuContent}
-  class={cn("min-w-(--bits-dropdown-menu-anchor-width)", className)}
+  class={cn("min-w-(--kit-anchor-width)", className)}
   customAnchor={glass.node}
   menuWidth={width}
   {rises}

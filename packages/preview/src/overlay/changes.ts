@@ -7,7 +7,7 @@
  * much, so it follows the element's shape and never covers what it says;
  * in the page's own document as the pins are, never taking a press.
  *
- * A ring stands on its element by CSS anchor positioning (anchor-names.ts),
+ * A ring stands on its element by CSS anchor positioning (core anchor-names.ts),
  * never at a box measured here. A box measured once and placed in the
  * document's px stood where the element was then: a decision page scrolls
  * inside its first row (`page-scroll`), so neither its pictures loading nor
@@ -30,9 +30,7 @@
  * A press on a ringed element in Interact mode is a look at it
  * (`cawco:change-pressed`).
  */
-import { bringIntoView } from "@cawco/core/bring-into-view";
-import type { PageAnchor } from "@cawco/core/comments/anchor";
-import { readPins } from "@cawco/core/comments/model";
+
 import {
   type Anchorable,
   anchorable,
@@ -40,7 +38,10 @@ import {
   nameOff,
   nameOn,
   onAnchor,
-} from "./anchor-names";
+} from "@cawco/core/anchor-names";
+import { bringIntoView } from "@cawco/core/bring-into-view";
+import type { PageAnchor } from "@cawco/core/comments/anchor";
+import { readPins } from "@cawco/core/comments/model";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
@@ -95,7 +96,7 @@ export function startChanges(deps: ChangesDeps): Changes {
   const layer = document.createElement("div");
   layer.setAttribute("data-cawco-changes", "");
   layer.setAttribute("aria-hidden", "true");
-  // No box of its own: each ring is fixed, its containing block the viewport (anchor-names.ts).
+  // No box of its own: each ring is fixed, its containing block the viewport (core anchor-names.ts).
   layer.style.cssText = "display:contents";
   document.documentElement.append(layer);
 

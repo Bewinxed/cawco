@@ -20,7 +20,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { rise } from "#lib/components/ui/elevated/index.js";
+  import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { submenuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -32,12 +32,11 @@
     portalProps,
     width,
     min,
+    children,
     /* Off: see popover-content.svelte. */
-    /* Fixed: see popover-content.svelte. */
-    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
-  }: Omit<DropdownMenuPrimitive.SubContentProps, "side" | "collisionPadding"> &
+  }: Omit<DropdownMenuPrimitive.SubContentStaticProps, "child"> &
     DropdownMenuSubContentLooks & {
       portalProps?: WithoutChildrenOrChild<
         ComponentProps<typeof DropdownMenuPortal>
@@ -45,29 +44,27 @@
     } = $props();
 
   const surface = submenuSurface(() => ref);
-
-  /** One step above the surface it opens in (theme.css `surface`). */
-  const surfaceLevel = rise();
 </script>
 
 <!-- In the top layer's portal, as every kit floating surface is: inside its
      menu it was cut by the menu's scroll box and placed in the menu's
      coordinates. -->
 <DropdownMenuPortal {...portalProps}>
-  <DropdownMenuPrimitive.SubContent
-    style="--surface-level: {surfaceLevel}"
+  <DropdownMenuPrimitive.SubContentStatic
+    style="--surface-level: {surface.level}"
     {preventOverflowTextSelection}
-    {strategy}
     class={cn(
       floatingSurface(),
-      "relative z-(--layer-float) max-h-(--bits-menu-content-available-height) w-auto min-w-36 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "relative w-auto min-w-36 origin-(--kit-origin) overflow-y-auto overflow-x-hidden",
       dropdownMenuSubContentVariants({ width, min }),
       className
     )}
-    collisionPadding={surface.inset}
     data-slot="dropdown-menu-sub-content"
-    side={surface.side}
     bind:ref
     {...restProps}
-  />
+  >
+    {#snippet child(snippet)}
+      <FloatingBody {children} mounted {snippet} wrapper={surface.layer} />
+    {/snippet}
+  </DropdownMenuPrimitive.SubContentStatic>
 </DropdownMenuPortal>

@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * The kit's DropdownMenu in a frame of its own (its states file's): open
-   * under its trigger, drawn in place (the portal off) in a box that holds
-   * it (`contain: layout`, so floating-ui places it in the frame), holding
+   * under its trigger, drawn in place (the portal off) in a box with room
+   * for it, standing on its trigger as anywhere (anchored.svelte.ts), holding
    * its items, a checkbox item and a separator: the floating surface round
    * the menu item recipe (DESIGN.md, Popover, dropdown; Menu item).
    */
@@ -25,7 +25,7 @@
 </script>
 
 <div
-  class="relative min-h-(--frame-h) p-space-4 contain-layout"
+  class="relative min-h-(--frame-h) p-space-4"
   style:--frame-h={`${height}px`}
 >
   <DropdownMenu.Root open>

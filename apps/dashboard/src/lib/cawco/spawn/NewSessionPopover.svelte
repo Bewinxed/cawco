@@ -17,7 +17,6 @@
    * sheet (NewSessionDialog).
    */
   import { MediaQuery } from "svelte/reactivity";
-  import { popoverRoom } from "#lib/components/ui/glide-popover/index.js";
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
 
   import type { ContinueSource } from "../continue.svelte";
@@ -54,22 +53,15 @@
   const START = "[data-start-session]";
   /**
    * What it hangs from when its opener gave no trigger: the rail's Start
-   * session where the rail stands, else a point under the bar's leading
-   * edge (the rail a sheet), read as it opens.
+   * session where the rail stands, else the top bar, from its leading edge
+   * (the rail a sheet), read as it opens.
    */
-  const standIn = () => {
+  const standIn = (): HTMLElement | null => {
     const start = document.querySelector<HTMLElement>(START);
     if (start && start.getClientRects().length > 0) {
       return start;
     }
-    return {
-      getBoundingClientRect: () => {
-        const bar = document
-          .querySelector('header[data-slot="top"]')
-          ?.getBoundingClientRect();
-        return new DOMRect(bar?.left ?? 0, bar?.bottom ?? 0, 0, 0);
-      },
-    };
+    return document.querySelector<HTMLElement>('header[data-slot="top"]');
   };
   const hangsFrom = $derived(open ? (anchor ?? standIn()) : null);
   /** What held the focus as it opened, which it goes back to as it closes. */
@@ -81,21 +73,6 @@
         (document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null);
-    }
-  });
-  /**
-   * The room under the trigger, a frame after floating-ui says so
-   * (glide-popover `popoverRoom`): the form growing (a start notice
-   * unfolding) moves the popover, and its height bound by the room directly
-   * changed inside floating-ui's ResizeObserver delivery.
-   */
-  let room = $state<string>();
-  const roomed = popoverRoom((next) => {
-    room = next;
-  });
-  $effect(() => {
-    if (card) {
-      return roomed(card);
     }
   });
 </script>
@@ -119,8 +96,9 @@
     {open}
   >
     <!-- The form's own measure, never past the window's gutter or the room
-         bits-ui measures under the trigger; the recess tray under the
-         raised body, as the dialog's card is. -->
+         under the trigger (its layer's box caps it there: kit
+         anchored.svelte.ts); the recess tray under the raised body, as the
+         dialog's card is. -->
     <!-- A dialog that holds nothing (WAI-ARIA, dialog: `aria-modal` false):
          its openers say they open one (`aria-haspopup="dialog"`), and
          bits-ui's popover content carries no role of its own. -->
@@ -150,7 +128,7 @@
         form?.focusPrompt();
       }}
       side="bottom"
-      style={`--pop-w: min(calc(var(--spacing) * 142.25), 100vw - var(--spacing-space-8) * 1.5); --pop-max-h: calc(${room ?? "var(--bits-popover-content-available-height)"} - 2px)`}
+      style="--pop-w: min(calc(var(--spacing) * 142.25), 100vw - var(--spacing-space-8) * 1.5); --pop-max-h: none"
       width="room"
       bind:ref={card}
     >

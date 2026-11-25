@@ -9,15 +9,17 @@
    * cards.
    *
    * `pop` (DESIGN.md, Navigation, menus and floating surfaces): it opens from its trigger's
-   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-slow on the
+   * side (`--kit-rise`, by the `data-side` its layer read once it was
+   * placed, anchored.svelte.ts) over --duration-slow on the
    * drawer curve, rising --spacing-space-2 and growing from --pop-scale as it fades
    * in from its @starting-style (which iOS 27.2 Safari applies to a surface
    * just added: probe-kit ios-safari-motion, 2026-10-23), and leaves the
    * same way over --duration-base.
    * Transitions on `data-state`, so a close caught mid-open turns back from
    * where it is; bits-ui holds it mounted until they end (getAnimations()).
-   * It grows from its trigger through bits' transform-origin, which each
-   * kit content sets. With reduced motion only the fade runs.
+   * While its layer is placed (`data-placing`) it stands in its closed look,
+   * and opens from there once its side is known. It grows from its trigger
+   * (`--kit-origin`, its layer's). With reduced motion only the fade runs.
    *
    * `hang`: a card that hangs from its anchor opens and closes on its own
    * clock (motion/hang, HangCard); with reduced motion the kit's fade runs.
@@ -30,7 +32,7 @@
    * anchor; it leaves by `popOut` with the same side.
    */
   export const popMotion =
-    "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
+    "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)] in-data-placing:opacity-0 motion-safe:in-data-placing:scale-(--pop-scale) motion-safe:in-data-placing:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
     base: "surface rounded-lg p-space-2 text-tx",
@@ -58,16 +60,18 @@
         narrow: "w-64",
         wide: "w-80",
         widest: "w-96",
-        panel: "w-95 max-w-(--bits-popover-content-available-width)",
+        panel: "w-95 max-w-layer-room",
         room: "w-(--pop-w)",
       },
-      /* `available`: as tall as the room bits-ui measures on its side of
-         the trigger, scrolling past it (the design graph's lists: a cap
-         of 320px cut the chosen curve on a phone). */
+      /* `available`: as tall as the room on its side of the trigger,
+         scrolling past it (the design graph's lists: a cap of 320px cut
+         the chosen curve on a phone): its layer's box caps it there where
+         it would run past the viewport (anchored.svelte.ts), with no cap of
+         its own. */
       height: {
         capped: "max-h-80",
         room: "max-h-(--pop-max-h)",
-        available: "max-h-(--bits-popover-content-available-height)",
+        available: "max-h-none",
       },
       overflow: {
         scroll: "overflow-y-auto overscroll-contain",
@@ -99,6 +103,10 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import { type ComponentProps, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import {
+    type LayerPlacement,
+    layerProps,
+  } from "#lib/components/ui/anchored.svelte.js";
   import { rise } from "#lib/components/ui/elevated/index.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { pressedAway } from "#lib/components/ui/floating-presence.js";
@@ -113,9 +121,13 @@
   let {
     ref = $bindable(null),
     class: className,
+    side = "bottom",
     sideOffset = 4,
     align = "center",
+    alignOffset = 0,
     collisionPadding,
+    customAnchor,
+    fixedSide = false,
     portalProps,
     morphs,
     bare = false,
@@ -139,17 +151,10 @@
        pointerdown inside it and again at pointerup, and each write restyles
        the whole page (3,700 elements, 35-50 ms in Chromium on a session with
        a component canvas open). */
-    /* Fixed, not absolute: a floating layer's open and close motion carries
-       it past the window's foot (a menu rising from a bar at the bottom
-       starts a menu's height below it), and placed absolutely it lengthened
-       the document for those frames: a scrollbar came and went, the whole
-       page moved 10px sideways twice per open, and focus moving into the
-       menu scrolled the page to it. A fixed layer never adds to the
-       document's scroll. */
-    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
-  }: PopoverPrimitive.ContentProps &
+  }: Omit<PopoverPrimitive.ContentStaticProps, keyof LayerPlacement> &
+    LayerPlacement &
     PopoverContentLooks &
     FloatingSurfaceLooks & {
       portalProps?: WithoutChildrenOrChild<
@@ -189,12 +194,37 @@
   /* A popover is not modal: the page beside it keeps its presses and its
      focus. It traps the focus only where its site asks (`trapFocus`), and a
      press outside closes it, leaving the focus where that press put it
-     (floating-presence `pressedAway`). */
+     (floating-presence `pressedAway`). A press on the element it stands on,
+     when that is not its trigger (`customAnchor`), keeps it open. */
   const away = pressedAway({
     content: () => ref,
-    onInteractOutside: () => onInteractOutside,
+    onInteractOutside: () => (event: PointerEvent) => {
+      onInteractOutside?.(event);
+      const at =
+        typeof customAnchor === "string"
+          ? document.querySelector(customAnchor)
+          : customAnchor;
+      if (
+        at instanceof Element &&
+        event.target instanceof Node &&
+        at.contains(event.target)
+      ) {
+        event.preventDefault();
+      }
+    },
     onCloseAutoFocus: () => onCloseAutoFocus,
   });
+
+  /** Its layer's box: on its trigger, or the element its site names (anchored.svelte.ts). */
+  const layer = layerProps(() => ({
+    side,
+    align,
+    sideOffset,
+    alignOffset,
+    collisionPadding: inset,
+    customAnchor,
+    fixedSide,
+  }));
 
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping: once it has come in. What
@@ -243,14 +273,12 @@
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
      the page has its pointer back at the dismissal (floating-presence). -->
 <PopoverPortal {...portalProps}>
-  <PopoverPrimitive.Content
+  <PopoverPrimitive.ContentStatic
     style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
-    {strategy}
-    {align}
     class={cn(
       floatingSurface({ motion }),
-      "z-(--layer-float) flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 type-label outline-hidden",
+      "flex w-72 origin-(--kit-origin) flex-col gap-4 type-label outline-hidden",
       bare &&
         "border-current border-none bg-none bg-transparent p-0 shadow-none",
       popoverContentVariants({
@@ -263,18 +291,15 @@
         look,
       }),
       /* Its least and greatest width both, so whatever width its site
-         gives (a width of its own, or the room bits-ui measures) stands at
-         this one under the phone line. */
+         gives stands at this one under the phone line. */
       phoneWide &&
         "max-phone:min-w-[calc(100vw-2*var(--spacing-space-3))] max-phone:max-w-[calc(100vw-2*var(--spacing-space-3))]",
       className
     )}
-    collisionPadding={inset}
     data-slot="popover-content"
     forceMount
     onCloseAutoFocus={away.onCloseAutoFocus}
     onInteractOutside={away.onInteractOutside}
-    {sideOffset}
     {trapFocus}
     bind:ref
     {...restProps}
@@ -286,7 +311,8 @@
         {children}
         {forceMount}
         {snippet}
+        wrapper={layer}
       />
     {/snippet}
-  </PopoverPrimitive.Content>
+  </PopoverPrimitive.ContentStatic>
 </PopoverPortal>

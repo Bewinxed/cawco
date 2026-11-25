@@ -575,7 +575,6 @@
     }}
     side="bottom"
     sideOffset={placement.sideOffset}
-    strategy="fixed"
     trapFocus={false}
     bind:joined={
       () => barGlass.joined,

@@ -268,7 +268,16 @@
               "animation-range",
               // written after its -webkit- twin, which WebKit reads.
               "user-select",
+              // CSS anchor positioning, which every target engine ships
+              // (Chrome 125, Firefox 147, Safari 26; the owner's pick of
+              // 2026-11-25, kit floating layers on CSS anchors): the kit's
+              // floating layers stand on their anchors by it
+              // (components/ui/anchored.svelte.ts).
+              "position-anchor",
+              "position-area",
+              "position-try-fallbacks",
             ],
+            "allowAtRules": ["position-try"],
             "allowPropertyValues": {
               "text-wrap-style": ["pretty"],
               "background-clip": ["text"],

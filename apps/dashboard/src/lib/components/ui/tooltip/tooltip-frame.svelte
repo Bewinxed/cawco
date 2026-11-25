@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * The kit's Tooltip in a frame of its own (its states file's): open over
-   * the kit Button it names, drawn in place (the portal off) in a box that
-   * holds it (`contain: layout`), its words and the keys that do the same.
+   * the kit Button it names, drawn in place (the portal off) in a box with
+   * room for it, its words and the keys that do the same.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconSessionAdd } from "#lib/icons.js";

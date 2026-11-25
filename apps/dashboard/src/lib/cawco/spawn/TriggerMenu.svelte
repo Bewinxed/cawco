@@ -5,6 +5,7 @@
    * Its rows and their fill are concentric with the snug surface (The
    * Concentric Rule): its 12px less its 1px edge and 4px pad, `radius-well`.
    */
+  import type { AnchorSpot } from "#lib/components/ui/anchored.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
@@ -20,7 +21,7 @@
   }: {
     id: string;
     open: boolean;
-    anchor: { getBoundingClientRect: () => DOMRect } | null;
+    anchor: AnchorSpot | null;
     items: MenuItem[];
     index: number;
     onpick: (item: MenuItem) => void;

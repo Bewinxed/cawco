@@ -27,6 +27,7 @@
    */
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import type { AnchorPair } from "#lib/components/ui/anchored.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -196,25 +197,19 @@
    * Their first line names whose they are.
    */
   const sideFor = (): TipSide => (touch.current ? "top" : "right");
-  const rowOf = (id: string) => ({
-    getBoundingClientRect: () => {
-      const cell = document.querySelector<HTMLElement>(
-        `[data-usage-cell][data-account="${CSS.escape(id)}"]`
-      );
-      const grid = cell?.closest<HTMLElement>('[data-slot="wall"]');
-      if (!(cell && grid)) {
-        return new DOMRect();
-      }
-      const across = grid.getBoundingClientRect();
-      if (touch.current) {
-        const list = grid.closest<HTMLElement>("[data-accounts]");
-        const { top } = (list ?? grid).getBoundingClientRect();
-        return new DOMRect(across.x, top, across.width, 0);
-      }
-      const at = cell.getBoundingClientRect();
-      return new DOMRect(across.x, at.y, across.width, at.height);
-    },
-  });
+  /**
+   * The box a cell's tooltips stand on: across the cell's whole wall, along
+   * the cell's row; in the sheet, along the accounts' list, whose head it
+   * stands over (Tip `anchor`, a pair: kit anchored.svelte.ts).
+   */
+  const rowOf = (id: string): AnchorPair => {
+    const cell = `[data-usage-cell][data-account="${CSS.escape(id)}"]`;
+    const wallOf = `[data-slot="wall"]:has(${cell})`;
+    return {
+      x: wallOf,
+      y: touch.current ? `[data-accounts]:has(${cell})` : cell,
+    };
+  };
 
   /** Every account by the one name the strip and the popover show it by. */
   const names = $derived(shownNames(claude?.accounts ?? [], openCode));
@@ -861,20 +856,17 @@
   <!-- Its size follows what it lists (a provider arriving, a note going).
        In the popover and in the sheet alike the head and the foot stand
        still and the accounts between them scroll. -->
-  <!-- Never taller than the room bits-ui measures beside the strip (inside
-       its collision padding), less the popover's 1px edge above and below:
+  <!-- Never taller than the room beside the strip, as the popover's layer
+       caps it (anchored.svelte.ts; it shrinks inside the popover's column):
        the head and the foot stand still, and the accounts between them
        scroll. The sheet: as the popover, the controls at the touch floor,
        under the room of the kit's floating head (`--sheet-room`), since its
        head stands still over the accounts. -->
   <div
     class={[
-      "flex flex-col",
-      sheet
-        ? "max-h-none min-h-0 flex-auto pt-(--sheet-room)"
-        : "max-h-(--pop-max)",
+      "flex min-h-0 flex-col",
+      sheet && "max-h-none flex-auto pt-(--sheet-room)",
     ]}
-    style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
     style:--ring-ground="var(--color-bg)"
     {@attach morph()}
   >

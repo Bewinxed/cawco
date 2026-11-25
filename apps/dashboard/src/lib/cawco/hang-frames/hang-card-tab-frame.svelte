@@ -115,7 +115,7 @@
           alignOffset={place.offset}
           {anchor}
           aria-label={transcriptWords.sessionDetails}
-          as={Popover.Content}
+          as={Popover.ContentStatic}
           class="z-(--layer-float) w-(--hang-width)"
           collisionPadding={12}
           customAnchor={anchor}

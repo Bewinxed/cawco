@@ -77,7 +77,6 @@
     anchor?.focus({ preventScroll: true });
     return anchor !== null;
   }}
-  follows
   {open}
   width={340}
 >

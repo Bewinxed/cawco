@@ -218,7 +218,7 @@
         }}
         overflow="scroll"
         side="bottom"
-        style="--pop-w: {width}; --pop-max-h: var(--bits-popover-content-available-height)"
+        style="--pop-w: {width}; --pop-max-h: none"
         width="room"
         bind:ref={popover}
       >

@@ -3541,19 +3541,68 @@
    same in the dashboard and on a decision page (host.css imports this
    sheet). Pele's diagrams are lib/tokens/libraries.css's. */
 @layer components {
-  /* The cut the card comes down from behind (`hang`): its floating wrapper,
+  /* The cut the card comes down from behind (`hang`): its layer's box,
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
-     all the compositor has to play. In CSS, not the wrapper's own style,
-     which bits-ui writes whole on every placement; HangCard marks the
-     wrapper it draws (`data-hang`). A card that rises out of its anchor's
-     top (`data-hang="rises"`) is cut at its foot instead. */
-  [data-bits-floating-content-wrapper][data-hang] {
+     all the compositor has to play. HangCard marks the box it draws
+     (`data-hang`). A card that rises out of its anchor's top
+     (`data-hang="rises"`) is cut at its foot instead. */
+  [data-kit-layer][data-hang] {
     @apply clip-block-start;
   }
-  [data-bits-floating-content-wrapper][data-hang="rises"] {
+  [data-kit-layer][data-hang="rises"] {
     @apply clip-block-end;
   }
+}
+
+/* ---- A kit floating layer's box (components/ui/anchored.svelte.ts): fixed,
+   standing on its anchor by CSS anchor positioning, the script writing only
+   its area, margins and fallbacks. Hidden while its anchor is out of sight
+   (a trigger scrolled out of its scroller), as a layer cut off from what
+   opened it: `position-visibility`'s initial value in every engine
+   (Chromium and WebKit spell it `anchor-visible`, Firefox
+   `anchors-visible`), so it is left unwritten. Its surface fills it as a column, so a cap on the box (the
+   fallbacks below) caps the surface, which scrolls what it holds. */
+@layer components {
+  [data-kit-layer] {
+    position: fixed;
+    z-index: var(--layer-float);
+    display: flex;
+    flex-direction: column;
+    inset: auto;
+
+    & > [data-state] {
+      min-block-size: 0;
+    }
+  }
+}
+
+/* A floating surface's widest: the viewport less its layer's gutter each
+   side (`--kit-gutter`, anchored.svelte.ts). */
+@utility max-w-layer-room {
+  max-inline-size: calc(100vw - 2 * var(--kit-gutter, 0px));
+}
+
+/* The fallbacks a layer tries where its preferred place does not hold it
+   (anchored.svelte.ts `placeStyle`), each read through `--kit-offset` (its
+   distance off the anchor) and `--kit-gutter` (its distance off the
+   viewport's edges): spanning the viewport across or along, centred on the
+   anchor and kept inside the viewport, its height capped to the room. */
+@position-try --kit-span-block {
+  position-area: bottom span-all;
+  margin: var(--kit-offset) var(--kit-gutter) var(--kit-gutter);
+  max-block-size: calc(100% - var(--kit-offset) - var(--kit-gutter));
+}
+@position-try --kit-span-inline {
+  position-area: right span-all;
+  margin: var(--kit-gutter) var(--kit-gutter) var(--kit-gutter)
+    var(--kit-offset);
+  max-block-size: calc(100% - 2 * var(--kit-gutter));
+}
+@position-try --kit-below {
+  position-area: bottom span-all;
+  margin: var(--kit-offset) var(--kit-gutter) var(--kit-gutter);
+  max-block-size: calc(100% - var(--kit-offset) - var(--kit-gutter));
 }
 
 /* Zero-token house utilities for removed single-use theme tokens. */

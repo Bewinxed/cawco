@@ -8,6 +8,7 @@
    * `onleadremove`.
    */
   import { type Component, mount, unmount } from "svelte";
+  import type { AnchorSpot } from "#lib/components/ui/anchored.svelte.js";
   import HarnessLogo from "../HarnessLogo.svelte";
   import type { LeadChip, MenuItem } from "./ns-types";
   import TriggerMenu from "./TriggerMenu.svelte";
@@ -82,23 +83,22 @@
   const grown = $derived(Boolean(engaged || value || menu));
 
   /**
-   * The menu stands on the caret where the caret is now, measured each time
-   * the popover places itself. Measured once, as the trigger was typed, a
-   * `/` typed while the editor was still growing to its grown height (the dialog
-   * re-centring 38px up as it did) left the menu 38px under the caret for
-   * good. The editor is the anchor's `contextElement`: floating-ui's
-   * autoUpdate observes it for size and movement, and its scrolling
-   * ancestors, so the menu follows whatever moves the caret.
+   * The menu stands on the caret, a spot inside the editor (kit
+   * anchored.svelte.ts `AnchorSpot`): read where it is as the menu opens
+   * and as the trigger's text changes, and kept at that offset from the
+   * editor's corner by CSS anchor positioning, so the menu follows the
+   * editor whatever moves it (a `/` typed while the editor was still
+   * growing to its grown height, the dialog re-centring 38px up as it did).
    */
-  const anchor = $derived.by(() => {
+  const anchor = $derived.by((): AnchorSpot | null => {
     const at = menu;
     const editor = element;
     if (!(at && editor)) {
       return null;
     }
     return {
-      contextElement: editor,
-      getBoundingClientRect: () => {
+      within: editor,
+      rect: () => {
         const range = document.createRange();
         range.setStart(at.node, at.end);
         range.collapse(true);

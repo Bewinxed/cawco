@@ -16,9 +16,8 @@
  * size it was drawn at, and nothing around it ever sees the new size first.
  * Started from a ResizeObserver callback instead, after layout had already
  * reported the new size to every observer, the tween's first frame resized
- * the container back inside that delivery. Whatever watches an ancestor (the
- * floating wrapper bits-ui hands floating-ui's `autoUpdate`, a morph around
- * this one) was then resized at a depth the delivery had already passed,
+ * the container back inside that delivery. Whatever watches an ancestor (a
+ * floating layer's box, a morph around this one) was then resized at a depth the delivery had already passed,
  * and the browser reported a ResizeObserver loop.
  *
  * What a child placed out of the flow by its own style does (contents
@@ -232,10 +231,11 @@ export interface Morph {
    */
   on?: readonly string[];
   /**
-   * Placed by its parent: a floating wrapper that floating-ui measures and
-   * places (bits-ui's, round a popover's content). The parent is held at the
-   * box's end size for the tween's length, so the box is placed once, where
-   * it lands, and the placement's own glide runs to that place. Measured as
+   * Placed by its parent: a floating layer's box (kit anchored.svelte.ts,
+   * round a popover's content), which CSS stands on its anchor at its size.
+   * The parent is held at the box's end size for the tween's length, so the
+   * box is placed once, where it lands, and the placement's own glide runs
+   * to that place. Measured as
    * the box passed through each size, a surface aligned by its end edge, or
    * shifted off the screen's edge, was placed again on every frame: its
    * glide was restarted each time, chasing a place that kept moving, and
@@ -648,7 +648,7 @@ export function morph({
             { duration: 0, fill: "forwards" }
           )
         );
-        // The parent floating-ui places held at the end size (`placed`):
+        // The layer's box round it held at the end size (`placed`):
         // its `min-width: max-content` let go, so the box inside it is
         // free to pass through every size.
         const parent = placed ? node.parentElement : null;

@@ -145,7 +145,7 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="max-w-(--bits-popover-content-available-width)"
+    class="max-w-layer-room"
     gap="tight"
     width="widest"
   >

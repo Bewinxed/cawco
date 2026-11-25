@@ -6,7 +6,8 @@
    * panel's) or over its top (`top`, a head's group), and the menu of one
    * of its items open: risen out of the glass's top from the foot, hung
    * from its foot from the top. Stand-in rows, no store read; the menu is
-   * portaled as every BarMenu is, placed on the glass by floating-ui.
+   * portaled as every BarMenu is, standing on the glass by CSS anchor
+   * positioning (anchored.svelte.ts).
    */
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {

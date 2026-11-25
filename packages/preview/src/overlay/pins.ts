@@ -16,7 +16,7 @@
  * answered and the person hasn't looked (the needs-you dot, echoing three
  * loops, then still).
  *
- * A pill stands on its element by CSS anchor positioning (anchor-names.ts):
+ * A pill stands on its element by CSS anchor positioning (core anchor-names.ts):
  * the element takes the pill's anchor name, and the pill's tail corner
  * stands on the pressed point, written as percentages of the element's box
  * (`anchor(<percentage>)`), so the browser moves it with the element through
@@ -36,7 +36,7 @@
  * too ({@link PILL_SHEET}); a pin on ink stands past its group's top-right
  * corner, anchored to the element the group stands on. A browser whose
  * anchors don't follow their transforms (Firefox, Safari 26:
- * anchor-names.ts `anchorsFollowTransforms`) has each pill moved by the
+ * core anchor-names.ts `anchorsFollowTransforms`) has each pill moved by the
  * distance its element's transforms move it, measured as the page changes.
  *
  * Every pin is placed again from its anchor whenever the page changes (core
@@ -60,6 +60,15 @@
  * each pin's picture is cropped (`cropOf`).
  */
 
+import {
+  type Anchorable,
+  anchorable,
+  anchorName,
+  nameOff,
+  nameOn,
+  shiftTranslate,
+  transformShifts,
+} from "@cawco/core/anchor-names";
 import { breathPhase } from "@cawco/core/breath";
 import {
   bringInto,
@@ -89,14 +98,6 @@ import {
 } from "@cawco/core/comments/model";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
-import {
-  type Anchorable,
-  anchorable,
-  anchorName,
-  anchorsFollowTransforms,
-  nameOff,
-  nameOn,
-} from "./anchor-names";
 import { artifact, PLACED } from "./artifact";
 import { type Box, clipOf, meets, pageBox, rectOf } from "./frames";
 import { fitToPage, footKept, insetFoot } from "./ink";
@@ -319,14 +320,6 @@ cawco-pin-dot {
 
 cawco-pin-echo {
   opacity: 0;
-}
-
-cawco-pin-probe {
-  all: initial;
-  position: fixed;
-  inset: anchor(inside);
-  visibility: hidden;
-  pointer-events: none;
 }
 `;
 
@@ -1251,39 +1244,30 @@ export function startPins(deps: PinsDeps): Pins {
 
   /**
    * In a browser whose anchors stand where their element is laid out, not
-   * where its transforms draw it (anchor-names.ts
+   * where its transforms draw it (core anchor-names.ts
    * `anchorsFollowTransforms`), each row moved by as far as its element's
-   * transforms move its point: a probe on each element reads where it is
-   * laid out, all in one layout, beside where it is drawn. Every other
-   * browser lays every row by CSS alone.
+   * transforms move its point (core anchor-names.ts `transformShifts`).
+   * Every other browser lays every row by CSS alone.
    */
   const followTransforms = (drawn: Row[]) => {
-    if (drawn.length === 0 || anchorsFollowTransforms(layer)) {
-      return;
-    }
-    const probes = drawn.flatMap((row) => {
+    const standing = drawn.flatMap((row) => {
       const kept = rows.get(row.anchor);
-      if (!kept) {
-        return [];
-      }
-      const probe = row.anchor.ownerDocument.createElement("cawco-pin-probe");
-      probe.style.setProperty("position-anchor", kept.name);
-      layerIn(row.anchor.ownerDocument).append(probe);
-      return [{ box: kept.box, probe, row }];
+      return kept
+        ? [
+            {
+              anchor: row.anchor,
+              box: kept.box,
+              name: kept.name,
+              point: row.point,
+            },
+          ]
+        : [];
     });
-    const shifts = probes.map(({ probe, row }) => {
-      const laid = probe.getBoundingClientRect();
-      const drawnAt = row.anchor.getBoundingClientRect();
-      const { x, y } = row.point;
-      return {
-        x: drawnAt.x + x * drawnAt.width - (laid.x + x * laid.width),
-        y: drawnAt.y + y * drawnAt.height - (laid.y + y * laid.height),
-      };
-    });
-    for (const [i, { box, probe }] of probes.entries()) {
-      probe.remove();
-      const { x, y } = shifts[i];
-      const by = Math.abs(x) < 0.5 && Math.abs(y) < 0.5 ? "" : `${x}px ${y}px`;
+    const shifts = transformShifts(standing, (anchor) =>
+      layerIn(anchor.ownerDocument)
+    );
+    for (const [i, { box }] of standing.entries()) {
+      const by = shiftTranslate(shifts[i]);
       if (box.style.translate !== by) {
         box.style.translate = by;
       }

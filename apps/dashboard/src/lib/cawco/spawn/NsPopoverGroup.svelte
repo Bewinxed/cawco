@@ -13,16 +13,13 @@
   import { Popover } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { layerProps } from "#lib/components/ui/anchored.svelte.js";
   import {
     drawn,
     own,
     pressable,
   } from "#lib/components/ui/floating-presence.js";
-  import {
-    glidePopoverVariants,
-    placementGlide,
-    popoverRoom,
-  } from "#lib/components/ui/glide-popover/index.js";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { whenIdle } from "#lib/platform/idle-build.svelte.js";
@@ -51,11 +48,6 @@
   let shown = $state.raw<PopoverMember | undefined>(undefined);
   /** Set once the open surface retargets a sibling, cleared when it closes. */
   let morphing = $state(false);
-  /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
-  let room = $state<string>();
-  const roomed = popoverRoom((next) => {
-    room = next;
-  });
 
   /** The member the surface was last open on; cleared when it closes. */
   let last: PopoverMember | undefined;
@@ -111,8 +103,18 @@
     });
   });
   const open = $derived(active !== undefined);
-  /** The wrapper's glide to a sibling's placement (glide-popover `placementGlide`). */
-  const glides = placementGlide(() => morphing);
+  /**
+   * Its layer's box: on the open member's trigger, gliding to a sibling's
+   * from where it was drawn while the surface morphs (`data-anchor-glide`,
+   * kit anchored.svelte.ts).
+   */
+  const layer = layerProps(() => ({
+    side: "bottom",
+    sideOffset: 6,
+    align: surface?.align ?? "start",
+    collisionPadding: inset,
+    customAnchor: surface?.trigger ?? undefined,
+  }));
 
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
   /**
@@ -174,18 +176,14 @@
   >
     <Popover.Portal>
       {#if surface}
-        <Popover.Content
+        <Popover.ContentStatic
           data-ns-pop
           forceMount
           preventOverflowTextSelection={false}
-          strategy="fixed"
-          align={surface.align}
           class={cn(
             "ns-theme",
             glidePopoverVariants({ height: surface?.tall ? "room" : "cap" })
           )}
-          collisionPadding={inset}
-          customAnchor={surface.trigger}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             if (surface?.onclosefocus?.()) {
@@ -214,12 +212,10 @@
               event.preventDefault();
             }
           }}
-          side="bottom"
-          sideOffset={6}
           style={`--ns-pop-width:${popoverWidth(surface.width)}`}
           trapFocus={surface.trapFocus}
         >
-          {#snippet child({ props, wrapperProps, open })}
+          {#snippet child({ props, open })}
             {@const seen = drawn(props)}
             <!-- Closing, it lets presses through to the page (floating-presence).
                  It glides to each new placement while the surface morphs.
@@ -227,11 +223,11 @@
                  content built, unseen, unrendered and out of reach: the next
                  press draws it as it was left, nothing mounted. -->
             <div
-              {...wrapperProps}
+              {...layer}
               class={seen ? undefined : "invisible content-visibility-hidden"}
+              data-anchor-glide={morphing || undefined}
               inert={!seen}
               style:pointer-events={pressable(open)}
-              {@attach glides}
             >
               <!-- The label names what the trigger holds, so it changes as the
                  reader types or picks inside the surface. It is set here, on
@@ -241,30 +237,24 @@
               <div
                 {...own(props)}
                 aria-label={surface?.label}
-                data-room={room}
                 id={`${surface?.id}-popover`}
                 role="presentation"
-                style:--ns-pop-room={room}
                 style:pointer-events={pressable(open)}
-                {@attach roomed}
                 {@attach surface?.rows
                   ? highlight({ rows: surface.rows })
                   : undefined}
                 {@attach morph({
                   ms: dur("--duration-slow"),
                   followUnfolds: true,
-                  on: ["data-room"],
                   placed: true,
                   width: true,
                 })}
               >
                 <!-- The surface tweens to its content's next size (motion/
                      morph), width and height, as it glides to a sibling or
-                     its own list filters, and to its next cap as its room
-                     changes under a new trigger (`data-room`). The size it
-                     tweens to is read at the new trigger's width and cap, and
-                     the wrapper floating-ui places is held at it (`placed`),
-                     so the wrapper glides once (`glides`), to where the
+                     its own list filters. The size it tweens to is read at
+                     the new trigger's width, and its layer's box is held at
+                     it (`placed`), so the box glides once, to where the
                      surface lands, on the size tween's clock. A question
                      unfolding in it (Full Send's) is the one motion, the
                      surface laid out at its size frame by frame. A fresh
@@ -295,7 +285,7 @@
               </div>
             </div>
           {/snippet}
-        </Popover.Content>
+        </Popover.ContentStatic>
       {/if}
     </Popover.Portal>
   </PopoverRoot>

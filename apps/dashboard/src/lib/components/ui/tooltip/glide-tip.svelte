@@ -8,21 +8,16 @@
    * its place, its width and its height move together on one clock, and its
    * words morph as the house swaps words (MorphText).
    *
-   * Why the shape moves on the tooltip itself, not its floating wrapper:
-   * bits-ui places the wrapper with floating-ui, centred on the item, from
-   * the wrapper's size, and re-places it whenever that size changes (its
-   * `autoUpdate` observes it). Gliding the wrapper's transform while the
-   * words changed its size snapped the width to the new words on the first
-   * frame (76 px to 43 px, "Next state" to "Map") and only then slid; and a
-   * width tweened under a gliding wrapper re-placed it every frame, each
-   * placing restarting the glide. Here the wrapper is placed at once,
-   * centred on the new item, every frame at the width drawn then; the
-   * tooltip stands off it by how far its centre was from the new item's and
-   * closes that distance (its `transform`; its fade in owns its `translate`,
-   * kit-tip-in, whose fill would hold it), while its width and height go
-   * from the size drawn to the new words' size, both on one clock over
-   * `--duration-fast` on the drawer's curve (Web Animations, so each starts
-   * from the values given, not from a style the page must lay out first).
+   * The shape moves on the tooltip itself, inside its layer's box, which
+   * stands on the item by CSS anchor positioning (anchored.svelte.ts): the
+   * box moves to the new item at once, centred on it at the width drawn
+   * then; the tooltip stands off it by how far its centre was from the new
+   * item's and closes that distance (its `transform`; its fade in owns its
+   * `translate`, kit-tip-in, whose fill would hold it), while its width and
+   * height go from the size drawn to the new words' size, both on one clock
+   * over `--duration-fast` on the drawer's curve (Web Animations, so each
+   * starts from the values given, not from a style the page must lay out
+   * first).
    * So its centre and its width each go straight from the last item's to
    * this one's, together; caught mid-way, it starts again from where it is
    * drawn. The words' size is `sizer`'s, the same words laid out unseen,
@@ -83,12 +78,9 @@
    * Its item stands still: the tooltip is built (`shown`) only once nothing
    * moves the item, and a frame past the open at the soonest. A row the
    * surface focused as it opened (a popover's list opened by a key) moves
-   * with the surface's entrance: built then, the tooltip's floating layer
-   * was mounted in the frames the surface rose in, and floating-ui placed it
-   * again on every frame of the rise, its layout-shift observer seeing the
-   * row move (the accounts tray, main thread slowed 4×: frames dropped
-   * through the entrance). Once open, it glides from item to item without
-   * waiting again.
+   * with the surface's entrance: built then, the tooltip's layer read the
+   * side it took off a row still moving, and stood its rise from there.
+   * Once open, it glides from item to item without waiting again.
    */
   let standing = $state(false);
   const shown = $derived(open && standing);
@@ -222,8 +214,8 @@
       ? document.documentElement.clientWidth
       : document.documentElement.clientHeight;
     const size = across ? from.width : from.height;
-    // Where its wrapper is placed this frame: centred on the item at the
-    // size held, kept CLEAR of the viewport's edges as floating-ui keeps it.
+    // Where its layer's box stands this frame: centred on the item at the
+    // size held, kept CLEAR of the viewport's edges (anchored.svelte.ts).
     const lands = Math.min(
       Math.max(
         across ? to.left + to.width / 2 : to.top + to.height / 2,
@@ -300,7 +292,12 @@
       <!-- 8px clear of the viewport's edges: it never touches one. Its words
            stand in its centre, so a box narrower or wider than them for a
            frame of the glide clips them evenly. -->
-      <Content collisionPadding={CLEAR} side={payload.side} bind:ref={tip}>
+      <Content
+        collisionPadding={CLEAR}
+        customAnchor={item}
+        side={payload.side}
+        bind:ref={tip}
+      >
         <!-- The words, clipped to the box (never its arrow, which stands
              outside it) and centred in it, so a box narrower or wider than
              them for a frame of the glide cuts them evenly; MorphText's

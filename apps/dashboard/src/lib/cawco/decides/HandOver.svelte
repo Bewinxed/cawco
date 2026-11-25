@@ -2,7 +2,7 @@
   /** The popover's width for `count` rows: two across where two fit, else one, never wider than the room beside the tile (bits-ui measures it). */
   export const handOverWidth = (count: number): string => {
     const across = Math.min(2, Math.max(1, count));
-    return `min(calc(${across} * calc(var(--spacing) * 68) + ${across - 1} * var(--spacing-space-3) + 2 * var(--spacing-space-2) + 2px), var(--bits-popover-content-available-width, calc(100vw - 2 * var(--spacing-space-3))))`;
+    return `min(calc(${across} * calc(var(--spacing) * 68) + ${across - 1} * var(--spacing-space-3) + 2 * var(--spacing-space-2) + 2px), calc(100vw - 2 * var(--kit-gutter)))`;
   };
 </script>
 

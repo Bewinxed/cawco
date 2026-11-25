@@ -32,7 +32,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { rise } from "#lib/components/ui/elevated/index.js";
+  import type { LayerPlacement } from "#lib/components/ui/anchored.svelte.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import {
@@ -46,9 +46,13 @@
 
   let {
     ref = $bindable(null),
+    side = "bottom",
     sideOffset = 4,
     align = "start",
+    alignOffset = 0,
     collisionPadding,
+    customAnchor,
+    fixedSide = false,
     portalProps,
     class: className,
     forceMount = false,
@@ -61,11 +65,10 @@
     child: callerChild,
     children,
     /* Off: see popover-content.svelte. */
-    /* Fixed: see popover-content.svelte. */
-    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
-  }: DropdownMenuPrimitive.ContentProps &
+  }: Omit<DropdownMenuPrimitive.ContentStaticProps, keyof LayerPlacement> &
+    LayerPlacement &
     DropdownMenuContentLooks &
     FloatingSurfaceLooks & {
       portalProps?: WithoutChildrenOrChild<
@@ -87,41 +90,52 @@
         : 0)
   );
 
-  const away = menuSurface({
-    content: () => ref,
-    onInteractOutside: () => onInteractOutside,
-    onCloseAutoFocus: () => onCloseAutoFocus,
-  });
-
-  /** One step above the surface it opens in (theme.css `surface`). */
-  const surfaceLevel = rise();
+  /** Its layer's box: on its trigger (anchored.svelte.ts). */
+  const surface = menuSurface(
+    {
+      content: () => ref,
+      onInteractOutside: () => onInteractOutside,
+      onCloseAutoFocus: () => onCloseAutoFocus,
+    },
+    () => ({
+      side,
+      align,
+      sideOffset,
+      alignOffset,
+      collisionPadding: inset,
+      customAnchor,
+      fixedSide,
+    })
+  );
 </script>
 
 <!-- Mounted and drawn as the popover is (floating-body). -->
 <DropdownMenuPortal {...portalProps}>
-  <DropdownMenuPrimitive.Content
-    style="--surface-level: {surfaceLevel}"
+  <DropdownMenuPrimitive.ContentStatic
+    style="--surface-level: {surface.level}"
     {preventOverflowTextSelection}
-    {strategy}
-    {align}
     class={cn(
       floatingSurface({ motion }),
-      "relative z-(--layer-float) p-space-1 max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      "relative p-space-1 w-(--kit-anchor-width) min-w-48 origin-(--kit-origin) overflow-y-auto overflow-x-hidden outline-none",
       dropdownMenuContentVariants({ width, min }),
       className
     )}
-    collisionPadding={inset}
     data-slot="dropdown-menu-content"
     forceMount
-    onCloseAutoFocus={away.onCloseAutoFocus}
-    onInteractOutside={away.onInteractOutside}
+    onCloseAutoFocus={surface.onCloseAutoFocus}
+    onInteractOutside={surface.onInteractOutside}
     {preventScroll}
-    {sideOffset}
     bind:ref
     {...restProps}
   >
     {#snippet child(snippet)}
-      <FloatingBody {callerChild} {children} {forceMount} {snippet} />
+      <FloatingBody
+        {callerChild}
+        {children}
+        {forceMount}
+        {snippet}
+        wrapper={surface.layer}
+      />
     {/snippet}
-  </DropdownMenuPrimitive.Content>
+  </DropdownMenuPrimitive.ContentStatic>
 </DropdownMenuPortal>

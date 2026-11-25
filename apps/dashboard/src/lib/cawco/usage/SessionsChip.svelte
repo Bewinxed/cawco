@@ -29,6 +29,7 @@
    * goes to the first session and the house ring shows.
    */
   import { MediaQuery } from "svelte/reactivity";
+  import type { AnchorPair } from "#lib/components/ui/anchored.svelte.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
 
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
@@ -68,20 +69,11 @@
     row?.closest<HTMLElement>("[data-flyover-span]") ?? null
   );
   /** The row, across its grid's whole width where it stands in one. */
-  const anchor = $derived.by(() => {
+  const anchor = $derived.by((): HTMLElement | AnchorPair | null => {
     if (!(row && span)) {
       return row;
     }
-    const cell = row;
-    const grid = span;
-    return {
-      contextElement: cell,
-      getBoundingClientRect: () => {
-        const at = cell.getBoundingClientRect();
-        const across = grid.getBoundingClientRect();
-        return new DOMRect(across.x, at.y, across.width, at.height);
-      },
-    };
+    return { x: span, y: row };
   });
   const keepFocus = (event: Event) => {
     if (byPointer) {
@@ -192,7 +184,7 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--bits-popover-anchor-width)"
+    class="w-(--kit-anchor-width)"
     customAnchor={anchor}
     data-sessions-flyover
     frame="raised"

@@ -28,8 +28,8 @@
  * A surface's `pointer-events` while it closes: none, so a press on the
  * place it is leaving from lands on the page under it, as one anywhere else
  * does. Open: auto, said here and not left to bits-ui. A floating surface
- * says it on its wrapper too (bits-ui's `wrapperProps`, the box floating-ui
- * places): the wrapper is as large as the surface, and left at auto it took
+ * says it on its layer's box too (`data-kit-layer`, anchored.svelte.ts, the box
+ * that stands it on its anchor): the box is as large as the surface, and left at auto it took
  * the press the closing surface let through.
  *
  * bits-ui writes `pointer-events: auto` inline on every content and
@@ -84,10 +84,7 @@ export function pressedAway(site: {
       // A press on another floating surface (its own submenu, a menu it
       // opened) is no press on the page: that surface handles the focus.
       const target = event.target instanceof Element ? event.target : null;
-      away = !(
-        event.defaultPrevented ||
-        target?.closest("[data-bits-floating-content-wrapper]")
-      );
+      away = !(event.defaultPrevented || target?.closest("[data-kit-layer]"));
       // Its trigger names it only while it is open (bits-ui writes
       // `aria-controls` then): read now, before the close.
       const surface = site.content();

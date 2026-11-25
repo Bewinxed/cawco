@@ -487,7 +487,7 @@
         !(target instanceof Element) ||
         card.contains(target) ||
         target.closest('[data-session-tabs] [data-slot="tab"]') ||
-        target.closest("[data-bits-floating-content-wrapper]")
+        target.closest("[data-kit-layer]")
       ) {
         return;
       }
@@ -546,15 +546,16 @@
   // The morph mark changes as the surface retargets. It is set on the
   // element: as a prop of the popover's content the change re-mounts
   // bits-ui's focus scope, which runs its close auto-focus on a surface
-  // that is still open. The card's floating wrapper (HangCard draws it) is
-  // marked the card's, and while the card glides it says so too: the
-  // wrapper's move is the glide (the styles below).
+  // that is still open. The card's layer's box (HangCard draws it) is
+  // marked the card's, and while the card glides it says so too: the box
+  // moves to the new tab from where it was drawn (`data-anchor-glide`, kit
+  // anchored.svelte.ts).
   $effect(() => {
     const card = cardEl;
-    const wrapper = card?.parentElement;
+    const box = card?.parentElement;
     card?.toggleAttribute("data-morph", morphing);
-    wrapper?.setAttribute("data-session-details", "");
-    wrapper?.toggleAttribute("data-details-morph", morphing);
+    box?.setAttribute("data-session-details", "");
+    box?.toggleAttribute("data-anchor-glide", morphing);
   });
   function hoverTab(
     id: string,
@@ -1865,7 +1866,7 @@
       alignOffset={cardPlace ? cardPlace.offset : 0}
       anchor={detailAnchor}
       aria-label={transcriptWords.sessionDetails}
-      as={Popover.Content}
+      as={Popover.ContentStatic}
       collisionPadding={12}
       customAnchor={detailAnchor}
       folded={takeFolded}

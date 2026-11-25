@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * The modal's popover shell: a portaled bits-ui Popover anchored to its
-   * trigger (or a caret rect), collision-handled, scaled from the trigger side,
+   * The modal's popover shell: a portaled bits-ui Popover standing on its
+   * trigger (or the element its site names) by CSS anchor positioning (kit
+   * anchored.svelte.ts), turned where it would not fit, scaled from the trigger side,
    * and capped rather than full-screen on small screens. Decision §8.6: the design's
    * `fixedOrigin` maths is unnecessary here because the content is portaled.
    *
@@ -18,14 +19,15 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
   import {
+    type AnchorSpot,
+    layerProps,
+  } from "#lib/components/ui/anchored.svelte.js";
+  import {
     drawn,
     own,
     pressable,
   } from "#lib/components/ui/floating-presence.js";
-  import {
-    glidePopoverVariants,
-    popoverRoom,
-  } from "#lib/components/ui/glide-popover/index.js";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { whenIdle } from "#lib/platform/idle-build.svelte.js";
@@ -59,7 +61,6 @@
     triggerData = {},
     haspopup,
     rows,
-    follows = false,
     prebuild = false,
     ...rest
   }: {
@@ -86,7 +87,7 @@
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
     /**
-     * As tall as the room floating-ui leaves it, past the form's cap: a
+     * As tall as the room on its side of its trigger, past the form's cap: a
      * surface whose list is its subject (the location's repositories), so
      * the list scrolls alone, never inside a scrolling surface.
      */
@@ -96,7 +97,7 @@
      * round a menu whose rows carry their own (`snug`, the trigger menu).
      */
     pad?: "roomy" | "snug";
-    anchor?: { getBoundingClientRect: () => DOMRect } | HTMLElement | null;
+    anchor?: HTMLElement | AnchorSpot | null;
     label?: string;
     triggerClass?: string;
     /**
@@ -109,12 +110,6 @@
     haspopup?: "listbox" | "menu";
     /** The rows the hover ghost glides between (components/ui/highlight). */
     rows?: string;
-    /**
-     * Its anchor moves by transform (a row in the transcript as it re-anchors
-     * and unfolds), which no scroll or resize tells it of: placed again on
-     * every frame while it is open (bits-ui `updatePositionStrategy`).
-     */
-    follows?: boolean;
     "aria-label"?: string;
     /** Its content is built while the page is idle, before any press opens it: in a group, the group's surface builds it (`PopoverMember.prebuild`); alone, its own. */
     prebuild?: boolean;
@@ -122,11 +117,14 @@
 
   /** Its inset from the screen's edge (`screenInset`). */
   const inset = $derived(screenInset());
-  /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
-  let room = $state<string>();
-  const roomed = popoverRoom((next) => {
-    room = next;
-  });
+  /** Its layer's box: on its trigger, or the element its site names (kit anchored.svelte.ts). */
+  const layer = layerProps(() => ({
+    side: "bottom",
+    sideOffset: 6,
+    align,
+    collisionPadding: inset,
+    customAnchor: anchor ?? undefined,
+  }));
 
   /**
    * Inside an NsPopoverGroup this is only a trigger: the group owns the one
@@ -241,23 +239,29 @@
     {/if}
     <PopoverPrimitive.Portal>
       {#if built || open}
-        <PopoverPrimitive.Content
+        <PopoverPrimitive.ContentStatic
           forceMount
           preventOverflowTextSelection={false}
-          strategy="fixed"
           data-ns-pop
           data-fit={fit || undefined}
-          {align}
           aria-label={rest["aria-label"]}
           class={cn(
             "ns-theme",
             glidePopoverVariants({ pad, height: tall ? "room" : "cap" })
           )}
-          collisionPadding={inset}
-          customAnchor={anchor}
           id={`${id}-popover`}
           onCloseAutoFocus={(event) => {
             if (onclosefocus?.()) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            // A press on the element it stands on keeps it, as on its trigger.
+            if (
+              anchor instanceof HTMLElement &&
+              event.target instanceof Node &&
+              anchor.contains(event.target)
+            ) {
               event.preventDefault();
             }
           }}
@@ -266,20 +270,15 @@
               event.preventDefault();
             }
           }}
-          side="bottom"
-          sideOffset={6}
           style={`--ns-pop-width:${popoverWidth(width)};--ns-pop-gap:${gap}px`}
           {trapFocus}
-          updatePositionStrategy={follows ? "always" : "optimized"}
         >
-          {#snippet child({ props, wrapperProps, open })}
-            <!-- Seen from the flush that opens it, so it turns visible in the
-               style pass floating-ui's first read takes, not one of its own. -->
+          {#snippet child({ props, open })}
             {@const seen = open || drawn(props)}
             <!-- Closing, it lets presses through to the page (floating-presence).
                Shut and kept, it stands unseen and out of reach. -->
             <div
-              {...wrapperProps}
+              {...layer}
               class={seen ? undefined : "invisible"}
               inert={!seen}
               style:pointer-events={pressable(open)}
@@ -288,9 +287,7 @@
                 {...own(props)}
                 id={`${id}-popover`}
                 role="presentation"
-                style:--ns-pop-room={room}
                 style:pointer-events={pressable(open)}
-                {@attach roomed}
                 {@attach rows ? highlight({ rows }) : undefined}
                 {@attach morph({ followUnfolds: true })}
               >
@@ -298,7 +295,7 @@
               </div>
             </div>
           {/snippet}
-        </PopoverPrimitive.Content>
+        </PopoverPrimitive.ContentStatic>
       {/if}
     </PopoverPrimitive.Portal>
   </PopoverRoot>

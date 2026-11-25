@@ -1,4 +1,3 @@
-import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { tv } from "#lib/utils.js";
 
 /**
@@ -25,11 +24,11 @@ import { tv } from "#lib/utils.js";
  * every width, a phone's included, so the phone's width stands only where
  * neither does. Its width is the caller's `--ns-pop-width` (a token's length
  * or pixels), its rows' gap `--ns-pop-gap`. Its height is held to the room
- * floating-ui leaves it a frame after floating-ui says so (`--ns-pop-room`,
- * `popoverRoom`).
+ * on its side of its trigger by its layer's box (kit anchored.svelte.ts),
+ * which caps it where it would run past the screen.
  */
 export const glidePopoverVariants = tv({
-  base: "relative z-(--layer-float) grid max-h-[min(calc(var(--spacing)_*_110),var(--ns-pop-room,var(--bits-popover-content-available-height)))] w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-var(--spacing-space-8)))] origin-[var(--bits-popover-content-transform-origin,top_left)] translate-0 scale-100 grid-cols-1 content-start gap-(--ns-pop-gap,0px) overflow-auto rounded-lg bg-bg p-space-2 opacity-100 shadow-lg ring ring-ui-2 outline-off transition-[opacity] duration-(--duration-slow) ease-drawer not-data-fit:has-[[data-slot=perms][data-embedded=true]]:w-max not-data-fit:has-[[data-slot=perms][data-embedded=true]]:max-w-[calc(100vw-var(--spacing-space-8))] data-fit:max-h-none data-fit:w-max data-fit:max-w-[calc(100vw-2*var(--spacing-space-3))] data-fit:min-w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-2*var(--spacing-space-3)))] data-fit:overflow-visible motion-safe:transition-[opacity,scale,translate] motion-safe:data-[state=closed]:animate-ns-pop-out motion-safe:data-[state=open]:animate-ns-pop-in max-phone:not-data-fit:max-h-[min(calc(var(--spacing)_*_105),55dvh,var(--ns-pop-room,var(--bits-popover-content-available-height,55dvh)))] max-phone:not-data-fit:not-has-[[data-slot=perms][data-embedded=true]]:w-[calc(100vw-2*var(--spacing-space-3))] coarse:[:where(&_button:not([data-slot=button]))]:min-h-row",
+  base: "relative z-(--layer-float) grid max-h-[calc(var(--spacing)_*_110)] w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-var(--spacing-space-8)))] origin-[var(--kit-origin,top_left)] translate-0 scale-100 grid-cols-1 content-start gap-(--ns-pop-gap,0px) overflow-auto rounded-lg bg-bg p-space-2 opacity-100 shadow-lg ring ring-ui-2 outline-off transition-[opacity] duration-(--duration-slow) ease-drawer not-data-fit:has-[[data-slot=perms][data-embedded=true]]:w-max not-data-fit:has-[[data-slot=perms][data-embedded=true]]:max-w-[calc(100vw-var(--spacing-space-8))] data-fit:max-h-none data-fit:w-max data-fit:max-w-[calc(100vw-2*var(--spacing-space-3))] data-fit:min-w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-2*var(--spacing-space-3)))] data-fit:overflow-visible motion-safe:transition-[opacity,scale,translate] motion-safe:data-[state=closed]:animate-ns-pop-out motion-safe:data-[state=open]:animate-ns-pop-in max-phone:not-data-fit:max-h-[min(calc(var(--spacing)_*_105),55dvh)] max-phone:not-data-fit:not-has-[[data-slot=perms][data-embedded=true]]:w-[calc(100vw-2*var(--spacing-space-3))] coarse:[:where(&_button:not([data-slot=button]))]:min-h-row",
   variants: {
     /**
      * Its inset: the sheet's own (`roomy`), or the ladder's 4px round a menu
@@ -37,139 +36,16 @@ export const glidePopoverVariants = tv({
      */
     pad: { roomy: "", snug: "p-space-1" },
     /**
-     * Its height's cap: the form's own (`cap`), or the whole room
-     * floating-ui leaves it (`room`), for a surface whose list is its
-     * subject and would otherwise scroll inside a scroller (the location's
+     * Its height's cap: the form's own (`cap`), or the whole room on its
+     * side of its trigger (`room`, its layer's box's cap: kit
+     * anchored.svelte.ts), for a surface whose list is its subject and
+     * would otherwise scroll inside a scroller (the location's
      * repositories).
      */
     height: {
       cap: "",
-      room: "max-h-(--ns-pop-room,var(--bits-popover-content-available-height)) max-phone:not-data-fit:max-h-(--ns-pop-room,var(--bits-popover-content-available-height,55dvh))",
+      room: "max-h-none max-phone:not-data-fit:max-h-[55dvh]",
     },
   },
   defaultVariants: { pad: "roomy", height: "cap" },
 });
-
-/** bits-ui's available height on the floating wrapper (use-floating-layer `wrapperProps`). */
-const AVAILABLE_HEIGHT = "--bits-floating-available-height";
-/** A length in pixels: bits-ui writes `undefinedpx` until floating-ui has measured. */
-const PX = /^-?\d+(?:\.\d+)?px$/u;
-
-/**
- * The room floating-ui leaves the surface, handed to `set` a frame after
- * floating-ui writes it: for the surface's `--ns-pop-room`, set with a
- * `style:` directive (a property written on the node is lost whenever bits-ui
- * redraws its style). floating-ui writes its available height on the
- * floating wrapper (bits-ui's `--bits-floating-available-height`, the
- * content's `--bits-popover-content-available-height`) from its
- * ResizeObserver's delivery as it places the surface. Bounded by it there,
- * the surface changed height inside that delivery, at a depth the delivery
- * had passed: picking Full Send grew the content, the surface flipped above
- * its trigger into more room, and the page raised "ResizeObserver loop
- * completed with undelivered notifications" (new-session-full-send, desk).
- * Taken a frame later, the bound lands outside it, as every size the house
- * reads off an observer does (frame-observer.ts). Until the first copy the
- * surface takes floating-ui's own value: it opens placed, not inside a
- * delivery.
- *
- * The room is read off the wrapper's own style attribute, where bits-ui
- * writes it, never off the surface's computed style: a computed read in
- * the frame after the open recalculated the style of the whole page the
- * open had just changed, a forced style read in the accounts tray's open
- * (LimitPickerChecks AccountsOpen, main thread slowed 4×).
- */
-export function popoverRoom(set: (room: string | undefined) => void) {
-  return (node: HTMLElement) => {
-    let frame = 0;
-    const read = () => {
-      frame = 0;
-      const room = node.parentElement?.style
-        .getPropertyValue(AVAILABLE_HEIGHT)
-        .trim();
-      set(room && PX.test(room) ? room : undefined);
-    };
-    const ask = () => {
-      if (frame === 0) {
-        frame = requestAnimationFrame(read);
-      }
-    };
-    // floating-ui writes on the wrapper, the surface's parent.
-    const watch = new MutationObserver(ask);
-    if (node.parentElement) {
-      watch.observe(node.parentElement, {
-        attributes: true,
-        attributeFilter: ["style"],
-      });
-    }
-    ask();
-    return () => {
-      cancelAnimationFrame(frame);
-      watch.disconnect();
-    };
-  };
-}
-
-/** floating-ui's placement in a wrapper's `transform`: `translate(xpx, ypx)`. */
-const PLACED = /translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)/u;
-/** The `transform` declaration in a style attribute. */
-const TRANSFORM = /transform:[^;]*/u;
-
-/** A wrapper's placement, or null before it is placed. */
-const placedAt = (transform: string | null) => {
-  const at = PLACED.exec(transform ?? "");
-  return at ? { x: Number(at[1]), y: Number(at[2]) } : null;
-};
-
-/**
- * The floating wrapper's glide to each new placement while `gliding()` (a
- * group's surface moving to a sibling's trigger): attached to the wrapper
- * bits-ui renders, it hears floating-ui write a new `transform` and plays
- * the wrapper from where it is drawn to there on a Web Animation
- * (`translate`, which composes with that transform), over --duration-slow
- * on the drawer curve: the clock and curve the surface's size tween runs
- * on (motion/morph), started in the same frame, so the box's edges and
- * its place land together. A placement that comes mid-glide starts again
- * from where the wrapper is drawn, as the size tween does. A CSS
- * transition of the transform kept its own clock: begun at the style
- * change and shortened when it reversed, it landed the box's place while
- * its size went on growing (a glide interrupted back to the location).
- */
-export function placementGlide(gliding: () => boolean) {
-  return (node: HTMLElement) => {
-    let running: Animation | undefined;
-    const watch = new MutationObserver((records) => {
-      const was = placedAt(records[0]?.oldValue?.match(TRANSFORM)?.[0] ?? null);
-      const now = placedAt(node.style.transform);
-      if (!(was && now) || (was.x === now.x && was.y === now.y)) {
-        return;
-      }
-      // Where it is drawn: the old placement, and the glide in flight.
-      const [dx = 0, dy = 0] = running
-        ? getComputedStyle(node)
-            .translate.split(" ")
-            .map((px) => Number.parseFloat(px) || 0)
-        : [];
-      running?.cancel();
-      running = undefined;
-      if (!(gliding() && motionOk.current)) {
-        return;
-      }
-      running = node.animate(
-        [
-          { translate: `${was.x + dx - now.x}px ${was.y + dy - now.y}px` },
-          { translate: "0px 0px" },
-        ],
-        { duration: dur("--duration-slow"), easing: CURVE.drawer }
-      );
-    });
-    watch.observe(node, {
-      attributes: true,
-      attributeFilter: ["style"],
-      attributeOldValue: true,
-    });
-    return () => {
-      watch.disconnect();
-      running?.cancel();
-    };
-  };
-}

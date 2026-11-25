@@ -113,13 +113,16 @@
    * anchor's span and flared top, square on a flush side, and it slides up
    * out of the anchor's top and back down into it.
    *
-   * The neck is measured here, from where the primitive places the card:
-   * the anchor's span in the card's coordinates, and on each side the
-   * anchor's `--flare` where the card reaches past the anchor's edge, none
-   * where its edge meets the anchor's (flush, within a pixel). The anchor's
-   * box is read as it is laid out anew (its size, the window's, a scroll),
-   * never in a placement, where a read made the page lay itself out again
-   * then and there.
+   * It stands on its anchor by CSS anchor positioning (its layer's box,
+   * anchored.svelte.ts): always on the side the site gives, never turned to
+   * the other (`fixedSide`), along it where it fits and capped where it runs
+   * past the screen's foot. The neck is measured here, from where its layer
+   * stands it once placed (the layer's `kit-placed`): the anchor's span in
+   * the card's coordinates, and on each side the anchor's `--flare` where
+   * the card reaches past the anchor's edge, none where its edge meets the
+   * anchor's (flush, within a pixel). The anchor's box is read as it is laid
+   * out anew (its size, the window's), never in a placement, where a read
+   * made the page lay itself out again then and there.
    *
    * The anchor draws its own foot while the card stands drawn out of it
    * (`joined`): Caw's glass its `.join`, a tab its `.neck`.
@@ -131,11 +134,15 @@
    * gives it (the Shell's layer, a states frame's) and takes its form from
    * that shell's width.
    */
-  import type {
-    ContextMenu as ContextMenuPrimitive,
+  import {
+    type ContextMenu as ContextMenuPrimitive,
     Popover as PopoverPrimitive,
   } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
+  import {
+    type LayerPlacement,
+    layerProps,
+  } from "#lib/components/ui/anchored.svelte.js";
   import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
   import { rise } from "#lib/components/ui/elevated/index.js";
@@ -197,7 +204,7 @@
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     settings: "w-max max-w-(--frame-w) gap-0 p-0",
     details:
-      "flex max-h-[min(calc(var(--spacing)_*_190),var(--bits-popover-content-available-height,85vh))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-control-lg)-2*var(--spacing-space-3)-var(--safe-bottom)),var(--bits-popover-content-available-height,85vh))]",
+      "flex max-h-[min(calc(var(--spacing)_*_190),85vh)] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-control-lg)-2*var(--spacing-space-3)-var(--safe-bottom)),85vh)]",
   };
   /** The shell less a floating card's edge each side. */
   const ROOM = "calc(100cqi - 2 * var(--spacing-space-3))";
@@ -221,75 +228,77 @@
     },
     files: {
       w: `min(calc(var(--spacing) * 95), ${ROOM})`,
-      h: "min(calc(var(--spacing) * 160), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
+      h: "min(calc(var(--spacing) * 160), calc(85dvh - 2px))",
     },
     details: {},
     settings: { w: ROOM },
   };
 
   type Props = Omit<
-    PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
-    "child" | "children"
-  > & {
-    /** What it hangs from. */
-    anchor: HTMLElement | null;
-    /** The kit surface it is: the popover's (default), bits-ui's own, the context menu's, or a bar menu's (BarMenu: the dropdown menu's). */
-    as?:
-      | typeof PopoverContent
-      | typeof PopoverPrimitive.Content
-      | typeof ContextMenuContent
-      | typeof DropdownMenuContent;
-    /** The anchor's foot flares out into the card (a chosen tab's does; another's meets it square). */
-    flared?: boolean;
-    /** It hangs from the top bar's glass. */
-    glass?: boolean;
-    /**
-     * How far it rises on the surface ladder (ui/elevated): a float, or a
-     * `panel`, one step, for a card hung from an anchor narrower than itself
-     * (a bar's glass, BarCard), where the clip at its top would cut a float's
-     * deeper drop into a hard line past the anchor's sides.
-     */
-    depth?: "float" | "panel";
-    /**
-     * The face it frames: the glass card's (GlassCard: Caw's panel, the
-     * machines, Jump or Files, each its own width, padding and height), or
-     * the session card's (`details`).
-     */
-    frame?: Frame;
-    /** The surface it stands on, when not the raised one: the tab's menu, on its tab's. */
-    surface?: "recess";
-    /**
-     * It hangs from a folder tab (the session card, the tab's menu): one
-     * silhouette with it, grown out of its foot (motion/hang-shape,
-     * hang-outline).
-     */
-    tab?: boolean;
-    /**
-     * It stands on its anchor's top and rises out of it (the site places it
-     * side `top`): its foot meets the anchor, as a hanging card's top does.
-     * Not with `tab` or `glass`, which only hang.
-     */
-    rises?: boolean;
-    /** It stands drawn out of its anchor: the anchor draws its foot. */
-    joined?: boolean;
-    /** The neck where the card stands, on every placement. */
-    onneck?: (neck: Neck) => void;
-    /** A finger is drawing it out of its anchor, which is its open: nothing plays. */
-    held?: () => boolean;
-    /** A finger folded it into its anchor: it is shut, with nothing left to play. */
-    folded?: () => boolean;
-    /**
-     * How the popover's box tweens to a new size (motion/morph): the
-     * popover's own `as` only. A card that hangs and keeps its width has
-     * its clip draw each change of height (`clip`), its foot's slice drawn
-     * under the cut (`hang-foot`); one that tweens its width (GlassCard's
-     * faces), a tab's and one that rises tween as a popover does.
-     */
-    morphs?: Morph;
-    /** A bar menu's width (BarMenu): the kit dropdown menu's own `width`. */
-    menuWidth?: "compact" | "regular" | "wide" | "tiles" | "titles";
-    children: Snippet;
-  };
+    PopoverPrimitive.ContentStaticProps &
+      ContextMenuPrimitive.ContentStaticProps,
+    "child" | "children" | keyof LayerPlacement
+  > &
+    LayerPlacement & {
+      /** What it hangs from. */
+      anchor: HTMLElement | null;
+      /** The kit surface it is: the popover's (default), bits-ui's own (its static part, no surface of the kit's), the context menu's, or a bar menu's (BarMenu: the dropdown menu's). */
+      as?:
+        | typeof PopoverContent
+        | typeof PopoverPrimitive.ContentStatic
+        | typeof ContextMenuContent
+        | typeof DropdownMenuContent;
+      /** The anchor's foot flares out into the card (a chosen tab's does; another's meets it square). */
+      flared?: boolean;
+      /** It hangs from the top bar's glass. */
+      glass?: boolean;
+      /**
+       * How far it rises on the surface ladder (ui/elevated): a float, or a
+       * `panel`, one step, for a card hung from an anchor narrower than itself
+       * (a bar's glass, BarCard), where the clip at its top would cut a float's
+       * deeper drop into a hard line past the anchor's sides.
+       */
+      depth?: "float" | "panel";
+      /**
+       * The face it frames: the glass card's (GlassCard: Caw's panel, the
+       * machines, Jump or Files, each its own width, padding and height), or
+       * the session card's (`details`).
+       */
+      frame?: Frame;
+      /** The surface it stands on, when not the raised one: the tab's menu, on its tab's. */
+      surface?: "recess";
+      /**
+       * It hangs from a folder tab (the session card, the tab's menu): one
+       * silhouette with it, grown out of its foot (motion/hang-shape,
+       * hang-outline).
+       */
+      tab?: boolean;
+      /**
+       * It stands on its anchor's top and rises out of it (the site places it
+       * side `top`): its foot meets the anchor, as a hanging card's top does.
+       * Not with `tab` or `glass`, which only hang.
+       */
+      rises?: boolean;
+      /** It stands drawn out of its anchor: the anchor draws its foot. */
+      joined?: boolean;
+      /** The neck where the card stands, on every placement. */
+      onneck?: (neck: Neck) => void;
+      /** A finger is drawing it out of its anchor, which is its open: nothing plays. */
+      held?: () => boolean;
+      /** A finger folded it into its anchor: it is shut, with nothing left to play. */
+      folded?: () => boolean;
+      /**
+       * How the popover's box tweens to a new size (motion/morph): the
+       * popover's own `as` only. A card that hangs and keeps its width has
+       * its clip draw each change of height (`clip`), its foot's slice drawn
+       * under the cut (`hang-foot`); one that tweens its width (GlassCard's
+       * faces), a tab's and one that rises tween as a popover does.
+       */
+      morphs?: Morph;
+      /** A bar menu's width (BarMenu): the kit dropdown menu's own `width`. */
+      menuWidth?: "compact" | "regular" | "wide" | "tiles" | "titles";
+      children: Snippet;
+    };
 
   let {
     anchor,
@@ -309,10 +318,42 @@
     forceMount = false,
     menuWidth,
     morphs,
+    side = "bottom",
+    align = "start",
+    sideOffset = 0,
+    alignOffset = 0,
+    collisionPadding = 0,
+    customAnchor,
     class: className,
     children,
     ...rest
   }: Props = $props();
+
+  /**
+   * Where it stands on its anchor: always on the side the site gives (a
+   * hanging card turned over its anchor would no longer hang from it).
+   */
+  const placement = () => ({
+    side,
+    align,
+    sideOffset,
+    alignOffset,
+    collisionPadding,
+    customAnchor: customAnchor ?? anchor,
+    fixedSide: true,
+  });
+  /**
+   * What a kit surface takes of where it stands: the element it stands on,
+   * a press on which keeps a popover open. The box it stands in is the
+   * card's own (`layer`), whatever its surface.
+   */
+  const placeLook = $derived<Record<string, unknown>>(
+    Content === PopoverPrimitive.ContentStatic
+      ? {}
+      : { customAnchor: customAnchor ?? anchor ?? undefined }
+  );
+  /** The card's layer's box, built here for every surface it is. */
+  const cardLayer = layerProps(placement);
 
   /** A bar menu's width, as the kit dropdown menu takes it; nothing for any other surface. */
   const menuLook = $derived<Record<string, unknown>>(
@@ -381,6 +422,8 @@
         if (!placed || placedAt === null) {
           return;
         }
+        // It stands on the anchor by CSS: it may have moved with it.
+        placedAt = placed.getBoundingClientRect().left;
         const neck = neckAt(placed, placedAt, flared);
         return neck ? () => draw(placed, neck) : undefined;
       },
@@ -622,10 +665,9 @@
     // with the delivery's reads and drawn with its writes, in the frame it
     // took its width. Drawn in a ResizeObserver of its own, delivered among
     // the page's other observers (`ForeignResizeObserver`), it wrote the cut
-    // between their reads: floating-ui's, which places the card (bits-ui's
-    // `autoUpdate`), read the card's box after it on every frame the card
-    // resized, a style and a layout pass each (a tab switch's height morph:
-    // 11–16 a switch, 4–5ms).
+    // between their reads, which then read the page laid out anew, a style
+    // and a layout pass each (a tab switch's height morph: 11–16 a switch,
+    // 4–5ms).
     const sized = frameObserver(null, {
       inside: ([entry]) => {
         const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
@@ -735,13 +777,14 @@
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
      unless the site keeps it drawn (`forceMount`): the page has its pointer
-     back at the dismissal (floating-presence). Its wrapper is marked a
+     back at the dismissal (floating-presence). Its layer's box (the kit
+     surface's, or its own for bits-ui's bare static part) is marked a
      hanging card's (`data-hang`, `rises` for one that rises), the cut
-     app.css draws on it, at the card's top or its foot. A kit
-     surface is told it hangs, so it keeps only the fade of its own motion.
-     The wrapper is fixed, so it is the stacking context the card's own
-     z-index is held inside: it stands on the floating layer itself
-     (DESIGN.md, Stacking), or the card stood under the page's dock. -->
+     design.css draws on it, at the card's top or its foot. A kit surface
+     is told it hangs, so it keeps only the fade of its own motion. The box
+     is fixed on the floating layer itself (DESIGN.md, Stacking), the
+     stacking context the card's own z-index is held inside, or the card
+     stood under the page's dock. -->
 <Content
   style="--surface-level: {surfaceLevel}"
   preventOverflowTextSelection={false}
@@ -751,6 +794,7 @@
   {...glass ? { portalProps: { disabled: true } } : {}}
   {...menuLook}
   {...morphLook}
+  {...placeLook}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang" }),
@@ -761,11 +805,10 @@
   forceMount
   bind:ref
 >
-  {#snippet child({ props, wrapperProps, open })}
+  {#snippet child({ props, open })}
     {#if forceMount || drawn(props)}
       <div
-        {...wrapperProps}
-        class="z-(--layer-float)"
+        {...cardLayer}
         data-hang={rises ? "rises" : ""}
         style:pointer-events={pressable(open)}
       >

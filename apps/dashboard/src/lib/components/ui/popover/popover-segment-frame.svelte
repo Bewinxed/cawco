@@ -36,7 +36,7 @@
 </script>
 
 <div
-  class="relative flex min-h-(--frame-h) items-start justify-end p-space-4 contain-layout"
+  class="relative flex min-h-(--frame-h) items-start justify-end p-space-4"
   style:--frame-h={`${height}px`}
 >
   <ToggleGroup.Root aria-label="Owners" type="single" bind:value>
@@ -52,12 +52,10 @@
       </Popover.Trigger>
       <Popover.Content
         align="end"
-        avoidCollisions={false}
         onOpenAutoFocus={(event) => event.preventDefault()}
         pad="none"
         portalProps={{ disabled: true }}
         side="bottom"
-        strategy="absolute"
         trapFocus={false}
         width="narrow"
       >

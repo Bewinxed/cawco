@@ -108,7 +108,7 @@ as-cast	{ value: string } | null	packages/jsonl-parser/src/fts5.ts	2
 as-cast	{ value: string; } | null	packages/jsonl-parser/src/fts5.ts	1
 as-cast	| (Css & { children: Css[]; comments: { end: number; start: number; valu	scripts/style-residual-check.ts	1
 as-cast	Action	packages/cli/src/browser.ts	1
-as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
+as-cast	Anchorable	packages/core/src/anchor-names.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
 as-cast	ArrayBuffer | string | Uint8Array<ArrayBuffer>	packages/preview/src/overlay/doc-worker.ts	1
 as-cast	AtRule	apps/dashboard/scripts/specificity-trap.ts	1

@@ -2,8 +2,8 @@
   /**
    * The kit's ContextMenu in a frame of its own (its states file's): open
    * on its trigger, standing at the row's foot where a secondary click there
-   * puts it, drawn in place (the portal off) in a box that holds it
-   * (`contain: layout`), its items, a separator and a destructive item, as
+   * puts it, drawn in place (the portal off) in a box with room for it, its
+   * items, a separator and a destructive item, as
    * a session's menu composes it.
    */
   import * as ContextMenu from "./index.js";
@@ -25,7 +25,7 @@
 </script>
 
 <div
-  class="relative min-h-(--frame-h) w-sm max-w-full contain-layout"
+  class="relative min-h-(--frame-h) w-sm max-w-full"
   style:--frame-h={`${height}px`}
 >
   <ContextMenu.Root open>

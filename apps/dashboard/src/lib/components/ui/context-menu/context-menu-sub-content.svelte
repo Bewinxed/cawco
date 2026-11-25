@@ -21,7 +21,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { rise } from "#lib/components/ui/elevated/index.js";
+  import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { submenuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -35,12 +35,11 @@
     width,
     frame,
     pad,
+    children,
     /* Off: see popover-content.svelte. */
-    /* Fixed: see popover-content.svelte. */
-    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
-  }: Omit<ContextMenuPrimitive.SubContentProps, "side" | "collisionPadding"> &
+  }: Omit<ContextMenuPrimitive.SubContentStaticProps, "child"> &
     ContextMenuSubContentLooks & {
       portalProps?: WithoutChildrenOrChild<
         ComponentProps<typeof ContextMenuPortal>
@@ -48,29 +47,27 @@
     } = $props();
 
   const surface = submenuSurface(() => ref);
-
-  /** One step above the surface it opens in (theme.css `surface`). */
-  const surfaceLevel = rise();
 </script>
 
 <!-- In the top layer's portal, as every kit floating surface is: inside its
      menu it was cut by the menu's scroll box (and a hanging menu's clip) and
      placed in the menu's coordinates. -->
 <ContextMenuPortal {...portalProps}>
-  <ContextMenuPrimitive.SubContent
-    style="--surface-level: {surfaceLevel}"
+  <ContextMenuPrimitive.SubContentStatic
+    style="--surface-level: {surface.level}"
     {preventOverflowTextSelection}
-    {strategy}
     class={cn(
       floatingSurface(),
-      "relative z-(--layer-float) max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "relative min-w-32 origin-(--kit-origin) overflow-y-auto overflow-x-hidden",
       contextMenuSubContentVariants({ min, width, frame, pad }),
       className
     )}
-    collisionPadding={surface.inset}
     data-slot="context-menu-sub-content"
-    side={surface.side}
     bind:ref
     {...restProps}
-  />
+  >
+    {#snippet child(snippet)}
+      <FloatingBody {children} mounted {snippet} wrapper={surface.layer} />
+    {/snippet}
+  </ContextMenuPrimitive.SubContentStatic>
 </ContextMenuPortal>

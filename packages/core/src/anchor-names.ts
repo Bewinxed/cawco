@@ -1,14 +1,16 @@
 /**
- * The overlay's boxes that stand on an element of the page (a change's ring,
- * changes.ts; the One Target, page.ts; a row of pins' pills, pins.ts, in
- * the page's document or a same-origin frame's) stand there by CSS anchor
+ * A box that stands on an element of a page stands there by CSS anchor
  * positioning, never at a box measured once: the element takes the box's
- * name (`anchor-name`) and the box's edges are the element's (`anchor()` on
- * its default anchor, `position-anchor`), so the browser lays the box out
- * with the element through every picture and font that loads, every resize
- * and every scroll, the window's and a scroller's of the page's own
- * (css-anchor-position-1 §3.3: a box "compensating for scroll" moves with
- * its default anchor).
+ * name (`anchor-name`) and the box's edges are the element's (`anchor()` or
+ * `position-area` on its default anchor, `position-anchor`), so the browser
+ * lays the box out with the element through every picture and font that
+ * loads, every resize and every scroll, the window's and a scroller's of the
+ * page's own (css-anchor-position-1 §3.3: a box "compensating for scroll"
+ * moves with its default anchor). Two kinds of box stand so: the preview
+ * overlay's (a change's ring, overlay/changes.ts; the One Target, page.ts;
+ * a row of pins' pills, pins.ts, in the page's document or a same-origin
+ * frame's) and the dashboard kit's floating layers (a popover, a menu, a
+ * select, a tooltip, a hanging card: components/ui/anchored.svelte.ts).
  *
  * A name is given inline, after the element's own names, and every box's
  * name on one element is held here, so two boxes on it never write over
@@ -19,14 +21,14 @@
  *
  * A box that anchors here is `position: fixed`, so its containing block is
  * the viewport, which holds every element it can anchor to. Absolute, in a
- * layer of the overlay's, the layer would be its containing block with no
- * element of the page inside it ("acceptable anchor element"); and
- * Chromium moved an absolute box with the window's scroll, not with a fixed
- * element it stood on, and Firefox took no fixed element as its anchor.
+ * layer of its own, the layer would be its containing block with no element
+ * of the page inside it ("acceptable anchor element"); and Chromium moved an
+ * absolute box with the window's scroll, not with a fixed element it stood
+ * on, and Firefox took no fixed element as its anchor.
  *
  * A name is the document's (a tree-scoped name), and so is the rule that
- * reads it: a box in the overlay's shadow root takes it through a rule of
- * the document's on its part (`::part`), never through its own sheet, which
+ * reads it: a box in a shadow root takes it through a rule of the
+ * document's on its part (`::part`), never through its own sheet, which
  * Chromium, WebKit and Firefox all leave unanchored.
  */
 
@@ -61,10 +63,13 @@ export const anchorable = (
 /** Names made since the page loaded: each box's is the next. */
 let made = 0;
 
-/** A name no other box of the overlay's has. */
-export function anchorName(): string {
+/**
+ * A name no other box has: each kind of box names its own (`kind`), so the
+ * overlay's and the kit's never meet on a page that holds both.
+ */
+export function anchorName(kind = "cawco-anchor"): string {
   made += 1;
-  return `--cawco-anchor-${made}`;
+  return `--${kind}-${made}`;
 }
 
 /** The declarations that stand a fixed box on anchor `name`, its edges `out` px beyond the element's. */
@@ -151,10 +156,10 @@ let followsTransforms: boolean | null = null;
  * Whether this browser lays a box on its anchor where the anchor is drawn,
  * its transforms with it (Chromium, Safari 27), or where it is laid out
  * before them (Firefox, Safari 26). Measured once, in `into` (a layer of the
- * overlay's own, after the body, so the page hears nothing): a fixed anchor
- * moved 100px by a transform, and a box standing on its left edge.
+ * caller's own, so the page hears nothing): a fixed anchor moved 100px by a
+ * transform, and a box standing on its left edge.
  */
-export function anchorsFollowTransforms(into: Element): boolean {
+function anchorsFollowTransforms(into: Element): boolean {
   if (followsTransforms !== null) {
     return followsTransforms;
   }
@@ -175,3 +180,60 @@ export function anchorsFollowTransforms(into: Element): boolean {
   box.remove();
   return followsTransforms;
 }
+
+/** A point on an anchor's box, as fractions of its width from its left and its height from its top. */
+export interface AnchorPoint {
+  x: number;
+  y: number;
+}
+
+/** How far a box must move to stand where its anchor's transforms draw it. */
+export interface AnchorShift {
+  x: number;
+  y: number;
+}
+
+/** Where `name` lays its box out: the anchor's box before its transforms. */
+const probeStyle = (name: string): string =>
+  `all:initial;position:fixed;position-anchor:${name};inset:anchor(inside);visibility:hidden;pointer-events:none`;
+
+/**
+ * In a browser whose anchors stand where their element is laid out, not
+ * where its transforms draw it ({@link anchorsFollowTransforms}), how far
+ * each element's transforms move its `point`: the box standing on it moves
+ * by as much. A probe on each name reads where its element is laid out, all
+ * in one layout, beside where the element is drawn; every probe is gone
+ * again before it returns. Every other browser needs no move, and reads
+ * nothing: each shift is zero. `into` holds the probes: a layer of the
+ * caller's in the element's document, where the page hears nothing.
+ */
+export function transformShifts(
+  stands: readonly { anchor: Element; name: string; point: AnchorPoint }[],
+  into: (anchor: Element) => Element
+): AnchorShift[] {
+  if (stands.length === 0 || anchorsFollowTransforms(into(stands[0].anchor))) {
+    return stands.map(() => ({ x: 0, y: 0 }));
+  }
+  const probes = stands.map(({ anchor, name }) => {
+    const probe = anchor.ownerDocument.createElement("div");
+    probe.style.cssText = probeStyle(name);
+    into(anchor).append(probe);
+    return probe;
+  });
+  const shifts = stands.map(({ anchor, point }, i) => {
+    const laid = probes[i].getBoundingClientRect();
+    const drawn = anchor.getBoundingClientRect();
+    return {
+      x: drawn.x + point.x * drawn.width - (laid.x + point.x * laid.width),
+      y: drawn.y + point.y * drawn.height - (laid.y + point.y * laid.height),
+    };
+  });
+  for (const probe of probes) {
+    probe.remove();
+  }
+  return shifts;
+}
+
+/** A shift as a `translate`, none under half a pixel. */
+export const shiftTranslate = ({ x, y }: AnchorShift): string =>
+  Math.abs(x) < 0.5 && Math.abs(y) < 0.5 ? "" : `${x}px ${y}px`;

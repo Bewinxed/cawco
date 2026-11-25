@@ -336,7 +336,7 @@
         overflow="clip"
         pad="none"
         side="bottom"
-        style="--pop-w: min(calc(var(--spacing) * 176), var(--bits-popover-content-available-width, 100vw)); --pop-max-h: var(--bits-popover-content-available-height)"
+        style="--pop-w: min(calc(var(--spacing) * 176), calc(100vw - 2 * var(--kit-gutter))); --pop-max-h: none"
         width="room"
       >
         {#if who.kindsOpen}

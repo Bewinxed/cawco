@@ -91,7 +91,7 @@
   <WriteTrigger {down} icon={IconPlus} label={words.newDocument} />
   <Popover.Content
     align="end"
-    class="max-w-(--bits-popover-content-available-width)"
+    class="max-w-layer-room"
     gap="form"
     pad="form"
     width="widest"

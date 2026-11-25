@@ -39,10 +39,8 @@
     <Select.Content
       forceMount={open}
       portalProps={{ disabled: true }}
-      strategy="absolute"
       side="bottom"
       align="start"
-      avoidCollisions={false}
     >
       {#each options as option (option)}
         <Select.Item label={option} value={option} />

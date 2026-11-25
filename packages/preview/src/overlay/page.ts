@@ -3,6 +3,14 @@
  * decides; a same-origin frame inside stands down and is reached from here).
  */
 
+import {
+  type Anchorable,
+  anchorable,
+  anchorName,
+  nameOff,
+  nameOn,
+  onAnchor,
+} from "@cawco/core/anchor-names";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
   ANCHOR_IDENTITIES,
@@ -85,14 +93,6 @@ import {
   stageSeekOf,
 } from "@cawco/core/stage-graph";
 import { cutShort } from "@cawco/core/words/helpers";
-import {
-  type Anchorable,
-  anchorable,
-  anchorName,
-  nameOff,
-  nameOn,
-  onAnchor,
-} from "./anchor-names";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
 import { type Changes, startChanges } from "./changes";
@@ -271,7 +271,7 @@ label.hidden = true;
 shadow.append(sheet, layer, highlight, label);
 /**
  * The One Target's anchor: the target of this page's document takes it,
- * and the highlight stands on it (anchor-names.ts), through the document's
+ * and the highlight stands on it (core anchor-names.ts), through the document's
  * own rule on its part, the one way a box in a shadow root takes a name of
  * the document's. The rule stands in the host's own children, which a
  * morph keeps (`kept`).
