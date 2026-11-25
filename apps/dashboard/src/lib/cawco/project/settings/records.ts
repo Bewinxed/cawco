@@ -11,6 +11,7 @@ import type { AccountProvider } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { Kind, Member } from "@cawco/core/decides";
 import type { LandsMode } from "@cawco/core/injected";
+import type { TrackerDirection } from "@cawco/core/trackers";
 
 type MachineOs = string;
 
@@ -59,6 +60,8 @@ export type SyncStanding =
 /** The tie to an outside tracker, while tasks are kept there too. */
 export interface TrackerTie {
   connection: { account: string; name: string };
+  /** Which way it syncs: `inbound` writes nothing to the tracker. */
+  direction: TrackerDirection;
   /** With GitHub: the Project that carries stages, or GitHub's reason there is none. */
   githubProject: { name: string; url: string } | { none: string } | null;
   home: "github" | "linear";

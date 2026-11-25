@@ -14002,6 +14002,13 @@
       "ask"
     ]
   },
+  "tracker_bindings.direction": {
+    "type": "string",
+    "enum": [
+      "both",
+      "inbound"
+    ]
+  },
   "tracker_bindings.github_project": {
     "type": "object",
     "properties": {

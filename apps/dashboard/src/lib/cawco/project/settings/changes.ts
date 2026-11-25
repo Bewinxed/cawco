@@ -8,6 +8,7 @@
 import type { Account } from "@cawco/core/accounts";
 import type { LandsMode } from "@cawco/core/injected";
 import type { AgentHere, FolderForecast } from "@cawco/core/project-folders";
+import type { TrackerDirection } from "@cawco/core/trackers";
 import type { RepoSource } from "#lib/cawco/spawn/RepoPicker.svelte";
 import type { LargeFiles, SettingsRecord } from "./records";
 
@@ -26,9 +27,10 @@ export type ChangeKey =
   | `locate.${string}`
   | `drop.${string}`;
 
-/** A tie the setup saves: the tracker, the sign-in, the repository or team, and on GitHub the Project for columns (null: open and closed only). */
+/** A tie the setup saves: the tracker, the sign-in, the repository or team, which way it syncs, and on GitHub the Project for columns (null: open and closed only). */
 interface TieAsk {
   connection: string;
+  direction: TrackerDirection;
   githubProject: string | null;
   home: "github" | "linear";
   target: string;

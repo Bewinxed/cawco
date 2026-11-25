@@ -28718,6 +28718,13 @@
                   "connection": {
                     "type": "string"
                   },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "inbound"
+                    ]
+                  },
                   "githubProject": {
                     "type": [
                       "object",
@@ -65149,6 +65156,10 @@
             "description": "The connection's name (hub connections.ts).",
             "type": "string"
           },
+          "direction": {
+            "$ref": "#/components/schemas/TrackerDirection",
+            "description": "Which way it syncs: with `inbound`, nothing is written to the tracker."
+          },
           "githubProject": {
             "description": "GitHub: the Project its stages show on through Status; null when none is set.",
             "$ref": "#/components/schemas/GithubProject"
@@ -65215,12 +65226,20 @@
         "required": [
           "boundAt",
           "connection",
+          "direction",
           "linked",
           "provider",
           "state",
           "target",
           "targetName",
           "targetUrl"
+        ]
+      },
+      "TrackerDirection": {
+        "type": "string",
+        "enum": [
+          "both",
+          "inbound"
         ]
       },
       "TrackerSyncState": {

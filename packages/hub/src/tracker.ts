@@ -16,11 +16,27 @@
  *   is bound. Letting the binding go lets its links go; each task file
  *   still names its issue, which the task's view shows.
  * - **Going forward.** Issues opened after the binding become tasks, and
- *   tasks filed after it become issues; nothing older is copied either way.
+ *   on a `both` binding tasks filed after it become issues; nothing older
+ *   is copied either way.
  *   A routine (a task with a trigger, §5.5) never becomes an issue: it
  *   stays a CawCo file whatever the tracker.
  *   Linear's own GitHub sync does the same: "This will only sync issues
  *   *going forward*" (linear.app/docs/github).
+ * - **Direction.** A binding syncs `both` ways, as the rest of this says,
+ *   or `inbound`: issues opened after it come in as tasks, and their
+ *   fields, state, Status and comments reach their tasks as below, the
+ *   tracker the record, while nothing is written to the tracker. No issue
+ *   is opened for a task, and no field, state, label, comment, Status or
+ *   Status option goes out; a task's own changes stay in CawCo. Every
+ *   write the sync makes is a member of the binding's {@link Outbound},
+ *   made in one place from its direction (`outboundOf`), which an inbound
+ *   binding does not have. Linear's GitHub sync offers the same choice:
+ *   "One-way: issues created in GitHub will create a synced copy in
+ *   Linear" (linear.app/docs/github). An inbound binding through a GitHub
+ *   App needs only to read issues. A binding turned `both` sends what is
+ *   filed and written from then: tasks filed and comments written while it
+ *   was inbound stay in CawCo, and a linked task whose fields moved
+ *   meanwhile sends them as any change, under the last-agreed rule.
  * - **The link** is the task file's `issue:` (the issue's URL; files are the
  *   truth), the task's record link as the issue holds it (`task_links`,
  *   mode `record`, db task-links.ts), and a row of what the two last agreed
@@ -93,6 +109,7 @@ import {
   statusOptionFor,
   TRACKER_NAMES,
   type Tracker,
+  type TrackerDirection,
   type TrackerSyncState,
   type TrackerView,
 } from "@cawco/core/trackers";
@@ -191,6 +208,8 @@ export interface TrackersDeps {
 export interface BindInput {
   /** The connection's name: GitHub Issues and Linear need one. */
   connection?: string;
+  /** Which way it syncs; left out, `both`. */
+  direction?: TrackerDirection;
   /**
    * GitHub: the Project whose Status carries its stages, each stage on the
    * option named as it; null for none. Left out, the first Project linked
@@ -220,7 +239,12 @@ const askedOf = (input: BindInput & { tracker: IssueTracker }) => {
       detail: `${name} needs its ${where}: pick one ${connection} reaches.`,
     });
   }
-  return { connection, target, tracker: input.tracker };
+  return {
+    connection,
+    target,
+    tracker: input.tracker,
+    direction: input.direction ?? "both",
+  };
 };
 
 /** What the connections hand a tracker (a client, a connection's view), or the words they threw as the sign-in that could not be made. */
@@ -271,19 +295,44 @@ type Stopped =
 /** One task's problem in a sync: the tracker's problem, or words of the hub's own. */
 type Problem = AnyProblem | string;
 
+/** What a sync reads of the tracker: its adapter less every write, which only {@link Outbound} holds. */
+type TrackerReads = Omit<TrackerAdapter, OutboundCall>;
+type OutboundCall = "comment" | "create" | "update";
+
+/**
+ * Every write a sync makes to the tracker, made from the binding's
+ * direction in one place (`outboundOf`); an inbound binding has none, so no
+ * write is reachable from its sync.
+ */
+interface Outbound {
+  /** Opens an issue for a task, changes an issue's fields and state, comments on one. */
+  issues: Pick<TrackerAdapter, OutboundCall>;
+  /** GitHub: adds to a Project's Status field an option for each of `stages` it lacks (tracker-github-project.ts). */
+  options: (
+    project: Pick<GithubProject, "title">,
+    fieldId: string,
+    stages: readonly string[]
+  ) => ReturnType<typeof statusOptionsAdded> | Promise<TrackerProblem>;
+  /** From when tasks filed and comments written go to the tracker, ms: when the binding turned `both`; 0 for one bound so. */
+  since: number;
+  /** GitHub: puts an issue's item in a Status option on the binding's Project; set once the sync has read the Project. */
+  status?: GithubProjectStatus["put"];
+}
+
 /** One project's sync: its binding, signed-in adapter, states, stages, and each task's problem. */
 interface Sync {
-  adapter: TrackerAdapter;
+  adapter: TrackerReads;
   binding: TrackerBindingRow;
   /** Where what the tracker does not vouch for waits for you: the first stage of kind `you`. */
   hold: Stage;
   /** GitHub: the Project its stages show on, as this sync read it; unset while there is none or it does not run. */
   onProject?: {
-    client: GithubProjectStatus;
     fieldId: string;
     project: GithubProject;
     read: ProjectRead;
   };
+  /** What it writes to the tracker; unset for an inbound binding, which writes nothing. */
+  out: Outbound | undefined;
   /** Each task's problem this sync, by task (or `issue:<key>`): the binding says the first the connection caused. */
   problems: Map<string, Problem>;
   projectId: string;
@@ -723,13 +772,13 @@ const agreePushed = (round: Round, field: Field): void => {
   }
 };
 
-/** The task's changes, sent to its issue in one write; a problem leaves them unagreed, to go again, and a rate limit stops the sync. */
+/** The task's changes, sent to its issue in one write (none on an inbound binding); a problem leaves them unagreed, to go again, and a rate limit stops the sync. */
 const applyPush = async (round: Round): Promise<Stopped | undefined> => {
   const { push, sync, link } = round;
-  if (Object.keys(push).length === 0) {
+  if (!sync.out || Object.keys(push).length === 0) {
     return;
   }
-  const updated = await sync.adapter.update(
+  const updated = await sync.out.issues.update(
     { key: link.issueKey, ref: link.ref },
     push
   );
@@ -822,6 +871,44 @@ const addedKept = (
     : null;
 };
 
+/**
+ * What a binding bound again keeps of the stages made sure of: those named
+ * now, else, on the same Project, those named before: an inbound binding
+ * names none, so a binding turned inbound keeps what it had made sure of.
+ */
+const stagesKept = (
+  was: TrackerBindingRow | undefined,
+  now: OnProject
+): GithubStatusStages | null => {
+  if (now.githubStatusStages) {
+    return now.githubStatusStages;
+  }
+  return was?.githubProject?.id === now.githubProject?.id
+    ? (was?.githubStatusStages ?? null)
+    : null;
+};
+
+/**
+ * What the same target bound again (another connection, another
+ * direction) keeps of where it stood, so nothing is missed or copied twice;
+ * nothing for another target. A direction changed is dated, so a binding
+ * turned `both` sends only what is filed and written after.
+ */
+const keptOf = (
+  was: TrackerBindingRow | undefined,
+  draft: TrackerBindingRow
+): Partial<Pick<TrackerBindingRow, "boundAt" | "cursor" | "directionAt">> => {
+  if (!(was?.provider === draft.provider && was.target === draft.target)) {
+    return {};
+  }
+  return {
+    boundAt: was.boundAt,
+    cursor: was.cursor,
+    directionAt:
+      was.direction === draft.direction ? was.directionAt : draft.boundAt,
+  };
+};
+
 /** The options last added to the binding's Project, as the view shows them; none for another Project. */
 const addedOn = (
   binding: Pick<TrackerBindingRow, "githubProject" | "githubStatusesAdded">
@@ -905,6 +992,40 @@ export const createTrackers = (deps: TrackersDeps) => {
       : linearAdapter(linear.client, binding.target, linear.asApp);
   };
 
+  /**
+   * What a binding writes to the tracker: the one place its direction
+   * decides a write. An inbound binding has none, so its sync opens no
+   * issue and sends no field, state, label, comment, Status or Status
+   * option, and binding it adds no Status option.
+   */
+  const outboundOf = (
+    binding: Pick<
+      TrackerBindingRow,
+      "connection" | "direction" | "directionAt"
+    >,
+    adapter: TrackerAdapter
+  ): Outbound | undefined => {
+    if (binding.direction === "inbound") {
+      return;
+    }
+    return {
+      issues: {
+        create: adapter.create,
+        update: adapter.update,
+        comment: adapter.comment,
+      },
+      options: async (project, fieldId, stages) => {
+        const octokit = await signedIn(() =>
+          deps.connections.githubClient(binding.connection)
+        );
+        return octokit instanceof ElysiaStatus
+          ? octokit
+          : await statusOptionsAdded(octokit, project, fieldId, stages);
+      },
+      since: binding.directionAt?.getTime() ?? 0,
+    };
+  };
+
   const view = (projectId: string): TrackerView => {
     const binding = db.trackers.binding(projectId);
     if (!binding) {
@@ -915,6 +1036,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       binding: {
         provider: binding.provider,
         connection: binding.connection,
+        direction: binding.direction,
         target: binding.target,
         targetName: binding.targetName,
         targetUrl: binding.targetUrl,
@@ -1016,19 +1138,20 @@ export const createTrackers = (deps: TrackersDeps) => {
     return misfit.response.detail;
   };
 
-  /** The task's move put on its item: added to the Project when it is not on it, its Status set. */
+  /** The task's move put on its item: added to the Project when it is not on it, its Status set; nothing on an inbound binding. */
   const applyStatus = async (round: Round): Promise<Stopped | undefined> => {
     const { sync, link, task, pushStatus } = round;
     const { onProject } = sync;
+    const put = sync.out?.status;
     if (
-      !onProject ||
+      !(onProject && put) ||
       pushStatus === undefined ||
       // The move did not go through: its Status waits for it.
       round.next.stage !== (round.moveTo ?? task.stage)
     ) {
       return;
     }
-    const item = await onProject.client.put(
+    const item = await put(
       link.issueKey,
       round.item,
       onProject.fieldId,
@@ -1074,9 +1197,14 @@ export const createTrackers = (deps: TrackersDeps) => {
     return issue;
   };
 
-  /** A task's comments written in CawCo since its link, posted once each to its issue. */
+  /** A task's comments written in CawCo since its link (and since the binding turned `both`), posted once each to its issue; none on an inbound binding. */
   const carryOut = async (round: Round): Promise<Stopped | undefined> => {
     const { sync, link, task } = round;
+    const { out } = sync;
+    if (!out) {
+      return;
+    }
+    const from = Math.max(link.linkedAt.getTime(), out.since);
     const carried = new Set(
       db.taskLinks
         .comments(sync.projectId, link.taskId)
@@ -1086,13 +1214,13 @@ export const createTrackers = (deps: TrackersDeps) => {
     const due = task.comments.filter(
       (comment) =>
         comment.via === null &&
-        comment.at >= link.linkedAt.getTime() &&
+        comment.at >= from &&
         !carried.has(comment.at) &&
         comment.author.mover !== "hub"
     );
     const { provider } = sync.binding;
     for (const comment of due) {
-      const posted = await sync.adapter.comment(
+      const posted = await out.issues.comment(
         { key: link.issueKey, ref: link.ref },
         comment.author.name,
         outOfFile(comment.text, COMMENT_DEPTH)
@@ -1397,6 +1525,7 @@ export const createTrackers = (deps: TrackersDeps) => {
    */
   const placeOnProject = async (
     sync: Sync,
+    out: Outbound,
     task: TaskView,
     issue: Issue
   ): Promise<Partial<Pick<TrackerSynced, "status">> | Stopped> => {
@@ -1404,10 +1533,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     const want = onProject
       ? statusOptionFor(task.stage, onProject.project)
       : null;
-    if (!onProject || want === null) {
+    if (!(onProject && out.status) || want === null) {
       return onProject ? { status: null } : {};
     }
-    const item = await onProject.client.put(
+    const item = await out.status(
       issue.key,
       undefined,
       onProject.fieldId,
@@ -1427,6 +1556,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** A task with no issue: one made for it, linked, and what the tracker made of its words taken back. */
   const fileIssue = async (
     sync: Sync,
+    out: Outbound,
     task: TaskView
   ): Promise<Stopped | undefined> => {
     const { provider, targetName } = sync.binding;
@@ -1439,7 +1569,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       });
     }
     const fields = fileFields(task);
-    const issue = await sync.adapter.create({
+    const issue = await out.issues.create({
       title: fields.title,
       description: outOfFile(fields.description, DESCRIPTION_DEPTH),
       labels: fields.labels,
@@ -1449,7 +1579,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       return issue;
     }
     const remote = remoteFields(issue);
-    const placed = await placeOnProject(sync, task, issue);
+    const placed = await placeOnProject(sync, out, task, issue);
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
@@ -1499,6 +1629,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** A task with no issue yet: the issue its file names, linked, or one made; a problem is the binding's to say and the next sync tries again, unless it stops the sync. */
   const fileOrRelink = async (
     sync: Sync,
+    out: Outbound,
     taskId: string
   ): Promise<Stopped | undefined> => {
     const task = await tasks.get(sync.projectId, taskId);
@@ -1508,7 +1639,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const named = task.links.find((link) => link.mode === "record")?.url;
     const misfit = await (named
       ? relink(sync, task, named)
-      : fileIssue(sync, task));
+      : fileIssue(sync, out, task));
     if (!misfit) {
       return;
     }
@@ -1641,6 +1772,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     return {
       adapter,
       binding,
+      out: outboundOf(binding, adapter),
       hold,
       projectId: binding.projectId,
       states,
@@ -1673,7 +1805,8 @@ export const createTrackers = (deps: TrackersDeps) => {
       binding.connection,
       binding.target,
       bound ? { id: bound.id } : undefined,
-      []
+      [],
+      undefined
     );
     if (probe instanceof ElysiaStatus) {
       if (stopsSync(probe)) {
@@ -1760,7 +1893,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       );
       return;
     }
-    sync.onProject = { client, fieldId: read.fieldId, project: fresh, read };
+    sync.onProject = { fieldId: read.fieldId, project: fresh, read };
+    if (sync.out) {
+      sync.out.status = client.put;
+    }
     return await statusesOwed(sync, retry);
   };
 
@@ -1772,13 +1908,14 @@ export const createTrackers = (deps: TrackersDeps) => {
    * stage that has one by its name is named made with no call. GitHub's
    * refusal goes on the binding in its words, the other stages' Status
    * syncing, and is asked again on Sync now or after {@link RECHECK_MS}.
+   * An inbound binding adds none.
    */
   const statusesOwed = async (
     sync: Sync,
     retry: boolean
   ): Promise<Stopped | undefined> => {
-    const { binding, onProject } = sync;
-    if (!onProject) {
+    const { binding, onProject, out } = sync;
+    if (!(onProject && out)) {
       return;
     }
     const { project } = onProject;
@@ -1810,18 +1947,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     statusesAskedAt.set(binding.projectId, Date.now());
-    const octokit = await signedIn(() =>
-      deps.connections.githubClient(binding.connection)
-    );
-    if (octokit instanceof ElysiaStatus) {
-      return octokit;
-    }
-    const added = await statusOptionsAdded(
-      octokit,
-      project,
-      onProject.fieldId,
-      lacking
-    );
+    const added = await out.options(project, onProject.fieldId, lacking);
     if (added instanceof ElysiaStatus) {
       if (stopsSync(added)) {
         return added;
@@ -1841,7 +1967,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       addedNow(binding.projectId, project, added.added) ?? undefined;
   };
 
-  /** Each linked task on the board whose issue moved, or that moved itself or has a problem, made one record. */
+  /** Each linked task on the board whose issue moved, or that moved itself (on a binding that writes) or has a problem, made one record. */
   const reconcileLinks = async (
     sync: Sync,
     board: TaskSummary[],
@@ -1863,12 +1989,15 @@ export const createTrackers = (deps: TrackersDeps) => {
           link.issueKey,
           link.baseline.synced.status
         ) !== link.baseline.synced.status;
+      // A change in CawCo has somewhere to go only when the binding writes.
       const touched =
         task !== undefined &&
-        (marked.has(link.taskId) ||
-          link.problem !== null ||
+        (link.problem !== null ||
           statusMoved ||
-          task.updatedAt > (link.syncedAt?.getTime() ?? 0) - CLOCK_MARGIN_MS);
+          (sync.out !== undefined &&
+            (marked.has(link.taskId) ||
+              task.updatedAt >
+                (link.syncedAt?.getTime() ?? 0) - CLOCK_MARGIN_MS)));
       if (task && (issue || touched)) {
         const stoppedBy = await reconcile(sync, link, issue);
         if (stoppedBy) {
@@ -1891,12 +2020,16 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
   };
 
-  /** Tasks filed since the binding with no issue yet (or one refused before), given theirs. */
+  /** Tasks filed since the binding (and since it turned `both`) with no issue yet (or one refused before), given theirs. */
   const fileNewIssues = async (
     sync: Sync,
+    out: Outbound,
     board: TaskSummary[]
   ): Promise<Stopped | undefined> => {
-    const bound = sync.binding.boundAt.getTime() - CLOCK_MARGIN_MS;
+    const bound = Math.max(
+      sync.binding.boundAt.getTime() - CLOCK_MARGIN_MS,
+      out.since
+    );
     for (const task of board) {
       // A routine stays a CawCo file whatever the tracker (§5.2): never an issue.
       if (task.routine) {
@@ -1904,7 +2037,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       }
       const link = db.trackers.link(sync.projectId, task.id);
       if (task.createdAt >= bound && !link) {
-        const stoppedBy = await fileOrRelink(sync, task.id);
+        const stoppedBy = await fileOrRelink(sync, out, task.id);
         if (stoppedBy) {
           return stoppedBy;
         }
@@ -1981,7 +2114,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       return reconciled;
     }
     await fileNewTasks(sync, moved);
-    const filed = await fileNewIssues(sync, board);
+    // An inbound binding files no issue: its tasks stay in CawCo.
+    const filed = sync.out
+      ? await fileNewIssues(sync, sync.out, board)
+      : undefined;
     if (filed) {
       return filed;
     }
@@ -2058,9 +2194,12 @@ export const createTrackers = (deps: TrackersDeps) => {
     );
   };
 
-  // A task changed in CawCo: its project syncs soon. The sync's own writes are not sent back.
+  // A task changed in CawCo: its project syncs soon. The sync's own writes
+  // are not sent back, and an inbound binding sends nothing: its poll alone
+  // brings the tracker's changes in.
   tasks.listen((event) => {
-    if (!db.trackers.binding(event.projectId) || ownEvent(event)) {
+    const binding = db.trackers.binding(event.projectId);
+    if (!binding || binding.direction === "inbound" || ownEvent(event)) {
       return;
     }
     if (event.id) {
@@ -2151,6 +2290,8 @@ export const createTrackers = (deps: TrackersDeps) => {
       targetName: asked.target,
       targetUrl: "",
       boundAt: now,
+      direction: asked.direction,
+      directionAt: null,
       cursor: {
         since: now.getTime(),
         etag: null,
@@ -2179,11 +2320,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const { target, onProject } = read;
     checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
-    // The same target bound again (another connection) keeps where it stood: nothing is missed or copied twice.
-    const kept =
-      was?.provider === draft.provider && was.target === target.id
-        ? { boundAt: was.boundAt, cursor: was.cursor }
-        : {};
+    const kept = keptOf(was, { ...draft, target: target.id });
     await inTurn(projectId, () => {
       db.trackers.bind({
         ...draft,
@@ -2191,6 +2328,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         targetName: target.name,
         targetUrl: target.url,
         ...onProject,
+        githubStatusStages: stagesKept(was, onProject),
         githubStatusesAdded: addedKept(was, onProject),
         ...kept,
       });
@@ -2214,9 +2352,15 @@ export const createTrackers = (deps: TrackersDeps) => {
     asked: BindInput["githubProject"],
     stages: readonly string[]
   ) => {
+    const adapter = await adapterOf(draft);
+    if (adapter instanceof ElysiaStatus) {
+      return adapter;
+    }
+    const out = outboundOf(draft, adapter);
     // A GitHub App that may only read issues would be refused on every
-    // sync: it is refused here, with what to grant on GitHub.
-    if (draft.provider === "github" && asApp) {
+    // sync that writes: it is refused here, with what to grant on GitHub.
+    // An inbound binding only reads.
+    if (draft.provider === "github" && asApp && out) {
       const granted = await signedIn(() =>
         deps.connections.githubAppPermissions(draft.connection)
       );
@@ -2230,17 +2374,13 @@ export const createTrackers = (deps: TrackersDeps) => {
         });
       }
     }
-    const adapter = await adapterOf(draft);
-    if (adapter instanceof ElysiaStatus) {
-      return adapter;
-    }
     const target = await adapter.describe();
     if (target instanceof ElysiaStatus) {
       return target;
     }
     const onProject =
       draft.provider === "github"
-        ? await projectOf(draft.connection, target.id, asked, stages)
+        ? await projectOf(draft.connection, target.id, asked, stages, out)
         : NO_PROJECT;
     return onProject instanceof ElysiaStatus
       ? onProject
@@ -2258,13 +2398,15 @@ export const createTrackers = (deps: TrackersDeps) => {
    * words, so the person can pick no Project or grant what it needs. A
    * connection that may not read the owner's Projects binds with none,
    * GitHub's words kept. Answers the binding's Project columns, the
-   * options it added among them.
+   * options it added among them. With no `out` (an inbound binding, or a
+   * permission asked again) it adds none and names no stage made.
    */
   const projectOf = async (
     connection: string,
     repo: string,
     asked: BindInput["githubProject"],
-    stages: readonly string[]
+    stages: readonly string[],
+    out: Outbound | undefined
   ) => {
     const octokit = await signedIn(() =>
       deps.connections.githubClient(connection)
@@ -2293,9 +2435,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (!chosen) {
       return none;
     }
-    const statuses = chosen.fieldId
-      ? await statusOptionsAdded(octokit, chosen, chosen.fieldId, stages)
-      : { added: [], options: chosen.options };
+    const statuses =
+      out && chosen.fieldId
+        ? await out.options(chosen, chosen.fieldId, stages)
+        : { added: [], options: chosen.options };
     if (statuses instanceof ElysiaStatus) {
       return problem(400, {
         code: "tracker-github-statuses",
@@ -2314,9 +2457,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       githubProjectReason: null,
       // With no Status field there is nothing made: the sync says so, and
       // a field made since takes every stage's option.
-      githubStatusStages: chosen.fieldId
-        ? { projectId: chosen.id, stages: [...stages] }
-        : null,
+      githubStatusStages:
+        out && chosen.fieldId
+          ? { projectId: chosen.id, stages: [...stages] }
+          : null,
       githubStatusesAdded: addedNow(repo, chosen, statuses.added),
       githubStatusesRefused: null,
     };
@@ -2434,6 +2578,10 @@ export const trackerRoutes = (trackers: Trackers) =>
           connection: t.Optional(t.String()),
           /** GitHub: `owner/repo`; Linear: the team's id. */
           target: t.Optional(t.String()),
+          /** Which way it syncs: `inbound` brings issues in as tasks and writes nothing to the tracker; left out, `both`. */
+          direction: t.Optional(
+            t.Union([t.Literal("both"), t.Literal("inbound")])
+          ),
           /** GitHub: the Project whose Status carries the stages, each on the option named as it (one added where none is); null for none; left out, the first linked to the repository. */
           githubProject: t.Optional(
             t.Union([t.Null(), t.Object({ id: t.String() })])

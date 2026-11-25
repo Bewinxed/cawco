@@ -7,6 +7,7 @@
 
 import type { BuiltInKind, BuiltInMember } from "../decides";
 import type { LandsMode } from "../injected";
+import type { TrackerDirection } from "../trackers";
 
 type TaskHome = "files" | "github" | "linear";
 type Decider = Exclude<BuiltInMember, "asker">;
@@ -55,11 +56,11 @@ export const settingsViewWords = {
       },
       github: {
         name: "GitHub Issues",
-        note: "Both sides sync, GitHub wins, and outside issues wait.",
+        note: "Issues sync with tasks, GitHub wins, and outside issues wait.",
       },
       linear: {
         name: "Linear",
-        note: "Both sides sync, Linear wins, and outside issues wait.",
+        note: "Issues sync with tasks, Linear wins, and outside issues wait.",
       },
     } satisfies Record<TaskHome, { name: string; note: string }>,
     syncNow: "Sync now",
@@ -84,6 +85,23 @@ export const settingsViewWords = {
     repoLabel: "Repository",
     teamLabel: "Team",
     projectRepoTag: "This project",
+    directionLabel: "Direction",
+    /** Which way a tie syncs, each with what picking it sends to the site. */
+    directions: {
+      both: {
+        name: "Both ways",
+        note: (site: string) =>
+          `New tasks open issues on ${site}, and edits go both ways.`,
+      },
+      inbound: {
+        name: "Into CawCo only",
+        note: (site: string) =>
+          `Issues become tasks, and nothing goes back to ${site}.`,
+      },
+    } satisfies Record<
+      TrackerDirection,
+      { name: string; note: (site: string) => string }
+    >,
     githubProjectLabel: "GitHub Project for columns",
     githubProjectNone: "Open and closed only",
     saveTie: "Start syncing",

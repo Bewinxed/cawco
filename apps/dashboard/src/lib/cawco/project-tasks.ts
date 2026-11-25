@@ -29,7 +29,7 @@ import type {
   TaskTimes,
   TaskWait,
 } from "@cawco/core/task-views";
-import type { IssueTracker } from "@cawco/core/trackers";
+import type { IssueTracker, TrackerDirection } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
 import type { HubClient } from "@cawco/hub/client";
@@ -256,6 +256,8 @@ export const setTracker = (
     | { tracker: "cawco" }
     | {
         connection: string;
+        /** Which way it syncs: `inbound` writes nothing to the tracker; left out, `both`. */
+        direction?: TrackerDirection;
         /** GitHub: the Project whose Status carries the stages, each on the option named as it (the hub adds any it lacks); null for none. */
         githubProject?: { id: string } | null;
         target: string;

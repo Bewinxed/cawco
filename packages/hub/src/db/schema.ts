@@ -149,7 +149,7 @@ import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
 import { TOOL_STATES, TOOL_UPDATES } from "@cawco/core/tools";
-import { TRACKERS } from "@cawco/core/trackers";
+import { TRACKER_DIRECTIONS, TRACKERS } from "@cawco/core/trackers";
 import { THING_KINDS, TRIGGER_KINDS } from "@cawco/core/triggers";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { USAGE_HARNESSES } from "@cawco/core/usage/types";
@@ -6838,6 +6838,19 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   targetUrl: text("target_url").notNull(),
   /** Issues opened after it become tasks; nothing older is copied. */
   boundAt: timestamp("bound_at").notNull(),
+  /**
+   * Which way it syncs (core `TrackerDirection`): `both`, or `inbound`,
+   * which writes nothing to the tracker (tracker.ts `outboundOf`).
+   */
+  direction: storedEnum(z.enum(TRACKER_DIRECTIONS))("direction")
+    .notNull()
+    .default("both"),
+  /**
+   * When its direction last changed on a binding kept as it stood; null
+   * while it is as bound. Turned to `both`, only tasks filed and comments
+   * written since go to the tracker.
+   */
+  directionAt: timestamp("direction_at"),
   /** The newest issue change its poll took in, ms: the next asks GitHub for changes since it. */
   issuesSince: integer("issues_since").notNull(),
   /** GitHub's ETag for the list of issue changes as it last asked it; null: none. */

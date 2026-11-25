@@ -1,5 +1,9 @@
 <script lang="ts">
   import { repoIdentity, repoPath } from "@cawco/core/protocol";
+  import {
+    TRACKER_DIRECTIONS,
+    type TrackerDirection,
+  } from "@cawco/core/trackers";
   import { boardStatusWords } from "@cawco/core/words/board-statuses";
   import { settingsViewWords as words } from "@cawco/core/words/settings-view";
   import { untrack } from "svelte";
@@ -14,9 +18,11 @@
    * files, GitHub's and Linear's own logos); while tied to one, how the two
    * sides stand above them; and pressed on GitHub or Linear, the tie's setup
    * opening under the tiles, its sign-ins, repositories, teams and GitHub
-   * Projects read from the hub as it asks (`setup`). Linking a GitHub
-   * Project matches the board's columns to its Status options by name, and
-   * the hub adds any it lacks. Files moves at the press (changes.ts
+   * Projects read from the hub as it asks (`setup`), and which way it
+   * syncs: both ways, or into CawCo only, which writes nothing to the
+   * tracker. Linking a GitHub Project matches the board's columns to its
+   * Status options by name, and on a tie both ways the hub adds any it
+   * lacks. Files moves at the press (changes.ts
    * `withAsked`); GitHub or Linear moves at the setup's Save. A refusal
    * puts it back and stands under the tiles (RowFault).
    */
@@ -29,10 +35,12 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconDocument,
+    IconDownload,
     IconError,
     IconExternalLinear,
     IconRefresh,
     IconSettings,
+    IconTransfer,
     IconWorking,
   } from "#lib/icons.js";
   import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
@@ -126,6 +134,8 @@
   let repoPick = $state("");
   /** The GitHub Project picked; null for the first the repository links. */
   let githubProjectPick = $state<string | null>(null);
+  /** Which way the tie syncs, as picked; null for the tie's own, else both ways. */
+  let directionPick = $state<TrackerDirection | null>(null);
 
   const disabled = $derived(!record.hubReachable);
   const syncPending = $derived(syncing || pending.includes("sync"));
@@ -233,6 +243,11 @@
     return githubProjects.find((one) => one.linked)?.id ?? NONE_PROJECT;
   });
 
+  /** Which way the tie syncs: the one picked, else the tie's own, else both ways. */
+  const activeDirection = $derived<TrackerDirection>(
+    directionPick ?? (tie?.home === setupHome ? tie.direction : "both")
+  );
+
   const canSaveTie = $derived(
     !disabled &&
       setupHome !== null &&
@@ -246,6 +261,7 @@
     teamPick = null;
     repoPick = "";
     githubProjectPick = null;
+    directionPick = null;
   }
 
   function closeSetup() {
@@ -297,6 +313,7 @@
         home: setupHome,
         connection: activeConnectionId,
         target,
+        direction: activeDirection,
         githubProject:
           setupHome === "github" && activeProject !== NONE_PROJECT
             ? activeProject
@@ -330,6 +347,7 @@
     return [
       inStep,
       `${tie.connection.name} (${tie.connection.account})`,
+      words.tasks.directions[tie.direction].name,
       words.tasks.linkedCount(tie.linked),
       columns,
     ]
@@ -337,6 +355,14 @@
       .join(", ");
   });
 </script>
+
+{#snippet directionGlyph(direction: TrackerDirection)}
+  {#if direction === "both"}
+    <IconTransfer aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconDownload aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {/if}
+{/snippet}
 
 {#snippet homeGlyph(home: TaskHome)}
   {#if home === "files"}
@@ -676,6 +702,31 @@
                   {/if}
                 </div>
               {/if}
+
+              <!-- Which way it syncs: each way says what it sends to the
+                   site, so both stand side by side (PickTiles). -->
+              <div class={FORM_FIELD}>
+                <p class={FORM_LABEL} id="{uid}-direction">
+                  {words.tasks.directionLabel}
+                </p>
+                <PickTiles
+                  cols={2}
+                  {disabled}
+                  glyph={directionGlyph}
+                  label={words.tasks.directionLabel}
+                  onpick={(next) => {
+                    directionPick = next;
+                  }}
+                  options={TRACKER_DIRECTIONS.map((direction) => ({
+                    id: direction,
+                    name: words.tasks.directions[direction].name,
+                    note: words.tasks.directions[direction].note(
+                      words.tasks.site[setupHome ?? "github"]
+                    ),
+                  }))}
+                  value={activeDirection}
+                />
+              </div>
 
               <!-- The GitHub Project its columns come from (GitHub only): linked,
              the hub matches the board's columns to the Project's statuses. -->

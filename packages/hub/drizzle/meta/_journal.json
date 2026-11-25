@@ -3333,6 +3333,13 @@
       "when": 1795529898114,
       "tag": "0483_artifact_pick",
       "breakpoints": true
+    },
+    {
+      "idx": 484,
+      "version": "6",
+      "when": 1795583403823,
+      "tag": "0484_tracker_direction",
+      "breakpoints": true
     }
   ]
 }

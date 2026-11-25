@@ -36,6 +36,25 @@ export const StatusOptionsAdded = {
   },
 };
 
+/** Synced with GitHub into CawCo only: issues come in as tasks, and nothing goes back. */
+export const IntoCawcoOnly = {
+  args: {
+    ...stageArgs("Tied to GitHub, into CawCo only"),
+    syncing: false,
+    onsync: () => undefined,
+  },
+};
+
+/** Synced into CawCo only, Change sync pressed: the setup opens on the tie's own direction. */
+export const ChangingDirection = {
+  args: {
+    ...stageArgs("Tied to GitHub, into CawCo only"),
+    syncing: false,
+    onsync: () => undefined,
+    opening: "github",
+  },
+};
+
 /** Pressed on GitHub Issues: its setup open, the repository picked in the New session form's picker. */
 export const SettingUpGitHub = {
   args: { opening: "github" },

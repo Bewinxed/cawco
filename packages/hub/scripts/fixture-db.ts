@@ -1142,6 +1142,8 @@ function seedTracker(db: HubDb, projects: string[]): void {
     targetName: TRACKED.target,
     targetUrl: TRACKED.url,
     boundAt,
+    direction: "both",
+    directionAt: null,
     cursor: { since, etag: null, commentsSince: since, commentsEtag: null },
     state: "synced",
     reason: null,

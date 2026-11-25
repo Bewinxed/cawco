@@ -236,6 +236,7 @@ typeOverrides:
     ToolState: OpenEnums.ToolState
     ToolUpdates: OpenEnums.ToolUpdates
     Tracker: OpenEnums.Tracker
+    TrackerDirection: OpenEnums.TrackerDirection
     TrackerSyncState: OpenEnums.TrackerSyncState
     TranscriptBlockState: OpenEnums.TranscriptBlockState
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus

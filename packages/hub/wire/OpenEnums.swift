@@ -10269,6 +10269,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/TrackerDirection`.
+    public enum TrackerDirection: OpenEnum {
+        case both
+        case inbound
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "both": self = .both
+            case "inbound": self = .inbound
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .both: "both"
+            case .inbound: "inbound"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.both, .inbound]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/TrackerSyncState`.
     public enum TrackerSyncState: OpenEnum {
         case refused

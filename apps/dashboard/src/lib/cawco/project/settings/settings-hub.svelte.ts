@@ -359,6 +359,7 @@ export class SettingsHub {
     }
     return {
       home: binding.provider,
+      direction: binding.direction,
       connection: {
         name: binding.connection,
         account:
@@ -574,6 +575,7 @@ export class SettingsHub {
               tracker: tie.home,
               connection: tie.connection,
               target: tie.target,
+              direction: tie.direction,
               ...(tie.home === "github"
                 ? {
                     githubProject: tie.githubProject

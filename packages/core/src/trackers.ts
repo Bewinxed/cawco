@@ -23,6 +23,14 @@ export const TRACKER_NAMES: Readonly<Record<Tracker, string>> = {
 };
 
 /**
+ * Which way a binding syncs (hub tracker.ts): `both` keeps each linked
+ * task and its issue one record and files each new task as an issue;
+ * `inbound` brings issues in as tasks and writes nothing to the tracker.
+ */
+export const TRACKER_DIRECTIONS = ["both", "inbound"] as const;
+export type TrackerDirection = (typeof TRACKER_DIRECTIONS)[number];
+
+/**
  * Where a project's sync stands: `syncing` until its first poll answers,
  * `synced` while the tracker answers, `refused` when the tracker refused the
  * connection's sign-in or scope, whose words are its `reason`.
@@ -122,6 +130,8 @@ interface TrackerBindingView {
   boundAt: number;
   /** The connection's name (hub connections.ts). */
   connection: string;
+  /** Which way it syncs: with `inbound`, nothing is written to the tracker. */
+  direction: TrackerDirection;
   /** GitHub: the Project its stages show on through Status; null when none is set. */
   githubProject: GithubProject | null;
   /**

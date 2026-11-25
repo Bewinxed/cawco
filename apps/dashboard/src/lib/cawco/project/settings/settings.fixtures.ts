@@ -178,6 +178,7 @@ const LANTERN_TIE: TrackerTie = {
     url: "https://github.com/lantern-studio/lantern-web/issues",
   },
   connection: { name: "Lantern GitHub App", account: "lantern-studio" },
+  direction: "both",
   linked: 148,
   statusesRefused: null,
   statusesAdded: null,
@@ -263,6 +264,12 @@ const LANTERN_STATUSES_ADDED: SettingsRecord = {
   },
 };
 
+/** Lantern web taking GitHub's issues in as tasks, sending nothing back to its public repository. */
+const LANTERN_INBOUND: SettingsRecord = {
+  ...LANTERN_TIED,
+  tie: { ...LANTERN_TIE, direction: "inbound", linked: 23 },
+};
+
 /** Lantern web named to an account that is signed in on no machine: nothing starts. */
 const LANTERN_SIGNED_OUT: SettingsRecord = {
   ...LANTERN,
@@ -291,6 +298,7 @@ export const SITUATIONS = {
   "Two stages in trouble": LANTERN_IN_TROUBLE,
   "Tied to GitHub, in step": LANTERN_TIED,
   "GitHub Status options added": LANTERN_STATUSES_ADDED,
+  "Tied to GitHub, into CawCo only": LANTERN_INBOUND,
   "Named account signed out": LANTERN_SIGNED_OUT,
   "Who decides unreadable": LANTERN_RULES_UNREADABLE,
   "Hub out of reach": LANTERN_HUB_AWAY,
