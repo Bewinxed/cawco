@@ -1,7 +1,7 @@
 /**
  * Usability feedback's consent (core usability-feedback.ts), read on connect
- * (`/api/usability-feedback`) and written by the first run's step, the one
- * ask an existing hub gets in Needs you, and Configure › Feedback to CawCo:
+ * (`/api/usability-feedback`) and written by the first run's step and
+ * Configure › Feedback to CawCo:
  * null until a person answers, so the dashboard asks. An answer saves at
  * once and shows at once; one given while a save is on its way is saved
  * when that one settles, so the latest answer holds. A failed save puts the

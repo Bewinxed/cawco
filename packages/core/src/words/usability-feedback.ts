@@ -2,7 +2,7 @@
  * Usability feedback's words (core usability-feedback.ts): what an agent
  * reads of the `usability_feedback` tool and at the end of every refusal
  * while feedback is on, and what the person reads where they allow it (the
- * first run, the one ask an existing hub gets, Configure › Feedback).
+ * first run, Configure › Feedback).
  */
 
 /** The tool's name, as every harness lists it under CawCo's prefix. */
@@ -73,8 +73,4 @@ export const usabilityFeedbackWords = {
   stepDone: (allowed: boolean) =>
     allowed ? "Feedback to CawCo: allowed" : "Feedback to CawCo: not allowed",
   stepNote: "Change it in Configure › Feedback to CawCo.",
-
-  /** The one ask an existing hub gets in Needs you. */
-  needTitle: "Feedback to CawCo",
-  needMeta: "Asked once",
 };

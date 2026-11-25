@@ -40,10 +40,6 @@
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
    *
-   * The usability feedback question, asked once of a hub past its first
-   * run, is one more: the question as its line, what Allow means under it,
-   * then Don't allow and Allow as peers; an answer takes the row away.
-   *
    * This browser's presence is one more: its notice as its line (what
    * Chrome shares, and that what needs you shows here instead of on your
    * phone), then Skip and Allow as peers. Allow asks the browser for Idle
@@ -83,7 +79,6 @@
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
-  import { usabilityFeedbackWords } from "@cawco/core/words/usability-feedback";
   import type { Component } from "svelte";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
   import {
@@ -97,7 +92,6 @@
     IconArtifactCanvas,
     IconArtifactPage,
     IconArtifactSheet,
-    IconBug,
     IconCheck,
     IconClose,
     IconDollar,
@@ -151,7 +145,6 @@
     dismissLfsRefusal,
   } from "../stores/offers.svelte";
   import { relayStore } from "../stores/relay.svelte";
-  import { chooseFeedback } from "../stores/usability-feedback.svelte";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import {
@@ -188,7 +181,6 @@
     if (
       item.kind === "tailnet" ||
       item.kind === "desk" ||
-      item.kind === "feedback" ||
       item.kind === "relay" ||
       item.kind === "machine"
     ) {
@@ -229,8 +221,6 @@
         return item.unavailable
           ? presenceWords.unavailable
           : presenceWords.lead(item, onPhone());
-      case "feedback":
-        return usabilityFeedbackWords.question;
       case "relay":
         return "";
       case "artifact":
@@ -389,8 +379,6 @@
         return tailnetWords.meta(item.tailnet.host);
       case "desk":
         return presenceWords.meta;
-      case "feedback":
-        return usabilityFeedbackWords.needMeta;
       case "relay":
         return "";
       case "pairing":
@@ -814,8 +802,6 @@
         {:else}
           <IconMonitor aria-hidden="true" class="size-icon-md" />
         {/if}
-      {:else if item.kind === "feedback"}
-        <IconBug aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "tailnet"}
         {#if item.done}
           <IconSuccess
@@ -1174,56 +1160,6 @@
           {@render dot()}
           <span class="flex-none num">{item.taskId}</span>
         </span>
-      {:else if item.kind === "feedback"}
-        <!-- What Allow means, then Don't allow and Allow as peers (The Peer
-           Rule): the person's own call on what leaves their machines, so
-           neither is made the more inviting. While no machine signs in to
-           GitHub the line under says one is needed; a refused answer stands
-           over the peers. -->
-        <div
-          data-slot="peers"
-          class="relative col-start-2 col-end-4 row-3 flex flex-col gap-space-2"
-        >
-          <p class="m-0 type-meta text-pretty text-ink-muted">
-            {usabilityFeedbackWords.options.allow.line}
-          </p>
-          {#if !item.signedIn}
-            <p class="m-0 type-meta text-pretty text-ink-muted">
-              {usabilityFeedbackWords.needsSignIn}
-            </p>
-          {/if}
-          {#if item.fault}
-            <p
-              class="m-0 type-meta text-pretty wrap-anywhere text-status-fail-ink"
-              role="alert"
-            >
-              {item.fault}
-            </p>
-          {/if}
-          <span
-            class="flex flex-wrap items-center justify-end gap-space-2 coarse:gap-space-4"
-          >
-            <span
-              data-slot="meta"
-              class="pointer-events-none me-auto min-w-0 flex-none overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-              >{meta}</span
-            >
-            <Button
-              data-deny
-              label={usabilityFeedbackWords.options.deny.name}
-              onclick={() => chooseFeedback(false)}
-              size="sm"
-              variant="secondary"
-            />
-            <Button
-              data-allow
-              label={usabilityFeedbackWords.options.allow.name}
-              onclick={() => chooseFeedback(true)}
-              size="sm"
-              variant="secondary"
-            />
-          </span>
-        </div>
       {:else if item.kind === "desk" && !item.done}
         <!-- Where it comes from, then Skip and Allow as peers (The Peer
            Rule) on the same line while the row has the room (a desk's

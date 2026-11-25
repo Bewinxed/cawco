@@ -239,8 +239,8 @@ async function refresh(): Promise<boolean> {
   // The fleet's helpers and step lists: the first run asks each one no
   // person has chosen yet, and Configure shows them.
   readOwnTools();
-  // Whether agents may send CawCo usability feedback: the first run, or
-  // Needs you on a hub that has run a while, asks while no person has said.
+  // Whether agents may send CawCo usability feedback: the first run asks
+  // while no person has said.
   readFeedback();
   // The person's presence: the rail's dot, and Needs you's row for this browser.
   readPerson().catch(() => undefined);

@@ -1,8 +1,8 @@
 /**
  * Usability feedback's consent (usability-feedback.ts): whether agents may
  * file trouble with CawCo's own tools as issues on CawCo's repository. Read
- * by the first run, the one ask an existing hub gets, and Configure ›
- * Feedback to CawCo, each of which writes it. While no machine is known to
+ * by the first run and Configure › Feedback to CawCo, each of which writes
+ * it. While no machine is known to
  * sign in to GitHub, which the tool needs, the read asks the connected ones
  * again, so a `gh auth login` since they connected is found.
  */
