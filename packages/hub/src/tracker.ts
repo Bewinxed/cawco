@@ -33,10 +33,13 @@
  *   binding does not have. Linear's GitHub sync offers the same choice:
  *   "One-way: issues created in GitHub will create a synced copy in
  *   Linear" (linear.app/docs/github). An inbound binding through a GitHub
- *   App needs only to read issues. A binding turned `both` sends what is
- *   filed and written from then: tasks filed and comments written while it
- *   was inbound stay in CawCo, and a linked task whose fields moved
- *   meanwhile sends them as any change, under the last-agreed rule.
+ *   App needs only to read issues. A binding turned `both` sends only what
+ *   is filed and written from then: tasks filed and comments written while
+ *   it was inbound stay in CawCo, and on the switch each linked task is
+ *   settled as one linked again (below): wherever it and its issue differ,
+ *   in a field, state or Status, the tracker's value stands and becomes
+ *   what they agree on (`settleTurned`). An edit made while inbound never
+ *   reaches the tracker; one made after the switch does.
  * - **The link** is the task file's `issue:` (the issue's URL; files are the
  *   truth), the task's record link as the issue holds it (`task_links`,
  *   mode `record`, db task-links.ts), and a row of what the two last agreed
@@ -1519,6 +1522,36 @@ export const createTrackers = (deps: TrackersDeps) => {
   };
 
   /**
+   * A binding turned from inbound to `both`: each linked task settled as a
+   * task linked again, so nothing its task took on while inbound reaches the
+   * tracker. Its baseline becomes the task as it stands, the state and
+   * Status unagreed, so every field, state and Status where the task and
+   * its issue differ is the tracker's on the sync the binding runs next,
+   * the baseline then the tracker's value; each task is marked so that
+   * sync reconciles it. Only what changes after the switch goes out.
+   */
+  const settleTurned = async (projectId: string): Promise<void> => {
+    for (const link of db.trackers.links(projectId)) {
+      const task = await tasks.get(projectId, link.taskId);
+      if (task instanceof ElysiaStatus) {
+        console.info(
+          `[tracker] ${projectId} ${link.taskId}: not settled on the turn to both: ${task.response.detail}`
+        );
+        continue;
+      }
+      db.trackers.updateLink(projectId, link.taskId, {
+        synced: {
+          ...fileFields(task),
+          stage: task.stage,
+          state: "",
+          status: null,
+        },
+      });
+      dirtyOf(projectId).add(link.taskId);
+    }
+  };
+
+  /**
    * A new issue on the binding's Project in its task's stage's Status, when
    * the stage maps to one; the Status agreed on, or nothing when there is no
    * Project or it would not (its words kept). A rate limit stops the sync.
@@ -2321,7 +2354,12 @@ export const createTrackers = (deps: TrackersDeps) => {
     checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
     const kept = keptOf(was, { ...draft, target: target.id });
-    await inTurn(projectId, () => {
+    // The same target's direction changed just now, dated: from inbound to both.
+    const turnedBoth =
+      asked.direction === "both" &&
+      kept.directionAt !== undefined &&
+      kept.directionAt !== was?.directionAt;
+    await inTurn(projectId, async () => {
       db.trackers.bind({
         ...draft,
         target: target.id,
@@ -2336,7 +2374,9 @@ export const createTrackers = (deps: TrackersDeps) => {
       if (was?.githubProject?.id !== onProject.githubProject?.id) {
         db.trackers.forgetStatus(projectId);
       }
-      return Promise.resolve();
+      if (turnedBoth) {
+        await settleTurned(projectId);
+      }
     });
     console.info(
       `[tracker] ${projectId} bound to ${target.name} through ${asked.connection}`
