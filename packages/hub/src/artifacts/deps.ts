@@ -246,7 +246,7 @@ export interface ArtifactServiceDeps {
     maker: InstanceRow,
     artifact: ArtifactRow,
     next?: ArtifactRow
-  ) => Promise<void>;
+  ) => void;
   /** The machine the hub runs on; undefined before it is read. */
   hubMachine: () => string | undefined;
   instance: (id: string) => InstanceRow | undefined;

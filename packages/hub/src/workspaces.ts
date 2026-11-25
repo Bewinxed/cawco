@@ -3,6 +3,7 @@ import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { detach } from "@cawco/core/detach";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import type { InstanceRow, InstanceStatus } from "@cawco/core/protocol";
@@ -46,7 +47,6 @@ import {
   type WorkspaceUnlanded,
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
-import AsyncLock from "async-lock";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -1613,11 +1613,9 @@ export const createWorkspaces = ({
    * a boundary that the workspace's settle was closing, and failed. A step
    * never takes its own workspace's turn again.
    */
-  const workspaceTurns = new AsyncLock({
-    maxPending: Number.POSITIVE_INFINITY,
-  });
+  const workspaceTurns = makeKeyedLock();
   const inWorkspaceTurn = <T>(id: string, work: () => Promise<T>): Promise<T> =>
-    workspaceTurns.acquire(id, work);
+    workspaceTurns.run(id, work);
   /** Workspaces whose turn now runs work going on in them ({@link goOnIn}): its own send waits on no settle. */
   const goingOn = new Set<string>();
   /**

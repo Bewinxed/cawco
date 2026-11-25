@@ -71,6 +71,7 @@ import type {
 } from "@cawco/core/external-items";
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { closeFences, someLineOutsideFences } from "@cawco/core/markdown-code";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -111,7 +112,6 @@ import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { workWords } from "@cawco/core/words/work";
 import { linkOfUrl } from "@cawco/providers/registry";
-import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { WorkItemAttempt } from "./db/project-work";
 import type { Tracker } from "./db/schema";
@@ -1892,7 +1892,7 @@ export const createTasks = (store: TaskStore) => {
       : undefined;
   };
   /** One change to a project's tasks at a time, around the folder's own commits. */
-  const taskTurns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const taskTurns = makeKeyedLock();
   /** The project's starters, each place's, as the stages view carries them. */
   const startersOf = (
     projectId: string
@@ -2730,7 +2730,7 @@ export const createTasks = (store: TaskStore) => {
     settling.add(key);
     const what = `task ${path} settle`;
     detach(
-      taskTurns.acquire(projectId, async () => {
+      taskTurns.run(projectId, async () => {
         try {
           const refused = await settleQueued(projectId, path, number);
           if (refused) {
@@ -3506,7 +3506,7 @@ export const createTasks = (store: TaskStore) => {
       );
     detach(
       taskTurns
-        .acquire(projectId, () => fillTypes(projectId))
+        .run(projectId, () => fillTypes(projectId))
         .then(
           (refused) => {
             if (refused) {
@@ -3923,7 +3923,7 @@ export const createTasks = (store: TaskStore) => {
     ref: string,
     actor: TaskActor,
     apply: (doc: TaskDoc, id: string) => string | Did
-  ) => taskTurns.acquire(projectId, () => amend(projectId, ref, actor, apply));
+  ) => taskTurns.run(projectId, () => amend(projectId, ref, actor, apply));
 
   /** A refused stage, with its problem when it has one: 400 for a stage the project lacks, 403 for one its rules close. */
   const stageRefusal = (
@@ -4491,7 +4491,7 @@ export const createTasks = (store: TaskStore) => {
     );
     const dropped = closed.kind === "dropped" && !closed.duplicateOf;
     const unwaited = dropped
-      ? await taskTurns.acquire(projectId, () =>
+      ? await taskTurns.run(projectId, () =>
           repoint(projectId, id, null, `${id} was dropped`)
         )
       : [];
@@ -4695,7 +4695,7 @@ export const createTasks = (store: TaskStore) => {
     why: string | undefined,
     tickCriteria: boolean | undefined
   ) =>
-    taskTurns.acquire(projectId, async () => {
+    taskTurns.run(projectId, async () => {
       const file = await opened(projectId, ref);
       if (file instanceof ElysiaStatus) {
         return file;
@@ -5293,7 +5293,7 @@ export const createTasks = (store: TaskStore) => {
         `[tasks] project ${projectId}'s task index was not caught up: ${why}`
       );
     try {
-      const refused = await taskTurns.acquire(projectId, async () => {
+      const refused = await taskTurns.run(projectId, async () => {
         for (const step of [
           retireMover,
           dropTemplateCopy,
@@ -5527,7 +5527,7 @@ export const createTasks = (store: TaskStore) => {
     actor: TaskActor,
     outcome: LinkOutcome
   ) =>
-    taskTurns.acquire(projectId, async () => {
+    taskTurns.run(projectId, async () => {
       const file = await opened(projectId, ref);
       if (file instanceof ElysiaStatus) {
         return file;
@@ -5781,7 +5781,7 @@ export const createTasks = (store: TaskStore) => {
 
     /** A new task filed in the project's turn as `draft` asks ({@link drafted}), under the next free number; listeners hear it was created. */
     async create(projectId: string, draft: TaskDraft, actor: TaskActor) {
-      const task = await taskTurns.acquire(projectId, async () => {
+      const task = await taskTurns.run(projectId, async () => {
         const tracker = known(projectId);
         if (tracker instanceof ElysiaStatus) {
           return tracker;
@@ -5844,7 +5844,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor,
       from: string
     ) {
-      const adopted = await taskTurns.acquire(projectId, async () => {
+      const adopted = await taskTurns.run(projectId, async () => {
         const tracker = known(projectId);
         if (tracker instanceof ElysiaStatus) {
           return tracker;
@@ -5894,7 +5894,7 @@ export const createTasks = (store: TaskStore) => {
       if (runsOn instanceof ElysiaStatus) {
         return runsOn;
       }
-      const task = await taskTurns.acquire(projectId, async () => {
+      const task = await taskTurns.run(projectId, async () => {
         const file = await opened(projectId, ref);
         if (file instanceof ElysiaStatus) {
           return file;
@@ -6168,7 +6168,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor,
       archived = true
     ) {
-      const task = await taskTurns.acquire(projectId, async () => {
+      const task = await taskTurns.run(projectId, async () => {
         const tracker = known(projectId);
         if (tracker instanceof ElysiaStatus) {
           return tracker;
@@ -6189,7 +6189,7 @@ export const createTasks = (store: TaskStore) => {
      * as done, or take their edges out first.
      */
     async remove(projectId: string, ref: string, actor: TaskActor) {
-      const gone = await taskTurns.acquire(projectId, () =>
+      const gone = await taskTurns.run(projectId, () =>
         removeFile(projectId, ref, actor)
       );
       return gone instanceof ElysiaStatus
@@ -6205,7 +6205,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor
     ) {
       const added = (changes.add ?? []).map(({ text }) => text.trim());
-      const task = await taskTurns.acquire(projectId, async () => {
+      const task = await taskTurns.run(projectId, async () => {
         const file = await opened(projectId, ref);
         if (file instanceof ElysiaStatus) {
           return file;
@@ -6249,7 +6249,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor,
       message?: string
     ) {
-      const written = await taskTurns.acquire(projectId, () =>
+      const written = await taskTurns.run(projectId, () =>
         stagesWritten(projectId, content, actor, message)
       );
       return written instanceof ElysiaStatus
@@ -6271,7 +6271,7 @@ export const createTasks = (store: TaskStore) => {
       template: StagesTemplate,
       actor: TaskActor
     ) {
-      const written = await taskTurns.acquire(projectId, () =>
+      const written = await taskTurns.run(projectId, () =>
         templateApplied(projectId, template, actor)
       );
       return written instanceof ElysiaStatus
@@ -6418,7 +6418,7 @@ export const createTasks = (store: TaskStore) => {
       if (written instanceof ElysiaStatus) {
         return written;
       }
-      const task = await taskTurns.acquire(projectId, async () => {
+      const task = await taskTurns.run(projectId, async () => {
         const file = await opened(projectId, ref);
         if (file instanceof ElysiaStatus) {
           return file;
@@ -6442,7 +6442,7 @@ export const createTasks = (store: TaskStore) => {
 
     /** {@link migrateLinks} in the project's turn: what the hub runs for each project as it starts. */
     migrateLinks(projectId: string) {
-      return taskTurns.acquire(projectId, async () => {
+      return taskTurns.run(projectId, async () => {
         const tracker = known(projectId);
         if (tracker instanceof ElysiaStatus) {
           return tracker;

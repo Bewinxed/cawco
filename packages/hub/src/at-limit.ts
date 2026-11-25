@@ -12,6 +12,7 @@ import {
 } from "@cawco/core/accounts";
 import { WORK_IN_FLIGHT } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -25,7 +26,6 @@ import {
 import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
-import AsyncLock from "async-lock";
 import type { KeptOff } from "./account-marks";
 import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
@@ -1816,7 +1816,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     (accountId ? db.accounts.get(accountId)?.provider : undefined) ?? "";
 
   /** Each provider's decisions, one at a time: the next starts once the one before it ended. */
-  const chains = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const chains = makeKeyedLock();
 
   /**
    * Runs `work` once every decision of `provider` before it has ended, so
@@ -1828,7 +1828,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     what: string,
     work: () => Promise<void>
   ): Promise<void> =>
-    chains.acquire(provider, work).catch((error: unknown) => {
+    chains.run(provider, work).catch((error: unknown) => {
       console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
     });
 

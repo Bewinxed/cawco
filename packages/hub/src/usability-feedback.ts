@@ -23,6 +23,7 @@
  */
 
 import type { ForgeAsk } from "@cawco/core/forge-post";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   FEEDBACK_HOST,
@@ -43,7 +44,6 @@ import {
   usabilityFeedbackWords as words,
 } from "@cawco/core/words/usability-feedback";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import AsyncLock from "async-lock";
 import { problem } from "elysia";
 import { z } from "zod";
 import type { ForgeCall } from "./forge-posts";
@@ -156,7 +156,7 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
    * only once the filing before it has ended, so reports of one problem that
    * arrive together find the issue the first one opened.
    */
-  const byFingerprint = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const byFingerprint = makeKeyedLock();
 
   /** Runs `change`, and says so when it turned feedback on or off. */
   const moving = (change: () => void): void => {
@@ -228,7 +228,7 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       report.tool,
       refusalIdentity(report.got, heard)
     );
-    const called = await byFingerprint.acquire(fingerprint, () =>
+    const called = await byFingerprint.run(fingerprint, () =>
       deps.forge(sender, {
         repo: deps.repo,
         write: {

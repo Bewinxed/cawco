@@ -44,6 +44,7 @@ import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -53,7 +54,6 @@ import { unhandled } from "@cawco/core/unhandled";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
-import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
 import { type AnyProblem, isProblem } from "./refusal";
 
@@ -600,7 +600,7 @@ const commit = async (
  * so commits never interleave. A caller that reads a file, changes it and
  * writes it back (the task files) takes its own lock around those writes.
  */
-const projectTurns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+const projectTurns = makeKeyedLock();
 /** Projects whose folder this process has seen made, so a read skips the check. */
 const ready = new Set<string>();
 /** Projects whose folder went to the trash since the hub started: never made again until it comes back. */
@@ -694,7 +694,7 @@ const forReading = async (projectId: string) => {
     return root;
   }
   if (!ready.has(projectId)) {
-    const prepared = await projectTurns.acquire(projectId, () =>
+    const prepared = await projectTurns.run(projectId, () =>
       prepare(projectId, root)
     );
     if (prepared instanceof ElysiaStatus) {
@@ -1261,7 +1261,7 @@ const inFolderTurn = <T>(
   root: string,
   work: () => Promise<T>
 ) =>
-  projectTurns.acquire(projectId, async () => {
+  projectTurns.run(projectId, async () => {
     const prepared = await prepare(projectId, root);
     return prepared instanceof ElysiaStatus ? prepared : await work();
   });
@@ -2540,7 +2540,7 @@ export const trashProjectFolder = async (projectId: string, entry: string) => {
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await projectTurns.acquire(
+  return await projectTurns.run(
     projectId,
     async (): Promise<string | undefined> => {
       letGo(projectId);
@@ -2564,7 +2564,7 @@ export const deleteProjectFolder = async (projectId: string) => {
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await projectTurns.acquire(projectId, async () => {
+  return await projectTurns.run(projectId, async () => {
     letGo(projectId);
     if (!(await exists(root))) {
       return false;
@@ -2589,7 +2589,7 @@ export const untrashProjectFolder = async (
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await projectTurns.acquire(projectId, async () => {
+  return await projectTurns.run(projectId, async () => {
     if (entry === null) {
       forgotten.delete(projectId);
       return;

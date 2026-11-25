@@ -67,7 +67,7 @@
     "bun-plugin-svelte": "0.0.6",
     "cronstrue": "3.32.0",
     "drizzle-orm": "^0.45.3",
-    "effect": "^4.0.0",
+    "effect": "4.1.5",
     "elysia": "2.0.0-rc.4",
     "exact-mirror": "^1.2.7",
     "image-size": "2.0.4",

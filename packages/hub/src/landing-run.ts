@@ -853,8 +853,6 @@ export const createLandingRun = ({
       last: lastBranchPush(item),
       logsUrl: sessionUrl(item.instanceId),
       run: runIn(workspace, item),
-      turn: turnOf(item),
-      queue: landings,
       skip: db.workItemOutputs(item.id),
       stopped: landingStopped(item),
     });

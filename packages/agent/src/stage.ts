@@ -1516,10 +1516,6 @@ const holdsMemory = (stage: Stage): boolean =>
   stage.status === "live" ||
   stage.status === "starting" ||
   stage.status === "waking";
-
-/** One start's room is weighed at a time, each on what the one before left ({@link roomFor}). */
-let weighing: Promise<void> = Promise.resolve();
-
 /**
  * Memory of stages put to sleep a moment ago that the free figure may not
  * count yet: each until its kill's grace ({@link KILL_GRACE_MS}) and as long
@@ -1567,10 +1563,8 @@ function keepMeasuring(): void {
  * on it reconnects, and would wake it again at once. A start is never
  * refused: when nothing is left to put to sleep it starts anyway, said.
  */
-async function roomFor(stage: Stage): Promise<void> {
-  const turn = weighing.then(() => weigh(stage));
-  weighing = turn.catch(() => undefined);
-  await turn;
+function roomFor(stage: Stage): void {
+  weigh(stage);
   keepMeasuring();
 }
 
@@ -1659,7 +1653,7 @@ async function start(stage: Stage): Promise<void> {
       `port ${stage.port} in this workspace is already in use, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
-  await roomFor(stage);
+  roomFor(stage);
   const boundary = await ensureBoundary(stage.boundary);
   const [command, env] = commandOf(stage);
   stage.startedAt = Date.now();

@@ -32,6 +32,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   PLAN_WAKE_QUIET_MS,
   PLAN_WAKING_EDITS,
@@ -43,7 +44,6 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
-import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
@@ -128,7 +128,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /** One quiet window per receiver: its timer, re-armed by each waking change. */
   const quiet = new Map<string, HubTimer>();
   /** Each receiver's deliveries, one at a time and in order. */
-  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const turns = makeKeyedLock();
 
   const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
@@ -360,7 +360,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   ): Promise<void> => {
     const logged = (said: string) =>
       console.warn(`[plan-changes] ${key}: ${said}`);
-    return turns.acquire(key, work).then(
+    return turns.run(key, work).then(
       (refused) => {
         if (refused) {
           logged(refused.response.detail);

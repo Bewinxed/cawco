@@ -20,6 +20,7 @@ import {
   parseArtifactComments,
   parseArtifactResponses,
 } from "@cawco/core/injected";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
@@ -43,7 +44,6 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
-import AsyncLock from "async-lock";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import { designFolderOf } from "./artifacts/design-folder";
@@ -112,9 +112,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
    * it already read is not repeated. Each artifact's events settle one after
    * another.
    */
-  const artifactEvents = new AsyncLock({
-    maxPending: Number.POSITIVE_INFINITY,
-  });
+  const artifactEvents = makeKeyedLock();
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
     whole: Pick<HubEnvelope<"send">, "payload"> | null
@@ -323,7 +321,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
    * is kept in its transcript as not sent, with why, waking nobody. So is
    * one it didn't take.
    */
-  const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
+  const handArtifactUp: ArtifactServiceDeps["handedUp"] = (
     parent,
     maker,
     artifact,
@@ -339,29 +337,26 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       ask: artifact.ask,
       next: next?.id,
     });
-    await artifactEvents.acquire(`${artifact.id}:handed`, () => {
-      if (!wokenBy(parent, maker)) {
-        recordUndelivered(parent, text, [], artifactToolWords.handedUnwoken);
-        return Promise.resolve();
-      }
-      const record = sendArtifactEvent(
-        parent,
-        text,
-        [],
-        undefined,
-        [],
-        ARTIFACT_HANDED_ORIGIN
+    if (!wokenBy(parent, maker)) {
+      recordUndelivered(parent, text, [], artifactToolWords.handedUnwoken);
+      return;
+    }
+    const record = sendArtifactEvent(
+      parent,
+      text,
+      [],
+      undefined,
+      [],
+      ARTIFACT_HANDED_ORIGIN
+    );
+    if (record instanceof ElysiaStatus) {
+      // A problem the send path answers (a conversation gone) keeps no record of its own.
+      recordUndelivered(parent, text, [], record.response.detail);
+    } else if (record?.state === "failed") {
+      console.warn(
+        `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
       );
-      if (record instanceof ElysiaStatus) {
-        // A problem the send path answers (a conversation gone) keeps no record of its own.
-        recordUndelivered(parent, text, [], record.response.detail);
-      } else if (record?.state === "failed") {
-        console.warn(
-          `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
-        );
-      }
-      return Promise.resolve();
-    });
+    }
   };
   /**
    * Tells `instance` the person sent their picks on `artifact`. Answers the
@@ -373,7 +368,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     artifact: ArtifactRow,
     { since }: { since: number }
   ): Promise<string | undefined> =>
-    artifactEvents.acquire(`${artifact.id}:picks`, async () => {
+    artifactEvents.run(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
         instance,
         artifact,
@@ -423,25 +418,24 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     instance,
     artifact,
     delivery
-  ) =>
-    artifactEvents.acquire(`${artifact.id}:marks`, () => {
-      const taker = takerOf(instance, artifact);
-      switch (taker.to) {
-        case "writer":
-        case "none":
-          return marksToSession(instance, artifact, delivery);
-        case "route":
-          return marksRouted(
-            instance,
-            artifact,
-            taker.projectId,
-            taker.why,
-            delivery
-          );
-        default:
-          return unhandled("artifact taker", taker);
-      }
-    });
+  ) => {
+    const taker = takerOf(instance, artifact);
+    switch (taker.to) {
+      case "writer":
+      case "none":
+        return marksToSession(instance, artifact, delivery);
+      case "route":
+        return marksRouted(
+          instance,
+          artifact,
+          taker.projectId,
+          taker.why,
+          delivery
+        );
+      default:
+        return unhandled("artifact taker", taker);
+    }
+  };
   /** Who takes what the person did on an artifact `writer` made (artifacts/taker.ts). */
   const takerOf = (writer: InstanceRow | undefined, artifact: ArtifactRow) =>
     artifactTaker(writer, artifact, artifactRefusal);

@@ -51,8 +51,8 @@
  */
 
 import type { CommandResult } from "@cawco/core/commands/controls";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { shellQuote } from "@cawco/core/shell-quote";
-import AsyncLock from "async-lock";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
@@ -194,7 +194,7 @@ const turnWords = (branch: string, ahead: LandingTurn[]): string =>
  * push.
  */
 export function landingQueue(): LandingQueue {
-  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const turns = makeKeyedLock();
   /** Per key: the landing running now and those waiting behind it, in order. */
   const lines = new Map<
     string,
@@ -225,7 +225,7 @@ export function landingQueue(): LandingQueue {
     if (queued) {
       sayWaits(key);
     }
-    return turns.acquire(key, async () => {
+    return turns.run(key, async () => {
       line.waiting = line.waiting.filter((each) => each !== turn);
       line.running = turn;
       if (queued) {
@@ -1022,10 +1022,9 @@ async function ready(
 export function pushBranch(
   base: string,
   branch: string,
-  deps: Pick<
-    LandingDeps,
-    "logsUrl" | "queue" | "run" | "skip" | "stopped" | "turn"
-  > & { last: string | undefined }
+  deps: Pick<LandingDeps, "logsUrl" | "run" | "skip" | "stopped"> & {
+    last: string | undefined;
+  }
 ): Promise<BranchOutcome> {
   return untilStopped(pushOwnBranch(base, branch, deps));
 }
@@ -1040,50 +1039,48 @@ async function pushOwnBranch(
   if (start.kind !== "ready") {
     return start;
   }
-  return await deps.queue(`${start.repo}#${branch}`, async () => {
-    if (deps.stopped?.()) {
-      return { kind: "stopped" };
-    }
-    const fetched = await fetchBase(run, base, deps.stopped);
-    if (fetched.exitCode !== 0) {
-      return refusal("fetch", fetched);
-    }
-    const ahead = await run(
-      `git rev-list --count ${shellQuote(`origin/${base}`)}..HEAD`,
-      LOCAL_MS
-    );
-    if (ahead.exitCode !== 0) {
-      return refusal("read", ahead);
-    }
-    if (Number(ahead.stdout.trim()) === 0) {
-      return { kind: "nothing" };
-    }
-    const stamped = await landedRebase(
-      run,
-      `origin/${base}`,
-      deps.logsUrl,
-      true,
-      false
-    );
-    if (stamped.kind === "conflict") {
-      return {
-        kind: "refused",
-        step: "rebase",
-        detail: `the rebase that stamps its commits where they stand conflicted on ${stamped.files}`,
-      };
-    }
-    if (stamped.kind !== "rebased") {
-      return stamped;
-    }
-    const sha = stamped.head;
-    if (deps.stopped?.()) {
-      return { kind: "stopped" };
-    }
-    const refused = await leasedPush(run, branch, sha, deps.last);
-    return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
-      ? refused
-      : { kind: "pushed", sha };
-  });
+  if (deps.stopped?.()) {
+    return { kind: "stopped" };
+  }
+  const fetched = await fetchBase(run, base, deps.stopped);
+  if (fetched.exitCode !== 0) {
+    return refusal("fetch", fetched);
+  }
+  const ahead = await run(
+    `git rev-list --count ${shellQuote(`origin/${base}`)}..HEAD`,
+    LOCAL_MS
+  );
+  if (ahead.exitCode !== 0) {
+    return refusal("read", ahead);
+  }
+  if (Number(ahead.stdout.trim()) === 0) {
+    return { kind: "nothing" };
+  }
+  const stamped = await landedRebase(
+    run,
+    `origin/${base}`,
+    deps.logsUrl,
+    true,
+    false
+  );
+  if (stamped.kind === "conflict") {
+    return {
+      kind: "refused",
+      step: "rebase",
+      detail: `the rebase that stamps its commits where they stand conflicted on ${stamped.files}`,
+    };
+  }
+  if (stamped.kind !== "rebased") {
+    return stamped;
+  }
+  const sha = stamped.head;
+  if (deps.stopped?.()) {
+    return { kind: "stopped" };
+  }
+  const refused = await leasedPush(run, branch, sha, deps.last);
+  return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
+    ? refused
+    : { kind: "pushed", sha };
 }
 
 /** Whitespace between `git ls-remote`'s sha and its ref. */

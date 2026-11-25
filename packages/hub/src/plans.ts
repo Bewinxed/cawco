@@ -36,6 +36,7 @@
  * and the deltas after it never cross.
  */
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   type KeptStep,
   type OrphanedComments,
@@ -56,7 +57,6 @@ import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { planWords } from "@cawco/core/words/plan";
-import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
@@ -710,7 +710,7 @@ export const createPlans = (deps: PlansDeps) => {
   /** The plan each session's followers last heard, by instance. */
   const held = new Map<string, Held>();
   /** Each session's queue: every read and send for it runs in turn. */
-  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const turns = makeKeyedLock();
 
   const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
@@ -890,7 +890,7 @@ export const createPlans = (deps: PlansDeps) => {
   };
 
   const settle = (instanceId: string) =>
-    turns.acquire(instanceId, async () => {
+    turns.run(instanceId, async () => {
       const row = rowOf(instanceId);
       if (row instanceof ElysiaStatus) {
         return row;
@@ -969,7 +969,7 @@ export const createPlans = (deps: PlansDeps) => {
       send: (message: PlanSnapshot) => void
     ): void {
       turns
-        .acquire(instanceId, async () => {
+        .run(instanceId, async () => {
           const known = held.get(instanceId);
           if (known) {
             send(snapshotOf(instanceId, known));

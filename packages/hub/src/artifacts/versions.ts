@@ -241,7 +241,7 @@ export const createVersions = (ctx: VersionsContext) => {
     }
     if (holding.fresh) {
       ctx.versionMoved(row);
-      await deps.handedUp(owner, maker, row, holding.next);
+      deps.handedUp(owner, maker, row, holding.next);
     }
   };
   /**
@@ -287,7 +287,7 @@ export const createVersions = (ctx: VersionsContext) => {
     }
     if (holding.fresh) {
       ctx.versionMoved(row);
-      await deps.handedUp(owner, instance, row, holding.next);
+      deps.handedUp(owner, instance, row, holding.next);
     }
     return changed;
   };
@@ -335,7 +335,7 @@ export const createVersions = (ctx: VersionsContext) => {
       return unready;
     }
     if (!waiting) {
-      await deps.handedUp(making.owner, making.maker, row);
+      deps.handedUp(making.owner, making.maker, row);
     }
     return {
       opened: false,

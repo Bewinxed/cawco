@@ -30,13 +30,13 @@ import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/modes";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { CONNECTOR_MIN_S } from "@cawco/providers/connection/descriptor";
-import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
@@ -808,7 +808,7 @@ export const createEventRoutes = ({
   };
 
   /** Edits of one poll under way, by its id: one at a time each. */
-  const editing = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
+  const editing = makeKeyedLock();
 
   /**
    * An edit of a poll, made from the row as the edit before it left it: its
@@ -819,7 +819,7 @@ export const createEventRoutes = ({
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
-  ) => editing.acquire(id, () => editPoll(id, patch, by));
+  ) => editing.run(id, () => editPoll(id, patch, by));
 
   const editPoll = async (
     id: string,
