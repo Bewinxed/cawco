@@ -47,6 +47,7 @@ export type AccountProbesContext = Pick<
   | "spendNow"
   | "stallOf"
   | "stalledNow"
+  | "triggers"
   | "unansweredFault"
   | "workItems"
 >;
@@ -372,6 +373,14 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           // project whose start the register's look refused for want of a
           // signed-in account gets its look again now, not at the safety net.
           ctx.dispatcher.machineOnline(machineId);
+          // Likewise a project's held triggers, which start where its
+          // account is signed in (lead-home.ts).
+          if (ctx.triggers) {
+            detach(
+              ctx.triggers.machineOnline(machineId),
+              "run the projects' held triggers"
+            );
+          }
         }
         if (failed && ctx.registry.agent(machineId)) {
           if (

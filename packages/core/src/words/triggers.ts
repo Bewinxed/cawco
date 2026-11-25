@@ -1,7 +1,7 @@
 /**
  * The words of the trigger router (hub triggers.ts): what a fresh session
  * for a project's thing reads (its brief, each later trigger, the list of
- * what was held while the project's triggers were off), and the hub's own
+ * what the project held while nothing could start for it), and the hub's own
  * lines about it.
  */
 
@@ -38,7 +38,7 @@ const linesOf = (trigger: TriggerLines): string =>
     `For how to handle it, use the ${trigger.skill} skill.`,
   ].join("\n");
 
-/** One held trigger in the switch-on list. */
+/** One held trigger in the held list. */
 interface HeldLine {
   at: string;
   delta: string;
@@ -46,7 +46,7 @@ interface HeldLine {
   who: string;
 }
 
-/** A thing and what was held on it, for the switch-on list. */
+/** A thing and what was held on it, for the held list. */
 export interface HeldThing {
   held: HeldLine[];
   name: string;
@@ -82,7 +82,7 @@ export const triggerWords = {
   /** A later trigger on its thing, to the session that lives on it. */
   again: (trigger: TriggerLines) =>
     [`[CawCo] ${linesOf(trigger)}`, "", READ_THE_REST].join("\n"),
-  /** The brief of the session that reads what was held while the project's triggers were off. */
+  /** The brief of the session that reads what the project held while nothing could start for it. */
   held: (
     project: string,
     folder: string,
@@ -91,7 +91,7 @@ export const triggerWords = {
     things: HeldThing[]
   ) =>
     [
-      `You are a fresh session the hub started in ${project} (in ${folder}): its triggers were switched back on, and these arrived while they were off. Nothing was started for any of them. Decide, thing by thing, what to act on now, what to start, and what to leave.`,
+      `You are a fresh session the hub started in ${project} (in ${folder}): these arrived while nothing could start for them (its triggers were off, it was past its spend cap, or none of its machines was online), and now a session can start. Nothing was started for any of them. Decide, thing by thing, what to act on now, what to start, and what to leave.`,
       "",
       ...things.flatMap((thing) => [
         `## ${thing.name}`,
@@ -108,7 +108,7 @@ export const triggerWords = {
       READ_THE_REST,
     ].join("\n"),
   /** The thing the held list is about: the project itself. */
-  heldThing: (project: string) => `what ${project} held while off`,
+  heldThing: (project: string) => `what ${project} held`,
   /** What came with a trigger, sent after a fresh session's brief. */
   carried: "What came with it.",
   /** The headline the hub writes on a fresh session it ended idle that wrote none. */
@@ -122,7 +122,10 @@ export const triggerWords = {
     "The project's triggers are off, so nothing started: it waits on the project until they are on.",
   /** Why a trigger was held: the project is past its spend cap. */
   heldCapped: (why: string) =>
-    `Nothing started, as the project is past its spend cap (${why}): it waits on the project until its triggers are switched on again.`,
+    `Nothing started, as the project is past its spend cap (${why}): it waits on the project until its triggers are switched on again, or a machine comes online, with the project under its cap.`,
+  /** Why a trigger was held: no machine the project's sessions start on is online. */
+  heldNoMachine:
+    "No machine of the project's is online to start a session on, so nothing started: it waits on the project until one comes online.",
   /** Why a session over its token cap was passed over for a trigger. */
   overCap: (tokens: number, cap: number, window: number) =>
     `over its token cap (${tokens} tokens of context, past ${cap} of its ${window}-token window)`,

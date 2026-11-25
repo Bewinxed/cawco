@@ -29,6 +29,8 @@ export interface HeldTrigger {
 export interface TriggersDb {
   /** The fleet's own setting for each kind; unset fields null. */
   readonly fleetSettings: () => Record<TriggerKind, TriggerSetting>;
+  /** The projects that hold a trigger now. */
+  readonly heldProjects: () => string[];
   /** Holds one trigger on its project: nothing started for it. */
   readonly hold: (projectId: string, held: HeldTrigger) => void;
   /** The project's own setting for each kind; unset fields null. */
@@ -89,6 +91,12 @@ export const triggersDb = (db: BunSQLiteDatabase): TriggersDb => ({
       })
       .run();
   },
+  heldProjects: () =>
+    db
+      .selectDistinct({ projectId: heldTriggers.projectId })
+      .from(heldTriggers)
+      .all()
+      .map((row) => row.projectId),
   hold: (projectId, held) => {
     db.insert(heldTriggers)
       .values({

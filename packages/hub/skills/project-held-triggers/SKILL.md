@@ -1,11 +1,11 @@
 ---
 name: project-held-triggers
-description: Decide what to do with the triggers a project held while its triggers were off (comments, task moves, routine runs and results, inbound events), now that they are on again. Use when a CawCo message's context line names this skill.
+description: Decide what to do with the triggers a project held while nothing could start for them (its triggers off, past its spend cap, or none of its machines online), now that a session can start (comments, task moves, routine runs and results, inbound events). Use when a CawCo message's context line names this skill.
 ---
 
-# What waited while the project was off
+# What waited while nothing could start
 
-Your brief lists everything that happened to the project's things while its triggers were switched off, grouped by thing, oldest first. Nothing was started for any of it. Each entry says what happened, who did it and when, and what changed.
+Your brief lists everything that happened to the project's things while nothing could start for them (its triggers were off, it was past its spend cap, or none of its machines was online), grouped by thing, oldest first. A trigger whose thing was gone by the time you started is not on it. Nothing was started for any of it. Each entry says what happened, who did it and when, and what changed.
 
 1. **Read each thing as it stands now** (`task_read({ id })` for a task, `artifact_read` for a page, `find` for the rest). Done when you know, for each thing, whether what was held still matters: a comment someone already answered, a run a later one superseded, or an event on a pull request since merged does not.
 2. **Decide per thing** and act once:

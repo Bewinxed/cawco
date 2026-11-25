@@ -22,12 +22,15 @@
  *   at once share its start. It writes its result on the thing, asks the
  *   person for what it needs, and ends once idle {@link idleMs} with nothing
  *   pending: no ask of its waiting on the person, no delegate of its live.
- * - **Off or past the spend cap, nothing starts**: a live owner still hears
- *   its own thing's trigger; anything else is held on the project
- *   (`held_triggers`). Switched on, one fresh session reads everything held,
- *   grouped by thing ({@link switchedOn}); nothing held, nothing starts.
+ * - **Off, past the spend cap or with no machine online, nothing starts**:
+ *   a live owner still hears its own thing's trigger; anything else is held
+ *   on the project (`held_triggers`). Once a session can start again (the
+ *   switch turned on, a machine come online), one fresh session reads
+ *   everything held, grouped by thing, a thing gone by then left out
+ *   ({@link rerunHeld}); nothing held, nothing starts.
  */
 import { ANY_TYPE } from "@cawco/core/delegate-types";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -45,9 +48,11 @@ import { ElysiaStatus } from "elysia";
 import { isProjectConversation, type PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import type { HeldTriggerRow } from "./db/triggers";
 import { ROUTINE_ORIGIN } from "./hub-words";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Caps } from "./project-caps";
+import { type AnyProblem, isProblem } from "./refusal";
 import type { Tasks } from "./tasks";
 import {
   type Carried,
@@ -110,11 +115,13 @@ export interface TriggersDeps {
   readonly db: Pick<
     DbShape,
     | "artifacts"
+    | "connections"
     | "getInstancesByIds"
     | "liveWorkItems"
     | "liveWorkItemsOf"
     | "project"
     | "projectAttempts"
+    | "routines"
     | "triggers"
     | "workItem"
   >;
@@ -130,10 +137,10 @@ export interface TriggersDeps {
   readonly openAsk: (instanceId: string) => string | undefined;
   /** Why the session's context is over its token cap, or nothing (server.ts, core `STANDING_CONTEXT_SHARE`). */
   readonly overCap: (row: InstanceRow) => Promise<string | undefined>;
-  /** Where a project's sessions start: its checkout, else its folder (caw.ts `placeFor`). */
+  /** Where a project's sessions start: its checkout, else its folder (caw.ts `placeFor`); undefined while no machine of its is online. */
   readonly place: (
     project: ProjectRow
-  ) => Promise<{ cwd: string; machineId: string } | undefined>;
+  ) => Promise<Place | AnyProblem | undefined>;
   /** Why a session takes no input now (server.ts `inputRefusal`), or nothing. */
   readonly refusal: (row: InstanceRow) => string | undefined;
   /** Delivers the hub's word through the one send path. */
@@ -148,6 +155,12 @@ export interface TriggersDeps {
   readonly workItems: Pick<WorkItems, "endForHub" | "startForHub">;
 }
 
+/** Where a fresh session starts: a folder on a machine that is online. */
+interface Place {
+  cwd: string;
+  machineId: string;
+}
+
 const errorWords = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -159,6 +172,8 @@ export const createTriggers = (deps: TriggersDeps) => {
   const starting = new Map<string, Promise<Routed>>();
   /** Fresh sessions the sweep found idle and held open, said once each. */
   const heldSaid = new Set<string>();
+  /** One run of a project's held list at a time ({@link rerunHeld}). */
+  const heldTurns = makeKeyedLock<string>();
 
   const keyOf = (projectId: string, thing: Thing): string =>
     `${projectId}\0${thing.kind}\0${thing.id}`;
@@ -338,21 +353,15 @@ export const createTriggers = (deps: TriggersDeps) => {
       : (sent.reason ?? "its session did not take it");
   };
 
-  /** A fresh session for `thing`, briefed with `prompt`, on the settings its kind takes. */
+  /** A fresh session for `thing` at `place`, briefed with `prompt`, on the settings its kind takes. */
   const startFresh = async (
     project: ProjectRow,
+    place: Place,
     thing: Thing & { name: string },
     kind: TriggerKind | undefined,
     event: Pick<TriggerEvent, "carried" | "kind" | "route" | "routine">,
     prompt: (folder: string) => string
   ): Promise<Routed> => {
-    const place = await deps.place(project);
-    if (!place) {
-      return {
-        to: "lost",
-        why: "No machine of the project's is online to start a session on.",
-      };
-    }
     const set = deps.settings.forEvent(project, kind, event);
     const title = triggerWords.title(thing.name);
     const parent: Parent = {
@@ -480,8 +489,16 @@ export const createTriggers = (deps: TriggersDeps) => {
     if (capped !== undefined) {
       return hold(project, event, triggerWords.heldCapped(capped));
     }
+    const place = await deps.place(project);
+    if (isProblem(place)) {
+      return { to: "lost", why: place.response.detail };
+    }
+    if (!place) {
+      return hold(project, event, triggerWords.heldNoMachine);
+    }
     return await startFresh(
       project,
+      place,
       event.thing,
       settingKindOf(event),
       event,
@@ -499,7 +516,8 @@ export const createTriggers = (deps: TriggersDeps) => {
   /**
    * One trigger on a thing of a project, to the session that hears it: the
    * thing's fresh session, else its live owner, else a fresh one; held on
-   * the project while its triggers are off or it is past its spend cap.
+   * the project while its triggers are off, it is past its spend cap, or no
+   * machine of its is online.
    * Triggers on one thing while its fresh session starts wait for it.
    */
   const route = async (
@@ -546,21 +564,112 @@ export const createTriggers = (deps: TriggersDeps) => {
     );
   };
 
-  /**
-   * The project's triggers were switched on: one fresh session reads every
-   * trigger held while they were off, grouped by thing, and decides what to
-   * act on. Nothing held, nothing starts. A start that does not go gives
-   * the triggers back to the project.
-   */
-  const switchedOn = async (projectId: string): Promise<Routed | undefined> => {
-    const project = db.project(projectId);
-    if (!project?.eventsOn) {
+  /** Why the task `taskId` is gone, or nothing while the project has it. */
+  const taskGone = async (
+    projectId: string,
+    taskId: string
+  ): Promise<string | undefined> => {
+    const task = await deps.tasks.get(projectId, taskId);
+    return isProblem(task) && task.response.code === "task-missing"
+      ? task.response.detail
+      : undefined;
+  };
+
+  /** Why the artifact or decision page `id` is gone, or nothing while it stands. */
+  const artifactGone = (kind: "artifact" | "card", id: string) => {
+    // A decision page no artifact names yet (decisions.ts) is its folder's.
+    if (id.startsWith("decisions/") || db.artifacts.get(id)) {
       return;
     }
-    const held = db.triggers.takeHeld(projectId);
-    if (held.length === 0) {
+    return `the ${kind === "card" ? "decision page" : "artifact"} ${id} was deleted`;
+  };
+
+  /** Why a thing the hub keeps a row of is gone, or nothing while it stands; a task is {@link taskGone}'s. */
+  const rowGone = (thing: Thing): string | undefined => {
+    switch (thing.kind) {
+      case "artifact":
+      case "card":
+        return artifactGone(thing.kind, thing.id);
+      case "connection":
+        return db.connections.byName(thing.id)
+          ? undefined
+          : `the connection “${thing.id}” was removed`;
+      case "routine":
+        return db.routines.get(thing.id)
+          ? undefined
+          : `the routine ${thing.id} was deleted`;
+      case "session":
+        return row(thing.id) ? undefined : `the session ${thing.id} is gone`;
+      case "event":
+      case "project":
+      case "task":
+        return;
+      default:
+        return unhandled("thing kind", thing.kind);
+    }
+  };
+
+  /** Why `thing` is gone, so a trigger held on it is closed, not routed; undefined while it stands. */
+  const goneWhy = async (
+    project: ProjectRow,
+    thing: Thing
+  ): Promise<string | undefined> =>
+    thing.kind === "task"
+      ? await taskGone(project.id, thing.id)
+      : rowGone(thing);
+
+  /** A held row back on its project, as it was held. */
+  const holdAgain = (projectId: string, one: HeldTriggerRow): void =>
+    db.triggers.hold(projectId, {
+      at: one.at,
+      delta: one.delta,
+      kind: one.kind,
+      thing: { kind: one.thingKind, id: one.thingId, name: one.thingName },
+      what: one.what,
+      who: one.who,
+    });
+
+  /** Where the project's held list starts a session now: its triggers on, under its cap, a machine online; else nothing. */
+  const rerunPlace = async (
+    project: ProjectRow | undefined
+  ): Promise<{ place: Place; project: ProjectRow } | undefined> => {
+    if (!project?.eventsOn || deps.caps.quiets(project.id) !== undefined) {
       return;
     }
+    const place = await deps.place(project);
+    if (isProblem(place)) {
+      console.warn(
+        `[triggers] ${project.name}: what it holds stays held: ${place.response.detail}`
+      );
+      return;
+    }
+    return place ? { place, project } : undefined;
+  };
+
+  /** The held rows whose thing still stands; each other is closed, its reason logged. */
+  const standing = async (
+    project: ProjectRow,
+    held: HeldTriggerRow[]
+  ): Promise<HeldTriggerRow[]> => {
+    const kept: HeldTriggerRow[] = [];
+    for (const one of held) {
+      const gone = await goneWhy(project, {
+        kind: one.thingKind,
+        id: one.thingId,
+      });
+      if (gone === undefined) {
+        kept.push(one);
+        continue;
+      }
+      console.log(
+        `[triggers] ${project.name}: ${one.kind} on ${one.thingKind} ${one.thingId}, held since ${one.at.toISOString()}, is closed: ${gone}`
+      );
+    }
+    return kept;
+  };
+
+  /** The held rows grouped by thing, oldest first within each. */
+  const heldThings = (held: HeldTriggerRow[]): HeldThing[] => {
     const things = new Map<string, HeldThing>();
     for (const one of held) {
       const key = `${one.thingKind}\0${one.thingId}`;
@@ -573,9 +682,24 @@ export const createTriggers = (deps: TriggersDeps) => {
       });
       things.set(key, thing);
     }
+    return [...things.values()];
+  };
+
+  /** {@link rerunHeld} in the project's turn. */
+  const rerunNow = async (projectId: string): Promise<Routed | undefined> => {
+    const ready = await rerunPlace(db.project(projectId));
+    if (!ready) {
+      return;
+    }
+    const { place, project } = ready;
+    const kept = await standing(project, db.triggers.takeHeld(projectId));
+    if (kept.length === 0) {
+      return;
+    }
     const skill = EVENT_SKILLS["held-triggers"];
     const started = await startFresh(
       project,
+      place,
       {
         kind: "project",
         id: project.id,
@@ -589,28 +713,52 @@ export const createTriggers = (deps: TriggersDeps) => {
           folder,
           idleMinutes,
           skill,
-          [...things.values()]
+          heldThings(kept)
         )
     ).catch((error: unknown): Routed => ({
       to: "lost",
       why: errorWords(error),
     }));
     if (started.to === "lost") {
-      for (const one of held) {
-        db.triggers.hold(projectId, {
-          at: one.at,
-          delta: one.delta,
-          kind: one.kind,
-          thing: { kind: one.thingKind, id: one.thingId, name: one.thingName },
-          what: one.what,
-          who: one.who,
-        });
+      for (const one of kept) {
+        holdAgain(projectId, one);
       }
       console.warn(
         `[triggers] ${project.name}: what was held did not reach a session, and is held again: ${started.why}`
       );
     }
     return started;
+  };
+
+  /**
+   * What the project held while nothing could start for it, once a session
+   * can: its triggers on, under its spend cap, a machine of its online. One
+   * fresh session reads every held trigger whose thing still stands,
+   * grouped by thing, and decides what to act on; a trigger whose thing is
+   * gone is closed, its reason logged. Nothing held, nothing starts. Taking
+   * the list empties it, and one run at a time per project takes it, so a
+   * trigger reaches one session; a start that does not go gives the list
+   * back to the project.
+   */
+  const rerunHeld = (projectId: string): Promise<Routed | undefined> =>
+    heldTurns.run(projectId, () => rerunNow(projectId));
+
+  /**
+   * A machine came online: each project that holds a trigger runs its held
+   * list ({@link rerunHeld}), which starts a session where one now can.
+   */
+  const machineOnline = async (machineId: string): Promise<void> => {
+    await Promise.all(
+      db.triggers
+        .heldProjects()
+        .map((projectId) =>
+          rerunHeld(projectId).catch((error: unknown) =>
+            console.warn(
+              `[triggers] ${projectId}: ${machineId} came online, and what it holds stays held: ${errorWords(error)}`
+            )
+          )
+        )
+    );
   };
 
   /** Why the fresh session `session` is still pending, or nothing: an ask of its waits, a delegate of its lives. */
@@ -661,7 +809,13 @@ export const createTriggers = (deps: TriggersDeps) => {
   };
   deps.lifetime.every("fresh session sweep", SWEEP_MS, sweep);
 
-  return { route, routeQuietly, switchedOn, sweep };
+  return {
+    machineOnline,
+    route,
+    routeQuietly,
+    switchedOn: rerunHeld,
+    sweep,
+  };
 };
 
 export type Triggers = ReturnType<typeof createTriggers>;

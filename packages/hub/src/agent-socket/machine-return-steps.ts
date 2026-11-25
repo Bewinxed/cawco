@@ -92,6 +92,7 @@ export type MachineReturnContext = Pick<
   | "takeUpMovesOn"
   | "toolFacts"
   | "transcripts"
+  | "triggers"
   | "unknownAccountsOf"
   | "usabilityFeedback"
   | "workItems"
@@ -148,6 +149,14 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // A checkout coming online can be where a ready task's
     // workspace is cut.
     ctx.dispatcher.machineOnline(message.machineId);
+    // What a project held while none of its machines was online starts now
+    // (triggers.ts `rerunHeld`).
+    if (ctx.triggers) {
+      detach(
+        ctx.triggers.machineOnline(message.machineId),
+        "run the projects' held triggers"
+      );
+    }
     // A delegate that waited for owned files may start on it now.
     ctx.workItems.resumeQueued();
   };
