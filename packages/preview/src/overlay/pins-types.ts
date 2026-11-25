@@ -41,11 +41,8 @@ export interface Pins {
   cropOf: (id: string) => { box: Box; el: Element | null; look: string } | null;
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
-  /** Pins drawn again where their elements stand now: done once they are painted (Floating UI places them in a promise). */
-  /** Drawn where their elements stand now; `following`, a scroller moved them and nothing else changed. */
-  draw: (following?: boolean) => Promise<void>;
-  /** The layer fixed to the viewport, where pins on the page as a whole stand. */
-  fixed: SVGSVGElement;
+  /** Drawn on the elements they stand on now; `following`, a scroller moved the ink and nothing else changed (only a pin on ink is read again). */
+  draw: (following?: boolean) => void;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
   /**
    * Pin `id` focused, and with `scroll` brought into view: in one step with
@@ -63,7 +60,8 @@ export interface Pins {
   hover: (id: string | null) => void;
   /** After a re-publish or an HMR update: the open thread's pin, if it now stands under the host's chrome, brought out again. */
   keepClear: () => void;
-  layer: SVGSVGElement;
+  /** This page's layer of pills (pins.ts `layerIn`): a re-publish keeps it, and it stands after the body. */
+  layer: HTMLElement;
   /** The pins the agent is working on (`live`) and those with an answer the person hasn't read (`unread`), each its dot. */
   marks: (live: Set<string>, unread: Set<string>) => void;
   /** Pin `id`'s thread opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it; `made`, for one the apps' tap just made. */
@@ -74,6 +72,8 @@ export interface Pins {
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
   /** Where on `el`'s box the viewport's `x`, `y` lands, as fractions. */
   pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
+  /** The room under the page's foot, an svg the overlay's layers size (ink.ts `fitToPage`): a re-publish keeps it. */
+  room: SVGSVGElement;
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
   /** The elements its pins, and the comment being written, stand on now. */

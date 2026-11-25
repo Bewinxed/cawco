@@ -148,6 +148,12 @@ interface Marks {
   over: Element[];
 }
 
+/** Where the marks stand as one read saw them (`whereNow`): the ink's groups, and apart the pins'. */
+interface Where {
+  ink: string;
+  pins: string;
+}
+
 /** A group as it stands now: read in one pass, then written. */
 interface Stand {
   /** What is shown of it, in the page's px; null where nothing clips it. */
@@ -206,7 +212,7 @@ export interface InkDeps {
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** Whether `el` is the page's own box rather than content on it. */
   pageSized: (el: Element) => boolean;
-  /** The pins, drawn after the ink each time it is drawn. */
+  /** The pins, drawn after the ink when what they stand on changed (never for a scroll: each pill stands on its element by CSS, pins.ts). */
   pins: () => Pins;
   /** The count of the page's changes of more than words: an element put in, taken out or renamed, or the window's width (page.ts `shapesNow`). */
   shapes: () => number;
@@ -221,8 +227,10 @@ export interface InkDeps {
 export interface Ink {
   /** The doc's ink changed, or the doc was replaced: drawn again. */
   changed: () => void;
-  /** A scroller moved them: every group, and its pins, stands where its element is now, nothing else read. */
+  /** A scroller moved them: every group, and a pin on one, stands where its element is now, nothing else read. */
   follow: () => void;
+  /** A placed group's box in the page, px, and the element it stands on; null when it is not on the page. */
+  groupAt: (id: string) => { box: Box; el: Element } | null;
   /** A placed group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
   /** The svg the ink is drawn in: a re-publish keeps it (overlay `kept`). */
@@ -414,12 +422,13 @@ const holding = new Set<SVGSVGElement>();
 
 /**
  * The overlay's own elements in the page: its host, its ink, pin and change
- * layers (the pins' fixed layer among them), and its stand-ins over frames
- * of another origin (embeds.ts). What changes in them is never the page's:
- * a pill painted in the fixed layer, read as the page's, placed every mark
- * again on the next frame, which painted the pill again, every frame.
+ * layers (the pins' room under the page's foot, and their pills' layer in
+ * this document and in each same-origin frame's), and its stand-ins over
+ * frames of another origin (embeds.ts). What changes in them is never the
+ * page's: a pill painted in its layer, read as the page's, placed every
+ * mark again on the next frame, which painted the pill again, every frame.
  */
-export const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], svg[data-cawco-changes], [${STAND_INS}]`;
+export const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], cawco-pins, svg[data-cawco-changes], [${STAND_INS}]`;
 /** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
 export const ownNode = (node: Node | null): boolean => {
   const el =
@@ -1331,46 +1340,55 @@ export function startInk(deps: InkDeps): Ink {
   };
 
   /**
-   * Where the marks stand, read and nothing written: the count of the
-   * page's changes of more than words, the page's extent, the box in the
-   * page of each element a mark stands on as the last draw placed it, and
-   * what each mark's anchor finds now ({@link foundNow}). Two reads alike
-   * mean a draw would place every mark where it stands: words the page
-   * writes elsewhere (a counter, a clock, a progress label on every scroll
-   * frame) draw nothing again.
+   * Where the marks stand, read and nothing written, the ink's apart from
+   * the pins'. The ink's: the count of the page's changes of more than
+   * words, the page's extent, the box in the page of each element a group
+   * stands on as the last draw placed it, and what each group's anchor
+   * finds now ({@link foundNow}). The pins': what each pin's anchor finds
+   * now, and nothing of where it is: a pill stands on its element by CSS
+   * anchor positioning (pins.ts), so the browser moves it with every scroll
+   * and layout, and a pin is drawn again only when what it stands on is
+   * another element, reads otherwise, or is drawn or undrawn. Two reads
+   * alike mean a draw would place those marks where they stand: words the
+   * page writes elsewhere (a counter, a clock, a progress label on every
+   * scroll frame) draw nothing again.
    */
-  const whereNow = () => {
+  const whereNow = (): Where => {
     unshown = new Set();
-    const { ink, moved } = maps();
     // A canvas places no mark by an anchor: its draw stands down.
-    const found = onCanvas()
-      ? []
-      : [
-          ...[...ink.values(), ...moved.values()].map((group) =>
-            "selector" in group.anchor
-              ? foundNow(
-                  deps.anchorToday(group.anchor, group.at),
-                  placed.get(group.id)?.anchor ?? null
-                )
-              : null
-          ),
-          ...[...deps.pins().anchored()].map(({ anchor, on }) =>
-            foundNow(anchor, on)
-          ),
-        ];
-    return JSON.stringify([
-      deps.shapes(),
-      document.body?.scrollWidth ?? 0,
-      document.body?.scrollHeight ?? 0,
-      [
-        ...[...placed.values()].map(({ anchor }) => anchor),
-        ...deps.pins().standingOn(),
-      ].map((el) => (el?.isConnected ? pageBox(el) : null)),
-      found,
-    ]);
+    if (onCanvas()) {
+      return { ink: "", pins: "" };
+    }
+    const { ink, moved } = maps();
+    const inkFound = [...ink.values(), ...moved.values()].map((group) =>
+      "selector" in group.anchor
+        ? foundNow(
+            deps.anchorToday(group.anchor, group.at),
+            placed.get(group.id)?.anchor ?? null
+          )
+        : null
+    );
+    const pinsFound = [...deps.pins().anchored()].map(({ anchor, on }) =>
+      foundNow(anchor, on)
+    );
+    return {
+      ink:
+        placed.size + inkFound.length === 0
+          ? ""
+          : JSON.stringify([
+              deps.shapes(),
+              document.body?.scrollWidth ?? 0,
+              document.body?.scrollHeight ?? 0,
+              [...placed.values()].map(({ anchor }) =>
+                anchor.isConnected ? pageBox(anchor) : null
+              ),
+              inkFound,
+            ]),
+      pins: JSON.stringify(pinsFound),
+    };
   };
   /** {@link whereNow} as the last draw left the marks. */
-  let drawnWhere = "";
+  let drawnWhere: Where = { ink: "", pins: "" };
 
   let frame = 0;
   /** A draw is due on the next frame whatever {@link whereNow} reads ({@link drawSoon}). */
@@ -1379,18 +1397,21 @@ export function startInk(deps: InkDeps): Ink {
    * Placed again on the next frame, once, if what the marks stand on moved
    * ({@link whereNow}). A change anywhere in the page asks: a class, a
    * style, an attribute, a transition's end. Most move nothing a mark stands
-   * on (a hover's colour, a control's state), and a draw places every pin
-   * again through Floating UI: 15 pins drew for 25 to 48 ms on each pointer
-   * move over a canvas.
+   * on (a hover's colour, a control's state). The ink is drawn again when
+   * its groups' elements moved; the pins only when what they stand on
+   * changed, never for a move alone (a pin on a group is moved with it,
+   * `draw(true)`).
    */
   function later() {
     if (!frame) {
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const due = wanted || whereNow() !== drawnWhere;
+        const now = whereNow();
+        const pinsDue = wanted || now.pins !== drawnWhere.pins;
+        const inkDue = wanted || now.ink !== drawnWhere.ink;
         wanted = false;
-        if (due) {
-          draw();
+        if (pinsDue || inkDue) {
+          draw(pinsDue);
         }
       });
     }
@@ -1400,7 +1421,6 @@ export function startInk(deps: InkDeps): Ink {
     wanted = true;
     later();
   }
-
   /**
    * Whether a group whose element is gone may be moved aside now, and one
    * that stands otherwise written again: a page the agent wrote, or a sheet
@@ -1475,7 +1495,11 @@ export function startInk(deps: InkDeps): Ink {
     return { found, standing, stands };
   }
 
-  function draw() {
+  /**
+   * Every group drawn where its element stands now, then the pins: all of
+   * them (`pins`), else only one standing on a group, which moves with it.
+   */
+  function draw(pins = true) {
     placed.clear();
     clips.clear();
     if (onCanvas()) {
@@ -1514,13 +1538,9 @@ export function startInk(deps: InkDeps): Ink {
       settleGroups(found, gone);
       bringBackMoved();
     }
-    deps
-      .pins()
-      .draw()
-      .then(() => {
-        drawnWhere = whereNow();
-        watchBoxes(boxesToWatch(standing));
-      });
+    deps.pins().draw(!pins);
+    drawnWhere = whereNow();
+    watchBoxes(boxesToWatch(standing));
     watchMoves();
   }
 
@@ -1833,6 +1853,10 @@ export function startInk(deps: InkDeps): Ink {
     layer,
     replace: () => draw(),
     follow,
+    groupAt: (id) => {
+      const at = placed.get(id);
+      return at ? { box: at.box, el: at.anchor } : null;
+    },
     groupBox: (id) => placed.get(id)?.box ?? null,
     standingOn: () => [...placed.values()].map(({ anchor }) => anchor),
     changed,

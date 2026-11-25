@@ -539,7 +539,7 @@ const pins: Pins = startPins({
   chrome,
   compose: (target, elements) => composeInk(target, elements),
   describe,
-  groupBox: (id) => ink.groupBox(id),
+  groupAt: (id) => ink.groupAt(id),
   locate,
   outline,
   post,
@@ -574,7 +574,7 @@ function anchoredAfterBody() {
     // biome-ignore lint/suspicious/noBitwiseOperators: compareDocumentPosition answers a bitmask
     host.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING
   ) {
-    document.documentElement.append(host, changes.layer);
+    document.documentElement.append(host, changes.layer, pins.layer);
   }
 }
 if (document.readyState === "loading") {
@@ -719,15 +719,15 @@ addEventListener("cawco:hmr", (event) => {
   changes.draw();
 });
 /**
- * Whether a mark stands on a fixed bar or a sticky head, which the page's own
- * scroll leaves in the viewport as it carries the layers on. Read as it scrolls
- * and never as a draw: a page whose document never scrolls pays nothing.
+ * Whether an ink group stands on a fixed bar or a sticky head, which the
+ * page's own scroll leaves in the viewport as it carries the ink's layer on
+ * (a pin's pill stands on its element by CSS, pins.ts, and follows it
+ * there itself). Read as it scrolls and never as a draw: a page whose
+ * document never scrolls pays nothing.
  */
 const marksStayInView = () => {
   positionsNow();
-  return [...ink.standingOn(), ...pins.standingOn()].some(
-    (el) => !!el && staysInView(el)
-  );
+  return [...ink.standingOn()].some((el) => !!el && staysInView(el));
 };
 addEventListener(
   "scroll",
@@ -1228,7 +1228,7 @@ const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
   node === pins.layer ||
-  node === pins.fixed ||
+  node === pins.room ||
   node === changes.layer ||
   (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&

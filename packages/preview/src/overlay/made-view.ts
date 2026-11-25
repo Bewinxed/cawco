@@ -137,20 +137,69 @@ const readForeign = async (href: string): Promise<string[] | null> => {
   return conditionsIn(sheet);
 };
 
+/** A document's width thresholds as last read ({@link thresholdsOf}), and what they were read from. */
+interface KeptThresholds {
+  /** The queries its script asked, the sheets fetched by address, then each sheet and its count of rules: changed, they are read again. */
+  from: unknown[];
+  thresholds: number[] | null;
+}
+const keptThresholds = new WeakMap<Document, KeptThresholds>();
+
+/**
+ * What `doc`'s thresholds are read from, read without a rule's text: the
+ * queries its script asked (a set that only grows), how many sheets of
+ * another origin have been fetched, and each sheet with its count of
+ * rules, or -1 where it keeps them from the page.
+ */
+const thresholdsFrom = (doc: Document): unknown[] => {
+  const from: unknown[] = [
+    markOf(doc.defaultView ?? window)?.media.size ?? 0,
+    fetched.size,
+  ];
+  for (const sheet of Array.from(doc.styleSheets)) {
+    from.push(sheet, rulesIn(sheet) ?? -1);
+  }
+  return from;
+};
+
+/** How many rules `sheet` holds; null for another origin's, which keeps them from the page (read by its address: {@link foreignConditions}). */
+const rulesIn = (sheet: CSSStyleSheet): number | null => {
+  try {
+    return sheet.cssRules.length;
+  } catch {
+    return null;
+  }
+};
+
+const sameFrom = (a: unknown[], b: unknown[]): boolean =>
+  a.length === b.length && a.every((one, i) => one === b[i]);
+
 /**
  * `doc`'s page's width thresholds (core `widthThresholds`); null while a
  * sheet of its keeps its rules, unread: then only the same width draws the
- * page alike.
+ * page alike. Read once per document and kept until a sheet is added,
+ * taken out or given rules, or its script asks a new query
+ * ({@link thresholdsFrom}): every mark judged in a draw reads the kept array.
  */
 const thresholdsOf = (doc: Document): number[] | null => {
+  const from = thresholdsFrom(doc);
+  const kept = keptThresholds.get(doc);
+  if (kept && sameFrom(kept.from, from)) {
+    return kept.thresholds;
+  }
+  const thresholds = readThresholds(doc);
+  keptThresholds.set(doc, { from, thresholds });
+  return thresholds;
+};
+
+/** `doc`'s width thresholds read from its sheets' rules and its script's queries. */
+const readThresholds = (doc: Document): number[] | null => {
   const conditions: string[] = [
     ...(markOf(doc.defaultView ?? window)?.media ?? []),
   ];
   for (const sheet of Array.from(doc.styleSheets)) {
-    let rules: number;
-    try {
-      rules = sheet.cssRules.length;
-    } catch {
+    const rules = rulesIn(sheet);
+    if (rules === null) {
       const foreign = sheet.href ? foreignConditions(sheet.href) : null;
       if (!foreign) {
         return null;

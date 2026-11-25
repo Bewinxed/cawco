@@ -1,6 +1,7 @@
 /**
  * The overlay's boxes that stand on an element of the page (a change's ring,
- * changes.ts; the One Target, page.ts) stand there by CSS anchor
+ * changes.ts; the One Target, page.ts; a row of pins' pills, pins.ts, in
+ * the page's document or a same-origin frame's) stand there by CSS anchor
  * positioning, never at a box measured once: the element takes the box's
  * name (`anchor-name`) and the box's edges are the element's (`anchor()` on
  * its default anchor, `position-anchor`), so the browser lays the box out
@@ -32,13 +33,30 @@
 /** An element that takes an inline style: what a box can anchor to. */
 export type Anchorable = Element & ElementCSSInlineStyle;
 
-/** Whether `el` is an element of this page's document that takes an inline style; another document's (a same-origin frame's) never anchors a box of this one. */
-export const anchorable = (el: Element | null): el is Anchorable =>
+/** The namespaces whose elements take an inline style: HTML's, SVG's and MathML's. */
+const STYLED = new Set([
+  "http://www.w3.org/1999/xhtml",
+  "http://www.w3.org/2000/svg",
+  "http://www.w3.org/1998/Math/MathML",
+]);
+
+/**
+ * Whether `el` is an element of `doc` that takes an inline style: what a box
+ * of `doc`'s can anchor to. A name is its document's, so a box anchors only
+ * in its own document: one of this page's never to a same-origin frame's
+ * element; the pins put a frame's pills in that frame's document (pins.ts).
+ * Judged by its namespace, never by `instanceof`: Chromium gives a frame's
+ * element a wrapper of whichever window's realm reached it first, so it is
+ * an instance of the page's classes on one load and the frame's on another.
+ */
+export const anchorable = (
+  el: Element | null,
+  doc: Document = document
+): el is Anchorable =>
   !!el &&
-  el.ownerDocument === document &&
-  (el instanceof HTMLElement ||
-    el instanceof SVGElement ||
-    el instanceof MathMLElement);
+  el.ownerDocument === doc &&
+  STYLED.has(el.namespaceURI ?? "") &&
+  "style" in el;
 
 /** Names made since the page loaded: each box's is the next. */
 let made = 0;
@@ -124,4 +142,36 @@ export function nameOff(el: Anchorable, name: string): void {
   if (!hold.attribute && el.getAttribute("style") === "") {
     el.removeAttribute("style");
   }
+}
+
+/** Whether a box on an anchor follows the anchor's transform, as measured once ({@link anchorsFollowTransforms}). */
+let followsTransforms: boolean | null = null;
+
+/**
+ * Whether this browser lays a box on its anchor where the anchor is drawn,
+ * its transforms with it (Chromium, Safari 27), or where it is laid out
+ * before them (Firefox, Safari 26). Measured once, in `into` (a layer of the
+ * overlay's own, after the body, so the page hears nothing): a fixed anchor
+ * moved 100px by a transform, and a box standing on its left edge.
+ */
+export function anchorsFollowTransforms(into: Element): boolean {
+  if (followsTransforms !== null) {
+    return followsTransforms;
+  }
+  const doc = into.ownerDocument;
+  const name = anchorName();
+  const hidden =
+    "position:fixed;top:0;left:0;width:10px;height:10px;visibility:hidden;pointer-events:none;margin:0";
+  const anchor = doc.createElement("div");
+  anchor.style.cssText = `${hidden};transform:translateX(100px);anchor-name:${name}`;
+  const box = doc.createElement("div");
+  box.style.cssText = `${hidden};position-anchor:${name};left:anchor(left)`;
+  into.append(anchor, box);
+  followsTransforms =
+    Math.abs(
+      box.getBoundingClientRect().left - anchor.getBoundingClientRect().left
+    ) < 1;
+  anchor.remove();
+  box.remove();
+  return followsTransforms;
 }

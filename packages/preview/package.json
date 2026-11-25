@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@cawco/core": "workspace:*",
-    "@floating-ui/dom": "1.8.0",
     "idiomorph": "0.8.0",
     "modern-screenshot": "4.7.0",
     "perfect-freehand": "1.2.3",

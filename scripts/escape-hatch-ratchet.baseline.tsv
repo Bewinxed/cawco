@@ -181,7 +181,6 @@ as-cast	Json	packages/design-tokens/src/dtcg-resolver.ts	2
 as-cast	Json | undefined	packages/design-tokens/src/design-tokens.ts	5
 as-cast	Json | undefined	packages/design-tokens/src/dtcg-resolver.ts	1
 as-cast	keyof CSSStyleDeclaration	packages/preview/src/overlay/page.ts	1
-as-cast	keyof typeof overflow	packages/preview/src/overlay/pins.ts	1
 as-cast	Kind	scripts/escape-hatch-ratchet.ts	1
 as-cast	Kind	scripts/style-residual-check.ts	1
 as-cast	Listed[]	packages/sessiond/src/server.ts	2
@@ -469,7 +468,6 @@ catch-drops-reason	CallExpression	packages/agent/src/provider-accounts.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/session-containers.ts	1
 catch-drops-reason	CallExpression	packages/hub/src/git-remote.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
-catch-drops-reason	CallExpression	packages/preview/src/overlay/pins.ts	2
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
 catch-drops-reason	CallExpression	scripts/binary/sign-agent-bundle.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/decides/WhoDecides.svelte	1

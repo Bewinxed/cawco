@@ -863,6 +863,7 @@ export const SKIPPED = [
   "cawco-overlay",
   "svg[data-cawco-ink]",
   "svg[data-cawco-pins]",
+  "cawco-pins",
   "[data-cawco-stand-ins]",
   ...UNSHOWN_ELEMENTS,
   "link",
