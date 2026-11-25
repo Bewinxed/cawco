@@ -25,7 +25,9 @@
  *
  * Refused always, each with its sentence: ending the browser, reading or
  * clearing its cookies, opening its own pages (`chrome://`,
- * `chrome-untrusted://`, `devtools://`, `file://`), another session's pages,
+ * `chrome-untrusted://`, `devtools://`, `file://`), a loopback address
+ * other than a hub's preview the agent entered by its `artifact_browse`
+ * address, another session's pages,
  * and the methods that speak for every page at once (a browser-level
  * session, tracing or interception at the browser's level). Chromium's
  * tracing records the whole browser whichever page asks, so a page's trace
@@ -64,6 +66,7 @@ import {
   workspaceProjectFile,
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
+import { PREVIEW_ENTER_PATH } from "@cawco/core/preview/routes";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import {
   MARK_WAIT_WORDS,
@@ -79,6 +82,8 @@ import { browserDir } from "./state";
 const GATE_WORDS = {
   others: "This page belongs to another session of the project.",
   ownPages: "This browser's own pages are not for agents.",
+  loopback:
+    'Loopback addresses are closed to agents: open a local server as a preview with artifact_create { kind: "preview", port } (with serve: { command } in a workspace), then load the url artifact_browse { id } answers.',
   signIns:
     "The browser's sign-ins are the project's: use them, never read or clear them. A signed-out test is a new browser context.",
   browser:
@@ -243,6 +248,34 @@ const text = (value: unknown): string | undefined =>
 /** Whether `url` opens one of the browser's own pages or a file of the machine. */
 const ownPage = (url: unknown): boolean =>
   typeof url === "string" && OWN_PAGE.test(url);
+
+/** IPv4 loopback (127.0.0.0/8) as the URL parser writes it, and its IPv6-mapped form (`::ffff:7f00:0/104`). */
+const LOOPBACK_V4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/u;
+const LOOPBACK_MAPPED = /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/u;
+/** A fully qualified name's root dot (`localhost.`). */
+const TRAILING_DOT = /\.$/u;
+
+/**
+ * The origin of `url` when its host is the machine's own loopback
+ * (`localhost` and the names under it, 127.0.0.0/8, `::1`, `0.0.0.0`), as
+ * the URL parser writes it, so `127.1` and `[0:0::1]` are read as such;
+ * undefined for any other address.
+ */
+const loopbackOrigin = (url: unknown): string | undefined => {
+  if (typeof url !== "string" || !URL.canParse(url)) {
+    return;
+  }
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase().replace(TRAILING_DOT, "");
+  const loopback =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "[::1]" ||
+    host === "0.0.0.0" ||
+    LOOPBACK_V4.test(host) ||
+    LOOPBACK_MAPPED.test(host);
+  return loopback ? parsed.origin : undefined;
+};
 
 const said = (data: string | Buffer): string =>
   typeof data === "string" ? data : data.toString("utf8");
@@ -1284,6 +1317,8 @@ class Link {
   readonly #tracing = new Set<string>();
   /** Sessions whose trace the gate cut: their trace's events are dropped, their `Tracing.end` refused. */
   readonly #traceCut = new Set<string>();
+  /** Loopback origins the agent entered by an `artifact_browse` address: the hub's previews there, which it loads again by any path. */
+  readonly #entered = new Set<string>();
 
   constructor(gate: Gate, workspace: string) {
     this.#gate = gate;
@@ -1469,22 +1504,47 @@ class Link {
     if (!(sessionId || BROWSER_DOMAINS.has(method.split(".")[0] ?? ""))) {
       return GATE_WORDS.wide;
     }
-    if (
-      (method === "Page.navigate" || method === "Target.createTarget") &&
-      ownPage(params.url)
-    ) {
-      return GATE_WORDS.ownPages;
+    if (method === "Page.navigate" || method === "Target.createTarget") {
+      return this.#closedAddress(params.url) ?? this.#named(method, params);
     }
     if (method === "Page.navigateToHistoryEntry" && this.#wire) {
       const history = await this.#wire
         .call("Page.getNavigationHistory", {}, sessionId)
         .catch((): Json => ({}));
       const entries = HistoryEntries.catch([]).parse(history.entries);
-      if (ownPage(entries.find((entry) => entry.id === params.entryId)?.url)) {
-        return GATE_WORDS.ownPages;
+      const closed = this.#closedAddress(
+        entries.find((entry) => entry.id === params.entryId)?.url
+      );
+      if (closed) {
+        return closed;
       }
     }
     return this.#named(method, params);
+  }
+
+  /**
+   * Why the agent may not load `url`: one of the browser's own pages, or a
+   * loopback address ({@link loopbackOrigin}), whatever host the browser runs
+   * on, so every machine keeps one rule. The hub's previews on a loopback
+   * name pass: each opens first by its `artifact_browse` address (core
+   * `PREVIEW_ENTER_PATH`), and its origin then loads by any path.
+   */
+  #closedAddress(url: unknown): string | undefined {
+    if (ownPage(url)) {
+      return GATE_WORDS.ownPages;
+    }
+    const origin = loopbackOrigin(url);
+    if (!(origin && typeof url === "string")) {
+      return;
+    }
+    const asked = new URL(url);
+    if (
+      asked.pathname === PREVIEW_ENTER_PATH &&
+      asked.searchParams.has("ticket")
+    ) {
+      this.#entered.add(origin);
+    }
+    return this.#entered.has(origin) ? undefined : GATE_WORDS.loopback;
   }
 
   /** Why the gate refuses a call naming a target, session, context or window not the agent's. */

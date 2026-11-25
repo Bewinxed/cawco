@@ -37,6 +37,9 @@ export const artifactToolWords = {
     why: string
   ) =>
     `[artifacts] design ${name} (${tree.slice(0, 8)}): ${hop} (${at}) failed: ${why}`,
+  /** `artifact_read` of a design folder with story, state, render or verify, which read a states file's stories: the reads that serve its pages. */
+  designFolderRead: (name: string) =>
+    `${name} is a design folder: story, state, render and verify read a states file's stories, and its pages have none. artifact_read({ id: "${name}", png: true }) draws its first page, and artifact_browse({ id: "${name}" }) opens each page in your browser tool.`,
   /** The head of `artifact_read`'s faults: what a browser met as it drew the page at this revision (core page-faults.ts). */
   faultsHead: (revision: number) =>
     `What a browser met drawing revision ${revision} (each once, the first 20):`,

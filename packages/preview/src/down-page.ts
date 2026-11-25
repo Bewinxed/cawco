@@ -13,11 +13,13 @@
  * own, or in a frame that did not hear it yet, it is that state itself.
  */
 
+import { gatedLineScript } from "@cawco/core/browser-gate";
 import {
   PREVIEW_DOWN_META,
   PREVIEW_WHY_META,
   type PreviewDown,
 } from "@cawco/core/preview/protocol";
+import { GATED_PAGE_WORDS } from "@cawco/core/words/browser";
 import { commonWords } from "@cawco/core/words/common";
 import { downState } from "@cawco/core/words/preview-down";
 import { shellWords } from "@cawco/core/words/shell";
@@ -84,7 +86,8 @@ pre{flex-basis:100%;margin:var(--s1) 0 0;max-block-size:12rem;overflow:auto;over
  * down state (core `downState`), `words` its sentence (the hop's
  * `DOWN_WORDS`, or its sender's own), `why` under Show details, Try again a
  * reload, and both posted to its parent as `cawco:down` for a frame that
- * draws its own state over it.
+ * draws its own state over it. A closed preview read in an agent's browser
+ * says the call that opens it in its line (core `GATED_PAGE_WORDS`).
  */
 export function downPage(
   down: PreviewDown,
@@ -110,6 +113,11 @@ export function downPage(
   ]).replaceAll("<", "\\u003c");
   // Try again loads the page afresh; Show details opens the machine's words under the actions, its label turning to Hide details.
   const script = `<script>document.querySelector("[data-again]").addEventListener("click",()=>location.reload());const d=document.querySelector("[data-details]");if(d){const w=${toggle},p=document.getElementById("details");d.addEventListener("click",()=>{const o=p.hidden;p.hidden=!o;d.setAttribute("aria-expanded",String(o));d.textContent=w[o?1:0]})}if(window.parent!==window)window.parent.postMessage(${message},"*")</script>`;
+  // A closed preview read in an agent's browser names the call that opens it.
+  const agents =
+    down === "closed"
+      ? gatedLineScript("[data-slot=empty] p", GATED_PAGE_WORDS.closed)
+      : "";
   const mark = down === "gone" ? MARKS.gone : MARKS.alert;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>${escapeHtml(title)}</title><style>${STYLE}</style></head><body><main data-slot="empty" data-down="${down}" role="alert"><svg viewBox="0 0 24 24" aria-hidden="true">${mark}</svg><h1>${escapeHtml(title)}</h1><p>${escapeHtml(words)}</p><div data-box><button type="button" data-again>${escapeHtml(commonWords.tryAgain)}</button>${details}</div></main>${script}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>${escapeHtml(title)}</title><style>${STYLE}</style></head><body><main data-slot="empty" data-down="${down}" role="alert"><svg viewBox="0 0 24 24" aria-hidden="true">${mark}</svg><h1>${escapeHtml(title)}</h1><p>${escapeHtml(words)}</p><div data-box><button type="button" data-again>${escapeHtml(commonWords.tryAgain)}</button>${details}</div></main>${agents}${script}</body></html>`;
 }

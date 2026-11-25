@@ -748,11 +748,18 @@ export const artifactUpdatedDetailed = (updated: Updated): Presented =>
 export const artifactShownWords = (shown: Shown): string =>
   `${shown.link}: ${openedWords(shown)}`;
 
-/** `artifact_browse`: the address to load, and until when. */
+/** `artifact_browse`: the address to load, and until when; a design's directions each at its own address. */
 export const artifactBrowsedWords = (
   browsed: Browsed & { link: string }
-): string =>
-  `Load ${browsed.url} once in your browser tool to open ${browsed.link}. It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`;
+): string => {
+  const loaded = `Load ${browsed.url} once in your browser tool to open ${browsed.link}. It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`;
+  const directions = browsed.directions
+    ?.map((one) => `${one.name}: ${one.url}`)
+    .join("; ");
+  return directions
+    ? `${loaded} It opens on the first direction; once it has loaded, each direction opens in that browser at its own address. ${directions}.`
+    : loaded;
+};
 
 /** `artifact_promote`. */
 export const artifactPromotedWords = (promoted: Promoted): string =>

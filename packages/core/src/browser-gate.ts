@@ -109,6 +109,22 @@ export const dashboardOriginOf = (
  */
 export const GATED_PAGE_MARK = "__cawcoGatedBy";
 
+/**
+ * A page's script that, in a document an agent's gate marked
+ * ({@link GATED_PAGE_MARK}), puts `words` in place of the text of the
+ * element `selector` finds: a line written for the person, said to the
+ * agent as the call that works for it. The person's browser keeps the line.
+ */
+export const gatedLineScript = (selector: string, words: string): string => {
+  // `<` as its escape, so nothing in the words can close the script.
+  const body =
+    `if(${JSON.stringify(GATED_PAGE_MARK)} in globalThis){const l=document.querySelector(${JSON.stringify(selector)});if(l)l.textContent=${JSON.stringify(words)}}`.replaceAll(
+      "<",
+      "\\u003c"
+    );
+  return `<script>${body}</script>`;
+};
+
 /** The dashboard socket's query parameter that names the page's {@link GATED_PAGE_MARK}. */
 export const GATED_PAGE_PARAM = "gatedBy";
 

@@ -171,3 +171,17 @@ export const SHIELD_CLOSE_WORDS = "The person took over this browser.";
  */
 export const MARK_WAIT_WORDS =
   "This page was not marked as yours in time, so it was not loaded. It is still blank. Open it again.";
+
+/**
+ * A preview origin's own pages as an agent's browser reads them, in place
+ * of the person's line (core browser-gate.ts `gatedLineScript`): what
+ * failed, and the call that opens the artifact.
+ */
+export const GATED_PAGE_WORDS = {
+  /** Its origin serves nothing at this address now (the proxy's closed page). */
+  closed:
+    "Nothing is served at this address now: load the url artifact_browse { id } answers for the artifact.",
+  /** It came without a pass, or with a spent ticket (the preview's locked page). */
+  locked:
+    "This browser holds no pass for this preview: load the url artifact_browse { id } answers, which sets one.",
+} as const;

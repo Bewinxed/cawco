@@ -6,6 +6,7 @@ import {
   previewRoute,
 } from "@cawco/core/preview/routes";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { designOf, designPages } from "@cawco/core/stage";
 import { secondsOf } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
@@ -119,7 +120,8 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * The origin that serves artifact `row` to a browser of its own, by its
    * key, its listener started when it has none, and its address there: a
    * page or a canvas on the origin that serves it, a machine's component or
-   * preview on its embed origin ({@link embedKeyOf}). Refused when no
+   * preview on its embed origin ({@link embedKeyOf}), a design folder there
+   * at its first page, with each direction's (core stage.ts `designPages`). Refused when no
    * session or machine holds it, or every preview port is taken.
    */
   const browsedOrigin = (row: ArtifactRow) => {
@@ -145,8 +147,15 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       });
     }
     const address = ctx.previewListeners.address(key);
-    return address instanceof ElysiaStatus
-      ? address
+    if (address instanceof ElysiaStatus) {
+      return address;
+    }
+    // A design folder opens on its page, as its stage serves it: its
+    // canvas's address is the design graph's shell, which shows a page
+    // only when the graph reaches it (agent canvas/pages.ts).
+    const design = designOf(row);
+    return design
+      ? { key, address, ...designPages(design) }
       : { key, address, path: served.source.path ?? "/" };
   };
 
@@ -165,6 +174,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return origin;
     }
     const { key, address, path } = origin;
+    const directions = "directions" in origin ? origin.directions : undefined;
     const embeds = Object.entries(
       ctx.artifacts.programServed(row.id)?.media ?? {}
     ).flatMap(([, held]) => {
@@ -177,6 +187,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     return {
       address,
       path,
+      directions,
       entry: mintSessionTicket(instance.id, [key, ...embeds]),
     };
   };
@@ -197,7 +208,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     if (entered instanceof ElysiaStatus) {
       return entered;
     }
-    const { address, path, entry } = entered;
+    const { address, path, directions, entry } = entered;
     const origin =
       address.origin ??
       previewRoute(address, new URL(dashboardUrl(ctx.registry)))?.origin;
@@ -210,12 +221,20 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     const browsed: Browsed = {
       url: previewEnterUrl(origin, entry.ticket, path),
       expiresAt: new Date(entry.expiresAt).toISOString(),
+      ...(directions
+        ? {
+            directions: directions.map((one) => ({
+              name: one.name,
+              url: `${origin}${one.path}`,
+            })),
+          }
+        : {}),
     };
     return browsed;
   };
 
   /**
-   * Preview or page `row` drawn as the person's panel draws it, for session
+   * Preview, page or design folder `row` drawn as the person's panel draws it, for session
    * `instance`'s `artifact_read` with `png`: the hub machine's daemon opens
    * it in its Chromium (agent artifact-picture.ts) where `artifact_browse`
    * would, on its own preview origin, here on loopback, so the proxy's

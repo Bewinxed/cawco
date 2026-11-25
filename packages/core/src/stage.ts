@@ -911,6 +911,31 @@ export const designOf = (row: {
       }
     : null;
 
+/** Page `file` of a design (from the toolchain root) at its own address on its stage, as Vite serves it: the document its canvas frames (agent canvas/pages.ts `show`). */
+const designPagePath = (file: string): string =>
+  `/${file.split("/").map(encodeURIComponent).join("/")}`;
+
+/**
+ * A design folder's pages as a browser opens each on its own, with no
+ * graph around it ({@link designPagePath}): the first direction's page
+ * first, or its one page. `directions` names each direction's page, in
+ * the design's order, when it has directions.
+ */
+export const designPages = (design: {
+  files: string[];
+  spec: CanvasSpec;
+}): { directions?: { name: string; path: string }[]; path: string } => {
+  const directions = (design.spec.directions ?? []).map((one) => ({
+    name: one.name,
+    path: designPagePath(one.file),
+  }));
+  const [first] = directions;
+  if (first) {
+    return { path: first.path, directions };
+  }
+  return { path: designPagePath(design.files[0] ?? "") };
+};
+
 /**
  * One direction of a design (the design graph's directions): one of the
  * canvas's states files, its name as the person reads it, and the agent's

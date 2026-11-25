@@ -594,9 +594,12 @@ export type Shown =
 /**
  * What `artifact_browse` answers: the address the session's own browser
  * loads, an entry that sets the session's pass, and when that pass stops
- * opening (ISO).
+ * opening (ISO). A design folder's `url` opens its first page; one with
+ * directions names each direction's page on the same origin, which the
+ * pass `url` set opens.
  */
 export interface Browsed {
+  directions?: { name: string; url: string }[];
   expiresAt: string;
   url: string;
 }

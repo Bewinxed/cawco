@@ -2953,6 +2953,50 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
   };
 
+  /**
+   * A design folder's read ({@link readSheet}): its pins, dials, pick and
+   * compile errors, and with `png` the picture of its first page drawn as a
+   * preview's is ({@link pictureFor}), on its own origin at the address
+   * `artifact_browse` opens. Its pages are no states file, so a story, a
+   * frame's state, a render of its frames and a design system round are
+   * refused, naming the reads that serve a page.
+   */
+  const designReadOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    since: number | undefined,
+    ownersRead: boolean,
+    ask: Omit<PictureAsk, "link"> & { png: boolean }
+  ) => {
+    if (ask.render || ask.state || ask.story || ask.verify) {
+      return problem(400, {
+        code: "artifact-read-state-unfit",
+        detail: artifactToolWords.designFolderRead(row.name),
+      });
+    }
+    const answer = await readSheet(row, since, ownersRead, {
+      ...ask,
+      png: false,
+    });
+    if (answer instanceof ElysiaStatus || !ask.png) {
+      return answer;
+    }
+    const picture = await pictureFor(
+      instance,
+      newestVersion(row),
+      ask.width ?? PICTURE_VIEW.width,
+      undefined
+    );
+    if (picture instanceof ElysiaStatus) {
+      return picture;
+    }
+    return {
+      ...answer,
+      png: picture.png,
+      ...(picture.cut ? { pictureCut: picture.cut } : {}),
+    };
+  };
+
   /** A design graph's read ({@link readSheet}), with the verdict a round asks when `ask.verify`. */
   const sheetReadOf = async (
     instance: InstanceRow,
@@ -2961,15 +3005,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ownersRead: boolean,
     ask: Omit<PictureAsk, "link"> & { png: boolean }
   ) => {
-    // A design folder's pages are no states file: no story, no frame drawn of one, nothing to verify.
-    if (
-      designOf(row) &&
-      (ask.png || ask.render || ask.state || ask.story || ask.verify)
-    ) {
-      return problem(400, {
-        code: "artifact-read-state-unfit",
-        detail: `${row.name} is a design folder: it has no stories, and the hub draws no frames of its pages. artifact_read({ id }) answers its pins, dials, pick and compile errors.`,
-      });
+    if (designOf(row)) {
+      return await designReadOf(instance, row, since, ownersRead, ask);
     }
     const answer = await readSheet(row, since, ownersRead, ask);
     if (answer instanceof ElysiaStatus || !ask.verify) {

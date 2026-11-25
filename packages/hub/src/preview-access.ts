@@ -82,6 +82,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { gatedLineScript } from "@cawco/core/browser-gate";
 import {
   PREVIEW_ENTER_PATH,
   PREVIEW_LOCKED_MESSAGE,
@@ -90,6 +91,7 @@ import {
   type PreviewTicket,
 } from "@cawco/core/preview/routes";
 import { DAY_MS } from "@cawco/core/time";
+import { GATED_PAGE_WORDS } from "@cawco/core/words/browser";
 import { z } from "zod";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
 import { hubSecrets } from "./secret-box";
@@ -416,13 +418,14 @@ const LOCKED_WORDS =
 
 /**
  * What a preview name answers without a pass: 401, a sentence for a person
- * who opened it in a tab of its own, and a word to the frame's parent
+ * who opened it in a tab of its own (an agent's browser reads the call that
+ * enters it, `GATED_PAGE_WORDS.locked`), and a word to the frame's parent
  * (core `PREVIEW_LOCKED_MESSAGE`), so the dashboard enters again. Nothing in
  * it is the app's, so any parent may hear it.
  */
 export const lockedResponse = (): Response =>
   new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-locked" content="1"><title>Preview locked</title></head><body><p>${LOCKED_WORDS}</p><script>if(window.parent!==window)window.parent.postMessage({type:${JSON.stringify(PREVIEW_LOCKED_MESSAGE)}},"*")</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-locked" content="1"><title>Preview locked</title></head><body><p>${LOCKED_WORDS}</p>${gatedLineScript("p", GATED_PAGE_WORDS.locked)}<script>if(window.parent!==window)window.parent.postMessage({type:${JSON.stringify(PREVIEW_LOCKED_MESSAGE)}},"*")</script></body></html>`,
     {
       status: 401,
       headers: {
