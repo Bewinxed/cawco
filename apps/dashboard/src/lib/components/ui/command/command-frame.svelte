@@ -18,7 +18,10 @@
 </script>
 
 <div class="w-sm max-w-full overflow-clip rounded-lg border border-ui-2 bg-bg">
-  <Command.Root value="" shouldFilter={false}>
+  <!-- Its first row is not scrolled into view as it mounts: drawn in place,
+       that scroll reached the page around the frame (the design board,
+       scrolled down to it on load). -->
+  <Command.Root disableInitialScroll value="" shouldFilter={false}>
     <Command.Input
       placeholder="Find a session, task or machine"
       value={search}

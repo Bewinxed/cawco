@@ -139,7 +139,11 @@ const twMergeConfig = {
       "inks-strong": ["inks-strong"],
       "tap-highlight": ["tap-highlight-none"],
       "touch-callout": ["touch-callout-none"],
-      "content-visibility": ["content-visibility-hidden"],
+      "content-visibility": [
+        "content-visibility-hidden",
+        "content-visibility-auto",
+      ],
+      "contain-intrinsic-size": [{ "intrinsic-auto": [validators.isNumber] }],
       "timeline-scope": ["timeline-scope-transcript-head"],
       "writing-mode": ["writing-vertical-rl"],
       direction: ["dir-rtl"],
@@ -235,6 +239,7 @@ const twMerge = extendTailwindMerge<
   | "tap-highlight"
   | "touch-callout"
   | "content-visibility"
+  | "contain-intrinsic-size"
   | "timeline-scope"
   | "writing-mode"
   | "direction"

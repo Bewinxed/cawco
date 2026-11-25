@@ -1040,6 +1040,14 @@
 @utility content-visibility-hidden {
   content-visibility: hidden;
 }
+@utility content-visibility-auto {
+  content-visibility: auto;
+}
+/* A box's size while its contents are skipped: the size it was last drawn
+   at, else the spacing step given (`intrinsic-auto-88`). */
+@utility intrinsic-auto-* {
+  contain-intrinsic-size: auto --spacing(--value(integer));
+}
 @utility scheme-inherit {
   color-scheme: inherit;
 }

@@ -41,7 +41,10 @@
       side="bottom"
       trapFocus={false}
     >
-      <Command.Root>
+      <!-- Its first row is not scrolled into view as it mounts: drawn in
+           place, that scroll reached the page around the frame (the design
+           board, scrolled down to it on load). -->
+      <Command.Root disableInitialScroll>
         <Command.List>
           {#each rows as row (row)}
             <Command.Item value={row}>{row}</Command.Item>

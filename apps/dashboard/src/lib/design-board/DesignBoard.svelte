@@ -12,10 +12,10 @@
   import type { Snippet } from "svelte";
   import InlineBlockConversation from "#lib/cawco/transcript/inline-block-conversation-frame.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
   import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
-  import NearView from "./NearView.svelte";
   import "./type-pairs/type-pairs.css";
   import { PAIRS, type Pair, slugOf, TODAY } from "./type-pairs/pairs.js";
 
@@ -50,6 +50,37 @@
     title: titleOf(family),
     frames: framesOf(family),
   });
+
+  /**
+   * Every section stays mounted, and the browser skips drawing the ones off
+   * screen (`content-visibility: auto`, owner's pick, 2026-11-25). Each pane
+   * carries `contain-intrinsic-size: auto` from its first frame, so the
+   * browser remembers its real height while it is drawn (it remembers only
+   * for a box that carries `auto`), and skipping starts only once every
+   * pane has held its height through a frame: the kit's frames measure
+   * themselves as they mount and settle a frame or two later (a checkbox's
+   * pane 100px in its first frame, 156px in its second). So no section
+   * changes height as it comes into view, and the browser's scroll anchoring
+   * never moves the board under the reader. The 352px is only what a pane
+   * would stand at before it was ever drawn.
+   */
+  let skipping = $state(false);
+
+  /** Turns skipping on once a frame passes with no pane resized. */
+  const remember = (node: HTMLElement) => {
+    const seen = frameObserver((changed) => {
+      if (changed.length > 0) {
+        seen.request();
+        return;
+      }
+      skipping = true;
+      seen.disconnect();
+    });
+    for (const pane of node.querySelectorAll("[data-board-pane]")) {
+      seen.observe(pane);
+    }
+    return () => seen.disconnect();
+  };
 
   /** A section's anchor, from its title: what the index's links name. */
   const anchorOf = (title: string) =>
@@ -122,24 +153,26 @@
         <p class="max-w-measure text-tx-2 type-body">{note}</p>
       {/if}
     </header>
-    <NearView>
-      <div
-        class="grid overflow-clip rounded-lg ring ring-ui @phone:grid-cols-2"
-      >
-        {#each SCHEMES as scheme (scheme.scheme)}
-          <div
-            data-scheme={scheme.scheme}
-            class={[
-              "flex min-w-0 flex-col gap-space-3 bg-bg p-space-4 text-tx",
-              scheme.scheme === "dark" ? "scheme-dark" : "scheme-light",
-            ]}
-          >
-            <p class="text-tx-2 type-meta">{scheme.label}</p>
-            {@render pane()}
-          </div>
-        {/each}
-      </div>
-    </NearView>
+    <div
+      data-board-pane
+      class={[
+        "grid overflow-clip rounded-lg ring ring-ui intrinsic-auto-88 @phone:grid-cols-2",
+        skipping && "content-visibility-auto",
+      ]}
+    >
+      {#each SCHEMES as scheme (scheme.scheme)}
+        <div
+          data-scheme={scheme.scheme}
+          class={[
+            "flex min-w-0 flex-col gap-space-3 bg-bg p-space-4 text-tx",
+            scheme.scheme === "dark" ? "scheme-dark" : "scheme-light",
+          ]}
+        >
+          <p class="text-tx-2 type-meta">{scheme.label}</p>
+          {@render pane()}
+        </div>
+      {/each}
+    </div>
   </section>
 {/snippet}
 
@@ -240,6 +273,7 @@
     <div class="mt-space-6">{@render index()}</div>
   </nav>
   <div
+    {@attach remember}
     class="flex h-dvh min-w-0 flex-1 flex-col gap-space-8 overflow-y-auto overscroll-contain p-space-6 max-phone:p-space-3"
   >
     <details
