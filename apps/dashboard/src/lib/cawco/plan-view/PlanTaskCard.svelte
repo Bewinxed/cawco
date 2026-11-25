@@ -1,479 +1,216 @@
 <script lang="ts">
-  import { harnessName } from "@cawco/core/harness/kinds";
-  import type { PlanEdit } from "@cawco/core/plan";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import {
-    IconAdd,
-    IconChevronDown,
-    IconChevronRight,
-    IconClock,
-    IconDecisions,
-    IconFork,
-    IconLandPullRequest,
-    IconLock,
-    IconPen,
-    IconSuccess,
-    IconTrash,
-  } from "#lib/icons.js";
-  import PlanDelegateHeader from "./PlanDelegateHeader.svelte";
-  import PlanNoteList from "./PlanNoteList.svelte";
-  import PlanTodoSection from "./PlanTodoSection.svelte";
-  import { PHASE_WORD } from "./style-maps.js";
-  import type { DerivedPlanTask, PlanPhase } from "./types.js";
+  import { IconDecisions } from "#lib/icons.js";
+  import { todoIndentClass } from "./style-maps.js";
+  import type { DerivedPlanTask } from "./types.js";
 
   let {
     task,
     isFirst,
     isLast,
     selected,
-    wellExpanded,
     onSelectTask,
-    onToggleWell,
-    onEdit,
-    onAddTodo,
-    onResolveOffer,
-    onClearHold,
   }: {
     isFirst: boolean;
     isLast: boolean;
-    onAddTodo: (taskId: string, text: string) => void;
-    onClearHold: (taskId: string) => void;
-    onEdit: (edit: PlanEdit) => void;
-    onResolveOffer: (taskId: string, todoId: string, accept: boolean) => void;
     onSelectTask: (taskId: string) => void;
-    onToggleWell: (taskId: string) => void;
     selected: boolean;
     task: DerivedPlanTask;
-    wellExpanded: boolean;
   } = $props();
 
-  let rewordingTask = $state(false);
-  let taskTitleDraft = $state("");
-  let addingTodo = $state(false);
-  let newTodoText = $state("");
+  const isProminent = $derived(task.phase === "moving" || task.needsYou);
+  const openTodos = $derived(task.todos.filter((t) => !t.done));
+  const previewTodos = $derived(openTodos.slice(0, 3));
+  const extraTodoCount = $derived(
+    Math.max(0, openTodos.length - previewTodos.length)
+  );
+  const showOverviewWell = $derived(isProminent && previewTodos.length > 0);
 
-  function cardSurfaceClass(isPicked: boolean, phase: PlanPhase): string {
+  function prominentSurfaceClass(isPicked: boolean, needsYou: boolean): string {
+    if (isPicked) {
+      return "border-brand-solid bg-option-picked shadow-xs";
+    }
+    if (needsYou) {
+      return "border-warning-9 bg-surface-raised shadow-xs can-hover:hover:bg-surface-hover";
+    }
+    return "border-border bg-surface-raised shadow-xs can-hover:hover:bg-surface-hover";
+  }
+
+  function peripherySurfaceClass(isPicked: boolean): string {
     if (isPicked) {
       return "border-brand-solid bg-option-picked";
     }
-    if (phase === "held") {
-      return "border-warning-9 bg-surface-raised";
+    return "border-transparent can-hover:hover:border-border-hairline can-hover:hover:bg-surface-raised";
+  }
+
+  function peripheryTitleClass(phase: DerivedPlanTask["phase"]): string {
+    if (phase === "done" || phase === "gone") {
+      return "text-ink-muted";
     }
-    return "border-border bg-surface-raised";
+    return "font-medium text-ink-row";
   }
-
-  function beginTaskReword() {
-    taskTitleDraft = task.title;
-    rewordingTask = true;
-  }
-
-  function saveTaskReword() {
-    const clean = taskTitleDraft.trim();
-    if (clean && clean !== task.title) {
-      onEdit({ kind: "reword", step: task.handle, content: clean });
-    }
-    rewordingTask = false;
-  }
-
-  function submitNewTodo() {
-    const clean = newTodoText.trim();
-    if (clean) {
-      onAddTodo(task.taskId, clean);
-      newTodoText = "";
-      addingTodo = false;
-    }
-  }
-
-  const hasTodos = $derived(
-    task.todos.length > 0 || task.offeredTodos.length > 0
-  );
-  const waitKind = $derived(task.wait?.target?.kind);
 </script>
 
-{#snippet waitGlyph(iconClass: string)}
-  {#if waitKind === "pr"}
-    <IconLandPullRequest aria-hidden="true" class={iconClass} />
-  {:else if waitKind === "card" || waitKind === "pin"}
-    <IconDecisions aria-hidden="true" class={iconClass} />
-  {:else if waitKind === "time"}
-    <IconClock aria-hidden="true" class={iconClass} />
-  {:else}
-    <IconLock aria-hidden="true" class={iconClass} />
-  {/if}
-{/snippet}
-
-<div class="flex gap-x-space-3" data-phase={task.phase} data-slot="plan-task">
-  <!-- Level-1-to-Level-2 Spine Column: connects every task in plan order with one clear status node -->
+<div
+  class="flex gap-x-space-3"
+  data-needs-you={task.needsYou ? "true" : undefined}
+  data-phase={task.phase}
+  data-slot="plan-task"
+>
+  <!-- Level 1 -> Level 2 Spine Rail: only the task needing the person carries a loud mark -->
   <div class="relative flex w-c-row-lead shrink-0 flex-col items-center">
-    {#if !isFirst}
-      <span aria-hidden="true" class="h-space-3 w-px shrink-0 bg-nest-ink"
-      ></span>
+    {#if isFirst}
+      <span aria-hidden="true" class="h-space-2 w-px shrink-0"></span>
     {:else}
-      <span aria-hidden="true" class="h-space-3 w-px shrink-0"></span>
+      <span aria-hidden="true" class="h-space-2 w-px shrink-0 bg-nest-ink"
+      ></span>
     {/if}
 
-    {#if task.phase === "done"}
-      <span
-        aria-hidden="true"
-        class="grid size-icon-lg shrink-0 place-items-center rounded-pill bg-status-done-bg text-status-done-glyph"
-      >
-        <IconSuccess aria-hidden="true" class="size-icon-sm" />
-      </span>
-    {:else if task.phase === "moving"}
-      <span
-        aria-hidden="true"
-        class="grid size-icon-lg shrink-0 place-items-center rounded-pill bg-status-live-bg text-status-live-glyph"
-      >
-        <span
-          aria-hidden="true"
-          class="size-2 rounded-pill bg-status-live-glyph loops breathe"
-        ></span>
-      </span>
-    {:else if task.phase === "held"}
+    {#if task.needsYou}
       <span
         aria-hidden="true"
         class="grid size-icon-lg shrink-0 place-items-center rounded-pill bg-status-attn-bg text-status-attn-glyph"
       >
-        {@render waitGlyph("size-icon-sm")}
+        <IconDecisions aria-hidden="true" class="size-icon-sm" />
       </span>
-    {:else if task.phase === "gone"}
+    {:else if task.phase === "moving"}
       <span
         aria-hidden="true"
-        class="grid size-icon-lg shrink-0 place-items-center rounded-pill border border-dashed border-border-control bg-surface-page text-ink-subtle"
-      >
-        <span class="mono-figure type-meta">–</span>
-      </span>
+        class="my-1 size-2.5 shrink-0 rounded-pill border-2 border-ink-strong bg-surface-raised"
+      ></span>
+    {:else if task.phase === "done"}
+      <span
+        aria-hidden="true"
+        class="my-1 size-2 shrink-0 rounded-pill bg-nest-ink"
+      ></span>
     {:else}
       <span
         aria-hidden="true"
-        class="grid size-icon-lg shrink-0 place-items-center rounded-pill border border-border-control bg-surface-recess text-ink-muted"
-      >
-        <span class="mono-figure type-meta">{task.order}</span>
-      </span>
+        class="my-1 size-2 shrink-0 rounded-pill border border-border-control bg-surface-page"
+      ></span>
     {/if}
 
     {#if !isLast}
-      <span aria-hidden="true" class="min-h-space-3 w-px flex-1 bg-nest-ink"
+      <span aria-hidden="true" class="min-h-space-2 w-px flex-1 bg-nest-ink"
       ></span>
     {/if}
   </div>
 
-  <!-- Level 2: Raised Task Surface -->
-  <div class="min-w-0 flex-1 pb-space-3">
-    {#if task.gone}
-      <div
-        class="flex flex-col gap-space-2 rounded-lg border border-dashed border-border-control bg-surface-recess p-space-3"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-space-2">
-          <div class="flex min-w-0 flex-wrap items-center gap-space-2">
-            <span class="type-code text-ink-subtle">{task.taskId}</span>
-            <span class="type-body text-ink-muted">{task.title}</span>
-          </div>
-          <Button
-            icon={IconTrash}
-            label="Remove from plan"
-            onclick={() => onEdit({ kind: "remove", step: task.handle })}
-            size="xs"
-            tone="destructive"
-            variant="ghost"
-          />
-        </div>
-        <PlanNoteList comments={task.comments} surface="raised" />
-      </div>
-    {:else}
-      <div
+  <!-- Level 2: Task Item (name + one plain sentence + single loud mark only when needed) -->
+  <div class="min-w-0 flex-1 pb-space-2">
+    {#if isProminent}
+      <button
+        aria-expanded={selected}
         class={[
-          "flex min-w-0 flex-col rounded-lg border shadow-xs transition-control",
-          cardSurfaceClass(selected, task.phase),
+          "press-tint flex w-full min-w-0 flex-col gap-space-2 rounded-lg border p-space-3 text-start transition-control focus-inset",
+          prominentSurfaceClass(selected, task.needsYou),
         ]}
+        onclick={() => onSelectTask(task.taskId)}
+        type="button"
       >
-        <!-- Task Header & Primary Metadata -->
-        <div class="flex flex-col gap-space-2 p-space-3">
-          <div class="flex flex-wrap items-center gap-space-2">
-            <span class="type-code text-ink-muted">{task.taskId}</span>
-
-            {#if task.phase === "moving"}
-              <Badge variant="live">
-                <span>{task.record?.stage ?? PHASE_WORD.moving}</span>
-              </Badge>
-            {:else if task.phase === "held"}
-              <Badge variant="attn">
-                <span>Held · {task.record?.stage ?? "Waiting"}</span>
-              </Badge>
-            {:else if task.phase === "done"}
-              <Badge variant="done">
-                <span>{task.record?.stage ?? PHASE_WORD.done}</span>
-              </Badge>
-            {:else}
-              <Badge variant="secondary">
-                <span>{task.record?.stage ?? PHASE_WORD.ahead}</span>
-              </Badge>
-            {/if}
-
-            {#if task.record && task.record.unblocks.length > 0 && task.phase !== "done"}
-              <span
-                class="mark-line inline-flex items-center gap-space-1 text-ink-muted type-meta"
-              >
-                <IconFork
-                  aria-hidden="true"
-                  class="size-icon-sm text-ink-subtle"
-                />
-                <span>Unblocks {task.record.unblocks.length}</span>
-              </span>
-            {/if}
-
-            <div class="ms-auto flex items-center gap-space-2">
-              {#if task.agreedTotal > 0}
-                <span class="mono-figure type-meta text-ink-muted">
-                  {task.agreedDone}/{task.agreedTotal} to-dos
-                </span>
-              {/if}
-
-              {#if task.offeredTodos.length > 0}
-                <Badge variant="brand">
-                  <span>{task.offeredTodos.length} offered</span>
-                </Badge>
-              {/if}
-
-              <Button
-                icon={IconPen}
-                label="Reword task"
-                onclick={beginTaskReword}
-                size="xs"
-                tone="quiet"
-                variant="ghost"
-              />
-
-              <Button
-                label={selected ? "Close task" : "Open task"}
-                onclick={() => onSelectTask(task.taskId)}
-                size="xs"
-                variant={selected ? "secondary" : "outline"}
-              />
-            </div>
-          </div>
-
-          <!-- Task Title or Inline Reword Field -->
-          {#if rewordingTask}
-            <form
-              class="flex flex-wrap items-center gap-space-2"
-              onsubmit={(e) => {
-                e.preventDefault();
-                saveTaskReword();
-              }}
-            >
-              <div class="min-w-52 flex-1">
-                <Input
-                  aria-label="Reword task title"
-                  text="label"
-                  bind:value={taskTitleDraft}
-                />
-              </div>
-              <Button
-                label="Save wording"
-                size="xs"
-                type="submit"
-                variant="secondary"
-              />
-              <Button
-                label="Cancel edit"
-                onclick={() => {
-                  rewordingTask = false;
-                }}
-                size="xs"
-                tone="muted"
-                variant="ghost"
-              />
-            </form>
-          {:else}
-            <button
-              class={[
-                "press-tint w-full rounded-xs text-start type-row transition-control focus-inset",
-                task.phase === "done"
-                  ? "text-ink-muted"
-                  : "text-ink-strong can-hover:hover:text-brand-ink-strong",
-              ]}
-              onclick={() => onSelectTask(task.taskId)}
-              type="button"
-            >
+        <span class="flex w-full min-w-0 flex-col gap-space-1">
+          <span
+            class="flex w-full min-w-0 items-start justify-between gap-space-2"
+          >
+            <span class="min-w-0 flex-1 break-word type-row text-ink-strong">
               {task.title}
-            </button>
-          {/if}
+            </span>
+            {#if task.needsYou}
+              <Badge class="shrink-0" variant="attn">
+                <span>Needs you</span>
+              </Badge>
+            {/if}
+          </span>
 
-          <!-- Delegate Handoff Strip: shows WHICH session is working this task right now -->
-          {#if task.delegate}
-            <div
-              class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 rounded-sm bg-surface-recess px-space-2 py-space-1"
-            >
-              <PlanDelegateHeader
-                harness={task.delegate.harness}
-                identity={task.delegate.identity}
-                title={task.delegate.title}
-              />
+          <span
+            class={[
+              "min-w-0 break-word type-meta",
+              task.needsYou ? "text-status-attn-ink" : "text-ink-muted",
+            ]}
+          >
+            {task.overviewSentence}
+          </span>
+        </span>
 
-              <span class="type-meta text-ink-muted">
-                {harnessName(task.delegate.harness)} · {task.delegate.machine}
-              </span>
-
-              {#if task.delegate.liveLine && task.phase === "moving"}
-                <span
-                  class="min-w-0 basis-full break-word ps-space-5 type-meta text-ink-muted"
-                >
-                  Now: {task.delegate.liveLine}
-                </span>
-              {/if}
-            </div>
-          {/if}
-
-          <!-- Hold / Wait Strip: calm inline context when held, never a duplicate inbox -->
-          {#if task.wait && task.phase !== "done"}
-            <div
-              class="flex flex-wrap items-center justify-between gap-space-2 rounded-sm border border-border-well bg-needs-ground px-space-3 py-space-2"
-            >
-              <div class="flex min-w-0 flex-1 flex-col gap-space-row">
-                <div
-                  class="mark-line flex items-center gap-space-2 text-status-attn-ink type-label"
-                >
-                  {@render waitGlyph(
-                    "size-icon-md shrink-0 text-status-attn-glyph"
-                  )}
-                  <span class="min-w-0 break-word">{task.wait.label}</span>
-                </div>
-                <p class="ps-space-6 type-meta text-ink-muted">
-                  {task.wait.detail}
-                </p>
-              </div>
-              <div class="flex shrink-0 items-center gap-space-2">
-                <Button
-                  label={task.wait.actionLabel}
-                  onclick={() => {
-                    if (task.wait?.target?.kind === "task") {
-                      onSelectTask(task.wait.target.id);
-                    } else {
-                      onSelectTask(task.taskId);
-                    }
-                  }}
-                  size="xs"
-                  variant="outline"
-                />
-                <Button
-                  label="Mark hold settled"
-                  onclick={() => onClearHold(task.taskId)}
-                  size="xs"
-                  tone="muted"
-                  variant="ghost"
-                />
-              </div>
-            </div>
-          {/if}
-
-          <!-- Operator Notes attached directly to the task step -->
-          <PlanNoteList
-            accentIcon
-            comments={task.comments}
-            prefix="Your note: "
-            surface="recess"
-          />
-        </div>
-
-        <!-- Level 3: Recessed To-do Well nested inside the Task Card -->
-        {#if hasTodos || addingTodo}
-          <div class="px-space-3 pb-space-3">
-            <div
-              class="flex flex-col rounded-well border border-border-well bg-surface-well"
-            >
-              <!-- Well Disclosure Bar -->
-              <div
-                class="flex flex-wrap items-center justify-between gap-space-2 px-space-2 py-space-1"
+        <!-- Level 3: Recessed To-do Well nested inside active or needs-you tasks -->
+        {#if showOverviewWell}
+          <span
+            class="flex w-full min-w-0 flex-col gap-space-row rounded-well border border-border-well bg-surface-well px-space-2 py-space-1"
+          >
+            {#each previewTodos as todo (todo.handle)}
+              <span
+                class={[
+                  "mark-line relative flex min-w-0 items-center gap-space-2 py-0.5",
+                  todoIndentClass(todo.depth),
+                ]}
               >
-                <button
-                  aria-expanded={wellExpanded}
-                  class="mark-line press-tint touch-hit inline-flex items-center gap-space-1 rounded-xs px-space-1 py-0.5 type-label text-ink-muted can-hover:hover:text-ink-strong"
-                  onclick={() => onToggleWell(task.taskId)}
-                  type="button"
+                {#if todo.depth > 0}
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none absolute start-space-2 top-0 h-3.5 w-space-2 rounded-es-xs border-b border-s border-nest-ink"
+                    data-box
+                  ></span>
+                {/if}
+
+                {#if todo.inProgress}
+                  <span
+                    aria-hidden="true"
+                    class="size-1.5 shrink-0 rounded-pill bg-ink-strong"
+                    data-box
+                  ></span>
+                {:else}
+                  <span
+                    aria-hidden="true"
+                    class="size-2.5 shrink-0 rounded-hair border border-border-control"
+                    data-box
+                  ></span>
+                {/if}
+
+                <span
+                  class={[
+                    "min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta",
+                    todo.inProgress
+                      ? "font-medium text-ink-strong"
+                      : "text-ink-row",
+                  ]}
                 >
-                  {#if wellExpanded}
-                    <IconChevronDown aria-hidden="true" class="size-icon-sm" />
-                  {:else}
-                    <IconChevronRight aria-hidden="true" class="size-icon-sm" />
-                  {/if}
-                  <span>
-                    {wellExpanded
-                      ? `To-dos (${task.agreedDone} of ${task.agreedTotal} done)`
-                      : `Show ${task.agreedTotal} to-dos (${task.agreedDone} done)`}
-                  </span>
-                </button>
+                  {todo.text}
+                </span>
+              </span>
+            {/each}
 
-                <Button
-                  icon={IconAdd}
-                  label="Add to-do"
-                  onclick={() => {
-                    if (!wellExpanded) {
-                      onToggleWell(task.taskId);
-                    }
-                    addingTodo = true;
-                  }}
-                  size="xs"
-                  tone="quiet"
-                  variant="ghost"
-                />
-              </div>
-
-              {#if wellExpanded}
-                <div
-                  class="flex flex-col gap-space-row border-t border-border-well p-space-1"
-                >
-                  <PlanTodoSection
-                    offerHeading="Offered by session — agree to include in this task's to-dos:"
-                    offeredTodos={task.offeredTodos}
-                    {onEdit}
-                    onResolveOffer={(todoId, accept) =>
-                      onResolveOffer(task.taskId, todoId, accept)}
-                    {onSelectTask}
-                    todos={task.todos}
-                  />
-
-                  {#if addingTodo}
-                    <form
-                      class="flex flex-wrap items-center gap-space-2 px-space-2 py-space-1"
-                      onsubmit={(e) => {
-                        e.preventDefault();
-                        submitNewTodo();
-                      }}
-                    >
-                      <div class="min-w-44 flex-1">
-                        <Input
-                          aria-label="New to-do wording"
-                          look="cell"
-                          placeholder="Describe the new to-do…"
-                          bind:value={newTodoText}
-                        />
-                      </div>
-                      <Button
-                        label="Add to-do"
-                        size="xs"
-                        type="submit"
-                        variant="secondary"
-                      />
-                      <Button
-                        label="Cancel to-do"
-                        onclick={() => {
-                          addingTodo = false;
-                        }}
-                        size="xs"
-                        tone="muted"
-                        variant="ghost"
-                      />
-                    </form>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          </div>
+            {#if extraTodoCount > 0}
+              <span class="ps-space-4 pt-0.5 type-meta text-ink-subtle">
+                +{extraTodoCount} more open {extraTodoCount === 1
+                  ? "to-do"
+                  : "to-dos"}
+              </span>
+            {/if}
+          </span>
         {/if}
-      </div>
+      </button>
+    {:else}
+      <button
+        aria-expanded={selected}
+        class={[
+          "press-tint touch-hit flex w-full min-w-0 flex-col gap-space-row rounded-md border px-space-3 py-space-1 text-start transition-control focus-inset",
+          peripherySurfaceClass(selected),
+        ]}
+        onclick={() => onSelectTask(task.taskId)}
+        type="button"
+      >
+        <span
+          class={[
+            "min-w-0 break-word type-body",
+            peripheryTitleClass(task.phase),
+          ]}
+        >
+          {task.title}
+        </span>
+        <span class="min-w-0 break-word type-meta text-ink-subtle">
+          {task.overviewSentence}
+        </span>
+      </button>
     {/if}
   </div>
 </div>

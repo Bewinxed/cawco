@@ -28,14 +28,14 @@ const td = (
 const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
   {
     id: "del-resync",
-    title: "Harden RFC 6902 delta gap recovery",
+    title: "Harden delta gap recovery",
     harness: "claude",
     machine: "obelisk",
     identity: 6,
     state: "running",
     assignedTaskIds: ["tsk-504"],
     liveLine:
-      "Verifying duplicate plan.resync suppression when reconnect frames interleave",
+      "Checking that reconnect bursts send a single resync request per session",
     plan: {
       source: "cawco",
       taskId: "tsk-504",
@@ -46,7 +46,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           todo: "td-1",
           depth: 0,
           status: "completed",
-          content: "Clone proxy-held plan state before applying RFC 6902 patch",
+          content: "Copy held plan state before applying incoming patches",
         },
         {
           id: "tsk-504:td-2",
@@ -54,7 +54,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           todo: "td-2",
           depth: 0,
           status: "completed",
-          content: "Drop stale delta frames whose revision trails held.rev",
+          content: "Ignore out-of-date frames whose revision already landed",
         },
         {
           id: "tsk-504:td-3",
@@ -63,7 +63,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           depth: 0,
           status: "in_progress",
           content:
-            "Coalesce concurrent gap detections to one plan.resync per instanceId",
+            "Coalesce missed revisions into one resync request per session",
         },
         {
           id: "tsk-504:td-4",
@@ -71,21 +71,21 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           todo: "td-4",
           depth: 0,
           status: "pending",
-          content: "Sweep handover interleavings in scripts/protocol-sweep.ts",
+          content: "Run the reconnect interleaving sweep across handovers",
         },
       ],
     },
   },
   {
     id: "del-sheet",
-    title: "Mobile sheet & 16px inline reword floor",
+    title: "Polish mobile sheet and touch fields",
     harness: "opencode",
     machine: "studio.local",
     identity: 2,
     state: "running",
     assignedTaskIds: ["tsk-505"],
     liveLine:
-      "Checking hit-under touch targets on inline reword fields at 390px width",
+      "Verifying text selection inside 44px touch targets at 390px phone width",
     plan: {
       source: "cawco",
       taskId: "tsk-505",
@@ -97,7 +97,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           depth: 0,
           status: "completed",
           content:
-            "Mount bottom task sheet with 100×6 grabber under the 900px desk line",
+            "Open the bottom task sheet with a 100×6 grabber below 900px",
         },
         {
           id: "tsk-505:td-2",
@@ -106,7 +106,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           depth: 0,
           status: "in_progress",
           content:
-            "Keep caret selection live inside touch-hit rows on iOS Safari",
+            "Keep text selection working inside touch-target rows on iOS Safari",
         },
         {
           id: "tsk-505:td-3",
@@ -115,14 +115,14 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           depth: 0,
           status: "pending",
           content:
-            "Verify keyboard lift keeps Save note above safe-area-inset-bottom",
+            "Keep the note composer clear of the bottom safe area when the keyboard opens",
         },
       ],
     },
   },
   {
     id: "del-swift",
-    title: "Regenerate Words.Plan for iOS TestFlight",
+    title: "Regenerate iOS plan strings",
     harness: "pi",
     machine: "mini.local",
     identity: 4,
@@ -138,7 +138,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           todo: "td-1",
           depth: 0,
           status: "completed",
-          content: "Add off-board step copy to packages/core/src/words/plan.ts",
+          content: "Add shared off-board step wording to core plan words",
         },
         {
           id: "tsk-502:td-2",
@@ -146,8 +146,7 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
           todo: "td-2",
           depth: 0,
           status: "completed",
-          content:
-            "Run bun run words and confirm Words.generated.swift matches",
+          content: "Regenerate Swift bindings and confirm zero diff",
         },
       ],
     },
@@ -157,15 +156,14 @@ const REALISTIC_DELEGATES: DelegateSessionRecord[] = [
 const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
   "tsk-501": {
     id: "tsk-501",
-    title:
-      "Deny harness-native todo tools at session spawn across all adapters",
+    title: "Turn off built-in harness todo lists when CawCo starts a session",
     stage: "Done",
     stageKind: "done",
     summary:
       "Every session uses CawCo's single plan list so edits from the operator and steps written by the harness never drift apart.",
     acceptance: [
-      "Claude Code TaskCreate/TodoWrite and EnterPlanMode denied in spawn options without touching user settings",
-      "OpenCode plan agent disabled on launched servers",
+      "Claude Code built-in todo tools denied in spawn options without touching personal CLI settings",
+      "OpenCode built-in plan agent turned off on launched servers",
     ],
     labels: ["agent", "harnesses"],
     after: [],
@@ -174,90 +172,78 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Pass OWN_LIST_DENIED in session start options beside fleet baseline",
+        "Deny built-in todo tools in session start options",
         true
       ),
       td(
         "td-2",
         "2",
-        "Disable built-in plan mode in OpenCode server launch config",
+        "Turn off built-in plan mode in OpenCode server launch config",
         true
       ),
       td(
         "td-3",
         "3",
-        "Confirm standalone claude started by hand keeps its own tools",
+        "Confirm standalone CLI sessions started by hand keep their default tools",
         true
       ),
     ],
   },
   "tsk-502": {
     id: "tsk-502",
-    title: "Sync shared plan words and off-board handle copy with Words.Plan",
+    title: "Keep shared plan wording in sync across web and iOS builds",
     stage: "Done",
     stageKind: "done",
     delegateId: "del-swift",
     summary:
-      "Keeps web dashboard strings and CawCoCore Swift strings generated from one canonical source.",
-    acceptance: ["bun run words:check passes with zero diff"],
+      "Generates web dashboard strings and iOS Swift strings from one shared source so labels never diverge.",
+    acceptance: ["Generated Swift strings match shared core plan words"],
     labels: ["words", "ios"],
     after: ["tsk-501"],
     unblocks: ["tsk-505"],
     todos: [
-      td(
-        "td-1",
-        "1",
-        "Add off-board step copy to packages/core/src/words/plan.ts",
-        true
-      ),
-      td(
-        "td-2",
-        "2",
-        "Run bun run words and confirm Words.generated.swift matches",
-        true
-      ),
+      td("td-1", "1", "Add off-board step wording to core plan words", true),
+      td("td-2", "2", "Regenerate Swift bindings and verify zero diff", true),
     ],
   },
   "tsk-503": {
     id: "tsk-503",
-    title:
-      "Preserve person comments across session todo_write replacements and track orphaned steps",
+    title: "Keep operator notes attached when a session rewrites its plan",
     stage: "Done",
     stageKind: "done",
     summary:
-      "When an agent rewrites its session plan, comments stay attached to the same task or to-do handle, or move to orphanedComments if omitted.",
+      "When an agent updates its session plan, notes from the operator stay attached to the same task or to-do instead of getting wiped.",
     acceptance: [
-      "keepComments sorts preserved notes chronologically by ISO timestamp",
-      "Refuses a write once when it would silently undo an unsettled add, remove, or untick",
+      "Preserved notes stay ordered chronologically",
+      "Refuses a write once if it would silently drop an unread operator edit",
     ],
     labels: ["hub", "plans"],
     after: ["tsk-501"],
     unblocks: ["tsk-504"],
     todos: [
-      td("td-1", "1", "Key kept comments by step record handle on write", true),
+      td("td-1", "1", "Match existing notes by task and to-do handle", true),
       td(
         "td-2",
         "2",
-        "Refuse unsettled person edits once with changeLine summary",
+        "Refuse overwrites once when unread operator edits would be lost",
         true
       ),
-      td("td-3", "3", "Promote mobile sheet follow-up to its own task", true, {
+      td("td-3", "3", "Split mobile sheet polish into its own task", true, {
         promoted: "tsk-505",
       }),
     ],
   },
   "tsk-504": {
     id: "tsk-504",
-    title:
-      "Stream AG-UI plan.snapshot and RFC 6902 plan.delta frames with single-flight gap resync",
+    title: "Keep live plan updates in sync across reconnects",
     stage: "Working",
     stageKind: "active",
     delegateId: "del-resync",
     summary:
-      "Followers subscribe once and apply sequential JSON patches by revision; any skipped revision triggers a single plan.resync request until the fresh snapshot lands.",
+      "Applies sequential plan patches by revision and requests a single fresh snapshot whenever a reconnect skips a revision.",
     acceptance: [
-      "Out-of-order delta never mutates store proxy state partially",
-      "At most one in-flight plan.resync per instanceId per gap",
+      "Out-of-order patches never leave plan state half-applied",
+      "At most one resync request is sent per session during a gap",
     ],
     labels: ["hub", "stream"],
     after: ["tsk-501", "tsk-503"],
@@ -266,52 +252,51 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Clone proxy-held plan state before applying RFC 6902 patch",
+        "Copy held plan state before applying incoming patches",
         true
       ),
       td(
         "td-2",
         "2",
-        "Drop stale delta frames whose revision trails held.rev",
+        "Ignore out-of-date frames whose revision already landed",
         true
       ),
       td(
         "td-3",
         "3",
-        "Coalesce concurrent gap detections to one plan.resync per instanceId",
+        "Coalesce missed revisions into one resync request per session",
         false
       ),
       td(
         "td-3a",
         "3.1",
-        "Clear asked set only when matching plan.snapshot arrives",
+        "Clear the pending resync flag only when the fresh snapshot arrives",
         false,
         { depth: 1 }
       ),
       td(
         "td-3b",
         "3.2",
-        "Re-emit snapshot when patch exceeds half the step list",
+        "Send a full snapshot when a patch changes more than half the plan",
         false,
         { depth: 1 }
       ),
       td(
         "td-4",
         "4",
-        "Sweep handover interleavings in scripts/protocol-sweep.ts",
+        "Run the reconnect interleaving sweep across handovers",
         false
       ),
     ],
   },
   "tsk-505": {
     id: "tsk-505",
-    title:
-      "Build nested session plan view with recessed to-do wells, desk inspector, and phone sheet",
+    title: "Build the nested session plan view for desk and phone",
     stage: "Working",
     stageKind: "active",
     delegateId: "del-sheet",
     summary:
-      "Presents the plan, its tasks, and each task's to-dos as three unmistakable levels at 1440px and 390px in both schemes.",
+      "Shows the plan, its tasks, and active to-dos as three calm nested levels at 1440px and 390px, disclosing full details and editing when a task is opened.",
     acceptance: [
       "Plan, task, and to-do read as three nested levels at a glance",
       "Every action is named by what it does and works by keyboard and touch",
@@ -323,25 +308,25 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Mount bottom task sheet with 100×6 grabber under the 900px desk line",
+        "Open the bottom task sheet with a 100×6 grabber below 900px",
         true
       ),
       td(
         "td-2",
         "2",
-        "Keep caret selection live inside touch-hit rows on iOS Safari",
+        "Keep text selection working inside touch-target rows on iOS Safari",
         false
       ),
       td(
         "td-3",
         "3",
-        "Verify keyboard lift keeps Save note above safe-area-inset-bottom",
+        "Keep the note composer clear of the bottom safe area when the keyboard opens",
         false
       ),
       td(
         "td-4",
         "4",
-        "Add keyboard shortcut J/K traversal across spine tasks",
+        "Add keyboard up and down shortcuts across plan tasks",
         false,
         { proposed: true }
       ),
@@ -349,15 +334,14 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
   },
   "tsk-506": {
     id: "tsk-506",
-    title:
-      "Switch task & plan surfaces onto the 4px spacing base without breaking non-migrated routes",
+    title: "Move task and plan screens onto the 4px spacing grid",
     stage: "Waiting",
     stageKind: "you",
     summary:
-      "Applies data-grid='4px' token formulas to the plan surface once the operator picks the rollout boundary on the decision page and the contrast check PR merges.",
+      "Applies 4px spacing tokens to task and plan screens once you choose the rollout boundary on the decision page and the contrast baseline pull request merges.",
     acceptance: [
-      "scripts/grid-scope-check.ts passes with every derived spacing token redeclared",
-      "Measured contrast holds 4.5:1 for subtle ink on well and hover in light and dark",
+      "Every derived spacing token is redeclared cleanly inside the 4px grid scope",
+      "Subtle text holds 4.5:1 contrast on recessed wells in both light and dark themes",
     ],
     labels: ["tokens", "design"],
     after: ["tsk-501"],
@@ -366,19 +350,19 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Audit derived --spacing-c-* formulas inside theme.css [data-grid='4px']",
+        "Audit derived spacing tokens inside the 4px grid scope",
         true
       ),
       td(
         "td-2",
         "2",
-        "Settle rollout scope card on the 4px spacing decision page",
+        "Pick the rollout boundary on the 4px Grid Rollout decision page",
         false
       ),
       td(
         "td-3",
         "3",
-        "Land token-contrast-check baseline update in PR #614",
+        "Merge pull request #614 with the updated contrast table",
         false
       ),
     ],
@@ -386,14 +370,14 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
   "tsk-507": {
     id: "tsk-507",
     title:
-      "Batch waking plan edits over the 3-second quiet window before starting an idle session",
+      "Batch rapid plan edits over three seconds before waking an idle session",
     stage: "Ready",
     stageKind: "todo",
     summary:
-      "Rewords, adds, removals, and comments wake an idle session 3 seconds after the last edit as one consolidated message; ticks and moves wait for the next turn.",
+      "Rewords, additions, removals, and notes wait 3 seconds after the last edit so a burst of changes wakes an idle session once with one consolidated summary.",
     acceptance: [
-      "Burst of 4 edits within 3s dispatches exactly one wake message",
-      "Tick and move edits never wake an idle or archived session on their own",
+      "Four edits within 3 seconds send a single wake message",
+      "Ticking or reordering steps never wakes an idle session on its own",
     ],
     labels: ["hub", "triggers"],
     after: ["tsk-504"],
@@ -402,33 +386,32 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Debounce PLAN_WAKING_EDITS per receiver key using PLAN_WAKE_QUIET_MS",
+        "Group waking plan edits over a 3-second quiet window",
         false
       ),
       td(
         "td-2",
         "2",
-        "Route delegate plan edits to parent session rather than straight to delegate",
+        "Deliver delegate plan edits through the parent session",
         false
       ),
       td(
         "td-3",
         "3",
-        "Reopen archived session with preserved open records when transcript is gone",
+        "Reopen ended sessions with their open tasks when edited",
         false
       ),
     ],
   },
   "tsk-508": {
     id: "tsk-508",
-    title:
-      "Wire task_waits resolver to drop settled PR, task, and date holds from plan steps automatically",
+    title: "Clear settled pull request and task holds automatically",
     stage: "Ready",
     stageKind: "todo",
     summary:
-      "Uses the hub's single wait resolver so a merged GitHub PR or landed upstream task clears waitsOn and publishes a plan.delta immediately.",
+      "Watches open waits so a merged pull request or finished blocking task clears the hold and resumes the plan without manual cleanup.",
     acceptance: [
-      "Settled GitHub PR drops waitsOn and broadcasts RFC 6902 remove patch",
+      "Merged pull requests clear their wait and broadcast an immediate update",
     ],
     labels: ["hub", "waits"],
     after: ["tsk-504", "tsk-507"],
@@ -437,38 +420,37 @@ const REALISTIC_TASKS: Record<string, PlanTaskRecord> = {
       td(
         "td-1",
         "1",
-        "Subscribe planwaits table to task-waits settled hook",
+        "Connect plan holds to the shared wait settlement watcher",
         false
       ),
       td(
         "td-2",
         "2",
-        "Publish plan.delta removing /steps/i/waitsOn on settle",
+        "Broadcast a live patch removing the hold as soon as it settles",
         false
       ),
     ],
   },
   "tsk-509": {
     id: "tsk-509",
-    title:
-      "Run full repository check gate and verify zero layout near-misses across light and dark frames",
+    title: "Run the full repository check suite across light and dark themes",
     stage: "Ready",
     stageKind: "todo",
     summary:
-      "Final verification pass across golar tsc, golar lint, mark-line-check, token-contrast-check, knip, and jscpd.",
+      "Final verification pass across type-checking, design rules, contrast floors, unused exports, and copy-paste detection.",
     acceptance: [
-      "bun run check exits 0 from repository root",
-      "Both 390px phone and 1440px desk frames hold clean alignment edges",
+      "bun run check passes with zero warnings or errors",
+      "Phone (390px) and desk (1440px) views hold clean alignment in light and dark",
     ],
     labels: ["release", "check"],
     after: ["tsk-505", "tsk-506", "tsk-508"],
     unblocks: [],
     todos: [
-      td("td-1", "1", "Verify golar tsc -b and design lint rules pass", false),
+      td("td-1", "1", "Pass full type-checking and house design lints", false),
       td(
         "td-2",
         "2",
-        "Inspect 390px and 1440px stories in light and dark",
+        "Verify 390px phone and 1440px desk stories in light and dark",
         false
       ),
     ],
@@ -503,11 +485,11 @@ const REALISTIC_STEPS: PlanStep[] = [
     depth: 0,
     status: "pending",
     gone: true,
-    content: "tsk-498 is no longer on the board",
+    content: "Prototype standalone plan drawer",
     comments: [
       {
         at: "2026-11-24T13:18:00.000Z",
-        text: "Folded this old prototype spike into tsk-505 — safe to remove from plan.",
+        text: "Folded this early prototype spike into the main plan view task — safe to remove from the plan.",
       },
     ],
   },
@@ -520,7 +502,7 @@ const REALISTIC_STEPS: PlanStep[] = [
     comments: [
       {
         at: "2026-11-24T13:42:00.000Z",
-        text: "Keep the asked Set keyed by instanceId alone so rapid tab switches never double-send plan.resync.",
+        text: "Key the pending resync set by session alone so switching tabs quickly never sends duplicate requests.",
       },
     ],
   },
@@ -530,8 +512,7 @@ const REALISTIC_STEPS: PlanStep[] = [
     todo: "td-3",
     depth: 1,
     status: "in_progress",
-    content:
-      "Coalesce concurrent gap detections to one plan.resync per instanceId",
+    content: "Coalesce missed revisions into one resync request per session",
   },
   {
     id: "tsk-505",
@@ -546,7 +527,8 @@ const REALISTIC_STEPS: PlanStep[] = [
     todo: "td-2",
     depth: 1,
     status: "in_progress",
-    content: "Keep caret selection live inside touch-hit rows on iOS Safari",
+    content:
+      "Keep text selection working inside touch-target rows on iOS Safari",
   },
   {
     id: "tsk-506",
@@ -558,7 +540,7 @@ const REALISTIC_STEPS: PlanStep[] = [
     comments: [
       {
         at: "2026-11-24T13:55:00.000Z",
-        text: "Hold off touching SettingsView's existing 4px overrides until you pick Option B on the rollout card.",
+        text: "Leave Settings screen overrides untouched until Option B is confirmed on the rollout page.",
       },
     ],
   },
@@ -569,7 +551,7 @@ const REALISTIC_STEPS: PlanStep[] = [
     depth: 1,
     status: "pending",
     waitsOn: "https://github.com/bewinxed/cawco/pull/614",
-    content: "Land token-contrast-check baseline update in PR #614",
+    content: "Merge pull request #614 with the updated contrast table",
   },
   {
     id: "tsk-507",
@@ -597,27 +579,27 @@ const REALISTIC_STEPS: PlanStep[] = [
 
 const SHARED_WAIT_META: PlanViewDataset["waitMeta"] = {
   [`${ARTIFACT_ROLLOUT}#grid-rollout`]: {
-    label: "Waiting on your pick · 4px grid rollout",
+    label: "Waiting on your choice on the 4px Grid Rollout decision page",
     detail:
-      "Decision card “Where data-grid='4px' lands this week” on page 4px Grid Rollout needs your answer.",
-    actionLabel: "Open decision card",
+      "Card “Where the 4px spacing grid lands this week” on 4px Grid Rollout needs your pick before token changes run.",
+    actionLabel: "Open decision page",
   },
   [`${ARTIFACT_CONTRAST}/7`]: {
-    label: "Waiting on pin #7 · Night well contrast",
+    label: "Waiting on your reply to comment #7 on Surface Contrast Audit",
     detail:
-      "Pin #7 on Surface Contrast Audit asks whether border-well stays neutral-6 in dark mode.",
-    actionLabel: "Open pin #7",
+      "Comment #7 on Surface Contrast Audit asks whether dark-mode recessed wells keep their current border step.",
+    actionLabel: "Open comment #7",
   },
   "https://github.com/bewinxed/cawco/pull/614": {
-    label: "Waiting on PR #614 · Token contrast table",
+    label: "Waiting for pull request #614 to merge",
     detail:
-      "bewinxed/cawco#614 updates measured contrast figures for surface-well and option-picked.",
-    actionLabel: "Open PR #614",
+      "Pull request #614 updates measured contrast figures for recessed wells and picked rows.",
+    actionLabel: "Open pull request #614",
   },
   [`cawco#${DELEGATE_STREAM_UUID}`]: {
-    label: "Waiting on delegate · Harden RFC 6902 delta gap recovery",
+    label: "Waiting for delegate Harden delta gap recovery to finish",
     detail:
-      "Settles automatically once delegate session obelisk#4a82f109 lands tsk-504.",
+      "Settles automatically once the delegate session finishes the reconnect sync task.",
     actionLabel: "Inspect delegate",
   },
 };
@@ -626,33 +608,39 @@ const BACKLOG_TASKS: PlanTaskRecord[] = [
   {
     id: "tsk-510",
     title:
-      "Expose plan.follow subscription list on reconnect for multi-project iPad split view",
+      "Restore live plan subscriptions automatically after iPad split-view reconnects",
     stage: "Ready",
     stageKind: "todo",
     summary:
-      "Re-sends the active instanceIds set after socket transport recovery so side-by-side panes stay live.",
-    acceptance: ["Reconnect sends one consolidated plan.follow frame"],
+      "Re-sends active session subscriptions after a socket drop so side-by-side panes stay live without refreshing.",
+    acceptance: ["Reconnect sends one consolidated subscription frame"],
     labels: ["stream", "ipad"],
     after: ["tsk-504"],
     unblocks: [],
     todos: [
-      td("td-1", "1", "Diff followed instanceIds against live panes", false),
-      td("td-2", "2", "Drop unmounted pane ids on close", false),
+      td("td-1", "1", "Compare subscribed sessions against open panes", false),
+      td("td-2", "2", "Drop closed pane subscriptions cleanly", false),
     ],
   },
   {
     id: "tsk-511",
-    title:
-      "Add return recap summary line for plans modified while operator presence was away",
+    title: "Summarize tasks finished and newly held while you were away",
     stage: "Ready",
     stageKind: "todo",
     summary:
-      "Summarizes tasks completed and steps newly held while the operator's presence stood at away.",
-    acceptance: ["Recap reads from durable task history, never stored flags"],
+      "Shows a one-line recap of tasks finished and steps that hit a hold while operator presence was away.",
+    acceptance: ["Recap derives directly from task history"],
     labels: ["presence", "plans"],
     after: ["tsk-507"],
     unblocks: [],
-    todos: [td("td-1", "1", "Query task events since away timestamp", false)],
+    todos: [
+      td(
+        "td-1",
+        "1",
+        "Read task transitions since last active presence",
+        false
+      ),
+    ],
   },
 ];
 
@@ -660,13 +648,14 @@ const BACKLOG_TASKS: PlanTaskRecord[] = [
 export const REALISTIC_PLAN_DATA: PlanViewDataset = {
   session: {
     id: "ses-orchestrate-plan",
-    title: "Ship live session plan sync & 4px token pass",
+    title: "Ship live session plan sync and 4px spacing pass",
     project: "cawco",
     machine: "obelisk",
     harness: "claude",
     identity: 1,
     liveState: "working",
-    liveActivity: "Coordinating 2 active delegates and preparing wake batching",
+    liveActivity:
+      "Coordinating two active delegates and preparing wake batching",
   },
   delegates: REALISTIC_DELEGATES,
   tasks: REALISTIC_TASKS,
@@ -682,7 +671,7 @@ export const REALISTIC_PLAN_DATA: PlanViewDataset = {
         step: "tsk-504",
         was: REALISTIC_TASKS["tsk-504"].title,
         words:
-          "Keep the asked Set keyed by instanceId alone so rapid tab switches never double-send plan.resync.",
+          "Key the pending resync set by session alone so switching tabs quickly never sends duplicate requests.",
         at: "2026-11-24T13:42:00.000Z",
         toldAt: "2026-11-24T13:42:04.000Z",
         to: { kind: "session", instanceId: "ses-orchestrate-plan" },
@@ -700,13 +689,14 @@ export const REALISTIC_PLAN_DATA: PlanViewDataset = {
   },
 };
 
-/** Held-task dataset: foregrounds multiple hold kinds (decision card, PR, upstream session, and scheduled window). */
+/** Held-task dataset: foregrounds a step needing the person alongside scheduled and delegate waits. */
 export const HELD_PLAN_DATA: PlanViewDataset = {
   ...REALISTIC_PLAN_DATA,
   session: {
     ...REALISTIC_PLAN_DATA.session,
     liveState: "waiting",
-    liveActivity: "Paused on tsk-506 decision card pick and PR #614 merge",
+    liveActivity:
+      "Waiting on your 4px Grid Rollout choice and pull request #614",
   },
   tasks: {
     ...REALISTIC_TASKS,
@@ -784,8 +774,10 @@ function appendLongSpec(
     title: spec.title,
     stage: meta.stage,
     stageKind: meta.stageKind,
-    summary: `Part of the Q4 session plans & 4px grid release train (${spec.area}).`,
-    acceptance: [`All ${todos.length} to-dos verified and bun run check green`],
+    summary: `Part of the Q4 session plans and 4px spacing release train (${spec.area}).`,
+    acceptance: [
+      `All ${todos.length} to-dos verified and repository checks green`,
+    ],
     labels: [spec.area],
     ...(spec.delegateId ? { delegateId: spec.delegateId } : {}),
     after: prevId ? [prevId] : [],
@@ -814,350 +806,334 @@ function appendLongSpec(
   }
 }
 
-/** Builds a realistic 34-task release train plan to stress-test density, folding, and horizon navigation. */
+/** Builds a realistic 34-task release train plan to stress-test overview calm and progressive disclosure. */
 function buildLongPlanData(): PlanViewDataset {
   const specs: LongTaskSpec[] = [
     {
-      title: "Freeze SQLite session_plans and plan_changes migration baseline",
+      title: "Add database tables for session plans and operator edit history",
       area: "db",
       phase: "done",
       todoTexts: [
-        "Add session_plans table with ordered step JSON",
-        "Add plan_changes audit columns with toldAt",
-        "Verify migrations:check against shipped tag",
+        "Create session plans table with ordered steps",
+        "Record operator plan edits with delivery timestamps",
+        "Verify migration compatibility against shipped baseline",
       ],
     },
     {
-      title:
-        "Parse task markdown ## To-dos into nested agreed and proposed trees",
+      title: "Parse task markdown checklists into agreed and proposed to-dos",
       area: "core",
       phase: "done",
       todoTexts: [
-        "Preserve 2-space indent depth and td-N markers",
-        "Parse (proposed) prefix and -> #N promoted task links",
-        "Compute todoProgress over agreed items only",
+        "Preserve nested indentation depth and to-do handles",
+        "Separate proposed offers from agreed to-dos",
+        "Count progress across agreed items only",
       ],
     },
     {
       title:
-        "Implement wait-targets grammar for tasks, cards, pins, PRs, runs, sessions, and UTC dates",
+        "Parse wait targets for tasks, decision pages, comments, pull requests, and dates",
       area: "core",
       phase: "done",
       todoTexts: [
-        "Reject calendar-invalid dates such as 2026-02-30",
-        "Normalize GitHub pull and Actions run URLs",
-        "Distinguish uuid#card from dir#uuid unambiguously",
+        "Reject invalid calendar dates",
+        "Normalize GitHub pull request and check-run links",
+        "Distinguish decision cards from workspace sessions cleanly",
       ],
     },
     {
       title:
-        "Wire hub GET /api/instances/:id/plan with live task record hydration",
+        "Hydrate session plan reads with live project task titles and stages",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Read task title and done/dropped stage at every read",
-        "Mark steps naming deleted tasks with gone: true",
+        "Read live task title and completion stage on every fetch",
+        "Mark steps whose task left the board",
       ],
     },
     {
       title:
-        "Enforce per-session serialization queue so snapshots and deltas never cross",
+        "Order plan snapshots and live patches per session so frames never cross",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Order compute and publish calls in inTurn queue",
-        "Clean up idle queue promises on completion",
+        "Serialize compute and broadcast steps per session",
+        "Clean up idle session queues when turns finish",
       ],
     },
     {
       title:
-        "Add POST /api/instances/:id/plan/edits endpoint for owner-only mutations",
+        "Add plan edit endpoint for rewording, ticking, moving, and noting",
       area: "hub",
       phase: "done",
       todoTexts: [
         "Support reword, add, remove, comment, tick, and move",
-        "Refuse ticking a task step directly with clear stage message",
+        "Explain clearly that task completion follows its stage",
       ],
     },
     {
-      title:
-        "Route task attempt plan edits to project Caw rather than worker session",
+      title: "Send task-attempt plan edits to the project coordinator",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Resolve receiverKey to caw:<projectId> on task attempts",
-        "Format verbatim step-by-step changeLine block",
+        "Route attempt plan edits to the project coordinator",
+        "Format step-by-step summary of operator changes",
       ],
     },
     {
-      title: "Route delegate session plan edits to parent session",
+      title: "Route delegate plan edits through the parent session",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Walk parentInstanceId when computing PlanReceiver",
-        "Include delegate handle in parent notification",
+        "Walk parent session chain when resolving edit recipient",
+        "Name the delegate clearly in the parent notice",
       ],
     },
     {
       title:
-        "Deny Claude Code Builtin TodoWrite and TaskList at spawn without altering personal CLI settings",
+        "Turn off Claude Code built-in todo lists at spawn without altering personal CLI settings",
       area: "agent",
       phase: "done",
       todoTexts: [
-        "Append OWN_LIST_DENIED in SDK start options",
-        "Verify user-launched CLI keeps default tools",
+        "Pass denied built-in list tools in session start options",
+        "Confirm standalone CLI sessions keep their default tools",
+      ],
+    },
+    {
+      title: "Turn off OpenCode built-in plan agent on managed servers",
+      area: "agent",
+      phase: "done",
+      todoTexts: [
+        "Disable built-in plan mode in generated server config",
+        "Confirm CawCo plan tool registers cleanly",
+      ],
+    },
+    {
+      title: "Validate every written plan step against project task records",
+      area: "agent",
+      phase: "done",
+      todoTexts: [
+        "Check step handles against current project tasks",
+        "Return unread operator edits in tool responses",
       ],
     },
     {
       title:
-        "Disable OpenCode 2.0 native plan agent across daemon-spawned servers",
-      area: "agent",
-      phase: "done",
-      todoTexts: [
-        "Set plan agent off in generated opencode plugin module",
-        "Confirm session-scoped todo_write registers cleanly",
-      ],
-    },
-    {
-      title: "Expose MCP todo_write session scope alongside task attempt scope",
-      area: "agent",
-      phase: "done",
-      todoTexts: [
-        "Validate every step handle against project board records",
-        "Return current unsettled person edits in tool answer",
-      ],
-    },
-    {
-      title:
-        "File non-project session tasks under the Fleet project automatically",
+        "File standalone session tasks under the Fleet project automatically",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Resolve recordsProjectOf fallback to Fleet project",
-        "Allow ad-hoc sessions to build structured plans",
+        "Fall back to Fleet project when a session has no project",
+        "Let ad-hoc sessions build structured plans seamlessly",
       ],
     },
     {
-      title: "Generate Swift Words.Plan bindings and verify words:check in CI",
+      title: "Generate iOS Swift plan strings and verify parity in CI",
       area: "ios",
       phase: "done",
       delegateId: "del-swift",
       todoTexts: [
-        "Export ringLabel, figure, and gone copy",
-        "Run scripts/words-swift.ts --check",
+        "Export shared progress and off-board strings",
+        "Verify generated Swift file matches core words",
       ],
     },
     {
       title:
-        "Derive planNeedsOf from unparked Needs you items without storing flags",
+        "Attach open decision and comment waits directly to the steps they block",
       area: "core",
       phase: "done",
       todoTexts: [
-        "Attach artifact waits directly to open step naming card or pin",
-        "Omit settled or withdrawn questions immediately",
+        "Link unparked questions to the open step naming them",
+        "Drop settled questions immediately",
       ],
     },
     {
       title:
-        "Verify stored-shapes Zod schema compatibility against shipped nightly",
+        "Verify stored schema backwards compatibility against shipped builds",
       area: "hub",
       phase: "done",
       todoTexts: [
-        "Keep source: 'cawco' wire field for TestFlight builds 20261015–20261018",
-        "Pass packages/hub stored-shapes:check",
+        "Keep wire compatibility with active TestFlight builds",
+        "Pass stored-shapes check across hub and dashboard",
       ],
     },
     {
-      title:
-        "Stream AG-UI plan.snapshot and RFC 6902 plan.delta frames with single-flight gap resync",
+      title: "Keep live plan updates in sync across reconnects",
       area: "stream",
       phase: "moving",
       delegateId: "del-resync",
       todoTexts: [
-        "Clone proxy-held plan state before applying patch",
-        "Coalesce gap resync requests per instanceId",
-        "Sweep reconnect interleavings in protocol-sweep.ts",
+        "Copy held plan state before applying incoming patches",
+        "Coalesce missed revisions into one resync request per session",
+        "Run the reconnect interleaving sweep across handovers",
       ],
     },
     {
-      title:
-        "Build nested session plan view with recessed to-do wells, desk inspector, and phone sheet",
+      title: "Build the nested session plan view for desk and phone",
       area: "dashboard",
       phase: "moving",
       delegateId: "del-sheet",
       todoTexts: [
-        "Render 34-segment horizon bar for zero-scroll overview",
-        "Mount responsive task inspector beside spine at 1440px and sheet at 390px",
-        "Wire inline reword, tick, move, add, remove, and note controls",
+        "Open the bottom task sheet with a 100×6 grabber below 900px",
+        "Keep text selection working inside touch-target rows on iOS Safari",
+        "Keep details and editing controls inside the opened task",
       ],
     },
     {
-      title: "Synchronize composer plan ring progress with agreed task to-dos",
-      area: "dashboard",
-      phase: "moving",
+      title: "Move task and plan screens onto the 4px spacing grid",
+      area: "tokens",
+      phase: "held",
+      waitsOn: `${ARTIFACT_ROLLOUT}#grid-rollout`,
       todoTexts: [
-        "Compute ring fraction via planProgress helper",
-        "Exclude offered (proposed) to-dos until agreed",
-        "Hold tabular-nums width as figures increment",
+        "Audit derived spacing tokens inside the 4px grid scope",
+        "Pick the rollout boundary on the 4px Grid Rollout decision page",
+        "Merge pull request #614 with the updated contrast table",
       ],
     },
     {
       title:
-        "Instrument stage-measure layout checks on opened task inspector edges",
-      area: "agent",
-      phase: "moving",
+        "Confirm dark-mode recessed well border contrast under Increase Contrast",
+      area: "tokens",
+      phase: "held",
+      waitsOn: `${ARTIFACT_CONTRAST}/7`,
       todoTexts: [
-        "Check text left-edge alignment across task header and well",
+        "Measure recessed well border contrast in light and dark",
+        "Reply to comment #7 on Surface Contrast Audit",
+      ],
+    },
+    {
+      title: "Keep composer progress ring synchronized with agreed task to-dos",
+      area: "dashboard",
+      phase: "ahead",
+      todoTexts: [
+        "Calculate progress over agreed to-dos only",
+        "Hold tabular digit width steady as counts change",
+      ],
+    },
+    {
+      title: "Check text alignment edges across opened task sheets",
+      area: "agent",
+      phase: "ahead",
+      todoTexts: [
+        "Verify left-edge alignment between header, summary, and checklist well",
         "Confirm zero spacing near-misses against house tokens",
       ],
     },
     {
       title:
-        "Switch task & plan surfaces onto the 4px spacing base without breaking non-migrated routes",
-      area: "tokens",
-      phase: "held",
-      waitsOn: `${ARTIFACT_ROLLOUT}#grid-rollout`,
-      todoTexts: [
-        "Audit derived --spacing-c-* formulas in theme.css",
-        "Settle rollout scope card on 4px Grid Rollout decision page",
-        "Merge PR #614 token contrast table update",
-      ],
-    },
-    {
-      title:
-        "Calibrate dark-mode surface-well border contrast under Increase Contrast",
-      area: "tokens",
-      phase: "held",
-      waitsOn: `${ARTIFACT_CONTRAST}/7`,
-      todoTexts: [
-        "Measure border-well against neutral-1 and neutral-3 in oklch",
-        "Answer pin #7 on Surface Contrast Audit",
-      ],
-    },
-    {
-      title:
-        "Batch waking plan edits over the 3-second quiet window before starting an idle session",
+        "Batch rapid plan edits over three seconds before waking an idle session",
       area: "hub",
       phase: "ahead",
       todoTexts: [
-        "Debounce reword, add, remove, and comment per receiver",
-        "Send consolidated change summary in one turn wake",
+        "Group waking edits over a 3-second quiet window",
+        "Send one consolidated change summary when waking",
       ],
     },
     {
-      title:
-        "Reopen archived or ended sessions with preserved plan records when edited",
+      title: "Reopen ended sessions with preserved open tasks when edited",
       area: "hub",
       phase: "ahead",
       todoTexts: [
-        "Spawn replacement session in same place when transcript is gone",
-        "Seed brief with open plan steps, notes, and filed tasks",
+        "Start a continuation session in the same workspace when needed",
+        "Seed the continuation brief with open tasks and operator notes",
       ],
     },
     {
-      title:
-        "Drop settled GitHub PR and check-run holds automatically from plan_waits",
+      title: "Clear settled pull request and check-run holds automatically",
       area: "hub",
       phase: "ahead",
       todoTexts: [
-        "Hook GitHub webhook poller into task-waits settled",
-        "Broadcast RFC 6902 remove patch to followers",
+        "Connect GitHub webhook updates to the shared wait watcher",
+        "Broadcast live patch removing settled holds",
       ],
     },
     {
-      title:
-        "Promote overgrown to-dos to full board tasks with -> #id back-links",
+      title: "Promote overgrown to-dos into full board tasks with back-links",
       area: "hub",
       phase: "ahead",
       todoTexts: [
-        "Create linked task with parent edge",
-        "Auto-tick source to-do when promoted task reaches Done",
+        "Create linked board task from a complex to-do",
+        "Tick the original to-do automatically when the new task finishes",
       ],
     },
     {
-      title: "Render delegate tree handoffs inside project canvas view",
+      title: "Draw delegate handoff links on the project canvas",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "Draw part-of edges at --tree-line device pixel width",
-        "Highlight active delegate node with breathing live glyph",
+        "Draw parent-to-delegate edges at crisp device-pixel width",
+        "Highlight active delegate nodes calmly",
       ],
     },
     {
-      title:
-        "Add multi-pane plan.follow coalescing across split workspace tabs",
+      title: "Share live plan subscriptions across split workspace panes",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "Union followed session ids across open leaves",
-        "Prune closed session ids without dropping shared streams",
+        "Combine followed session sets across open panes",
+        "Clean up closed panes without dropping shared streams",
       ],
     },
     {
-      title:
-        "Buildaway-presence return recap banner from durable plan & task history",
+      title: "Summarize tasks finished and newly held while you were away",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "List tasks landed and holds encountered while away",
-        "Dismiss recap cleanly once glanced at",
+        "List tasks completed and holds hit since presence went away",
+        "Dismiss the recap cleanly once read",
       ],
     },
     {
-      title:
-        "Expose cawco plan CLI subcommand for terminal inspection and scripting",
+      title: "Add terminal command for inspecting and ticking session plans",
       area: "cli",
       phase: "ahead",
       todoTexts: [
-        "Format nested [x] / [~] / [ ] tree with wait targets",
-        "Support cawco plan comment and cawco plan tick",
+        "Print nested task and to-do status in plain text",
+        "Support adding notes and ticking to-dos from the terminal",
       ],
     },
     {
       title:
-        "Verify RTL logical properties across spine connectors and nested wells",
+        "Verify right-to-left layout mirroring across spine connectors and wells",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "Use inset-inline-start and border-s throughout plan-view",
-        "Check elbow rounding in dir='rtl' preview",
+        "Use logical inline borders and padding throughout plan-view",
+        "Confirm nested elbows mirror cleanly in RTL",
       ],
     },
     {
-      title: "Enforce prefers-reduced-motion stillness on live breathing marks",
+      title: "Keep reduced-motion mode completely still across live indicators",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "Gate breath animation behind motion-safe / breathe utility",
-        "Keep state switches instant opacity cross-fades",
+        "Gate breathing animations behind motion-safe preferences",
+        "Use instant opacity fades when switching states",
       ],
     },
     {
-      title: "Audit keyboard focus order and 44×44 coarse pointer touch areas",
+      title: "Audit keyboard focus order and 44×44 touch targets on phone",
       area: "dashboard",
       phase: "ahead",
       todoTexts: [
-        "Verify focus-ring visibility on spine cards and well checkboxes",
-        "Check touch-hit midpoint gaps on compact action rows",
+        "Verify focus rings across overview items and sheet controls",
+        "Confirm touch targets never overlap in compact rows",
       ],
     },
     {
-      title:
-        "Prune legacy TestFlight 20261015 source field once build window expires",
+      title: "Retire legacy TestFlight wire field once older builds expire",
       area: "core",
       phase: "ahead",
       todoTexts: [
-        "Update openapi wire baseline after TestFlight expiry",
-        "Remove deprecated source literal from SessionPlan",
+        "Update wire schema baseline after build expiry",
+        "Remove deprecated compatibility field",
       ],
     },
     {
-      title:
-        "Run full bun run check release gate across all workspace packages",
+      title: "Run the full repository check gate across every package",
       area: "release",
       phase: "ahead",
       todoTexts: [
-        "Pass golar tsc -b, golar lint, biome, knip, and jscpd",
+        "Pass type-checking, design lints, biome, knip, and jscpd",
         "Confirm zero uncommitted generated diffs",
       ],
     },
@@ -1185,14 +1161,14 @@ function buildLongPlanData(): PlanViewDataset {
   return {
     session: {
       id: "ses-q4-release-train",
-      title: "Q4 Session Plans, Wait Resolver & 4px Grid Release Train",
+      title: "Ship Q4 session plans, wait resolver, and 4px spacing pass",
       project: "cawco",
       machine: "obelisk",
       harness: "claude",
       identity: 6,
       liveState: "working",
       liveActivity:
-        "15 of 34 tasks landed · 4 moving across obelisk and studio.local",
+        "15 of 34 tasks finished · 2 in progress across obelisk and studio.local",
     },
     delegates: longDelegates,
     tasks,

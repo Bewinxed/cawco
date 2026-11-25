@@ -38,55 +38,57 @@ function formatTargetWait(
         handle,
         target,
         label: blocker
-          ? `Waiting on ${target.id} · ${blocker.title}`
-          : `Waiting on ${target.id}`,
+          ? `Waiting for “${blocker.title}” to finish`
+          : "Waiting for an earlier task to finish",
         detail: blocker
-          ? `Blocked until ${target.id} (${blocker.stage}) lands.`
-          : `Blocked until ${target.id} reaches Done.`,
-        actionLabel: `Open blocker ${target.id}`,
+          ? `Proceeds automatically once “${blocker.title}” (${blocker.stage}) reaches Done.`
+          : `Proceeds automatically once ${target.id} reaches Done.`,
+        actionLabel: blocker ? "Open blocking task" : `Open ${target.id}`,
       };
     }
     case "pr":
       return {
         handle,
         target,
-        label: `Waiting on PR #${target.number}`,
-        detail: `${target.repo} pull request #${target.number} must merge or close.`,
-        actionLabel: `Open PR #${target.number}`,
+        label: `Waiting for pull request #${target.number} to merge`,
+        detail: `Pull request #${target.number} on ${target.repo} must merge or close before this step continues.`,
+        actionLabel: `Open pull request #${target.number}`,
       };
     case "run":
       return {
         handle,
         target,
-        label: `Waiting on check run #${target.id.slice(-4)}`,
-        detail: `GitHub Actions run on ${target.repo} is still running.`,
+        label: "Waiting for automated checks to finish",
+        detail: `Check run on ${target.repo} is still running.`,
         actionLabel: "Open check run",
       };
     case "session":
       return {
         handle,
         target,
-        label: `Waiting on session in ${target.dir || "workspace"}`,
-        detail: "Settles once that session finishes its current work item.",
+        label: `Waiting for another session in ${target.dir || "workspace"} to finish`,
+        detail:
+          "Settles automatically once that session finishes its current work.",
         actionLabel: "Open waited session",
       };
     case "card":
       return {
         handle,
         target,
-        label: `Waiting on your pick · ${target.card}`,
+        label: "Waiting on your choice on a decision page",
         detail: target.option
-          ? `Proceeds once "${target.option}" is picked on the decision card.`
-          : "Needs your choice on the decision page before the session continues.",
-        actionLabel: "Open decision card",
+          ? `Continues once “${target.option}” is chosen on the decision page.`
+          : "Needs your choice on the decision page before the session can continue.",
+        actionLabel: "Open decision page",
       };
     case "pin":
       return {
         handle,
         target,
-        label: `Waiting on pin #${target.number}`,
-        detail: "Waiting for your reply on the artifact pin.",
-        actionLabel: `Open pin #${target.number}`,
+        label: `Waiting on your reply to comment #${target.number}`,
+        detail:
+          "Needs your answer on the pinned comment before work continues.",
+        actionLabel: `Open comment #${target.number}`,
       };
     case "time": {
       const formatted = new Intl.DateTimeFormat("en-GB", {
@@ -99,9 +101,9 @@ function formatTargetWait(
       return {
         handle,
         target,
-        label: `Held until ${formatted} UTC`,
-        detail: "The hub wakes the step automatically once this window opens.",
-        actionLabel: "Clear date hold",
+        label: `Paused until ${formatted} UTC`,
+        detail: "Wakes automatically once this scheduled window opens.",
+        actionLabel: "Clear scheduled pause",
       };
     }
     default:
@@ -109,7 +111,7 @@ function formatTargetWait(
   }
 }
 
-/** Resolves a `waitsOn` handle into human-readable words and an explicit action label. */
+/** Resolves a `waitsOn` handle into plain human words and an explicit action label. */
 function resolveWait(
   handle: string | undefined,
   waitMeta: Record<string, WaitMeta>,
@@ -133,15 +135,15 @@ function resolveWait(
     return {
       handle,
       target: undefined,
-      label: `Waiting on ${handle}`,
-      detail: "Settles automatically when the target completes.",
-      actionLabel: "Inspect wait target",
+      label: "Paused on an external check",
+      detail: "Settles automatically when the waited condition completes.",
+      actionLabel: "Inspect wait condition",
     };
   }
   return formatTargetWait(handle, target, tasks);
 }
 
-/** Derives a task's visual phase from its board record, step status, and waits. */
+/** Derives a task's phase from its board record, step status, and waits. */
 function deriveTaskPhase(
   step: PlanStep,
   record: PlanTaskRecord | null,
@@ -173,6 +175,68 @@ function deriveTaskPhase(
     return "moving";
   }
   return "ahead";
+}
+
+function isWaitNeedingPerson(wait: ResolvedWait | null): boolean {
+  const kind = wait?.target?.kind;
+  return kind === "card" || kind === "pin";
+}
+
+function buildTaskSentence(opts: {
+  agreedDone: number;
+  agreedTotal: number;
+  delegate: DelegateSessionRecord | null;
+  needsYou: boolean;
+  phase: PlanPhase;
+  wait: ResolvedWait | null;
+}): string {
+  const { phase, needsYou, wait, delegate, agreedDone, agreedTotal } = opts;
+  if (phase === "gone") {
+    return "Removed from the project board";
+  }
+  if (phase === "done") {
+    return delegate ? `Finished by ${delegate.title}` : "Finished";
+  }
+  if (needsYou) {
+    return wait ? wait.label : "Waiting on your decision";
+  }
+  if (phase === "held") {
+    return wait ? wait.label : "Paused until upstream work finishes";
+  }
+  if (phase === "moving") {
+    const progress =
+      agreedTotal > 0
+        ? `${agreedDone} of ${agreedTotal} to-dos done`
+        : "working now";
+    return delegate
+      ? `In progress with ${delegate.title} · ${progress}`
+      : `In progress · ${progress}`;
+  }
+  if (wait) {
+    return wait.label;
+  }
+  if (agreedTotal > 0) {
+    return `Up next · ${agreedTotal} ${agreedTotal === 1 ? "to-do" : "to-dos"}`;
+  }
+  return "Up next";
+}
+
+function buildPlanOverviewLine(
+  total: number,
+  doneCount: number,
+  movingCount: number,
+  needsYouCount: number
+): string {
+  const parts = [`${doneCount} of ${total} tasks finished`];
+  if (movingCount > 0) {
+    parts.push(`${movingCount} in progress`);
+  }
+  if (needsYouCount > 0) {
+    parts.push(
+      `${needsYouCount} ${needsYouCount === 1 ? "needs" : "need"} you`
+    );
+  }
+  return parts.join(" · ");
 }
 
 function stepStatusForStage(
@@ -256,6 +320,20 @@ function mapTodoGroup(
   });
 }
 
+function resolveTaskTitle(
+  step: PlanStep,
+  record: PlanTaskRecord | null,
+  isGone: boolean
+): string {
+  if (!isGone && record) {
+    return record.title;
+  }
+  if (step.content && step.content !== planWords.gone(step.task)) {
+    return step.content;
+  }
+  return planWords.gone(step.task);
+}
+
 function deriveSingleTask(
   step: PlanStep,
   idx: number,
@@ -295,26 +373,45 @@ function deriveSingleTask(
   const taskWait = resolveWait(step.waitsOn, waitMeta, tasks);
   const firstOpenTodoWait =
     agreedDerived.find((t) => !t.done && t.wait !== null)?.wait ?? null;
+  const effectiveWait = taskWait ?? firstOpenTodoWait;
   const anyActiveTodo = agreedDerived.some((t) => t.inProgress);
 
   const phase = deriveTaskPhase(
     step,
     record,
-    taskWait !== null || firstOpenTodoWait !== null,
+    effectiveWait !== null,
     anyActiveTodo
   );
+  const personTodoWait = agreedDerived.some(
+    (t) => !t.done && isWaitNeedingPerson(t.wait)
+  );
+  const needsYou =
+    !isGone &&
+    phase !== "done" &&
+    (record?.stageKind === "you" ||
+      isWaitNeedingPerson(taskWait) ||
+      personTodoWait);
 
   return {
     order: idx + 1,
     handle: step.id,
     taskId,
-    title: isGone || !record ? planWords.gone(taskId) : record.title,
+    title: resolveTaskTitle(step, record, isGone),
     status: phase === "done" ? "completed" : step.status,
     phase,
+    needsYou,
+    overviewSentence: buildTaskSentence({
+      phase,
+      needsYou,
+      wait: effectiveWait,
+      delegate,
+      agreedDone,
+      agreedTotal,
+    }),
     gone: isGone,
     record,
     delegate,
-    wait: taskWait ?? firstOpenTodoWait,
+    wait: effectiveWait,
     comments: step.comments ?? [],
     todos: agreedDerived,
     offeredTodos: offeredDerived,
@@ -361,12 +458,12 @@ export function derivePlanModel(dataset: PlanViewDataset): DerivedPlanModel {
     ahead: 0,
     gone: 0,
   };
-  let todoDoneCount = 0;
-  let todoTotalCount = 0;
+  let needsYouCount = 0;
   for (const task of derivedTasks) {
     counts[task.phase] += 1;
-    todoDoneCount += task.agreedDone;
-    todoTotalCount += task.agreedTotal;
+    if (task.needsYou) {
+      needsYouCount += 1;
+    }
   }
 
   return {
@@ -376,8 +473,13 @@ export function derivePlanModel(dataset: PlanViewDataset): DerivedPlanModel {
     heldCount: counts.held,
     aheadCount: counts.ahead,
     goneCount: counts.gone,
-    todoDoneCount,
-    todoTotalCount,
+    needsYouCount,
+    overviewLine: buildPlanOverviewLine(
+      derivedTasks.length,
+      counts.done,
+      counts.moving,
+      needsYouCount
+    ),
     changes: dataset.plan.changes ?? [],
   };
 }

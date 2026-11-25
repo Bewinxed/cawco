@@ -17,8 +17,8 @@ export type IdentitySlot = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 /** The phase a plan step belongs to as the operator scans the plan. */
 export type PlanPhase = "done" | "moving" | "held" | "ahead" | "gone";
 
-/** Which phase lens is active in the filter strip. */
-export type PhaseFilter = "all" | "moving" | "held" | "ahead" | "done";
+/** Which filter lens the person chose in the overview controls. */
+export type PhaseFilter = "all" | "needs_you" | "moving" | "ahead" | "done";
 
 /** A delegate session started by the parent session to work tasks of its plan. */
 export interface DelegateSessionRecord {
@@ -60,7 +60,7 @@ export interface WaitMeta {
   /** Action verb+object label to open or settle what the step waits on. */
   actionLabel: string;
   detail: string;
-  /** Short title of the waited-on thing. */
+  /** Short plain-language sentence of what the step waits on. */
   label: string;
 }
 
@@ -117,7 +117,7 @@ export interface DerivedPlanTodo {
   wait: ResolvedWait | null;
 }
 
-/** Level 2: one derived task block anchored along the session's plan spine. */
+/** Level 2: one derived task item anchored along the session's plan spine. */
 export interface DerivedPlanTask {
   agreedDone: number;
   agreedTotal: number;
@@ -128,9 +128,13 @@ export interface DerivedPlanTask {
   gone: boolean;
   /** Step handle (`tsk-12`) in `plan.steps`. */
   handle: string;
+  /** True only when this task is blocked on a person's decision or reply — the sole loud mark on the overview. */
+  needsYou: boolean;
   offeredTodos: DerivedPlanTodo[];
   /** 1-based ordinal in the full plan. */
   order: number;
+  /** One plain sentence shown under the task name on the first view. */
+  overviewSentence: string;
   phase: PlanPhase;
   record: PlanTaskRecord | null;
   status: PlanStepStatus;
@@ -148,7 +152,8 @@ export interface DerivedPlanModel {
   goneCount: number;
   heldCount: number;
   movingCount: number;
+  needsYouCount: number;
+  /** One plain-words overview line under the session title. */
+  overviewLine: string;
   tasks: DerivedPlanTask[];
-  todoDoneCount: number;
-  todoTotalCount: number;
 }

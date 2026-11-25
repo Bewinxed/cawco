@@ -146,24 +146,17 @@
             {todo.text}
           </span>
 
-          <span class="shrink-0 type-code text-ink-subtle">{todo.todoId}</span>
-
-          {#if todo.promoted}
-            <Badge kind="meta">
-              <span>Promoted → {todo.promoted}</span>
-            </Badge>
-            {#if onInspectTask}
-              <Button
-                label={`Open ${todo.promoted}`}
-                onclick={() => {
-                  if (todo.promoted) {
-                    onInspectTask(todo.promoted);
-                  }
-                }}
-                size="xs"
-                variant="link"
-              />
-            {/if}
+          {#if todo.promoted && onInspectTask}
+            <Button
+              label="Open split-out task"
+              onclick={() => {
+                if (todo.promoted) {
+                  onInspectTask(todo.promoted);
+                }
+              }}
+              size="xs"
+              variant="link"
+            />
           {/if}
 
           {#if todo.wait && !todo.done}

@@ -1,6 +1,6 @@
 import { unhandled } from "@cawco/core/unhandled";
 import type { WaitKind } from "@cawco/core/wait-targets";
-import type { IdentitySlot, PlanPhase } from "./types.js";
+import type { IdentitySlot } from "./types.js";
 
 /** Static Tailwind background utilities for CawCo's eight identity hues (no inline styles). */
 export const IDENTITY_DOT_BG: Record<IdentitySlot, string> = {
@@ -14,24 +14,6 @@ export const IDENTITY_DOT_BG: Record<IdentitySlot, string> = {
   8: "bg-mark-8",
 };
 
-/** Horizon bar segment fill per task phase. */
-export const HORIZON_SEGMENT_BG: Record<PlanPhase, string> = {
-  done: "bg-status-done-glyph",
-  moving: "bg-status-live-glyph loops breathe",
-  held: "bg-status-attn-glyph",
-  ahead: "bg-border-control",
-  gone: "bg-neutral-6",
-};
-
-/** Human-readable phase label. */
-export const PHASE_WORD: Record<PlanPhase, string> = {
-  done: "Done",
-  moving: "Moving now",
-  held: "Held",
-  ahead: "Ahead",
-  gone: "Off board",
-};
-
 /** Static indentation step for Level-3 nested to-dos inside a task's recessed well. */
 export function todoIndentClass(depth: number): string {
   if (depth <= 0) {
@@ -43,23 +25,23 @@ export function todoIndentClass(depth: number): string {
   return "ps-space-8";
 }
 
-/** Short noun for what kind of wait holds a step. */
+/** Short noun for what kind of wait holds a step inside the opened task inspector. */
 export function waitKindLabel(kind: WaitKind | undefined): string {
   switch (kind) {
     case "card":
-      return "Decision";
+      return "Your decision";
     case "pin":
-      return "Pin";
+      return "Your reply on pin";
     case "pr":
       return "Pull request";
     case "run":
       return "Check run";
     case "task":
-      return "Task blocker";
+      return "Upstream task";
     case "session":
-      return "Session";
+      return "Other session";
     case "time":
-      return "Scheduled hold";
+      return "Scheduled time";
     case undefined:
       return "Hold";
     default:
