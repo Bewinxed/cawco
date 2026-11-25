@@ -46,6 +46,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { problem } from "elysia";
 import { z } from "zod";
 import type { ForgeCall } from "./forge-posts";
+import { keyedTurns } from "./keyed-turns";
 import { awayProblem } from "./machine-answers";
 import { defineTool, refusalCode, withoutRefusalCode } from "./mcp-tool";
 
@@ -150,6 +151,12 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
    * newest time it came. Held until the session's row goes (`forget`).
    */
   const heardBy = new Map<string, Map<string, HeardRefusal[]>>();
+  /**
+   * Filings of one fingerprint, one at a time: each looks for the open issue
+   * only once the filing before it has ended, so reports of one problem that
+   * arrive together find the issue the first one opened.
+   */
+  const byFingerprint = keyedTurns("feedback");
 
   /** Runs `change`, and says so when it turned feedback on or off. */
   const moving = (change: () => void): void => {
@@ -221,16 +228,18 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       report.tool,
       refusalIdentity(report.got, heard)
     );
-    const called = await deps.forge(sender, {
-      repo: deps.repo,
-      write: {
-        op: "issue_once",
-        title: feedbackTitle(report),
-        body: feedbackBody(report, fingerprint),
-        marker: feedbackMarker(fingerprint),
-        search: fingerprint,
-      },
-    });
+    const called = await byFingerprint(fingerprint, () =>
+      deps.forge(sender, {
+        repo: deps.repo,
+        write: {
+          op: "issue_once",
+          title: feedbackTitle(report),
+          body: feedbackBody(report, fingerprint),
+          marker: feedbackMarker(fingerprint),
+          search: fingerprint,
+        },
+      })
+    );
     if (called.kind === "failed") {
       return problem(502, {
         code: "feedback-not-filed",

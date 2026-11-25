@@ -165,8 +165,9 @@ const within = async <T>(
 
 /**
  * An issue once: a comment on the open issue whose body holds the write's
- * marker, else a new issue. Two reports at one moment can both open one;
- * the next finds the first.
+ * marker, else a new issue. Two writes of one marker at one moment would
+ * both open one: the hub sends one marker's writes one at a time (hub
+ * usability-feedback.ts `byFingerprint`).
  */
 const issueOnce = async (
   client: ForgeClient,
