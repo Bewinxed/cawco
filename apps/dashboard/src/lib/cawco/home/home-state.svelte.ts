@@ -39,6 +39,7 @@ import { offerWords } from "@cawco/core/words/offers";
 import { presenceWords } from "@cawco/core/words/presence";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { tailnetWords } from "@cawco/core/words/tailnet";
+import { usabilityFeedbackWords } from "@cawco/core/words/usability-feedback";
 import { untrack } from "svelte";
 import { hub } from "#lib/platform/hub.js";
 import {
@@ -82,6 +83,7 @@ import { storedStore } from "../stores/stored.svelte";
 import { tailnetStore } from "../stores/tailnet.svelte";
 import { tickersStore } from "../stores/tickers.svelte";
 import { toolUpdatesStore } from "../stores/tool-updates.svelte";
+import { feedbackStore } from "../stores/usability-feedback.svelte";
 import type { ToolItem } from "./ToolNeedsRow.svelte";
 import { toolNeedsOf } from "./tool-needs";
 
@@ -492,6 +494,24 @@ interface DeskItem {
 }
 
 /**
+ * The usability feedback question (core usability-feedback.ts), asked once
+ * of a hub past its first run, which asked it as a step: while no person
+ * has answered it. The answer is pressed in the row; with it the row is
+ * gone, and Configure › Feedback to CawCo changes it after.
+ */
+interface FeedbackItem {
+  /** Why the last answer didn't hold, in words. */
+  fault: string | null;
+  key: string;
+  kind: "feedback";
+  place: string;
+  raisedAt: undefined;
+  /** A machine of the fleet signs in to GitHub, which sends the feedback. */
+  signedIn: boolean;
+  title: string;
+}
+
+/**
  * The stream relay's guided journey (hub relay-journey.ts), while it asks:
  * set up from Caw's setup card, Settings › Browsers or a take-over through a
  * domain, and not yet live and proven from outside, nor put away with Later
@@ -660,6 +680,7 @@ export type NeedsItem =
   | OfferItem
   | TailnetItem
   | DeskItem
+  | FeedbackItem
   | RelayItem
   | PairingItem
   | AdmissionItem
@@ -1302,6 +1323,24 @@ class Home {
             },
           ]
         : [];
+    // The feedback question, on a hub whose first run is behind it (its
+    // first project made), while no person has answered it.
+    const consent: NeedsItem[] =
+      feedbackStore.read &&
+      feedbackStore.shown === null &&
+      projectsStore.projects.length > 0
+        ? [
+            {
+              kind: "feedback",
+              key: "feedback:consent",
+              signedIn: feedbackStore.signedIn,
+              fault: feedbackStore.fault,
+              title: usabilityFeedbackWords.needTitle,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // The stream relay's journey: its row while it asks, its tick a moment after.
     const journey = relayStore.relayJourney;
     const relaying: NeedsItem[] =
@@ -1457,6 +1496,7 @@ class Home {
       ...offered,
       ...secured,
       ...desk,
+      ...consent,
       ...relaying,
       ...pairings,
       ...admissions,

@@ -18,6 +18,7 @@ import {
   listedFor,
   listedTools,
   toolViewOf,
+  withFeedback,
 } from "./delegation-mcp";
 
 /**
@@ -298,10 +299,16 @@ import {
  * judges it (the owner that day: the agent knows which picks suit a quick
  * version in the composer and which an enlarged one in the panel) (worker
  * 32,980, delegate 13,511 measured); both budgets are raised to it.
+ * 2026-11-25: usability_feedback, listed while the person allows agents to
+ * report trouble with CawCo's own tools (the owner's asks ask_6c6a3972,
+ * ask_27921e94, ask_f10aaf6f), its `tool` an enum of every CawCo tool's
+ * name so a report on anything else is refused by its schema, and
+ * memory_note's line pointing there; measured on (worker 33,849, delegate
+ * 14,380 measured). Both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_980,
-  delegate: 13_511,
+  worker: 33_849,
+  delegate: 14_380,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,
@@ -384,9 +391,10 @@ export const measureRoles = (): RoleSize[] =>
 export const listRoleTools = (): RoleTools[] =>
   SESSION_ROLES.map((role) => {
     const row = sampleOf(role);
+    // The most a role is listed: usability feedback on.
     const listed = listedTools(
       row,
-      definedTools(toolViewOf(row, undefined)),
+      withFeedback(definedTools(toolViewOf(row, undefined)), true),
       []
     );
     // What the model reads: a tool's `_meta` (its alwaysLoad mark) is

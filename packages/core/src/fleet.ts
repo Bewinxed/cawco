@@ -978,6 +978,14 @@ export interface MachineFleetConfig extends Omit<FleetConfig, "placedMemory"> {
    * {@link harnessConfig}, so no user-scope path takes them.
    */
   projects: Record<string, FleetProjectRows>;
+  /**
+   * Whether usability feedback is on (core usability-feedback.ts): the
+   * person allowed it and a machine of the fleet signs in to GitHub. Sent
+   * with {@link deniedTools} as the `policy` item; while it is on, the
+   * machine's DevTools gate ends each refusal with the line naming
+   * `usability_feedback` (agent browser/gate.ts).
+   */
+  usabilityFeedback: boolean;
 }
 
 /**

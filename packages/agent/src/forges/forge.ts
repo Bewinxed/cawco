@@ -163,11 +163,35 @@ const within = async <T>(
       };
 };
 
+/**
+ * An issue once: a comment on the open issue whose body holds the write's
+ * marker, else a new issue. Two reports at one moment can both open one;
+ * the next finds the first.
+ */
+const issueOnce = async (
+  client: ForgeClient,
+  one: Extract<ForgeWrite, { op: "issue_once" }>
+): Promise<ForgeMade> => {
+  const open = await client.markedIssue(one.marker, one.search);
+  if (open === undefined) {
+    return client.issue({ op: "issue", title: one.title, body: one.body });
+  }
+  const made = await client.comment({
+    op: "comment",
+    on: "issue",
+    number: open,
+    body: one.body,
+  });
+  return { ...made, existing: true };
+};
+
 /** One write through `client`. */
 const write = (client: ForgeClient, one: ForgeWrite): Promise<ForgeMade> => {
   switch (one.op) {
     case "issue":
       return client.issue(one);
+    case "issue_once":
+      return issueOnce(client, one);
     case "pull_request":
       return client.pullRequest(one);
     case "comment":
@@ -186,9 +210,18 @@ const madeWords = (forge: Forge, one: ForgeWrite, made: ForgeMade): string => {
       ? `${name} has a ${kind} open from ${one.head} into ${one.base} already: ${made.url}`
       : `${name} opened the ${kind}: ${made.url}`;
   }
-  return one.op === "issue"
-    ? `${name} opened the issue: ${made.url}`
-    : `${name} took the comment: ${made.url}`;
+  switch (one.op) {
+    case "issue":
+      return `${name} opened the issue: ${made.url}`;
+    case "issue_once":
+      return made.existing
+        ? `${name} took the comment on the issue already open: ${made.url}`
+        : `${name} opened the issue: ${made.url}`;
+    case "comment":
+      return `${name} took the comment: ${made.url}`;
+    default:
+      unhandled("forge write", one);
+  }
 };
 
 /**

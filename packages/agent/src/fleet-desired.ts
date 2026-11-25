@@ -55,12 +55,15 @@ export interface DeltaApplied {
 
 /**
  * The fleet's policy item (core fleet-items.ts): the tools its sessions are
- * denied, and whether they use CawCo's delegates and plan list or their
- * agent's own (core own-tools.ts; CawCo's on both from a hub before them).
+ * denied, whether they use CawCo's delegates and plan list or their
+ * agent's own (core own-tools.ts; CawCo's on both from a hub before them),
+ * and whether usability feedback is on (core usability-feedback.ts; off
+ * from a hub before it).
  */
 const PolicyItem = z.object({
   deniedTools: z.array(z.string()),
   ownTools: OwnToolsSchema.default(OWN_TOOLS_DEFAULT),
+  usabilityFeedback: z.boolean().default(false),
 });
 
 /** What the disk keeps of what the agent holds ({@link FleetDesired.keep}). */
@@ -168,7 +171,9 @@ export class FleetDesired {
   }
 
   /** The fleet's policy as held now; none before a delta carried it. */
-  get policy(): { deniedTools: string[]; ownTools: OwnTools } | undefined {
+  get policy():
+    | { deniedTools: string[]; ownTools: OwnTools; usabilityFeedback: boolean }
+    | undefined {
     return PolicyItem.safeParse(this.#items.get("policy")).data;
   }
 

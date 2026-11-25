@@ -439,6 +439,7 @@
       arrived
       onaddmachine={none}
       onlater={none}
+      onfeedback={none}
       onnewproject={none}
       onrelay={none}
       onchoose={none}
@@ -448,6 +449,7 @@
         harness: { state: "todo" },
         ownTools: { helpers: null, stepLists: null },
         ownToolsFaults: { helpers: null, stepLists: null },
+        feedback: { consent: null, signedIn: true, fault: null },
         relay: "todo",
         project: false,
       }}

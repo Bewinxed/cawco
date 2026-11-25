@@ -7,6 +7,7 @@ import {
   mcpGatewayPort,
 } from "@cawco/core/ports";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
+import { FEEDBACK_REPO } from "@cawco/core/usability-feedback";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
 export const HUB_VERSION = standalone ? runtimeVersion : "0.1.0";
@@ -15,6 +16,10 @@ export const HUB_PORT = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
 /** Whether the hub writes its debug lines (`CAWCO_DEBUG=1`). */
 export const HUB_DEBUG = readEnv(CAWCO_ENV.debug) === "1";
+
+/** Where usability feedback is filed (core cawco-env.ts `feedbackRepo`). */
+export const FEEDBACK_REPO_AT =
+  readEnv(CAWCO_ENV.feedbackRepo)?.trim() || FEEDBACK_REPO;
 
 /** The address the hub and its preview listeners bind (`HOST`): every interface unless set. */
 export const BIND_HOST = process.env.HOST ?? "0.0.0.0";

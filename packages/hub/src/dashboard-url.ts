@@ -161,3 +161,15 @@ export const dashboardOrigins = (registry: RegistryShape): string[] => [
       .filter((one): one is string => one !== undefined)
   ),
 ];
+
+/**
+ * Every host the dashboard is known by: the operator's override, the
+ * tailnet name's while the hub serves it, each origin a dashboard reached
+ * the hub from. What usability feedback takes out of a report before it is
+ * posted (usability-feedback.ts).
+ */
+export const dashboardHosts = (registry: RegistryShape): string[] =>
+  [DASHBOARD_URL_OVERRIDE, tailnetDashboard, ...registry.dashboardOrigins()]
+    .filter((one): one is string => !!one && URL.canParse(one))
+    .map((one) => new URL(one).hostname.replace(IPV6_BRACKETS, ""))
+    .filter((host) => !LOOPBACK.has(host));

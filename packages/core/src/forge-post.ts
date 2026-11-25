@@ -20,11 +20,23 @@ export const FORGE_NAMES: Readonly<Record<Forge, string>> = {
 
 /**
  * One write to a repository on a forge: an issue, a pull or merge request
- * from `head` into `base`, or a comment on an issue's or a pull request's
- * `number` (GitLab numbers its issues and merge requests apart).
+ * from `head` into `base`, a comment on an issue's or a pull request's
+ * `number` (GitLab numbers its issues and merge requests apart), or an
+ * issue once: a comment on the open issue whose body holds `marker`, or a
+ * new issue when none does (the hub's usability feedback,
+ * usability-feedback.ts).
  */
 export type ForgeWrite =
   | { readonly body: string; readonly op: "issue"; readonly title: string }
+  | {
+      readonly body: string;
+      /** Text the issue's body carries, which a repeat is found by. */
+      readonly marker: string;
+      readonly op: "issue_once";
+      /** What the forge's issue search finds the issue by: a word of `marker`. */
+      readonly search: string;
+      readonly title: string;
+    }
   | {
       readonly base: string;
       readonly body: string;
@@ -75,7 +87,10 @@ export type ForgeVerdict =
 
 /** What making a post said: whether it went, and what the forge answered; its page when it made or found one. */
 interface PostMade {
-  /** A pull or merge request that was open already for the same branches. */
+  /**
+   * A pull or merge request that was open already for the same branches, or
+   * an `issue_once` that found its open issue and commented there.
+   */
   readonly existing?: boolean;
   readonly ok: boolean;
   readonly said: string;

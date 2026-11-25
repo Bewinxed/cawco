@@ -20,7 +20,7 @@ export interface ForgeSignIn {
 
 /** What a forge made, or found already open. */
 export interface ForgeMade {
-  /** A pull or merge request that was open already for the same branches. */
+  /** A pull or merge request that was open already for the same branches, or an issue a repeat commented on. */
   readonly existing?: boolean;
   readonly url: string;
 }
@@ -35,6 +35,15 @@ export interface ForgeClient {
   readonly issue: (
     write: Extract<ForgeWrite, { op: "issue" }>
   ) => Promise<ForgeMade>;
+  /**
+   * The open issue whose body holds `marker`, by its number; none when no
+   * open issue does. `search` is a word of the marker the forge's issue
+   * search finds it by.
+   */
+  readonly markedIssue: (
+    marker: string,
+    search: string
+  ) => Promise<number | undefined>;
   /** The open pull or merge request from `head` into `base`, or a new one. */
   readonly pullRequest: (
     write: Extract<ForgeWrite, { op: "pull_request" }>

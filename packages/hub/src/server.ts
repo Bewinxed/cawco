@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
-import { networkInterfaces, hostname as osHostname } from "node:os";
+import { homedir, networkInterfaces, hostname as osHostname } from "node:os";
 import { dirname, join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
@@ -79,7 +79,7 @@ import {
   skillDescription,
 } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
-import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
+import { CONTROL_FORGE_POST, type ForgeAsk } from "@cawco/core/forge-post";
 import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
 import {
   type HandoverCommand,
@@ -386,6 +386,7 @@ import {
   BIND_HOST,
   DASHBOARD_PORT,
   DB_PATH,
+  FEEDBACK_REPO_AT,
   GIT_ROOT,
   HUB_PORT,
   HUB_VERSION,
@@ -401,6 +402,7 @@ import { createCutTurns } from "./cut-turns";
 import { damagedRecordsOf } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
+  dashboardHosts,
   dashboardOrigins,
   dashboardUrl,
   delegateDashboard,
@@ -472,7 +474,7 @@ import {
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createFolderMoves } from "./folder-moves";
-import { createForgePosts } from "./forge-posts";
+import { createForgePosts, type ForgeCall } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
 import { handMoveOf } from "./hand-move";
@@ -604,6 +606,7 @@ import {
   type PreviewOriginDeps,
   previewControlRoutes,
 } from "./preview-control";
+import { parsePattern } from "./preview-hosts";
 import { hasOwnOrigin, servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
@@ -718,6 +721,7 @@ import { ruleActivityRoutes, ruleRoutes } from "./routes/rules";
 import { sessionIdentityRoutes } from "./routes/session-identities";
 import { toolRoutes } from "./routes/tools";
 import { trashRoutes } from "./routes/trash";
+import { usabilityFeedbackRoutes } from "./routes/usability-feedback";
 import { usageRoutes } from "./routes/usage";
 import { workItemRoutes } from "./routes/work-items";
 import { workspaceRoutes } from "./routes/workspaces";
@@ -805,6 +809,7 @@ import { unknownFieldsOf } from "./unknown-fields";
 import { unreachable } from "./unreachable";
 import { createTrim } from "./unused-trim";
 import { TOOL_RELEASES } from "./upstreams";
+import { createUsabilityFeedback } from "./usability-feedback";
 import { UsageCounter } from "./usage-count";
 import { renameViewTaskTables } from "./view-task-tables";
 import { createViews, viewRoutes } from "./views";
@@ -1816,6 +1821,7 @@ export const createServer = (
     homeCredentialOf: () => homeCredentialOf,
     startMove: () => startMove,
     forgePosts: () => forgePosts,
+    usabilityFeedback: () => usabilityFeedback,
     cancelContinuation: () => cancelContinuation,
     continuationJob: () => continuationJob,
     closePreview: () => closePreview,
@@ -3116,33 +3122,97 @@ export const createServer = (
       pending.resolve(requestId);
     },
   });
+  /** One forge write made on `machineId` with its own sign-in there (agent forges/forge.ts). */
+  const forgeCall = async (
+    machineId: string,
+    ask: ForgeAsk
+  ): Promise<ForgeCall> => {
+    const answer = await callAgent(
+      machineId,
+      CONTROL_FORGE_POST,
+      [ask],
+      FORGE_POST_MS
+    );
+    if (answer.kind === "unanswered") {
+      return {
+        kind: "failed",
+        why:
+          answer.reason === "dead"
+            ? `${machineName(machineId)} is not connected, so nothing was posted.`
+            : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
+      };
+    }
+    return answer.value.ok
+      ? { kind: "answered", verdict: answer.value.result }
+      : {
+          kind: "failed",
+          why: answer.value.error ?? "The machine refused the post.",
+        };
+  };
   // A session's forge_post (forge-posts.ts): made on its machine with the
   // machine's own sign-in.
   const forgePosts = createForgePosts({
     linksOf: (projectId) =>
       (projectId ? db.project(projectId)?.links : undefined) ?? [],
-    call: async (machineId, ask) => {
-      const answer = await callAgent(
+    call: forgeCall,
+  });
+  // An agent's usability feedback on a CawCo tool (usability-feedback.ts),
+  // filed through a machine's GitHub sign-in while the person allows it.
+  const usabilityFeedback = createUsabilityFeedback({
+    repo: FEEDBACK_REPO_AT,
+    consent: () => db.usabilityFeedback(),
+    keepConsent: (on) => db.setUsabilityFeedback(on),
+    changed: (on) => {
+      // Every session's tools listed again, and every machine's gate told.
+      toolInputsChangedPort.now()();
+      fleetChanged(`usability feedback turned ${on ? "on" : "off"}`);
+    },
+    forge: forgeCall,
+    online: () => onlineMachines(),
+    ghHosts: async (machineId) => {
+      const answer = await readAgent(
         machineId,
-        CONTROL_FORGE_POST,
-        [ask],
-        FORGE_POST_MS
+        CONTROL_GH_ACCOUNTS,
+        [],
+        GH_ASK_MS
       );
-      if (answer.kind === "unanswered") {
-        return {
-          kind: "failed",
-          why:
-            answer.reason === "dead"
-              ? `${machineName(machineId)} is not connected, so nothing was posted.`
-              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
-        };
-      }
-      return answer.value.ok
-        ? { kind: "answered", verdict: answer.value.result }
-        : {
-            kind: "failed",
-            why: answer.value.error ?? "The machine refused the post.",
-          };
+      return answer.kind === "answered" &&
+        answer.value.ok &&
+        Array.isArray(answer.value.result)
+        ? answer.value.result.map((account) => account.host)
+        : undefined;
+    },
+    privateKnown: (actor) => {
+      const machines = db.machineFacts();
+      const previews = db.previews.settings();
+      const pattern =
+        previews.mode === "host" ? parsePattern(previews.pattern ?? "") : null;
+      return {
+        repository: actor.cwd,
+        homes: [
+          homedir(),
+          ...machines.flatMap((machine) =>
+            machine.home ? [machine.home] : []
+          ),
+        ],
+        hostnames: [
+          osHostname(),
+          ...machines.map((machine) => machine.hostname),
+        ],
+        hosts: [
+          ...dashboardHosts(registry),
+          ...(pattern && !(pattern instanceof ElysiaStatus)
+            ? [pattern.domain]
+            : []),
+        ],
+        emails: db.accounts
+          .list()
+          .flatMap((account) => (account.email ? [account.email] : [])),
+        projects: db.listProjects().map((project) => ({
+          name: project.name,
+          paths: project.places.map((place) => place.path),
+        })),
+      };
     },
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -11730,6 +11800,7 @@ export const createServer = (
     // One in-process dispatcher in place of six relay routes
     // (delegation-sends.ts `forward`).
     forward: delegationSends.forward,
+    feedback: usabilityFeedback,
   });
   toolsMovedPort.fill(delegationMcp.toolsMoved);
   toolInputsChangedPort.fill(delegationMcp.toolInputsChanged);
@@ -12917,6 +12988,7 @@ export const createServer = (
   const settingRoutes = new Elysia().use([
     imageSettingRoutes(ctx),
     ownToolRoutes(ctx),
+    usabilityFeedbackRoutes(ctx),
   ]);
   const hubRoutes = hubRoutesPart1.use([
     trashRoutes(ctx),

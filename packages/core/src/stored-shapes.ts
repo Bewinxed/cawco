@@ -2760,6 +2760,13 @@ const ForgeWriteShape = declared(
   z.union([
     z.object({ body: z.string(), op: z.literal("issue"), title: z.string() }),
     z.object({
+      body: z.string(),
+      marker: z.string(),
+      op: z.literal("issue_once"),
+      search: z.string(),
+      title: z.string(),
+    }),
+    z.object({
       base: z.string(),
       body: z.string(),
       head: z.string(),

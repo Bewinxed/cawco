@@ -47,7 +47,8 @@ export type ConfigSlug =
   | "devices"
   | "previews"
   | "browsers"
-  | "updates";
+  | "updates"
+  | "feedback";
 
 /**
  * What stands beside a section's name besides its count:
@@ -284,6 +285,16 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "updates-waiting",
     icon: "download-bold-duotone",
     hue: "mark-6",
+  },
+  {
+    slug: "feedback",
+    group: "Hub",
+    label: "Feedback to CawCo",
+    purpose: "Whether agents report trouble with CawCo's tools",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "bug-bold-duotone",
+    hue: "mark-3",
   },
 ];
 

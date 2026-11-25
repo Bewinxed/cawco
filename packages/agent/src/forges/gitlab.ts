@@ -79,6 +79,20 @@ export const gitlabForge: ForgeAdapter = {
         });
         return { url: made.web_url };
       },
+      markedIssue: async (marker, search) => {
+        const open = await api.Issues.all({
+          projectId: path,
+          state: "opened",
+          search,
+          in: "description",
+        });
+        return open.find((each) =>
+          (typeof each.description === "string"
+            ? each.description
+            : ""
+          ).includes(marker)
+        )?.iid;
+      },
       pullRequest: async ({ base, head, title, body }) => {
         const open = await api.MergeRequests.all({
           projectId: path,

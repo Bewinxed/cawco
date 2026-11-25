@@ -142,6 +142,7 @@ public enum Words {
             Section(slug: "previews", group: "Hub", label: "Previews", purpose: "How a session's previews are reached, each on an origin of its own", counted: false, badge: "fleet-faults", icon: "square-top-down-bold-duotone", hue: "mark-6"),
             Section(slug: "browsers", group: "Hub", label: "Browsers", purpose: "The stream relay a browser's take-over reaches you through, from any network", counted: false, badge: "fleet-faults", icon: "global-bold-duotone", hue: "mark-6"),
             Section(slug: "updates", group: "Hub", label: "Updates", purpose: "The builds your machines run, and when they install them", counted: false, badge: "updates-waiting", icon: "download-bold-duotone", hue: "mark-6"),
+            Section(slug: "feedback", group: "Hub", label: "Feedback to CawCo", purpose: "Whether agents report trouble with CawCo's tools", counted: false, badge: "fleet-faults", icon: "bug-bold-duotone", hue: "mark-3"),
         ]
     }
 

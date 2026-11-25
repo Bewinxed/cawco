@@ -250,6 +250,7 @@ import type { Triggers } from "./triggers";
 import type { turnState } from "./turn-state";
 import type { turnUsageOf } from "./turn-usage";
 import type { TypeProposals } from "./type-proposals";
+import type { UsabilityFeedback } from "./usability-feedback";
 import type { UsageCounter } from "./usage-count";
 import type { ViewChanges } from "./views/changes";
 import type { WelcomeConverge } from "./welcome-converge";
@@ -1479,6 +1480,8 @@ export interface ClosureContext {
     left: { machineId: string; why: "away" | "own" | "paused" }[];
     sent: string[];
   };
+  /** Agents' usability feedback on CawCo's tools (usability-feedback.ts). */
+  usabilityFeedback: UsabilityFeedback;
   usageCounter: UsageCounter;
   /** What the change log says moved, told to the views thread (views/client.ts). */
   viewsHear: (changes: ViewChanges) => void;

@@ -18,10 +18,9 @@ import { ownToolsWords as words } from "@cawco/core/words/own-tools";
 import { hub } from "#lib/platform/hub.js";
 import {
   failureClause,
-  failureWords,
   hubAsk,
   hubData,
-  hubSaid,
+  savedSetting,
 } from "#lib/platform/hub-read.js";
 
 export type OwnToolKey = keyof OwnTools;
@@ -86,17 +85,14 @@ async function save(pick: OwnToolPick): Promise<void> {
   const one = state.switches[pick.key];
   one.phase = "saving";
   one.fault = null;
-  let fault: string | null = null;
-  try {
-    const answer = await hubAsk(hub.api["own-tools"].put(bodyOf(pick)));
-    if (answer.ok) {
-      state.held = answer.value;
-    } else {
-      fault = words.refused(hubSaid(answer.refused));
-    }
-  } catch (error) {
-    fault = words.unsent(failureWords(error));
+  const saved = await savedSetting(
+    hubAsk(hub.api["own-tools"].put(bodyOf(pick))),
+    words
+  );
+  if (saved.ok) {
+    state.held = saved.value;
   }
+  const fault = saved.ok ? null : saved.fault;
   const later = one.next;
   one.next = null;
   if (later && later.value !== state.held?.[later.key]) {

@@ -211,6 +211,29 @@ export async function hubAsk<T, E extends HubError>(
 }
 
 /**
+ * A setting's save, as its control says it: the hub's answer, or why it
+ * didn't hold in the setting's own words, `refused` around the hub's
+ * refusal and `unsent` around why the request never reached it. Takes the
+ * save as {@link hubAsk} reads it.
+ */
+export async function savedSetting<T, E extends HubError>(
+  asked: Promise<HubAsked<T, E>>,
+  words: {
+    refused: (said: string) => string;
+    unsent: (why: string) => string;
+  }
+): Promise<{ ok: true; value: T } | { fault: string; ok: false }> {
+  try {
+    const answer = await asked;
+    return answer.ok
+      ? answer
+      : { ok: false, fault: words.refused(hubSaid(answer.refused)) };
+  } catch (error) {
+    return { ok: false, fault: words.unsent(failureWords(error)) };
+  }
+}
+
+/**
  * Eden's refusal as a {@link Refused}. With no answer beside it the request
  * got none: what `fetch` rejected with (a `TypeError` with the browser's
  * words, an abort's `AbortError`) is thrown, as it rejected before Eden.

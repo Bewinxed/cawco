@@ -9,7 +9,9 @@
  *
  * Its acts are the product's own: Add machine's window, Configure ›
  * Accounts to sign in, a pick of the fleet's helpers and step lists (saved
- * at once, as Configure › Helpers & step lists saves it), the relay's Set up (its journey, finished in
+ * at once, as Configure › Helpers & step lists saves it), the answer to the
+ * usability feedback question (as Configure › Feedback to CawCo saves it),
+ * the relay's Set up (its journey, finished in
  * Settings › Browsers) or Later, and New project.
  */
 
@@ -21,6 +23,10 @@ import { boardStore } from "../stores/board.svelte";
 import { chooseOwnTool, ownToolsStore } from "../stores/own-tools.svelte";
 import { projectsStore } from "../stores/projects.svelte";
 import { actOnRelay, relayStore } from "../stores/relay.svelte";
+import {
+  chooseFeedback,
+  feedbackStore,
+} from "../stores/usability-feedback.svelte";
 import type { FirstRunState } from "./FirstRun.svelte";
 import { home } from "./home-state.svelte";
 
@@ -72,7 +78,8 @@ export function firstRunSteps(): FirstRunState | null {
     home.ready &&
     home.live &&
     projectsStore.projectsRead &&
-    (ownToolsStore.read || ownToolsStore.unread)
+    (ownToolsStore.read || ownToolsStore.unread) &&
+    (feedbackStore.read || feedbackStore.unread)
   )) {
     return null;
   }
@@ -87,6 +94,12 @@ export function firstRunSteps(): FirstRunState | null {
     ownToolsFaults: {
       helpers: ownToolsStore.faultOf("helpers") ?? ownToolsStore.unread,
       stepLists: ownToolsStore.faultOf("stepLists") ?? ownToolsStore.unread,
+    },
+    feedback: {
+      consent: feedbackStore.shown,
+      signedIn: feedbackStore.signedIn,
+      // Unread, the step says why, and an answer waits for a read that lands.
+      fault: feedbackStore.fault ?? feedbackStore.unread,
     },
     relay: relayOf(),
     project: false,
@@ -104,4 +117,5 @@ export const firstRunActs = {
   onlater: () => actOnRelay({ act: "later" }),
   onnewproject: () => goto("/project/new"),
   onchoose: chooseOwnTool,
+  onfeedback: chooseFeedback,
 };

@@ -8,6 +8,7 @@ import {
 } from "@cawco/core/image-generation";
 import type { OwnTools, OwnToolsChosen } from "@cawco/core/own-tools";
 import { TOOL_UPDATES_DEFAULT, type ToolUpdates } from "@cawco/core/tools";
+import type { FeedbackConsent } from "@cawco/core/usability-feedback";
 import { eq } from "drizzle-orm";
 import type { DbCore } from "./core";
 import {
@@ -73,8 +74,12 @@ export interface HubSettingsDb {
   readonly setToolUpdates: (updates: ToolUpdates) => void;
   /** Hold (or replace) the TypeSafe key; null forgets it. */
   readonly setTypesafeKey: (key: string | null) => void;
+  /** Sets {@link HubSettingsDb.usabilityFeedback}. */
+  readonly setUsabilityFeedback: (on: boolean) => void;
   /** What the fleet does with a copy of a tool at a version CawCo does not run; core's `TOOL_UPDATES_DEFAULT` while no row says otherwise. */
   readonly toolUpdates: () => ToolUpdates;
+  /** Whether agents may file usability feedback (core usability-feedback.ts): null until a person answers. */
+  readonly usabilityFeedback: () => FeedbackConsent;
   /** Fleet watch's open needs-you notices, oldest first. */
   readonly watchNotices: () => FleetWatchNotice[];
 }
@@ -99,6 +104,14 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
       supervisorChoices();
       db.update(supervisorConfig)
         .set({ ...next, updatedAt: new Date() })
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .run();
+    },
+    usabilityFeedback: () => supervisorChoices().usabilityFeedback,
+    setUsabilityFeedback: (on) => {
+      supervisorChoices();
+      db.update(supervisorConfig)
+        .set({ usabilityFeedback: on, updatedAt: new Date() })
         .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
         .run();
     },

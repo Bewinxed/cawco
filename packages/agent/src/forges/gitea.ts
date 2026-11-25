@@ -189,6 +189,13 @@ export const giteaForge: ForgeAdapter = {
           "issue"
         ),
       }),
+      markedIssue: () =>
+        // gitea-mcp's tools listed to the adapter search no issues.
+        Promise.reject(
+          new Error(
+            "CawCo finds no open issue by its text on Gitea, so it files usability feedback on GitHub or GitLab only."
+          )
+        ),
       pullRequest: async ({ base, head, title, body }) => {
         // The open one for these branches, when there is one: an answer
         // that is no error is it; a refusal, none ("get_by_branches").

@@ -10,6 +10,7 @@ import {
   IconAccounts,
   IconBolt,
   IconBook,
+  IconBug,
   IconConnection,
   IconCpu,
   IconDollar,
@@ -71,6 +72,7 @@ const GLYPHS: Record<string, Component> = {
   "scale-bold-duotone": IconJev,
   "download-bold-duotone": IconDownload,
   "tuning-2-bold-duotone": IconTuning,
+  "bug-bold-duotone": IconBug,
 };
 
 const glyphOf = (icon: string): Component => {

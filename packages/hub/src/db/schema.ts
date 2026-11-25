@@ -4392,6 +4392,12 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * and plan mode (core own-tools.ts `StepLists`), as {@link helpers} is.
    */
   stepLists: storedEnum(z.enum(STEP_LISTS))("step_lists"),
+  /**
+   * Whether agents may file usability feedback on CawCo's own tools as
+   * issues on CawCo's repository (core usability-feedback.ts). Null until a
+   * person answers, so the dashboard asks; off until then.
+   */
+  usabilityFeedback: integer("usability_feedback", { mode: "boolean" }),
   updatedAt: stampedNow("updated_at"),
 });
 

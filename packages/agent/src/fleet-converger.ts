@@ -48,6 +48,7 @@ import { userLayerHeld } from "./boundary/plan";
 import { buildKey } from "./build";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
+import { feedbackHeard } from "./feedback-line";
 import { placeFolder, probeToolchain } from "./fleet";
 import { basisMoved, type ConvergeBasis } from "./fleet-converged";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
@@ -312,6 +313,9 @@ export class FleetConverger {
       }
     }
     const { policy } = this.#desired;
+    if (policy) {
+      feedbackHeard(policy.usabilityFeedback);
+    }
     if (policy && (applied.policy || delta.welcome)) {
       this.#writePolicy(policy, applied.policy);
     }

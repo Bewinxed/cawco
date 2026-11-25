@@ -129,6 +129,7 @@ export const fleetItemsOf = (config: MachineFleetConfig): FleetItems => {
   items.set("policy", {
     deniedTools: config.deniedTools,
     ownTools: config.ownTools,
+    usabilityFeedback: config.usabilityFeedback,
   });
   for (const row of config.mcp) {
     items.set(`mcp:${row.name}`, row);
@@ -271,9 +272,11 @@ const rowsOf = (
  */
 const ITEMS = {
   // A hub before the switches sends no `ownTools`: CawCo's own way on both.
+  // One before usability feedback sends no `usabilityFeedback`: off.
   policy: z.object({
     deniedTools: z.array(z.string()),
     ownTools: OwnToolsSchema.default(OWN_TOOLS_DEFAULT),
+    usabilityFeedback: z.boolean().default(false),
   }),
   mcp: FleetMcpServerSchema,
   skill: FleetSkillPayloadSchema,
@@ -311,6 +314,7 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
   const config: MachineFleetConfig = {
     deniedTools: [],
     ownTools: OWN_TOOLS_DEFAULT,
+    usabilityFeedback: false,
     harnessConfig: [],
     hooks: [],
     marketplaces: [],
@@ -332,6 +336,7 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
         // Parsed for its default: held whole, a hub before the switches
         // sent none.
         config.ownTools = ITEMS.policy.parse(value).ownTools;
+        config.usabilityFeedback = ITEMS.policy.parse(value).usabilityFeedback;
         break;
       case "mcp":
         config.mcp.push(itemAs(id, ITEMS.mcp, value));

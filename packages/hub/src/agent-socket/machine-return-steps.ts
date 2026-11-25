@@ -93,6 +93,7 @@ export type MachineReturnContext = Pick<
   | "toolFacts"
   | "transcripts"
   | "unknownAccountsOf"
+  | "usabilityFeedback"
   | "workItems"
 >;
 
@@ -758,6 +759,17 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     }
   };
 
+  const feedbackSignInRead = (ret: MachineReturn): void => {
+    const { message } = ret;
+    // Whether it signs in to GitHub, which files agents' usability
+    // feedback: the tool is listed while one machine does
+    // (usability-feedback.ts).
+    detach(
+      ctx.usabilityFeedback.readMachine(message.machineId),
+      "read a machine's GitHub sign-in for usability feedback"
+    );
+  };
+
   const movesBack = (ret: MachineReturn): void => {
     const { message } = ret;
     // And project moves waiting on it, likewise (moves.ts).
@@ -781,6 +793,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     protocolKept,
     relayConnected,
     browsersConnected,
+    feedbackSignInRead,
     sessionsSettled,
     parkedSwept,
     readsHandedBack,

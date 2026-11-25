@@ -104,6 +104,7 @@
       onaddmachine={none}
       onchoose={choose}
       onlater={none}
+      onfeedback={none}
       onnewproject={none}
       onrelay={none}
       onsignin={none}
@@ -112,6 +113,7 @@
         harness: { state: "done", harness: "Claude Code" },
         ownTools: chosen,
         ownToolsFaults: faults,
+        feedback: { consent: null, signedIn: true, fault: null },
         relay: "todo",
         project: false,
       }}

@@ -94,6 +94,7 @@ export type FleetSourcesContext = Pick<
   | "sendAnswerable"
   | "sendToMachine"
   | "toolInputsChanged"
+  | "usabilityFeedback"
 >;
 
 /** What moved on a machine at a fleet sync, for its live sessions ({@link refreshesOf}). */
@@ -186,6 +187,9 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       ctx.fleetMcp.syncConfig(
         {
           ...fleetRows,
+          // The machine's DevTools gate names usability_feedback in its
+          // refusals while feedback is on (usability-feedback.ts).
+          usabilityFeedback: ctx.usabilityFeedback.on(),
           // The fleet's own, for every folder; each project's apart, below.
           skills: unbound(config.skills),
           plugins: config.plugins.map((plugin) => {

@@ -209,6 +209,10 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // to any session that is not one (design-verify.ts).
     "design_write",
     "design_verdict",
+    // A CawCo tool's trouble, reported to CawCo while the person allows it
+    // (usability-feedback.ts). Not a web-facing session's: what it reads is
+    // the web's, and the issue is public.
+    "usability_feedback",
   ]),
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([

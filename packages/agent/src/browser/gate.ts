@@ -75,6 +75,7 @@ import {
 } from "@cawco/core/words/browser";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
+import { withFeedbackLine } from "../feedback-line";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 import { browserDir } from "./state";
 
@@ -1410,7 +1411,8 @@ class Link {
     }
     const why = (await this.#refusal(message)) ?? this.#traced(message);
     if (why) {
-      this.#refuse(message, why);
+      // A refusal of what the agent asked, so it can say CawCo was wrong.
+      this.#refuse(message, withFeedbackLine(why));
       return;
     }
     if (!message.sessionId && (await this.#answeredHere(message))) {
@@ -1599,7 +1601,7 @@ class Link {
     switch (message.method) {
       case "Target.setAutoAttach": {
         if (params.flatten !== true) {
-          this.#refuse(message, GATE_WORDS.flat);
+          this.#refuse(message, withFeedbackLine(GATE_WORDS.flat));
           return true;
         }
         this.#autoAttach =
@@ -1903,12 +1905,12 @@ const upgrade = async (
   }
   const bearer = BEARER.exec(request.headers.get("authorization") ?? "")?.[1];
   if (!(bearer && (await tokenOf(id, bearer)))) {
-    return new Response(GATE_WORDS.token, { status: 401 });
+    return new Response(withFeedbackLine(GATE_WORDS.token), { status: 401 });
   }
   // The machine's id as every door reads it (door.ts): one key for a gate id.
   const gate = gates.get(await keyOfWorkspace(id, await machineId()));
   if (!gate) {
-    return new Response(GATE_WORDS.none, { status: 404 });
+    return new Response(withFeedbackLine(GATE_WORDS.none), { status: 404 });
   }
   const admitted = gate.admit(id);
   if (typeof admitted === "string") {

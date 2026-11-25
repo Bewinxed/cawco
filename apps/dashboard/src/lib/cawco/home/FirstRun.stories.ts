@@ -2,7 +2,8 @@
  * First run on the fleet board (Component Story Format 3, live
  * components): the steps to a first project on the owner's own fleet
  * (obelisk, Claude Code), from a fresh hub to the first project, the
- * fleet's helpers and step lists asked in place on the way. The meta's
+ * fleet's helpers and step lists and the usability feedback question asked
+ * in place on the way. The meta's
  * args are every story's; a story's own args are what it changes.
  */
 import type { FirstRunState } from "./FirstRun.svelte";
@@ -16,6 +17,7 @@ const FRESH: FirstRunState = {
   harness: { state: "todo" },
   ownTools: { helpers: null, stepLists: null },
   ownToolsFaults: { helpers: null, stepLists: null },
+  feedback: { consent: null, signedIn: true, fault: null },
   relay: "todo",
   project: false,
 };
@@ -30,6 +32,7 @@ const SIGNED_IN: FirstRunState = {
 const PROJECT_NEXT: FirstRunState = {
   ...SIGNED_IN,
   ownTools: { helpers: "delegates", stepLists: "cawco" },
+  feedback: { consent: true, signedIn: true, fault: null },
   relay: "later",
 };
 
@@ -44,6 +47,7 @@ export default {
     onlater: none,
     onnewproject: none,
     onchoose: none,
+    onfeedback: none,
   },
   parameters: { viewport: 1212 },
 };
@@ -106,6 +110,27 @@ export const StepListsNext = {
     steps: {
       ...SIGNED_IN,
       ownTools: { helpers: "subagents", stepLists: null },
+    },
+  },
+};
+
+/** Both switches chosen: the feedback question is asked in place, neither answer recommended. */
+export const FeedbackNext = {
+  args: {
+    steps: {
+      ...SIGNED_IN,
+      ownTools: { helpers: "delegates", stepLists: "cawco" },
+    },
+  },
+};
+
+/** The feedback question on a fleet with no machine signed in to GitHub: the step says one is needed. */
+export const FeedbackNeedsSignIn = {
+  args: {
+    steps: {
+      ...SIGNED_IN,
+      ownTools: { helpers: "delegates", stepLists: "cawco" },
+      feedback: { consent: null, signedIn: false, fault: null },
     },
   },
 };

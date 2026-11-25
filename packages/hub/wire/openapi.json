@@ -33555,6 +33555,76 @@
         }
       }
     },
+    "/api/usability-feedback": {
+      "get": {
+        "operationId": "getApiUsabilityFeedback",
+        "responses": {
+          "200": {
+            "description": "getApiUsabilityFeedback 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiUsabilityFeedback 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiUsabilityFeedback422"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "consent": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "consent"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiUsabilityFeedback",
+        "responses": {
+          "200": {
+            "description": "putApiUsabilityFeedback 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiUsabilityFeedback 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiUsabilityFeedback422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/usage/limits": {
       "get": {
         "operationId": "getApiUsageLimits",
@@ -42852,6 +42922,27 @@
         "enum": [
           "github",
           "linear"
+        ]
+      },
+      "FeedbackConsent": {
+        "description": "The person's answer to the consent question: null until they give one.",
+        "type": "boolean"
+      },
+      "FeedbackState": {
+        "description": "What the hub answers the dashboard of feedback (`/api/usability-feedback`).",
+        "type": "object",
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/FeedbackConsent",
+            "description": "The person's answer: null until they give one, so the dashboard asks."
+          },
+          "signedIn": {
+            "description": "Whether a machine of the fleet is signed in to GitHub, which files the issues.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "signedIn"
         ]
       },
       "FileAttachment": {
@@ -115777,6 +115868,42 @@
         ]
       },
       "getApiTrimRoutineFleet422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiUsabilityFeedback422": {
         "type": "object",
         "properties": {
           "code": {
@@ -237733,6 +237860,106 @@
         ]
       },
       "putApiTrimRoutineFleet422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "putApiUsabilityFeedback422": {
         "anyOf": [
           {
             "type": "object",

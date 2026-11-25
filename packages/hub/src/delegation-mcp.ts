@@ -7,6 +7,10 @@ import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
+import {
+  USABILITY_FEEDBACK_TOOL,
+  usabilityFeedbackWords,
+} from "@cawco/core/words/usability-feedback";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -101,6 +105,10 @@ import {
 import type { SessionCalls } from "./session-calls";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
+import {
+  feedbackDefinition,
+  type UsabilityFeedback,
+} from "./usability-feedback";
 import type { WorkItemCalls } from "./work-item-calls";
 import { isVerifierParent } from "./work-item-state";
 
@@ -355,6 +363,46 @@ export const definedTools = (
 ];
 
 /**
+ * Every CawCo tool's name, the registry usability_feedback's `tool` enum is
+ * built of (usability-feedback.ts): shared discovery's tools, the superset
+ * of every session's, and the asks'. A connection's tools are its
+ * service's, never CawCo's.
+ */
+const cawcoToolNames = (
+  handoff: ToolFactory = handoffTools,
+  admin: ReturnType<typeof adminTools> = adminTools()
+): string[] => [
+  ...definedTools(toolViewOf(undefined, undefined), handoff, admin).map(
+    (tool) => tool.name
+  ),
+  ...ASK_TOOLS,
+];
+
+/**
+ * `defined` as listed while usability feedback is on (`on`), its tool among
+ * them and memory_note saying where a tool's trouble goes, or off, as they
+ * are. The tool's `tool` enum is CawCo's own tools ({@link cawcoToolNames}).
+ */
+export const withFeedback = (
+  defined: readonly ToolDefinition[],
+  on: boolean,
+  names: () => readonly string[] = () => cawcoToolNames()
+): ToolDefinition[] =>
+  on
+    ? [
+        ...defined.map((tool) =>
+          tool.name === "memory_note"
+            ? {
+                ...tool,
+                description: `${tool.description} ${usabilityFeedbackWords.noteLine}`,
+              }
+            : tool
+        ),
+        feedbackDefinition(names()).listed(),
+      ]
+    : [...defined];
+
+/**
  * The tools of `all` a session is listed: its role's and its scope's
  * (roles.ts), narrowed by its own context (a leaf gets no spawning tools,
  * only a work item `finish_item`, only a session in a project the project's
@@ -576,6 +624,12 @@ export function createDelegationMcp(options: {
   personOwed: (actor: InstanceRow) => boolean;
   /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
   sendToUser: (actor: InstanceRow, message: string) => void;
+  /**
+   * Usability feedback (usability-feedback.ts): while it is on, its tool is
+   * listed, every refusal of a CawCo tool ends with the line naming it, and
+   * memory_note's description says where tool trouble goes.
+   */
+  feedback?: Pick<UsabilityFeedback, "on" | "tool" | "withLine">;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
   shownRefusal?: (
     actor: InstanceRow,
@@ -601,6 +655,17 @@ export function createDelegationMcp(options: {
   >();
   /** Each listing as answered, with its hash, by {@link listingKey}: what decides a session's list, never the session itself. */
   const listings = new Map<string, Listing>();
+  /**
+   * Every CawCo tool's name, the registry usability_feedback's `tool` enum
+   * is built of: shared discovery's tools, the superset of every session's,
+   * and the asks'. A connection's tools are its service's, never CawCo's.
+   * Built once, again when a source reload replaces the definitions.
+   */
+  let registry: string[] | undefined;
+  const registryNames = (): string[] => {
+    registry ??= cawcoToolNames(tools, admin);
+    return registry;
+  };
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
   if (typeof __CAWCO_RELEASE__ !== "boolean") {
@@ -616,6 +681,7 @@ export function createDelegationMcp(options: {
           }
           tools = module.handoffTools;
           builtFor.clear();
+          registry = undefined;
           toolInputsChanged();
         }),
         "delegation-mcp tool reload"
@@ -628,6 +694,7 @@ export function createDelegationMcp(options: {
             admin = module.adminTools();
             adminNames = new Set(admin.map((tool) => tool.name));
             builtFor.clear();
+            registry = undefined;
             toolInputsChanged();
           }
         ),
@@ -683,6 +750,17 @@ export function createDelegationMcp(options: {
   };
 
   /**
+   * Whether usability feedback is on (usability-feedback.ts), read once per
+   * {@link listings}: it tells the hub when it turns on or off, which makes
+   * every listing again ({@link toolInputsChanged}).
+   */
+  let feedbackNow: boolean | undefined;
+  const feedbackOn = (): boolean => {
+    feedbackNow ??= options.feedback?.on() ?? false;
+    return feedbackNow;
+  };
+
+  /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
    * narrowed by its own context (a leaf gets no spawning tools, only a work
    * item `finish_item`, only a session in a project the project's tools,
@@ -695,8 +773,12 @@ export function createDelegationMcp(options: {
   const toolsFor = (actor: InstanceRow | undefined) =>
     listedTools<ToolDefinition>(
       actor,
-      builtOf(viewOf(actor)).defined.filter(
-        (tool) => triageCallable() || !TRIAGE_NAMES.has(tool.name)
+      withFeedback(
+        builtOf(viewOf(actor)).defined.filter(
+          (tool) => triageCallable() || !TRIAGE_NAMES.has(tool.name)
+        ),
+        feedbackOn(),
+        registryNames
       ),
       // Granted by a delegate type or a project, not a role's list: the
       // connections module answers which, the role's say included.
@@ -1077,23 +1159,32 @@ export function createDelegationMcp(options: {
     /** Aborts when the harness cuts the call (call-cuts.ts): what it started is stopped. */
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
+    // The one door every call's answer passes: a refusal of a CawCo tool
+    // ends with the line naming usability_feedback while feedback is on. A
+    // connection's tool is its service's, which the feedback cannot name.
+    const lined = (result: CallToolResult): CallToolResult =>
+      options.feedback && !parseConnectionTool(name)
+        ? options.feedback.withLine(name, result)
+        : result;
     const admitted = admitToolCall(name, binding ?? "unbound");
     if ("refused" in admitted) {
-      return {
+      return lined({
         isError: true,
         content: [{ type: "text", text: admitted.refused }],
-      };
+      });
     }
     try {
-      return await options.callKeys.once(binding, name, callKey, () =>
-        answer(
-          binding,
-          name,
-          args,
-          authorization,
-          toolUseId,
-          callIdOf(args, toolUseId, callKey),
-          cut
+      return lined(
+        await options.callKeys.once(binding, name, callKey, () =>
+          answer(
+            binding,
+            name,
+            args,
+            authorization,
+            toolUseId,
+            callIdOf(args, toolUseId, callKey),
+            cut
+          )
         )
       );
     } finally {
@@ -1117,6 +1208,9 @@ export function createDelegationMcp(options: {
     }
     if (name === PROJECT_FROM_SESSION && options.projectFromSession) {
       return await projectCall(actor, name, input);
+    }
+    if (name === USABILITY_FEEDBACK_TOOL && options.feedback) {
+      return await options.feedback.tool(actor, registryNames()).call(input);
     }
     if (options.tasks && TASK_TOOLS.has(name)) {
       return await taskCall(actor, name, input, cut, toolUseId);
@@ -1453,6 +1547,7 @@ export function createDelegationMcp(options: {
   const toolInputsChanged = (): void => {
     listings.clear();
     triageNow = undefined;
+    feedbackNow = undefined;
     owedAll = true;
     wantLook();
   };

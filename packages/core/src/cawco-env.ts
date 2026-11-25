@@ -49,6 +49,13 @@ export const CAWCO_ENV = {
    */
   debug: "CAWCO_DEBUG",
   /**
+   * The repository usability feedback is filed on, `host/owner/repo`
+   * (default core usability-feedback.ts `FEEDBACK_REPO`, CawCo's own): a
+   * scratch fleet names a repository of its own to try the tool without
+   * posting on CawCo's.
+   */
+  feedbackRepo: "CAWCO_FEEDBACK_REPO",
+  /**
    * Overrides the socket `sessiondEndpoint()` derives — the daemon listens on
    * it and every client dials it, so both ends must read the same variable.
    */

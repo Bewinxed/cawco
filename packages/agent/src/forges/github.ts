@@ -18,6 +18,9 @@ import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
 
 const HTTPS = /^https:/u;
 
+/** GitHub's most per page, for the open issues a marked one is looked for among. */
+const MARKED_PAGE = 100;
+
 /** gh's config dir, as gh finds it: `$GH_CONFIG_DIR`, else `<config home>/gh`. */
 const ghConfigDir = (): string =>
   process.env.GH_CONFIG_DIR || join(configHome(), "gh");
@@ -101,6 +104,34 @@ export const githubForge: ForgeAdapter = {
           body,
         });
         return { url: data.html_url };
+      },
+      markedIssue: async (marker, search) => {
+        // The newest open issues first, which the search index may not hold
+        // yet ("results … may take a few minutes to appear",
+        // docs.github.com, searching issues); then the search, for an
+        // older one. A pull request is an issue to this API: its
+        // `pull_request` key tells it apart.
+        const { data: recent } = await octokit.rest.issues.listForRepo({
+          ...target,
+          state: "open",
+          sort: "created",
+          direction: "desc",
+          per_page: MARKED_PAGE,
+        });
+        const marked = (each: {
+          body?: string | null;
+          number: number;
+          pull_request?: unknown;
+        }) => !each.pull_request && (each.body ?? "").includes(marker);
+        const fresh = recent.find(marked);
+        if (fresh) {
+          return fresh.number;
+        }
+        const { data: found } = await octokit.request("GET /search/issues", {
+          q: `repo:${target.owner}/${target.repo} is:issue is:open in:body ${search}`,
+          per_page: MARKED_PAGE,
+        });
+        return found.items.find(marked)?.number;
       },
       pullRequest: async ({ base, head, title, body }) => {
         const { data: open } = await octokit.rest.pulls.list({

@@ -5,7 +5,9 @@
    * line and its meta, then every step in order, each with its control and
    * its tick as the hub finds it done. A machine online, a harness signed in
    * on it, the fleet's helpers and step lists (core own-tools.ts: each a
-   * pick in place, the recommended side keeping CawCo's way), the stream
+   * pick in place, the recommended side keeping CawCo's way), whether agents
+   * may send CawCo usability feedback (core usability-feedback.ts: asked in
+   * place, neither answer recommended), the stream
    * relay (Set up, or Later, which ticks it as answered), the first project. A step shows its control only once the step before
    * it that it needs is done (the relay and the project need a machine; the
    * project needs a harness), and the one step to do next takes the coral.
@@ -23,7 +25,9 @@
   import type { OwnToolsChosen } from "@cawco/core/own-tools";
   import { firstRunWords } from "@cawco/core/words/onboarding";
   import { ownToolsWords } from "@cawco/core/words/own-tools";
+  import { usabilityFeedbackWords } from "@cawco/core/words/usability-feedback";
   import type { Snippet } from "svelte";
+  import FeedbackOptions from "#lib/cawco/config/feedback/FeedbackOptions.svelte";
   import ToolOptions from "#lib/cawco/config/own-tools/ToolOptions.svelte";
   import type { OwnToolPick } from "#lib/cawco/stores/own-tools.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,6 +36,16 @@
   import StepRow from "./StepRow.svelte";
 
   export interface FirstRunState {
+    /**
+     * Whether agents may send CawCo usability feedback: the person's answer
+     * (null until given), whether a machine signs in to GitHub, and why an
+     * answer didn't hold.
+     */
+    feedback: {
+      consent: boolean | null;
+      fault: string | null;
+      signedIn: boolean;
+    };
     /** A harness signed in on it, or the sign-in that failed and why. */
     harness:
       | { state: "todo" }
@@ -58,6 +72,7 @@
     onlater,
     onnewproject,
     onchoose,
+    onfeedback,
   }: {
     steps: FirstRunState;
     /** The first machine has just registered: Caw arrives, saying where. */
@@ -69,6 +84,8 @@
     onnewproject: () => void;
     /** A side of the helpers' or the step lists' switch picked, saved at once. */
     onchoose: (pick: OwnToolPick) => void;
+    /** The feedback question answered, saved at once. */
+    onfeedback: (consent: boolean) => void;
   } = $props();
 
   const machineName = $derived(
@@ -160,6 +177,20 @@
       },
       ...ownToolSteps(),
       {
+        id: "feedback",
+        done: steps.feedback.consent !== null,
+        label:
+          steps.feedback.consent === null
+            ? usabilityFeedbackWords.step
+            : usabilityFeedbackWords.stepDone(steps.feedback.consent),
+        note:
+          steps.feedback.fault ??
+          (steps.feedback.consent === null
+            ? undefined
+            : usabilityFeedbackWords.stepNote),
+        body: steps.feedback.consent === null ? feedbackPick : undefined,
+      },
+      {
         id: "relay",
         done: steps.relay !== "todo",
         label:
@@ -199,6 +230,19 @@
     recommended="delegates"
     value={steps.ownTools.helpers}
   />
+{/snippet}
+
+{#snippet feedbackPick()}
+  <div class="flex min-w-0 flex-col gap-space-2">
+    <p class="m-0 type-body text-pretty text-ink-strong">
+      {usabilityFeedbackWords.question}
+    </p>
+    <FeedbackOptions
+      onpick={onfeedback}
+      signedIn={steps.feedback.signedIn}
+      value={steps.feedback.consent}
+    />
+  </div>
 {/snippet}
 
 {#snippet stepListsPick()}
@@ -262,14 +306,15 @@
         >
           <!-- A done step's note goes, but the relay's answer and where the
                two switches change stay. -->
-          {#if one.note && (!one.done || one.id === "relay" || one.id === "helpers" || one.id === "step-lists")}
+          {#if one.note && (!one.done || one.id === "relay" || one.id === "helpers" || one.id === "step-lists" || one.id === "feedback")}
             <span
               data-slot="step-note"
               class={[
                 "col-start-2 min-w-0 type-meta wrap-anywhere",
                 (one.id === "harness" && steps.harness.state === "failed") ||
                 (one.id === "helpers" && steps.ownToolsFaults.helpers) ||
-                (one.id === "step-lists" && steps.ownToolsFaults.stepLists)
+                (one.id === "step-lists" && steps.ownToolsFaults.stepLists) ||
+                (one.id === "feedback" && steps.feedback.fault)
                   ? "text-status-fail-ink"
                   : "text-ink-muted",
               ]}>{one.note}</span

@@ -16,7 +16,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** What a machine's forge call came to: its verdict, or why there is none. */
-type ForgeCall =
+export type ForgeCall =
   { kind: "answered"; verdict: ForgeVerdict } | { kind: "failed"; why: string };
 
 export interface ForgePostsDeps {
