@@ -47,10 +47,10 @@
 </script>
 
 <div
-  class="min-h-(--frame-h) bg-surface-page px-space-4 py-space-3"
+  class="min-h-(--frame-h) bg-bg px-space-4 py-space-3"
   style:--frame-h={`${height}px`}
 >
-  <div class="w-full max-w-c-panel-w">
+  <div class="w-full max-w-95">
     <CawSeatSwitch lead={caw} {projectId} {projectName} />
   </div>
 </div>

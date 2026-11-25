@@ -4,9 +4,8 @@
    * under the field (`hitbox`, whose area stands under its content: the field takes its own presses, its caret
    * and its words' selection): a finger landing on it beside the field
    * focuses the field, which is the control and takes the focus itself.
-   * Its own size and radius, it draws the field's focus edge when its
-   * caller asks (`field-edge-wrap`). It is a box, never a run of words: a
-   * mark's row (`mark-line`) leaves it untrimmed (`data-box`).
+   * It is a box, never a run of words: a mark's row (`mark-line`) leaves
+   * it untrimmed (`data-box`).
    */
   import type { Snippet } from "svelte";
   import type { ClassValue } from "svelte/elements";
@@ -38,7 +37,10 @@
 <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
 <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the area. -->
 <span
-  class={cn("touch-hit hit-under inline-flex w-full min-w-0", className)}
+  class={cn(
+    "hitbox inline-flex w-full min-w-0 pointer-coarse:hitbox:touch-area",
+    className
+  )}
   data-box
   data-slot={slot}
   onclick={focusField}

@@ -57,14 +57,7 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconClose, IconTick } from "#lib/icons.js";
-  import { frameSize } from "#lib/platform/frame-observer.js";
-  import {
-    CURVE,
-    crossIn,
-    dur,
-    motionOk,
-    reveal,
-  } from "#lib/platform/motion/curves.svelte.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
@@ -76,6 +69,12 @@
     reason = null,
     progress,
     arrivals,
+    confirm,
+    armed = false,
+    holdsIcon = false,
+    iconFrom = "start",
+    doneLabel,
+    failedLabel,
     words = [],
   }: {
     label?: string;
@@ -95,6 +94,27 @@
     progress?: number;
     /** Drawn in the slot over its icon: what lands there. */
     arrivals?: Snippet;
+    /** What the label says while armed ("Press again to delete"). */
+    confirm?: string;
+    /** A first press armed it: the label says `confirm`. */
+    armed?: boolean;
+    /**
+     * Its icon comes and goes: the slot keeps its room while the icon is
+     * away, so the button's width never changes and nothing beside it moves
+     * (owner's pick, 2026-11-24: "Hold the width, slide inside").
+     */
+    holdsIcon?: boolean;
+    /**
+     * The side its rest icon slides in from when it comes into an empty
+     * slot, and leaves to: the start (default) or the end (a pin; owner,
+     * 2026-11-24). Every icon moves on the same clock (design.css
+     * `icon-swap`).
+     */
+    iconFrom?: GlyphSide;
+    /** What the label says while the work's good end is shown ("Sent"). */
+    doneLabel?: string;
+    /** What the label says while the work's failure is shown ("Not sent"). */
+    failedLabel?: string;
     /**
      * Every wording the label takes in the run (Button `words`): each
      * stands unseen in the label's cell, so the cell is as wide as the
@@ -174,7 +194,8 @@
    * The wordings that share the label's cell, each unseen in it and the
    * cell as wide as the widest, so the button never changes width as one
    * gives way to another: its own, its pending one beside a rest icon (with
-   * none, the spinner stands over its words instead), and its armed one.
+   * none, the spinner stands over its words instead), its armed one, and
+   * every wording its caller says the run takes (`words`).
    */
   const wordings = $derived([
     { key: "rest", text: label ?? "" },
@@ -184,6 +205,7 @@
     ...(asks ? [{ key: "armed", text: confirm ?? "" }] : []),
     ...(doneLabel ? [{ key: "done", text: doneLabel }] : []),
     ...(failedLabel ? [{ key: "failed", text: failedLabel }] : []),
+    ...[...new Set(words)].map((text) => ({ key: `run:${text}`, text })),
   ]);
   const drawnText = $derived(
     wordings.find((one) => one.key === drawn)?.text ?? label ?? ""
@@ -208,57 +230,6 @@
       return "failed";
     }
     return armed && asks && !pending ? "armed" : "rest";
-  });
-
-  /**
-   * Beside a rest icon both wordings stand centred in their one cell, as
-   * wide as the wider; the slot stands beside the one drawn, half the
-   * cell's slack in from its start, so the icon and the words drawn sit
-   * centred in the button with one inset at both ends, at rest and while
-   * pending. The slot crosses on the label's clock (--duration-base, ease-out).
-   */
-  let restWidth = $state(0);
-  let pendingWidth = $state(0);
-  /** The label's cell: the widest of its wordings, `words` among them. */
-  let cellWidth = $state(0);
-  const measureCell = frameSize(
-    (node: HTMLElement) => node.getBoundingClientRect().width,
-    (value) => {
-      cellWidth = value;
-    }
-  );
-  const measureRest = frameSize(
-    (node: HTMLElement) => node.getBoundingClientRect().width,
-    (value) => {
-      restWidth = value;
-    }
-  );
-  const measurePending = frameSize(
-    (node: HTMLElement) => node.getBoundingClientRect().width,
-    (value) => {
-      pendingWidth = value;
-    }
-  );
-  const slack = $derived(
-    (Math.max(cellWidth, restWidth, pendingWidth) -
-      (pending && swapsLabel ? pendingWidth : restWidth)) /
-      2
-  );
-  /** The cell holds more than the wording drawn: the slot stands beside that one. */
-  const holds = $derived(swapsLabel || words.length > 0);
-  /**
-   * The slot moves only once both wordings were measured: the first
-   * measure places it, it does not slide there as the button mounts.
-   */
-  let placed = $state(false);
-  $effect(() => {
-    if (placed || restWidth === 0 || (swapsLabel && pendingWidth === 0)) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      placed = true;
-    });
-    return () => cancelAnimationFrame(frame);
   });
 
   /**
@@ -302,45 +273,43 @@
     from === "spinner" && to === "ring";
 </script>
 
-<!-- Each wording of the run, unseen in the label's cell: it is as wide as
-     the widest. -->
-{#snippet held()}
-  {#each new Set(words) as word (word)}
-    <span aria-hidden="true" class="invisible col-start-1 row-start-1"
-      >{word}</span
-    >
-  {/each}
-{/snippet}
-
 <!-- The icon slot: its icon at rest, the spinner while its work runs, the
-     check or the cross when it ends, each swapped by Svelte's transitions in
-     one grid cell. With no icon at rest it stays folded for good (no width
-     and no gap) and draws what it shows over its label's start while the
-     label fades, so its width never changes. -->
-<span
-  style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
-  data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-spring data-placed:transition-[translate] motion-reduce:transition-off data-over:absolute data-over:inset-0 data-over:w-auto data-over:translate-x-0"
-  data-over={!beside || undefined}
-  data-placed={placed || undefined}
->
-  <!-- The key block is the span's own block, so its local transitions play
-       on each swap (Svelte's transitions are local: they do not play when
-       a parent block mounts), and an empty slot is an empty span that
-       still fades the last glyph out. -->
-  {#key shows}
-    <span in:glyphIn={arrival} out:glyphOut={departure}>
-      {#if shows === "icon" && Icon}
-        <Icon class="size-(--btn-icon)" />
-      {:else if shows === "spinner"}
-        <span class="contents" bind:this={spinnerCell}
-          ><Spinner
-            aria-hidden="true"
-            class="size-(--btn-icon)"
-            role="presentation"
-          /></span
-        >
-      {:else if shows === "ring"}
+     ring for work that counts, the check or the cross when it ends. Beside
+     the words, it closes while it stands empty (an icon that comes and
+     goes, or a button that says its work in words of its own), so the
+     words stand centred alone, and opens on the morph's clock as a glyph
+     comes, the row re-centring as it does; the button's width is the
+     cell's and never changes. With no icon at rest and no room kept it
+     stays out of the row for good and draws what it shows over the button
+     while the label fades. -->
+{#snippet slot(inRow: boolean)}
+  <GlyphSwap
+    class={[
+      "w-(--btn-icon) flex-none",
+      inRow
+        ? "me-(--btn-gap) transition-[width,margin-inline-end] duration-(--duration-slow) ease-spring data-empty:me-0 data-empty:w-0 motion-reduce:transition-off"
+        : "data-over:absolute data-over:inset-0 data-over:w-auto",
+    ]}
+    data-empty={(inRow && shows === null) || undefined}
+    data-over={!beside || undefined}
+    data-slot="btn-slot"
+    {inPlace}
+    {shows}
+    side={sideOf}
+  >
+    {#snippet glyph(key)}
+      {#if key === "icon"}
+        {#if restIcon}
+          {@const Rest = restIcon}
+          <Rest class="size-(--btn-icon)" />
+        {/if}
+      {:else if key === "spinner"}
+        <Spinner
+          aria-hidden="true"
+          class="size-(--btn-icon)"
+          role="presentation"
+        />
+      {:else if key === "ring"}
         <svg
           aria-hidden="true"
           class="size-(--btn-icon)"
@@ -350,7 +319,7 @@
         >
           <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
           <circle
-            class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--duration-slow) ease-out motion-reduce:transition-off"
+            class="origin-center -rotate-90 transition-[stroke-dasharray] duration-(--duration-slow) ease-out transform-view motion-reduce:transition-off"
             data-slot="ring-arc"
             cx="12"
             cy="12"
@@ -377,7 +346,7 @@
       {/if}
     {/snippet}
     {#if arrivals}
-      <span aria-hidden="true" class="relative size-full pointer-events-none"
+      <span aria-hidden="true" class="pointer-events-none relative size-full"
         >{@render arrivals()}</span
       >
     {/if}
@@ -400,55 +369,32 @@
       data-slot="label-text"
       class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"
       data-covered={covered}
-      >{#if swapsLabel && Icon === undefined}
-        <!-- No rest icon: its pending wording is never drawn (the spinner
-             stands over the label's start instead), so it never stands in
-             the label's cell to widen it; a reader is still told it. -->
-        <span aria-hidden={pending || undefined}
-          ><MorphText text={label} /></span
-        ><span class="sr-only" aria-hidden={!pending || undefined}
-          >{pendingLabel}</span
-        >
-      {:else if swapsLabel}
-        <!-- The wording that steps out fades as the other fades in, in one cell (DESIGN.md, Buttons: Pending). -->
-        <span
-          {@attach measureCell}
-          class="inline-grid justify-items-center"
-          data-slot="words"
-          >{@render held()}<span
-            {@attach measureRest}
-            aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] duration-(--duration-morph) ease-out active-false:opacity-0"
-            data-active={!pending}
-            ><!-- Re-made as it is covered and uncovered: a label changed
-                 under the pending wording ("Stop 3 and turn off" to "Caw is
-                 off") cross-fades in with it, never retyping as it shows. -->{#key pending}<MorphText
-                text={label}
-              />{/key}</span
-          ><!-- Its figures one width (num): a count winding down ("Stopping
-               3…", "Stopping 2…") keeps its width, so the slot beside it
-               stays put. --><span
-            {@attach measurePending}
-            aria-hidden={!pending || undefined}
-            class="num col-start-1 row-start-1 transition-[opacity] duration-(--duration-morph) ease-out active-false:opacity-0"
-            data-active={pending}>{pendingLabel}</span
+      >{#if wordings.length > 1 || roomy}
+        <!-- Every wording stands unseen in one grid cell with the slot's
+             room beside it (kept for a slot that stands empty at times),
+             holding the cell as wide as the widest
+             (DESIGN.md, Buttons: Pending). The slot and the wording drawn
+             stand over them as one row, centred in the cell by the row's
+             own layout, the words morphing into the next (MorphText,
+             torph: shared letters stay and slide, the rest leave and
+             arrive). The row takes no width of its own (`contain`), so a
+             morph's box never widens the cell; the row's items share the
+             unseen wordings' baseline. -->
+        <span class="inline-grid items-baseline" data-slot="words"
+          >{#each wordings as one (one.key)}<span
+              aria-hidden="true"
+              class={[
+                "invisible col-start-1 row-start-1 px-(--btn-word-pad,0px)",
+                beside &&
+                  "ps-[calc(var(--btn-icon)+var(--btn-gap)+var(--btn-word-pad,0px))]",
+              ]}>{one.text}</span
+            >{/each}<span
+            class="col-start-1 row-start-1 flex items-baseline justify-center contain-inline-size"
+            >{#if beside}{@render slot(true)}{/if}<span
+              class="px-(--btn-word-pad,0px)"
+              ><MorphText {clock} text={drawnText} /></span
+            ></span
           ></span
-        >
-      {:else if words.length > 0}
-        <!-- Its words change in a cell as wide as the widest it takes,
-             the new over the old where they stand (crossIn), centred in
-             it: morphed, the text's box took the wider words' size at once
-             and the old letters jumped half the difference. -->
-        <span
-          {@attach measureCell}
-          class="inline-grid justify-items-center"
-          data-slot="words"
-          >{@render held()}{#key label}<span
-              {@attach measureRest}
-              class="col-start-1 row-start-1"
-              in:crossIn
-              out:crossIn>{label}</span
-            >{/key}</span
         >
       {:else}
         <span class="inline-flex items-baseline"
@@ -467,7 +413,7 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-ch-32 px-(--btn-word-pad,0px) text-danger whitespace-normal wrap-anywhere"
+        class="block max-w-ch-32 px-(--btn-word-pad,0px) wrap-anywhere whitespace-normal text-danger type-meta"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

@@ -72,8 +72,6 @@
 )::before,
 :where(:is(.control))::before,
 :where(:is(.ec-now-indicator))::before,
-:where(:is(.field-edge-wrap))::before,
-:where(:is(.field-edge))::before,
 :where(
   :is(.prose)
     :where(blockquote p:first-of-type):not(
@@ -113,11 +111,10 @@
   .\[\&\>li\:not\(\:first-child\)\]\:before\:absolute > li:not(:first-child)
 )::before,
 :where(
-  .\[\&\>li\:not\(\:first-child\)\]\:before\:border-border-hairline
-    > li:not(:first-child)
+  .\[\&\>li\:not\(\:first-child\)\]\:before\:border-t > li:not(:first-child)
 )::before,
 :where(
-  .\[\&\>li\:not\(\:first-child\)\]\:before\:border-t > li:not(:first-child)
+  .\[\&\>li\:not\(\:first-child\)\]\:before\:border-ui > li:not(:first-child)
 )::before,
 :where(
   .\[\&\>li\:not\(\:first-child\)\]\:before\:inset-x-space-2
@@ -127,8 +124,8 @@
   .\[\&\>li\:not\(\:first-child\)\]\:before\:top-0 > li:not(:first-child)
 )::before,
 :where(.\@max-desk\/shell\:before\:clip-join-phone)::before,
-:where(.active\:before\:bg-surface-pressed:active)::before,
-:where(.aria-pressed\:before\:bg-surface-pressed[aria-pressed="true"])::before,
+:where(.active\:before\:bg-ui-2:active)::before,
+:where(.aria-pressed\:before\:bg-ui-2[aria-pressed="true"])::before,
 :where(.before\:-scale-y-100)::before,
 :where(.before\:-z-1)::before,
 :where(
@@ -146,10 +143,9 @@
 :where(.before\:bg-bg-2)::before,
 :where(.before\:bg-linear-to-b)::before,
 :where(.before\:bg-linear-to-b\/srgb)::before,
-:where(.before\:bg-status-attn-bg)::before,
-:where(.before\:bg-status-fail-bg)::before,
-:where(.before\:bg-surface-raised)::before,
-:where(.before\:bg-surface-recess-deep)::before,
+:where(.before\:bg-ui)::before,
+:where(.before\:bg-ui-2)::before,
+:where(.before\:bg-veil)::before,
 :where(.before\:border)::before,
 :where(.before\:border-t)::before,
 :where(.before\:border-t-ui)::before,
@@ -172,7 +168,7 @@
 :where(.before\:h-\(--cast-h\))::before,
 :where(.before\:h-\(--fade-len\))::before,
 :where(.before\:h-0\.5)::before,
-:where(.before\:h-c-edge-fade-len)::before,
+:where(.before\:h-10)::before,
 :where(.before\:h-px)::before,
 :where(.before\:hidden)::before,
 :where(.before\:inset-0)::before,
@@ -206,11 +202,6 @@
 :where(.before\:will-change-opacity)::before,
 :where(.before\:z-1)::before,
 :where(.before\:z-2)::before,
-:where(
-  .can-hover\:hover\:not-has-\[\[data-slot\]\[aria-invalid\=true\]\]\:before\:opacity-100:hover:not(
-      :has(:is([data-slot][aria-invalid="true"]))
-    )
-)::before,
 :where(.contrast-more\:before\:backdrop-filter-none)::before,
 :where(.contrast-more\:before\:bg-bg)::before,
 :where(.contrast-more\:before\:ring-tx-2)::before,
@@ -249,12 +240,7 @@
   .data-\[vaul-drawer-direction\=bottom\]\:before\:rounded-b-none[data-vaul-drawer-direction="bottom"]
 )::before,
 :where(.data-band\:before\:opacity-100[data-band])::before,
-:where(
-  .data-dragging\:not-has-\[\[data-slot\]\[aria-invalid\=true\]\]\:before\:opacity-100[data-dragging]:not(
-      :has(:is([data-slot][aria-invalid="true"]))
-    )
-)::before,
-:where(.data-drop-before\:before\:-start-space-row[data-drop-before])::before,
+:where(.data-drop-before\:before\:-start-space-1[data-drop-before])::before,
 :where(.data-drop-before\:before\:absolute[data-drop-before])::before,
 :where(.data-drop-before\:before\:bg-tx[data-drop-before])::before,
 :where(.data-drop-before\:before\:inset-y-space-1[data-drop-before])::before,
@@ -295,7 +281,7 @@
 :where(
   .data-mention-field-empty\:before\:whitespace-nowrap[data-mention-field-empty]
 )::before,
-:where(.data-needs\:before\:bg-status-attn-bg[data-needs])::before,
+:where(.data-needs\:before\:bg-bg-2[data-needs])::before,
 :where(.data-runs-on\:before\:border-be-transparent[data-runs-on])::before,
 :where(.data-runs-on\:before\:rounded-ee-none[data-runs-on])::before,
 :where(.data-runs-on\:before\:rounded-es-none[data-runs-on])::before,

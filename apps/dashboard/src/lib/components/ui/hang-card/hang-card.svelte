@@ -47,7 +47,7 @@
    * out unseen.
    */
   const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--color-surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-0.5 before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--color-bg)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-0.5 before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-ui-2 data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px] data-[rehearsing]:invisible",
     variants: {
       /**
        * Which edge meets the anchor: its top (it hangs) or its foot (it
@@ -58,8 +58,8 @@
        */
       rises: {
         false:
-          "[clip-path:inset(0_calc(-1*--spacing(30))_calc(-1*--spacing(30))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
-        true: "[clip-path:inset(calc(-1*--spacing(30))_calc(-1*--spacing(30))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
+          "[clip-path:inset(0_calc(-1*--spacing(30))_calc(-1*--spacing(30))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=end]:rounded-se-none data-[flush=start]:rounded-ss-none",
+        true: "[clip-path:inset(calc(-1*--spacing(30))_calc(-1*--spacing(30))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=end]:rounded-ee-none data-[flush=start]:rounded-es-none",
       },
       tab: {
         true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",

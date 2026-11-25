@@ -18,7 +18,7 @@ const PROMPT =
   "Read every issue opened or reopened in the customer onboarding portal since the last run, label each one with its area and its severity, and close the exact duplicates with a link to the issue they repeat.";
 
 export default {
-  title: "Kit/Textarea",
+  title: "Kit/Textarea grows",
   component: TextareaLive,
   args: { prompt: PROMPT },
 };

@@ -109,11 +109,11 @@
           style:inset-inline-end={index === 0 ? HALF : "0"}
           style:inset-inline-start={index === 0 ? "0" : HALF}
           in:fade={{
-            duration: dur("--duration-fade"),
-            delay: dur("--duration-exit"),
+            duration: dur("--duration-base"),
+            delay: dur("--duration-base"),
             easing: easeOut,
           }}
-          out:fade={{ duration: dur("--duration-exit"), easing: easeOut }}
+          out:fade={{ duration: dur("--duration-base"), easing: easeOut }}
         ></span>
       {/key}
     {/if}
@@ -121,10 +121,10 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-sm border border-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-tx transition-control hover:bg-ui no-hover:active:bg-ui unhovered:active:bg-ui focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+        class="relative flex flex-col rounded-sm border border-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 text-start text-tx type-meta transition-control hover:bg-ui focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent no-hover:active:bg-ui unhovered:active:bg-ui"
         value={card.channel}
       >
-        <span data-slot="name" class="relative z-2 type-label text-tx"
+        <span data-slot="name" class="relative z-2 text-tx type-label"
           >{card.name}</span
         >
         <span class="relative z-2 mt-space-1 text-tx-2">{card.description}</span
@@ -133,7 +133,7 @@
           {#if channels === null}
             —
           {:else if found}
-            <code data-slot="num" class="num type-code"
+            <code data-slot="num" class="type-code num"
               >{displayVersion(found.version)}</code
             >
           {:else}
@@ -142,7 +142,7 @@
         </span>
         {#if card.channel === current}
           <span
-            class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-tx"
+            class="relative z-2 mt-space-2 flex items-center gap-space-2 mark-line text-tx"
             in:blur={{
               duration: dur("--duration-slow"),
               easing: easeOut,
@@ -183,11 +183,11 @@
         aria-hidden="true"
         class="pointer-events-none absolute top-(--caw-top) z-3 size-(--caw-peek)"
         in:fade={{
-          duration: dur("--duration-fade"),
-          delay: dur("--duration-exit"),
+          duration: dur("--duration-base"),
+          delay: dur("--duration-base"),
           easing: easeOut,
         }}
-        out:fade={{ duration: dur("--duration-exit"), easing: easeOut }}
+        out:fade={{ duration: dur("--duration-base"), easing: easeOut }}
         style:--caw-top="calc(var(--caw-peek-rise) * -1)"
         style:inset-inline-start={index === 0
           ? "calc((100% - var(--spacing-space-3)) / 4 - var(--caw-peek) / 2)"

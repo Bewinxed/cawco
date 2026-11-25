@@ -188,7 +188,7 @@
   class={["grid gap-space-3", cols ?? "grid-cols-(--roster-cols)"]}
   style:--roster-cols={cols
     ? undefined
-    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+    : "repeat(auto-fill, minmax(max(min(100%, calc(var(--spacing) * 70)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
 >
   {#each members as member (member.id)}
     {@const shown = shownOn(member.id)}
@@ -201,7 +201,7 @@
                card and closes as it leaves; the tile the ghost lands takes
                its place without a close. -->
           <div
-            class="h-(--slot-h) rounded-well border border-dashed border-brand-solid bg-surface-hover"
+            class="h-(--slot-h) rounded-sm border border-dashed border-accent bg-ui"
             data-flip={kindDrag.carried(kind.id) ? undefined : ""}
             data-slot-for={kind.id}
             style:--slot-h="{kindDrag.slotIn(member.id)?.height ?? 0}px"
@@ -209,7 +209,7 @@
         {:else}
           <div
             class={[
-              "min-w-0 rounded-well data-lifted:outline-1 data-lifted:outline-dashed data-lifted:outline-border-control data-lifted:-outline-offset-1 data-lifted:[&>*]:invisible",
+              "min-w-0 rounded-sm data-lifted:outline-1 data-lifted:-outline-offset-1 data-lifted:outline-ui-2 data-lifted:outline-dashed data-lifted:[&>*]:invisible",
               kindDrag.carried(kind.id) &&
                 !kindDrag.lifted(kind.id, member.id) &&
                 "invisible",

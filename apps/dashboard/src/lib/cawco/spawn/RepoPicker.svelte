@@ -958,7 +958,7 @@
 <div data-slot="repo-picker" class="grid min-w-0 gap-space-2">
   <label
     data-slot="location-section-field"
-    class="control control-field flex h-control-lg min-w-0 items-center gap-space-3 rounded-sm pe-space-3"
+    class="control flex h-control-lg min-w-0 items-center gap-space-3 rounded-sm control-field pe-space-3"
   >
     <span class="grid w-row-compact flex-none place-items-center self-stretch"
       ><Search class="size-icon-md text-tx-2" /></span
@@ -974,7 +974,7 @@
       autocapitalize="off"
       autocomplete="off"
       autocorrect="off"
-      class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 type-body text-tx placeholder:text-tx-2"
+      class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 text-tx type-body placeholder:text-tx-2"
       data-autofocus={focus || undefined}
       oninput={(event) => search(event.currentTarget.value)}
       {onkeydown}
@@ -1093,7 +1093,7 @@
                               class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
                               >{one.owner.login}</span
                             >
-                            <span class="num type-meta text-tx-2"
+                            <span class="text-tx-2 type-meta num"
                               >{one.count}</span
                             >
                           </Command.Item>
@@ -1139,7 +1139,7 @@
     data-slot="repo-list"
     aria-busy={reading || undefined}
     aria-label={spawnWords.location.repositories}
-    class="fai-scroll @container/repos relative grid max-h-72 scrollbar-gutter-stable auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-slow) motion-safe:ease-in-out"
+    class="@container/repos relative grid fai-scroll max-h-72 scrollbar-gutter-stable auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-slow) motion-safe:ease-in-out"
     id={`${uid}-list`}
     role="listbox"
     style:--repo-cols={REPO_COLS}
@@ -1168,7 +1168,7 @@
       >
         {#each swap.leaving as row (row.key)}
           <div
-            class="col-span-full grid grid-cols-subgrid opacity-(--leave-ink) transform-(--leave-at) animate-(--leave)"
+            class="col-span-full grid transform-(--leave-at) animate-(--leave) grid-cols-subgrid opacity-(--leave-ink)"
             style:--leave={swap.leaveAnim()}
             style:--leave-ink={drawnAt.get(row.key)?.ink}
             style:--leave-at={drawnAt.get(row.key)?.at}
@@ -1192,7 +1192,7 @@
         {@const row = rows[item.index]}
         {#if row}
           <div
-            class="col-span-full grid grid-cols-subgrid animate-(--enter)"
+            class="col-span-full grid animate-(--enter) grid-cols-subgrid"
             data-flip
             data-index={item.index}
             style:--enter={entrance(row)}
@@ -1265,7 +1265,7 @@
          rows are drawn. -->
     <span
       aria-hidden="true"
-      class="invisible col-start-4 row-start-1 grid h-0 overflow-hidden ps-space-3 pe-(--repo-end) num type-meta whitespace-nowrap"
+      class="invisible col-start-4 row-start-1 grid h-0 overflow-hidden ps-space-3 pe-(--repo-end) whitespace-nowrap type-meta num"
       >{#each AGE_WIDEST as words (words)}<span class="col-start-1 row-start-1"
           >{words}</span
         >{/each}</span
@@ -1273,7 +1273,7 @@
     {#if !(rows.length || reading)}
       <p
         data-slot="repo-list-empty"
-        class="col-span-full m-0 py-space-4 type-meta text-pretty text-tx-2"
+        class="col-span-full m-0 py-space-4 text-pretty text-tx-2 type-meta"
         role="status"
       >
         {#if why}
@@ -1331,7 +1331,7 @@
       <span
         data-slot="name"
         data-box
-        class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-tx group-aria-selected:text-accent @max-sm/repos:col-span-3"
+        class="col-start-2 min-w-0 overflow-clip font-medium text-ellipsis whitespace-nowrap text-tx type-label group-aria-selected:text-accent @max-sm/repos:col-span-3"
         ><span
           data-slot="owner"
           aria-hidden={Boolean(owner) || undefined}
@@ -1347,7 +1347,7 @@
       {/if}
       <span
         data-slot="updated"
-        class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-tx-2 @max-sm/repos:row-start-2"
+        class="col-start-4 ps-space-3 text-end whitespace-nowrap text-tx-2 type-meta num @max-sm/repos:row-start-2"
         >{formatAgeShort(Date.parse(one.updatedAt))}</span
       >
       {@const worn = mark?.(one) ?? ""}
@@ -1355,8 +1355,8 @@
         <span
           data-slot="description"
           data-box
-          class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-          >{#if worn}<span data-slot="mark" class="font-medium text-ink-strong"
+          class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx-2 type-meta"
+          >{#if worn}<span data-slot="mark" class="font-medium text-tx"
               >{worn}</span
             >{#if one.description}{" · "}{/if}{/if}{#if one.description}<Marked
               query={q}
@@ -1395,7 +1395,7 @@
   <span
     data-slot="name"
     data-box
-    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-tx group-aria-selected:text-accent @max-sm/repos:col-span-3"
+    class="col-start-2 min-w-0 overflow-clip font-medium text-ellipsis whitespace-nowrap text-tx type-label group-aria-selected:text-accent @max-sm/repos:col-span-3"
     ><span class="font-normal text-tx-2"
       >{look.host
         ? spawnWords.location.onHost(look.host)
@@ -1407,7 +1407,7 @@
   {/if}
   <span
     data-slot="updated"
-    class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-tx-2 @max-sm/repos:row-start-2"
+    class="col-start-4 ps-space-3 text-end whitespace-nowrap text-tx-2 type-meta num @max-sm/repos:row-start-2"
     ><MorphText
       text={look.repo ? formatAgeShort(Date.parse(look.repo.updatedAt)) : ""}
     /></span
@@ -1416,14 +1416,14 @@
     <span
       data-slot="description"
       data-box
-      class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-tx-2"
+      class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx-2 type-meta"
       in:unfold
       out:unfold>{look.description}</span
     >
   {:else if look.note}
     <span
       data-slot="not-on-github"
-      class="col-start-2 row-start-2 min-w-0 type-meta text-pretty text-tx-2"
+      class="col-start-2 row-start-2 min-w-0 text-pretty text-tx-2 type-meta"
       in:unfold
       out:unfold>{look.note}</span
     >
@@ -1475,7 +1475,7 @@
 <!-- The owner strip's chips' insides. -->
 {#snippet allChip()}
   <span>{spawnWords.location.allOwners}</span>
-  <span class="num text-tx-2">{repos.length}</span>
+  <span class="text-tx-2 num">{repos.length}</span>
 {/snippet}
 
 {#snippet ownerChip(one: Owner)}
@@ -1483,7 +1483,7 @@
   <span class="max-w-40 overflow-clip text-ellipsis" title={one.owner.login}
     >{one.owner.login}</span
   >
-  <span class="num text-tx-2">{one.count}</span>
+  <span class="text-tx-2 num">{one.count}</span>
 {/snippet}
 
 {#snippet avatar(who: GhRepo["owner"], size: string)}

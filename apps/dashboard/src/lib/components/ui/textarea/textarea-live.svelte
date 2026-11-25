@@ -11,7 +11,7 @@
   let value = $derived(prompt);
 </script>
 
-<div class="flex w-full max-w-c-measure flex-col gap-space-4 p-space-5">
+<div class="flex w-full max-w-measure flex-col gap-space-4 p-space-4">
   <Input aria-label="Name" value="Triage new onboarding issues" />
   <Textarea
     aria-label="What each run does"

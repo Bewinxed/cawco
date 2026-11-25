@@ -62,13 +62,13 @@
   bind:this={card}
   aria-labelledby="member-{member.id}"
   class={[
-    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control data-over:bg-surface-hover data-over:inset-ring-1 data-over:inset-ring-brand-solid",
-    editing && "inset-ring-2 inset-ring-brand-solid",
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-bg p-space-3 text-tx shadow-sm transition-control data-over:bg-ui data-over:inset-ring-1 data-over:inset-ring-accent",
+    editing && "inset-ring-2 inset-ring-accent",
   ]}
   data-editing={editing || undefined}
   data-member={member.id}
   data-over={over || undefined}
-  style:--stand-in="calc(var(--spacing-c-roster-face) + var(--spacing-space-3))"
+  style:--stand-in="calc(calc(var(--spacing) * 12) + var(--spacing-space-3))"
 >
   {#snippet head(props: Record<string, unknown> = {})}
     <div
@@ -79,7 +79,7 @@
       <div class="flex min-w-0 flex-auto flex-col">
         <div class="flex min-w-0 items-start gap-x-space-1">
           <h2
-            class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
+            class="min-w-0 flex-auto font-medium wrap-anywhere type-body"
             id="member-{member.id}"
           >
             {member.name}
@@ -88,7 +88,7 @@
         </div>
         <p
           class={[
-            "type-meta text-ink-muted text-pretty wrap-anywhere",
+            "text-pretty wrap-anywhere text-tx-2 type-meta",
             brief && "sr-only",
           ]}
         >
@@ -108,7 +108,7 @@
   {/if}
   <p
     class={[
-      "ps-(--stand-in) type-meta text-pretty wrap-anywhere",
+      "ps-(--stand-in) text-pretty wrap-anywhere type-meta",
       facts?.attention ? "text-orange" : "text-tx-2",
     ]}
   >
@@ -126,7 +126,7 @@
       {@render tiles()}
     {:else}
       <p
-        class="rounded-sm border border-dashed border-ui-2 px-space-3 py-space-4 text-center type-meta text-tx-2 text-pretty"
+        class="rounded-sm border border-dashed border-ui-2 px-space-3 py-space-4 text-center text-pretty text-tx-2 type-meta"
       >
         {project === null
           ? decidesWords.holdsNothingFleet

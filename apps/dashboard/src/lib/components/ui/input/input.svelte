@@ -42,7 +42,7 @@
       flex: { code: { box: "flex-(--code-flex)" } },
       /** A name edited where it stands in a list row (a setup's stage):
           the row's words at rest, with no edge, fill or shadow, and the
-          field's edge only while it has the caret (`field-edge-wrap`), as the
+          field's edge only while it has the caret (theme.css `control-inline`), as the
           prose textarea's (DESIGN.md, Inputs and fields, Field frame). Its
           hover fill and edge are its own box, never pulled past it by a
           margin into a neighbour or its row's padding (owner's pin,
@@ -53,7 +53,7 @@
         bare: { box: "min-w-0", field: "bg-transparent" },
         inline: {
           box: "min-w-0",
-          field: "control-inline h-control-sm text-ellipsis px-space-3 text-tx",
+          field: "h-control-sm px-space-3 text-ellipsis text-tx control-inline",
         },
         /** A field in a list of keys and values (a task's own fields): a
             small button's height and its cell's tighter corner, flat, its
@@ -61,7 +61,7 @@
         cell: {
           box: "rounded-sm",
           field:
-            "h-c-btn-h-sm px-space-2 shadow-none placeholder:text-current/50",
+            "h-control-sm px-space-2 control-flat placeholder:text-current/50",
         },
         /** A heading's words renamed where they stand (a project's name in
             its page head): the heading's own type, size and ink in a
@@ -70,7 +70,7 @@
         heading: {
           box: "flex rounded-xs",
           field:
-            "block h-auto cursor-text overflow-hidden text-ellipsis px-space-1 text-start font-inherit text-inherit shadow-none read-only:text-ink-muted",
+            "block h-auto cursor-text overflow-hidden px-space-1 text-start text-ellipsis text-inherit font-inherit control-flat read-only:text-tx-2",
         },
         /** A row's title renamed where it stands (a session in the side
             list): the title's own type and line, in a hairline box that
@@ -78,24 +78,22 @@
         "row-title": {
           box: "flex rounded-xs",
           field:
-            "block h-auto min-h-space-5 content-center overflow-clip text-ellipsis whitespace-nowrap px-space-1 type-label shadow-none read-only:text-ink-muted",
+            "block h-auto min-h-space-4 content-center overflow-clip px-space-1 text-ellipsis whitespace-nowrap type-label control-flat read-only:text-tx-2",
         },
         /** An address typed exactly (a machine reached over SSH): its words
-            a house step in, its error edge whole at night. */
-        address: {
-          field: "px-space-3 dark:aria-invalid:border-error-9",
-        },
+            a house step in. */
+        address: { field: "px-space-3" },
       },
       /** A value the person changed from what it was: the edit's ink, as
           the design graph marks a changed timing on itself; `quiet`, a
           row's words muted where the row stands back (a session in
           context but not the one open). */
       tone: {
-        edited: { field: "text-selected-ink" },
-        quiet: { field: "text-ink-muted" },
+        edited: { field: "text-accent" },
+        quiet: { field: "text-tx-2" },
       },
       /** Its example (the placeholder) dimmer, under an exact address. */
-      hint: { subtle: { field: "placeholder:text-ink-subtle" } },
+      hint: { subtle: { field: "placeholder:text-tx-2" } },
     },
   });
 
@@ -154,21 +152,19 @@
     inputVariants({ face, text, field: kind, measure, flex, look, tone, hint })
   );
   /** The field's own look, the same for a file picker and a text field.
-      Typed in, its edge steps up: the caret is its focus. Its area draws
-      that edge (`field-edge-wrap`) and holds its radius, which the field
-      takes; without one, its frame draws it (InputGroup). */
+      Its fill, edge and states are the control surface's (theme.css
+      `control-field`): typed in, its edge steps up, the caret its focus.
+      With an area, the field takes the area's radius (a look's own corner). */
   const own = $derived([
-    area ? "rounded-inherit" : "rounded-md",
-    "shadow-xs transition-control",
-    "h-c-input-h w-full min-w-0 border border-border-row-outline",
-    "bg-surface-raised px-3 text-ink-strong",
+    look === "bare" ? "" : "control control-field",
+    area ? "rounded-inherit" : "rounded-sm",
+    "h-control-md w-full min-w-0",
+    "px-3 text-tx",
     "type-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
     "file:text-tx file:type-label",
     "placeholder:text-tx-2",
-    "disabled:pointer-events-none disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-error-9",
-    "dark:aria-invalid:border-error-9/50",
+    "disabled:cursor-not-allowed",
   ]);
   /**
    * A field with suggestions (a `list`, its datalist) shows the house's
@@ -222,12 +218,7 @@
 
 {#if area}
   <FieldArea
-    class={[
-      "field-edge-wrap rounded-md",
-      suggests && "relative",
-      looks.box(),
-      className,
-    ]}
+    class={["rounded-sm", suggests && "relative", looks.box(), className]}
     field={ref}
     slot="input-area"
   >

@@ -599,7 +599,7 @@
     <!-- Each pin made here stands on its element: the form's name field, marked as the overlay's pill would mark it. -->
     {#each madePins.filter((one) => !awayOf(one)) as one (one.id)}
       <span
-        class="fixed z-10 top-space-2 left-space-2 rounded-full bg-action-solid px-space-2 text-on-action type-meta"
+        class="fixed top-space-2 left-space-2 z-10 rounded-full bg-accent px-space-2 text-on-accent type-meta"
         data-bench-pill={one.number}>{one.number}</span
       >
     {/each}
@@ -628,7 +628,7 @@
     <!-- The box the drawing stands in is its size after its scale, so a
          scaled drawing leaves no 1:1 box behind to scroll across. -->
     <div
-      class="w-(--box-w) h-(--box-h) overflow-clip"
+      class="h-(--box-h) w-(--box-w) overflow-clip"
       style="--box-w: {width * fit}px; --box-h: {tall * fit}px"
     >
       <div
@@ -676,7 +676,7 @@
      floating head (SideSurface), beside the page on a desk and a sheet's
      on a phone, the graph under the head as PreviewPane hosts it. -->
 <div
-  class="flex h-dvh min-h-0 bg-bg p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  class="flex h-dvh min-h-0 bg-bg p-space-2 in-data-cawco-headed:p-0 max-phone:p-0 [&>*]:flex-1"
 >
   <SideSurface
     label="Preview"
@@ -687,7 +687,7 @@
     {#if pins}
       <!-- The pins' cards, as the pane opens them: the real PinCard, its Show the pin the pane's own action. -->
       <div
-        class="absolute z-20 right-space-2 bottom-space-2 flex w-80 flex-col gap-space-2"
+        class="absolute right-space-2 bottom-space-2 z-20 flex w-80 flex-col gap-space-2"
         data-slot="bench-pins"
       >
         {#each madePins as one (one.id)}

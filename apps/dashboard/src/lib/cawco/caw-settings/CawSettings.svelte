@@ -99,12 +99,12 @@
 <div
   data-slot="caw-settings"
   class={[
-    "flex flex-col gap-space-5 text-ink-strong",
+    "flex flex-col gap-space-4 text-tx",
     sheet
       ? [
           // The scroller reaches the sheet's edges, so the hero can too;
           // its own inset puts the rest back on the sheet's.
-          "-mx-4 min-h-0 overflow-y-auto px-4 pb-space-5",
+          "-mx-4 min-h-0 overflow-y-auto px-4 pb-space-4",
           sheetScroller,
         ]
       : "w-115 max-w-full",
@@ -116,7 +116,7 @@
     {#if hubAway}
       <p
         data-slot="hub-away"
-        class="mark-line m-0 flex items-center gap-space-2 pb-space-4 type-meta text-ink-muted"
+        class="m-0 flex items-center gap-space-2 mark-line pb-space-4 text-tx-2 type-meta"
         role="status"
       >
         <IconCloudCross
@@ -136,16 +136,16 @@
         onchange={onchanges}
       />
       {#if refusedChanges}
-        <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
+        <p data-slot="refused" class="m-0 text-red type-meta" role="alert">
           {refusedChanges}
         </p>
       {/if}
     </div>
     <section
       data-slot="chat"
-      class="grid gap-space-2 border-t border-border-hairline py-space-4"
+      class="grid gap-space-2 border-t border-ui py-space-4"
     >
-      <h3 class="m-0 type-row text-ink-strong">{words.chat}</h3>
+      <h3 class="m-0 type-title text-tx">{words.chat}</h3>
       <RunsAs
         account={chat.account}
         from={chat.mode === null ? { mode: words.from.fleet } : {}}
@@ -160,16 +160,16 @@
         readonly={hubAway}
       />
       {#if refusedChat}
-        <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
+        <p data-slot="refused" class="m-0 text-red type-meta" role="alert">
           {refusedChat}
         </p>
       {/if}
     </section>
     <section
       data-slot="triggers"
-      class="grid gap-space-3 border-t border-border-hairline pt-space-4"
+      class="grid gap-space-3 border-t border-ui pt-space-4"
     >
-      <h3 class="m-0 type-row text-ink-strong">{words.triggers}</h3>
+      <h3 class="m-0 type-title text-tx">{words.triggers}</h3>
       {#if triggers}
         <ul
           class="m-0 grid list-none grid-cols-pickers gap-x-space-2 gap-y-space-3 p-0"
@@ -188,10 +188,7 @@
           {/each}
         </ul>
       {:else}
-        <p
-          class="m-0 type-meta text-ink-muted"
-          role={unread ? "alert" : undefined}
-        >
+        <p class="m-0 text-tx-2 type-meta" role={unread ? "alert" : undefined}>
           {unread ? words.unread(unread) : words.reading}
         </p>
       {/if}

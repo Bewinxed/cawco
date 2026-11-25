@@ -50,25 +50,23 @@
   data-slot="settings-section"
   data-state={state}
 >
-  <header
-    class="mark-line flex min-h-c-btn-h-xs min-w-0 items-center gap-space-2"
-  >
+  <header class="flex min-h-space-6 min-w-0 items-center gap-space-2 mark-line">
     {#if state !== "settled"}
       <span
         aria-hidden="true"
-        class="mark-line grid size-icon-md flex-none place-items-center"
+        class="grid size-icon-md flex-none place-items-center mark-line"
         data-box
       >
         {#if state === "busy"}
           <LiveDot />
         {:else if state === "away"}
-          <IconWarningTriangle class="size-icon-md text-status-attn-glyph" />
+          <IconWarningTriangle class="size-icon-md text-orange" />
         {:else}
-          <IconError class="size-icon-md text-status-fail-glyph" />
+          <IconError class="size-icon-md text-red" />
         {/if}
       </span>
     {/if}
-    <h2 class="m-0 min-w-0 type-row text-ink-strong" id={headingId}>
+    <h2 class="m-0 min-w-0 type-title text-tx" id={headingId}>
       {title}{#if stateWords}<span class="sr-only">, {stateWords}</span>{/if}
     </h2>
     {#if fact}

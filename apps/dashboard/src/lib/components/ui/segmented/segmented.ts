@@ -1,5 +1,6 @@
 import { frameObserver } from "#lib/platform/frame-observer.js";
 import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
 import { tv } from "#lib/utils.js";
 
 /**
@@ -39,7 +40,7 @@ export const SEGMENTED_TRACK =
 export const segmentedVariants = tv({
   slots: {
     group: `group/segmented relative inline-flex items-center gap-space-1 ${SEGMENTED_TRACK}`,
-    lens: "pointer-events-none absolute top-0 left-0 rounded-(--shape) lens opacity-0 loops motion-safe:transition-[scale] motion-safe:duration-(--duration-base) motion-safe:ease-spring motion-safe:group-data-pending/segmented:animate-breath motion-safe:data-pressed:scale-[1.08_1.24]",
+    lens: "pointer-events-none absolute top-0 left-0 rounded-(--shape) lens opacity-0 loops group-data-pending/segmented:breathe motion-safe:transition-[scale] motion-safe:duration-(--duration-base) motion-safe:ease-spring motion-safe:data-pressed:scale-[1.08_1.24]",
     segment:
       "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-space-3 mark-line py-0 font-sans text-base leading-none font-medium whitespace-nowrap text-tx-2 transition-control not-data-[state=active]:not-data-[state=on]:press-tint hover:not-data-[state=active]:not-data-[state=on]:not-aria-expanded:bg-ui-2 data-[state=active]:touch-pan-y data-[state=active]:text-tx data-[state=on]:touch-pan-y data-[state=on]:text-tx",
   },
@@ -362,7 +363,11 @@ export function segmentedLens(
   group.addEventListener("pointercancel", release);
   group.addEventListener("click", hush, { capture: true });
   group.addEventListener("keydown", keep, { capture: true });
+  // The lens's pending breath, which starts when the group turns pending,
+  // stands in step with every other live mark.
+  const unstep = loopInStep(lens);
   return () => {
+    unstep();
     changes.disconnect();
     sizes.disconnect();
     group.removeEventListener("pointerdown", press);

@@ -1,8 +1,6 @@
 <script lang="ts">
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
-  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
+  import StatusGlyph from "../StatusGlyph.svelte";
   import { sessionStatusOf } from "./session-status";
 
   let {
@@ -17,40 +15,18 @@
 
 <span
   aria-label={status.label}
-  class="mark-line inline-flex items-center gap-space-1 text-tx-2 text-base font-medium whitespace-nowrap"
+  class="inline-flex items-center gap-space-1 mark-line text-base font-medium whitespace-nowrap text-tx-2"
   data-slot="session-status"
   data-session-status-tone={status.tone}
   role="img"
 >
-  <!-- The two glyphs of a change share one cell while they cross-fade. The
-       glyph wears its status hue; the word beside it stays text ink. -->
-  <span
-    data-slot="glyph"
-    class={[
-      "inline-grid flex-none",
-      status.tone === "working" && "breathe loops text-status-live-glyph",
-      status.tone === "attention" && "text-status-attn-glyph",
-      status.tone === "failed" && "text-status-fail-glyph",
-      status.tone === "quiet" && "text-ink-muted",
-    ]}
-    data-box
-    {@attach loopInStep}
-  >
-    {#key status.icon}
-      <span
-        data-slot="mark"
-        class="row-start-1 col-start-1 inline-flex"
-        in:glyphIn
-        out:glyphOut
-      >
-        {#if status.icon}
-          <status.icon aria-hidden="true" class="size-icon-md flex-none" />
-        {:else}
-          <Spinner aria-hidden="true" role="presentation" class="flex-none" />
-        {/if}
-      </span>
-    {/key}
-  </span>
+  <!-- The glyphs of a change share one cell, on the house's glyph swap.
+       The glyph wears its status hue; the word beside it stays text ink. -->
+  <StatusGlyph
+    breathes={status.tone === "working"}
+    icon={status.icon}
+    tone={status.tone}
+  />
   {#if !compact}
     <MorphText text={status.label} />
   {/if}

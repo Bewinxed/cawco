@@ -153,10 +153,10 @@ class Ghost {
       overflow: "visible",
       pointerEvents: "none",
       width: `${box.width}px`,
-      borderRadius: "var(--radius-well)",
+      borderRadius: "var(--radius-sm)",
       boxShadow: "none",
       transition: motionOk.current
-        ? "box-shadow var(--duration-control) var(--ease-out)"
+        ? "box-shadow var(--duration-fast) var(--ease-out)"
         : "none",
       willChange: "transform",
     });
@@ -177,7 +177,7 @@ class Ghost {
       fill: "forwards",
     });
     requestAnimationFrame(() => {
-      node.style.boxShadow = "var(--shadow-overlay)";
+      node.style.boxShadow = "var(--shadow-lg)";
     });
   }
 

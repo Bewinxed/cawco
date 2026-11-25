@@ -14,11 +14,11 @@ const SESSION = "s-parked-orchestrator";
 /** The grey of each direction at night, by its states file: the value the stand-in drawing takes (the product's is the stage page's). */
 export const DIRECTION_GREYS: Record<string, string> = {
   "apps/dashboard/src/lib/tokens/HoverOneStep.stories.ts":
-    "light-dark(var(--color-neutral-4), var(--color-neutral-4))",
+    "light-dark(var(--color-ui), var(--color-ui))",
   "apps/dashboard/src/lib/tokens/HoverTwoSteps.stories.ts":
-    "light-dark(var(--color-neutral-4), var(--color-neutral-5))",
+    "light-dark(var(--color-ui), var(--color-ui-2))",
   "apps/dashboard/src/lib/tokens/HoverWarm.stories.ts":
-    "light-dark(var(--color-neutral-4), oklch(30.5% 0.018 62))",
+    "light-dark(var(--color-ui), oklch(30.5% 0.018 62))",
 };
 
 const GREYS: ParkedPick = {

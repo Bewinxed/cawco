@@ -467,7 +467,7 @@
   </div>
 
   <div data-slot="path" class="grid min-w-0 gap-space-2">
-    <span class="type-label text-tx-2" id={`${uid}-path`}
+    <span class="text-tx-2 type-label" id={`${uid}-path`}
       ><MorphText text={pathLabel} /></span
     >
     <!-- What it holds is clipped to its corners and is no scroller (the
@@ -475,12 +475,12 @@
          item it takes no width of its own content's: `min-w-0`, or the
          folder rows widened the popover past a phone's edge. The frame
          clips nothing itself, or it would clip its focus edge
-         (`field-edge`): its inside does, a box laid over the frame's border
+         (`control control-field`): its inside does, a box laid over the frame's border
          box with a clear border of the frame's width, so it clips on the
          frame's inner radius. -->
     <div
       data-slot="location-section-field"
-      class="field-edge min-w-0 rounded-md border bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+      class="control min-w-0 rounded-sm control-field data-locked:bg-bg-2"
       data-locked={locked || undefined}
     >
       <div
@@ -488,19 +488,19 @@
       >
         <div
           data-slot="row"
-          class="flex h-c-row-h items-center gap-space-3 pe-space-2"
+          class="flex h-control-lg items-center gap-space-3 pe-space-2"
         >
           <span class={LEAD}
             ><FolderOpen
               data-location-section-lead
-              class="size-icon-md text-mark-3"
+              class="size-icon-md text-orange"
             /></span
           >
           <input
             aria-invalid={reading && !informational ? true : undefined}
             aria-labelledby={`${uid}-path`}
             autocapitalize="off"
-            class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
+            class="min-h-control-sm min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-base leading-base font-normal text-tx placeholder:text-tx-2 max-phone:min-h-control-lg"
             id="session-dir"
             oninput={(event) => ondir(event.currentTarget.value)}
             onkeydown={commitOnEnter}
@@ -511,10 +511,10 @@
           />
           {#if locked}
             <span
-              class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
+              class="inline-flex h-space-6 ns-in items-center gap-space-1 rounded-sm bg-bg-2 px-space-2 mark-line font-sans text-base leading-none font-medium whitespace-nowrap text-cyan"
               ><span>{spawnWords.location.fromProject}</span></span
             >
-            <span class="ns-in flex flex-none" style:--delay={staggered(1)}>
+            <span class="flex flex-none ns-in" style:--delay={staggered(1)}>
               <Button
                 onclick={onoverride}
                 size="sm"
@@ -525,7 +525,7 @@
               </Button>
             </span>
           {:else}
-            <span class="ns-in flex flex-none">
+            <span class="flex flex-none ns-in">
               <Button
                 aria-expanded={browsing}
                 disabled={!machineId}
@@ -535,11 +535,11 @@
                 variant="secondary"
               >
                 {#if browsing}
-                  <Up class="size-icon-md flex-none text-ink-muted" /><span
+                  <Up class="size-icon-md flex-none text-tx-2" /><span
                     >{spawnWords.location.close}</span
                   >
                 {:else}
-                  <Search class="size-icon-md flex-none text-ink-muted" />
+                  <Search class="size-icon-md flex-none text-tx-2" />
                   <span>{spawnWords.location.browse}</span>
                 {/if}
               </Button>
@@ -548,7 +548,7 @@
         </div>
         <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
           <div class="min-h-0">
-            <div class="border-t border-t-border-hairline bg-surface-recess">
+            <div class="border-t border-t-ui bg-bg-2">
               <!-- The machine and the crumb on one line at every width. The
                    folder you are in stands whole at the crumb's end (its name
                    ending in an ellipsis only past the whole row); the folders
@@ -556,42 +556,40 @@
                    end, the one above yours: a right-to-left scroller starts at
                    its right, round a left-to-right run of crumbs. -->
               <div
-                class="flex items-center gap-space-2 border-b border-b-border-hairline bg-surface-recess p-space-2 ps-space-3"
+                class="flex items-center gap-space-2 border-b border-b-ui bg-bg-2 p-space-2 ps-space-3"
               >
                 <span
                   data-slot="machine"
-                  class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
+                  class="inline-flex h-space-6 flex-none items-center gap-space-2 rounded-sm bg-bg px-space-2 mark-line font-sans text-base leading-none font-medium whitespace-nowrap text-tx"
                   ><span
                     data-slot="dot"
-                    class="size-space-2 rounded-pill bg-mark-4"
+                    class="size-space-2 rounded-pill bg-yellow"
                     data-box
                   ></span><span>{machineName}</span></span
                 >
                 <div
                   data-slot="crumbs"
-                  class="flex min-w-0 flex-1 items-center gap-space-row whitespace-nowrap font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-muted"
+                  class="flex min-w-0 flex-1 items-center gap-space-1 font-(family-name:--font-mono) text-base leading-base font-normal whitespace-nowrap text-tx-2"
                 >
                   {#if crumbs.length > 1}
                     <div
                       data-slot="above"
-                      class="fai-scroll dir-rtl min-w-0 overflow-x-auto overscroll-x-contain"
+                      class="fai-scroll min-w-0 overflow-x-auto overscroll-x-contain dir-rtl"
                     >
                       <div
-                        class="inline-flex items-center gap-space-row align-middle"
+                        class="inline-flex items-center gap-space-1 align-middle"
                         dir="ltr"
                       >
                         {#each crumbs.slice(0, -1) as crumb (crumb.to)}
                           <button
                             data-slot="crumb"
-                            class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                            class="min-h-control-lg min-w-control-lg flex-none rounded-xs border-none border-current press-tint bg-transparent px-space-2 text-inherit select-none transition-control hover:bg-ui"
                             onclick={() => list(crumb.to)}
                             type="button"
                           >
                             {crumb.label}
                           </button>
-                          <span aria-hidden="true" class="text-neutral-8"
-                            >/</span
-                          >
+                          <span aria-hidden="true" class="text-tx-2">/</span>
                         {/each}
                       </div>
                     </div>
@@ -599,7 +597,7 @@
                   <button
                     data-slot="crumb"
                     aria-current="location"
-                    class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
+                    class="min-h-control-lg max-w-full min-w-control-lg shrink-0 rounded-xs border-none border-current press-tint bg-bg px-space-2 text-start font-medium text-tx select-none transition-control"
                     onclick={() => list(path)}
                     type="button"
                   >
@@ -608,11 +606,11 @@
                 </div>
               </div>
               <div
-                class="fai-scroll grid max-h-49 content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
+                class="grid fai-scroll max-h-49 content-box-start gap-space-1 overflow-auto overscroll-contain p-space-2"
               >
                 {#if canGoUp}
                   <button
-                    class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                    class="flex h-control-md min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current press-tint bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-base leading-none font-normal text-tx-2 select-none transition-control hover:bg-ui max-phone:h-control-lg"
                     onclick={goUp}
                     type="button"
                   >
@@ -624,7 +622,7 @@
                 {#if listingFolders}
                   <div
                     data-slot="location-section-empty"
-                    class="type-meta px-space-2 py-space-6 text-center wrap-anywhere text-tx-2"
+                    class="px-space-2 py-space-6 text-center wrap-anywhere text-tx-2 type-meta"
                     role="status"
                   >
                     {spawnWords.location.loadingFolders}
@@ -632,7 +630,7 @@
                 {:else if listError}
                   <div
                     data-slot="location-section-empty"
-                    class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-status-fail-ink"
+                    class="px-space-2 py-space-6 text-center wrap-anywhere text-red type-meta"
                     role="alert"
                   >
                     {listError}
@@ -640,14 +638,14 @@
                 {:else}
                   {#each folders as folder (`${path}/${folder.name}`)}
                     <button
-                      class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                      class="flex h-control-md min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current press-tint bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-base leading-none font-normal text-tx select-none transition-control hover:bg-ui max-phone:h-control-lg"
                       onclick={() => enter(folder.name)}
                       title={folder.name}
                       type="button"
                     >
                       <Folder
                         class="size-icon-md flex-none"
-                        style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-mark-3)"}`}
+                        style={`color:${folder.name.startsWith(".") ? "var(--color-tx-2)" : "var(--color-orange)"}`}
                       />
                       <span data-slot="name" class="min-w-0 flex-1 truncate"
                         >{folder.name}</span
@@ -655,17 +653,17 @@
                       {#if folder.git}
                         <span
                           data-slot="git"
-                          class="flex-none font-sans type-meta text-ink-muted"
+                          class="flex-none font-sans text-tx-2 type-meta"
                           >{spawnWords.location.gitRepository}</span
                         >
                       {/if}
-                      <Right class="size-icon-md flex-none text-neutral-8" />
+                      <Right class="size-icon-md flex-none text-tx-2" />
                     </button>
                   {/each}
                   {#if !folders.length}
                     <div
                       data-slot="location-section-empty"
-                      class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
+                      class="px-space-2 py-space-6 text-center wrap-anywhere text-tx-2 type-meta"
                       role="status"
                     >
                       {spawnWords.location.noSubfolders}
@@ -679,11 +677,11 @@
                    scroller round it (the field clips, it does not scroll). -->
               <div
                 data-slot="browse-foot"
-                class="sticky bottom-0 flex max-phone:flex-wrap items-center justify-between gap-space-2 border-t border-t-border-hairline bg-surface-lift p-space-2"
+                class="sticky bottom-0 flex items-center justify-between gap-space-2 border-t border-t-ui bg-bg p-space-2 max-phone:flex-wrap"
               >
                 <span
                   data-slot="path"
-                  class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) type-meta text-ink-muted"
+                  class="min-w-0 truncate font-(family-name:--font-mono) text-tx-2 type-meta max-phone:basis-full"
                   title={path}>{path}</span
                 >
                 <Button
@@ -706,7 +704,7 @@
     <p
       data-slot="outcome"
       aria-live="polite"
-      class="m-0 min-w-0 type-meta text-pretty text-tx-2"
+      class="m-0 min-w-0 text-pretty text-tx-2 type-meta"
       in:unfold
       out:unfold
     >

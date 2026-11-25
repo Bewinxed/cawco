@@ -56,13 +56,12 @@
   class="min-w-0 flex-1 data-line:flex data-line:items-center data-line:gap-space-2"
   data-line={line || undefined}
 >
-  <span
-    data-slot="name"
-    class="type-label block min-w-0 truncate text-ink-strong">{name}</span
+  <span data-slot="name" class="block min-w-0 truncate text-tx type-label"
+    >{name}</span
   >
   <span
     data-slot="meta"
-    class="type-meta mark-line flex items-center gap-space-2 text-tx-2"
+    class="flex items-center gap-space-2 mark-line text-tx-2 type-meta"
     ><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}

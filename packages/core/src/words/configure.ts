@@ -231,7 +231,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "inbox-in-bold-duotone",
-    hue: "mark-4",
+    hue: "mark-3",
   },
   {
     slug: "phone",
@@ -294,7 +294,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "bug-bold-duotone",
-    hue: "mark-3",
+    hue: "mark-2",
   },
 ];
 

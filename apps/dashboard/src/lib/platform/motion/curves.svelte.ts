@@ -577,7 +577,7 @@ export function crossOutWith(
  * the line as it was drawn is pinned beside it where it stood (its next
  * sibling, on its offset parent), out of the flow and out of the pointer's
  * way, read by no one, and fades out
- * (--duration-control, ease-out) as the line, already holding its new
+ * (--duration-fast, ease-out) as the line, already holding its new
  * words, fades in on the same clock: the {@link crossIn}/{@link crossOut}
  * pair, on Web Animations of its own. A `{#key}` block's swap is the
  * framework's to time: in a batch that defers its branches the new words
@@ -619,7 +619,7 @@ export function crossfades(words: () => unknown) {
         return;
       }
       node.after(leaving);
-      const timing = { duration: dur("--duration-control"), easing: CURVE.out };
+      const timing = { duration: dur("--duration-fast"), easing: CURVE.out };
       node.animate([{ opacity: 0 }, { opacity: 1 }], timing);
       leaving
         .animate([{ opacity: 1 }, { opacity: 0 }], timing)

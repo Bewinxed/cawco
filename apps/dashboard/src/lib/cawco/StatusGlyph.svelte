@@ -10,6 +10,7 @@
   import type { SVGAttributes } from "svelte/elements";
   import { GlyphSwap } from "#lib/components/ui/glyph-swap/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -31,10 +32,11 @@
 
 <span
   data-slot="glyph"
-  class="inline-grid flex-none data-breathes:loops data-breathes:motion-safe:animate-breath data-[tone=attention]:text-orange data-[tone=failed]:text-red data-[tone=quiet]:text-tx-2 data-[tone=working]:text-cyan"
+  class="inline-grid flex-none data-breathes:breathe data-breathes:loops data-[tone=attention]:text-orange data-[tone=failed]:text-red data-[tone=quiet]:text-tx-2 data-[tone=working]:text-cyan"
   data-box
   data-breathes={breathes || undefined}
   data-tone={tone}
+  {@attach loopInStep}
 >
   <GlyphSwap shows={icon ?? Spinner}>
     {#snippet glyph(Mark)}

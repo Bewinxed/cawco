@@ -40,8 +40,7 @@
   } = $props();
 
   /** The card's surface starts on the rail's edge and its content on the glyph column, as an answered question's (QuestionCard). */
-  const HITL_START =
-    "calc(var(--x-glyph) - var(--x-rail) - var(--border-width))";
+  const HITL_START = "calc(var(--x-glyph) - var(--x-rail) - 1px)";
   /** The artifact the call's answer names (core references.ts `artifactLink`). */
   const ARTIFACT_LINK = /cawco:artifact\/([0-9a-f-]{36})/u;
   const queue = parkedHere();
@@ -118,20 +117,18 @@
       : words.decisionFrom(asker)}
   <section
     aria-label={title}
-    class="mt-space-4 ms-(--x-rail) rounded-lg border border-border-control bg-surface-raised py-space-3 pe-space-3 ps-(--hitl-start) shadow-hairline"
+    class="ms-(--x-rail) mt-space-4 rounded-lg border border-ui-2 bg-bg py-space-3 ps-(--hitl-start) pe-space-3 shadow-sm"
     data-frame
     data-slot="hitl"
     data-parked-record={item.kind}
     style:--hitl-start={HITL_START}
   >
-    <h2
-      class="rail-line mb-space-2 text-size-label font-medium text-ink-strong"
-    >
+    <h2 class="mb-space-2 rail-line text-base font-medium text-tx">
       <span class="rail-cell inline-grid" data-slot="rail-cell">
         <span
           class={[
             "col-start-1 row-start-1 grid place-items-center",
-            done ? "text-status-done-ink" : "text-ink-muted",
+            done ? "text-green" : "text-tx-2",
           ]}
           data-slot="mark"
         >
@@ -146,16 +143,14 @@
       <span class="inline-grid" data-box>
         <span
           class={[
-            "mark-line inline-flex h-icon-lg items-center rounded-pill px-space-2 py-0 text-size-label font-medium whitespace-nowrap",
-            done
-              ? "bg-status-done-bg text-status-done-ink"
-              : "bg-surface-recess text-ink-muted",
+            "inline-flex h-icon-lg items-center rounded-pill px-space-2 mark-line py-0 text-base font-medium whitespace-nowrap",
+            done ? "bg-bg-2 text-green" : "bg-bg-2 text-tx-2",
           ]}><span>{stateWord(item)}</span></span
         >
       </span>
     </h2>
     <p
-      class="rail-hang mb-space-2 max-w-c-measure type-body text-ink-strong"
+      class="rail-hang mb-space-2 max-w-measure text-tx type-body"
       data-slot="lede"
     >
       {item.kind === "directions" ? item.ask : item.card.question}
@@ -163,7 +158,7 @@
     {#if picked.length > 0}
       <div
         class={chipsVariants({
-          class: "rail-hang relative mt-space-row mb-space-2",
+          class: "rail-hang relative mt-space-1 mb-space-2",
         })}
         data-slot="qopts"
       >
@@ -178,11 +173,11 @@
     {/if}
     {#if note}
       <p
-        class="rail-hang flex max-w-c-measure items-baseline gap-space-2 type-body text-ink-strong"
+        class="rail-hang flex max-w-measure items-baseline gap-space-2 text-tx type-body"
         in:crossIn
       >
         <span
-          class="flex-none text-size-label font-medium tracking-caps text-ink-muted uppercase"
+          class="flex-none text-base font-medium tracking-caps text-tx-2 uppercase"
           >{note.label}</span
         >{note.text}
       </p>

@@ -8,7 +8,7 @@
    *
    * `cols` across, `colsPhone` under the phone line (one a row by default:
    * stacked). With `wraps`, `cols` across where `cols` tiles hold the
-   * choice tile's least width (`--spacing-c-choice-tile-min`), else one a
+   * choice tile's least width (160px), else one a
    * row, so no tile stands alone under a row of others.
    *
    * With `glide`, the pick is the kit's selection pill (OptionGroup
@@ -54,7 +54,7 @@
   /** The grid's tracks: `cols` equal ones; with `wraps`, one filling the row where `cols` would stand under the least width (the clamp turns from 0 to the row's whole width there). */
   const tracks = $derived(
     wraps
-      ? `repeat(auto-fit, minmax(max(calc((100% - ${cols - 1} * var(--spacing-space-2)) / ${cols}), clamp(0px, calc((${cols} * var(--spacing-c-choice-tile-min) + ${cols - 1} * var(--spacing-space-2) - 100%) * 999), 100%)), 1fr))`
+      ? `repeat(auto-fit, minmax(max(calc((100% - ${cols - 1} * var(--spacing-space-2)) / ${cols}), clamp(0px, calc((${cols} * calc(var(--spacing) * 40) + ${cols - 1} * var(--spacing-space-2) - 100%) * 999), 100%)), 1fr))`
       : `repeat(${cols}, minmax(0, 1fr))`
   );
 </script>
@@ -82,27 +82,24 @@
     >
       {#if glyph}
         <span
-          class="mark-line grid w-full min-w-0 grid-cols-auto-fluid items-start gap-x-space-2"
+          class="row-span-2 grid w-full min-w-0 grid-cols-auto-fluid items-start gap-x-space-2 mark-line"
         >
           <span class="mark-cell type-label" data-box
             >{@render glyph(option.id)}</span
           >
-          <span class="type-label font-medium wrap-anywhere">{option.name}</span
-          >
+          <span class="wrap-anywhere type-label">{option.name}</span>
           {#if option.note}
             <span
-              class="col-start-2 type-meta text-ink-muted text-pretty wrap-anywhere"
+              class="col-start-2 text-pretty wrap-anywhere text-tx-2 type-meta"
               >{option.note}</span
             >
           {/if}
         </span>
       {:else}
-        <span class="type-label font-medium wrap-anywhere">{option.name}</span>
-        {#if option.note}
-          <span class="type-meta text-ink-muted text-pretty wrap-anywhere"
-            >{option.note}</span
-          >
-        {/if}
+        <span class="wrap-anywhere type-label">{option.name}</span>
+        <span class="text-pretty wrap-anywhere text-tx-2 type-meta empty:hidden"
+          >{option.note ?? ""}</span
+        >
       {/if}
     </OptionGroupItem>
   {/each}

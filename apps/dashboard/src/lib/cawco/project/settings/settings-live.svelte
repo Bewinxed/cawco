@@ -239,11 +239,11 @@
     <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <!-- The page, as ProjectPage draws it: on a phone the one scroller, its foot clear of the views bar (--bar-reach). -->
       <div
-        class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
+        class="max-phone:@container-size flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
         data-project-page
         data-safe-bottom
         data-slot="project-page"
-        style:--bar-reach={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
+        style:--bar-reach={"calc(var(--composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
       >
         <ProjectHead
           {lead}
@@ -259,7 +259,7 @@
           setup={null}
         />
         <div
-          class="flex w-full min-w-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 max-phone:hidden"
+          class="flex w-full min-w-0 ps-space-6 pe-space-6 max-desk:ps-space-4 max-desk:pe-space-4 max-phone:hidden"
         >
           <ViewTabs
             current={view}

@@ -78,7 +78,7 @@
  *
  * `clip`: the box's layout takes each change at once and its clip draws it
  * (motion/edge-cut): its foot is cut from where it was drawn to where it
- * now stands on --duration-morph's --ease-drawer, the slice of its foot
+ * now stands on --duration-base's --ease-drawer, the slice of its foot
  * (`clip.foot`) drawn under the cut, and a change that leaves it shorter
  * holds it at the height it was drawn at for that run. A fold shut inside
  * it slides (motion/fold) and the cut follows the slide. No child is held
@@ -501,14 +501,14 @@ export function morph({
       const at = cut.change({
         from: Math.max(0, to.h - shown - slides),
         to: hold,
-        ms: ms ?? dur("--duration-morph"),
+        ms: ms ?? dur("--duration-base"),
         easing: CURVE.drawer,
       });
       endClip();
       const height = `${to.h + hold}px`;
       const clock = node.animate(
         hold > 0 ? [{ minHeight: height }, { minHeight: height }] : [],
-        { duration: ms ?? dur("--duration-morph") }
+        { duration: ms ?? dur("--duration-base") }
       );
       clock.startTime = at;
       clipClock = clock;

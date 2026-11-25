@@ -50,17 +50,16 @@
   >
     {#each OPTIONS as option, index (option.value)}
       <OptionGroupItem digit={index + 1} value={option.value}>
-        <span class="flex min-w-0 flex-col gap-space-row">
-          <span class="type-label text-ink-strong">{option.name}</span>
-          <span class="type-meta text-pretty text-ink-muted">{option.line}</span
-          >
+        <span class="flex min-w-0 flex-col gap-space-1">
+          <span class="text-tx type-label">{option.name}</span>
+          <span class="text-pretty text-tx-2 type-meta">{option.line}</span>
         </span>
       </OptionGroupItem>
     {/each}
   </OptionGroup>
   {#if !signedIn}
     <p
-      class="m-0 max-w-c-measure type-meta text-pretty text-ink-muted"
+      class="m-0 max-w-measure text-pretty text-tx-2 type-meta"
       data-slot="feedback-sign-in"
     >
       {words.needsSignIn}

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { settingsViewWords as words } from "@cawco/core/words/settings-view";
-  import { BitsConfig, Portal } from "bits-ui";
   /**
    * The project's Settings view (ProjectPage's `settings` tab, JOURNEY.md
    * spec 3): the project's settings, mounted inside the project page's
@@ -12,10 +11,7 @@
    * Task sync, Account & usage limits, Repository & Git for a code project,
    * Run environments, and What needs you. A section still reading draws its own
    * skeleton, one whose read failed its alert with Try again, and the
-   * hub's being out of reach stands over them all. It wears the 4px base
-   * on its root (theme.css `[data-grid="4px"]`), and so does the layer its
-   * menus, popovers and tips open in; the rest of the app stays on
-   * today's grid.
+   * hub's being out of reach stands over them all.
    */
   import {
     Alert,
@@ -89,9 +85,6 @@
     onreread: (stage: StageId) => void;
     onsync: () => void;
   } = $props();
-
-  /** Where the view's sections open their layers (BitsConfig `defaultPortalTo`). */
-  let layer = $state<HTMLElement>();
 
   const baseStates = $derived(
     sectionStates(record, { sync: syncing, movingPlaceId })
@@ -211,11 +204,11 @@
   {@const [first, ...rest] = record.repos}
   {#if first}
     <a
-      class="ms-auto min-w-0 truncate type-meta font-mono liga-none text-ink-muted underline-offset-2 hover:text-ink-strong hover:underline"
+      class="ms-auto min-w-0 truncate text-tx-2 underline-offset-2 type-meta font-mono liga-none hover:text-tx hover:underline"
       href={first.url}
       rel="noreferrer"
       target="_blank">{first.owner}/{first.name}</a
-    >{#if rest.length > 0}<span class="type-meta text-ink-muted">
+    >{#if rest.length > 0}<span class="text-tx-2 type-meta">
         +{rest.length}</span
       >{/if}
   {/if}
@@ -328,49 +321,32 @@
 <section
   aria-label={words.viewLabel}
   class="@container/work-path flex w-full flex-col pt-space-4 pb-space-6 max-phone:py-space-4"
-  data-grid="4px"
   data-slot="project-settings"
 >
   {#if !record.hubReachable}
-    <Alert
-      class="mb-space-4 max-w-c-settings-max"
-      layout="row"
-      variant="warning"
-    >
-      <IconCloudCross aria-hidden="true" />
-      <AlertDescription>
-        {words.hubOutOfReach(asOfAge)}
-      </AlertDescription>
-    </Alert>
+    <div class="mb-space-4 max-w-278">
+      <Alert layout="row" variant="warning">
+        <IconCloudCross aria-hidden="true" />
+        <AlertDescription>
+          {words.hubOutOfReach(asOfAge)}
+        </AlertDescription>
+      </Alert>
+    </div>
   {/if}
 
   <!-- Every section's card in the first screen: the two columns side by
        side on the page's edge under the tabs, one gap between cards both
-       ways; under the two-column width one card under another. What a
-       section opens in a layer of its own (a menu, the account picker, a
-       tip) opens in the view's layer, on the same base. -->
-  <BitsConfig defaultPortalTo={layer}>
-    <div
-      class="flex min-w-0 max-w-c-settings-max flex-col gap-space-4 @min-settings-two/work-path:flex-row @min-settings-two/work-path:items-start"
-      {@attach measureFull}
-    >
-      {#each [COLUMNS.left, COLUMNS.right] as column, at (at)}
-        <div class="flex min-w-0 flex-1 basis-0 flex-col gap-space-4">
-          {#each column as section (section)}
-            {@render card(section)}
-          {/each}
-        </div>
-      {/each}
-    </div>
-  </BitsConfig>
-</section>
-
-<!-- The view's layer, on the body as every layer is: the 4px base for what
-     its sections open in a layer, the rest of the app's layers untouched. -->
-<Portal>
+       ways; under the two-column width one card under another. -->
   <div
-    bind:this={layer}
-    data-grid="4px"
-    data-slot="project-settings-layer"
-  ></div>
-</Portal>
+    class="flex max-w-278 min-w-0 flex-col gap-space-4 @min-[41rem]/work-path:flex-row @min-[41rem]/work-path:items-start"
+    {@attach measureFull}
+  >
+    {#each [COLUMNS.left, COLUMNS.right] as column, at (at)}
+      <div class="flex min-w-0 flex-1 basis-0 flex-col gap-space-4">
+        {#each column as section (section)}
+          {@render card(section)}
+        {/each}
+      </div>
+    {/each}
+  </div>
+</section>

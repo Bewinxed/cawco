@@ -111,7 +111,7 @@
   <div
     bind:this={tile}
     class={[
-      "relative flex min-w-0 gap-x-space-2 rounded-well p-space-2 transition-control",
+      "relative flex min-w-0 gap-x-space-2 rounded-sm p-space-2 transition-control",
       brief ? "items-center" : "items-start",
       surface,
     ]}
@@ -128,7 +128,7 @@
     </span>
     <div class="flex min-w-0 flex-auto flex-col">
       <span class="flex min-w-0 flex-wrap items-center gap-x-space-1">
-        <span class="min-w-0 type-label font-medium text-tx wrap-anywhere"
+        <span class="min-w-0 font-medium wrap-anywhere text-tx type-label"
           >{kind.name}</span
         >
         {#if project !== null}
@@ -137,7 +137,7 @@
       </span>
       {#if !brief}
         <span
-          class="block type-meta text-ink-muted wrap-anywhere first-letter:uppercase"
+          class="block wrap-anywhere text-tx-2 type-meta first-letter:uppercase"
           >{kind.example}</span
         >
       {/if}
@@ -158,7 +158,6 @@
                   onputback();
                 }
               }}
-              press="pressable"
               size="icon-xs"
               tone="edited"
               variant="ghost"
@@ -192,7 +191,7 @@
                   ]
                     .filter(Boolean)
                     .join(". ")}
-                  class="absolute inset-0 rounded-well can-hover:hover:bg-ink-strong/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+                  class="absolute inset-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid can-hover:hover:bg-tx/5"
                   aria-disabled={asking !== null || undefined}
                   data-kind-press={kind.id}
                   type="button"
@@ -229,7 +228,7 @@
   </div>
   {#if own && !brief}
     <button
-      class="self-center type-meta text-accent underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid aria-disabled:text-tx-2"
+      class="self-center text-accent underline underline-offset-2 type-meta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid aria-disabled:text-tx-2 can-hover:hover:not-aria-disabled:text-accent"
       aria-disabled={asking !== null || undefined}
       onclick={() => {
         if (asking === null) {

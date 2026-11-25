@@ -37,8 +37,8 @@
             padding (owner's pin, onboarding-first-minutes #2). Its words
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
-        prose: "control-inline min-h-0 px-space-3 py-space-1",
-        note: "control-quiet max-h-50 min-h-control-md min-w-0 px-0 py-space-2 leading-lg placeholder-shown:truncate",
+        prose: "min-h-0 px-space-3 py-space-1 control-inline",
+        note: "max-h-50 min-h-control-md min-w-0 px-0 py-space-2 leading-lg control-quiet placeholder-shown:truncate",
       },
     },
   });
@@ -89,9 +89,8 @@
 
   /**
    * What each line the field grows or gives up is drawn on (motion/
-   * grow-cut): its area, which carries its focus edge, cut at its foot,
-   * the field drawing the look; a note's, its composer's shell, cut at its
-   * head.
+   * grow-cut): its area, cut at its foot, the field drawing the look and
+   * its edge; a note's, its composer's shell, cut at its head.
    */
   function grows(): GrowTarget | null {
     if (!ref) {
@@ -113,16 +112,16 @@
 {#snippet control(placement?: ClassValue | null)}
   <textarea
     class={cn(
+      // Its fill, edge and states are the control surface's (theme.css
+      // `control-field`): typed in, its edge steps up, the caret its focus.
+      // A note has no edge of its own (the composer's pill is its field).
       // Its area holds its radius, which it takes; without one, its own.
-      area ? "rounded-inherit" : "rounded-md",
-      "shadow-xs transition-control",
+      "control control-field",
+      area ? "rounded-inherit" : "rounded-sm",
       "flex min-h-16 w-full resize-none py-2",
-      "border border-border-row-outline",
-      "bg-surface-raised px-3 text-ink-strong",
-      "type-body placeholder:text-ink-muted",
-      "disabled:cursor-not-allowed disabled:opacity-50",
-      "aria-invalid:ring-red",
-      "dark:aria-invalid:ring-red/50",
+      "px-3 text-tx",
+      "type-body placeholder:text-tx-2",
+      "disabled:cursor-not-allowed",
       textareaVariants({ face, text, height, resize, fill, look, measure }),
       placement
     )}
@@ -134,14 +133,7 @@
 {/snippet}
 
 {#if area}
-  <!-- Typed in, its edge steps up: the caret is its focus, and the area
-       draws the edge round it (`field-edge-wrap`). A note has no edge of its
-       own (the composer's pill is its field). -->
-  <FieldArea
-    class={[look !== "note" && "field-edge-wrap", "rounded-md", className]}
-    field={ref}
-    slot="textarea-area"
-  >
+  <FieldArea class={["rounded-sm", className]} field={ref} slot="textarea-area">
     {@render control(undefined)}
   </FieldArea>
 {:else}

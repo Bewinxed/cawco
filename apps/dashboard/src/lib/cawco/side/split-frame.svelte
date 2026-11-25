@@ -48,12 +48,12 @@
 </script>
 
 {#snippet conversation()}
-  <div class="h-full min-h-0 w-full overflow-y-auto bg-surface-page">
+  <div class="h-full min-h-0 w-full overflow-y-auto bg-bg">
     <div
-      class="mx-auto flex max-w-c-composer-w flex-col gap-space-4 px-space-5 py-space-6"
+      class="mx-auto flex max-w-(--composer-w) flex-col gap-space-4 px-space-4 py-space-6"
     >
       {#each PARAGRAPHS as words, at (at)}
-        <p class="type-body text-ink-strong">{words}</p>
+        <p class="text-tx type-body">{words}</p>
       {/each}
     </div>
   </div>
@@ -61,10 +61,10 @@
 
 {#snippet card()}
   <div
-    class="flex h-full flex-col gap-space-3 rounded-lg bg-surface-raised p-space-5 shadow-md"
+    class="flex h-full flex-col gap-space-3 rounded-lg bg-bg p-space-4 shadow-md"
   >
-    <h2 class="type-title text-ink-strong">Plan</h2>
-    <p class="type-body text-ink-muted">
+    <h2 class="type-title text-tx">Plan</h2>
+    <p class="text-tx-2 type-body">
       Fill the empty owner column from each session's project, then run the
       migration check against last night's copy again.
     </p>
@@ -73,7 +73,7 @@
 
 <div
   data-slot="split-frame"
-  class="flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-surface-recess"
+  class="flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-bg-2"
   style:--frame-h="{height}px"
   style:--frame-w="{width}px"
 >

@@ -108,7 +108,7 @@
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-tx"
+      class="group grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current press-tint bg-transparent px-space-3 py-space-2 text-start text-tx select-none transition-control"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
@@ -116,10 +116,10 @@
       type="button"
     >
       <span aria-hidden="true"></span>
-      <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
+      <span data-slot="words" class="flex min-w-0 flex-col gap-space-1">
         <span class="type-label">{autoName}</span>
         {#if tool.auto.why}
-          <span class="type-meta text-tx-2 text-pretty">{tool.auto.why}</span>
+          <span class="text-pretty text-tx-2 type-meta">{tool.auto.why}</span>
         {/if}
       </span>
       <Check
@@ -130,7 +130,7 @@
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-tx"
+        class="group grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current press-tint bg-transparent px-space-3 py-space-2 text-start text-tx select-none transition-control"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
@@ -158,7 +158,7 @@
             ><AccountName account={nameFields(option)} row wrap /></span
           >
           {#if option.line.length > 0}
-            <span class="type-meta text-tx-2"
+            <span class="text-tx-2 type-meta"
               ><Words parts={option.line} /></span
             >
           {/if}

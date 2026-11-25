@@ -194,12 +194,12 @@
       class={[
         "size-space-2 flex-none rounded-pill bg-(--c)",
         // An inherited account's dot drops its colour with its muted name.
-        tone === "muted" && "grayscale opacity-70",
+        tone === "muted" && "opacity-70 grayscale",
       ]}
       style:--c={hueVar(shown.hue)}
     ></span>
   {:else if bare}
-    <IconUser aria-hidden="true" class="text-ink-subtle" />
+    <IconUser aria-hidden="true" class="text-tx-2" />
   {/if}
   <span
     class={bare ? "sr-only" : undefined}
@@ -212,7 +212,7 @@
        the name, so it reads as the name's figure and not a word of it. -->
   {#if quota}
     <span
-      class="mark-line ms-word inline-flex flex-none items-center gap-word text-tx-2 tabular-nums"
+      class="ms-word inline-flex flex-none items-center gap-word mark-line text-tx-2 tabular-nums"
       data-box
       data-slot="quota"
     >

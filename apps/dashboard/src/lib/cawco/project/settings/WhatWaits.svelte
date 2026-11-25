@@ -6,7 +6,7 @@
    * on a line; one a line only where two would crush a tile's words.
    */
   export const DECIDERS_COLS =
-    "grid-cols-1 @min-kinds/deciders:grid-cols-2 @min-roster-four/deciders:grid-cols-4";
+    "grid-cols-1 @min-sm/deciders:grid-cols-2 @min-[72.25rem]/deciders:grid-cols-4";
 </script>
 
 <script lang="ts">

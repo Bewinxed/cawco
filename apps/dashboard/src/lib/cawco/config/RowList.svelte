@@ -26,11 +26,12 @@
   <ul
     aria-label={label}
     class={[
-      "flex list-none flex-col p-0 my-0",
+      "@container/rows my-0 rows-grid list-none gap-x-0 p-0",
       divided
-        ? "[&>li]:relative [&>li:not(:first-child)]:before:absolute [&>li:not(:first-child)]:before:inset-x-space-2 [&>li:not(:first-child)]:before:top-0 [&>li:not(:first-child)]:before:border-t [&>li:not(:first-child)]:before:border-border-hairline"
-        : "gap-space-row",
+        ? "[&>li]:relative [&>li:not(:first-child)]:before:absolute [&>li:not(:first-child)]:before:inset-x-space-2 [&>li:not(:first-child)]:before:top-0 [&>li:not(:first-child)]:before:border-t [&>li:not(:first-child)]:before:border-ui"
+        : "gap-y-space-1",
     ]}
+    style:--row-cols={"var(--spacing-space-2) var(--spacing-row-compact) var(--spacing-space-3) minmax(0, 1fr) auto var(--spacing-space-2)"}
     {@attach reflow()}
   >
     {@render children()}

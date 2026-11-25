@@ -173,7 +173,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-control-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-accent transition-[color] duration-(--duration-fast) ease-out hover:enabled:text-accent data-failed:block data-failed:text-start data-failed:text-red focus-inset touch-hit"
+  class="group/divider touch-hit mt-space-2 flex min-h-control-sm w-full items-center gap-space-2 border-none border-current bg-transparent p-0 text-accent focus-inset transition-[color] duration-(--duration-fast) ease-out divider-chevron select-none type-meta hover:enabled:text-accent data-failed:block data-failed:text-start data-failed:text-red"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -197,15 +197,15 @@
   <!-- Mirrored, so both arms run outward from the word. -->
   <span
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-base) motion-reduce:group-data-settled/divider:ease-out"
+    class="@container min-w-0 flex-1 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-base) motion-reduce:group-data-settled/divider:ease-out"
   >
-    <svg aria-hidden="true" class="block w-full h-1.5 -scale-x-100"
+    <svg aria-hidden="true" class="block h-1.5 w-full -scale-x-100"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
         class={[
-          "wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-fast) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe",
+          "fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-fast) ease-out wave-dash motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-live/divider:animate-wave-breathe motion-safe:group-data-settled/divider:animate-wave-draw",
           live && "loops",
         ]}
       /></svg
@@ -222,14 +222,14 @@
     style:--mid-x="calc(var(--chev) * var(--room) * -1)"
     style:--mid-durs="var(--chev-dur), var(--duration-base)"
     style:--mid-eases="var(--chev-ease), var(--ease-out)"
-    class="whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
+    class="translate-x-(--mid-x) whitespace-nowrap group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
-      class="relative inline-block align-middle w-4.5 h-4.5 me-space-2 group-data-live/divider:w-space-8 motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--duration-slow) motion-safe:ease-out"
+      class="relative me-space-2 inline-block h-4.5 w-4.5 align-middle group-data-live/divider:w-space-8 motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--duration-slow) motion-safe:ease-out"
       data-caw
       >{#if working}
-        <span class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
+        <span class="absolute top-1/2 left-1/2 block -translate-1/2 leading-0"
           ><Caw
             next={[COMPACTION_MARK.status]}
             ongone={() => {
@@ -243,9 +243,9 @@
       {/if}
       {#if !(live || failed)}
         <span
-          class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
+          class="absolute top-1/2 left-1/2 block -translate-1/2 leading-0"
           in:fade={{
-            duration: watched ? dur("--duration-fade") : 0,
+            duration: watched ? dur("--duration-base") : 0,
             easing: easeOut,
           }}
           ><CawMark
@@ -277,7 +277,7 @@
           chevron's clock, and the turn's. --><span
       data-slot="chev"
       style:--chev-x="calc(var(--chev) * var(--spacing-space-1))"
-      class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
+      class="inline-block h-icon-sm w-0 align-middle opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
         aria-hidden="true"
         class="block size-icon-sm translate-x-(--chev-x) group-aria-expanded/divider:rotate-90 motion-safe:divider-chevron-turn"
@@ -286,15 +286,15 @@
   >
   <span
     style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-base) motion-reduce:group-data-settled/divider:ease-out"
+    class="@container min-w-0 flex-1 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-base) motion-reduce:group-data-settled/divider:ease-out"
   >
-    <svg aria-hidden="true" class="block w-full h-1.5"
+    <svg aria-hidden="true" class="block h-1.5 w-full"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
         class={[
-          "wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-fast) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe",
+          "fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-fast) ease-out wave-dash motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-live/divider:animate-wave-breathe motion-safe:group-data-settled/divider:animate-wave-draw",
           live && "loops",
         ]}
       /></svg
@@ -307,15 +307,15 @@
          rail is a 2px band of the failure ink down its start edge. -->
     <span
       style:--fail-pad="calc(var(--x-glyph) - var(--x-rail) - 2px)"
-      class="block ms-(--x-rail) ps-(--fail-pad) border-s-2 border-status-fail-ink text-size-label font-medium leading-body"
-      in:fade={{ duration: dur("--duration-fade"), easing: easeOut }}
+      class="ms-(--x-rail) block border-s-2 border-red ps-(--fail-pad) text-base leading-base font-medium"
+      in:fade={{ duration: dur("--duration-base"), easing: easeOut }}
     >
       <span class="rail-line"
         ><span data-slot="rail-cell" class="rail-cell"
           ><IconError class="size-icon-sm" /></span
         ><b>Couldn't compact the conversation</b></span
       >
-      <span data-slot="reason" class="block mt-space-1 text-pretty rail-hang"
+      <span data-slot="reason" class="rail-hang mt-space-1 block text-pretty"
         >{reason}</span
       >
     </span>
@@ -335,7 +335,7 @@
   >
     <div data-slot="body" {@attach morph()}>
       {#if facts}
-        <p class="mb-space-2 type-meta text-tx-2">{facts}</p>
+        <p class="mb-space-2 text-tx-2 type-meta">{facts}</p>
       {/if}
       <MessageBody source={row.brief} />
     </div>

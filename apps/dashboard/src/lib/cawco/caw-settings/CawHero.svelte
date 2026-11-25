@@ -72,10 +72,10 @@
 
   /**
    * Turning day to night (or back), the two scenes blend over
-   * --duration-dusk on --ease-crossfade: the new picture, laid over the
+   * --duration-dusk on --ease-in-out: the new picture, laid over the
    * old, fades in whole while the old one's light turns toward the new
    * (dimming into night, brightening into day). The scrim's fade stays over
-   * both. Reduced motion, a plain cross-fade over --duration-fade.
+   * both. Reduced motion, a plain cross-fade over --duration-base.
    */
   function turn(next: boolean): void {
     const incoming = pictures[next ? "asleep" : "awake"];
@@ -98,8 +98,8 @@
       return;
     }
     const timing = {
-      duration: dur(motionOk.current ? "--duration-dusk" : "--duration-fade"),
-      easing: ease("--ease-crossfade"),
+      duration: dur(motionOk.current ? "--duration-dusk" : "--duration-base"),
+      easing: ease("--ease-in-out"),
     };
     // The new scene blends in over the whole picture at once; with motion,
     // the old one's light turns toward the new as it goes (dimming into
@@ -135,7 +135,7 @@
        the desk's legs cropped away. -->
   <div
     aria-hidden="true"
-    class="relative aspect-5/2 w-full overflow-clip bg-surface-recess"
+    class="relative aspect-5/2 w-full overflow-clip bg-bg-2"
     data-slot="scene"
   >
     {#each SCENES as one (one.scene)}
@@ -156,7 +156,7 @@
     <!-- The scrim: the scene's lower part fades into the panel's surface,
          solid by its foot; the line stands below it, clear of the scene. -->
     <span
-      class="absolute inset-x-0 bottom-0 z-2 h-1/4 bg-linear-to-b/srgb from-transparent to-surface-raised to-70%"
+      class="bg-linear-to-b/srgb absolute inset-x-0 bottom-0 z-2 h-1/4 from-transparent to-bg to-70%"
     ></span>
   </div>
 
@@ -173,7 +173,7 @@
         {#snippet children(tip)}
           <span
             {...tip}
-            class="relative flex h-c-btn-h-sm items-center px-space-2"
+            class="relative flex h-control-sm items-center px-space-2"
           >
             <CawLeadSwitch
               {disabled}

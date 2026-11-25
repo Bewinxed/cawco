@@ -130,7 +130,7 @@
 </script>
 
 <div
-  class="relative flex min-h-(--frame-h) flex-col items-end bg-surface-page p-space-4 contain-layout"
+  class="relative flex min-h-(--frame-h) flex-col items-end bg-bg p-space-4 contain-layout"
   style:--frame-h={`${height}px`}
   bind:this={layer}
 >

@@ -75,16 +75,16 @@ import { watchRendered } from "#lib/platform/rendered.js";
  *   --duration-fast; gliding (`GLIDES.ghost`), it moves 80ms on --ease-in-out.
  *   Unseen (`data-unseen`), it still marks the row it is on (`data-ghosted`)
  *   and is not drawn: folder tabs draw their own hover.
- * - The pill is the selection, the apricot wash its row's selected ink
- *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
- *   old selection fading where it was (`data-fade`), and never glides: its
- *   parts stay off the compositor. With less motion a selection that moves
- *   cross-fades (`data-swap`) over --duration-base.
- * - `card` (the host's `data-highlight`): a grid of icon cards (updates/ChannelCards.svelte), whose pill is the channel card's selection frame, 1px
- *   brand-solid over the picked fill (option-picked) at the card's own radius, drawn over the
- *   card's border and fill and under its face (CardFace): its edges are
- *   parts of their own, a border's width thick, so no scale ever thickens
- *   them.
+ * - The pill is the selection, the wash its row's selected ink stands on;
+ *   gliding, it moves 120ms on --ease-drawer. The trail is the old selection
+ *   fading where it was (`data-fade`), and never glides. With less motion a
+ *   selection that moves cross-fades (`data-swap`) over --duration-base.
+ * - `card` (the host's `data-highlight`): a grid of icon cards
+ *   (updates/ChannelCards.svelte), whose pill is the channel card's
+ *   selection frame, 1px brand-solid over the recess at the card's own
+ *   radius, drawn over the card's border and fill and under its face
+ *   (CardFace): the box's own border, inside its size, so the frame stands
+ *   on the card's edge.
  */
 const LAYERS = `
 [data-slot^="highlight-"] {
@@ -135,19 +135,8 @@ const LAYERS = `
 }
 :host([data-highlight="card"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
   z-index: 1;
-  background-color: var(--color-option-picked);
-}
-:host([data-highlight="card"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
-  border-top: 1px solid var(--color-accent);
-}
-:host([data-highlight="card"]) :is([data-part="corner-bl"], [data-part="corner-br"]) {
-  border-bottom: 1px solid var(--color-accent);
-}
-:host([data-highlight="card"]) :is([data-part="corner-tl"], [data-part="corner-bl"]) {
-  border-left: 1px solid var(--color-accent);
-}
-:host([data-highlight="card"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
-  border-right: 1px solid var(--color-accent);
+  border: 1px solid var(--color-accent);
+  background-color: var(--color-bg-2);
 }
 `;
 

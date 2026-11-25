@@ -86,9 +86,9 @@
 
 {#snippet limitGlyph(choice: "wait" | "move")}
   {#if choice === "wait"}
-    <IconHourglass aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconHourglass aria-hidden="true" class="size-icon-md text-tx-2" />
   {:else}
-    <IconTransfer aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconTransfer aria-hidden="true" class="size-icon-md text-tx-2" />
   {/if}
 {/snippet}
 

@@ -657,7 +657,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-fast) ease-out not-active:not-aria-current:group-hover/row:bg-ui active:not-aria-current:bg-ui-2 aria-current:bg-ui aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-ui-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+      class="flex min-h-control-lg w-full items-start gap-space-2 rounded-sm border-none bg-transparent px-space-2 py-space-2 text-start transition-[background-color] duration-(--duration-fast) ease-out not-active:not-aria-current:group-hover/row:bg-ui focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent active:not-aria-current:bg-ui-2 aria-current:bg-ui aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-ui-2 aria-current:not-focus-visible:outline-solid"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -681,22 +681,22 @@
         {#if need}<PinDot dot={need} inline />{/if}
         {#if need === "live"}<span class="sr-only">{said.working}</span>{/if}
       </span>
-      <span class="flex flex-1 min-w-0 flex-col">
+      <span class="flex min-w-0 flex-1 flex-col">
         <span class="flex min-w-0 items-baseline gap-space-2" data-line="place">
           <span
             data-slot="title"
             class={[
-              "min-w-0 truncate type-body font-medium",
+              "min-w-0 truncate font-medium type-body",
               gone ? "text-tx-2" : "text-tx",
             ]}
             >{#each segments(gone ? said.offPage(awayOf(pin.id)) : pinName(pin)) as part, at (at)}{#if part.hit}<mark
-                  class="bg-selection text-inherit rounded-xs">{part.text}</mark
+                  class="rounded-xs bg-accent/20 text-inherit">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
           <span
             data-slot="age"
             class={[
-              "ms-auto flex-none type-meta num transition-opacity duration-(--duration-fast) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
+              "ms-auto flex-none transition-opacity duration-(--duration-fast) ease-out type-meta num not-coarse:group-focus-within/row:opacity-0 not-coarse:group-hover/row:opacity-0",
               "text-tx-2",
             ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
           >
@@ -705,11 +705,11 @@
           <span
             data-line="words"
             class={[
-              "mt-space-1 line-clamp-2 type-body text-pretty wrap-anywhere",
+              "mt-space-1 line-clamp-2 text-pretty wrap-anywhere type-body",
               "text-tx",
             ]}
             >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
-                  class="bg-accent/20 text-inherit rounded-xs">{part.text}</mark
+                  class="rounded-xs bg-accent/20 text-inherit">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
         {/if}
@@ -748,7 +748,7 @@
         {#if back?.kind === "notSent"}
           <span
             class={[
-              "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
+              "mt-space-1 line-clamp-2 text-pretty wrap-anywhere type-meta",
               "text-red",
             ]}
             data-line="back"
@@ -764,7 +764,7 @@
           {@const Speaker = back.by === "agent" ? IconAgent : IconUser}
           <span
             class={[
-              "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
+              "mt-space-1 flex min-w-0 items-center gap-space-1 mark-line type-meta",
               back.unread ? "text-tx" : "text-tx-2",
             ]}
             data-line="back"
@@ -781,10 +781,10 @@
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               >{#if back.unread}<span
-                  class="text-orange font-medium"
+                  class="font-medium text-orange"
                   data-slot="new-answer">{`${said.newAnswer} · `}</span
                 >{/if}{#each segments(marked.length > 0 ? aroundHit(back.text) : back.text) as part, at (at)}{#if part.hit}<mark
-                    class="bg-accent/20 text-inherit rounded-xs"
+                    class="rounded-xs bg-accent/20 text-inherit"
                     >{part.text}</mark
                   >{:else}{part.text}{/if}{/each}</span
             ></span
@@ -810,7 +810,7 @@
     {/if}
     {#if !coarse.current}
       <span
-        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--duration-fast) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--duration-fast) ease-out group-focus-within/row:opacity-100 group-hover/row:opacity-100"
       >
         <Button
           aria-label={pin.resolvedAt ? said.reopen : said.resolve}
@@ -850,7 +850,7 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="relative flex flex-col min-h-0 w-xs max-w-full timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="relative flex min-h-0 w-xs max-w-full flex-col timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:w-full data-[layout=sheet]:flex-1"
   style:--rail-head="{headHeight}px"
 >
   <!-- The bar and what stands under it (the lists, a composer or note
@@ -881,7 +881,7 @@
     <header
       data-slot="head"
       data-searching={searching || undefined}
-      class="relative grid flex-none grid-cols-1 items-center h-control-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-4 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
+      class="relative grid h-control-lg flex-none grid-cols-1 items-center px-space-2 hit-gap-x-space-1 data-[layout=beside]:mt-space-2 coarse:hit-gap-x-space-4 [&>*]:col-start-1 [&>*]:row-start-1"
       data-layout={layout}
     >
       {#if searching}
@@ -1140,7 +1140,7 @@
           bind:value={note}
         />
         {#if noteRefused}
-          <p class="m-0 type-meta text-red" role="alert">
+          <p class="m-0 text-red type-meta" role="alert">
             {noteRefused}
           </p>
         {/if}
@@ -1162,7 +1162,7 @@
       <RowFault
         data-pin-list-down
         again={onretry}
-        class="shrink-0 py-space-1 px-space-3"
+        class="shrink-0 px-space-3 py-space-1"
         details={down}
         end="var(--spacing-space-2)"
         indent="var(--spacing-space-2)"
@@ -1177,7 +1177,7 @@
   <div
     data-slot="rows"
     data-fits={(layout === "sheet" && rowsFit) || undefined}
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain pt-(--rail-head) scroll-timeline-transcript-head no-scrollbar kit-edge-fade-block data-fits:touch-none"
+    class="kit-edge-fade-block relative no-scrollbar min-h-0 flex-auto overflow-y-auto overscroll-contain pt-(--rail-head) scroll-timeline-transcript-head data-fits:touch-none"
     {@attach rowsRun}
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
@@ -1200,11 +1200,11 @@
              so the list holds still as it lands. -->
         {#each [0, 1, 2] as skeleton (skeleton)}
           <span
-            class="flex items-start gap-space-2 min-h-control-lg px-space-2 py-space-2"
+            class="flex min-h-control-lg items-start gap-space-2 px-space-2 py-space-2"
             data-slot="skeleton-row"
           >
             <span class="w-1.5 flex-none"></span>
-            <span class="flex flex-1 min-w-0 flex-col">
+            <span class="flex min-w-0 flex-1 flex-col">
               <span class="flex min-w-0 items-start gap-space-2">
                 <Skeleton class="w-3/5" line="label" radius="text" />
                 <Skeleton
@@ -1223,7 +1223,7 @@
       <RowFault
         data-pin-list-failed
         again={onretry}
-        class="py-space-2 px-space-2"
+        class="px-space-2 py-space-2"
         reason={words.commentsNotRead(failed)}
       />
     {:else}
@@ -1243,7 +1243,7 @@
               >
                 {group.name} <span class="num">{group.pins.length}</span>
               </h3>
-              <ol class="flex flex-col gap-space-1 m-0 p-0 list-none">
+              <ol class="m-0 flex list-none flex-col gap-space-1 p-0">
                 {#each group.pins as pin (pin.id)}
                   {@render boundedRow(pin)}
                 {/each}
@@ -1271,7 +1271,7 @@
                 out:listSwap.leaveView
               >
                 {#if shown.length > 0}
-                  <ol class="flex flex-col gap-space-1 m-0 p-0 list-none">
+                  <ol class="m-0 flex list-none flex-col gap-space-1 p-0">
                     {#each shown as pin (pin.id)}
                       {@render boundedRow(pin)}
                     {/each}

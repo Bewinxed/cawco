@@ -316,7 +316,7 @@
   <DirectionWell drawing={wellOf(one)} name={one.name} onretry={nothing}>
     <div
       class="flex flex-col gap-space-3 p-space-4"
-      style:--color-surface-hover={DIRECTION_GREYS[one.file]}
+      style:--color-ui={DIRECTION_GREYS[one.file]}
     >
       <div class="flex flex-wrap items-center gap-space-1">
         <!-- Its menu open: the ghost's look under the pointer. -->
@@ -345,14 +345,14 @@
 {/snippet}
 
 <div
-  class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-raised text-ink-strong"
+  class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-bg text-tx"
   data-slot="parked-fixture"
   style:--fixture-h="{height}px"
 >
   <div
-    class="min-h-0 flex-auto overflow-y-auto px-space-7 pt-space-6 max-desk:px-space-5"
+    class="min-h-0 flex-auto overflow-y-auto px-space-6 pt-space-6 max-desk:px-space-4"
   >
-    <div class="tx-columns mx-auto max-w-c-measure">
+    <div class="mx-auto max-w-measure tx-columns">
       <Turn>
         <Who name={AGENT} />
         <MessageBody

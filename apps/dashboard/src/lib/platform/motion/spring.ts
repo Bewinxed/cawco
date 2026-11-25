@@ -36,13 +36,13 @@ export interface Sample {
 
 /**
  * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0,
- * over --duration-settle unless a surface names its own perceptual
+ * over --duration-slow unless a surface names its own perceptual
  * duration (`ms`). Always at least two points, the last exactly at rest.
  */
 export function integrate(
   x0: number,
   v0: number,
-  ms: number = dur("--duration-settle")
+  ms: number = dur("--duration-slow")
 ): Sample[] {
   /** The perceptual duration, in seconds. */
   const settle = ms / 1000;

@@ -833,7 +833,7 @@
   data-drawing={canvas.up || undefined}
   data-minimized={grown.minimized || undefined}
   data-flush={flush || undefined}
-  class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-40 flex flex-col justify-end items-center pointer-events-none"
+  class="group/dock pointer-events-none z-40 flex flex-col items-center justify-end not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative"
   data-composer-dock
   data-keeps-draft
   data-safe-bottom
@@ -866,7 +866,7 @@
   <div
     data-slot="layer-ground"
     aria-hidden="true"
-    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-(--layer-shown,0)"
+    class="pointer-events-none absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) bg-(image:--layer-ground-image) opacity-(--layer-shown,0)"
     style:--layer-ground-image={LAYER_GROUND}
     style:--ground-bottom={GROUND_BOTTOM}
     style:--ground-h={GROUND_H}
@@ -880,7 +880,7 @@
          the desktop's step off the panel. -->
     <div
       data-slot="prompts"
-      class="grow shrink basis-0 min-h-0 w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
+      class="not-group-data-flush/dock:desk:ms-space-1 not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto pointer-events-none flex min-h-0 w-(--composer-w) shrink grow basis-0 flex-col justify-end transition-fade-show group-data-asking/dock:invisible group-data-asking/dock:opacity-0 group-data-asking/dock:transition-fade-hide group-data-drawing/dock:invisible group-data-drawing/dock:opacity-0 group-data-drawing/dock:transition-fade-hide max-desk:mb-(--prompts-step)"
       inert={grown.askRaised}
       bind:this={offerStack.offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
@@ -911,7 +911,7 @@
           <div
             data-composer-away={row.id !== showing || undefined}
             data-offscreen={row.id !== showing || undefined}
-            class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
+            class="pointer-events-auto absolute inset-x-0 bottom-0 has-[>*]:pb-space-3 data-composer-away:invisible"
             {@attach offerStack.measureOffer(row.id)}
           >
             {@render row.prompts?.()}
@@ -929,7 +929,7 @@
        the positioned box the suggestion chips stand on. -->
   <div
     data-slot="lift"
-    class="relative flex-none w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="not-group-data-flush/dock:desk:ms-space-1 not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto pointer-events-none relative w-(--composer-w) flex-none transition-fade-show group-data-asking/dock:invisible group-data-asking/dock:opacity-0 group-data-asking/dock:transition-fade-hide group-data-drawing/dock:invisible group-data-drawing/dock:opacity-0 group-data-drawing/dock:transition-fade-hide"
     inert={grown.askRaised}
     {@attach dockFoot.measureLift}
   >
@@ -953,7 +953,7 @@
            the bar as it fades. -->
       {@const summary = askSummaryOf(ask)}
       <div
-        class="absolute inset-0 flex items-box-end pb-space-2 pe-(--ring-room,0px) pointer-events-none opacity-(--waiting-shown,1)"
+        class="pointer-events-none absolute inset-0 flex items-box-end pe-(--ring-room,0px) pb-space-2 opacity-(--waiting-shown,1)"
         data-minimized-bar
         style:--ring-room={planRing
           ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
@@ -983,11 +983,11 @@
             <fleet.CawFace size={16} status="needs-you" />
           </span>
           <span
-            class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
+            class="min-w-0 flex-auto overflow-clip text-start text-ellipsis whitespace-nowrap"
             >{summary}</span
           >
           {#if ask.more > 0}
-            <span data-slot="num" class="num flex-none font-normal"
+            <span data-slot="num" class="flex-none font-normal num"
               >+{ask.more}</span
             >
           {/if}
@@ -1018,10 +1018,10 @@
            container its chips fold their words by. -->
       <div
         data-slot="progress-slot"
-        class="@container/tray absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-(--tray-row) pb-space-2 pointer-events-none"
+        class="@container/tray pointer-events-none absolute inset-x-0 bottom-0 z-1 flex h-(--tray-row) items-end justify-end pb-space-2"
       >
         <div
-          class="flex items-end gap-space-2 pointer-events-auto"
+          class="pointer-events-auto flex items-end gap-space-2"
           {@attach dockFoot.measureRing}
         >
           {@render planRing()}
@@ -1039,7 +1039,7 @@
            float over it, in none of its flow. -->
       <div
         data-slot="tray-slot"
-        class="relative grid grid-cols-1 items-box-end min-h-(--tray-row) transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
+        class="relative grid min-h-(--tray-row) grid-cols-1 items-box-end transition-fade-show group-data-minimized/dock:invisible group-data-minimized/dock:opacity-0 group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
           ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
           : undefined}
@@ -1053,7 +1053,7 @@
           <div
             data-slot="tray"
             data-composer-away={row.id !== showing || undefined}
-            class="row-start-1 col-start-1 transition-fade-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-fade-hide"
+            class="col-start-1 row-start-1 transition-fade-show data-composer-away:invisible data-composer-away:opacity-0 data-composer-away:transition-fade-hide"
           >
             <fleet.DelegateTray {held} parentId={row.delegatesOf} />
           </div>
@@ -1066,7 +1066,7 @@
   <div
     data-slot="composer"
     data-composer-holding={press.holding || undefined}
-    class="relative flex-none w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="not-group-data-flush/dock:desk:ms-space-1 not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto pointer-events-none relative flex w-(--composer-w) flex-none flex-col gap-space-3"
     bind:this={canvas.column}
     {@attach dockFoot.measurePanel}
     in:rise
@@ -1081,7 +1081,7 @@
       <div
         data-slot="canvas-slot"
         aria-hidden="true"
-        class="absolute left-px right-px bottom-full pointer-events-none"
+        class="pointer-events-none absolute right-px bottom-full left-px"
         bind:this={canvas.canvasSlot}
       ></div>
     {/if}
@@ -1117,7 +1117,7 @@
            machine's words, and the way on. -->
       <div
         data-slot="relaunch-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-red text-sm font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-sm font-normal wrap-anywhere text-red group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1134,7 +1134,7 @@
     {:else if sender.sendNotice}
       <div
         data-slot="send-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-red text-sm font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-sm font-normal text-red group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1159,7 +1159,7 @@
       </div>
     {:else if sender.signInNote}
       <p
-        class="pointer-events-auto px-space-3 text-tx-2 text-sm font-normal"
+        class="pointer-events-auto px-space-3 text-sm font-normal text-tx-2"
         role="status"
         transition:unfold
       >
@@ -1171,7 +1171,7 @@
            sign-in's note takes. -->
       <p
         data-slot="composer-note"
-        class="pointer-events-auto px-space-3 text-tx-2 text-sm font-normal"
+        class="pointer-events-auto px-space-3 text-sm font-normal text-tx-2"
         transition:unfold
       >
         {note}
@@ -1185,7 +1185,7 @@
     <div
       data-slot="shell"
       data-rolling={!!recalling.recall || undefined}
-      class="relative pointer-events-auto"
+      class="pointer-events-auto relative"
       bind:this={shell}
     >
       {#if find && findDock.finding && find.listOpen}
@@ -1238,7 +1238,7 @@
         <div
           data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-sm font-medium text-tx-2 pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(length:--spacing-space-1) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-space-2 motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-fast)"
+          class="group/edit data-composer-shown:[&_[data-keep]]:filter-none pointer-events-none absolute inset-x-(--edit-inset) z-3 flex items-center gap-space-2 pt-space-1 text-sm font-medium text-tx-2 [&_[data-keep]]:pointer-events-auto [&_[data-keep]]:hidden [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(length:--spacing-space-1) [&_[data-keep]]:transition-fade-blur data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:delay-(--duration-fast) motion-safe:[&_[data-keep]]:translate-y-space-2 motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex"
           bind:this={queued.editRow}
           style:--edit-inset="{queued.edit.inset}px"
           style:bottom="{queued.edit.base}px"
@@ -1246,14 +1246,14 @@
         >
           <span
             data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-tx opacity-0 blur-(length:--spacing-space-1) transition-fade-blur before:size-1.5 before:rounded-pill before:bg-accent motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
+            class="group-data-composer-shown/edit:filter-none me-auto inline-flex items-center gap-space-2 text-tx opacity-0 blur-(length:--spacing-space-1) transition-fade-blur group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:opacity-100 before:size-1.5 before:rounded-pill before:bg-accent motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur"
             >Editing your queued message</span
           >
           <!-- A touch screen has no Esc: a button keeps the message as it
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-fast)"
+            class="group-data-composer-shown/edit:filter-none inline-flex items-center gap-space-1 whitespace-nowrap opacity-0 blur-(length:--spacing-space-1) transition-fade-blur group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:delay-(--duration-fast) motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur max-phone:hidden coarse:hidden"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -1277,7 +1277,7 @@
              empty band stands under it. -->
         <div
           data-slot="ask"
-          class="absolute z-3 inset-x-0 bottom-0"
+          class="absolute inset-x-0 bottom-0 z-3"
           inert={!grown.askShown}
           bind:this={grown.askPanel}
           style:--ask-max="{grown.askBox.max}px"
@@ -1411,13 +1411,13 @@
                         <!-- A command, in the code face. -->
                         <span
                           data-slot="e-label"
-                          class="font-(family-name:--font-mono) font-medium text-tx whitespace-nowrap flex-none"
+                          class="flex-none font-(family-name:--font-mono) font-medium whitespace-nowrap text-tx"
                           >{entry.label}</span
                         >
                         {#if entry.detail}
                           <span
                             data-slot="e-detail"
-                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-sm font-normal text-tx-2 flex-auto"
+                            class="min-w-0 flex-auto overflow-clip text-sm font-normal text-ellipsis whitespace-nowrap text-tx-2"
                             >{entry.detail}</span
                           >
                         {/if}
@@ -1437,7 +1437,7 @@
                plays it, a key lands it (motion/keyed). -->
           <div
             data-slot="find"
-            class="basis-full min-w-0 group-data-asking/dock:invisible"
+            class="min-w-0 basis-full group-data-asking/dock:invisible"
             inert={grown.askOpen}
             transition:unfold
             {@attach frameSize(
@@ -1457,7 +1457,7 @@
                while an ask holds the composer. -->
           <div
             data-slot="lead"
-            class="flex basis-full min-w-0 transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+            class="flex min-w-0 basis-full transition-fade-show group-data-asking/dock:invisible group-data-asking/dock:opacity-0 group-data-asking/dock:transition-fade-hide"
             inert={grown.askOpen}
           >
             {@render lead()}
@@ -1495,7 +1495,7 @@
           data-folded={fieldFold.folded || undefined}
           data-slot="composer-field"
           class={[
-            "group/field touch-hit relative flex flex-auto min-w-0",
+            "group/field touch-hit relative flex min-w-0 flex-auto",
             // A second way to send takes the controls' row under the field,
             // so the words keep the pill's width.
             also ? "basis-full" : "group-data-lead/cin:basis-0",
@@ -1528,8 +1528,8 @@
                in it (motion/autosize.svelte.ts), a line at a time over 120ms,
                from one line's worth of the control height to a ceiling, and
                scrolls past that; folding and opening a long draft run over
-               --duration-morph, and a pick off the recall wheel over
-               --duration-panel-exit on the drawer curve. Each change is laid
+               --duration-base, and a pick off the recall wheel over
+               --duration-slow on the drawer curve. Each change is laid
                out once and drawn by grow-cut on the pill's head (`grows`),
                on the field's clock (`fieldClock`). No scrollbar is drawn, so
                the text wraps at the field's full width in every state. While another draft's words
@@ -1547,7 +1547,7 @@
               : undefined}
             aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 no-scrollbar h-(--cin-ctl) min-h-(--cin-ctl) min-w-0 flex-auto translate-raw-(--roll-move) overflow-y-auto border-none border-current bg-transparent px-0 py-(--field-pad) font-sans text-input-floor leading-lg font-normal text-tx opacity-(--roll-o) clip-path-(--roll-clip) group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-folded/field:overflow-hidden group-data-folded/field:mask-(--fold-fade) group-data-folded/field:clip-path-(--fold-clip) group-data-wheeling/cin:caret-transparent group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) data-flying:text-transparent data-flying:caret-transparent data-mention-field-empty:before:absolute data-mention-field-empty:before:tracking-tight data-mention-field-empty:before:whitespace-nowrap data-mention-field-empty:before:text-tx-2 group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-base) group-data-hint-back/cin:data-mention-field-empty:before:ease-out group-data-recalling/cin:data-mention-field-empty:before:text-transparent data-flying:data-mention-field-empty:before:text-transparent"
             data-cue-bottom={(swap.cueBottom && !fieldFold.folded) || undefined}
             data-cue-top={(swap.cueTop && !fieldFold.folded) || undefined}
             data-flying={swap.flight !== null ||
@@ -1610,12 +1610,12 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-input-floor leading-lg text-tx whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              class="pointer-events-none absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end px-0 py-(--field-pad) font-sans text-input-floor leading-lg wrap-break-word whitespace-pre-wrap text-tx clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 justify-self-box-start after:content-rest after:text-transparent"
+                class="col-start-1 row-start-1 justify-self-box-start after:text-transparent after:content-rest"
                 data-rest="{swap.flight.outRest}&#8203;"
                 bind:this={swap.flightOut}
                 style:inline-size="{swap.flight.outWrap}px"
@@ -1626,7 +1626,7 @@
               >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 justify-self-box-start opacity-0 after:content-rest after:text-transparent"
+                class="col-start-1 row-start-1 justify-self-box-start opacity-0 after:text-transparent after:content-rest"
                 data-rest="{swap.flight.text.slice(swap.typed.length)}&#8203;"
                 bind:this={swap.flightIn}
                 style:translate="0 {swap.inDrop}px">{swap.typed}</span
@@ -1640,7 +1640,7 @@
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-tx-2 text-sm font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              class="pointer-events-none absolute end-0 bottom-0 z-2 flex h-(--cin-ctl) w-18 translate-raw-(--roll-move) items-center justify-end text-sm font-normal whitespace-nowrap text-tx-2 opacity-(--roll-o) clip-path-(--roll-clip) num group-data-asking/cin:invisible group-data-asking/dock:invisible"
               >+{fieldFold.lines - 1}
               {fieldFold.lines === 2 ? "line" : "lines"}</span
             >
@@ -1668,7 +1668,7 @@
         <div
           data-slot="ctrls"
           class={[
-            "group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide",
+            "group/ctrls flex flex-none items-center gap-space-2 hit-gap-x-space-2 transition-fade-show group-data-asking/dock:invisible group-data-asking/dock:opacity-0 group-data-asking/dock:transition-fade-hide coarse:gap-space-3 coarse:hit-gap-x-space-3",
             also && "ms-auto",
           ]}
           inert={!!recalling.recall}
@@ -1726,7 +1726,7 @@
             <GlyphSwap data-slot="swap" shows={sendGlyph}>
               {#snippet glyph(key)}
                 <span
-                  class="inline-flex group-enabled/stop:translate-x-optical group-enabled/stop:-translate-y-optical"
+                  class="group-enabled/stop:-translate-y-optical inline-flex group-enabled/stop:translate-x-optical"
                   >{#if key === "wait"}<Spinner
                       aria-hidden="true"
                       role="presentation"

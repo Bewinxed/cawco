@@ -3,7 +3,7 @@
    * The kit's NativeSelect in a frame of its own (its states file's): the
    * platform's own select in the field's look, with its options.
    */
-  import * as NativeSelect from "./index.js";
+  import { NativeSelect, NativeSelectOption } from "./index.js";
 
   let {
     label,
@@ -22,8 +22,8 @@
   } = $props();
 </script>
 
-<NativeSelect.Root aria-label={label} {disabled} measure="cap-md" {value}>
+<NativeSelect aria-label={label} {disabled} measure="cap-md" {value}>
   {#each options as option (option)}
-    <NativeSelect.Option value={option}>{option}</NativeSelect.Option>
+    <NativeSelectOption value={option}>{option}</NativeSelectOption>
   {/each}
-</NativeSelect.Root>
+</NativeSelect>

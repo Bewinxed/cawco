@@ -148,7 +148,7 @@
      (apps/dashboard/scripts/has-subject-check.ts). -->
 <span
   data-tree-mark
-  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-bg data-bare:text-tx-2"
+  class="group/mark relative z-(--mark-z) inline-block size-(--size) flex-none text-bg data-bare:text-tx-2"
   data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
@@ -175,13 +175,13 @@
     <span
       aria-hidden="true"
       data-tree-mark-deck
-      class="absolute inset-0 pointer-events-none"
+      class="pointer-events-none absolute inset-0"
       data-deck={Math.min(count, 3)}
     >
       {#each [1, 2, 3] as i (i)}
         <span
           data-slot="tree-mark-card"
-          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
+          class="absolute inset-0 origin-(--card-origin) transform-(--card-scale) overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) before:absolute before:inset-x-0 before:top-0 before:z-1 before:h-(--cast-h) before:translate-y-(--cast-y) before:bg-linear-to-b before:to-transparent before:from-mark-deck-cast after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen)"
           style:--i={i}
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
           style:--shade-seen="calc(var(--p) * 0.2)"
@@ -196,13 +196,12 @@
   {/if}
   <!-- What the tile shows: its face, or its count, and the chevron either
        gives way to. The echo is the bare tile: only what grows past the
-       tile is ever seen of it. Both stay in the tile; the one leaving
-       fades and shrinks out as the other fades and grows in, by
-       transitions, so a pointer that turns back mid-way turns them with it
-       (design.css `swap-move`, `swap-gone`): opacity and scale, on the
-       compositor; the shrink is motion and only where motion is welcome.
-       The chevron's turn (`rotate`) and the tile's press
-       (`scale`) run on the compositor. Open, the chevron stands in the face's
+       tile is ever seen of it. Both stay in the tile and give way to one
+       another on the house's glyph swap (design.css `swap-move`,
+       `swap-gone`, `swap-shown`), by transitions, so a pointer that turns
+       back mid-way turns them with it: on the compositor, the slide only
+       where motion is welcome.
+       The chevron's turn and the tile's press are registered numbers. Open, the chevron stands in the face's
        place, unless the count is the parent's own status (`countIsStatus`):
        then only a pointer brings it. With a dot the face is cut away round
        it: a hole in its mask, filled while a working mark's echo beats
@@ -213,7 +212,7 @@
     data-slot="tile"
     aria-hidden="true"
     class={[
-      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--mark-press) motion-safe:transition-[scale] motion-safe:duration-(--duration-toggle) motion-safe:ease-out group-data-dot/mark:mask-(--hole-mask)",
+      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none group-data-dot/mark:mask-(--hole-mask) motion-safe:scale-(--mark-press) motion-safe:transition-[scale] motion-safe:duration-(--duration-base) motion-safe:ease-out",
       !(has && !faceAlways) && "bg-mark-overlay",
     ]}
     style:--hole={dot
@@ -224,7 +223,7 @@
     <span
       data-slot="tree-mark-rest"
       style:--icon-swap-dur="var(--duration-fast)"
-      class="col-start-1 row-start-1 inline-grid place-items-center swap-move group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-gone group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-gone"
+      class="col-start-1 row-start-1 inline-grid swap-move place-items-center group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-gone"
     >
       {#if has && !faceAlways}
         <!-- The count's box is fixed, and the morph (which animates its own
@@ -232,7 +231,7 @@
              is laid out as the figure changes, and 9 to 10 stays centred. -->
         <span
           data-slot="num"
-          class="num inline-grid place-items-center w-ch-2 h-lh type-meta leading-none contain-layout contain-size data-past:scale-75"
+          class="inline-grid h-lh w-ch-2 place-items-center leading-none contain-layout contain-size type-meta num data-past:scale-75"
           data-past={count >= 100 || undefined}><MorphText text={shown} /></span
         >
       {:else}
@@ -243,11 +242,11 @@
       <span
         data-slot="chev"
         style:--icon-swap-dur="var(--duration-fast)"
-        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm swap-move swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown"
+        class="swap-gone col-start-1 row-start-1 inline-grid size-icon-sm swap-move place-items-center group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
           class={[
-            "size-full motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-out",
+            "size-full motion-safe:transition-[rotate] motion-safe:duration-(--duration-base) motion-safe:ease-out",
             open && "rotate-90",
           ]}
         /></span
@@ -259,7 +258,7 @@
        its way to its row (motion/branch). Unseen at rest. -->
   <span
     aria-hidden="true"
-    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
+    class="pointer-events-none absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 before:absolute before:inset-x-0 before:top-0 before:z-1 before:h-(--cast-h) before:translate-y-(--cast-y) before:bg-linear-to-b before:to-transparent before:from-mark-deck-cast after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen)"
     data-ride-skin
     style:--p="1"
     style:--shade-seen="calc(var(--p) * 0.2)"
@@ -279,7 +278,7 @@
     <span
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-1.5 rounded-pill bg-(--dot) pointer-events-none"
+      class="pointer-events-none absolute top-(--dot-off) right-(--dot-off) z-5 size-1.5 rounded-pill bg-(--dot)"
       style:--dot-off="calc(calc(var(--spacing) * 1.5) / -2)"
     ></span>
   {/if}
@@ -302,7 +301,7 @@
     <span
       aria-hidden="true"
       data-tree-mark-echo-box
-      class="absolute z-5 -inset-(--reach) pointer-events-none clip-path-(--echo-cut)"
+      class="pointer-events-none absolute -inset-(--reach) z-5 clip-path-(--echo-cut)"
       style:--reach={"round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px)"}
       style:--r="var(--radius-xs)"
       style:--side="calc(var(--size) - 2 * var(--r))"
@@ -312,7 +311,7 @@
     >
       <span
         data-slot="tile"
-        class="absolute inset-(--reach) grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none opacity-0"
+        class="absolute inset-(--reach) grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay opacity-0 group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none"
         data-echo
         data-echo-key={echoKey}
         data-echo-status={status}
@@ -326,7 +325,7 @@
       data-ping
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-1.5 rounded-pill bg-(--dot) pointer-events-none opacity-0"
+      class="pointer-events-none absolute top-(--dot-off) right-(--dot-off) z-5 size-1.5 rounded-pill bg-(--dot) opacity-0"
       data-echo
       data-echo-key={echoKey}
       data-echo-status={status}
@@ -348,7 +347,7 @@
       data-slot="hit"
       aria-expanded={open}
       aria-label={label}
-      class="focus-inset touch-hit select-none touch-callout-none absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
+      class="touch-hit absolute -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) z-4 rounded-xs focus-inset select-none touch-callout-none coarse:-bottom-(--reach) coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
       style:--reach="calc(calc(var(--spacing) * 1.5) / 2)"
       style:--hit-max={"var(--mark-hit-max, calc(var(--spacing-space-1) + var(--spacing-space-1)))"}
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}

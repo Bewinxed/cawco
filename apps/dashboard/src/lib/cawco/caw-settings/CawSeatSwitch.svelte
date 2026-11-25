@@ -42,13 +42,13 @@
      them. -->
 <div
   data-slot="caw-seat-switch"
-  class="grid grid-cols-auto-fluid items-center justify-items-start gap-x-space-2 gap-y-space-3 type-label text-ink-strong [&>*:not([data-slot=caw-seat]):not([data-glass])]:col-span-2"
+  class="grid grid-cols-auto-fluid items-center justify-items-start gap-x-space-2 gap-y-space-3 text-tx type-label [&>*:not([data-slot=caw-seat]):not([data-glass])]:col-span-2"
 >
   <CawSeat {lead} {projectId} {projectName} {size} />
   <BarGlass flare="end" form="group">
     <!-- The switch and its word on one line in the capsule, over the
          glass's join while the confirm hangs. -->
-    <span class="relative flex h-c-btn-h-sm items-center px-space-2">
+    <span class="relative flex h-control-sm items-center px-space-2">
       <CawLeadSwitch
         hang
         {label}

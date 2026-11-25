@@ -456,7 +456,7 @@
 {#snippet gallery(attachments: CommentAttachment[] | undefined)}
   {#if attachments?.length}
     <div
-      class="flex flex-wrap items-center gap-space-2 mt-space-2"
+      class="mt-space-2 flex flex-wrap items-center gap-space-2"
       data-gallery
       data-slot="chips"
     >
@@ -496,7 +496,7 @@
         ><!-- A box of its own (`data-box`), not the bar item's trimmed and
              padded words: a clamp's padding would show the top of a third
              line, and a trim round it would cut its first and last. --><span
-          class="line-clamp-2 text-pretty wrap-anywhere text-start text-tx type-body font-medium"
+          class="line-clamp-2 text-start font-medium text-pretty wrap-anywhere text-tx type-body"
           data-box>{name}</span
         ></BarItem
       >
@@ -691,7 +691,7 @@
      (Journey's recipe), and keeps a scrollbar's gutter, so an age at a
      line's end is never cut by its edge. -->
 <div
-  class="kit-edge-fade-block relative -mx-space-1 flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-space-1 scrollbar-gutter-stable data-whole:shrink-0"
+  class="kit-edge-fade-block relative -mx-space-1 flex min-h-0 min-w-0 flex-auto scrollbar-gutter-stable flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain px-space-1 data-whole:shrink-0"
   data-whole={squeezed || undefined}
   data-pin-room
   onscroll={readAt}
@@ -704,7 +704,7 @@
       class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
       {#if placing || goneLine}
-        <p class="m-0 min-w-0 text-ink-row" role="status">
+        <p class="m-0 min-w-0 text-tx" role="status">
           {placing ? said.placeHere : goneLine}
         </p>
       {/if}
@@ -727,7 +727,7 @@
     <!-- Resolved, and when: Reopen is the floating group's, said once. -->
     <p
       data-slot="resolved"
-      class="m-0 shrink-0 min-w-0 text-tx-2 type-meta num"
+      class="m-0 min-w-0 shrink-0 text-tx-2 type-meta num"
       role="status"
     >
       {said.resolvedAgo(resolvedAge)}
@@ -757,7 +757,7 @@
   <!-- The transcript's turns: a run of one speaker's entries is one turn
          (its later entries under the first's speaker line), the person's
          run one well. -->
-  <ol data-slot="thread" class="m-0 p-0 list-none">
+  <ol data-slot="thread" class="m-0 list-none p-0">
     {#each thread as entry, i (entry.id)}
       {@const grouped = thread[i - 1]?.by === entry.by}
       <li data-slot="entry" class="group/entry" data-by={entry.by}>
@@ -785,10 +785,10 @@
               <MessageBody source={entry.text} wrap="pretty" />
             {/if}
             {#if entry.files?.length}
-              <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
+              <p class="mx-0 mt-space-1 mb-0 flex flex-wrap gap-space-1">
                 {#each entry.files as file (file)}
                   <code
-                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-bg-2 type-code"
+                    class="min-w-0 rounded-xs bg-bg-2 px-space-1 py-0 wrap-anywhere type-code"
                     >{file}</code
                   >
                 {/each}

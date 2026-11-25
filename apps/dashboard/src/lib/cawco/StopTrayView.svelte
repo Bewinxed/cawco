@@ -75,7 +75,6 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconNeedsYou as Attention,
     IconCloudCross as Away,
@@ -88,6 +87,7 @@
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import {
+    appear,
     CURVE,
     crossfades,
     crossIn,
@@ -97,7 +97,6 @@
   } from "../platform/motion/curves.svelte";
   import { echoBeat } from "../platform/motion/echo.svelte";
   import { fold, refolds, unfold } from "../platform/motion/fold.svelte";
-  import { glyphIn, glyphOut } from "../platform/motion/glyph";
   import { morph } from "../platform/motion/morph.svelte";
   import { departBox, land } from "../platform/motion/share.svelte";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
@@ -381,7 +380,7 @@
           easing: CURVE.out,
           fill: "forwards",
         });
-      after(dur("--duration-panel"), () => {
+      after(dur("--duration-slow"), () => {
         arrive(row);
         pressConfirm();
       });
@@ -417,7 +416,7 @@
   /**
    * A tile has landed in the confirm: it takes the house press for one
    * beat, scaled to --press-scale and back on its own press's clock
-   * (button/press.ts: transform over --duration-toggle on --ease-out each
+   * (button/press.ts: transform over --duration-base on --ease-out each
    * way). The transform alone, and none with reduced motion.
    */
   function pressConfirm(): void {
@@ -432,7 +431,7 @@
         { scale: "var(--press-scale)", easing: CURVE.out },
         { scale: "1" },
       ],
-      { duration: dur("--duration-toggle") * 2 }
+      { duration: dur("--duration-base") * 2 }
     );
   }
 
@@ -442,7 +441,7 @@
   /** A line that changes height folds to it on the morph's clock. */
   const LINE_FOLD = {
     get ms() {
-      return dur("--duration-morph");
+      return dur("--duration-base");
     },
     easing: CURVE.drawer,
   };
@@ -734,15 +733,15 @@
           for={picks && choosing ? `${uid}-${row.s.id}` : undefined}
           data-slot="row"
           class={[
-            "group col-span-full grid min-h-(--row-compact-h) grid-cols-subgrid items-center py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap) text-ink-strong",
+            "group col-span-full grid min-h-row-compact grid-cols-subgrid items-center py-0 pr-space-2 pl-space-2 text-tx",
             picks && "rounded-sm",
-            picks && choosing && "hover:bg-surface-hover",
+            picks && choosing && "hover:bg-ui",
           ]}
           data-away={row.state === "away" || undefined}
         >
           <span
             data-slot="lead"
-            class="mark-line flex min-w-0 items-center gap-space-2"
+            class="flex min-w-0 items-center gap-space-2 mark-line"
             data-box
           >
             <TreeMark
@@ -758,7 +757,7 @@
             </TreeMark>
             <span
               data-slot="title"
-              class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-tx"
+              class="m-0 min-w-0 flex-auto overflow-clip text-balance text-ellipsis whitespace-nowrap text-tx type-label"
               ><span class="sr-only">{status.word}: </span>
               {#if shownAs.href && !(picks && choosing)}
                 <a
@@ -774,7 +773,7 @@
                own under the title. -->
           <span
             data-slot="status"
-            class="mark-line inline-flex items-center gap-space-1 text-base font-medium whitespace-nowrap text-tx-2 @max-sm/stop-tray:group-data-away:col-span-full @max-sm/stop-tray:group-data-away:row-start-2 @max-sm/stop-tray:group-data-away:ps-(--stat-away-indent) @max-sm/stop-tray:group-data-away:pb-space-1"
+            class="inline-flex items-center gap-space-1 mark-line text-base font-medium whitespace-nowrap text-tx-2 @max-sm/stop-tray:group-data-away:col-span-full @max-sm/stop-tray:group-data-away:row-start-2 @max-sm/stop-tray:group-data-away:ps-(--stat-away-indent) @max-sm/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
             style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-4)) + var(--spacing-space-2))"}
@@ -794,13 +793,13 @@
                  on the mark line; its word is the run it trims. -->
             <span
               class={[
-                "relative inline-block @max-stop-tray-rail/stop-tray:hidden",
-                status.tone === "failed" && "text-status-fail-ink",
+                "relative inline-block @max-xs/stop-tray:hidden",
+                status.tone === "failed" && "text-red",
               ]}
               data-box
             >
               {#key status.word}
-                <span class="mark-text block" in:crossIn out:crossOut
+                <span class="block mark-text" in:crossIn out:crossOut
                   >{status.word}</span
                 >
               {/key}
@@ -814,14 +813,14 @@
           </span>
           <span
             data-slot="num"
-            class="num type-meta text-end whitespace-nowrap text-tx-2 @max-sm/stop-tray:group-data-away:row-start-1 @max-sm/stop-tray:group-data-away:col-start-3 @max-xs/stop-tray:hidden"
+            class="text-end whitespace-nowrap text-tx-2 type-meta num @max-sm/stop-tray:group-data-away:col-start-3 @max-sm/stop-tray:group-data-away:row-start-1 @max-xs/stop-tray:hidden"
             >{trailOf(row)}</span
           >
           {#if picks}
             <!-- Settled through the stops: only checked rows stand then. -->
             <span
               data-slot="pick"
-              class="grid flex-none place-items-center @max-stop-tray/stop-tray:group-data-away:row-start-1 @max-stop-tray/stop-tray:group-data-away:col-start-4"
+              class="grid flex-none place-items-center @max-sm/stop-tray:group-data-away:col-start-4 @max-sm/stop-tray:group-data-away:row-start-1"
               data-box
             >
               <Checkbox
@@ -867,14 +866,14 @@
     aria-labelledby="{uid}-title"
     class={cn(
       "@container/stop-tray min-w-0 ps-(--ask-indent) pe-(--ask-end)",
-      look === "section" ? "py-space-1" : "py-(--row-compact-gap)",
+      look === "section" ? "py-space-1" : "py-space-2",
       className
     )}
     data-stop-tray={job.projectId}
     data-stop-kind={job.kind}
     data-phase={phase}
-    style:--ask-indent={look === "card" ? "var(--row-compact-gap)" : undefined}
-    style:--ask-end={look === "card" ? "var(--row-compact-gap)" : undefined}
+    style:--ask-indent={look === "card" ? "var(--spacing-space-2)" : undefined}
+    style:--ask-end={look === "card" ? "var(--spacing-space-2)" : undefined}
     in:unfold
     out:unfold
     {...rest}
@@ -891,7 +890,7 @@
       class={[
         "flex flex-col gap-space-3",
         look === "section" &&
-          "rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised",
+          "rounded-sm border border-ui bg-bg p-space-3 shadow-sm",
       ]}
       {@attach land(() => share)}
       {@attach morph()}
@@ -901,7 +900,7 @@
           <!-- Its words cross-fade where they stand as he is off. -->
           <p
             data-slot="title"
-            class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-tx"
+            class="m-0 min-w-0 flex-auto overflow-clip text-balance text-ellipsis whitespace-nowrap text-tx type-label"
             id="{uid}-title"
             {@attach crossfades(() => heading)}
           >
@@ -918,7 +917,7 @@
           <!-- A line of another height folds to it on the morph's clock. -->
           <p
             aria-live="polite"
-            class="m-0 type-meta text-pretty text-ink-muted data-empty:hidden"
+            class="m-0 text-pretty text-tx-2 type-meta data-empty:hidden"
             data-empty={description === "" || undefined}
             {@attach crossfades(() => description)}
             {@attach refolds(() => description, LINE_FOLD)}
@@ -936,7 +935,7 @@
           data-slot="list"
           class={[
             "flex min-w-0 flex-col gap-space-1",
-            look === "card" && "-mx-(--row-compact-gap)",
+            look === "card" && "-mx-space-2",
           ]}
           in:unfold
           out:unfold
@@ -949,15 +948,13 @@
               for="{uid}-all"
               data-slot="all"
               class={[
-                "mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end)",
-                choosing && "hover:bg-surface-hover",
+                "flex min-h-row-compact items-center gap-space-2 rounded-sm mark-line ps-space-2 pe-space-2",
+                choosing && "hover:bg-ui",
               ]}
               in:unfold
               out:unfold
             >
-              <span
-                data-box
-                class="min-w-0 flex-auto type-label text-ink-strong"
+              <span data-box class="min-w-0 flex-auto text-tx type-label"
                 >{cawOffWords.all(rows.length)}</span
               >
               <span
@@ -979,7 +976,7 @@
           <ul
             data-slot="sessions"
             aria-label={picks ? cawOffWords.list : "Running sessions"}
-            class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
+            class="kit-tree grid grid-cols-(--tray-cols) gap-x-space-2 overflow-x-clip clip-margin-space-2"
             data-roots="touch"
             style:--tray-cols={trayCols}
             {@attach echoBeat()}
@@ -1009,7 +1006,7 @@
              where it stands, holding its place, and Close fades in there. -->
         <span
           class={[
-            "inline-flex transition-[opacity] duration-(--duration-control) ease-out",
+            "inline-flex transition-[opacity] duration-(--duration-fast) ease-out",
             cancelLabel === null && "pointer-events-none opacity-0",
           ]}
           inert={cancelLabel === null}

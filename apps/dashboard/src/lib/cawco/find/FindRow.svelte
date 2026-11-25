@@ -76,7 +76,7 @@
 
 <div
   data-slot="slot"
-  class="relative flex flex-col flex-none"
+  class="relative flex flex-none flex-col"
   data-flip
   data-key={row.key}
   data-phone={phone || undefined}
@@ -88,7 +88,7 @@
   <button
     data-slot="row"
     {id}
-    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-ui data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-control-lg"
+    class="group/row relative box-border grid min-h-13 w-full cursor-default grid-cols-(--row-cols) grid-rows-(--row-rows) items-center gap-x-space-2 rounded-sm border-none border-current bg-transparent px-space-3 mark-line py-space-2 text-start outline-off select-none active:bg-ui data-peekable:pe-control-lg data-phone:min-h-14 data-phone:py-space-3"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-posinset={posinset}
@@ -115,7 +115,7 @@
   >
     <span
       data-slot="glyph"
-      class="loops grid place-items-center row-start-1 col-start-1 w-icon-md h-icon-lg text-status-idle-glyph data-breathes:breathe tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-box-start"
+      class="col-start-1 row-start-1 grid h-icon-lg w-icon-md place-items-center text-tx-2 loops group-data-phone/row:self-box-start data-breathes:breathe tone-attn:text-orange tone-fail:text-red tone-live:text-cyan"
       data-breathes={row.breathes ? "" : undefined}
       {@attach loopInStep}
       data-tone={row.state.tone}
@@ -132,25 +132,25 @@
     <span
       data-slot="title"
       data-box={phone || undefined}
-      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-tx group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
+      class="col-start-2 row-start-1 min-w-0 overflow-clip leading-icon-lg text-ellipsis whitespace-nowrap text-tx type-label group-data-phone/row:line-clamp-3 group-data-phone/row:overflow-clip group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:type-body group-data-phone/row:line-clamp-std-3"
       {@attach said(titleRuns, shown)}
     ></span>
     {#if ago}
       <span
         data-slot="num"
-        class="num row-start-1 col-start-3 type-meta leading-icon-lg text-tx-2 group-data-phone/row:self-box-start"
+        class="col-start-3 row-start-1 leading-icon-lg text-tx-2 type-meta num group-data-phone/row:self-box-start"
         aria-hidden="true">{ago}</span
       >
     {/if}
     {#if row.state.word || row.meta.length > 0}
       <span
         data-slot="meta"
-        class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-tx-2 group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
+        class="col-start-2 col-end-4 row-start-2 line-clamp-2 leading-icon-md text-tx-2 type-meta group-data-phone/row:leading-icon-md group-data-phone/row:font-normal group-data-phone/row:type-label"
         aria-hidden="true"
         data-box
       >
         <span
-          class="font-medium text-tx-2 tone-live:text-cyan tone-attn:text-orange tone-fail:text-red"
+          class="font-medium text-tx-2 tone-attn:text-orange tone-fail:text-red tone-live:text-cyan"
           data-tone={row.state.tone}>{row.state.word}</span
         >
         {#each row.meta as word (word)}
@@ -164,7 +164,7 @@
            column. -->
       <span
         data-slot="reason"
-        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-4 text-tx-2 group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
+        class="col-start-2 col-end-4 row-start-3 min-w-0 overflow-clip leading-space-4 text-ellipsis whitespace-nowrap text-tx-2 type-meta group-data-phone/row:line-clamp-2 group-data-phone/row:overflow-clip group-data-phone/row:leading-icon-md group-data-phone/row:font-normal group-data-phone/row:whitespace-normal group-data-phone/row:type-label group-data-phone/row:line-clamp-std-2"
         aria-hidden="true"
         data-box
         {@attach said(row.reason.parts, shown, {
@@ -176,7 +176,7 @@
   </button>
   {#if peekable}
     <button
-      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-control-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-tx-2 active:bg-ui"
+      class="group/disclose absolute inset-y-0 end-0 grid min-h-0 w-control-lg place-items-center rounded-sm border-none border-current bg-transparent p-0 text-tx-2 select-none active:bg-ui"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}
@@ -187,7 +187,7 @@
       type="button"
     >
       <ChevronDown
-        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+        class="size-icon-md group-aria-expanded/disclose:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
       />
     </button>
   {/if}

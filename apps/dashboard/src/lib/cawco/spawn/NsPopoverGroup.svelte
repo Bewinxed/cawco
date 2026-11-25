@@ -277,7 +277,7 @@
                        unseen and unrendered, its layout kept. -->
                   <!-- The one shown clips at the surface's inset (`clip-margin`,
                        the surface's own padding): its rows enter rising from
-                       below (`ns-in`, --pop-rise), and the last row's lift
+                       below (`ns-in`, --spacing-space-2), and the last row's lift
                        reached past the inset into the surface's scrollable
                        overflow, a scrollbar standing for the entry and going
                        as it landed, the rows shifting with it. -->

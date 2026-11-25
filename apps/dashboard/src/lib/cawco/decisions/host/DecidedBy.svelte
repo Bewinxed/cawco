@@ -13,7 +13,7 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-space-1" data-slot="decided-by">
-  <p class="type-meta max-w-c-measure text-pretty text-ink-muted">
+  <p class="max-w-measure text-pretty text-tx-2 type-meta">
     {decidedByLine(settled)}
   </p>
   {#if settled.sources.length > 0}
@@ -29,15 +29,13 @@
         <li class="min-w-0">
           {#if shown.href}
             <a
-              class="type-meta wrap-anywhere text-link-ink"
+              class="wrap-anywhere text-accent type-meta"
               href={shown.href}
               rel="noreferrer"
               target="_blank">{shown.label}</a
             >
           {:else}
-            <span class="type-meta wrap-anywhere text-ink-muted"
-              >{shown.label}</span
-            >
+            <span class="wrap-anywhere text-tx-2 type-meta">{shown.label}</span>
           {/if}
         </li>
       {/each}

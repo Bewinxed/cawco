@@ -84,9 +84,9 @@
   class="col-span-full grid grid-cols-subgrid gap-y-space-2"
 >
   <div class="col-span-full grid min-w-0">
-    <span class="type-label font-medium text-ink-strong">{named.name}</span>
+    <span class="font-medium text-tx type-label">{named.name}</span>
     {#if "what" in named}
-      <span class="type-meta text-ink-muted text-pretty">{named.what}</span>
+      <span class="text-pretty text-tx-2 type-meta">{named.what}</span>
     {/if}
   </div>
   <div class="col-span-full grid grid-cols-subgrid">
@@ -116,7 +116,7 @@
   {#if refused}
     <p
       data-slot="refused"
-      class="col-span-full m-0 type-meta text-error-11"
+      class="col-span-full m-0 text-red type-meta"
       role="alert"
     >
       {refused}

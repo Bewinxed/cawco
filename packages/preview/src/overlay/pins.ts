@@ -139,7 +139,7 @@ const DRAFT_PIN = "draft";
  * Each value a token gives is a custom property its layer carries
  * ({@link varsOf}); each row's point is its own (`--cawco-pin-x`,
  * `--cawco-pin-y`, percentages of its element's box from its start
- * sides). The ring is 2px (`--radius-hair` the tail's corner), the
+ * sides). The ring is 2px (`--radius-xs` the tail's corner), the
  * finger's hit area 44px.
  */
 const PILL_SHEET = `
@@ -744,16 +744,16 @@ export function startPins(deps: PinsDeps): Pins {
     const read = chrome.tokens({
       action: ["--color-accent"],
       onAction: ["--color-on-accent"],
-      raised: ["--color-surface-raised"],
-      recessed: ["--color-surface-pressed"],
-      strong: ["--color-ink-strong"],
-      focus: ["--color-focus-ring"],
-      shadow: ["--color-shadow-tint"],
-      dot: ["--color-status-live-glyph"],
-      attn: ["--color-status-attn-glyph"],
-      font: ["--type-label", "font"],
-      height: ["--spacing-c-pin", "width"],
-      pad: ["--spacing-c-pin-pad", "width"],
+      raised: ["--color-bg"],
+      recessed: ["--color-ui-2"],
+      strong: ["--color-tx"],
+      focus: ["--color-accent"],
+      dot: ["--color-cyan"],
+      attn: ["--color-orange"],
+      fontFamily: ["--font-sans", "font-family"],
+      fontSize: ["--text-base", "font-size"],
+      height: ["--spacing-row-compact", "width"],
+      pad: ["--spacing-space-2", "width"],
       gap: ["--spacing-space-1", "width"],
       inset: ["--spacing-space-2", "width"],
       loop: ["--duration-loop", "transition-duration"],
@@ -776,7 +776,7 @@ export function startPins(deps: PinsDeps): Pins {
       font: `500 ${read.fontSize || "14px"} ${read.fontFamily || "sans-serif"}`,
       height: Number.parseFloat(read.height) || 28,
       pad: Number.parseFloat(read.pad) || 8,
-      gap: Number.parseFloat(read.gap) || 4,
+      gap,
       inset: Number.parseFloat(read.inset) || 8,
       dotSize: gap * 1.5,
       dotCut: gap * 0.375,

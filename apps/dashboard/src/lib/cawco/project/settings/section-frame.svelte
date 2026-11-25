@@ -14,7 +14,7 @@
     $props();
 </script>
 
-<div class="max-w-c-settings-col p-space-4" data-grid="4px">
+<div class="max-w-137 p-space-4">
   <SettingsSection id={section} state="settled" title={words.sections[section]}>
     {@render children()}
   </SettingsSection>

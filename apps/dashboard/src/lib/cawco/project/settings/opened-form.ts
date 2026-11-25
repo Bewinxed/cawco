@@ -10,10 +10,10 @@
 
 /** The opened form's surface and its fields' rhythm. */
 export const OPENED_FORM =
-  "flex min-w-0 flex-col gap-space-5 rounded-md border border-border-hairline bg-surface-raised p-space-4 shadow-raised";
+  "flex min-w-0 flex-col gap-space-4 rounded-sm border border-ui bg-bg p-space-4 shadow-sm";
 
 /** One field: its label over its control. */
 export const FORM_FIELD = "flex min-w-0 flex-col gap-space-2";
 
 /** A field's label, where its control is a group (a radiogroup takes no `<label>`); a text field's is Field's own. */
-export const FORM_LABEL = "m-0 type-meta text-ink-muted";
+export const FORM_LABEL = "m-0 type-meta text-tx-2";

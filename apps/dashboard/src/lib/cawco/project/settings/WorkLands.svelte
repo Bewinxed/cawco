@@ -32,7 +32,7 @@
 
 {#snippet glyph(landing: LandsMode)}
   {@const Glyph = GLYPHS[landing]}
-  <Glyph aria-hidden="true" class="size-icon-md text-ink-muted" />
+  <Glyph aria-hidden="true" class="size-icon-md text-tx-2" />
 {/snippet}
 
 <div class="flex min-w-0 flex-col gap-space-1">

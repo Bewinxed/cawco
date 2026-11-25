@@ -205,8 +205,7 @@ function flushRound(base: Base, head: boolean): string {
 
 /**
  * An edge the box draws on a pseudo-element inside it, showing now: a hung
- * card's on `::after`, a field's focus edge on its touch area's `::before`
- * (design.css `field-edge`) while the field has focus.
+ * card's on `::after`.
  */
 function drawnEdge(box: HTMLElement): CSSStyleDeclaration | null {
   for (const pseudo of ["::after", "::before"]) {

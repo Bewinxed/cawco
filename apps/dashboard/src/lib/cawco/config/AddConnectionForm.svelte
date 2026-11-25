@@ -73,19 +73,19 @@
   data-slot="add"
   aria-label={words.signInService(service.label)}
   class={cn(
-    "mb-space-4 flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised",
+    "mb-space-4 flex max-w-measure flex-col gap-space-3 rounded-sm border border-ui bg-bg p-space-3 shadow-sm",
     className
   )}
   {onsubmit}
   transition:unfold
 >
-  <p class="mark-line type-label flex items-center gap-space-2 text-ink-strong">
+  <p class="flex items-center gap-space-2 mark-line text-tx type-label">
     <ProviderLogo class="flex-none" provider={service.service} />
     <span>{words.signInService(service.label)}</span>
   </p>
   {#if service.ways.length > 1}
     <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
-      <p class="type-meta text-ink-muted">{words.signsInWith}</p>
+      <p class="text-tx-2 type-meta">{words.signsInWith}</p>
       <Choice
         label={words.signsInWith}
         onchange={onway}
@@ -96,10 +96,7 @@
         value={way?.label ?? ""}
       />
       {#if way}
-        <p
-          class="max-w-c-measure type-meta text-pretty text-ink-muted"
-          data-way-says
-        >
+        <p class="max-w-measure text-pretty text-tx-2 type-meta" data-way-says>
           {way.says}
         </p>
       {/if}
@@ -177,7 +174,7 @@
   {#if secretAskedAgain && way && (way.auth === "bearer" || (way.auth === "app" && service.service !== "github"))}
     <p
       data-slot="secret-again"
-      class="type-meta max-w-c-measure text-pretty text-ink-muted"
+      class="max-w-measure text-pretty text-tx-2 type-meta"
       transition:unfold
     >
       {words.secretNotKept}
@@ -186,7 +183,7 @@
   {#if problem}
     <p
       data-slot="add-problem"
-      class="type-meta wrap-anywhere text-status-fail-ink"
+      class="wrap-anywhere text-red type-meta"
       role="alert"
       transition:unfold
     >
@@ -203,7 +200,6 @@
     />
     {#if way?.auth !== "gh"}
       <Button
-        press="pressable"
         label={words.signIn}
         {pending}
         pendingLabel={words.signingIn}

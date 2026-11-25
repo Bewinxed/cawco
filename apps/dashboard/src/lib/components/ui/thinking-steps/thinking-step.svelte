@@ -128,10 +128,10 @@
     aria-hidden="true"
     class="pointer-events-none absolute inset-0 overflow-hidden"
     ><span
-      class="loops absolute inset-y-0 start-0 text-ink-strong sheen-band animate-thinking-sheen"
+      class="absolute inset-y-0 start-0 animate-thinking-sheen sheen-band text-tx loops"
       data-slot="sheen"
       ><span
-        class="loops block w-1/3 animate-thinking-sheen-hold"
+        class="block w-1/3 animate-thinking-sheen-hold loops"
         data-slot="sheen-word">{text}</span
       ></span
     ></span
@@ -191,7 +191,7 @@
              breaks where it must, as the description does. -->
         <span
           data-slot="thinking-step-label"
-          class="relative font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-ink-muted"
+          class="relative font-normal wrap-anywhere text-tx transition-control motion-safe:not-status-ahead:data-shimmer:text-tx-2 status-ahead:text-tx-2"
           data-shimmer={status === "active" || undefined}
           data-status={status}
           >{label}{#if status === "active" && motionOk.current}{@render light(
@@ -214,7 +214,7 @@
         </div>
       {:else if description}
         <span
-          class="relative wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-ink-muted"
+          class="relative wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-tx-2"
           data-shimmer={(!label && status === "active") || undefined}
           >{description}{#if !label && status === "active" && motionOk.current}{@render light(
               description

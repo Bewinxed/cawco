@@ -54,7 +54,7 @@
 <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the frame's area. -->
 <div
   class={cn(
-    "hitbox pointer-coarse:hitbox:touch-area [--hit-edge:1px]",
+    "hitbox [--hit-edge:1px] pointer-coarse:hitbox:touch-area",
     "relative flex h-9 w-full min-w-0 items-center rounded-sm",
     // Its fill, edge and states are the control surface's (theme.css
     // `control-field`), drawn on the frame; its own input draws none.
@@ -79,12 +79,11 @@
     // A value's frame is dragged across: every part of it says so to the
     // pointer until its field holds the caret, a horizontal drag is the
     // frame's under a finger (a vertical one still scrolls), and its edge
-    // steps up under the pointer and through a drag: the focus edge's ring
-    // (`field-edge`), faded in on the compositor.
+    // steps up under the pointer and through a drag (`control-drag-edge`).
     share !== undefined &&
-      "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100 data-dragging:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100",
+      "isolate cursor-ew-resize touch-pan-y control-drag-edge not-focus-within:[&_*]:cursor-ew-resize",
     look === "bar" &&
-      "control-glass h-control-md rounded-pill glass-backdrop contrast-more:backdrop-filter-none reduced-transparency:backdrop-filter-none",
+      "contrast-more:backdrop-filter-none reduced-transparency:backdrop-filter-none h-control-md rounded-pill glass-backdrop control-glass",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className
@@ -100,13 +99,13 @@
     <!-- The share's fill, clipped to the frame's inside by a box laid over
          the frame's border box with a clear border of the frame's width: its
          inside is the frame's, on the frame's inner radius. The frame clips
-         nothing itself, or it would clip its focus edge (`field-edge`). -->
+         nothing itself. -->
     <span
       aria-hidden="true"
       class="pointer-events-none absolute -inset-px -z-1 overflow-clip rounded-inherit border border-transparent"
     >
       <span
-        class="absolute inset-y-0 start-0 w-(--share) bg-surface-fill transition-control"
+        class="absolute inset-y-0 start-0 w-(--share) bg-ui transition-control"
         data-slot="input-group-share"
         style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
       ></span>

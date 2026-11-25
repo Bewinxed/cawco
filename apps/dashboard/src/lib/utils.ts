@@ -68,9 +68,14 @@ const twMergeConfig = {
     classGroups: {
       "font-size": ["text-input-floor"],
       "bg-image": [{ bg: utilities("bg") }],
-      // The theme's transition tokens, and app.css's `transition-off`.
+      // The theme's transition utilities, and app.css's `transition-off`.
       transition: [{ transition: [...utilities("transition"), "off"] }],
-      animate: ["sheet-fade"],
+      animate: [
+        "sheet-fade",
+        "animate-fade-out",
+        "animate-rise-in",
+        "animate-rise-out",
+      ],
       content: [{ content: ["data-n", "placeholder"] }],
       "grid-rows": [{ "grid-rows": ["shut", "open"] }],
       "grid-cols": [{ "grid-cols": ["fluid-auto"] }, "rows-grid", "row-cells"],

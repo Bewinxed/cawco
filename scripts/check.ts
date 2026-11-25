@@ -613,8 +613,6 @@ const gated: Gated[] = [
   bun("scripts/browser-image-check.ts"),
   bun("scripts/fixed-ports-check.ts"),
   bun("scripts/border-width-check.ts"),
-  // A screen on the 4px base re-declares every token built from its bases.
-  bun("scripts/grid-scope-check.ts"),
   bun("scripts/patched-dependencies-check.ts"),
   // Each Biome plugin reports its planted mistakes and nothing else.
   bun("scripts/lint/biome-plugins.ts"),

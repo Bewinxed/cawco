@@ -148,7 +148,7 @@
   });
 
   /**
-   * His slot opens and closes over --duration-panel on --ease-in-out as he comes
+   * His slot opens and closes over --duration-slow on --ease-in-out as he comes
    * and goes; the capsule beside it slides with its width.
    */
   function slot(node: HTMLElement) {
@@ -247,7 +247,7 @@
 
 <header
   data-slot="project-head"
-  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-12 pt-space-6 pe-space-6 pb-space-4 ps-space-6 max-desk:pt-space-4 max-desk:pe-space-4 max-desk:pb-space-3 max-desk:ps-space-4"
+  class="flex min-h-12 flex-none flex-nowrap items-center gap-x-space-4 ps-space-6 pe-space-6 pt-space-6 pb-space-4 max-desk:ps-space-4 max-desk:pe-space-4 max-desk:pt-space-4 max-desk:pb-space-3"
 >
   <!-- Leading: the name, then the place. The pair is as wide as it holds
        and gives way first: the name ends in its ellipsis before anything
@@ -279,7 +279,7 @@
       {:else}
         <button
           data-slot="name"
-          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui focus-visible:-outline-offset-2"
+          class="block max-w-full cursor-text overflow-hidden rounded-xs border border-transparent press-tint bg-transparent px-space-1 text-start text-ellipsis text-inherit transition-[background-color] duration-(--duration-fast) ease-out font-inherit select-none hover:bg-ui focus-visible:-outline-offset-2"
           onclick={editName}
           title="Rename {project.name}"
           type="button"
@@ -490,6 +490,6 @@
     at={endAt}
     opener={() => more}
     projectId={project.id}
-    class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-4"
+    class="max-w-128 tray-indent-space-6 max-desk:tray-indent-space-4"
   />
 </div>

@@ -39,12 +39,12 @@
       class={cn(
         /* Solid ink, never coral (DESIGN.md, Tooltip): the ink fill, the text
          on it, meta type, 8px radius. A tooltip that waited its delay fades in
-         over --duration-fade settling `--tip-rise` toward its trigger
+         over --duration-base settling `--tip-rise` toward its trigger
          (`--kit-tip-from`, by its side); one opened while another has just been
          open (bits-ui's `instant-open`), from the keyboard or by a tap stands at
          once, as does every leaving, so moving on is never held up. With
          reduced motion only the first one's fade runs. */
-        "type-meta rounded-sm bg-ink-strong text-on-ink [--kit-tip-from:0_var(--tip-rise)] data-[state=delayed-open]:animate-tip-fade motion-safe:data-[state=delayed-open]:animate-tip-in data-[side=bottom]:[--kit-tip-from:0_calc(-1*var(--tip-rise))] data-[side=left]:[--kit-tip-from:var(--tip-rise)_0] data-[side=right]:[--kit-tip-from:calc(-1*var(--tip-rise))_0]",
+        "rounded-sm bg-tx text-bg type-meta [--kit-tip-from:0_2px] data-[side=bottom]:[--kit-tip-from:0_calc(-1*2px)] data-[side=left]:[--kit-tip-from:2px_0] data-[side=right]:[--kit-tip-from:calc(-1*2px)_0] data-[state=delayed-open]:animate-fade-in motion-safe:data-[state=delayed-open]:animate-tip-in",
         "z-(--layer-float) inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
         className
       )}

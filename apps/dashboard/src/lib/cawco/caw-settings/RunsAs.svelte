@@ -240,7 +240,7 @@
   /**
    * A field's reset comes and goes in place: it widens from nothing beside
    * its chip (the field's gap with it), growing from the pop scale as it
-   * fades in (--duration-pop), and folds back the same way at the exit
+   * fades in (--duration-slow), and folds back the same way at the exit
    * tier, so the chip beside it eases to its new width instead of jumping.
    */
   function widen(
@@ -250,7 +250,7 @@
   ): TransitionConfig {
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         css: (t) => `opacity: ${t}`,
       };
     }
@@ -264,7 +264,9 @@
         getComputedStyle(node).getPropertyValue("--pop-scale")
       ) || 0.96;
     return {
-      duration: dur(direction === "out" ? "--duration-exit" : "--duration-pop"),
+      duration: dur(
+        direction === "out" ? "--duration-base" : "--duration-slow"
+      ),
       easing: easeDrawer,
       css: (t) =>
         `overflow: hidden; inline-size: ${(t * width).toFixed(2)}px; margin-inline-start: ${((t - 1) * gap).toFixed(2)}px; opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
@@ -459,7 +461,7 @@
       ><HarnessLogo {harness} /></span
     >
   {:else}
-    <IconCpuBolt class="text-ink-subtle" />
+    <IconCpuBolt class="text-tx-2" />
   {/if}
 {/snippet}
 
@@ -475,7 +477,7 @@
       style:--hue={look.hue}><Icon /></span
     >
   {:else}
-    <IconShield class="text-ink-subtle" />
+    <IconShield class="text-tx-2" />
   {/if}
   <span class={glyphOnly ? "sr-only" : undefined} data-slot="chip-label"
     >{modeName}</span

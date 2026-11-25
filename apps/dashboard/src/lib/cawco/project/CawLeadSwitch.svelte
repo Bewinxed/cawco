@@ -166,13 +166,10 @@
       }}
       open={standing}
     >
-      <BarCard
-        class="w-c-panel-w"
-        frame="settings"
-        label={cawOffWords.ask(projectName)}
-      >
-        <!-- The card's own inset: the settings frame draws none. -->
-        <div class="p-c-floating-pad">
+      <BarCard frame="settings" label={cawOffWords.ask(projectName)}>
+        <!-- The card's own inset and width: the settings frame draws none
+             and takes what it holds. -->
+        <div class="w-95 p-space-2">
           <StopTray job={offJob} look="card" />
         </div>
       </BarCard>
@@ -205,7 +202,7 @@
   <!-- A refusal is said under the switch it answers (the place last
        flipped), so his seat and his settings, both drawn, say it once. -->
   {#if lead.refused && (lead.flippedAt ?? cawOffAt(projectId)) === at}
-    <p data-slot="refused" class="type-meta text-error-11" role="alert">
+    <p data-slot="refused" class="text-red type-meta" role="alert">
       {lead.refused}
     </p>
   {/if}

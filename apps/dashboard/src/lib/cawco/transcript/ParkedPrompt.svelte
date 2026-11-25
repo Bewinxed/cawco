@@ -347,7 +347,7 @@
   );
   /** The part classes every part of the card comes up with (Prompt's). */
   const PART =
-    "opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)";
+    "opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)";
 </script>
 
 <!-- What the card hands its options to draw: each Option node, as the page's renderer draws it. -->
@@ -375,11 +375,11 @@
 >
   <h2
     class={[
-      "mark-line mb-space-2 flex items-center gap-space-2 text-size-label font-medium text-ink-strong",
+      "mb-space-2 flex items-center gap-space-2 mark-line text-base font-medium text-tx",
       PART,
     ]}
     style:--part="0"
-    style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+    style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
   >
     <span
       aria-hidden="true"
@@ -430,11 +430,11 @@
     data-slot="body"
     bind:this={body}
     style:--part="1"
-    style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+    style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
   >
     {#if item.kind === "directions"}
       <p
-        class="mb-space-3 max-w-c-measure type-body text-pretty text-ink-strong wrap-anywhere"
+        class="mb-space-3 max-w-measure text-pretty wrap-anywhere text-tx type-body"
         data-slot="lede"
         id="parked-{item.artifact.id}-ask"
       >
@@ -459,7 +459,7 @@
         }
       >
         <div
-          class="grid w-full min-w-0 grid-cols-1 gap-x-space-3 gap-y-space-5 @min-[34rem]/parked:grid-cols-(--directions) @min-[34rem]/parked:gap-y-space-2"
+          class="grid w-full min-w-0 grid-cols-1 gap-x-space-3 gap-y-space-4 @min-[34rem]/parked:grid-cols-(--directions) @min-[34rem]/parked:gap-y-space-2"
           data-slot="directions"
           style:--directions="repeat({item.directions.length}, minmax(0, 1fr))"
         >
@@ -487,7 +487,7 @@
                 </OptionGroupItem>
               </div>
               <label
-                class="min-w-0 max-w-c-measure type-meta text-pretty text-ink-muted wrap-anywhere"
+                class="max-w-measure min-w-0 text-pretty wrap-anywhere text-tx-2 type-meta"
                 for="parked-{item.artifact.id}-{at}"
                 id="parked-{item.artifact.id}-{at}-line">{direction.line}</label
               >
@@ -503,7 +503,7 @@
          nothing under the thumb moves as the line opens (Prompt's browser
          ask). -->
     <div
-      class="mt-space-3 flex h-c-input-h min-w-0 items-center gap-space-2"
+      class="mt-space-3 flex h-control-md min-w-0 items-center gap-space-2"
       data-slot="other"
     >
       <OptionGroup
@@ -538,18 +538,18 @@
     class={["flex-none pt-space-2", PART]}
     data-slot="foot"
     style:--part="2"
-    style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+    style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
   >
     {#if elsewhere}
       <p
-        class="mb-space-2 type-meta text-ink-muted"
+        class="mb-space-2 text-tx-2 type-meta"
         data-slot="elsewhere"
         role="status"
       >
         {elsewhere}
       </p>
     {:else if refused}
-      <p class="mb-space-2 type-meta text-status-fail-ink" role="alert">
+      <p class="mb-space-2 text-red type-meta" role="alert">
         {NOT_KEPT[writing](refused)}
       </p>
     {/if}

@@ -177,12 +177,9 @@
 
 {#snippet largeFilesGlyph(kind: "own" | "declared")}
   {#if kind === "own"}
-    <IconFolderGit aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconFolderGit aria-hidden="true" class="size-icon-md text-tx-2" />
   {:else}
-    <IconLargeFilesServer
-      aria-hidden="true"
-      class="size-icon-md text-ink-muted"
-    />
+    <IconLargeFilesServer aria-hidden="true" class="size-icon-md text-tx-2" />
   {/if}
 {/snippet}
 
@@ -213,7 +210,7 @@
       transition:unfold
     >
       <form class="hidden" id="{uid}-lfs-form" onsubmit={saveLargeFiles}></form>
-      <p class="m-0 type-label text-ink-strong">
+      <p class="m-0 text-tx type-label">
         {words.places.largeFilesDeclared.name}
       </p>
       <Field id="{uid}-lfs-url" label={words.places.largeFilesAddress}>
@@ -251,11 +248,11 @@
               {#each keys as conn (conn.name)}
                 <OptionGroupItem value={conn.name}>
                   <span
-                    class="mark-line flex min-w-0 items-center gap-x-space-2"
+                    class="flex min-w-0 items-center gap-x-space-2 mark-line"
                   >
                     <IconKey
                       aria-hidden="true"
-                      class="size-icon-sm flex-none text-ink-muted"
+                      class="size-icon-sm flex-none text-tx-2"
                     />
                     <span>{conn.name}</span>
                   </span>
@@ -272,12 +269,12 @@
             type="button"
           >
             <span
-              class="mark-line flex min-w-0 items-center gap-x-space-2"
+              class="flex min-w-0 items-center gap-x-space-2 mark-line"
               data-box
             >
               <IconPlus
                 aria-hidden="true"
-                class="size-icon-sm flex-none text-ink-muted"
+                class="size-icon-sm flex-none text-tx-2"
                 data-box
               />
               <span>{words.places.addKey}</span>

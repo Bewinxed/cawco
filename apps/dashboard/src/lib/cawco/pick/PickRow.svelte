@@ -105,7 +105,7 @@
   >
     <span
       data-slot="name"
-      class="min-w-0 truncate type-label text-tx group-aria-disabled:opacity-50 group-data-limited:text-tx-2"
+      class="min-w-0 truncate text-tx type-label group-aria-disabled:opacity-50 group-data-limited:text-tx-2"
       ><bdi>{name}</bdi></span
     >
     {#if detail && meter}
@@ -113,7 +113,7 @@
            and its figure one unit, the ring a word space from the words. -->
       <span
         data-slot="detail"
-        class="mark-line flex min-w-0 items-center gap-word type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink"
+        class="flex min-w-0 items-center gap-word mark-line text-tx-2 tabular-nums type-meta group-data-limited:text-orange"
       >
         <span class="flex-none" data-box
           ><UsageRing share={meter.share} state={meter.state} /></span
@@ -125,7 +125,7 @@
     {:else if detail}
       <span
         data-slot="detail"
-        class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
+        class="min-w-0 truncate text-tx-2 tabular-nums type-meta group-data-limited:text-orange data-mono:font-(family-name:--font-mono)"
         data-mono={mono || undefined}>{detail}</span
       >
     {/if}

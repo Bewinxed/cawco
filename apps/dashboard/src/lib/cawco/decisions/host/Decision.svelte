@@ -444,7 +444,7 @@
 <!-- `data-bare`: it stands in a surface of its own (the composer's), which draws its edge, fill and padding, and writes its picks through its host: it carries no `data-cawco-choice`, so a page's overlay round that surface (the design graph's stage) never stores a press on it as the page's own pick. -->
 <article
   {@attach morph()}
-  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-modal bg-surface-raised p-(--card-in) shadow-tile data-bare:gap-space-4 data-bare:rounded-none data-bare:bg-transparent data-bare:p-0 data-bare:shadow-none"
+  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-4 rounded-xl bg-bg p-(--card-in) shadow-sm data-bare:gap-space-4 data-bare:rounded-none data-bare:bg-transparent data-bare:p-0 data-bare:shadow-none"
   data-bare={host.bare || undefined}
   data-cawco-choice={host.bare ? undefined : id}
   data-cawco-multiple={multiple && !host.bare ? "" : undefined}
@@ -453,7 +453,7 @@
 >
   <header class="flex min-w-0" data-slot="decision-head">
     <h2
-      class="type-title min-w-0 max-w-c-measure flex-1 text-balance text-ink-strong wrap-anywhere group-data-bare/card:type-body group-data-bare/card:font-medium"
+      class="max-w-measure min-w-0 flex-1 type-title text-balance wrap-anywhere text-tx group-data-bare/card:font-medium group-data-bare/card:type-body"
     >
       <Words text={question} />
     </h2>
@@ -491,7 +491,7 @@
     {/if}
     {#if from}
       <p
-        class="type-meta max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        class="max-w-measure text-pretty wrap-anywhere text-tx-2 type-meta"
         data-slot="picked-from"
       >
         {pickedFromYourLine(from)}
@@ -511,7 +511,7 @@
       <div bind:this={noteField}>
         <div class="flex flex-col gap-space-2">
           <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview overlay/fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
-          <span class="type-label text-tx-2" id={`decision-${id}-note-label`}
+          <span class="text-tx-2 type-label" id={`decision-${id}-note-label`}
             >Note</span
           >
           <Textarea
@@ -531,7 +531,7 @@
     </div>
     {#if advice}
       <p
-        class="type-body max-w-measure text-pretty text-tx-2 wrap-anywhere"
+        class="max-w-measure text-pretty wrap-anywhere text-tx-2 type-body"
         data-slot="why"
       >
         <Words text={advice} />

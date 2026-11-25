@@ -46,3 +46,4 @@
 <p in:fade>Svelte's defaults</p>
 <p out:fade={{ duration: dur("--duration-exit") }}>Svelte's curve</p>
 <p in:fade={{ duration: dur("--duration-fade"), easing: easeOut }}>House</p>
+<div class="pt-[calc(--spacing(2)+1px)]"></div>

@@ -234,7 +234,7 @@
 
 {#snippet feedbackPick()}
   <div class="flex min-w-0 flex-col gap-space-2">
-    <p class="m-0 type-body text-pretty text-ink-strong">
+    <p class="m-0 text-pretty text-tx type-body">
       {usabilityFeedbackWords.question}
     </p>
     <FeedbackOptions
@@ -267,7 +267,7 @@
       status={steps.machine.state === "todo" ? "sleeping" : "ready"}
     />
     {#if arrived && machineName}
-      <figcaption class="type-body text-center text-tx-2">
+      <figcaption class="text-center text-tx-2 type-body">
         {firstRunWords.arrived(machineName)}
       </figcaption>
     {/if}
@@ -279,11 +279,11 @@
     class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-bg p-space-4 shadow-sm"
     style:--row-cols="var(--spacing-row-compact) minmax(0, 1fr)"
   >
-    <span class="mark-cell row-span-2"
+    <span class="row-span-2 mark-cell"
       ><IconFolder aria-hidden="true" class="size-icon-md text-tx-2" /></span
     >
-    <h2 class="m-0 type-label text-tx">{firstRunWords.title}</h2>
-    <span class="type-meta num text-tx-2"
+    <h2 class="m-0 text-tx type-label">{firstRunWords.title}</h2>
+    <span class="text-tx-2 type-meta num"
       >{firstRunWords.meta(doneCount, list.length)}</span
     >
     <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
@@ -307,13 +307,13 @@
             <span
               data-slot="step-note"
               class={[
-                "col-start-2 min-w-0 type-meta wrap-anywhere",
+                "col-start-2 min-w-0 wrap-anywhere type-meta",
                 (one.id === "harness" && steps.harness.state === "failed") ||
                 (one.id === "helpers" && steps.ownToolsFaults.helpers) ||
                 (one.id === "step-lists" && steps.ownToolsFaults.stepLists) ||
                 (one.id === "feedback" && steps.feedback.fault)
-                  ? "text-status-fail-ink"
-                  : "text-ink-muted",
+                  ? "text-red"
+                  : "text-tx-2",
               ]}>{one.note}</span
             >
           {/if}

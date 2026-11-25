@@ -45,7 +45,7 @@
 
 <SectionFrame problem={unread} ready={read || unread !== null} {section}>
   {#if read}
-    <div class="flex max-w-c-measure flex-col gap-space-3" data-slot="feedback">
+    <div class="flex max-w-measure flex-col gap-space-3" data-slot="feedback">
       <SectionHeader
         hue={section.hue}
         icon={section.icon}

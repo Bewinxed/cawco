@@ -2,7 +2,7 @@
  * A field's change of height, drawn on the compositor (the kit Textarea's
  * and the composer's autosize: motion/autosize `cut`). The field is laid
  * out at its new height in the frame the change lands in, once, and what
- * the eye sees moves on the target's clock (`--duration-control` on
+ * the eye sees moves on the target's clock (`--duration-fast` on
  * `--ease-out` unless it names another):
  *
  * - its box is cut by its clip from where its edge was drawn to where it now
@@ -73,7 +73,7 @@ export interface GrowTarget {
   /**
    * The change's duration and easing, asked as each change starts (the
    * composer's: a line, a fold, the recall wheel settling). Without one,
-   * `--duration-control` on `--ease-out`.
+   * `--duration-fast` on `--ease-out`.
    */
   clock?: () => { easing: string; ms: number };
   /**
@@ -489,7 +489,7 @@ export function growCut(target: () => GrowTarget | null) {
     const settled = placesOf(start.places.keys());
     const lookHeight = look.offsetHeight;
     const { ms, easing } = start.target.clock?.() ?? {
-      ms: dur("--duration-control"),
+      ms: dur("--duration-fast"),
       easing: ease("--ease-out"),
     };
     const hold = Math.max(0, start.shown - to);

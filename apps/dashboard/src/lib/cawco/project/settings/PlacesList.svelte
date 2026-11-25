@@ -195,7 +195,7 @@
             <Badge><span>{words.places.startsHere}</span></Badge>
           {:else if place.kind === "hub"}
             <!-- Why it has no menu: the hub keeps it. -->
-            <span class="type-meta text-ink-muted">{words.places.hubOwn}</span>
+            <span class="text-tx-2 type-meta">{words.places.hubOwn}</span>
           {/if}
         {/snippet}
         {#snippet trailing()}
@@ -215,9 +215,7 @@
           {#if place.locateTo}
             <!-- A Change path held for its machine, away: said with Call off. -->
             <div class="flex min-w-0 flex-wrap items-center gap-space-2">
-              <p
-                class="m-0 min-w-0 flex-auto type-meta text-pretty text-ink-muted"
-              >
+              <p class="m-0 min-w-0 flex-auto text-pretty text-tx-2 type-meta">
                 {folderWords.locateWaits(
                   place.locateTo,
                   machine ? machine.name : words.places.hub
@@ -245,12 +243,12 @@
           />
           {#if dropping === place.id}
             <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
-              <p class="m-0 type-meta text-pretty text-ink-strong">
+              <p class="m-0 text-pretty text-tx type-meta">
                 {words.places.dropSays(
                   place.path,
                   machine ? machine.name : words.places.hub
                 )}
-                <span class="text-ink-muted">{words.places.dropKeeps}</span>
+                <span class="text-tx-2">{words.places.dropKeeps}</span>
               </p>
               <div class="flex justify-end gap-space-2">
                 <Button
@@ -299,7 +297,7 @@
       onsubmit={submitAddPlace}
       transition:unfold
     >
-      <p class="m-0 type-label text-ink-strong">
+      <p class="m-0 text-tx type-label">
         {words.places.addPlace}
       </p>
       <div class={FORM_FIELD}>

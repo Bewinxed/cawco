@@ -42,7 +42,7 @@
 <figure
   aria-busy={drawing.state === "loading" || undefined}
   aria-label={graphWords.directionWell(name)}
-  class="relative m-0 grid min-h-40 min-w-0 overflow-clip rounded-md bg-surface-well"
+  class="relative m-0 grid min-h-40 min-w-0 overflow-clip rounded-sm bg-bg-2"
   data-drawing={drawing.state}
   data-slot="direction-well"
 >
@@ -66,13 +66,11 @@
       role="alert"
       style:--hang="calc(var(--spacing-icon-md) + var(--spacing-space-2))"
     >
-      <p
-        class="mark-line m-0 flex items-start gap-space-2 type-meta text-ink-strong"
-      >
+      <p class="m-0 flex items-start gap-space-2 mark-line text-tx type-meta">
         <IconAlert
           aria-hidden="true"
-          class="mt-px size-icon-md flex-none text-status-fail-glyph"
-        /><span class="min-w-0 wrap-anywhere text-pretty">{drawing.why}</span>
+          class="mt-px size-icon-md flex-none text-red"
+        /><span class="min-w-0 text-pretty wrap-anywhere">{drawing.why}</span>
       </p>
       {#if onretry}
         <Button

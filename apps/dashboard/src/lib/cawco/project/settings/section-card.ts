@@ -8,14 +8,13 @@
 /**
  * A section's card: the raised surface on the visible edge, its heading and
  * groups a space-4 apart. Its padding holds its border inside it, so its
- * content stands a space-4 in from the card's outer edge, on the 4px base
- * the view wears (theme.css `[data-grid="4px"]`).
+ * content stands a space-4 in from the card's outer edge.
  */
 export const SECTION_CARD =
-  "flex min-w-0 flex-col gap-space-4 rounded-lg border border-border bg-surface-raised p-[calc(var(--spacing-space-4)_-_var(--border-width))]";
+  "flex min-w-0 flex-col gap-space-4 rounded-lg border border-ui-2 bg-bg p-[calc(var(--spacing-space-4)_-_1px)]";
 
 /** One group in a card: its label over its controls. */
 export const CARD_GROUP = "flex min-w-0 flex-col gap-space-2";
 
 /** A group's label: the row and option label's step, in strong ink (the four-step scale's second). */
-export const GROUP_LABEL = "m-0 type-label font-medium text-ink-strong";
+export const GROUP_LABEL = "m-0 type-label font-medium text-tx";

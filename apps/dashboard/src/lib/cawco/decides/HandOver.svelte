@@ -42,15 +42,12 @@
 </script>
 
 <div class="flex flex-col gap-space-1">
-  <p
-    class="px-space-2 pt-space-1 type-meta text-ink-muted text-pretty"
-    id={headId}
-  >
+  <p class="px-space-2 pt-space-1 text-pretty text-tx-2 type-meta" id={headId}>
     {said.handTo(kind.name)}
   </p>
   {#if describe}
     <p
-      class="px-space-2 type-meta text-ink-muted text-pretty first-letter:uppercase"
+      class="px-space-2 text-pretty text-tx-2 type-meta first-letter:uppercase"
     >
       {kind.example}
     </p>
@@ -62,21 +59,21 @@
     {#each members as member (member.id)}
       <li class="min-w-0">
         <button
-          class="flex min-h-control-lg w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control can-hover:hover:bg-ui focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
+          class="flex min-h-control-lg w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid can-hover:hover:bg-ui"
           onclick={() => onpick(member.id)}
           type="button"
         >
           <MemberFace {member} size={28} />
           <span class="flex min-w-0 flex-auto flex-col">
-            <span class="type-label font-medium text-tx wrap-anywhere">
+            <span class="font-medium wrap-anywhere text-tx type-label">
               {member.name}
               {#if member.id === fleetChoice}
-                <span class="font-normal text-ink-muted">
+                <span class="font-normal text-tx-2">
                   · {said.fleetsChoice}</span
                 >
               {/if}
             </span>
-            <span class="type-meta text-tx-2 text-pretty wrap-anywhere"
+            <span class="text-pretty wrap-anywhere text-tx-2 type-meta"
               >{member.job}</span
             >
           </span>

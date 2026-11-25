@@ -30,10 +30,10 @@ scripts/lint/fixtures/design/planted.svelte:41:10 design/no-arbitrary-values
 scripts/lint/fixtures/design/planted.svelte:41:33 design/no-arbitrary-values
 scripts/lint/fixtures/design/planted.svelte:41:33 house/no-raw-class-values
 scripts/lint/fixtures/design/planted.svelte:41:48 design/no-arbitrary-values
-scripts/lint/fixtures/design/planted.svelte:41:111 design/no-arbitrary-values
-scripts/lint/fixtures/design/planted.svelte:41:111 house/no-raw-class-values
-scripts/lint/fixtures/design/planted.svelte:41:136 design/no-arbitrary-values
-scripts/lint/fixtures/design/planted.svelte:41:165 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:41:90 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:41:90 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.svelte:41:115 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:41:144 design/no-arbitrary-values
 scripts/lint/fixtures/design/planted.svelte:43:47 design/no-inline-styles
 scripts/lint/fixtures/design/planted-class-join.svelte:23:27 house/no-class-join
 scripts/lint/fixtures/design/planted-class-join.svelte:25:17 house/no-class-join
@@ -123,5 +123,5 @@ scripts/lint/fixtures/design/planted-typed-read.ts:24:19 house/typed-property-re
 scripts/lint/fixtures/design/planted.svelte:20:23 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:14:29 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:25:10 house/typed-property-read
-scripts/lint/fixtures/design/planted.svelte:41:13 design/no-arbitrary-values
-scripts/lint/fixtures/design/planted.svelte:41:13 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.svelte:49:13 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:49:13 house/no-raw-class-values

@@ -7,7 +7,10 @@
  * make the browser's own `:hover` match), and on a measuring page sends real
  * input instead (agent canvas real-input.ts); `canvas` finds elements in the
  * frame and the layers it opened by their words and roles, a small kin of
- * Testing Library's queries.
+ * Testing Library's queries: a role and a name are the accessibility tree's,
+ * as Testing Library reads them (dom-accessibility-api), so what an element
+ * hides from readers (`aria-hidden`, a morph's letters) names nothing and a
+ * reader's own words (a visually hidden span) do.
  */
 
 import {
@@ -167,8 +170,8 @@ const WHITESPACE = /\s+/gu;
 
 /** An element as a refusal lists it: its role, else its tag, and its name. */
 export const elementSaid = (el: Element): string => {
-  const name = nameOf(el).replace(WHITESPACE, " ");
-  return `${roleOf(el) ?? el.localName}${name ? ` “${name.length > 40 ? `${name.slice(0, 39)}…` : name}”` : ""}`;
+  const name = computeAccessibleName(el).replace(WHITESPACE, " ");
+  return `${getRole(el) ?? el.localName}${name ? ` “${name.length > 40 ? `${name.slice(0, 39)}…` : name}”` : ""}`;
 };
 
 export interface CanvasQueries {
@@ -233,9 +236,11 @@ export function queriesIn(
   const allByRole = (role: string, options?: { name?: string | RegExp }) =>
     all().filter(
       (el) =>
-        roleOf(el) === role &&
-        (options?.name === undefined || matches(nameOf(el), options.name)) &&
-        accessible(el)
+        getRole(el) === role &&
+        !isInaccessible(el) &&
+        accessible(el) &&
+        (options?.name === undefined ||
+          matches(computeAccessibleName(el), options.name))
     );
   const allByTestId = (id: string) =>
     roots().flatMap((root) => [

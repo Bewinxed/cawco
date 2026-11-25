@@ -44,18 +44,18 @@ interface Flight {
 /**
  * The clock the composer's field changes height on (motion/grow-cut, asked
  * as each change starts): while the recall wheel settles (the composer's
- * `data-settling`), --duration-panel-exit on the drawer curve; folding or
- * opening a long draft (`data-folding`, motion/autosize), --duration-morph;
- * a line, --duration-control; both on --ease-out.
+ * `data-settling`), --duration-slow on the drawer curve; folding or
+ * opening a long draft (`data-folding`, motion/autosize), --duration-base;
+ * a line, --duration-fast; both on --ease-out.
  */
 export function fieldClock(node: HTMLElement): { easing: string; ms: number } {
   if (node.closest('[data-slot="cin"][data-settling]')) {
-    return { ms: dur("--duration-panel-exit"), easing: ease("--ease-drawer") };
+    return { ms: dur("--duration-slow"), easing: ease("--ease-drawer") };
   }
   if (node.dataset.folding !== undefined) {
-    return { ms: dur("--duration-morph"), easing: ease("--ease-out") };
+    return { ms: dur("--duration-base"), easing: ease("--ease-out") };
   }
-  return { ms: dur("--duration-control"), easing: ease("--ease-out") };
+  return { ms: dur("--duration-fast"), easing: ease("--ease-out") };
 }
 
 /**

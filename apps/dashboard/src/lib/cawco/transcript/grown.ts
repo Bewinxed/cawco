@@ -45,6 +45,7 @@ import {
   easeDrawer,
   easingOf,
   motionOk,
+  numberOf,
 } from "#lib/platform/motion/curves.svelte.js";
 import { FRAME } from "#lib/platform/motion/edge-cut.js";
 import type { GrowChange } from "#lib/platform/motion/grow-cut.js";

@@ -105,7 +105,7 @@
   /**
    * The setup arriving glides in from the side of the tile picked, as a
    * conversation does when its tab is switched (workspace/PaneLeaf: a
-   * `--swap-nudge` toward the new side over `--duration-pop` on the drawer
+   * `--swap-nudge` toward the new side over `--duration-slow` on the drawer
    * curve); the one it replaces goes at once.
    */
   const setupIn = (node: HTMLElement) => {
@@ -117,12 +117,12 @@
     node.animate(
       [
         {
-          transform: `translateX(calc(var(--swap-nudge) * ${dir * rtl}))`,
+          transform: `translateX(calc(calc(var(--spacing) * 10) * ${dir * rtl}))`,
           opacity: 0.4,
         },
         { transform: "none", opacity: 1 },
       ],
-      { duration: dur("--duration-pop"), easing: ease("--ease-drawer") }
+      { duration: dur("--duration-slow"), easing: ease("--ease-drawer") }
     );
   };
   /** Leaving a tie for the project's own files, asked and not yet answered: the press first says what it stops (DESIGN.md, ceremony matches consequence). */
@@ -358,15 +358,15 @@
 
 {#snippet directionGlyph(direction: TrackerDirection)}
   {#if direction === "both"}
-    <IconTransfer aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconTransfer aria-hidden="true" class="size-icon-md text-tx-2" />
   {:else}
-    <IconDownload aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconDownload aria-hidden="true" class="size-icon-md text-tx-2" />
   {/if}
 {/snippet}
 
 {#snippet homeGlyph(home: TaskHome)}
   {#if home === "files"}
-    <IconDocument aria-hidden="true" class="size-icon-md text-ink-muted" />
+    <IconDocument aria-hidden="true" class="size-icon-md text-tx-2" />
   {:else}
     <ProviderLogo provider={home} />
   {/if}
@@ -447,13 +447,13 @@
           {#if tie.statusesAdded && tie.githubProject && "name" in tie.githubProject}
             <!-- The Status options the hub last added to the Project: told on the tie, never in the Caw chat. -->
             <div class="flex min-w-0 flex-col gap-space-1">
-              <p class="m-0 min-w-0 type-meta text-pretty text-ink-strong">
+              <p class="m-0 min-w-0 text-pretty text-tx type-meta">
                 {boardStatusWords.addedTitle(
                   tie.githubProject.name,
                   tie.statusesAdded.options
                 )}
               </p>
-              <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
+              <p class="m-0 min-w-0 text-pretty text-tx-2 type-meta">
                 {boardStatusWords.addedBody(
                   tie.githubProject.name,
                   tie.statusesAdded.options.length
@@ -508,19 +508,19 @@
       transition:unfold
     >
       <div class="flex min-w-0 flex-col gap-space-1">
-        <p class="m-0 type-label text-ink-strong" id="{uid}-leave">
+        <p class="m-0 text-tx type-label" id="{uid}-leave">
           {words.tasks.leaveTie.says(words.tasks.homes[tie.home].name)}
         </p>
-        <p class="m-0 type-meta text-pretty text-ink-muted">
+        <p class="m-0 text-pretty text-tx-2 type-meta">
           {words.tasks.leaveTie.keeps(words.tasks.site[tie.home])}
         </p>
       </div>
-      <p class="mark-line m-0 flex min-w-0 items-center gap-space-2 type-meta">
+      <p class="m-0 flex min-w-0 items-center gap-space-2 mark-line type-meta">
         <ProviderLogo class="flex-none" provider={tie.home} />
-        <span class="min-w-0 type-code wrap-anywhere text-ink-strong"
+        <span class="min-w-0 wrap-anywhere text-tx type-code"
           >{tie.target.label}</span
         >
-        <span class="flex-none text-ink-muted num"
+        <span class="flex-none text-tx-2 num"
           >{words.tasks.linkedCount(tie.linked)}</span
         >
       </p>
@@ -557,16 +557,16 @@
            height follows it (motion/morph). -->
       <div class="relative min-w-0" {@attach morph()}>
         {#key setupHome}
-          <div class="flex min-w-0 flex-col gap-space-5" {@attach setupIn}>
+          <div class="flex min-w-0 flex-col gap-space-4" {@attach setupIn}>
             <div class="flex min-w-0 flex-col gap-space-1">
               <p
-                class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
+                class="m-0 flex items-center gap-space-2 mark-line text-tx type-label"
                 id="{uid}-setup"
               >
                 <ProviderLogo class="flex-none" provider={setupHome} />
                 <span>{words.tasks.setupTitle(setupHome)}</span>
               </p>
-              <p class="m-0 type-meta text-pretty text-ink-muted">
+              <p class="m-0 text-pretty text-tx-2 type-meta">
                 {words.tasks.setupFieldsNote}
               </p>
             </div>
@@ -603,7 +603,7 @@
                 <!-- Said on the form's own ground, the way on beside it. -->
                 <div class="flex min-w-0 flex-wrap items-center gap-space-2">
                   <p
-                    class="m-0 min-w-0 flex-auto type-meta text-pretty text-ink-muted"
+                    class="m-0 min-w-0 flex-auto text-pretty text-tx-2 type-meta"
                   >
                     {words.tasks.noConnection(setupHome)}
                   </p>
@@ -630,9 +630,7 @@
                       value={conn.name}
                     >
                       <span>{conn.name}</span>
-                      <span class="type-meta text-ink-muted"
-                        >{conn.account}</span
-                      >
+                      <span class="text-tx-2 type-meta">{conn.account}</span>
                     </OptionGroupItem>
                   {/each}
                 </OptionGroup>
@@ -747,7 +745,7 @@
                       reason={projectsRead.reason}
                     />
                   {:else if projectsRead?.state === "read" && projectsRead.value.refused}
-                    <p class="m-0 type-meta text-pretty text-ink-muted">
+                    <p class="m-0 text-pretty text-tx-2 type-meta">
                       {projectsRead.value.refused}
                     </p>
                   {:else if projectsRead?.state !== "read"}

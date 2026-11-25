@@ -98,7 +98,7 @@
   >
     <span
       data-slot="tile"
-      class="col-start-2 inline-flex size-row-compact flex-none items-center justify-center rounded-sm bg-bg text-tx-2 shadow-sm [&>*]:size-icon-md [&>*]:flex-none @max-xs/rows:row-span-2 @max-xs/rows:self-center"
+      class="col-start-2 inline-flex size-row-compact flex-none items-center justify-center rounded-sm bg-bg text-tx-2 shadow-sm @max-xs/rows:row-span-2 @max-xs/rows:self-center [&>*]:size-icon-md [&>*]:flex-none"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {
@@ -120,12 +120,12 @@
            under the name, so the name never truncates to nothing. -->
       <span
         data-slot="name"
-        class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-row type-label text-ink-strong transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
+        class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 text-tx transition-opacity duration-(--duration-slow) ease-out type-label group-data-off/row:opacity-55"
         data-mono={mono || undefined}
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-2 focus-visible:after:outline-accent focus-visible:after:-outline-offset-2"
+            class="truncate text-inherit no-underline outline-off after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-accent focus-visible:after:outline-solid in-data-mono:type-code"
             data-link
             data-share="title:{href}"
             {href}
@@ -133,7 +133,7 @@
           >
         {:else if onpress}
           <button
-            class="truncate border-none bg-transparent p-0 text-start text-inherit outline-off after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
+            class="truncate border-none bg-transparent p-0 text-start text-inherit outline-off after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-accent focus-visible:after:outline-solid"
             data-link
             onclick={onpress}
             type="button">{name}</button
@@ -156,7 +156,7 @@
           data-slot="meta"
           data-whole={whole || undefined}
           data-code={code || undefined}
-          class="truncate type-meta text-ink-muted data-code:type-code data-whole:overflow-visible data-whole:whitespace-normal data-whole:wrap-anywhere transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
+          class="truncate text-tx-2 transition-opacity duration-(--duration-slow) ease-out type-meta group-data-off/row:opacity-55 data-code:type-code data-whole:overflow-visible data-whole:wrap-anywhere data-whole:whitespace-normal"
           title={whole ? undefined : meta}>{meta}</span
         >
       {/if}
@@ -168,7 +168,7 @@
          body's start column. -->
     <span
       data-slot="controls"
-      class="relative z-1 col-start-5 flex flex-none items-center justify-self-end ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 not-empty:ms-space-3 @max-xs/rows:col-start-4 @max-xs/rows:col-span-2 @max-xs/rows:row-start-2 @max-xs/rows:ms-0 @max-xs/rows:justify-self-start"
+      class="relative z-1 col-start-5 flex flex-none items-center gap-space-2 justify-self-end ghost-rest-fill hit-gap-x-space-2 not-empty:ms-space-3 @max-xs/rows:col-span-2 @max-xs/rows:col-start-4 @max-xs/rows:row-start-2 @max-xs/rows:ms-0 @max-xs/rows:justify-self-start coarse:gap-space-4 coarse:hit-gap-x-space-4"
     >
       {#if rollout}
         {@render rollout()}
@@ -192,12 +192,12 @@
   </div>
   {#if below || note}
     <div
-      class="col-start-4 col-span-2 max-phone:col-start-2 max-phone:col-span-4 flex min-w-0 flex-col gap-space-2 pb-space-2 empty:hidden"
+      class="col-span-2 col-start-4 flex min-w-0 flex-col gap-space-2 pb-space-2 empty:hidden max-phone:col-span-4 max-phone:col-start-2"
     >
       {#if note}
         <p
           data-slot="note"
-          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-tx-2 tone-fail:text-red"
+          class="flex items-start gap-space-2 mark-line wrap-anywhere text-tx-2 type-meta tone-fail:text-red"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}

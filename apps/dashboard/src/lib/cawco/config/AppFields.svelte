@@ -30,10 +30,10 @@
 
 <p
   data-slot="callback"
-  class="flex min-w-0 max-w-c-measure flex-col gap-space-1 type-meta text-ink-muted"
+  class="flex max-w-measure min-w-0 flex-col gap-space-1 text-tx-2 type-meta"
 >
   <span>{words.callbackLine}</span>
-  <code class="min-w-0 font-mono wrap-anywhere text-ink-strong select-all"
+  <code class="min-w-0 wrap-anywhere text-tx select-all font-mono"
     >{callbackUrl}</code
   >
 </p>

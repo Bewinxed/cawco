@@ -178,15 +178,8 @@ const PAIRS: Pair[] = [
     source: S.badges,
   },
   // Text inks on the surfaces they stand on.
-  ...["ink-strong", "ink-row", "ink-muted"].flatMap((ink) =>
-    [
-      "surface-page",
-      "surface-raised",
-      "surface-recess",
-      "surface-fill",
-      "surface-hover",
-      "option-picked",
-    ].map((bg) => ({
+  ...["tx", "tx-2"].flatMap((ink) =>
+    ["bg", "bg-2", "ui"].map((bg) => ({
       label: `${ink} on ${bg}`,
       fg: ink,
       bg: groundOf(bg),

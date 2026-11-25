@@ -58,15 +58,14 @@
     chipVariants({ variant: "option" }),
     "focus-inset",
     // Gliding, the group's pill is the pick (look "card": the picked edge
-    // over the picked fill); the option stands over it, clear while chosen.
-    group.glide &&
-      "relative z-2 bg-transparent aria-checked:ring-transparent aria-checked:bg-transparent",
+    // over the recess); the option stands over it, clear while chosen.
+    group.glide && "relative z-2 control-glide",
     group.layout === "list" &&
-      "items-box-start grid min-w-0 grid-cols-auto-fluid content-center",
+      "grid min-w-0 grid-cols-auto-fluid content-center items-box-start",
     group.layout === "tiles" &&
       (tile === "picture"
-        ? "size-c-pose-tile min-h-0 place-items-center justify-center rounded-lg p-space-1"
-        : "h-full min-w-0 flex-col items-start justify-start gap-0 px-space-3 py-space-2 disabled:border-dashed disabled:bg-transparent disabled:text-ink-muted"),
+        ? "size-16 min-h-0 place-items-center justify-center rounded-lg p-space-1"
+        : "row-span-2 grid h-full min-w-0 grid-rows-subgrid items-box-start justify-items-start gap-y-space-1 control-dashed-off px-space-3 py-space-2 text-start disabled:bg-transparent disabled:text-tx-2"),
     className
   )}
   aria-checked={chosen}
