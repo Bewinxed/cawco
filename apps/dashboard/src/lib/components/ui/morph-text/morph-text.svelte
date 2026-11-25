@@ -7,10 +7,12 @@
    * without a morph (torph's own `respectReducedMotion`). The first draw
    * never morphs: the text is just the text. torph eases its own box from
    * the old words' size to the new ones', so what stands beside it in a
-   * line moves with it on the same clock, unless it is `steady`.
+   * line moves with it on the same clock, unless it is `steady`. At rest
+   * torph holds the words as plain text, one text node, and splits them
+   * into boxes only while a morph runs (the build vendor/README.md names).
    *
    * `steady`: a figure beside other words (a count, a reading) that never
-   * moves them. torph 0.1.4 publishes no option to hold its box, so the
+   * moves them. torph publishes no option to hold its box, so the
    * box is held from outside it: the old words and the new stand unseen in
    * one grid cell (as the kit Button's wordings do), holding it as wide as
    * the wider of them while the morph runs, and torph draws over them in a
@@ -20,9 +22,9 @@
    * at most once, in that one frame, and never slides.
    *
    * `wrap`: the text is a paragraph that wraps, a block of its own. torph
-   * 0.1.4 sets its words in one line that never breaks (each a box of its
-   * own, spaces no-break), so a paragraph lands without a morph and wraps
-   * as plain text.
+   * sets a morph's words in one line that never breaks (its root is
+   * `white-space: nowrap`, a line ending only where the text holds a line
+   * break), so a paragraph lands without a morph and wraps as plain text.
    *
    * `still`: this change lands without a morph (a figure that changed because
    * the clock moved, not because something happened). So does a change in

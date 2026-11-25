@@ -59,6 +59,7 @@
     "test:smoke": "bun scripts/binary-tests.ts --only smoke",
     "token-alias:check": "bun scripts/token-alias-check.ts",
     "token-contrast:check": "bun scripts/token-contrast-check.ts",
+    "torph:build": "bun scripts/torph-at-commit.ts",
     "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
     "words": "bun scripts/words-swift.ts",
     "words:check": "bun scripts/words-swift.ts --check"

@@ -9,6 +9,7 @@ dist
 # Anchored: a bare `build` also swallows .design-foundations/build, which is tracked.
 /build
 *.tgz
+!/vendor/*.tgz
 .svelte-kit
 apps/dashboard/build
 apps/dashboard/.build-next
@@ -67,6 +68,7 @@ tmp/
 release/
 !/scripts/release/
 *.tgz
+!/vendor/*.tgz
 
 build.bak.*/
 
