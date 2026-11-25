@@ -411,7 +411,7 @@ function expand(
 }
 
 /** A box's edges, px. */
-export interface Box {
+interface Box {
   b: number;
   l: number;
   r: number;
@@ -471,9 +471,9 @@ function depths(bones: Fitted[], boxes: Box[]): number[] {
  * Reading order: the piece's outlines first (`first`), then row by row, a
  * row being what stands beside the first thing on it; each row starts one
  * step after the last, and each thing in it one step after the one to its
- * left. The skeleton's bones and the content that lands take the same.
+ * left.
  */
-export function readingSteps(boxes: Box[], first: boolean[]): number[] {
+function readingSteps(boxes: Box[], first: boolean[]): number[] {
   const steps = new Array<number>(boxes.length).fill(0);
   const rest = boxes
     .map((box, i) => ({ box, i }))

@@ -21,6 +21,10 @@ const waiting = (piece: "rows" | "card" | "picture", rows = 3) => ({
   rows,
   loading: true,
 });
+const landed = (piece: "rows" | "card" | "picture", rows = 3) => ({
+  ...waiting(piece, rows),
+  loading: false,
+});
 
 const lands = {
   play: async ({ update }: { update: (args: object) => Promise<void> }) => {
@@ -33,7 +37,7 @@ export const ListWaiting = { args: waiting("rows") };
 
 /** The fleet answered: the three machines sharpen in where they waited. */
 export const ListLanded = {
-  args: waiting("rows"),
+  args: landed("rows"),
   from: "ListWaiting",
   ...lands,
 };
@@ -43,7 +47,7 @@ export const CardWaiting = { args: waiting("card") };
 
 /** The session arrived: its card sharpens in over its outline. */
 export const CardLanded = {
-  args: waiting("card"),
+  args: landed("card"),
   from: "CardWaiting",
   ...lands,
 };
@@ -53,7 +57,7 @@ export const PictureWaiting = { args: waiting("picture") };
 
 /** The preview arrived: the picture fills the patterned well. */
 export const PictureLanded = {
-  args: waiting("picture"),
+  args: landed("picture"),
   from: "PictureWaiting",
   ...lands,
 };
@@ -63,7 +67,7 @@ export const EmptyListWaiting = { args: waiting("rows", 0) };
 
 /** Still no machines: the empty state sharpens in. */
 export const EmptyListLanded = {
-  args: waiting("rows", 0),
+  args: landed("rows", 0),
   from: "EmptyListWaiting",
   ...lands,
 };
@@ -73,7 +77,7 @@ export const LongListWaiting = { args: waiting("rows", 12) };
 
 /** The twelve land, row by row from the top. */
 export const LongListLanded = {
-  args: waiting("rows", 12),
+  args: landed("rows", 12),
   from: "LongListWaiting",
   ...lands,
 };
@@ -94,6 +98,7 @@ export const LabelLine = {
 export const Mark = {
   component: Skeleton,
   args: { cell: "mark", radius: "tile" },
+  parameters: { viewport: 390 },
 };
 
 /** A card, waiting for its session. */

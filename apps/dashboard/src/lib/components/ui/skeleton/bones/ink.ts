@@ -13,7 +13,7 @@
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
 
 /** Elements boned as one box: their box is their ink. */
-export const BOXES: ReadonlySet<string> = new Set([
+const BOXES: ReadonlySet<string> = new Set([
   "img",
   "svg",
   "video",
@@ -94,28 +94,56 @@ function shown(node: Element): boolean {
   );
 }
 
+/** A face's capital H: where its ink starts above the baseline, and its box's ascent. */
+interface Capital {
+  ascent: number;
+  ink: number;
+}
+
+/** One canvas measures every face, each face once (browser only). */
+let measure: CanvasRenderingContext2D | null = null;
+const capitals = new Map<string, Capital>();
+
+function capitalOf(holder: Element): Capital | null {
+  const { fontStyle, fontWeight, fontSize, fontFamily } =
+    getComputedStyle(holder);
+  const font = `${fontStyle} ${fontWeight} ${fontSize} ${fontFamily}`;
+  const held = capitals.get(font);
+  if (held) {
+    return held;
+  }
+  measure ??= document.createElement("canvas").getContext("2d");
+  if (!measure) {
+    return null;
+  }
+  measure.font = font;
+  // A line fragment's rect is its content area, which starts the font's
+  // ascent above its baseline; the capital H's ink is the cap height.
+  const h = measure.measureText("H");
+  const capital = {
+    ascent: h.fontBoundingBoxAscent,
+    ink: h.actualBoundingBoxAscent,
+  };
+  capitals.set(font, capital);
+  return capital;
+}
+
 /** The run's ink, line by line, top to bottom. */
 export function inkLines(run: Element): InkLine[] {
-  const measure = document.createElement("canvas").getContext("2d");
   const lines = new Map<number, InkLine>();
   const texts = document.createTreeWalker(run, NodeFilter.SHOW_TEXT);
   for (let text = texts.nextNode(); text; text = texts.nextNode()) {
     const holder = text.parentElement;
-    if (!(holder && text.textContent?.trim() && measure)) {
+    const capital = holder && text.textContent?.trim() ? capitalOf(holder) : null;
+    if (!capital) {
       continue;
     }
-    const { fontStyle, fontWeight, fontSize, fontFamily } =
-      getComputedStyle(holder);
-    measure.font = `${fontStyle} ${fontWeight} ${fontSize} ${fontFamily}`;
-    // A line fragment's rect is its content area, which starts the font's
-    // ascent above its baseline; the capital H's ink is the cap height.
-    const capital = measure.measureText("H");
     const range = document.createRange();
     range.selectNodeContents(text);
     for (const fragment of range.getClientRects()) {
       if (fragment.width >= 1) {
-        const base = fragment.top + capital.fontBoundingBoxAscent;
-        const top = base - capital.actualBoundingBoxAscent;
+        const base = fragment.top + capital.ascent;
+        const top = base - capital.ink;
         const key = Math.round(base);
         const line = lines.get(key);
         lines.set(key, {

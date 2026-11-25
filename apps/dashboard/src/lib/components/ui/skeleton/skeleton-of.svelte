@@ -18,24 +18,24 @@
    * repeating pattern fading to its edges. One band of coral light sweeps
    * each layer (two composited translates), from the first frame.
    *
-   * When the data lands, each bone fades while the content sharpens from a
-   * 4px blur over --duration-base, in reading order a step apart; with
-   * reduced motion there is no light, and the hand-over is a fade.
+   * When the data lands, each bone fades while the content under it
+   * sharpens from a 4px blur over --duration-base, in reading order a step
+   * apart, the blur a pane over each part fading with its bone (only
+   * opacity animates); with reduced motion there is no light and no blur,
+   * and the hand-over is a fade.
    */
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
-  import { frameSize } from "#lib/platform/frame-observer.js";
-  import { dur, sharpenIn } from "#lib/platform/motion/curves.svelte.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
   import {
     draw,
     type Item,
     layerStyle,
     isList as listOf,
-    readingSteps,
     runsPerRow,
   } from "./bones/draw.js";
   import { bonesOf, emptyBonesOf } from "./bones/index.js";
-  import { BOXES, findRuns, lineCounts } from "./bones/ink.js";
+  import { lineCounts } from "./bones/ink.js";
   import {
     rememberSkeletonShape,
     type SkeletonShape,
@@ -171,17 +171,6 @@
   const track = (item: Item): string | undefined =>
     item.kind === "words" ? `${(-0.06 * item.hpx).toFixed(2)}px` : undefined;
 
-  /** What sharpens in turn: every run of words, and every box drawn whole. */
-  function leavesOf(root: Element): Element[] {
-    const all = [
-      ...findRuns(root),
-      ...root.querySelectorAll([...BOXES].join(",")),
-    ];
-    return all.filter(
-      (el) => !all.some((other) => other !== el && other.contains(el))
-    );
-  }
-
   /**
    * Off screen the light holds still, so a skeleton nobody sees costs
    * nothing: its sweep pauses while its box is out of the window.
@@ -216,68 +205,90 @@
   }
 
   /**
-   * The content has landed: the bones fade a step apart in reading order
-   * (their steps counted from the first on screen), and every leaf of the
-   * content sharpens out of a blur in the same order.
+   * The content has landed: each bone and the pane over its part fade a
+   * step apart in reading order (their steps counted from the first on
+   * screen), so the content sharpens in the same order.
    */
   function handOver(node: HTMLElement) {
     let live = true;
-    const fonts = document.fonts?.ready ?? Promise.resolve();
-    if (untrack(() => ended) !== false) {
-      fonts.then(() => {
-        if (live) {
-          remember(node);
+    const sites: { disconnect: () => void }[] = [];
+    /**
+     * The shape is read in a frame's delivery, on the layout that frame has
+     * done, once the content's faces have loaded (a line set in a fallback
+     * face breaks elsewhere); `then` writes in the frame after.
+     */
+    const settle = (then: () => void) => {
+      const site = frameObserver(
+        () => {
+          if (live && document.fonts.status === "loaded") {
+            then();
+          }
+        },
+        {
+          read: () => {
+            if (!live) {
+              return;
+            }
+            if (document.fonts.status === "loaded") {
+              remember(node);
+            } else {
+              document.fonts.ready.then(() => site.readNext());
+            }
+          },
         }
-      });
-      return () => {
-        live = false;
-      };
-    }
-    const step = dur("--duration-fast") / 4;
-    const animations: Animation[] = [];
-    const box = untrack(() => layersBox);
-    if (box) {
-      const shown = [...box.querySelectorAll<HTMLElement>("[data-lines] > *")];
-      const visible = shown
-        .filter((el) => onScreen(el.getBoundingClientRect()))
-        .map((el) => Number(el.style.getPropertyValue("--sketch-at")) || 0);
-      const first = visible.length ? Math.min(...visible) : 0;
-      box.style.setProperty(
-        "--sketch-from-at",
-        String(first > 1 ? first - 1 : 0)
       );
-      // The bones' own fades, which the page's styles start.
-      animations.push(...box.getAnimations({ subtree: true }));
-    }
-    const leaves = leavesOf(node);
-    const rects = leaves.map((el) => el.getBoundingClientRect());
-    const steps = readingSteps(
-      rects.map((r) => ({ l: r.left, t: r.top, r: r.right, b: r.bottom })),
-      rects.map(() => false)
-    );
-    leaves.forEach((el, i) => {
-      const rect = rects[i];
-      if (rect && onScreen(rect)) {
-        animations.push(sharpenIn(el, (steps[i] ?? 0) * step));
-      }
-    });
-    // Once every bone has faded and every part has sharpened, the bones go,
-    // and the shape is read from the content standing still: a run still
-    // fading in from nothing is not counted (ink.ts `shown`).
-    Promise.allSettled([...animations.map((a) => a.finished), fonts]).then(
-      () => {
-        if (live) {
-          ended = true;
-          remember(node);
-        }
-      }
-    );
-    return () => {
+      sites.push(site);
+      site.readNext();
+    };
+    const stop = () => {
       live = false;
-      for (const animation of animations) {
-        animation.cancel();
+      for (const site of sites) {
+        site.disconnect();
       }
     };
+    const box = untrack(() => layersBox);
+    if (untrack(() => ended) !== false || !box) {
+      settle(() => undefined);
+      return stop;
+    }
+    // Read in the next frame's delivery, on the layout that frame has done
+    // and with its styles resolved: the bones' fades, and the first step on
+    // screen. The fades' delays count from that step only where it is not
+    // the first (a list scrolled past its top), written the frame after.
+    let from = 0;
+    let fades: Animation[] = [];
+    const fading = frameObserver(
+      () => {
+        if (!live) {
+          return;
+        }
+        if (from > 0) {
+          box.style.setProperty("--sketch-from-at", String(from));
+        }
+        // Once every bone and its pane have faded, the shape is read and
+        // the bones go.
+        Promise.allSettled(fades.map((a) => a.finished)).then(() =>
+          settle(() => {
+            ended = true;
+          })
+        );
+      },
+      {
+        read: () => {
+          fades = box.getAnimations({ subtree: true });
+          const steps = [
+            ...box.querySelectorAll<HTMLElement>("[data-lines] > *"),
+          ]
+            .filter((el) => onScreen(el.getBoundingClientRect()))
+            .map((el) => Number(el.style.getPropertyValue("--sketch-at")) || 0);
+          const first = steps.length ? Math.min(...steps) : 0;
+          from = first > 1 ? first - 1 : 0;
+        },
+      }
+    );
+    sites.push(fading);
+    fading.readNext();
+    return stop;
   }
 </script>
 
@@ -329,6 +340,25 @@
             data-lines
           >
             {@render lines(layer.items, true)}
+          </div>
+          <!-- As the content lands, a pane over each part blurs what it
+               covers and fades with that part's bone: the content sharpens
+               in reading order on the compositor. Not over the piece's own
+               outline, which holds everything. -->
+          <div
+            class="absolute inset-0 hidden group-aria-busy-false/sk:block motion-reduce:hidden"
+          >
+            {#each layer.items.filter((it) => it.kind !== "frame" && it.kind !== "shape") as item, k (k)}
+              <span
+                class="sketch-pane absolute top-(--sketch-y) left-(--sketch-x) -m-1 h-[calc(var(--sketch-h)+var(--spacing)*2)] w-[calc(var(--sketch-w)+var(--spacing)*2)] rounded-(--sketch-r) group-aria-busy-false/sk:animate-sketch-out"
+                style:--sketch-at={item.at}
+                style:--sketch-h={item.h}
+                style:--sketch-r={radius(item)}
+                style:--sketch-w={item.w}
+                style:--sketch-x={item.x}
+                style:--sketch-y={item.y}
+              ></span>
+            {/each}
           </div>
           <div
             class="sketch-light absolute inset-y-0 left-0 w-3/10 overflow-hidden in-data-away:[animation-play-state:paused] group-aria-busy-false/sk:hidden motion-reduce:hidden motion-safe:group-aria-busy/sk:animate-sketch-sweep"

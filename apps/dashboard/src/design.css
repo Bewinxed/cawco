@@ -2350,6 +2350,12 @@
   --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 14 14%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M0 .5h14M.5 0v14%22/%3E%3C/svg%3E");
   --sketch-tile: calc(var(--spacing) * 5.25) calc(var(--spacing) * 5.25);
 }
+/* The hand-over's blur: a pane over a part of the content, blurring what it
+   covers by 4px, one step of the grid past the part on every side so the
+   blur's own reach is held (owner, 2026-11-25). Only its opacity animates. */
+@utility sketch-pane {
+  backdrop-filter: blur(var(--spacing));
+}
 /* The light: a window a third of the layer wide crosses it while the copy
    of the drawing inside it is carried back as far, so the copy stands
    still over the drawing and only the lit band moves; both translates, on

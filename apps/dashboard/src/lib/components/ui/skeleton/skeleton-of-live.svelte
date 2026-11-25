@@ -97,7 +97,7 @@
   const name = $derived(`kit-${piece}`);
 </script>
 
-<div class="w-full">
+<div class="w-sm max-w-full">
   {#key again}
     <SkeletonOf count={rows} {loading} {name} {slot}>
       <SkeletonPieces
