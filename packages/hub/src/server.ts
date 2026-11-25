@@ -8436,6 +8436,12 @@ export const createServer = (
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
   const caps = createCaps({
     db,
+    // The cap no longer quiets the project: what it held while quiet goes
+    // to one fresh session (triggers.ts `rerunHeld`). The router is made
+    // further down, before any cap can move.
+    freed: (projectId) =>
+      detach(triggers.rerunHeld(projectId), "triggers held past the spend cap"),
+    lifetime,
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
   });
@@ -9540,7 +9546,7 @@ export const createServer = (
     // The switch turned on: what was held while off goes to one fresh
     // session (triggers.ts). The router is made just below.
     switchedOn: (projectId) =>
-      detach(triggers.switchedOn(projectId), "triggers held while off"),
+      detach(triggers.rerunHeld(projectId), "triggers held while off"),
     trigger: (projectId, event) => triggers.routeQuietly(projectId, event),
     // The project's conversation, started as any session is, in the mode
     // its payload names (caw.ts `startOf`: the project's, else the one you

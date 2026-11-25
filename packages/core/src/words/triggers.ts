@@ -122,7 +122,7 @@ export const triggerWords = {
     "The project's triggers are off, so nothing started: it waits on the project until they are on.",
   /** Why a trigger was held: the project is past its spend cap. */
   heldCapped: (why: string) =>
-    `Nothing started, as the project is past its spend cap (${why}): it waits on the project until its triggers are switched on again, or a machine comes online, with the project under its cap.`,
+    `Nothing started, as the project is past its spend cap (${why}): it waits on the project until the project is under its cap again, as the budget is raised or its period ends.`,
   /** Why a trigger was held: no machine the project's sessions start on is online. */
   heldNoMachine:
     "No machine of the project's is online to start a session on, so nothing started: it waits on the project until one comes online.",

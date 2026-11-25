@@ -25,7 +25,8 @@
  * - **Off, past the spend cap or with no machine online, nothing starts**:
  *   a live owner still hears its own thing's trigger; anything else is held
  *   on the project (`held_triggers`). Once a session can start again (the
- *   switch turned on, a machine come online), one fresh session reads
+ *   switch turned on, a machine come online, the spend cap no longer
+ *   quieting the project: project-caps.ts `freed`), one fresh session reads
  *   everything held, grouped by thing, a thing gone by then left out
  *   ({@link rerunHeld}); nothing held, nothing starts.
  */
@@ -813,7 +814,7 @@ export const createTriggers = (deps: TriggersDeps) => {
     machineOnline,
     route,
     routeQuietly,
-    switchedOn: rerunHeld,
+    rerunHeld,
     sweep,
   };
 };
