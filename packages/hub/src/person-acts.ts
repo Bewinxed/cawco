@@ -206,6 +206,9 @@ export const PERSON_CONTROLS: ReadonlyMap<string, string> = new Map([
  * started from the dashboard (`spawn`, its row the person's start), and
  * the extension's passkey advert (`frames`). The agent sends with
  * `handoff`, starts with `delegate` or `start_session`, and names itself.
+ * Beside them, the place picker's listing of a machine's folders (`fs`),
+ * which reaches past any agent's own boundary, and no tool of an agent's
+ * does.
  */
 export const PERSON_SOCKET_WORDS: ReadonlyMap<string, string> = new Map([
   [
@@ -221,4 +224,11 @@ export const PERSON_SOCKET_WORDS: ReadonlyMap<string, string> = new Map([
     "A session started from the dashboard is the person's: an agent starts one with delegate or start_session, which names it.",
   ],
   ["frames", PASSKEY],
+  // Not the person's words but the person's own reach: the place picker
+  // lists any folder of a machine, and no agent tool does; an agent reads
+  // its own workspace with its tools.
+  [
+    "fs",
+    "Listing a machine's folders is the person's place picker: an agent reads its own workspace with its own tools.",
+  ],
 ]);

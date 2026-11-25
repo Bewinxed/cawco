@@ -6997,11 +6997,11 @@ export const createServer = (
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket<ClientSocket>, string | null>();
   /**
-   * Each dashboard socket a project's browser an agent drives opened, by its
-   * id (hub-auth.ts, a `browser` caller): an agent of its project, sent and
-   * heard all but the person's own (person-acts.ts).
+   * Each dashboard or artifact tab socket a project's browser an agent
+   * drives opened, by its id (hub-auth.ts, a `browser` caller): an agent of
+   * its project, sent and heard all but the person's own (person-acts.ts).
    */
-  const browserDashboards = new Set<string>();
+  const browserSockets = new Set<string>();
   /**
    * Each artifact tab's socket the hub admitted (`ARTIFACT_SESSION_PATH`),
    * by its id, and its paired device as {@link dashboardDevices} keeps a
@@ -12882,6 +12882,7 @@ export const createServer = (
     lfsRoutes(ctx),
     browserPassRoutes({
       callerOf: (request, address) => hubAuth.callerOf(request, address),
+      knows: (machineId) => db.machineFactsOf(machineId) !== undefined,
       origins: () => dashboardOrigins(registry),
     }),
   ]);
@@ -13809,7 +13810,7 @@ export const createServer = (
     // A project's browser's socket sends nothing the hub would record as
     // the person's (person-acts.ts `PERSON_SOCKET_WORDS`); the person's own
     // controls are refused where every control goes (relay-control.ts).
-    if (browserDashboards.has(ws.id)) {
+    if (browserSockets.has(ws.id)) {
       const refused = personsSocketAct(message);
       if (refused) {
         console.warn(`[hub] an agent's browser: ${refused}`);
@@ -14264,9 +14265,11 @@ export const createServer = (
           if (!agent) {
             noteParent(dashboardOriginOf(ws.headers));
           }
-          // The person's own material is not sent to an agent's browser.
+          // The person's own material is not sent to an agent's browser, nor
+          // is it heard for the person's own acts (`personsSocketAct`).
           if (agent) {
             limitLine(ws, notPersonsOwn);
+            browserSockets.add(ws.id);
           }
           artifactSessions.open(ws, instance, artifact);
         },
@@ -14283,6 +14286,13 @@ export const createServer = (
           }
           // A page's place picker browsing a machine's folders; the reply
           // comes back to this socket as it does to a dashboard's.
+          const refused = browserSockets.has(ws.id)
+            ? personsSocketAct(message)
+            : undefined;
+          if (refused) {
+            sendToClient(ws, refusalFrame(message, refused));
+            return;
+          }
           const addressed = addressedOf(message);
           const read = addressed && readClientEnvelope(addressed);
           if (read && "envelope" in read && read.envelope.verb === "fs") {
@@ -14298,6 +14308,7 @@ export const createServer = (
           const ws = clientSocket(handed);
           closeLine(ws);
           artifactDevices.delete(ws.id);
+          browserSockets.delete(ws.id);
           artifactSessions.close(ws);
         },
       })
@@ -14338,7 +14349,7 @@ export const createServer = (
             // recorded nowhere: the hub's links and previews' framing are
             // the person's dashboards' alone.
             limitLine(ws, notPersonsOwn);
-            browserDashboards.add(ws.id);
+            browserSockets.add(ws.id);
             greetDashboard(
               ws,
               false,
@@ -14415,7 +14426,7 @@ export const createServer = (
           closeLine(ws);
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);
-          browserDashboards.delete(ws.id);
+          browserSockets.delete(ws.id);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

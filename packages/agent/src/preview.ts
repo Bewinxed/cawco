@@ -7,7 +7,6 @@ import {
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
 import { opensAsFile } from "@cawco/core/file-viewer";
-import { machineId } from "@cawco/core/machine-id";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_HELD_HEADER } from "@cawco/core/preview/reach";
 import { PREVIEW_PING_PATH } from "@cawco/core/preview/routes";
@@ -44,11 +43,8 @@ import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { type BrowserPorts, wakeBrowser } from "./browser/browsers";
-import { stampHubRequest } from "./browser/dashboard-door";
-import { keyOfWorkspace } from "./browser/gate";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
-import { hubPorts } from "./hub-ports";
 import {
   closeBridge,
   reachWorkspace,
@@ -934,24 +930,6 @@ async function start(
       // The bridge into the workspace's network did not open.
       previewFailed("bridge", instanceId, causeOf(error));
       return downResponse("reach", 502, causeOf(error));
-    }
-    // A preview of the hub's own ports on this machine (its dashboard, its
-    // API) reaches the hub as its agent, never the person: stamped as the
-    // agent's browser's door stamps it, whoever's browser loads it.
-    if (upstream === "host" && hubPorts().includes(source.port)) {
-      try {
-        await stampHubRequest(
-          asked,
-          await keyOfWorkspace(
-            source.workspace ?? instanceId,
-            await machineId()
-          )
-        );
-      } catch (error) {
-        previewFailed("agent listener", instanceId, causeOf(error));
-        return downResponse("reach", 502, causeOf(error));
-      }
-      asked.set(PREVIEW_RELAYED_HEADER, "1");
     }
     const at = `${url.pathname}${url.search}`;
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {

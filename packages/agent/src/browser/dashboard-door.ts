@@ -60,6 +60,7 @@ import {
   OWNER_COOKIE,
   OWNER_COOKIE_SECURE,
 } from "@cawco/core/hub-auth";
+import { machineId } from "@cawco/core/machine-id";
 import { localDashboardPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -237,12 +238,15 @@ const readAt = new Map<BrowserKey, number>();
 
 const askPass = async (key: BrowserKey): Promise<DoorPass> => {
   readAt.set(key, Date.now());
+  // The hub signs the machine whose key proves the ask, and on a hub that
+  // trusts its network, where no machine holds a key yet, the one named.
+  const ownMachine = await machineId();
   const bounded = await readWithin(PASS_MS, (signal) =>
     hubClient(delegationHubUrl(), (url, init) =>
       provenFetch(url, { ...init, signal })
     )
       .api["browser-passes"]({ key })
-      .get()
+      .get({ query: { machine: ownMachine } })
   );
   if (bounded.kind !== "answered") {
     throw new Error(
@@ -396,34 +400,6 @@ const stamped = (
   }
   out.authorization = `${BROWSER_PASS_SCHEME} ${pass}`;
   return out;
-};
-
-/**
- * `headers` of a preview's request bound for the hub's own ports on this
- * machine (agent preview.ts), as the door would send them: every credential,
- * hop and forwarded word ({@link UNSENT}, CawCo's own but presence) taken
- * off, the person's cookie too, and browser `key`'s pass put on. So a
- * dashboard opened as a preview of its own port is its agent's, never the
- * person's, whoever's browser loads the preview.
- */
-export const stampHubRequest = async (
-  headers: Headers,
-  key: BrowserKey
-): Promise<void> => {
-  const { pass } = await passOf(key);
-  for (const name of [...headers.keys()]) {
-    if (
-      UNSENT.has(name) ||
-      (name.startsWith(CAWCO_HEADER) && name !== PRESENCE)
-    ) {
-      headers.delete(name);
-    }
-  }
-  const cookie = withoutOwner(headers.get("cookie") ?? undefined);
-  if (cookie) {
-    headers.set("cookie", cookie);
-  }
-  headers.set("authorization", `${BROWSER_PASS_SCHEME} ${pass}`);
 };
 
 /**

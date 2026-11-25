@@ -1,12 +1,13 @@
 import { detach } from "@cawco/core/detach";
 import { machineLabel } from "@cawco/core/machine-names";
-import { CAWCO_HUB_PORT, localDashboardPort } from "@cawco/core/ports";
+import { localDashboardPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
+import { DASHBOARD_PORT, HUB_PORT } from "../../config";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
 import { servedOf, serverOf, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
@@ -399,12 +400,16 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   };
   /**
    * Whether `port` on `machineId` is one CawCo serves: the dashboard's on
-   * every machine (the agent's loopback carries it), the hub's API on the
-   * hub's machine.
+   * every machine (the agent's loopback carries it), and on the hub's
+   * machine the hub's API and the dashboard's socket, at the ports this hub
+   * runs on (`CAWCO_HUB_PORT`, `CAWCO_DASHBOARD_PORT` move them). The one
+   * rule that keeps a preview off the hub: a preview's request carries no
+   * credential, which a hub that trusts its network reads as the person.
    */
   const ownPort = (port: number, machineId: string): boolean =>
     port === localDashboardPort() ||
-    (port === CAWCO_HUB_PORT && machineId === deps.hubMachine());
+    (machineId === deps.hubMachine() &&
+      (port === HUB_PORT || port === DASHBOARD_PORT));
 
   /**
    * The source a preview input names, on the machine it is read on: a

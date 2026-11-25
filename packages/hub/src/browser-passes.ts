@@ -10,7 +10,9 @@
  * hub's own (secret-box.ts `derive`), so it holds across a restart of the
  * hub and lapses by itself ({@link PASS_MS}); the door asks for a new one
  * before then. Only the machine whose browser it is gets one: its agent
- * asks with its key's proof, and the hub signs the machine it proved.
+ * asks with its key's proof, and the hub signs the machine it proved (on a
+ * hub that trusts its network, before any machine holds a key, the machine
+ * the request names: that request is the person's).
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { isBrowserKey } from "@cawco/core/browser";
@@ -82,24 +84,47 @@ export const openBrowserPass = (
 export interface BrowserPassDeps {
   /** The request's caller, as the gate classified it (hub-auth.ts `callerOf`). */
   readonly callerOf: (request: Request, address: string | null) => Caller;
+  /** Whether the hub knows machine `machineId`. */
+  readonly knows: (machineId: string) => boolean;
   /** Every origin the hub knows its dashboard at (dashboard-url.ts `dashboardOrigins`). */
   readonly origins: () => string[];
 }
 
-export const browserPassRoutes = ({ callerOf, origins }: BrowserPassDeps) =>
+/** The machine a pass is asked for: the one that proved its key, or the one the person names (`named`); undefined for anyone else. */
+const machineOfAsk = (caller: Caller, named: string): string | undefined => {
+  if (caller.kind === "machine") {
+    return caller.machineId;
+  }
+  return caller.kind === "owner" ? named : undefined;
+};
+
+export const browserPassRoutes = ({
+  callerOf,
+  knows,
+  origins,
+}: BrowserPassDeps) =>
   new Elysia()
     // A browser's pass and the dashboard's origins, for its machine's
-    // dashboard door (agent browser/dashboard-door.ts): the machine that
-    // proved its key, for a browser key of its own naming.
+    // dashboard door (agent browser/dashboard-door.ts), for a browser key of
+    // its own naming. The machine is the one that proved its key; on a hub
+    // that trusts its network a machine holds no key until pairing is
+    // turned on (agent hub-proof.ts), and its request is the person's, who
+    // may name any machine for a pass that is less than their own: so the
+    // query's `machine` names it then.
     .get(
       "/api/browser-passes/:key",
-      { ...hidden, params: t.Object({ key: t.String() }) },
-      ({ params, request, server }) => {
+      {
+        ...hidden,
+        params: t.Object({ key: t.String() }),
+        query: t.Object({ machine: t.String({ minLength: 1 }) }),
+      },
+      ({ params, query, request, server }) => {
         const caller = callerOf(request, addressOf(server, request));
-        if (caller.kind !== "machine") {
+        const machineId = machineOfAsk(caller, query.machine);
+        if (!(machineId && knows(machineId))) {
           return problem(403, {
             code: "browser-pass-machine-only",
-            detail: `A browser's pass (${BROWSER_PASS_SCHEME}) is its machine's agent's to ask for, with its key's proof.`,
+            detail: `A browser's pass (${BROWSER_PASS_SCHEME}) is a known machine's agent's to ask for, with its key's proof once the hub requires paired devices.`,
           });
         }
         if (!isBrowserKey(params.key)) {
@@ -109,7 +134,7 @@ export const browserPassRoutes = ({ callerOf, origins }: BrowserPassDeps) =>
           });
         }
         return {
-          ...mint(caller.machineId, params.key),
+          ...mint(machineId, params.key),
           origins: origins(),
         } satisfies BrowserPass;
       }
