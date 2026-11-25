@@ -7,6 +7,7 @@
 
 import type { Account } from "@cawco/core/accounts";
 import type { LandsMode } from "@cawco/core/injected";
+import type { OutsiderRule } from "@cawco/core/outsiders";
 import type { AgentHere, FolderForecast } from "@cawco/core/project-folders";
 import type { TrackerDirection } from "@cawco/core/trackers";
 import type { RepoSource } from "#lib/cawco/spawn/RepoPicker.svelte";
@@ -22,6 +23,7 @@ export type ChangeKey =
   | `decides.${string}`
   | "landing"
   | "largeFiles"
+  | "outsiders"
   | "sync"
   | "addPlace"
   | `locate.${string}`
@@ -44,7 +46,8 @@ export type Change =
   | { key: "decides"; kind: string; value: string }
   | { key: "decidesReset"; kind: string }
   | { key: "landing"; value: LandsMode }
-  | { key: "largeFiles"; value: LargeFiles };
+  | { key: "largeFiles"; value: LargeFiles }
+  | { key: "outsiders"; value: OutsiderRule };
 
 /** A read the view waits on: still coming, what the hub answered, or why it could not. */
 export type Read<T> =
@@ -177,6 +180,7 @@ export function keyOf(change: Change): ChangeKey {
     case "atLimit":
     case "landing":
     case "largeFiles":
+    case "outsiders":
       return change.key;
   }
 }
@@ -220,6 +224,8 @@ export function applied(base: SettingsRecord, change: Change): SettingsRecord {
       return { ...base, landing: change.value };
     case "largeFiles":
       return { ...base, largeFiles: change.value };
+    case "outsiders":
+      return { ...base, outsiders: change.value };
   }
 }
 

@@ -176,6 +176,7 @@
     createdAt: new Date(now - 120_000).toISOString(),
     eventsOn: true,
     lands: "main",
+    outsiders: "hold",
     lfsConnection: null,
     lfsUrl: null,
     links: [],

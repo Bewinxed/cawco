@@ -49,6 +49,7 @@ export const projectRowOf = (record: SettingsRecord): ProjectRow => ({
   eventsOn: true,
   id: record.project.id,
   lands: record.landing,
+  outsiders: record.outsiders,
   lfsConnection:
     record.largeFiles.kind === "declared" ? record.largeFiles.connection : null,
   lfsUrl:

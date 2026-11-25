@@ -24,7 +24,9 @@
    * Status options by name, and on a tie both ways the hub adds any it
    * lacks. Files moves at the press (changes.ts
    * `withAsked`); GitHub or Linear moves at the setup's Save. A refusal
-   * puts it back and stands under the tiles (RowFault).
+   * puts it back and stands under the tiles (RowFault). Under them, one
+   * row's switch holds outsiders' issues and comments in Needs you, or lets
+   * them start sessions (the project's `outsiders`); it moves at the press.
    */
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -40,6 +42,7 @@
     IconExternalLinear,
     IconRefresh,
     IconSettings,
+    IconShield,
     IconTransfer,
     IconWorking,
   } from "#lib/icons.js";
@@ -485,11 +488,10 @@
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
     onpick={handleHomeClick}
-    options={HOMES.map((home) => ({
-      id: home,
-      name: words.tasks.homes[home].name,
-      note: words.tasks.homes[home].note,
-    }))}
+    options={HOMES.map((home) => {
+      const { name, ...rest } = words.tasks.homes[home];
+      return { id: home, name, ...("note" in rest ? { note: rest.note } : {}) };
+    })}
     value={leaving ? "files" : (setupHome ?? record.taskHome)}
   />
   <RowFault
@@ -808,4 +810,24 @@
       </div>
     </section>
   {/if}
+
+  <!-- Outsiders' issues and comments: held in Needs you, or a session started (the project's `outsiders`). -->
+  <RowList label={words.tasks.outsiders}>
+    <SectionRow
+      enabled={record.outsiders === "hold"}
+      icon={IconShield}
+      name={words.tasks.outsiders}
+      ontoggle={(hold) =>
+        onchange({ key: "outsiders", value: hold ? "hold" : "start" })}
+      toggling={disabled}
+    >
+      {#snippet below()}
+        <RowFault
+          again={() => onretry("outsiders")}
+          againLabel={words.retryChange}
+          reason={refused.outsiders}
+        />
+      {/snippet}
+    </SectionRow>
+  </RowList>
 </div>

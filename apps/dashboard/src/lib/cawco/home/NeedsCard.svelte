@@ -60,6 +60,7 @@
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { needLinkOf } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
+  import type { WaitingOffer } from "@cawco/core/project-conversation";
   import { questionsOf } from "@cawco/core/question";
   import type {
     TailnetHttps,
@@ -75,6 +76,7 @@
   import { lfsWords } from "@cawco/core/words/lfs";
   import { mcpWords } from "@cawco/core/words/mcp";
   import { offerWords } from "@cawco/core/words/offers";
+  import { outsiderWords } from "@cawco/core/words/outsiders";
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
@@ -141,6 +143,7 @@
   import { decideAction } from "../stores/needs.svelte";
   import {
     answerDesignOffer,
+    answerOutsider,
     dismissLfsRefusal,
   } from "../stores/offers.svelte";
   import { relayStore } from "../stores/relay.svelte";
@@ -149,7 +152,6 @@
   import {
     askView,
     clock,
-    type DrawnOffer,
     type NeedsItem,
     type ProjectMarking,
   } from "./home-state.svelte";
@@ -257,7 +259,7 @@
   });
 
   /** An offer's line: what it asks, in the hub's words for its kind. */
-  function offerLine(offer: DrawnOffer): string {
+  function offerLine(offer: WaitingOffer): string {
     switch (offer.kind) {
       case "design":
         return offerWords.designLine(
@@ -267,6 +269,8 @@
         );
       case "lfs-refused":
         return lfsWords.refusedLine(offer.endpoint);
+      case "outsider":
+        return outsiderWords.line(offer.firstLine, offer.count);
     }
   }
 
@@ -282,6 +286,12 @@
     try {
       if (offer.kind === "design") {
         await answerDesignOffer(offer.projectId, yes ? "build" : "dismiss");
+      } else if (offer.kind === "outsider") {
+        await answerOutsider(
+          offer.projectId,
+          offer.itemId,
+          yes ? "accept" : "decline"
+        );
       } else {
         await dismissLfsRefusal(offer.projectId, offer.endpoint);
       }
@@ -1395,7 +1405,26 @@
           {#if refusal}
             <ErrorText message={refusal} title="The hub refused that answer" />
           {/if}
-          {#if offer.kind === "lfs-refused"}
+          {#if offer.kind === "outsider"}
+            <Button
+              disabled={held || offering === "yes"}
+              label={outsiderWords.drop}
+              onclick={() => answerOffer(false)}
+              pending={offering === "no"}
+              pendingLabel={outsiderWords.dropping}
+              size="sm"
+              variant="secondary"
+            />
+            <Button
+              disabled={held || offering === "no"}
+              label={outsiderWords.letThrough}
+              onclick={() => answerOffer(true)}
+              pending={offering === "yes"}
+              pendingLabel={outsiderWords.lettingThrough}
+              size="sm"
+              variant="secondary"
+            />
+          {:else if offer.kind === "lfs-refused"}
             <Button
               disabled={held}
               label={lfsWords.dismiss}

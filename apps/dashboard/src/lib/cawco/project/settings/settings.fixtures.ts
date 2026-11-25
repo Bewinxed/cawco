@@ -123,6 +123,7 @@ const LANTERN: SettingsRecord = {
   hubReachable: true,
   asOf: minutesAgo(0),
   machines: MACHINES,
+  outsiders: "hold",
   places: [
     {
       id: "p-atlas",
@@ -218,6 +219,7 @@ const FIELD_NOTES: SettingsRecord = {
   hubReachable: true,
   asOf: minutesAgo(0),
   machines: MACHINES,
+  outsiders: "hold",
   places: [
     {
       id: "fn-kestrel",

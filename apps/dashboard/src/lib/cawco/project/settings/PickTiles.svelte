@@ -19,7 +19,7 @@
     onpick,
   }: {
     value: T | null;
-    options: readonly { id: T; name: string; note: string }[];
+    options: readonly { id: T; name: string; note?: string }[];
     /** The group, as a screen reader names it. */
     label: string;
     /** Each option's glyph, by its id (a tracker's logo, a Solar glyph). */

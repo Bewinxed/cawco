@@ -24,6 +24,7 @@ import type { MoveResult, MoveRun } from "@cawco/core/project-folders";
 import type { TrackerView } from "@cawco/core/trackers";
 import { decidesWords } from "@cawco/core/words/decides";
 import { folderWords, stepWords } from "@cawco/core/words/project-details";
+import { settingsViewWords as viewWords } from "@cawco/core/words/settings-view";
 import { nameFor } from "#lib/cawco/config/connection-form.js";
 import {
   type FleetOffer,
@@ -63,6 +64,7 @@ import type { AccountsView } from "#lib/cawco/stores/accounts.svelte.js";
 import type { Machine } from "#lib/cawco/stores/board.svelte.js";
 import {
   addProjectPlace,
+  configureCaw,
   editProject,
   previewProjectPlace,
   readConnections,
@@ -116,6 +118,7 @@ const NO_PROJECT: ProjectRow = {
   eventsOn: false,
   id: "",
   lands: "none",
+  outsiders: "hold",
   lfsConnection: null,
   lfsUrl: null,
   links: [],
@@ -458,6 +461,7 @@ export class SettingsHub {
       })),
       whoDecides: this.#whoDecides,
       landing: project.lands,
+      outsiders: project.outsiders,
       largeFiles: project.lfsUrl
         ? {
             kind: "declared",
@@ -527,7 +531,13 @@ export class SettingsHub {
         this.#settle(key, ticket, null);
       },
       (error: unknown) => {
-        this.#settle(key, ticket, failureWords(error));
+        this.#settle(
+          key,
+          ticket,
+          change.key === "outsiders"
+            ? viewWords.tasks.outsidersRefused
+            : failureWords(error)
+        );
       }
     );
   };
@@ -612,6 +622,9 @@ export class SettingsHub {
           },
           client
         );
+        return;
+      case "outsiders":
+        await configureCaw(id, { outsiders: change.value }, client);
         return;
       case "decides":
       case "decidesReset":

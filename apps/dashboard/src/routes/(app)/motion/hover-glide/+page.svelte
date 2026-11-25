@@ -58,6 +58,7 @@
     eventsOn: false,
     id: `p${n}`,
     lands: "main",
+    outsiders: "hold",
     lfsConnection: null,
     lfsUrl: null,
     links: [],

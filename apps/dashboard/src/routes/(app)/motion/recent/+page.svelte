@@ -742,6 +742,7 @@
         createdAt: new Date(now - 30 * DAY_MS).toISOString(),
         eventsOn: true,
         lands: "main",
+        outsiders: "hold",
         lfsConnection: null,
         lfsUrl: null,
         links: [],

@@ -128,6 +128,20 @@ export const dismissLfsRefusal = (projectId: string, endpoint: string) =>
     refusedOrUnreached
   );
 
+/** Answers an outsider's held words on an item: Let through routes them as anyone's, Drop puts them away. */
+export const answerOutsider = (
+  projectId: string,
+  itemId: string,
+  answer: "accept" | "decline"
+) =>
+  hubDone(
+    hub.api.projects({ id: projectId }).outsiders.answer.post({
+      itemId,
+      answer,
+    }),
+    refusedOrUnreached
+  );
+
 /** The offers standing on sessions, and the joins answered here. */
 export const offersStore = {
   /** The "make this a project" offer standing on a session, if one does. */

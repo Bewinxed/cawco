@@ -52,17 +52,25 @@ export const settingsViewWords = {
     homes: {
       files: {
         name: "Local files",
-        note: "Tasks stay local, keeping any past issue links.",
       },
       github: {
         name: "GitHub Issues",
-        note: "Issues sync with tasks, GitHub wins, and outside issues wait.",
+        note: "GitHub overrides conflicting fields.",
       },
       linear: {
         name: "Linear",
-        note: "Issues sync with tasks, Linear wins, and outside issues wait.",
+        note: "Linear overrides conflicting fields.",
       },
-    } satisfies Record<TaskHome, { name: string; note: string }>,
+    } satisfies Record<TaskHome, { name: string; note?: string }>,
+    /**
+     * Whether issues and comments from someone who isn't a collaborator on
+     * the repository, or is outside the Linear workspace, are held in Needs
+     * you (hub outsiders.ts, the project's `outsiders`): the row's name, its
+     * switch on while they are held.
+     */
+    outsiders: "Hold outsiders' issues and comments",
+    /** What stands under the outsiders row when the hub refused its change, either way. */
+    outsidersRefused: "Couldn't save this setting",
     syncNow: "Sync now",
     syncing: "Syncing…",
     firstSync: "Running first sync…",

@@ -2,6 +2,7 @@ import type { ProjectAtLimit } from "@cawco/core/accounts";
 import type { ProjectCap } from "@cawco/core/areas";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { LandsMode } from "@cawco/core/injected";
+import type { OutsiderRule } from "@cawco/core/outsiders";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 import { primaryPlaceOf } from "@cawco/core/project-membership";
 
@@ -69,6 +70,8 @@ export interface ProjectRow {
   /** Its links, one per repository, `host/owner/repo`, oldest first. */
   links: string[];
   name: string;
+  /** What an issue or comment from an outsider does (hub outsiders.ts): held in Needs you, or a session started. */
+  outsiders: OutsiderRule;
   places: ProjectPlace[];
   /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
   primaryPlaceId: string | null;

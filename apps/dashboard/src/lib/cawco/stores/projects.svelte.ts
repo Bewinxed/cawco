@@ -17,6 +17,7 @@ import type { ProjectStopFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
+import type { OutsiderRule } from "@cawco/core/outsiders";
 import {
   type CawInitiated,
   capHolds,
@@ -233,10 +234,13 @@ export const configureCaw = async (
     mode?: OfferedMode | null;
     model?: string | null;
     on?: boolean;
-  }
+    /** What an issue or comment from an outsider does: held, or a session started. */
+    outsiders?: OutsiderRule;
+  },
+  client: HubClient = hub
 ): Promise<ProjectConversationView> => {
   const view = await hubData(
-    hub.api.projects({ id: projectId }).caw.patch(change),
+    client.api.projects({ id: projectId }).caw.patch(change),
     refusedOrUnreached
   );
   // The hub's answer is where he stands: the project's row says so now,
@@ -249,6 +253,7 @@ export const configureCaw = async (
     row.cawHarness = view.harness;
     row.cawModel = view.model;
     row.conversationInstanceId = view.instanceId;
+    row.outsiders = view.outsiders;
   }
   return view;
 };

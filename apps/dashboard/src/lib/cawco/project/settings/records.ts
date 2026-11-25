@@ -11,6 +11,7 @@ import type { AccountProvider } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { Kind, Member } from "@cawco/core/decides";
 import type { LandsMode } from "@cawco/core/injected";
+import type { OutsiderRule } from "@cawco/core/outsiders";
 import type { TrackerDirection } from "@cawco/core/trackers";
 
 type MachineOs = string;
@@ -128,6 +129,8 @@ export interface SettingsRecord {
   landing: LandsMode;
   largeFiles: LargeFiles;
   machines: FleetMachine[];
+  /** What an outsider's issue or comment does: held in Needs you, or a session started. */
+  outsiders: OutsiderRule;
   places: ProjectPlace[];
   project: { id: string; name: string };
   repos: ProjectRepo[];
