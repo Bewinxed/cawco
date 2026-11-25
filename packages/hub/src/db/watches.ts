@@ -230,10 +230,12 @@ const followGitHub = (
   tx: Writer,
   projectId: string,
   connection: string
-): void => {
-  for (const repo of linkedRepos(tx, projectId)) {
+): string[] => {
+  const repos = linkedRepos(tx, projectId);
+  for (const repo of repos) {
     watchRepo(tx, projectId, repo, connection);
   }
+  return repos;
 };
 
 /**
@@ -358,7 +360,8 @@ export interface GitHubWatchPolled {
 export interface GitHubWatchesDb {
   /** The connection project `projectId`'s GitHub watches read with (one that only follows first), or nothing while it follows none. */
   readonly followedBy: (projectId: string) => string | undefined;
-  readonly followGitHub: (projectId: string, connection: string) => void;
+  /** {@link followGitHub}: the repositories now watched, none while the project links none on github.com. */
+  readonly followGitHub: (projectId: string, connection: string) => string[];
   /** The GitHub watches the poller reads, a project's or every one, oldest first, each with its resources' cursors. */
   readonly githubWatches: (projectId?: string) => GitHubWatch[];
   /** Each poll's outcome kept, in one transaction. */

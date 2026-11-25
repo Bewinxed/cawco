@@ -1275,9 +1275,11 @@ export const createIngress = ({
     }
     for (const projectId of found.projects) {
       if (store.followedBy(projectId) === undefined) {
-        store.followGitHub(projectId, connection);
+        const repos = store.followGitHub(projectId, connection);
         console.log(
-          `[ingress] project ${projectId}: polls GitHub with ${connection}`
+          repos.length > 0
+            ? `[ingress] project ${projectId}: polls ${repos.join(", ")} with ${connection}`
+            : `[ingress] project ${projectId}: links no repository on github.com; one it links is polled with ${connection}`
         );
       }
     }
