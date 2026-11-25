@@ -11,18 +11,15 @@ const CONTAINER_DOOR_PORT = 9230;
 const DOOR = `PROXY 127.0.0.1:${CONTAINER_DOOR_PORT}`;
 
 /**
- * The addresses a machine's own services answer on, which no agent's
- * browser opens (the door refuses them, dashboard-door.ts): Tailscale's
- * "quad 100", its local web client and DNS ("100.100.100.100 … also
- * fd7a:115c:a1e0::53", tailscale.com/kb/1381/what-is-quad100), which shows
- * the machine's tailnet account, name and address and changes its
- * settings; and the cloud's instance metadata (169.254.169.254, and AWS's
- * fd00:ec2::254), which hands out the machine's credentials. Written as a
- * URL's host is, IPv6 bracketed.
+ * The addresses no agent's browser opens (the door refuses them,
+ * dashboard-door.ts): the cloud's instance metadata (169.254.169.254, and
+ * AWS's fd00:ec2::254), which hands out the machine's cloud credentials,
+ * as no agent tool does. Tailscale's quad 100 stays open (the owner,
+ * 2026-11-25): its page shows what `tailscale status` does, and changes
+ * nothing without the person's own sign-in. Written as a URL's host is,
+ * IPv6 bracketed.
  */
 export const CLOSED_HOSTS: readonly string[] = [
-  "100.100.100.100",
-  "[fd7a:115c:a1e0::53]",
   "169.254.169.254",
   "[fd00:ec2::254]",
 ];
@@ -40,7 +37,7 @@ const hostPort = (origin: string): string => {
  * list as the browser's door last read it: a proxy domain on 443), go to
  * the browser's dashboard door, which signs the dashboard's in as the
  * browser and refuses the rest (dashboard-door.ts), as it refuses the
- * machine's own services ({@link CLOSED_HOSTS}); everything else is
+ * cloud's instance metadata ({@link CLOSED_HOSTS}); everything else is
  * `DIRECT`. A hub that trusts its network takes a request with no
  * credential as the owner (hub hub-auth.ts `classify`), so none of them
  * may go direct.

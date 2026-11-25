@@ -26,8 +26,8 @@
  *   its key alone (`--ignore-certificate-errors-spki-list`), and plain bytes
  *   (Chromium tunnels `ws://` through a proxy too) are read as they come.
  *   No byte is ever spliced to a dashboard origin.
- * - any other host on the hub's ports (hub-ports.ts), and the machine's own
- *   services (hub-pac.ts `CLOSED_HOSTS`): refused;
+ * - any other host on the hub's ports (hub-ports.ts), and the cloud's
+ *   instance metadata (hub-pac.ts `CLOSED_HOSTS`): refused;
  * - anything else: carried as it is (a tunnel, or a forward), which only the
  *   local host's Chromium sends here: a container's PAC sends nothing else
  *   (hub-pac.ts).
@@ -455,7 +455,7 @@ const refuse = (socket: Socket, words: string): void => {
 const HUB_REFUSED =
   "CawCo's dashboard door: this browser reaches the hub only at its dashboard's own address, signed in as its agent.";
 const CLOSED_REFUSED =
-  "CawCo's dashboard door: this address is the machine's own service (Tailscale's or the cloud's metadata), closed to an agent's browser.";
+  "CawCo's dashboard door: this address is the cloud's instance metadata, which hands out the machine's cloud credentials: closed to an agent's browser.";
 
 /** The words a refused target is refused in. */
 const refusedWords = (reach: Reach): string =>
