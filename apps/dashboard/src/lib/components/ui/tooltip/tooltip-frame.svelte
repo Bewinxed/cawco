@@ -28,7 +28,6 @@
    * provider of its own, so its tooltip stands open beside another frame's
    * (the app's one provider keeps one open at a time).
    */
-  let open = $state(false);
   let rested = $state(false);
   $effect(() => {
     const frame = requestAnimationFrame(() => {
@@ -36,12 +35,13 @@
     });
     return () => cancelAnimationFrame(frame);
   });
-  /** The pointer stays on it: what would close it (the page scrolling under it) opens it again. */
-  $effect(() => {
-    if (rested && !open) {
-      open = true;
-    }
-  });
+  /**
+   * It stands open while the frame does: a close bits-ui asks for (the page
+   * scrolling under its trigger, the pointer leaving) is not taken, so the
+   * tooltip is never let go and drawn again as its frame scrolls.
+   */
+  const open = () => rested;
+  const kept = () => undefined;
 </script>
 
 <div
@@ -49,7 +49,7 @@
   style:--frame-room={`${room}px`}
 >
   <Tooltip.TooltipProvider>
-    <Tooltip.Root bind:open>
+    <Tooltip.Root bind:open={open, kept}>
       <Tooltip.Trigger>
         {#snippet child({ props })}
           <Button

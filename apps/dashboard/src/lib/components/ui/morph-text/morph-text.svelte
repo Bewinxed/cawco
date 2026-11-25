@@ -45,6 +45,7 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { skippedAt } from "#lib/platform/motion/rows.svelte.js";
   import { track } from "#lib/platform/track.js";
+  import { browser } from "$app/env";
 
   let {
     text,
@@ -81,13 +82,17 @@
       host = null;
     };
   };
-  /** Asked again at each change of the text, as the change lands. */
-  const unseen = $derived.by(() => {
+  /**
+   * Whether the change landing now goes without a morph, asked again only
+   * as the text changes: torph builds its morph again whenever an option
+   * changes (its `MorphController` takes options only in `attach`), and
+   * `still` or `wrap` turning while the words stand changes nothing anyone
+   * sees, so it waits for the next change of the words.
+   */
+  const disabled = $derived.by(() => {
     track(text);
-    return host !== null && skippedAt(host);
+    return untrack(() => still || wrap || (host !== null && skippedAt(host)));
   });
-
-  const disabled = $derived(still || wrap || unseen);
 
   /**
    * The words a steady figure held before, each kept unseen in its cell
@@ -123,12 +128,16 @@
     }
   });
 
-  let morphMs = $state(0);
-  let morphEase = $state<string>(CURVE.out);
-  $effect(() => {
-    morphMs = dur(clock?.duration ?? "--duration-base");
-    morphEase = clock ? ease(clock.ease) : CURVE.out;
-  });
+  /**
+   * The morph's clock, read off the root from the first render, so torph
+   * builds its morph once as it mounts (a server render draws no morph).
+   */
+  const morphMs = $derived(
+    browser ? dur(clock?.duration ?? "--duration-base") : 0
+  );
+  const morphEase = $derived(
+    browser ? ease(clock?.ease ?? "--ease-out") : CURVE.out
+  );
 </script>
 
 {#snippet morph()}
