@@ -211,104 +211,120 @@ if (!config) {
   throw new Error("packages/hub/tsconfig.json did not parse");
 }
 const socket = socketFrames();
-const program = ts.createProgram([routesFile, ...socket.files], {
-  ...config.options,
-  composite: false,
-  declaration: false,
-  emitDeclarationOnly: false,
-  noEmit: true,
-  // TypeScript 6 defaults an unset rootDir to the tsconfig directory. This
-  // no-emit program also owns generated aliases under tmpdir(), so its root
-  // must explicitly include both the repository and the scratch directory.
-  rootDir: parse(HUB).root,
-});
-const unrecorded = outsideInputs(
-  program.getSourceFiles().map((file) => file.fileName)
-);
-if (unrecorded.length) {
-  throw new Error(
-    `The hub's program reads files scripts/openapi-inputs.ts does not record as inputs; add their directory there:\n${unrecorded.join("\n")}`
-  );
-}
-const routeErrors = ts
-  .getPreEmitDiagnostics(program, program.getSourceFile(routesFile))
-  .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
-if (routeErrors.length) {
-  throw new Error(`~Routes lookups failed:\n${routeErrors.join("\n")}`);
-}
-
-const generator = TJS.buildGenerator(
-  program,
-  {
-    ref: true,
-    aliasRef: false,
-    required: true,
-    constAsEnum: true,
-    ignoreErrors: true,
-  },
-  [routesFile, ...socket.files]
-);
-if (!generator) {
-  throw new Error("typescript-json-schema could not read the program");
-}
-// The generator reads a frame by its name, taking the first type the program
-// declares under it outside node_modules: that must be the one core marks.
-for (const [name, file] of socket.declaredIn) {
-  const named = generator
-    .getSymbols(name)
-    .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName)
-    .find((path) => path !== undefined && !path.includes("/node_modules/"));
-  if (named !== file) {
-    throw new Error(
-      `${name} is marked @socketFrame in ${file}, but the generator reads the ${name} in ${named}: give one of them another name`
-    );
-  }
-}
-// The generator reports every property initializer it reads; none is news.
-const { warn } = console;
-console.warn = () => undefined;
 /**
  * Elysia's published type for the body it answers a failed validation with:
  * the 422 bodies the routes' types spell out are written as this one
  * component, described as Elysia describes it.
  */
 const VALIDATION_BODY = "ValidationErrorResponse";
-const generated = generator.getSchemaForSymbols([
-  ...ids,
-  ...socket.frames,
-  VALIDATION_BODY,
-]) as { definitions?: Record<string, Schema> };
-// In one order before anything below reads it (openapi-order.ts): which enum
-// names a value list and which schema meets a type first follow from it.
-const definitions = inOneOrder(
-  generated.definitions ?? {},
-  "definitions"
-) as Record<string, Schema>;
-console.warn = warn;
-/** Elysia's package folder, wherever the hub resolves it from. */
-const elysiaRoot = (() => {
-  const entry = Bun.resolveSync("elysia", HUB);
-  for (let at = dirname(entry); at !== dirname(at); at = dirname(at)) {
-    const manifest = join(at, "package.json");
-    if (
-      existsSync(manifest) &&
-      z
-        .object({ name: z.string().optional() })
-        .parse(JSON.parse(readFileSync(manifest, "utf8"))).name === "elysia"
-    ) {
-      return `${at}/`;
+
+/**
+ * The schemas of every route's responses, the socket's frames and Elysia's
+ * validation body, read off the hub's program (`~Routes`) by one
+ * typescript-json-schema generator. The program and its checker hold
+ * gigabytes; built in here, they are garbage once it returns, and are
+ * collected before the agents' sources are read below.
+ */
+const readDefinitions = (): Record<string, Schema> => {
+  const program = ts.createProgram([routesFile, ...socket.files], {
+    ...config.options,
+    composite: false,
+    declaration: false,
+    emitDeclarationOnly: false,
+    noEmit: true,
+    // TypeScript 6 defaults an unset rootDir to the tsconfig directory. This
+    // no-emit program also owns generated aliases under tmpdir(), so its root
+    // must explicitly include both the repository and the scratch directory.
+    rootDir: parse(HUB).root,
+  });
+  const unrecorded = outsideInputs(
+    program.getSourceFiles().map((file) => file.fileName)
+  );
+  if (unrecorded.length) {
+    throw new Error(
+      `The hub's program reads files scripts/openapi-inputs.ts does not record as inputs; add their directory there:\n${unrecorded.join("\n")}`
+    );
+  }
+  const routeErrors = ts
+    .getPreEmitDiagnostics(program, program.getSourceFile(routesFile))
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+  if (routeErrors.length) {
+    throw new Error(`~Routes lookups failed:\n${routeErrors.join("\n")}`);
+  }
+
+  const generator = TJS.buildGenerator(
+    program,
+    {
+      ref: true,
+      aliasRef: false,
+      required: true,
+      constAsEnum: true,
+      ignoreErrors: true,
+    },
+    [routesFile, ...socket.files]
+  );
+  if (!generator) {
+    throw new Error("typescript-json-schema could not read the program");
+  }
+  // The generator reads a frame by its name, taking the first type the program
+  // declares under it outside node_modules: that must be the one core marks.
+  for (const [name, file] of socket.declaredIn) {
+    const named = generator
+      .getSymbols(name)
+      .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName)
+      .find((path) => path !== undefined && !path.includes("/node_modules/"));
+    if (named !== file) {
+      throw new Error(
+        `${name} is marked @socketFrame in ${file}, but the generator reads the ${name} in ${named}: give one of them another name`
+      );
     }
   }
-  throw new Error(`No package.json names elysia above ${entry}`);
-})();
-const validationBody = generator
-  .getSymbols(VALIDATION_BODY)
-  .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName);
-if (validationBody.length !== 1 || !validationBody[0]?.startsWith(elysiaRoot)) {
-  throw new Error(
-    `${VALIDATION_BODY} names ${validationBody.length} types (${validationBody.join(", ")}); openapi.ts reads Elysia's one`
-  );
-}
+  // The generator reports every property initializer it reads; none is news.
+  const { warn } = console;
+  console.warn = () => undefined;
+  const generated = generator.getSchemaForSymbols([
+    ...ids,
+    ...socket.frames,
+    VALIDATION_BODY,
+  ]) as { definitions?: Record<string, Schema> };
+  // In one order before anything below reads it (openapi-order.ts): which enum
+  // names a value list and which schema meets a type first follow from it.
+  const definitions = inOneOrder(
+    generated.definitions ?? {},
+    "definitions"
+  ) as Record<string, Schema>;
+  console.warn = warn;
+  /** Elysia's package folder, wherever the hub resolves it from. */
+  const elysiaRoot = (() => {
+    const entry = Bun.resolveSync("elysia", HUB);
+    for (let at = dirname(entry); at !== dirname(at); at = dirname(at)) {
+      const manifest = join(at, "package.json");
+      if (
+        existsSync(manifest) &&
+        z
+          .object({ name: z.string().optional() })
+          .parse(JSON.parse(readFileSync(manifest, "utf8"))).name === "elysia"
+      ) {
+        return `${at}/`;
+      }
+    }
+    throw new Error(`No package.json names elysia above ${entry}`);
+  })();
+  const validationBody = generator
+    .getSymbols(VALIDATION_BODY)
+    .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName);
+  if (
+    validationBody.length !== 1 ||
+    !validationBody[0]?.startsWith(elysiaRoot)
+  ) {
+    throw new Error(
+      `${VALIDATION_BODY} names ${validationBody.length} types (${validationBody.join(", ")}); openapi.ts reads Elysia's one`
+    );
+  }
+  return definitions;
+};
+const definitions = readDefinitions();
+Bun.gc(true);
 
 // Frame kinds are mutually exclusive already: required literal `kind` values.
 // Emit the existing discriminant with named references, so Swift names cases
