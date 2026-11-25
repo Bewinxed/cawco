@@ -32,8 +32,9 @@
  *   (`POST /user/repos`), empty, private as asked, no redirect followed.
  */
 import { Effect } from "effect";
+import { eventKeys } from "../event-keys";
 import type { BoardAt, ItemRef, WriteOp, Writes } from "../provider";
-import { writesOf } from "../provider-writes";
+import { issueWriteEvents, writesOf } from "../provider-writes";
 import { refusedWith } from "../read-stop";
 import { boardAsk } from "./board";
 import type { GitHubClient } from "./client";
@@ -97,9 +98,7 @@ const itemAt = (
   const item = parsed ? github.itemOfUrl(parsed) : undefined;
   return item
     ? Effect.succeed(item)
-    : Effect.fail(
-        refusedWith(`GitHub answered a page CawCo cannot read: ${url}`)
-      );
+    : Effect.fail(refusedWith(`GitHub returned an unreadable page: ${url}`));
 };
 
 /** GitHub's state and reason for a state token the sync names. */
@@ -114,16 +113,50 @@ const writeState = (
           token === "closed:not_planned" ? "not_planned" : "completed",
       };
 
-/** An issue GitHub answered, as its ref and its revision. */
-const answeredIssue = Effect.fnUntraced(function* (data: { html_url: string }) {
+/** An issue as GitHub answers a write of it: what the events the write caused are read off. */
+interface AnsweredIssue {
+  closed_at: string | null;
+  html_url: string;
+  labels: (string | { name?: string | null })[];
+  number: number;
+  state: string;
+  updated_at: string;
+}
+
+/** An issue's label names as GitHub answers them. */
+const labelNames = (labels: AnsweredIssue["labels"]): Set<string> =>
+  new Set(
+    labels.map((one) => (typeof one === "string" ? one : (one.name ?? "")))
+  );
+
+/** An issue GitHub answered, as its ref, its revision and the events the write caused. */
+const answeredIssue = Effect.fnUntraced(function* (
+  data: AnsweredIssue,
+  op: Extract<WriteOp, { op: "issue.create" | "issue.update" }>,
+  before: ReadonlySet<string> = new Set()
+) {
   const item = yield* itemAt(data.html_url);
   const revision = issueRevisionOf(data, item);
   if (!revision) {
     return yield* refusedWith(
-      `GitHub answered ${data.html_url}, which is no issue.`
+      `GitHub returned ${data.html_url}, not an issue.`
     );
   }
-  return { item, revision };
+  return {
+    item,
+    revision,
+    events: issueWriteEvents(
+      String(data.number),
+      {
+        open: data.state !== "closed",
+        closedAt: data.closed_at,
+        updatedAt: data.updated_at,
+        labels: [...labelNames(data.labels)],
+      },
+      op,
+      [...before]
+    ),
+  };
 });
 
 /** An issue's fields as REST takes them: those the op names. */
@@ -157,7 +190,7 @@ export const githubWrites: Writes<GitHubClient> = writesOf("GitHub", {
       );
       // A new issue is open; a task filed already closed closes it.
       if (op.stateToken === undefined || op.stateToken === "open") {
-        return yield* answeredIssue(data);
+        return yield* answeredIssue(data, op);
       }
       const closed = yield* githubAsk(
         REQUEST_MS,
@@ -171,12 +204,33 @@ export const githubWrites: Writes<GitHubClient> = writesOf("GitHub", {
             request: { signal },
           })
       );
-      return yield* answeredIssue(closed.data);
+      return yield* answeredIssue(closed.data, op);
     }),
 
   "issue.update": (octokit, repo, op) =>
     Effect.gen(function* () {
       const target = yield* repoParts(repo);
+      // The labels it had, read first when the write sets labels: the
+      // events it causes are those of the labels it adds.
+      const before =
+        op.labels === undefined
+          ? new Set<string>()
+          : labelNames(
+              (yield* githubAsk(
+                REQUEST_MS,
+                `read issue #${op.key}`,
+                repo,
+                (signal) =>
+                  octokit.request(
+                    "GET /repos/{owner}/{repo}/issues/{issue_number}",
+                    {
+                      ...target,
+                      issue_number: Number(op.key),
+                      request: { signal },
+                    }
+                  )
+              )).data.labels
+            );
       const { data } = yield* githubAsk(
         REQUEST_MS,
         `change issue #${op.key}`,
@@ -190,7 +244,7 @@ export const githubWrites: Writes<GitHubClient> = writesOf("GitHub", {
             request: { signal },
           })
       );
-      return yield* answeredIssue(data);
+      return yield* answeredIssue(data, op, before);
     }),
 
   "comment.create": (octokit, repo, op) =>
@@ -257,7 +311,11 @@ export const githubWrites: Writes<GitHubClient> = writesOf("GitHub", {
             request: { signal },
           })
       );
-      return { item: yield* itemAt(data.html_url), existing: false };
+      return {
+        item: yield* itemAt(data.html_url),
+        existing: false,
+        events: [eventKeys.opened("pr", String(data.number))],
+      };
     }),
 
   "issue.find-marked": (octokit, repo, op) =>

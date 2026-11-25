@@ -5,13 +5,14 @@
  *
  * An event is `ours` when:
  * - it is a comment CawCo posted: its own id is a `comment` row's;
- * - it opened an item CawCo made for a task: an `issue` or `pr` row of the
- *   item with a task. An item CawCo made with no task behind it (usability
- *   feedback) opens as anyone's would: on a synced repository it becomes a
- *   task, and its opening follows the project's trigger settings;
- * - it is any other move of an item (a close, a reopen, a label, a merge)
- *   within {@link SAME_WRITE_MS} of a version a write of CawCo's left the
- *   item at: the close or label CawCo's own update made.
+ * - its key is one a write of CawCo's named as its own doing (`events`): the
+ *   close at the `closed_at` CawCo's update set, a label it put on, an item
+ *   it opened. An opening counts only for an item made for a task: one
+ *   CawCo made with no task behind it (usability feedback) opens as
+ *   anyone's would, so on a synced repository it becomes a task, and its
+ *   opening follows the project's trigger settings. A person's close of the
+ *   same issue a moment later carries its own `closed_at`, its own key, and
+ *   is theirs.
  */
 import type {
   MirroredRef,
@@ -25,9 +26,6 @@ import type { InboundOrigin } from "./stored-types";
 
 export type ExternalWriteRow = typeof externalWrites.$inferSelect;
 export type ExternalWriteDraft = Omit<typeof externalWrites.$inferInsert, "id">;
-
-/** How near an item's move is to a version CawCo's write left it at to be that write's: a service's timestamps of one change differ by less. Our choice. */
-const SAME_WRITE_MS = 5000;
 
 /** The events that are a comment written on their item. */
 const COMMENT_KINDS: ReadonlySet<string> = new Set([
@@ -84,7 +82,7 @@ const madeItem = (
     .sort((a, b) => b.at.getTime() - a.at.getTime())[0];
 
 /** What an event is read for: what it happened to, when, what kind it is, and a comment's own id. */
-export type OriginOf = Pick<SourceEvent, "at" | "comment" | "kind"> & {
+export type OriginOf = Pick<SourceEvent, "comment" | "key" | "kind"> & {
   item: Pick<MirroredRef, "container" | "host" | "key" | "provider"> | null;
 };
 
@@ -101,22 +99,13 @@ export const originOf = (db: Reader, event: OriginOf): InboundOrigin => {
       ? "ours"
       : "outside";
   }
-  const rows = rowsOf(db, written);
-  if (event.kind.endsWith(".opened")) {
-    return rows.some(
-      (row) => (row.kind === "issue" || row.kind === "pr") && row.taskId
-    )
-      ? "ours"
-      : "outside";
-  }
-  return rows.some(
-    (row) =>
-      row.kind !== "comment" &&
-      row.version !== null &&
-      Math.abs(Number(row.version) - event.at) <= SAME_WRITE_MS
-  )
-    ? "ours"
-    : "outside";
+  const caused = rowsOf(db, written).filter((row) =>
+    row.events.includes(event.key)
+  );
+  const theirs = event.kind.endsWith(".opened")
+    ? caused.some((row) => row.taskId !== null)
+    : caused.length > 0;
+  return theirs ? "ours" : "outside";
 };
 
 /** The ledger's rows the door reads and the sync writes. */

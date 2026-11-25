@@ -32,6 +32,7 @@ import {
   RatelimitedLinearError,
 } from "@linear/sdk";
 import { Effect } from "effect";
+import { eventKeys } from "../event-keys";
 import type {
   ExternalActor,
   Ingest,
@@ -161,22 +162,19 @@ const linearRefused = (
           : null;
       const resumeAt = reset ?? now + 60_000;
       return refusedWith(
-        `Linear's rate limit holds requests back until ${new Date(resumeAt).toISOString()}.`,
+        `Linear rate-limited requests until ${new Date(resumeAt).toISOString()}.`,
         "rate",
         resumeAt
       );
     }
     case LinearErrorType.AuthenticationError:
-      return refusedWith(
-        `Linear refused the connection's sign-in (${said}).`,
-        "sign-in"
-      );
+      return refusedWith(`Linear refused sign-in: ${said}`, "sign-in");
     case LinearErrorType.Forbidden:
     case LinearErrorType.FeatureNotAccessible:
       return refusedWith(`Linear refused to ${what}: ${said}`, "scope");
     case LinearErrorType.NetworkError:
       return refusedWith(
-        `Linear could not be reached to ${what}: ${said}`,
+        `Could not reach Linear to ${what}: ${said}`,
         "unreachable"
       );
     case LinearErrorType.BootstrapError:
@@ -191,7 +189,7 @@ const linearRefused = (
     case undefined:
       break;
   }
-  return refusedWith(`Linear would not ${what}: ${said}`);
+  return refusedWith(`Linear failed to ${what}: ${said}`);
 };
 
 /** `text` kept to `max` characters, closing in "…" where it was cut. */
@@ -309,7 +307,7 @@ const issueRead = (raw: LinearRawIssue): Ingested => {
   const events: SourceEvent[] = [
     {
       ...base,
-      key: `issue:${ref.key}:opened`,
+      key: eventKeys.opened("issue", ref.key),
       kind: "issue.opened",
       at: ms(raw.createdAt),
     },
@@ -321,7 +319,7 @@ const issueRead = (raw: LinearRawIssue): Ingested => {
   if (closedAt) {
     events.push({
       ...base,
-      key: `issue:${ref.key}:closed@${ms(closedAt)}`,
+      key: eventKeys.closed("issue", ref.key, ms(closedAt)),
       kind: "issue.closed",
       at: ms(closedAt),
     });
@@ -509,7 +507,7 @@ const linearMoved: NonNullable<LinearIngest["moved"]> = (revision, held) => {
     {
       item,
       source: linearSource(item),
-      key: `issue:${item.key}:reopened@${version}`,
+      key: eventKeys.reopened("issue", item.key, version),
       kind: "issue.reopened",
       actor: snapshot.author && {
         ...snapshot.author,

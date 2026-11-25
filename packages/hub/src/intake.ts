@@ -303,7 +303,7 @@ export const createIntake = ({
     const origin = db.writes.origin({
       item: item ?? null,
       kind: event.kind,
-      at: event.at,
+      key: row.deliveryKey,
       ...(event.comment ? { comment: event.comment } : {}),
     });
     if (origin !== row.origin) {

@@ -929,7 +929,7 @@ export const createLandingRun = ({
     if (!(made && url)) {
       const said = Result.isFailure(outcome)
         ? outcome.failure.words
-        : "the forge named no pull or merge request.";
+        : "the forge returned no pull or merge request.";
       return {
         kind: "refused",
         line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,

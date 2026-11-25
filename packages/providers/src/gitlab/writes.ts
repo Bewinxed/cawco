@@ -1,14 +1,16 @@
 /**
- * GitLab's writes (provider spec §2.3 `Writes`): an issue, a note on an
- * issue or a merge request, a merge request opened, and the open issue a
- * marker names found, on one project (`group/sub/project`). They are made
+ * GitLab's writes (provider spec §2.3 `Writes`): an issue made or changed
+ * (its title, description, labels, and open or closed by `state_event`), a
+ * note on an issue or a merge request, a merge request opened, and the open
+ * issue a marker names found, on one project (`group/sub/project`). They are made
  * only through the hub's write door (hub writes.ts), on a session's machine
  * with glab's sign-in. GitLab numbers issues and merge requests apart, each
  * its own iid; a note is a comment ("Notes API").
  */
-import { Effect } from "effect";
-import type { ItemRef, ItemRevision, Writes } from "../provider";
-import { writesOf } from "../provider-writes";
+import { Effect, Predicate } from "effect";
+import { eventKeys } from "../event-keys";
+import type { ItemRef, WriteOp, Writes } from "../provider";
+import { writesOf, writtenIssue } from "../provider-writes";
 import { refusedWith, request } from "../read-stop";
 import type { GitLabClient } from "./client";
 import { gitlab } from "./descriptor";
@@ -24,7 +26,7 @@ const ask = <A>(what: string, run: () => Promise<A>) =>
     () => run(),
     (error) =>
       refusedWith(
-        `GitLab would not ${what}: ${error instanceof Error ? error.message : String(error)}`
+        `GitLab failed to ${what}: ${error instanceof Error ? error.message : String(error)}`
       )
   );
 
@@ -38,33 +40,108 @@ const itemAt = (url: string) => {
   }
   return item
     ? Effect.succeed(item)
-    : Effect.fail(
-        refusedWith(`GitLab answered a page CawCo cannot read: ${url}`)
-      );
+    : Effect.fail(refusedWith(`GitLab returned an unreadable page: ${url}`));
 };
+
+/** An issue as GitLab answers a write of it (its REST `IssueSchema`, the fields read here). */
+interface AnsweredIssue {
+  closed_at?: string | null;
+  created_at: string;
+  description?: unknown;
+  id: number;
+  iid: number;
+  labels?: unknown;
+  state: string;
+  title: string;
+  updated_at: string;
+  web_url: string;
+}
+
+/** An issue's labels as GitLab answers them: names, or label objects. */
+const labelsOf = (labels: unknown): string[] =>
+  Array.isArray(labels)
+    ? labels.flatMap((one) => {
+        if (typeof one === "string") {
+          return [one];
+        }
+        return Predicate.hasProperty(one, "name") &&
+          typeof one.name === "string"
+          ? [one.name]
+          : [];
+      })
+    : [];
+
+/**
+ * An issue a write answered, as its ref, its revision, and the events the
+ * write itself caused (event-keys.ts): its opening when it made it, its
+ * close at the `closed_at` it set, its reopen at the version it left, and
+ * each label it put on.
+ */
+const answeredIssue = Effect.fnUntraced(function* (
+  made: AnsweredIssue,
+  op: Extract<WriteOp, { op: "issue.create" | "issue.update" }>,
+  before: readonly string[] = []
+) {
+  const item = yield* itemAt(made.web_url);
+  return writtenIssue(
+    item,
+    made,
+    {
+      labels: labelsOf(made.labels),
+      body: typeof made.description === "string" ? made.description : null,
+    },
+    op,
+    before
+  );
+});
+
+/** GitLab's own word for a state token: `close` or `reopen` (`state_event`). */
+const stateEventOf = (token: string): "close" | "reopen" =>
+  token === "open" ? "reopen" : "close";
 
 export const gitlabWrites: Writes<GitLabClient> = writesOf("GitLab", {
   "issue.create": (client, path, op) =>
     Effect.gen(function* () {
-      const made = yield* ask("open the issue", () =>
-        client.api.Issues.create(path, op.title, { description: op.body })
+      const made: AnsweredIssue = yield* ask("open the issue", () =>
+        client.api.Issues.create(path, op.title, {
+          description: op.body,
+          ...(op.labels === undefined ? {} : { labels: op.labels.join(",") }),
+        })
       );
-      const item = yield* itemAt(made.web_url);
-      const revision: ItemRevision = {
-        item,
-        version: String(Date.parse(String(made.updated_at)) || Date.now()),
-        snapshot: {
-          externalId: String(made.id),
-          title: made.title,
-          state: "open",
-          stateName: "",
-          author: null,
-          labels: Array.isArray(made.labels) ? made.labels.map(String) : [],
-          body: typeof made.description === "string" ? made.description : null,
-          createdAt: Date.parse(String(made.created_at)) || Date.now(),
-        },
-      };
-      return { item, revision };
+      // A new issue is open; one asked closed is closed after.
+      if (op.stateToken === undefined || op.stateToken === "open") {
+        return yield* answeredIssue(made, op);
+      }
+      const closed: AnsweredIssue = yield* ask(`close #${made.iid}`, () =>
+        client.api.Issues.edit(path, made.iid, { stateEvent: "close" })
+      );
+      return yield* answeredIssue(closed, op);
+    }),
+
+  "issue.update": (client, path, op) =>
+    Effect.gen(function* () {
+      const iid = Number(op.key);
+      // The labels it had, read first when the write sets labels: the
+      // events it causes are those of the labels it adds.
+      const before =
+        op.labels === undefined
+          ? []
+          : labelsOf(
+              (yield* ask(`read #${iid}`, (): Promise<AnsweredIssue> =>
+                client.api.Issues.show(iid, { projectId: path })
+              )).labels
+            );
+      const made: AnsweredIssue = yield* ask(`change #${iid}`, () =>
+        client.api.Issues.edit(path, iid, {
+          ...(op.title === undefined ? {} : { title: op.title }),
+          ...(op.body === undefined ? {} : { description: op.body }),
+          ...(op.labels === undefined ? {} : { labels: op.labels.join(",") }),
+          ...(op.stateToken === undefined
+            ? {}
+            : { stateEvent: stateEventOf(op.stateToken) }),
+        })
+      );
+      return yield* answeredIssue(made, op, before);
     }),
 
   "issue.find-marked": (client, path, op) =>
@@ -106,7 +183,11 @@ export const gitlabWrites: Writes<GitLabClient> = writesOf("GitLab", {
           description: op.body,
         })
       );
-      return { item: yield* itemAt(made.web_url), existing: false };
+      return {
+        item: yield* itemAt(made.web_url),
+        existing: false,
+        events: [eventKeys.opened("pr", String(made.iid))],
+      };
     }),
 
   "comment.create": (client, path, op) =>
@@ -120,7 +201,17 @@ export const gitlabWrites: Writes<GitLabClient> = writesOf("GitLab", {
             ? client.api.IssueNotes.create(path, number, op.body)
             : client.api.MergeRequestNotes.create(path, number, op.body)
       );
-      const url = `${client.web}/${path}/-/${issue ? "issues" : "merge_requests"}/${number}#note_${note.id}`;
+      // A note's answer names no page: its item's does, and the note is
+      // that page's `#note_<id>` (a page's host is the web's, which the
+      // API's need not be).
+      const page = yield* ask(
+        `read ${issue ? "#" : "!"}${number}`,
+        (): Promise<{ web_url: string }> =>
+          issue
+            ? client.api.Issues.show(number, { projectId: path })
+            : client.api.MergeRequests.show(path, number)
+      );
+      const url = `${page.web_url}#note_${note.id}`;
       return {
         item: yield* itemAt(url),
         comment: {

@@ -27,6 +27,7 @@ export interface GiteaClient {
 /** The gitea-mcp tools the writes call, and no others are listed to it. */
 export const GITEA_TOOLS = [
   "get_me",
+  "issue_read",
   "issue_write",
   "pull_request_write",
   "pull_request_read",

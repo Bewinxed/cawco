@@ -5221,6 +5221,12 @@
       }
     ]
   },
+  "external_writes.events": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
   "external_writes.kind": {
     "type": "string",
     "enum": [

@@ -2861,6 +2861,7 @@ export type ItemRefOutput = z.output<typeof ItemRefShape>;
 const WriteMadeShape = declared(
   z.object({
     comment: MadeCommentShape.optional(),
+    events: z.array(z.string()).readonly().optional(),
     existing: z.boolean().optional(),
     item: ItemRefShape.nullable(),
   }),

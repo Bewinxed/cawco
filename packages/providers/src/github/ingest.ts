@@ -60,6 +60,7 @@
 
 import type { Octokit } from "@octokit/rest";
 import { Effect, Result, Schema } from "effect";
+import { eventKeys } from "../event-keys";
 import type {
   ExternalActor,
   ExternalState,
@@ -383,7 +384,7 @@ const pullRead = (pr: Pull, only?: "opened" | "closed"): Ingested => {
   if (only !== "closed") {
     events.push({
       ...base,
-      key: `pr:${pr.number}:opened`,
+      key: eventKeys.opened("pr", String(pr.number)),
       kind: "pr.opened",
       at: ms(pr.created_at),
     });
@@ -398,7 +399,7 @@ const pullRead = (pr: Pull, only?: "opened" | "closed"): Ingested => {
   } else if (only !== "opened" && pr.closed_at) {
     events.push({
       ...base,
-      key: `pr:${pr.number}:closed@${ms(pr.closed_at)}`,
+      key: eventKeys.closed("pr", String(pr.number), ms(pr.closed_at)),
       kind: "pr.closed",
       at: ms(pr.closed_at),
     });
@@ -491,7 +492,7 @@ const issueRead = (
   };
   const opened: SourceEvent = {
     ...base,
-    key: `issue:${one.number}:opened`,
+    key: eventKeys.opened("issue", String(one.number)),
     kind: "issue.opened",
     at: ms(one.created_at),
   };
@@ -499,7 +500,7 @@ const issueRead = (
     ? [
         {
           ...base,
-          key: `issue:${one.number}:closed@${ms(one.closed_at)}`,
+          key: eventKeys.closed("issue", String(one.number), ms(one.closed_at)),
           kind: "issue.closed",
           at: ms(one.closed_at),
         },
@@ -519,7 +520,7 @@ const issueRead = (
         events: [
           {
             ...base,
-            key: `issue:${one.number}:labeled:${only.label}`,
+            key: eventKeys.labeled("issue", String(one.number), only.label),
             kind: "issue.labeled",
             at: only.at,
           },
@@ -884,7 +885,7 @@ const githubMoved = (
     {
       item,
       source: githubSource(item.container),
-      key: `${item.kind}:${item.key}:reopened@${version}`,
+      key: eventKeys.reopened(item.kind, item.key, version),
       kind: `${item.kind}.reopened`,
       actor: snapshot.author && { ...snapshot.author, unvouched: null },
       labels: snapshot.labels,

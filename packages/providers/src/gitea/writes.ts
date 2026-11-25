@@ -7,8 +7,9 @@
  * gitea-mcp's tools listed search no issues, so no marked issue is found.
  */
 import { Effect, Predicate, Result, Schema } from "effect";
-import type { ItemRef, ItemRevision, Writes } from "../provider";
-import { writesOf } from "../provider-writes";
+import { eventKeys } from "../event-keys";
+import type { ItemRef, WriteOp, Writes } from "../provider";
+import { writesOf, writtenIssue } from "../provider-writes";
 import { refusedWith } from "../read-stop";
 import type { GiteaAnswer, GiteaClient } from "./client";
 import { gitea } from "./descriptor";
@@ -80,9 +81,7 @@ const itemAt = (text: string, what: string) => {
   }
   return item
     ? Effect.succeed({ item, url: url ?? "" })
-    : Effect.fail(
-        refusedWith(`gitea-mcp did not say where the ${what} is: ${text}`)
-      );
+    : Effect.fail(refusedWith(`gitea-mcp returned no ${what}: ${text}`));
 };
 
 /** `owner/repo` as gitea-mcp names them. */
@@ -90,6 +89,48 @@ const parts = (path: string) => {
   const [owner = "", repo = ""] = path.split("/");
   return { owner, repo };
 };
+
+/** What a written issue's answer is read for (gitea-mcp's `slimIssue`). */
+const AnsweredIssue = Schema.Struct({
+  closed_at: Schema.optional(Schema.NullOr(Schema.String)),
+  created_at: Schema.String,
+  id: Schema.Number,
+  labels: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+  number: Schema.Number,
+  state: Schema.String,
+  title: Schema.String,
+  updated_at: Schema.String,
+});
+
+/**
+ * An issue a write answered, as its ref, its revision, and the events the
+ * write itself caused (event-keys.ts): its opening when it made it, its
+ * close at the `closed_at` it set, its reopen at the version it left, and
+ * each label it put on.
+ */
+const answeredIssue = Effect.fnUntraced(function* (
+  text: string,
+  op: Extract<WriteOp, { op: "issue.create" | "issue.update" }>,
+  before: readonly string[] = []
+) {
+  const { item } = yield* itemAt(text, "issue");
+  const read = Schema.decodeUnknownResult(AnsweredIssue)(objectOf(text));
+  if (Result.isFailure(read)) {
+    return yield* refusedWith(`gitea-mcp returned no whole issue: ${text}`);
+  }
+  const made = read.success;
+  return writtenIssue(
+    item,
+    made,
+    { labels: made.labels ?? [], body: op.body ?? null },
+    op,
+    before
+  );
+});
+
+/** Gitea's own word for a state token. */
+const stateOf = (token: string): "open" | "closed" =>
+  token === "open" ? "open" : "closed";
 
 export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
   "issue.create": (client, path, op) =>
@@ -100,26 +141,76 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
           ...parts(path),
           title: op.title,
           body: op.body,
+          ...(op.labels === undefined ? {} : { labels: [...op.labels] }),
         }),
         "issue_write"
       );
+      // A new issue is open; one asked closed is closed after.
+      if (op.stateToken === undefined || op.stateToken === "open") {
+        return yield* answeredIssue(text, op);
+      }
       const { item } = yield* itemAt(text, "issue");
-      const now = Date.now();
-      const revision: ItemRevision = {
-        item,
-        version: String(now),
-        snapshot: {
-          externalId: "",
-          title: op.title,
-          state: "open",
-          stateName: "",
-          author: null,
-          labels: [],
-          body: op.body,
-          createdAt: now,
-        },
-      };
-      return { item, revision };
+      const closed = yield* answerText(
+        yield* call(client, "issue_write", {
+          method: "update",
+          ...parts(path),
+          issue_number: Number(item.key),
+          state: "closed",
+        }),
+        "issue_write"
+      );
+      return yield* answeredIssue(closed, op);
+    }),
+
+  "issue.update": (client, path, op) =>
+    Effect.gen(function* () {
+      const number = Number(op.key);
+      // The labels it had, read first when the write sets labels: the
+      // events it causes are those of the labels it adds.
+      const before: string[] = [];
+      if (op.labels !== undefined) {
+        const had = Schema.decodeUnknownResult(AnsweredIssue)(
+          objectOf(
+            yield* answerText(
+              yield* call(client, "issue_read", {
+                method: "get",
+                ...parts(path),
+                issue_number: number,
+              }),
+              "issue_read"
+            )
+          )
+        );
+        before.push(
+          ...(Result.isSuccess(had) ? (had.success.labels ?? []) : [])
+        );
+      }
+      // Labels next: the update's answer then holds them as they end.
+      if (op.labels !== undefined) {
+        yield* answerText(
+          yield* call(client, "issue_write", {
+            method: "replace_labels",
+            ...parts(path),
+            issue_number: number,
+            labels: [...op.labels],
+          }),
+          "issue_write"
+        );
+      }
+      const text = yield* answerText(
+        yield* call(client, "issue_write", {
+          method: "update",
+          ...parts(path),
+          issue_number: number,
+          ...(op.title === undefined ? {} : { title: op.title }),
+          ...(op.body === undefined ? {} : { body: op.body }),
+          ...(op.stateToken === undefined
+            ? {}
+            : { state: stateOf(op.stateToken) }),
+        }),
+        "issue_write"
+      );
+      return yield* answeredIssue(text, op, before);
     }),
 
   "issue.find-marked": () =>
@@ -160,9 +251,11 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
         }),
         "pull_request_write"
       );
+      const opened = (yield* itemAt(made, "pull request")).item;
       return {
-        item: (yield* itemAt(made, "pull request")).item,
+        item: opened,
         existing: false,
+        events: [eventKeys.opened("pr", opened.key)],
       };
     }),
 
@@ -178,13 +271,18 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
         "issue_write"
       );
       const { item, url } = yield* itemAt(text, "comment");
+      const answered = objectOf(text);
+      const id =
+        typeof answered?.id === "number"
+          ? String(answered.id)
+          : gitea.commentOfUrl(new URL(url));
+      if (!id) {
+        return yield* refusedWith(`gitea-mcp returned no comment id: ${text}`);
+      }
+      const at = Date.parse(String(answered?.created_at ?? ""));
       return {
         item,
-        comment: {
-          id: gitea.commentOfUrl(new URL(url)) ?? "",
-          url,
-          at: Date.now(),
-        },
+        comment: { id, url, at: Number.isNaN(at) ? Date.now() : at },
       };
     }),
 });

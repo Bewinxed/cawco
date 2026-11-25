@@ -10,9 +10,10 @@
 import type { ProviderId, WriteMade, WriteOp } from "@cawco/providers/provider";
 import { ForgeAskSchema } from "./stored-shapes";
 
-/** The writes a machine makes with its own sign-in. */
+/** The writes a machine makes with its own sign-in: every one GitLab's and Gitea's providers have, and a marked issue found. */
 const MACHINE_WRITE_OPS = [
   "issue.create",
+  "issue.update",
   "comment.create",
   "change-request.open",
   "issue.find-marked",

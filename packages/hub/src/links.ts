@@ -98,7 +98,7 @@ const carrierOf = (
 ): TaskActor => ({
   mover: "hub",
   author: { name: ours ? "CawCo" : externalItemWords.source[comment.source] },
-  reason: ours ? `CawCo's own comment on ${ref}` : `a comment on ${ref}`,
+  reason: ours ? `Commented on ${ref}` : `a comment on ${ref}`,
   ...(isOneOf(TRACKERS, comment.source) ? { tracker: comment.source } : {}),
 });
 
@@ -345,7 +345,7 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
       {
         mover: "hub",
         author: { name: "CawCo" },
-        reason: `${item.ref}, which its attempt opened`,
+        reason: `Attempt opened ${item.ref}`,
       }
     );
     if (linked instanceof ElysiaStatus) {

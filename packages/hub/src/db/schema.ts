@@ -7080,9 +7080,11 @@ export const externalComments = sqliteTable(
  *
  * - `kind`: `issue` or `pr`, an item it made (`key` its key); `comment`,
  *   a comment it posted on item `key` (`comment_id` its own id); `update`,
- *   an issue it changed, `version` the item's updated-at after (ms, as the
- *   mirror's), so the close or label that change raised is known as CawCo's;
- *   `repo`, a repository made (`key` its `owner/name`).
+ *   an issue it changed; `repo`, a repository made (`key` its `owner/name`).
+ * - `events`: the natural keys of the events the write itself caused, read
+ *   off what the service answered (its opening, the close at the
+ *   `closed_at` it set, each label it put on, a reopen at the version it
+ *   left): the close or label a person makes after is a key of its own.
  * - `by`: `sync:<watch id>`, `session:<session id>`, `work:<work item id>`
  *   (a landing's pull request), or `hub` (usability feedback, `create_repo`).
  * - `entry_at`: a comment the sync carried out from a task, its entry's
@@ -7111,7 +7113,8 @@ export const externalWrites = sqliteTable(
     /** The task it was written for (the session's attempt's, the sync's); null when none. */
     taskId: text("task_id"),
     entryAt: integer("entry_at"),
-    version: text("version"),
+    /** The natural keys of the events the write itself caused (providers event-keys.ts): an event is CawCo's own only when its key is one of these. */
+    events: storedJson(z.array(z.string()))("events").notNull().default([]),
     at: timestamp("at").notNull(),
   },
   (table) => [

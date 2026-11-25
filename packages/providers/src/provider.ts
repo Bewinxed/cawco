@@ -446,6 +446,14 @@ export interface MadeComment {
  */
 export interface WriteMade {
   comment?: MadeComment;
+  /**
+   * The natural keys of the events the write itself caused, read off what
+   * the service answered (event-keys.ts): an issue opened, the close at the
+   * `closed_at` it set, each label it put on, a reopen at the version it
+   * left. The door in names an event CawCo's own only when its key is one
+   * of these.
+   */
+  events?: readonly string[];
   existing?: boolean;
   item: ItemRef | null;
 }

@@ -12,6 +12,7 @@
  * - **A key** is what Linear's `issue(id:)` takes: its id or its identifier.
  */
 import { Effect } from "effect";
+import { eventKeys } from "../event-keys";
 import type { ItemRef, WriteOp, Writes } from "../provider";
 import { writesOf } from "../provider-writes";
 import { refusedWith } from "../read-stop";
@@ -73,7 +74,7 @@ const labelIds = Effect.fnUntraced(function* (
   const missing = names.filter((name) => !byName.has(name.toLowerCase()));
   if (missing.length > 0) {
     return yield* refusedWith(
-      `Linear has no label ${missing.map((name) => `“${name}”`).join(", ")} for the team; add it in Linear, or take it off the task.`
+      `Linear has no label ${missing.map((name) => `“${name}”`).join(", ")} for the team.`
     );
   }
   return names.flatMap((name) => byName.get(name.toLowerCase()) ?? []);
@@ -97,20 +98,53 @@ const issueInput = Effect.fnUntraced(function* (
   };
 });
 
-/** An issue a write answered, whole, as its ref and revision. */
+/** The states a close puts an issue in. */
+const SHUT_TYPES: ReadonlySet<string> = new Set(["completed", "canceled"]);
+
+/**
+ * The events a write of an issue itself caused, by the keys Linear's poll
+ * reads them under (event-keys.ts): its opening when it made it, its close
+ * at the `completedAt` or `canceledAt` it set, its reopen at the version it
+ * left.
+ */
+const causedBy = (
+  raw: LinearRawIssue,
+  key: string,
+  version: string,
+  op: Extract<WriteOp, { op: "issue.create" | "issue.update" }>
+): string[] => {
+  const shut = SHUT_TYPES.has(raw.state.type);
+  const closedAt = raw.completedAt ?? raw.canceledAt;
+  return [
+    ...(op.op === "issue.create" ? [eventKeys.opened("issue", key)] : []),
+    ...(op.stateToken !== undefined && shut && closedAt
+      ? [eventKeys.closed("issue", key, Date.parse(closedAt))]
+      : []),
+    ...(op.op === "issue.update" && op.stateToken !== undefined && !shut
+      ? [eventKeys.reopened("issue", key, version)]
+      : []),
+  ];
+};
+
+/** An issue a write answered, whole, as its ref, its revision and the events the write caused. */
 const madeIssue = Effect.fnUntraced(function* (
   client: LinearClientFor,
   raw: LinearRawIssue | null,
-  failed: string
+  failed: string,
+  op: Extract<WriteOp, { op: "issue.create" | "issue.update" }>
 ) {
   const full = raw ? yield* wholeIssue(client, REQUEST_MS, raw) : null;
   const revision = full ? linearIssueRevision(full) : undefined;
   const item = revision ? linkOfUrl(revision.item.url ?? "") : undefined;
-  if (!(revision && item)) {
+  if (!(full && revision && item)) {
     return yield* refusedWith(failed);
   }
   const ref: ItemRef = item;
-  return { item: ref, revision };
+  return {
+    item: ref,
+    revision,
+    events: causedBy(full, ref.key, revision.version, op),
+  };
 });
 
 export const linearWrites: Writes<LinearClientFor> = writesOf("Linear", {
@@ -125,7 +159,8 @@ export const linearWrites: Writes<LinearClientFor> = writesOf("Linear", {
       return yield* madeIssue(
         client,
         made.issueCreate.success ? made.issueCreate.issue : null,
-        "Linear did not create the issue."
+        "Linear did not create the issue.",
+        op
       );
     }),
 
@@ -141,7 +176,8 @@ export const linearWrites: Writes<LinearClientFor> = writesOf("Linear", {
       return yield* madeIssue(
         client,
         changed.issueUpdate.success ? changed.issueUpdate.issue : null,
-        `Linear did not change ${op.key}.`
+        `Linear did not change ${op.key}.`,
+        op
       );
     }),
 
@@ -175,7 +211,7 @@ export const linearWrites: Writes<LinearClientFor> = writesOf("Linear", {
       const item = linkOfUrl(comment?.issue?.url ?? comment?.url ?? "");
       if (!(created.commentCreate.success && comment && item)) {
         return yield* refusedWith(
-          `Linear did not take the comment on ${op.on.key}.`
+          `Linear did not add the comment to ${op.on.key}.`
         );
       }
       return {

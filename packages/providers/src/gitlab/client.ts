@@ -9,11 +9,9 @@
  */
 import { Gitlab } from "@gitbeaker/rest";
 
-/** A client signed in to one GitLab host, and where its pages are. */
+/** A client signed in to one GitLab host. */
 export interface GitLabClient {
   api: Gitlab<false>;
-  /** `https://gitlab.example.com`: a project's page is under it. */
-  web: string;
 }
 
 /** A client for `api` (`https://gitlab.example.com`), signed in with `token`. */
@@ -22,5 +20,4 @@ export const gitlabClient = (signIn: {
   token: string;
 }): GitLabClient => ({
   api: new Gitlab({ host: signIn.api, token: signIn.token }),
-  web: signIn.api,
 });

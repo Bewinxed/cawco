@@ -127,11 +127,12 @@ const written = (
   }
 };
 
-/** What a made write hands back: no revision, which the hub reads off the item itself. */
+/** What a made write hands back: what it made and the events it caused, no revision, which the hub reads off the item itself. */
 const madeOf = (made: WriteMade): WriteMade => ({
   item: made.item,
   ...(made.comment ? { comment: made.comment } : {}),
   ...(made.existing === undefined ? {} : { existing: made.existing }),
+  ...(made.events ? { events: made.events } : {}),
 });
 
 /**

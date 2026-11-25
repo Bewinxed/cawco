@@ -33,12 +33,14 @@ import {
   FORGES,
   type ForgeAsk,
   type ForgeVerdict,
+  isMachineWrite,
   type MachineWriteOp,
 } from "@cawco/core/forge-post";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { isOneOf } from "@cawco/core/one-of";
 import { secondsOf } from "@cawco/core/time";
 import { changeRequestWords } from "@cawco/core/words/forge";
+import { eventKeys } from "@cawco/providers/event-keys";
 import type { GitHubClient } from "@cawco/providers/github/client";
 import { githubWrites } from "@cawco/providers/github/writes";
 import type { LinearClientFor } from "@cawco/providers/linear/client";
@@ -183,7 +185,7 @@ const refusedOf = (failure: ProviderFailure): WriteRefused =>
       })
     : new WriteRefused({
         reason: "unanswered",
-        words: `${failure.service} did not answer within ${secondsOf(failure.after)} s, so it may or may not be there.`,
+        words: `${failure.service} did not answer within ${secondsOf(failure.after)} s. The write may have succeeded.`,
         resumeAt: null,
       });
 
@@ -196,7 +198,7 @@ const rowsOf = (
   op: WriteOp,
   made: WriteMade & {
     repo?: { fullName: string; url: string };
-    revision?: { version: string };
+    events?: readonly string[];
   },
   base: Pick<
     ExternalWriteDraft,
@@ -243,7 +245,7 @@ const rowsOf = (
         {
           ...of(item),
           kind: item.kind === "pr" ? "pr" : "issue",
-          version: made.revision?.version ?? null,
+          events: [...(made.events ?? [])],
         },
       ];
     case "issue.update":
@@ -251,7 +253,7 @@ const rowsOf = (
         {
           ...of(item),
           kind: "update",
-          version: made.revision?.version ?? null,
+          events: [...(made.events ?? [])],
         },
       ];
     // Each of these makes nothing of its own: it finds, or places, or adds
@@ -284,6 +286,8 @@ export const madeWords = (op: MachineWriteOp, made: MachineWritten): string => {
     }
     case "issue.create":
       return `${name} opened the issue: ${url}`;
+    case "issue.update":
+      return `${name} changed the issue: ${url}`;
     case "comment.create":
       return `${name} took the comment: ${url}`;
     case "issue.find-marked":
@@ -339,10 +343,7 @@ export const createWrites = (deps: WritesDeps) => {
         );
       default:
         return Effect.fail(
-          refuse(
-            "input",
-            `CawCo writes to ${provider} with no connection of the hub's.`
-          )
+          refuse("input", `Cannot write to ${provider}. Not signed in.`)
         );
     }
   };
@@ -356,12 +357,7 @@ export const createWrites = (deps: WritesDeps) => {
     MachineWritten & { container: string; host: string },
     WriteRefused
   > => {
-    if (
-      op.op !== "issue.create" &&
-      op.op !== "comment.create" &&
-      op.op !== "change-request.open" &&
-      op.op !== "issue.find-marked"
-    ) {
+    if (!isMachineWrite(op)) {
       return Effect.fail(
         refuse("input", `A machine makes no ${op.op} with its own sign-in.`)
       );
@@ -429,21 +425,21 @@ export const createWrites = (deps: WritesDeps) => {
           };
     if (!at) {
       return Effect.fail(
-        refuse("input", "The watch this write is for is gone.")
+        refuse("input", "Cannot write. The watch no longer exists.")
       );
     }
     if (input.by !== "hub" && "sync" in input.by && at.sync !== "both") {
       return Effect.fail(
         refuse(
           "direction",
-          `${at.container} syncs ${at.sync === "inbound" ? "inbound only" : "nothing"}, so the sync writes nothing to it.`
+          `Cannot write to ${at.container}. Sync is ${at.sync === "inbound" ? "inbound only" : "off"}.`
         )
       );
     }
     const { provider } = at;
     if (!isOneOf(PROVIDER_IDS, provider)) {
       return Effect.fail(
-        refuse("input", `CawCo writes nothing to ${provider}.`)
+        refuse("input", `Writing to ${provider} is not supported.`)
       );
     }
     const written = inHub(provider, at.connection, at.container, op).pipe(
@@ -531,7 +527,12 @@ export const createWrites = (deps: WritesDeps) => {
         by: byOf({ session: input.sessionId }),
         taskId: input.taskId,
         entryAt: null,
-        version: null,
+        // What a tool's answer says of an item is that it names it: its
+        // opening is the one event it may have caused that it can be
+        // known by. A close or a label it made is not told apart.
+        events: commentId
+          ? []
+          : [eventKeys.opened(itemKindOf(link.kind), item.key)],
         at: new Date(),
       });
       recorded += 1;

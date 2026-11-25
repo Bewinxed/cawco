@@ -336,14 +336,14 @@ export const createRepoPublish = ({
       const { failure } = created;
       throw new Error(
         failure.reason === "unanswered"
-          ? `GitHub did not answer about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
+          ? `GitHub did not answer. It may have created ${change.name}.`
           : `GitHub did not create ${change.name}: ${failure.words}`
       );
     }
     const made = created.success.repo;
     if (!made) {
       throw new Error(
-        `GitHub answered the create of ${change.name} without naming the repository.`
+        `GitHub returned no repository when creating ${change.name}.`
       );
     }
     await pushFromHub(hub, pushed.branch, made.cloneUrl, token);

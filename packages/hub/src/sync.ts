@@ -401,7 +401,7 @@ const answered = <A>(
     ? Effect.fail(
         new WriteRefused({
           reason: "input",
-          words: `The tracker's answer named no ${what}.`,
+          words: `The tracker returned no ${what}.`,
           resumeAt: null,
         })
       )
