@@ -13,6 +13,7 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
+  import { endSkeletonHydrationCheck } from "#lib/components/ui/skeleton/hydration-check.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
   import { trackKeyed } from "#lib/platform/motion/keyed.svelte.js";
@@ -24,6 +25,8 @@
   // attached before the taps app.html held are replayed: app.html holds them
   // on every route.
   onMount(() => window.releaseHeldTaps());
+  // Hydration is over: a skeleton it changed has been reported (dev only).
+  onMount(endSkeletonHydrationCheck);
   // Bottom sheets rest on the keyboard, and a focused field stays in view: a
   // pin's reply and a page's place picker are fields on a phone too.
   onMount(trackVisibleViewport);

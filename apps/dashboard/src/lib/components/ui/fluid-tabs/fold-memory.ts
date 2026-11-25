@@ -16,7 +16,7 @@ import type { FoldBox } from "#lib/platform/motion/fold-path.js";
 import {
   FOLD_BOXES_PREF,
   keepPrefs,
-  PREF_VALUE_LIMIT,
+  newestThatFit,
 } from "#lib/platform/prefs.js";
 import { store, stored as storedIn } from "#lib/platform/storage.js";
 
@@ -109,18 +109,8 @@ export function parseFoldBoxes(
 }
 
 /** The newest entries, as many of the last `KEPT` as fit a pref. */
-const fitted = (entries: [string, Stored][]): string => {
-  let kept = entries.slice(-KEPT);
-  let value = JSON.stringify(Object.fromEntries(kept));
-  while (
-    kept.length > 0 &&
-    encodeURIComponent(value).length > PREF_VALUE_LIMIT
-  ) {
-    kept = kept.slice(1);
-    value = JSON.stringify(Object.fromEntries(kept));
-  }
-  return value;
-};
+const fitted = (entries: [string, Stored][]): string =>
+  newestThatFit(entries.slice(-KEPT));
 
 const storedValue = (): string | null => storedIn("local", FOLD_BOXES_PREF);
 

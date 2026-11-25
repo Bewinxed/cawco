@@ -6,9 +6,13 @@ import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 import { reportError, reportErrorsTo } from "#lib/cawco/error-report.js";
 import { holdReadsWhileLeaving } from "#lib/cawco/leaving.js";
 import { claimRegionDrop } from "#lib/cawco/region-held.js";
+import { watchSkeletonHydration } from "#lib/components/ui/skeleton/hydration-check.js";
 import { version } from "$app/env";
 
 export const init: ClientInit = () => {
+  if (import.meta.env.DEV) {
+    watchSkeletonHydration();
+  }
   holdReadsWhileLeaving();
   reportErrorsTo("dashboard", version);
 };

@@ -233,6 +233,14 @@
     oklch(from var(--neutral-69) l c h / 0.4)
   );
   --color-nest: light-dark(var(--neutral-70), var(--neutral-44));
+  /* The sketch: the ink a skeleton draws its waiting content in (its
+     outlines, its words' glyphs, its marks and patterns), text at a share
+     the skeleton then lays its own strengths over (the owner's preview,
+     2026-11-25). */
+  --color-sketch: light-dark(
+    oklch(from var(--neutral-17) l c h / 0.55),
+    oklch(from var(--base-200) l c h / 0.7)
+  );
   --color-image-edge: light-dark(
     oklch(from var(--neutral-0) l c h / 0.1),
     oklch(from var(--neutral-100) l c h / 0.1)

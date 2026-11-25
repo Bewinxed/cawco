@@ -43,6 +43,19 @@
   initial-value: 0px;
 }
 
+/* A skeleton bone's step in reading order, and the first step on screen
+   when its content lands (SkeletonOf): the hand-over's delay counts them. */
+@property --sketch-at {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --sketch-from-at {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
 /* A tab's hang's open and close clock (motion/hang `GROW`): a number the
    run carries between 0 and 1, which nothing draws; each frame's shape is
    read off the run's time. */
@@ -2260,6 +2273,120 @@
     wave-breath-fade calc(calc(var(--duration-loop) * 2) * 2) var(--ease-in-out)
       infinite;
 }
+/* The kit's skeleton (SkeletonOf, the owner's decisions of 2026-11-25): its
+   drawing's marks and wells, its band of light, and its hand-over. Each
+   bone is drawn in markup by its kind; what a class cannot say is here. */
+/* A mark: a line icon, drawn in the bone's own ink through its art. */
+@utility sketch-mark {
+  background-color: currentColor;
+  mask: var(--sketch-art) center / contain no-repeat;
+}
+@utility sketch-icon-folder {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M3 7.5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-document {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M7 3h7l4 4v14H7z%22/%3E%3Cpath d=%22M14 3v4h4%22/%3E%3Cpath d=%22M9.5 12h6M9.5 15.5h6%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-chip {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M8 8h8v8H8z%22/%3E%3Cpath d=%22M10 4v4M14 4v4M10 16v4M14 16v4M4 10h4M4 14h4M16 10h4M16 14h4%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-person {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2212%22 cy=%228.5%22 r=%223.8%22/%3E%3Cpath d=%22M4.5 20.5a7.5 7.5 0 0 1 15 0%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-globe {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%228.5%22/%3E%3Cpath d=%22M3.5 12h17%22/%3E%3Cpath d=%22M12 3.5c3 2.6 3 14.4 0 17c-3-2.6-3-14.4 0-17z%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-tesseract {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M5 5h14v14H5z%22/%3E%3Cpath d=%22M9 9h6v6H9z%22/%3E%3Cpath d=%22M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-terminal {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M3.5 5h17v14h-17z%22/%3E%3Cpath d=%22M7 10l3 2.5L7 15M12.5 15.5h4.5%22/%3E%3C/svg%3E");
+}
+@utility sketch-icon-key {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%228%22 cy=%2212%22 r=%224%22/%3E%3Cpath d=%22M12 12h9M17 12v3.5M20 12v2.5%22/%3E%3C/svg%3E");
+}
+/* A picture's well: its pattern, half again as large as drawn, in a half
+   unit line, at 30% of the drawing's strength (the well's own 70% read
+   back out), fading toward the well's edges. */
+@utility sketch-well {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: inherit;
+    background-color: currentColor;
+    opacity: calc(0.3 / 0.7);
+    mask:
+      var(--sketch-art) 0 0 / var(--sketch-tile) repeat,
+      radial-gradient(closest-side, currentColor 35%, transparent);
+    mask-composite: intersect;
+  }
+}
+@utility sketch-pattern-plus {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M8 5v6M5 8h6%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 6) calc(var(--spacing) * 6);
+}
+@utility sketch-pattern-hatch {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 10 10%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M-2 12L12 -2M3 13l10-10%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 3.75) calc(var(--spacing) * 3.75);
+}
+@utility sketch-pattern-waves {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 12%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M0 6c4-5 8-5 12 0s8 5 12 0%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 9) calc(var(--spacing) * 4.5);
+}
+@utility sketch-pattern-honeycomb {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 18 31.18%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M9 0l9 5.2v10.4L9 20.8 0 15.6V5.2z M9 20.8v10.38%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 6.75) calc(var(--spacing) * 11.6925);
+}
+@utility sketch-pattern-rings {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%223.5%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 6) calc(var(--spacing) * 6);
+}
+@utility sketch-pattern-chevron {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 12%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M2 9l6-5 6 5%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 6) calc(var(--spacing) * 4.5);
+}
+@utility sketch-pattern-grid {
+  --sketch-art: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 14 14%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%22.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M0 .5h14M.5 0v14%22/%3E%3C/svg%3E");
+  --sketch-tile: calc(var(--spacing) * 5.25) calc(var(--spacing) * 5.25);
+}
+/* The light: a window a third of the layer wide crosses it while the copy
+   of the drawing inside it is carried back as far, so the copy stands
+   still over the drawing and only the lit band moves; both translates, on
+   the compositor. The window's edges fade. */
+@utility sketch-light {
+  transform: translateX(-100%);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    var(--color-tx) 35%,
+    var(--color-tx) 65%,
+    transparent
+  );
+}
+@utility sketch-lit {
+  inline-size: calc(100% / 0.3);
+  transform: translateX(30%);
+}
+@utility animate-sketch-sweep {
+  animation: sketch-sweep calc(var(--duration-loop) * 2.4) linear infinite;
+}
+@utility animate-sketch-sweep-back {
+  animation: sketch-sweep-back calc(var(--duration-loop) * 2.4) linear infinite;
+}
+/* The hand-over: each bone fades a step after the one before it in reading
+   order (`--sketch-at`), counted from the first on screen
+   (`--sketch-from-at`); at once
+   with less motion. */
+@utility animate-sketch-out {
+  animation: fade-out var(--duration-base) var(--ease-out) both;
+  animation-delay: calc(
+    max(0, var(--sketch-at) - var(--sketch-from-at)) * var(--duration-fast) / 4
+  );
+  @media (prefers-reduced-motion: reduce) {
+    animation-delay: 0s;
+  }
+}
 /* The design board's motion specimens, each playing its token (Foundation,
    the Motion shelf): a duration's bar fills over its time and holds for a
    loop's length (`--demo-d`, its hold folded into `--demo-hold` as a
@@ -3488,6 +3615,22 @@
 @keyframes fade-out {
   to {
     opacity: 0;
+  }
+}
+@keyframes sketch-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(calc(100% / 0.3));
+  }
+}
+@keyframes sketch-sweep-back {
+  from {
+    transform: translateX(30%);
+  }
+  to {
+    transform: translateX(-100%);
   }
 }
 @keyframes rise-in {

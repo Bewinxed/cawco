@@ -3,7 +3,8 @@
  * whether it is put away, the
  * last narrow-or-wide, the config page's card heights, the workspace's
  * layout and its sessions' places, the folder tabs' measured shapes
- * (fluid-tabs/fold-memory.ts), and how the sidebar's lists are grouped,
+ * (fluid-tabs/fold-memory.ts), the shapes the kit's skeletons last showed
+ * (skeleton/shape.ts), and how the sidebar's lists are grouped,
  * folded and pinned ({@link KEPT}). The page keeps each in its own
  * localStorage, which is its source; the server's copy is a cookie only the
  * server writes and reads (`/prefs`, HttpOnly), so no page script reads or
@@ -44,6 +45,8 @@ export const WORKSPACE_CTX_PREF = "cawco-workspace-ctx";
 export const FOLD_BOXES_PREF = "cawco-tab-boxes";
 /** The sidebar put away on a desk (Shell's Hide sidebar). */
 export const RAIL_HIDDEN_PREF = "cawco-rail-hidden";
+/** The shape each kit skeleton's slot last showed (skeleton/shape.ts). */
+export const SKELETON_SHAPES_PREF = "cawco-skeleton-shapes";
 export const PREFS = [
   RAIL_PREF,
   RAIL_HIDDEN_PREF,
@@ -52,6 +55,7 @@ export const PREFS = [
   WORKSPACE_PREF,
   WORKSPACE_CTX_PREF,
   FOLD_BOXES_PREF,
+  SKELETON_SHAPES_PREF,
   "cawco-recent-groups",
   "cawco-project-groups",
   "cawco-recent-folds",
@@ -88,6 +92,23 @@ export const PREF_MAX_AGE = 31_536_000;
  * cookie past 4096 bytes, name and value together.
  */
 export const PREF_VALUE_LIMIT = 3800;
+
+/**
+ * A pref kept as a JSON object of entries, the newest last: as many of the
+ * newest as fit a cookie, the oldest given up first.
+ */
+export function newestThatFit<T>(entries: [string, T][]): string {
+  let kept = entries;
+  let value = JSON.stringify(Object.fromEntries(kept));
+  while (
+    kept.length > 0 &&
+    encodeURIComponent(value).length > PREF_VALUE_LIMIT
+  ) {
+    kept = kept.slice(1);
+    value = JSON.stringify(Object.fromEntries(kept));
+  }
+  return value;
+}
 
 /**
  * A value as the server's copy is kept: itself where it fits a cookie, else

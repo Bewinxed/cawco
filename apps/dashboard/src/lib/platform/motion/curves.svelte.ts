@@ -483,6 +483,34 @@ export function revealOn(
   });
 }
 
+/** A kit skeleton's hand-over blur radius, px (owner, 2026-11-25). */
+const SKELETON_HANDOVER_BLUR = 4;
+
+/**
+ * One part of a piece arriving where its kit skeleton (SkeletonOf) stood:
+ * it sharpens out of a {@link SKELETON_HANDOVER_BLUR} blur over
+ * --duration-base on --ease-out, `delay` ms after the piece landed, held
+ * unseen until then; with reduced motion, a fade at once.
+ */
+export function sharpenIn(node: Element, delay: number): Animation {
+  const still = !motionOk.current;
+  const blur = SKELETON_HANDOVER_BLUR;
+  return node.animate(
+    still
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [
+          { opacity: 0, filter: `blur(${blur}px)` },
+          { opacity: 1, filter: "blur(0px)" },
+        ],
+    {
+      duration: dur("--duration-base"),
+      delay: still ? 0 : delay,
+      easing: ease("--ease-out"),
+      fill: "backwards",
+    }
+  );
+}
+
 /**
  * The reveal for content whose own block does not swap with its skeleton's
  * (the rows of an `{#each}` inside the branch that replaces the skeleton,

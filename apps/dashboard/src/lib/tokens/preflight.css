@@ -367,6 +367,7 @@
 :where(.reduced-transparency\:before\:backdrop-filter-none)::before,
 :where(.reduced-transparency\:before\:bg-bg)::before,
 :where(.reduced-transparency\:before\:ring-tx-2)::before,
+:where(.sketch-well)::before,
 :where(.status-failed\:before\:bg-bg-2[data-status="failed"])::before,
 :where(.status-needs\:before\:bg-bg-2[data-status="needs"])::before,
 :where([data-sonner-toast][data-swiping="false"][data-removed="true"])::before,
