@@ -22,9 +22,8 @@
  *
  * No lifecycle: the person adds the URL at the sender.
  */
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { Effect, Result, Schema } from "effect";
-import { Webhook as StandardWebhook } from "standardwebhooks";
 import { deliveryJson, deliveryText } from "../delivery";
 import type {
   HookAt,
@@ -34,6 +33,13 @@ import type {
   Webhook,
 } from "../provider";
 import { DeliveryUnread, DeliveryUnverified } from "../read-stop";
+import {
+  freshSeconds,
+  HEX_SHA256,
+  hmacHex,
+  sameText,
+  standardMisfit,
+} from "../signatures";
 import { HOOK_SCHEMES, type HookScheme, keyPart, valueAt } from "./descriptor";
 
 /** A relay's watch's signing, as its settings hold it. */
@@ -72,31 +78,9 @@ export const hookSigningOf = (settings: object): HookSigning | undefined => {
 /** What an event route's source pattern matches of a relay: `hook:<relay id>`. */
 export const hookSource = (relay: string): string => `hook:${relay}`;
 
-/** A signed timestamp's window either way: Stripe's own tolerance, 5 minutes. */
-const WINDOW_S = 5 * 60;
-const HEX = /^[0-9a-f]{64}$/u;
 const SHA256_PREFIX = "sha256=";
 /** The most of an id kept as a key. */
 const KEY_MAX = 200;
-
-const hmacHex = (secret: string, ...parts: (string | Uint8Array)[]) => {
-  const mac = createHmac("sha256", secret);
-  for (const part of parts) {
-    mac.update(part);
-  }
-  return mac.digest("hex");
-};
-
-/** Two strings equal, compared in constant time for their length (a length says nothing secret). */
-const same = (a: string, b: string): boolean => {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-};
-
-/** Whether a Unix time in seconds is within the window of now. */
-const fresh = (seconds: number, now: number) =>
-  Number.isFinite(seconds) && Math.abs(now / 1000 - seconds) <= WINDOW_S;
 
 /** Stripe's `Stripe-Signature`: "t=…,v1=…,v1=…,v0=…", the timestamp, then one or more signatures of `<t>.<body>`. */
 const stripeMisfit = (
@@ -110,11 +94,11 @@ const stripeMisfit = (
   const expected = hmacHex(secret, `${stamp}.`, body);
   const signed = pairs
     .filter(([key]) => key === "v1")
-    .some(([, value]) => same(value ?? "", expected));
+    .some(([, value]) => sameText(value ?? "", expected));
   if (!(stamp && signed)) {
     return "Stripe-Signature does not match t and the body";
   }
-  return fresh(Number(stamp), now)
+  return freshSeconds(Number(stamp), now)
     ? undefined
     : `Stripe-Signature's t=${stamp} is outside 5 minutes of now`;
 };
@@ -132,37 +116,18 @@ const hmacHeaderMisfit = (
     : raw;
   const stampHeader = signing.timestampHeader;
   if (!stampHeader) {
-    return HEX.test(given) && same(given, hmacHex(secret, body))
+    return HEX_SHA256.test(given) && sameText(given, hmacHex(secret, body))
       ? undefined
       : `${header} does not match the body`;
   }
   const stamp = (headers.get(stampHeader) ?? "").trim();
   const expected = hmacHex(secret, `${stamp}.`, body);
-  if (!(stamp && HEX.test(given) && same(given, expected))) {
+  if (!(stamp && HEX_SHA256.test(given) && sameText(given, expected))) {
     return `${header} does not match ${stampHeader} and the body`;
   }
-  return fresh(Number(stamp), now)
+  return freshSeconds(Number(stamp), now)
     ? undefined
     : `${stampHeader} ${stamp} is outside 5 minutes of now`;
-};
-
-/** Standard Webhooks, verified by its own library: `webhook-id`, `webhook-timestamp`, `webhook-signature`. */
-const standardMisfit = (
-  { headers, body }: RawDelivery,
-  secret: string
-): string | undefined => {
-  try {
-    new StandardWebhook(secret).verify(
-      body,
-      Object.fromEntries(headers.entries()),
-      {
-        jsonParse: false,
-      }
-    );
-  } catch (error) {
-    return `the Standard Webhooks signature does not hold: ${error instanceof Error ? error.message : String(error)}`;
-  }
-  return undefined;
 };
 
 /** Why a delivery does not hold under `signing`, or nothing when it does. */

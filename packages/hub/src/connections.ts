@@ -81,6 +81,7 @@ import { areaWords } from "@cawco/core/words/areas";
 import { connectionReasons } from "@cawco/core/words/connection-reasons";
 import { connectionsWords } from "@cawco/core/words/connections";
 import { cutShort } from "@cawco/core/words/helpers";
+import type { GiteaClient } from "@cawco/providers/gitea/client";
 import {
   type GitHubAppAuth,
   type GitHubClient,
@@ -89,6 +90,10 @@ import {
   githubAppJwtClient,
   githubTokenClient,
 } from "@cawco/providers/github/client";
+import {
+  type GitLabClient,
+  gitlabClient as gitlabTokenClient,
+} from "@cawco/providers/gitlab/client";
 import {
   type LinearClientFor,
   linearClientFor,
@@ -147,6 +152,7 @@ import {
   type HeldApp,
 } from "./db/connections";
 import { undoable } from "./db/trash";
+import { forgeOf } from "./forge-hosts";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -2868,6 +2874,42 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * A GitLab client signed in as a `gitlab` connection, for the poll, a
+   * link's read and the relay's webhooks: its key (a personal, project or
+   * group access token) on the GitLab its server names (forge-hosts.ts
+   * `forgeOf`). Refused in words for any other sign-in: an MCP OAuth token
+   * is for GitLab's MCP server alone.
+   */
+  const gitlabClient = (name: string): GitLabClient => {
+    const r = row(name);
+    const forge = forgeOf(view(r));
+    if (forge?.provider !== "gitlab") {
+      return r.service.trim().toLowerCase() === "gitlab"
+        ? misfit(
+            `${name} signs in with ${r.auth}; CawCo reads GitLab with an access token (bearer) that has the api or read_api scope.`
+          )
+        : misfit(`${name} is a ${r.service} connection, not a GitLab one.`);
+    }
+    return gitlabTokenClient({
+      api: forge.origin,
+      token: opened(r).key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
+    });
+  };
+
+  /**
+   * A Gitea client: a `gitea` connection's own gitea-mcp tools, called as
+   * the hub ({@link callConnection}), for the poll, a link's read and the
+   * relay's webhooks.
+   */
+  const giteaClient = (name: string): GiteaClient => {
+    const r = row(name);
+    if (r.service.trim().toLowerCase() !== "gitea") {
+      return misfit(`${name} is a ${r.service} connection, not a Gitea one.`);
+    }
+    return { call: (tool, args) => callConnection(name, tool, args) };
+  };
+
+  /**
    * The service refused the connection's sign-in to the hub's own call (the
    * tracker sync's): it needs a key or sign-in again, in the service's words.
    */
@@ -2947,6 +2989,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     githubClient,
     githubToken,
     githubAppPermissions,
+    gitlabClient,
+    giteaClient,
     linearClient,
     refusedBy,
     lfsBasic,

@@ -4,6 +4,8 @@
  * it unblocks, when it is ready, a cycle refused, and a decision it was
  * built on that moved since.
  */
+import type { ForgeId } from "@cawco/providers/provider";
+
 export const taskLinkWords = {
   /** A duplicates check that left open tasks out: only the nearest were compared. */
   notCompared: (count: number): string =>
@@ -62,9 +64,12 @@ export const taskLinkWords = {
     kind === "pr"
       ? "This task stays blocked while it waits on that pull request. Unlink it, link another in its place, or move the task yourself."
       : "This task stays blocked until that run passes. Re-run it on GitHub, unlink it, link another in its place, or move the task yourself.",
-  /** Why a project cannot wait on a pull request or run. */
-  noGitHub:
-    "the project has no GitHub connection to read it. Connect GitHub for the project first.",
+  /** Why a project cannot wait on a pull or merge request or run: no connection reads its forge (`GitHub`, `GitLab`, `Gitea`). */
+  noForge: (service: string): string =>
+    `the project has no ${service} connection. Connect ${service} first.`,
+  /** What a wait's row calls a pull request (GitHub, Gitea) or a merge request (GitLab), before its `#12` or `!7`. */
+  changeRequest: (provider: ForgeId): string =>
+    provider === "gitlab" ? "MR" : "PR",
   /** A live attempt's word that a card it started on moved: reopened. */
   wasReopened: "was reopened",
   /** A live attempt's word that a card it started on moved: answered differently. */

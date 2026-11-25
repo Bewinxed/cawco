@@ -25184,7 +25184,9 @@
                   "provider": {
                     "enum": [
                       "generic",
+                      "gitea",
                       "github",
+                      "gitlab",
                       "linear",
                       "standard-webhooks",
                       "stripe"
@@ -25306,7 +25308,9 @@
                   "provider": {
                     "enum": [
                       "generic",
+                      "gitea",
                       "github",
+                      "gitlab",
                       "linear",
                       "standard-webhooks",
                       "stripe"
@@ -45841,6 +45845,57 @@
           "wasm"
         ]
       },
+      "ForgePollView": {
+        "description": "A GitLab's or Gitea's poll of a project's repositories there, as GitHub's is said ({@link IngressView.github}).",
+        "type": "object",
+        "properties": {
+          "connection": {
+            "description": "The connections it polls with, comma-joined; null while none does.",
+            "type": "string"
+          },
+          "host": {
+            "description": "The forge's host: `gitlab.com`, `gitea.example.com:3000`.",
+            "type": "string"
+          },
+          "polled": {
+            "type": "boolean"
+          },
+          "polledAt": {
+            "type": "number"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ForgePollViewProvider"
+          },
+          "repos": {
+            "description": "The repositories it polls there, as linked: every one the project links on that host.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resumeAt": {
+            "type": "number"
+          },
+          "state": {
+            "description": "What is true of it, in a sentence: polled, or why not.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "polled",
+          "provider",
+          "repos",
+          "state"
+        ]
+      },
+      "ForgePollViewProvider": {
+        "type": "string",
+        "enum": [
+          "gitea",
+          "gitlab"
+        ]
+      },
       "ForgottenBrings": {
         "description": "What bringing a forgotten project back brings, counted.",
         "type": "object",
@@ -48150,7 +48205,7 @@
         ]
       },
       "IngressView": {
-        "description": "What a project's ingress is: its GitHub poller, routes, connector polls and newest events.",
+        "description": "What a project's ingress is: its GitHub poller, its GitLab and Gitea polls, routes, connector polls and newest events.",
         "type": "object",
         "properties": {
           "connectorPolls": {
@@ -48172,6 +48227,13 @@
           "eventsNext": {
             "description": "The `skip` that reads the page of older events after {@link events}.",
             "type": "number"
+          },
+          "forges": {
+            "description": "Each GitLab and Gitea the project links repositories on or follows, one poll line each.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForgePollView"
+            }
           },
           "github": {
             "type": "object",
@@ -48244,6 +48306,7 @@
           "events",
           "eventsMore",
           "eventsNext",
+          "forges",
           "github",
           "routes"
         ]
@@ -58441,7 +58504,9 @@
         "type": "string",
         "enum": [
           "generic",
+          "gitea",
           "github",
+          "gitlab",
           "linear",
           "standard-webhooks",
           "stripe"
@@ -58882,11 +58947,11 @@
             "type": "string"
           },
           "registered": {
-            "description": "Whether GitHub's webhook was registered by the hub (and is deleted with the relay).",
+            "description": "Whether the service's webhook was registered by the hub (and is deleted with the relay).",
             "type": "boolean"
           },
           "repo": {
-            "description": "GitHub: the repository, `owner/repo`, whose webhook it is; null for other providers.",
+            "description": "GitHub, GitLab, Gitea: the repository (`owner/repo`, `group/sub/project`) whose webhook it is; null for other providers.",
             "type": "string"
           },
           "state": {

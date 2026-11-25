@@ -5,6 +5,7 @@
  * key: a delegate type (or a project) lists the connections its sessions may
  * use, and the hub calls their tools for them (`conn__<name>__<tool>`).
  */
+import type { ForgeId } from "@cawco/providers/provider";
 import type { RelayProvider } from "./relays";
 
 /**
@@ -72,6 +73,107 @@ const GITHUB_API_AUTHS: readonly ConnectionAuth[] = [
 /** Whether a `github` connection signed in this way reads GitHub's REST API ({@link GITHUB_API_AUTHS}). */
 export const readsGitHubApi = (auth: ConnectionAuth): boolean =>
   GITHUB_API_AUTHS.includes(auth);
+
+/** The services whose API a connection is read with to follow a project's repositories: the forges' provider ids. */
+export type ApiProvider = ForgeId;
+
+/** Where a connection reads its service's API: its provider and the origin it answers at (`https://gitlab.example.com`). */
+export type ConnectionApi =
+  | { origin: string; provider: ApiProvider }
+  /** A `gitea` connection over HTTP: the gitea-mcp server says which Gitea it serves (its `get_me`), not its own URL. */
+  | { origin: null; provider: "gitea" };
+
+/** What of a connection names its API. */
+type ApiNamed = Pick<
+  ConnectionView,
+  "args" | "auth" | "service" | "transport" | "url"
+>;
+
+const HOST_FLAGS: ReadonlySet<string> = new Set(["-H", "-host", "--host"]);
+
+/** A URL as the platform parses it; null for none. */
+const urlOf = (text: string): URL | null => {
+  try {
+    return new URL(text);
+  } catch {
+    // The parser's TypeError says only that this is no URL, which null says.
+    return null;
+  }
+};
+
+/** An http(s) URL's origin; undefined for anything else. */
+const originOf = (text: string | undefined): string | undefined => {
+  const url = text ? urlOf(text) : null;
+  return url && (url.protocol === "https:" || url.protocol === "http:")
+    ? url.origin
+    : undefined;
+};
+
+/**
+ * The origin a command's arguments name: the value of a host flag
+ * (gitea-mcp's `-H`, `-host`, `--host`, as `--host <url>` or
+ * `--host=<url>`), else the first argument that is an http(s) URL.
+ */
+const argsOrigin = (args: readonly string[]): string | undefined => {
+  for (const [at, arg] of args.entries()) {
+    const equals = arg.indexOf("=");
+    const flag = equals < 0 ? arg : arg.slice(0, equals);
+    if (HOST_FLAGS.has(flag)) {
+      return originOf(equals < 0 ? args[at + 1] : arg.slice(equals + 1));
+    }
+  }
+  return args.map(originOf).find((one) => one !== undefined);
+};
+
+/**
+ * Where a connection reads its service's API, so a project it names
+ * follows that service's repositories it links (hub db/watches.ts): undefined
+ * for a connection that reads none.
+ * - **GitHub**: a `github` connection whose sign-in reads GitHub's REST API
+ *   ({@link readsGitHubApi}), on github.com.
+ * - **GitLab**: a `gitlab` connection with a key (`bearer`: a personal,
+ *   project or group access token, which "you can use … to authenticate
+ *   with the API", docs.gitlab.com/api/rest/authentication; one with the
+ *   `api` and `mcp` scopes serves both), on the host its server URL names
+ *   (GitLab's MCP server is served by GitLab itself,
+ *   `https://<host>/api/v4/mcp`), or a command's URL argument, else
+ *   gitlab.com. An MCP OAuth sign-in's token is for GitLab's MCP server
+ *   alone ("`/api/v4/mcp` lists only `mcp`, the one scope that it
+ *   accepts", same page).
+ * - **Gitea**: a `gitea` connection, read through its own gitea-mcp tools,
+ *   whatever its sign-in: a command names its Gitea by gitea-mcp's host
+ *   flag, else gitea-mcp's own default, gitea.com ("Gitea host URL
+ *   (default: https://gitea.com)"); one over HTTP is asked
+ *   (`origin: null`).
+ */
+export const connectionApi = (
+  connection: ApiNamed
+): ConnectionApi | undefined => {
+  const service = connection.service.trim().toLowerCase();
+  const args = connection.args ?? [];
+  const command = connection.transport === "stdio";
+  switch (service) {
+    case "github":
+      return readsGitHubApi(connection.auth)
+        ? { provider: "github", origin: "https://github.com" }
+        : undefined;
+    case "gitlab":
+      return connection.auth === "bearer"
+        ? {
+            provider: "gitlab",
+            origin:
+              (command ? argsOrigin(args) : originOf(connection.url)) ??
+              "https://gitlab.com",
+          }
+        : undefined;
+    case "gitea":
+      return command
+        ? { provider: "gitea", origin: argsOrigin(args) ?? "https://gitea.com" }
+        : { provider: "gitea", origin: null };
+    default:
+      return;
+  }
+};
 
 /** The services an `app` connection is built for. */
 export const APP_SERVICES = ["github", "linear"] as const;

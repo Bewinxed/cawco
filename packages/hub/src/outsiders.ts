@@ -2,7 +2,9 @@
  * Outsiders (provider spec §2.5 step 4, the owner's decision on D2): what
  * happens to the words of someone an outside service does not vouch for
  * (GitHub: no owner, member or collaborator of the repository; Linear: an
- * integration's, no member behind it), on every path alike, by the
+ * integration's, no member behind it; GitLab: no Developer role or above on
+ * the project; Gitea: no write access to the repository), on every path
+ * alike, by the
  * project's rule (`projects.outsiders`, core outsiders.ts).
  *
  * - **`hold`, the default.** Their event (an issue or pull request opened,
@@ -28,6 +30,7 @@ import type { OutsiderRule } from "@cawco/core/outsiders";
 import type { WaitingOffer } from "@cawco/core/project-conversation";
 import type { Stage } from "@cawco/core/task-views";
 import { TRACKERS } from "@cawco/core/trackers";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { InboundEventRow } from "./db/ingress";
@@ -123,7 +126,7 @@ export const createOutsiders = ({
     const source = event.author?.source;
     const actor: TaskActor = {
       mover: "hub",
-      author: { name: source === "linear" ? "Linear" : "GitHub" },
+      author: { name: externalItemWords.source[source ?? "github"] },
       reason: `${task.id} has words from ${unvouched}: it waits in ${hold.name} for you before any agent takes it`,
       // The tracker sync's own hold, never sent back to its tracker.
       ...(synced && isOneOf(TRACKERS, source) ? { tracker: source } : {}),

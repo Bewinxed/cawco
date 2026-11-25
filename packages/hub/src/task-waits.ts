@@ -20,8 +20,8 @@
  * same way again.
  *
  * A PR's and a run's state is its item's mirror row's (links.ts
- * `githubWait`), which the project's GitHub poll reads and its events keep,
- * so it outlives a restart. A project with no GitHub
+ * `linkWait`), which the project's poll of its forge reads and its events
+ * keep, so it outlives a restart. A project with no watch on that forge
  * poller is refused either target where it is written ({@link readWait}).
  *
  * A task that is a routine (§5.5) settles only by its stop: its task in a
@@ -42,7 +42,7 @@ import type { ConditionState, ConditionView } from "@cawco/core/routine-kinds";
 import type { WaitState } from "@cawco/core/task-views";
 import type { StageKind } from "@cawco/core/views";
 import {
-  githubTarget,
+  linkTarget,
   taskTarget,
   timeTarget,
   type WaitTarget,
@@ -59,7 +59,7 @@ import type { WorkItemState } from "./db/schema";
 import { type RoutineFacts, stopViewOf } from "./routine-stop";
 
 /** A pull request's or an Actions run's state as its mirror row holds it; `checking` before the poll read it. */
-export type GitHubWaitState =
+export type LinkWaitState =
   "open" | "merged" | "closed" | "running" | "green" | "red" | "checking";
 
 /** What the resolver reads of the hub, each answer the thing's own state now. */
@@ -77,13 +77,13 @@ export interface WaitWorld {
         value: string | null;
       }
     | undefined;
-  /** A pull request's or run's state and title as its mirror row holds them. */
-  readonly github: (target: Extract<WaitTarget, { kind: "pr" | "run" }>) => {
-    state: GitHubWaitState;
-    title: string | null;
-  };
   /** Whether the folder's history shows the task taken out of tasks/ (archived or deleted): done with. */
   readonly gone: (id: string) => boolean;
+  /** A pull request's or run's state and title as its mirror row holds them. */
+  readonly link: (target: Extract<WaitTarget, { kind: "pr" | "run" }>) => {
+    state: LinkWaitState;
+    title: string | null;
+  };
   /** The read's clock, ms since the epoch: one instant for every date the read settles. */
   readonly now: number;
   /** Pin `number` of artifact `artifactId`: what it stands on, and whether it is resolved; undefined when it is gone. */
@@ -244,13 +244,10 @@ const taskState = (
   };
 };
 
-const GITHUB_SETTLED: ReadonlySet<GitHubWaitState> = new Set([
-  "merged",
-  "green",
-]);
+const LINK_SETTLED: ReadonlySet<LinkWaitState> = new Set(["merged", "green"]);
 
 /** Each red state's flag, told to the person once per task's wait (wait-flags.ts). */
-const GITHUB_FLAG: Partial<Record<GitHubWaitState, string>> = {
+const LINK_FLAG: Partial<Record<LinkWaitState, string>> = {
   closed: taskLinkWords.closedUnmerged,
   red: taskLinkWords.runFailed,
 };
@@ -327,14 +324,14 @@ const pinState = (
 };
 
 /** A pull request or run: settled once merged or green, flagged once closed unmerged or red. */
-const githubState = (
+const linkState = (
   target: Extract<WaitTarget, { kind: "pr" | "run" }>,
   world: WaitWorld
 ): WaitState => {
-  const read = world.github(target);
+  const read = world.link(target);
   const label =
     target.kind === "pr"
-      ? `PR #${target.number}${read.title ? ` ${read.title}` : ""}`
+      ? `${taskLinkWords.changeRequest(target.provider)} ${target.ref}${read.title ? ` ${read.title}` : ""}`
       : `${read.title ?? "Actions run"} ${target.id}`;
   const base = {
     target: target.url,
@@ -342,13 +339,13 @@ const githubState = (
     href: target.url,
     label,
   };
-  const flag = GITHUB_FLAG[read.state];
+  const flag = LINK_FLAG[read.state];
   if (flag) {
     return flagged({ ...base, state: read.state }, flag);
   }
   return {
     ...base,
-    settled: GITHUB_SETTLED.has(read.state),
+    settled: LINK_SETTLED.has(read.state),
     state: read.state,
     flag: null,
     value: null,
@@ -437,7 +434,7 @@ const settled = (target: WaitTarget, world: WaitWorld): WaitState => {
       return pinState(target, world);
     case "pr":
     case "run":
-      return githubState(target, world);
+      return linkState(target, world);
     case "session":
       return sessionState(target, world);
     case "time":
@@ -478,8 +475,10 @@ export interface WaitReader {
   readonly cards: (
     artifactId: string
   ) => { id: string; options: readonly string[] }[];
-  /** Why the project cannot wait on a pull request or run (no GitHub connection), or nothing when it can. */
-  readonly githubRefusal: () => string | undefined;
+  /** Why the project cannot wait on this pull or merge request or run (no watch reads its forge), or nothing when it can. */
+  readonly linkRefusal: (
+    target: Extract<WaitTarget, { kind: "pr" | "run" }>
+  ) => string | undefined;
   /** The page a name, handle or id names, by its whole id and name; a refusal in words when it names none. */
   readonly page: (asked: string) => { id: string; name: string } | string;
   /** Whether page `artifactId` holds pin `number`. */
@@ -527,8 +526,8 @@ const sessionWait = (written: string, reader: WaitReader) => {
 /**
  * A wait as an agent or the dashboard writes it, read into its target: a
  * task (whose being in the project the caller checks), a card or a pin of a
- * page the writer may name, a pull request or run while the project has
- * GitHub, a session that runs a work item, a date; a task that is a routine
+ * page the writer may name, a pull or merge request or run while the
+ * project reads its forge, a session that runs a work item, a date; a task that is a routine
  * only when it has a stop condition.
  * Otherwise its refusal, each cause under its own code.
  */
@@ -572,26 +571,26 @@ export const readWait = (written: string, reader: WaitReader) => {
   }
   return problem(400, {
     code: "wait-target-unknown",
-    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, a session (<dir>#<id>), or a date (2026-12-01, 2026-12-01T09:00+03:00).`,
+    detail: `Can't wait on “${said}”. Use a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a pull or merge request on GitHub, GitLab or Gitea, a GitHub Actions run, a session (<dir>#<id>) or a date (2026-12-01, 2026-12-01T09:00+03:00).`,
   });
 };
 
-/** A link as a wait: a GitHub pull request or Actions run, while the project has GitHub. */
+/** A link as a wait: a pull or merge request on GitHub, GitLab or Gitea, or a GitHub Actions run, while the project reads its forge. */
 const readLink = (said: string, reader: WaitReader) => {
-  const github = githubTarget(said);
-  if (!github) {
+  const link = linkTarget(said);
+  if (!link) {
     return problem(400, {
       code: "wait-link-unsettled",
-      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task (a routine among them), a card, a pin, a session or a date.`,
+      detail: `Can't wait on the link “${said}”. Use a pull or merge request on GitHub, GitLab or Gitea, a GitHub Actions run, a task or routine, a card, a pin, a session or a date.`,
     });
   }
-  const refused = reader.githubRefusal();
+  const refused = reader.linkRefusal(link);
   return refused
     ? problem(400, {
         code: "wait-github-unavailable",
         detail: `“${said}” cannot be waited on: ${refused}`,
       })
-    : github;
+    : link;
 };
 
 /** `<page>#<card>` or `<page>#<card>=<option>` as a card the page asks; else a session handle (`cockpit#5a167bde`). */

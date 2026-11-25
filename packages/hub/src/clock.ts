@@ -39,7 +39,6 @@
  *   it through its promise edges.
  */
 
-import { readsGitHubApi } from "@cawco/core/connections";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import {
@@ -47,12 +46,25 @@ import {
   connectionIngest,
   type ToolCaller,
 } from "@cawco/providers/connection/ingest";
+import type { GiteaClient } from "@cawco/providers/gitea/client";
+import {
+  type GiteaStreamCursor,
+  giteaIngest,
+} from "@cawco/providers/gitea/ingest";
+import { giteaItems } from "@cawco/providers/gitea/items";
 import { BOARD_STREAM } from "@cawco/providers/github/board";
 import {
   type GitHubClient,
   type GitHubStreamCursor,
   githubIngest,
 } from "@cawco/providers/github/ingest";
+import { githubItems } from "@cawco/providers/github/items";
+import type { GitLabClient } from "@cawco/providers/gitlab/client";
+import {
+  type GitLabStreamCursor,
+  gitlabIngest,
+} from "@cawco/providers/gitlab/ingest";
+import { gitlabItems } from "@cawco/providers/gitlab/items";
 import type { LinearClientFor } from "@cawco/providers/linear/client";
 import {
   type LinearStreamCursor,
@@ -61,6 +73,7 @@ import {
 import type {
   Ingest,
   ItemRevision,
+  Items,
   WatchView,
 } from "@cawco/providers/provider";
 import { Cause, Effect, Fiber, Result, Schedule } from "effect";
@@ -69,19 +82,57 @@ import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { InboundVia, WatchCursor } from "./db/stored-types";
 import {
+  forgeReposOf,
+  GITHUB,
   githubReposOf,
   type PolledWatch,
   type Rehomed,
   type StreamCursor,
 } from "./db/watches";
-import type { IngressView } from "./ingress-views";
+import {
+  type Forge,
+  forgeOf,
+  learnHost,
+  nameConnectionHosts,
+  unlearned,
+} from "./forge-hosts";
+import type { ForgePollView, IngressView } from "./ingress-views";
 import type { Intake } from "./intake";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Links } from "./links";
 
-/** What the poll says of a project that links no GitHub repository. */
-const NO_GITHUB_LINK =
-  "Nothing is polled: the project links no repository on github.com.";
+/** What the poll says of a project that links no repository on a forge's host. */
+const noLinkOn = (host: string): string =>
+  `Not polling. No linked repository on ${host}.`;
+
+/** Each forge's name, for its poll's sentences. */
+const SERVICE_NAMES: Readonly<Record<Forge["provider"], string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  gitea: "Gitea",
+};
+
+/** A forge's poll's state in a sentence: polled, or why not; one template for every forge. */
+const pollState = (
+  forge: Pick<Forge, "host" | "provider">,
+  repos: readonly string[],
+  linked: readonly { container: string; reason: string | null }[],
+  connection: string | null
+): string => {
+  const named = repos.join(", ");
+  const reason = pollProblem(
+    linked.map((watch) => ({ repo: watch.container, reason: watch.reason }))
+  );
+  if (repos.length === 0) {
+    return noLinkOn(forge.host);
+  }
+  if (linked.length === 0) {
+    return `Not polling ${named}. Grant the project a ${SERVICE_NAMES[forge.provider]} connection in ${configurePage("connections")}.`;
+  }
+  return reason
+    ? `Polling ${named} with ${connection}. Last poll stopped: ${reason}`
+    : `Polling ${named} every 60 s with ${connection}.`;
+};
 
 /** How often the loop looks for a watch that is due. Our choice. */
 const LOOK_MS = 5000;
@@ -134,9 +185,47 @@ const latest = (
 /** The providers the poll reads, by a watch's stored name. */
 const POLLED: Readonly<Record<string, WatchView["provider"]>> = {
   github: "github",
+  gitlab: "gitlab",
+  gitea: "gitea",
   linear: "linear",
   connection: "connection",
 };
+
+/** gitlab.com and gitea.com: the forges whose repositories a project's links name with no connection saying so. */
+const OWN_FORGES: readonly Pick<Forge, "host" | "provider">[] = [
+  { provider: "gitlab", host: "gitlab.com" },
+  { provider: "gitea", host: "gitea.com" },
+];
+
+/** The origin of the Gitea a gitea-mcp's `get_me` answer is on: its user's `html_url`'s; undefined when it names none. */
+const servedOrigin = (answer: {
+  content: readonly ({ text: string; type: "text" } | { type: string })[];
+}): string | undefined => {
+  const text = answer.content
+    .map((part) => ("text" in part && part.type === "text" ? part.text : ""))
+    .join("");
+  let said: unknown;
+  try {
+    said = JSON.parse(text);
+  } catch {
+    // No JSON: it names no Gitea.
+    return;
+  }
+  const url =
+    typeof said === "object" &&
+    said !== null &&
+    "html_url" in said &&
+    typeof said.html_url === "string"
+      ? said.html_url
+      : "";
+  return URL.parse(url)?.origin;
+};
+
+/** A GitLab's or Gitea's watch: polled per project and forge, as GitHub is per project. */
+const isForgeWatch = (
+  watch: PolledWatch
+): watch is PolledWatch & { provider: "gitlab" | "gitea" } =>
+  watch.provider === "gitlab" || watch.provider === "gitea";
 
 /** A watch as its provider reads it: read through the connection the poll reads it with. */
 const viewOf = (watch: PolledWatch): WatchView => ({
@@ -173,6 +262,14 @@ const linearCursorOf = (
     ? { since: kept.cursor.since }
     : null;
 
+/** A GitLab's or Gitea's stream's kept mark as its provider reads it. */
+const sinceCursorOf = (
+  kept: StreamCursor | undefined
+): { since: number } | null =>
+  kept && typeof kept.cursor.since === "number"
+    ? { since: kept.cursor.since }
+    : null;
+
 /** A connector poll's kept mark: there once it has looked. */
 const connectorCursorOf = (
   kept: StreamCursor | undefined
@@ -201,7 +298,13 @@ interface WatchPolled {
 export interface ClockDeps {
   readonly connections: Pick<
     Connections,
-    "callConnection" | "get" | "githubClient" | "linearClient"
+    | "callConnection"
+    | "get"
+    | "giteaClient"
+    | "githubClient"
+    | "gitlabClient"
+    | "linearClient"
+    | "list"
   >;
   readonly db: Pick<DbShape, "ingress" | "project">;
   readonly intake: Pick<Intake, "settled" | "take">;
@@ -244,6 +347,20 @@ export const createClock = ({
     client: (watch) => (tool, args) =>
       connections.callConnection(watch.reads, tool, args),
     via: "connector",
+  };
+  const gitlab: Reader<GitLabClient, GitLabStreamCursor> = {
+    ingest: gitlabIngest,
+    cursorOf: sinceCursorOf,
+    keep: ({ since }) => ({ since }),
+    client: (watch) => connections.gitlabClient(watch.reads),
+    via: "poll",
+  };
+  const gitea: Reader<GiteaClient, GiteaStreamCursor> = {
+    ingest: giteaIngest,
+    cursorOf: sinceCursorOf,
+    keep: ({ since }) => ({ since }),
+    client: (watch) => connections.giteaClient(watch.reads),
+    via: "poll",
   };
 
   /**
@@ -356,12 +473,15 @@ export const createClock = ({
       catch: wordsOf,
     }).pipe(Effect.catch((words) => Effect.succeed({ words })));
 
-  /** The revisions a project's link reads found, through the door, each with its repository's watch. */
-  const storeReads = (projectId: string, revisions: ItemRevision[]): void => {
+  /** The revisions a project's link reads on `forge` found, through the door, each with its repository's watch there. */
+  const storeReads = (
+    projectId: string,
+    forge: Pick<Forge, "host" | "provider">,
+    followed: readonly PolledWatch[],
+    revisions: ItemRevision[]
+  ): void => {
     const byRepo = new Map(
-      store
-        .githubWatches(projectId)
-        .map((watch) => [watch.container.toLowerCase(), watch.id])
+      followed.map((watch) => [watch.container.toLowerCase(), watch.id])
     );
     const groups = new Map<string, ItemRevision[]>();
     for (const revision of revisions) {
@@ -373,7 +493,11 @@ export const createClock = ({
       // store is synchronous, and its subscribers run on a fiber of their own.
       Effect.runSync(
         intake.take(
-          { projectId, provider: "github", watchId: byRepo.get(repo) ?? null },
+          {
+            projectId,
+            provider: forge.provider,
+            watchId: byRepo.get(repo) ?? null,
+          },
           { revisions: group, events: [] },
           "poll",
           false
@@ -381,6 +505,28 @@ export const createClock = ({
       );
     }
   };
+
+  /**
+   * The project's linked items on `forge` due a read, each read with the
+   * client of the connection the project follows that forge by: what they
+   * say goes through the door.
+   */
+  const readForgeLinks = <Client>(
+    projectId: string,
+    forge: Pick<Forge, "host" | "provider">,
+    items: Items<Client>,
+    client: Client
+  ) =>
+    Effect.promise(() =>
+      links.readLinks(projectId, forge, items, client, requestMs, (revisions) =>
+        storeReads(
+          projectId,
+          forge,
+          store.forgeWatches(projectId, forge),
+          revisions
+        )
+      )
+    );
 
   /**
    * One poll of every GitHub repository the project links and watches,
@@ -404,7 +550,7 @@ export const createClock = ({
     );
     for (const watch of followed) {
       if (!(linked.includes(watch) || synced.includes(watch))) {
-        store.keepWatch(watch.id, { reason: NO_GITHUB_LINK, polledAt });
+        store.keepWatch(watch.id, { reason: noLinkOn(GITHUB.host), polledAt });
       }
     }
     for (const watch of [...linked, ...synced]) {
@@ -426,11 +572,84 @@ export const createClock = ({
       // The connection could not sign in: its watches' reads said why, and the links are read on the next poll.
       return;
     }
-    yield* Effect.promise(() =>
-      links.readLinks(projectId, client, requestMs, (revisions) =>
-        storeReads(projectId, revisions)
+    yield* readForgeLinks(projectId, GITHUB, githubItems, client);
+  });
+
+  /**
+   * One poll of a GitLab's or Gitea's repositories the project links and
+   * watches, each through its watch's connection, then the project's
+   * linked items on that forge due a read, as GitHub's are. A repository
+   * it no longer links keeps its watch and cursors, unread.
+   */
+  const pollForge = Effect.fnUntraced(function* (
+    projectId: string,
+    forge: Pick<Forge, "host" | "provider">
+  ): Effect.fn.Return<void> {
+    const followed = store.forgeWatches(projectId, forge);
+    const project = db.project(projectId);
+    if (!(followed.length > 0 && project)) {
+      return;
+    }
+    const polledAt = new Date();
+    const repos = new Set(
+      forgeReposOf(project.links, forge).map((repo) => repo.toLowerCase())
+    );
+    for (const watch of followed) {
+      if (!repos.has(watch.container.toLowerCase())) {
+        store.keepWatch(watch.id, {
+          reason: `Not polling. This project no longer links ${watch.container} on ${watch.host}.`,
+          polledAt,
+        });
+        continue;
+      }
+      if (forge.provider === "gitlab") {
+        yield* pollWith(watch, gitlab, polledAt);
+      } else {
+        yield* pollWith(watch, gitea, polledAt);
+      }
+    }
+    const by = store.followedOn(projectId, forge);
+    if (by === undefined) {
+      return;
+    }
+    const linkReads =
+      forge.provider === "gitlab"
+        ? Effect.try(() => connections.gitlabClient(by)).pipe(
+            Effect.flatMap((client) =>
+              readForgeLinks(projectId, forge, gitlabItems, client)
+            )
+          )
+        : Effect.try(() => connections.giteaClient(by)).pipe(
+            Effect.flatMap((client) =>
+              readForgeLinks(projectId, forge, giteaItems, client)
+            )
+          );
+    // A connection that could not sign in: its watches' reads said why,
+    // and the links are read on the next poll.
+    yield* linkReads.pipe(
+      Effect.catch((error) =>
+        Effect.sync(() =>
+          console.log(
+            `[clock] project ${projectId}: its links on ${forge.host} wait for the next poll: ${wordsOf(error)}`
+          )
+        )
       )
     );
+  });
+
+  /** One watch read through its reader, its outcome kept; false when its connection could not sign in. */
+  const pollWith = Effect.fnUntraced(function* <Client, Cursor>(
+    watch: PolledWatch,
+    reader: Reader<Client, Cursor>,
+    polledAt: Date
+  ): Effect.fn.Return<boolean> {
+    const opened = yield* clientFor(watch, reader);
+    if ("words" in opened) {
+      store.keepWatch(watch.id, { reason: opened.words, polledAt });
+      return false;
+    }
+    keepRead(watch, yield* readWatch(watch, reader, opened.client), polledAt);
+    return true;
   });
 
   /** One read of a Linear team's watch. */
@@ -518,28 +737,64 @@ export const createClock = ({
     );
   };
 
-  /** Every watch that is due starts its read. */
-  const look = (now: number = Date.now()): void => {
+  /** A forge's watches of one project, polled together. */
+  interface ForgeGroup {
+    followed: PolledWatch[];
+    forge: Pick<Forge, "host" | "provider">;
+    projectId: string;
+  }
+
+  /** The watches the poll reads, as their reads go: GitHub's by project, a GitLab's or Gitea's by project and forge, every other alone. */
+  const grouped = () => {
     const byProject = new Map<string, PolledWatch[]>();
+    const byForge = new Map<string, ForgeGroup>();
+    const alone: PolledWatch[] = [];
     for (const watch of store.polledWatches()) {
       if (watch.provider === "github") {
         byProject.set(watch.projectId, [
           ...(byProject.get(watch.projectId) ?? []),
           watch,
         ]);
-        continue;
+      } else if (isForgeWatch(watch)) {
+        const key = `${watch.provider}:${watch.projectId}:${watch.host.toLowerCase()}`;
+        const group = byForge.get(key) ?? {
+          forge: { provider: watch.provider, host: watch.host },
+          followed: [],
+          projectId: watch.projectId,
+        };
+        group.followed.push(watch);
+        byForge.set(key, group);
+      } else {
+        alone.push(watch);
       }
+    }
+    return { byProject, byForge, alone };
+  };
+
+  /** Every watch that is due starts its read. */
+  const look = (now: number = Date.now()): void => {
+    const { byProject, byForge, alone } = grouped();
+    for (const watch of alone) {
       lookAlone(watch, now);
     }
+    const due = (followed: readonly PolledWatch[], every: number) =>
+      latest(followed, "polledAt") + every <= now &&
+      latest(followed, "resumeAt") <= now;
     for (const [projectId, followed] of byProject) {
       const every = Math.min(
         ...followed.map((watch) => github.ingest.everyMs(viewOf(watch)))
       );
-      if (
-        latest(followed, "polledAt") + every <= now &&
-        latest(followed, "resumeAt") <= now
-      ) {
+      if (due(followed, every)) {
         Effect.runFork(once(`github:${projectId}`, pollGitHub(projectId)));
+      }
+    }
+    for (const [key, { forge, followed, projectId }] of byForge) {
+      const ingest = forge.provider === "gitlab" ? gitlab.ingest : gitea.ingest;
+      const every = Math.min(
+        ...followed.map((watch) => ingest.everyMs(viewOf(watch)))
+      );
+      if (due(followed, every)) {
+        Effect.runFork(once(key, pollForge(projectId, forge)));
       }
     }
   };
@@ -560,6 +815,12 @@ export const createClock = ({
     if (lifetime.closed()) {
       return;
     }
+    const known = connections.list();
+    nameHosts();
+    // A Gitea over HTTP is asked again which Gitea it serves, then followed.
+    for (const one of known.filter(unlearned)) {
+      followConnection(one.name, []);
+    }
     const was = looping;
     looping = Effect.runFork(loop);
     if (was) {
@@ -578,19 +839,7 @@ export const createClock = ({
         ? reading.join(", ")
         : (store.followedBy(projectId) ?? null);
     const named = repos.join(", ");
-    const reason = pollProblem(
-      linked.map((watch) => ({ repo: watch.container, reason: watch.reason }))
-    );
-    let state: string;
-    if (repos.length === 0) {
-      state = NO_GITHUB_LINK;
-    } else if (linked.length === 0) {
-      state = `${named} ${repos.length > 1 ? "aren't" : "isn't"} polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
-    } else if (reason) {
-      state = `Polling ${named} with ${connection}; its last poll stopped: ${reason}`;
-    } else {
-      state = `Polling ${named} every 60 s with ${connection}.`;
-    }
+    const state = pollState(GITHUB, repos, linked, connection);
     const polledAt = latest(followed, "polledAt");
     const resumeAt = latest(followed, "resumeAt");
     const seen: IngressView["github"] = {
@@ -606,20 +855,77 @@ export const createClock = ({
     return seen;
   };
 
+  /** Every GitLab and Gitea the project has watches on, or links a repository on (gitlab.com, gitea.com, or the host a connection names). */
+  const forgesOf = (
+    projectId: string,
+    remotes: readonly string[]
+  ): Pick<Forge, "host" | "provider">[] => {
+    const forges = new Map<string, Pick<Forge, "host" | "provider">>();
+    const add = (forge: Pick<Forge, "host" | "provider">) => {
+      forges.set(`${forge.provider}\0${forge.host.toLowerCase()}`, forge);
+    };
+    for (const watch of store.polledWatches()) {
+      if (watch.projectId === projectId && isForgeWatch(watch)) {
+        add({ provider: watch.provider, host: watch.host });
+      }
+    }
+    const named = connections.list().flatMap((one) => forgeOf(one) ?? []);
+    for (const forge of [...named, ...OWN_FORGES]) {
+      if (
+        forge.provider !== "github" &&
+        forgeReposOf(remotes, forge).length > 0
+      ) {
+        add(forge);
+      }
+    }
+    return [...forges.values()];
+  };
+
+  /** A project's GitLab and Gitea polls as its ingress view says them, one per forge, as {@link githubView} says GitHub's. */
+  const forgeViews = (
+    projectId: string,
+    remotes: readonly string[]
+  ): ForgePollView[] =>
+    forgesOf(projectId, remotes).map((forge) => {
+      const repos = forgeReposOf(remotes, forge);
+      const linkedRepos = new Set(repos.map((repo) => repo.toLowerCase()));
+      const followed = store.forgeWatches(projectId, forge);
+      const linked = followed.filter((watch) =>
+        linkedRepos.has(watch.container.toLowerCase())
+      );
+      const reading = [...new Set(linked.map((watch) => watch.reads))];
+      const connection =
+        reading.length > 0
+          ? reading.join(", ")
+          : (store.followedOn(projectId, forge) ?? null);
+      const polledAt = latest(followed, "polledAt");
+      const resumeAt = latest(followed, "resumeAt");
+      return {
+        provider: forge.provider === "gitlab" ? "gitlab" : "gitea",
+        host: forge.host,
+        repos,
+        connection,
+        polled: linked.length > 0,
+        state: pollState(forge, repos, linked, connection),
+        polledAt: polledAt === 0 ? null : polledAt,
+        resumeAt: resumeAt === 0 ? null : resumeAt,
+      };
+    });
+
   /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
   const pollGitHubNow = Effect.fnUntraced(function* (projectId: string) {
     const followed = store.githubWatches(projectId);
     if (followed.length === 0) {
       return problem(409, {
         code: "ingress-github-unpolled",
-        detail: `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`,
+        detail: `Not polling the repository. Grant the project a GitHub connection in ${configurePage("connections")}.`,
       });
     }
     const resumeAt = latest(followed, "resumeAt");
     if (resumeAt > Date.now()) {
       return problem(409, {
         code: "ingress-github-rate-limited",
-        detail: `GitHub's rate limit holds polls until ${new Date(resumeAt).toISOString()}.`,
+        detail: `GitHub rate-limited requests until ${new Date(resumeAt).toISOString()}.`,
       });
     }
     yield* once(`github:${projectId}`, pollGitHub(projectId));
@@ -663,43 +969,97 @@ export const createClock = ({
 
   /**
    * A connection's projects were written (connections.ts `writeProjects`):
-   * while it reads GitHub's API, each project it names that follows GitHub
-   * with no connection follows it through this one from now, a watch of
-   * each github.com repository it links (db/watches.ts `followGitHub`); a
-   * project following another keeps that one. Each project it dropped, or
-   * every one once it no longer reads GitHub's API, has its watches that
-   * read through it moved to the connection the project follows by from
-   * now, and stops following only where none is left (db/watches.ts
-   * `rehome`).
+   * while it reads a forge's API (GitHub, a GitLab, a Gitea: core
+   * `connectionApi`), each project it names that follows that forge with no
+   * connection follows it through this one from now, a watch of each
+   * repository there it links (db/watches.ts `followForge`); a project
+   * following another keeps that one. Each project it dropped, or every one
+   * once it no longer reads that forge's API, has its watches that read
+   * through it moved to the connection the project follows that forge by
+   * from now, and stops following only where none is left (db/watches.ts
+   * `rehome`). A Gitea over HTTP is asked which Gitea it serves first
+   * ({@link learn}).
    */
   const followConnection = (
     connection: string,
     dropped: readonly string[]
   ): void => {
     const found = connections.get(connection);
-    const reads =
-      found.service.trim().toLowerCase() === "github" &&
-      readsGitHubApi(found.auth);
-    if (!reads || dropped.length > 0) {
-      sayRehomed(
-        connection,
-        store.rehome(connection, reads ? dropped : undefined)
+    if (unlearned(found)) {
+      Effect.runFork(
+        learn(connection).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              if (!unlearned(connections.get(connection))) {
+                followConnection(connection, dropped);
+              }
+            })
+          ),
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              console.warn(
+                `[clock] ${connection}: ${wordsOf(Cause.squash(cause))}`
+              )
+            )
+          )
+        )
       );
-    }
-    if (!reads) {
       return;
     }
+    nameHosts();
+    const forge = forgeOf(found);
+    if (!forge || dropped.length > 0) {
+      sayRehomed(
+        connection,
+        store.rehome(connection, forge ? dropped : undefined)
+      );
+    }
+    if (!forge) {
+      return;
+    }
+    // Watches it reads on another forge than the one it names now (its
+    // server moved) move off it.
+    sayRehomed(connection, store.rehome(connection, undefined, forge));
     for (const projectId of found.projects) {
-      if (store.followedBy(projectId) === undefined) {
-        const repos = store.followGitHub(projectId, connection);
+      if (store.followedOn(projectId, forge) === undefined) {
+        const repos = store.followForge(projectId, connection, forge);
         console.log(
           repos.length > 0
-            ? `[clock] project ${projectId}: polls ${repos.join(", ")} with ${connection}`
-            : `[clock] project ${projectId}: links no repository on github.com; one it links is polled with ${connection}`
+            ? `[clock] project ${projectId}: polls ${repos.join(", ")} on ${forge.host} with ${connection}`
+            : `[clock] project ${projectId}: links no repository on ${forge.host}; one it links is polled with ${connection}`
         );
       }
     }
   };
+
+  /** The self-managed forges' hosts named (forge-hosts.ts), so their URLs read as their items. */
+  const nameHosts = (): void =>
+    nameConnectionHosts(connections.list(), store.polledWatches());
+
+  /** The Gitea a `gitea` connection over HTTP serves, as its server says (`get_me`'s `html_url`), learned (forge-hosts.ts). */
+  const learn = (connection: string): Effect.Effect<void> =>
+    Effect.tryPromise(() =>
+      connections.callConnection(connection, "get_me", {})
+    ).pipe(
+      Effect.flatMap((answer) =>
+        Effect.sync(() => {
+          const origin = answer.isError ? undefined : servedOrigin(answer);
+          learnHost(connection, origin);
+          console.log(
+            origin
+              ? `[clock] ${connection}: its gitea-mcp serves ${origin}`
+              : `[clock] ${connection}: its gitea-mcp's get_me named no Gitea, so it follows none`
+          );
+        })
+      ),
+      Effect.catchCause((cause) =>
+        Effect.sync(() =>
+          console.warn(
+            `[clock] ${connection}: its gitea-mcp was not asked which Gitea it serves: ${wordsOf(Cause.squash(cause))}`
+          )
+        )
+      )
+    );
 
   lifetime.onClose(() => {
     if (looping) {
@@ -710,6 +1070,8 @@ export const createClock = ({
 
   return {
     followConnection,
+    nameHosts,
+    forgeViews,
     githubView,
     pollConnectorNow,
     /** The promise edge of a project's GitHub poll now: what its route answers. */

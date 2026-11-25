@@ -4,30 +4,45 @@
  * Its connector polls are read in db/ingress.ts and its tracker binding in
  * db/trackers.ts, over the same rows.
  *
- * A project follows GitHub through a connection that reads GitHub's API
- * (core `readsGitHubApi`). Its GitHub watches are made at the two moments
- * that can start following, and nowhere else:
- * - a connection that reads GitHub's API names the project
- *   ({@link followGitHub}, from clock.ts `followConnection`): a watch of
- *   each github.com repository the project links;
- * - a github.com repository link is added to a project that follows GitHub
+ * A project follows a forge (GitHub, a GitLab, a Gitea: a provider on one
+ * host) through a connection that reads that forge's API (core
+ * `connectionApi`, forge-hosts.ts `forgeOf`). Its watches of a forge are
+ * made at the two moments that can start following, and nowhere else:
+ * - a connection that reads a forge's API names the project
+ *   ({@link followForge}, from clock.ts `followConnection`): a watch of
+ *   each repository on that forge the project links;
+ * - a repository link is added to a project that follows its forge
  *   ({@link followLink}, from db/projects.ts): a watch of that repository,
- *   with the connection the project follows by ({@link githubFollower}).
+ *   with the connection the project follows that forge by
+ *   ({@link forgeFollower}).
  * A repository the project no longer links keeps its watch and its cursors,
  * unread, until the project stops following.
  *
- * A project that some connection reading GitHub's API names keeps
- * following its repositories: when a watch's connection stops naming the
- * project, stops reading GitHub's API or is removed, the watch moves to the
- * connection the project follows by ({@link followConnectionOf}), and goes
- * only when there is none ({@link rehome}). A tracker binding's connection
- * reads its repository's watch while it syncs; the connection the poller
- * followed it by is kept beside it (`settings.pollerConnection`) and read
- * with again once the binding goes ({@link stopSyncing}).
+ * A project that some connection reading a forge's API names keeps
+ * following its repositories there: when a watch's connection stops naming
+ * the project, stops reading that API or is removed, the watch moves to the
+ * connection the project follows that forge by ({@link followConnectionOf}),
+ * and goes only when there is none ({@link rehome}). A tracker binding's
+ * connection reads its GitHub repository's watch while it syncs; the
+ * connection the poller followed it by is kept beside it
+ * (`settings.pollerConnection`) and read with again once the binding goes
+ * ({@link stopSyncing}).
  */
-import { CONNECTION_AUTHS, readsGitHubApi } from "@cawco/core/connections";
-import { and, asc, eq, inArray, like, ne, not, sql } from "drizzle-orm";
+
+import { FORGE_IDS, PROVIDER_IDS } from "@cawco/providers/provider";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  like,
+  ne,
+  not,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { type Forge, forgeOf, hostnameOf, sameForge } from "../forge-hosts";
 import {
   connectionProjects,
   connections,
@@ -48,26 +63,50 @@ type Writer = Pick<
 
 export const GITHUB_HOST = "github.com";
 
-/** The providers whose watches the poll loop reads (clock.ts): a GitHub repository, a Linear team, a connector poll. */
-const POLLED_PROVIDERS = ["github", "linear", "connection"] as const;
+/** GitHub, as a forge: what the GitHub poll, its relay and its tracker follow. */
+export const GITHUB: Pick<Forge, "host" | "provider"> = {
+  provider: "github",
+  host: GITHUB_HOST,
+};
+
+/** The providers whose watches the poll loop reads (clock.ts): a forge's repository, a Linear team, a connector poll. */
+const POLLED_PROVIDERS = [...PROVIDER_IDS, "connection"] as const;
+
+/** The providers whose watches the follow rule makes and moves: the forges. */
+const FOLLOWED_PROVIDERS = FORGE_IDS;
 
 /** What a syncing watch's board stream is called, before its Project's id (providers github/board.ts). */
 const BOARD_STREAMS = "board:%";
 
-/** The auths a `github` connection reads GitHub's REST API with (core `readsGitHubApi`), as stored. */
-const READS_GITHUB_API = CONNECTION_AUTHS.filter(readsGitHubApi);
-
-/** The repository `owner/repo` a github.com link names, or nothing. */
-const githubRepoOfLink = (remote: string): string | undefined => {
-  const [host, owner, repo, ...rest] = remote.split("/");
-  return host === GITHUB_HOST && owner && repo && rest.length === 0
-    ? `${owner}/${repo}`
+/**
+ * The repository a link (`host/path`, core `repoIdentity`) names on a
+ * forge, its path as linked; undefined when it names none there: the link's
+ * host is the forge's (its port aside, which a link drops), and its path is
+ * a GitHub or Gitea `owner/repo`, or a GitLab `group/…/project`.
+ */
+const repoOfLink = (
+  remote: string,
+  forge: Pick<Forge, "host" | "provider">
+): string | undefined => {
+  const [host = "", ...path] = remote.split("/");
+  const fits =
+    forge.provider === "gitlab" ? path.length >= 2 : path.length === 2;
+  return host === hostnameOf(forge.host) &&
+    fits &&
+    path.every((part) => part.length > 0)
+    ? path.join("/")
     : undefined;
 };
 
+/** The repositories, as linked, among a project's links on `forge`, oldest first. */
+export const forgeReposOf = (
+  links: readonly string[],
+  forge: Pick<Forge, "host" | "provider">
+): string[] => links.flatMap((link) => repoOfLink(link, forge) ?? []);
+
 /** The GitHub repositories, `owner/repo`, among a project's links, oldest first. */
 export const githubReposOf = (links: readonly string[]): string[] =>
-  links.flatMap((link) => githubRepoOfLink(link) ?? []);
+  forgeReposOf(links, GITHUB);
 
 /**
  * A watch that only holds how a relay's sender signs (settings `scheme`,
@@ -101,10 +140,11 @@ const letGo = (tx: Writer, watch: WatchRow): void => {
   tx.delete(watches).where(eq(watches.id, watch.id)).run();
 };
 
-/** One GitHub repository's watch of a project: `owner/repo` compared as GitHub does, without case. */
-const githubWatchOf = (
+/** One repository's watch of a project on `forge`: its path compared without case, as the forges do. */
+const forgeWatchOf = (
   tx: Writer,
   projectId: string,
+  forge: Pick<Forge, "host" | "provider">,
   repo: string
 ): WatchRow | undefined =>
   tx
@@ -113,65 +153,92 @@ const githubWatchOf = (
     .where(
       and(
         eq(watches.projectId, projectId),
-        eq(watches.provider, "github"),
-        eq(watches.host, GITHUB_HOST),
+        eq(watches.provider, forge.provider),
+        sql`lower(${watches.host}) = lower(${forge.host})`,
         sql`lower(${watches.container}) = lower(${repo})`
       )
     )
     .get();
 
-/** The project's GitHub watches its poller reads, those that read nothing else first, oldest first. */
-const followedOf = (tx: Writer, projectId: string): WatchRow[] =>
+/** The project's watches of `forge` its poll reads, those that read nothing else first, oldest first. */
+const followedOf = (
+  tx: Writer,
+  projectId: string,
+  forge: Pick<Forge, "host" | "provider">
+): WatchRow[] =>
   tx
     .select()
     .from(watches)
     .where(
       and(
         eq(watches.projectId, projectId),
-        eq(watches.provider, "github"),
+        eq(watches.provider, forge.provider),
+        sql`lower(${watches.host}) = lower(${forge.host})`,
         eq(watches.enabled, true)
       )
     )
     .orderBy(sql`${watches.sync} != 'off'`, asc(watches.createdAt))
     .all();
 
-/** The connections that read GitHub's API and name project `projectId`, by name. */
-const readersOf = (tx: Writer, projectId: string): string[] =>
+/** Each connection that names project `projectId`, with the forge it reads, by name. */
+const namingOf = (
+  tx: Writer,
+  projectId: string
+): { forge: Forge; name: string }[] =>
   tx
-    .select({ name: connections.name })
+    .select({
+      name: connections.name,
+      service: connections.service,
+      auth: connections.auth,
+      transport: connections.transport,
+      url: connections.url,
+      args: connections.args,
+    })
     .from(connections)
     .innerJoin(
       connectionProjects,
       eq(connectionProjects.connectionId, connections.id)
     )
-    .where(
-      and(
-        eq(connectionProjects.projectId, projectId),
-        sql`lower(trim(${connections.service})) = 'github'`,
-        inArray(connections.auth, READS_GITHUB_API)
-      )
-    )
+    .where(eq(connectionProjects.projectId, projectId))
     .orderBy(asc(connections.name))
     .all()
-    .map(({ name }) => name);
+    .flatMap((row) => {
+      const forge = forgeOf({
+        ...row,
+        url: row.url ?? undefined,
+        args: row.args ?? undefined,
+      });
+      return forge ? [{ name: row.name, forge }] : [];
+    });
+
+/** The connections that read `forge`'s API and name project `projectId`, by name. */
+const readersOf = (
+  tx: Writer,
+  projectId: string,
+  forge: Pick<Forge, "host" | "provider">
+): string[] =>
+  namingOf(tx, projectId)
+    .filter((one) => sameForge(one.forge, forge))
+    .map((one) => one.name);
 
 /**
- * The connection project `projectId` follows GitHub by from now, other
- * than `gone`: the first of `kept` that still reads GitHub's API and names
- * it, else its GitHub watches' (one that only follows first) that does,
- * else the first by name that does; nothing when none does.
+ * The connection project `projectId` follows `forge` by from now, other
+ * than `gone`: the first of `kept` that still reads its API and names it,
+ * else its watches' there (one that only follows first) that does, else
+ * the first by name that does; nothing when none does.
  */
 const followConnectionOf = (
   tx: Writer,
   projectId: string,
+  forge: Pick<Forge, "host" | "provider">,
   kept: readonly (string | null | undefined)[],
   gone?: string
 ): string | undefined => {
-  const readers = new Set(readersOf(tx, projectId));
+  const readers = new Set(readersOf(tx, projectId, forge));
   readers.delete(gone ?? "");
   return [
     ...kept,
-    ...followedOf(tx, projectId).map((watch) => watch.connection),
+    ...followedOf(tx, projectId, forge).map((watch) => watch.connection),
     ...readers,
   ].find(
     (name): name is string =>
@@ -180,18 +247,24 @@ const followConnectionOf = (
 };
 
 /**
- * The connection project `projectId` follows GitHub by, for a repository
- * linked to it: its GitHub watches' (one that only follows first), else
- * the first connection by name that reads GitHub's API and names it;
- * nothing when neither.
+ * The connection project `projectId` follows `forge` by, for a repository
+ * linked to it: its watches' there (one that only follows first), else the
+ * first connection by name that reads its API and names it; nothing when
+ * neither.
  */
-const githubFollower = (tx: Writer, projectId: string): string | undefined =>
-  followedOf(tx, projectId)[0]?.connection ?? readersOf(tx, projectId)[0];
-
-/** A new GitHub watch the poller reads, of `repo` through `connection`. */
-const madeGitHubWatch = (
+const forgeFollower = (
   tx: Writer,
   projectId: string,
+  forge: Pick<Forge, "host" | "provider">
+): string | undefined =>
+  followedOf(tx, projectId, forge)[0]?.connection ??
+  readersOf(tx, projectId, forge)[0];
+
+/** A new watch the poll reads, of `repo` on `forge` through `connection`. */
+const madeWatch = (
+  tx: Writer,
+  projectId: string,
+  forge: Pick<Forge, "host" | "provider">,
   repo: string,
   connection: string
 ): void => {
@@ -199,11 +272,11 @@ const madeGitHubWatch = (
     .values({
       id: crypto.randomUUID(),
       projectId,
-      provider: "github",
-      host: GITHUB_HOST,
+      provider: forge.provider,
+      host: forge.host,
       container: repo,
       containerName: repo,
-      containerUrl: `https://${GITHUB_HOST}/${repo}`,
+      containerUrl: `https://${forge.host}/${repo}`,
       connection,
       sync: "off",
       settings: {},
@@ -214,16 +287,17 @@ const madeGitHubWatch = (
     .run();
 };
 
-/** The poller reads `repo` of the project: its watch made, or one made by binding a tracker followed too. */
+/** The poll reads `repo` of the project on `forge`: its watch made, or one made by binding a tracker or a relay followed too. */
 const watchRepo = (
   tx: Writer,
   projectId: string,
+  forge: Pick<Forge, "host" | "provider">,
   repo: string,
   connection: string
 ): void => {
-  const was = githubWatchOf(tx, projectId, repo);
+  const was = forgeWatchOf(tx, projectId, forge, repo);
   if (!was) {
-    madeGitHubWatch(tx, projectId, repo, connection);
+    madeWatch(tx, projectId, forge, repo, connection);
   } else if (!was.enabled) {
     // One a relay alone held (no poll read it) is read from now through
     // the connection the project follows by.
@@ -237,50 +311,69 @@ const watchRepo = (
   }
 };
 
-/** Each github.com repository project `projectId` links, oldest first. */
-const linkedRepos = (tx: Writer, projectId: string): string[] =>
-  tx
-    .select({ remote: projectLinks.remote })
-    .from(projectLinks)
-    .where(eq(projectLinks.projectId, projectId))
-    .orderBy(asc(projectLinks.createdAt), sql`rowid`)
-    .all()
-    .flatMap(({ remote }) => githubRepoOfLink(remote) ?? []);
-
-/**
- * A connection that reads GitHub's API names the project, which follows
- * none: each github.com repository it links is watched through it.
- */
-const followGitHub = (
+/** Each repository on `forge` project `projectId` links, oldest first. */
+const linkedRepos = (
   tx: Writer,
   projectId: string,
-  connection: string
+  forge: Pick<Forge, "host" | "provider">
+): string[] =>
+  forgeReposOf(
+    tx
+      .select({ remote: projectLinks.remote })
+      .from(projectLinks)
+      .where(eq(projectLinks.projectId, projectId))
+      .orderBy(asc(projectLinks.createdAt), sql`rowid`)
+      .all()
+      .map(({ remote }) => remote),
+    forge
+  );
+
+/**
+ * A connection that reads `forge`'s API names the project, which follows
+ * none there: each repository on it the project links is watched through
+ * it.
+ */
+const followForge = (
+  tx: Writer,
+  projectId: string,
+  connection: string,
+  forge: Pick<Forge, "host" | "provider">
 ): string[] => {
-  const repos = linkedRepos(tx, projectId);
+  const repos = linkedRepos(tx, projectId, forge);
   for (const repo of repos) {
-    watchRepo(tx, projectId, repo, connection);
+    watchRepo(tx, projectId, forge, repo, connection);
   }
   return repos;
 };
 
 /**
- * A link was added to the project: a github.com repository is watched
- * when the project follows GitHub (it has a GitHub watch, or a connection
- * that reads GitHub's API names it), through the connection it follows by.
+ * A link was added to the project: a repository on a forge the project
+ * follows (it has a watch there, or a connection that reads that forge's
+ * API names it) is watched, through the connection it follows that forge
+ * by.
  */
 export const followLink = (
   tx: Writer,
   projectId: string,
   remote: string
 ): void => {
-  const repo = githubRepoOfLink(remote);
-  const connection = repo && githubFollower(tx, projectId);
-  if (repo && connection) {
-    watchRepo(tx, projectId, repo, connection);
+  const forges = [GITHUB, ...namingOf(tx, projectId).map((one) => one.forge)];
+  const seen = new Set<string>();
+  for (const forge of forges) {
+    const key = `${forge.provider}\0${forge.host.toLowerCase()}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const repo = repoOfLink(remote, forge);
+    const connection = repo && forgeFollower(tx, projectId, forge);
+    if (repo && connection) {
+      watchRepo(tx, projectId, forge, repo, connection);
+    }
   }
 };
 
-/** A GitHub watch moved off a connection: to the one named, or `null` when none was left and it went (or was left for the trash). */
+/** A watch moved off a connection: to the one named, or `null` when none was left and it went (or was left for the trash). */
 export interface Rehomed {
   container: string;
   /** What moved: the watch's own connection, or the one the poller reads a syncing watch through once its binding's is gone (`settings.pollerConnection`). */
@@ -293,11 +386,22 @@ export interface Rehomed {
   to: string | null;
 }
 
+/** A watch's forge: its provider and host. */
+const forgeOfWatch = (
+  watch: Pick<WatchRow, "host" | "provider">
+): Pick<Forge, "host" | "provider"> => ({
+  provider:
+    watch.provider === "gitlab" || watch.provider === "gitea"
+      ? watch.provider
+      : "github",
+  host: watch.host,
+});
+
 /**
  * Connection `gone` no longer follows the projects in `of` (every project
- * when undefined): it stopped naming them, stopped reading GitHub's API,
- * or is being removed. Each GitHub watch the poller reads through it moves
- * to the connection its project follows by from now
+ * when undefined): it stopped naming them, stopped reading its forge's API,
+ * or is being removed. Each watch of a forge the poll reads through it
+ * moves to the connection its project follows that forge by from now
  * ({@link followConnectionOf}); one with none goes, cursors and all, or,
  * with `leave`, stays for the connection's trash to take. A watch a tracker
  * binding syncs keeps the binding's connection, which the sync reads with;
@@ -309,27 +413,50 @@ export const rehome = (
   tx: Writer,
   gone: string,
   of: readonly string[] | undefined,
-  leave: boolean
+  leave: boolean,
+  /** The forge `gone` still reads: its watches there stay, and only those elsewhere move (its server moved). */
+  stays?: Pick<Forge, "host" | "provider">
 ): Rehomed[] => {
   const scoped =
     of === undefined ? undefined : inArray(watches.projectId, [...of]);
+  return [
+    ...rehomeFollowed(tx, gone, scoped, leave, stays),
+    ...(stays && sameForge(stays, GITHUB)
+      ? []
+      : rehomePollers(tx, gone, scoped)),
+  ];
+};
+
+/** {@link rehome}'s watches the poll reads through `gone` itself. */
+const rehomeFollowed = (
+  tx: Writer,
+  gone: string,
+  scoped: SQL | undefined,
+  leave: boolean,
+  stays: Pick<Forge, "host" | "provider"> | undefined
+): Rehomed[] => {
   const moved: Rehomed[] = [];
   for (const watch of tx
     .select()
     .from(watches)
     .where(
       and(
-        eq(watches.provider, "github"),
+        inArray(watches.provider, [...FOLLOWED_PROVIDERS]),
         eq(watches.enabled, true),
         eq(watches.connection, gone),
         scoped
       )
     )
     .all()) {
-    if (watch.sync !== "off") {
+    if (
+      watch.sync !== "off" ||
+      (stays && sameForge(forgeOfWatch(watch), stays))
+    ) {
       continue;
     }
-    const to = followConnectionOf(tx, watch.projectId, [], gone) ?? null;
+    const to =
+      followConnectionOf(tx, watch.projectId, forgeOfWatch(watch), [], gone) ??
+      null;
     if (to) {
       tx.update(watches)
         .set({ connection: to, reason: null })
@@ -347,6 +474,16 @@ export const rehome = (
       to,
     });
   }
+  return moved;
+};
+
+/** {@link rehome}'s GitHub watches a binding syncs, whose poller's connection was `gone`, or whose own is. */
+const rehomePollers = (
+  tx: Writer,
+  gone: string,
+  scoped: SQL | undefined
+): Rehomed[] => {
+  const moved: Rehomed[] = [];
   for (const watch of tx
     .select()
     .from(watches)
@@ -359,7 +496,8 @@ export const rehome = (
       continue;
     }
     const kept = was === gone ? null : was;
-    const to = followConnectionOf(tx, watch.projectId, [kept], gone) ?? null;
+    const to =
+      followConnectionOf(tx, watch.projectId, GITHUB, [kept], gone) ?? null;
     if (to !== was) {
       tx.update(watches)
         .set({
@@ -455,8 +593,22 @@ export interface PolledWatchesDb {
   readonly dropStreams: (watchId: string, prefix: string) => void;
   /** The connection project `projectId`'s GitHub watches read with (one that only follows first), or nothing while it follows none. */
   readonly followedBy: (projectId: string) => string | undefined;
-  /** {@link followGitHub}: the repositories now watched, none while the project links none on github.com. */
-  readonly followGitHub: (projectId: string, connection: string) => string[];
+  /** The connection project `projectId`'s watches of `forge` read with (one that only follows first), or nothing while it follows none there. */
+  readonly followedOn: (
+    projectId: string,
+    forge: Pick<Forge, "host" | "provider">
+  ) => string | undefined;
+  /** {@link followForge}: the repositories on `forge` now watched, none while the project links none there. */
+  readonly followForge: (
+    projectId: string,
+    connection: string,
+    forge: Pick<Forge, "host" | "provider">
+  ) => string[];
+  /** The project's watches of `forge` the poll reads, oldest first, each with its streams' cursors. */
+  readonly forgeWatches: (
+    projectId: string,
+    forge: Pick<Forge, "host" | "provider">
+  ) => PolledWatch[];
   /** The GitHub watches the poll reads, a project's or every one, oldest first, each with its streams' cursors. */
   readonly githubWatches: (projectId?: string) => PolledWatch[];
   /** One stream's read kept, once what it read is stored (provider spec §2.5). */
@@ -477,7 +629,8 @@ export interface PolledWatchesDb {
   /** {@link rehome} in one transaction, each watch left with no connection gone (a connection's removal rehomes in db/trash.ts). */
   readonly rehome: (
     gone: string,
-    of: readonly string[] | undefined
+    of: readonly string[] | undefined,
+    stays?: Pick<Forge, "host" | "provider">
   ) => Rehomed[];
 }
 
@@ -510,7 +663,7 @@ export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
       if (known) {
         return known;
       }
-      const made = new Set(readersOf(db, projectId));
+      const made = new Set(readersOf(db, projectId, GITHUB));
       readers.set(projectId, made);
       return made;
     };
@@ -536,7 +689,13 @@ export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
     not(isHookWatch)
   );
   return {
-    followedBy: (projectId) => followedOf(db, projectId)[0]?.connection,
+    followedBy: (projectId) => followedOf(db, projectId, GITHUB)[0]?.connection,
+    followedOn: (projectId, forge) =>
+      followedOf(db, projectId, forge)[0]?.connection,
+    forgeWatches: (projectId, forge) =>
+      withCursors(followedOf(db, projectId, forge)).sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+      ),
     githubWatches: (projectId) =>
       withCursors(
         db
@@ -615,9 +774,10 @@ export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
         db.update(watches).set(patch).where(eq(watches.id, watchId)).run();
       }
     },
-    followGitHub: (projectId, connection) =>
-      db.transaction((tx) => followGitHub(tx, projectId, connection)),
-    rehome: (gone, of) => db.transaction((tx) => rehome(tx, gone, of, false)),
+    followForge: (projectId, connection, forge) =>
+      db.transaction((tx) => followForge(tx, projectId, connection, forge)),
+    rehome: (gone, of, stays) =>
+      db.transaction((tx) => rehome(tx, gone, of, false, stays)),
   };
 };
 
@@ -654,7 +814,9 @@ export const unboundConnection = (
   tx: Writer,
   watch: WatchRow
 ): string | undefined =>
-  followConnectionOf(tx, watch.projectId, [watch.settings.pollerConnection]);
+  followConnectionOf(tx, watch.projectId, GITHUB, [
+    watch.settings.pollerConnection,
+  ]);
 
 /**
  * A watch no longer syncs. A GitHub repository the project links and
@@ -671,7 +833,7 @@ export const stopSyncing = (
   const followed =
     watch.provider === "github" &&
     connection !== undefined &&
-    linkedRepos(tx, watch.projectId).some(
+    linkedRepos(tx, watch.projectId, GITHUB).some(
       (repo) => repo.toLowerCase() === watch.container.toLowerCase()
     );
   const held = heldByRelay(tx, watch.id);
@@ -704,13 +866,13 @@ export const stopSyncing = (
 
 /**
  * Project `dupId` folds into `keepId` (db/projects.ts `foldProject`): its
- * connector polls move; its GitHub watches the poller reads move where the
- * kept project follows none, both polling the repositories they share,
- * each no longer syncing (its tracker binding goes with it, as every other
- * watch of it does) and read through the connection the poller followed it
- * by; a repository the kept project already watches keeps that watch. Then
- * each repository it linked is watched where the kept project follows
- * GitHub ({@link followLink}), as a link added to it.
+ * connector polls move; on each forge the kept project follows none of,
+ * its watches the poll reads move, both polling the repositories they
+ * share, each no longer syncing (its tracker binding goes with it, as every
+ * other watch of it does) and read through the connection the poller
+ * followed it by; a repository the kept project already watches keeps that
+ * watch. Then each repository it linked is watched where the kept project
+ * follows its forge ({@link followLink}), as a link added to it.
  */
 export const foldWatches = (tx: Writer, dupId: string, keepId: string) => {
   tx.update(watches)
@@ -719,9 +881,32 @@ export const foldWatches = (tx: Writer, dupId: string, keepId: string) => {
       and(eq(watches.projectId, dupId), eq(watches.provider, "connection"))
     )
     .run();
-  if (followedOf(tx, keepId).length === 0) {
-    for (const watch of followedOf(tx, dupId)) {
-      if (githubWatchOf(tx, keepId, watch.container)) {
+  const forges = new Map(
+    tx
+      .select({ provider: watches.provider, host: watches.host })
+      .from(watches)
+      .where(
+        and(
+          eq(watches.projectId, dupId),
+          inArray(watches.provider, [...FOLLOWED_PROVIDERS]),
+          eq(watches.enabled, true)
+        )
+      )
+      .all()
+      .map((one) => {
+        const forge = forgeOfWatch(one);
+        return [
+          `${forge.provider}\0${forge.host.toLowerCase()}`,
+          forge,
+        ] as const;
+      })
+  );
+  for (const forge of forges.values()) {
+    if (followedOf(tx, keepId, forge).length > 0) {
+      continue;
+    }
+    for (const watch of followedOf(tx, dupId, forge)) {
+      if (forgeWatchOf(tx, keepId, forge, watch.container)) {
         continue;
       }
       if (watch.sync !== "off") {

@@ -3782,6 +3782,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ForgePollViewProvider`.
+    public enum ForgePollViewProvider: OpenEnum {
+        case gitea
+        case gitlab
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "gitea": self = .gitea
+            case "gitlab": self = .gitlab
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .gitea: "gitea"
+            case .gitlab: "gitlab"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.gitea, .gitlab]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FormName`.
     public enum FormName: OpenEnum {
         case custom
@@ -7926,7 +7964,9 @@ public enum OpenEnums {
     /// `#/components/schemas/RelayProvider`.
     public enum RelayProvider: OpenEnum {
         case generic
+        case gitea
         case github
+        case gitlab
         case linear
         case standardWebhooks
         case stripe
@@ -7936,7 +7976,9 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "generic": self = .generic
+            case "gitea": self = .gitea
             case "github": self = .github
+            case "gitlab": self = .gitlab
             case "linear": self = .linear
             case "standard-webhooks": self = .standardWebhooks
             case "stripe": self = .stripe
@@ -7947,7 +7989,9 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .generic: "generic"
+            case .gitea: "gitea"
             case .github: "github"
+            case .gitlab: "gitlab"
             case .linear: "linear"
             case .standardWebhooks: "standard-webhooks"
             case .stripe: "stripe"
@@ -7959,7 +8003,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.generic, .github, .linear, .standardWebhooks, .stripe]
+        public static let allCases: [Self] = [.generic, .gitea, .github, .gitlab, .linear, .standardWebhooks, .stripe]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

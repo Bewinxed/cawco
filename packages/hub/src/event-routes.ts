@@ -38,7 +38,9 @@ import {
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
+import type { WaitTarget } from "@cawco/core/wait-targets";
 import { withoutUndefined } from "@cawco/core/without-undefined";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { CONNECTOR_MIN_S } from "@cawco/providers/connection/descriptor";
@@ -55,6 +57,7 @@ import type {
   EventRouteRow,
   InboundEventRow,
 } from "./db/ingress";
+import { GITHUB } from "./db/watches";
 import { byHandle } from "./handles";
 import { eventData, type InboundEvent } from "./inbound-event";
 import type {
@@ -227,7 +230,7 @@ export interface EventRoutesDeps {
   /** The poll loop: a project's GitHub poll as its view says it, and a poll asked for now (clock.ts). */
   readonly clock: Pick<
     Clock,
-    "githubView" | "pollConnectorNow" | "pollGitHubNow"
+    "forgeViews" | "githubView" | "pollConnectorNow" | "pollGitHubNow"
   >;
   readonly connections: Pick<Connections, "listConnectionTools">;
   readonly db: Pick<
@@ -596,8 +599,10 @@ export const createEventRoutes = ({
     }
     const delivered = deliveredBy(store.deliveries(projectId));
     const events = store.events(projectId, EVENTS_SHOWN, skip);
+    const project = db.project(projectId);
     const seen: IngressView = {
       github,
+      forges: project ? clock.forgeViews(projectId, project.links) : [],
       routes: store.routes(projectId).map((row) => routeView(row, delivered)),
       connectorPolls: store.connectorPolls(projectId).map(pollView),
       events: events.map(eventView),
@@ -1055,11 +1060,18 @@ export const createEventRoutes = ({
   };
 
   return {
-    /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
-    githubWaitRefusal(projectId: string): string | undefined {
-      return store.githubWatches(projectId).length > 0
+    /** Why project `projectId` cannot wait on a pull or merge request or run: no watch reads its forge; nothing when it can. */
+    linkWaitRefusal(
+      projectId: string,
+      target: Extract<WaitTarget, { kind: "pr" | "run" }>
+    ): string | undefined {
+      const forge =
+        target.kind === "pr"
+          ? { provider: target.provider, host: target.host }
+          : GITHUB;
+      return store.forgeWatches(projectId, forge).length > 0
         ? undefined
-        : taskLinkWords.noGitHub;
+        : taskLinkWords.noForge(externalItemWords.source[forge.provider]);
     },
     createPoll,
     createRoute,

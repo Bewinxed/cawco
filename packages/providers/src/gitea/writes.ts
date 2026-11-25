@@ -11,7 +11,7 @@ import { eventKeys } from "../event-keys";
 import type { ItemRef, WriteOp, Writes } from "../provider";
 import { writesOf, writtenIssue } from "../provider-writes";
 import { refusedWith } from "../read-stop";
-import type { GiteaAnswer, GiteaClient } from "./client";
+import { type GiteaAnswer, type GiteaClient, repoArgs } from "./client";
 import { gitea } from "./descriptor";
 
 /** What a gitea-mcp tool's answer is read for: an object's `html_url`, at its top or one level down, and a pull request's state. */
@@ -84,12 +84,6 @@ const itemAt = (text: string, what: string) => {
     : Effect.fail(refusedWith(`gitea-mcp returned no ${what}: ${text}`));
 };
 
-/** `owner/repo` as gitea-mcp names them. */
-const parts = (path: string) => {
-  const [owner = "", repo = ""] = path.split("/");
-  return { owner, repo };
-};
-
 /** What a written issue's answer is read for (gitea-mcp's `slimIssue`). */
 const AnsweredIssue = Schema.Struct({
   closed_at: Schema.optional(Schema.NullOr(Schema.String)),
@@ -138,7 +132,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       const text = yield* answerText(
         yield* call(client, "issue_write", {
           method: "create",
-          ...parts(path),
+          ...repoArgs(path),
           title: op.title,
           body: op.body,
           ...(op.labels === undefined ? {} : { labels: [...op.labels] }),
@@ -153,7 +147,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       const closed = yield* answerText(
         yield* call(client, "issue_write", {
           method: "update",
-          ...parts(path),
+          ...repoArgs(path),
           issue_number: Number(item.key),
           state: "closed",
         }),
@@ -174,7 +168,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
             yield* answerText(
               yield* call(client, "issue_read", {
                 method: "get",
-                ...parts(path),
+                ...repoArgs(path),
                 issue_number: number,
               }),
               "issue_read"
@@ -190,7 +184,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
         yield* answerText(
           yield* call(client, "issue_write", {
             method: "replace_labels",
-            ...parts(path),
+            ...repoArgs(path),
             issue_number: number,
             labels: [...op.labels],
           }),
@@ -200,7 +194,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       const text = yield* answerText(
         yield* call(client, "issue_write", {
           method: "update",
-          ...parts(path),
+          ...repoArgs(path),
           issue_number: number,
           ...(op.title === undefined ? {} : { title: op.title }),
           ...(op.body === undefined ? {} : { body: op.body }),
@@ -227,7 +221,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       // lookup answers its latest, closed or not.
       const found = yield* call(client, "pull_request_read", {
         method: "get_by_branches",
-        ...parts(path),
+        ...repoArgs(path),
         base: op.base,
         head: op.head,
       });
@@ -243,7 +237,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       const made = yield* answerText(
         yield* call(client, "pull_request_write", {
           method: "create",
-          ...parts(path),
+          ...repoArgs(path),
           base: op.base,
           head: op.head,
           title: op.title,
@@ -264,7 +258,7 @@ export const giteaWrites: Writes<GiteaClient> = writesOf("Gitea", {
       const text = yield* answerText(
         yield* call(client, "issue_write", {
           method: "add_comment",
-          ...parts(path),
+          ...repoArgs(path),
           issue_number: Number(op.on.key),
           body: op.body,
         }),

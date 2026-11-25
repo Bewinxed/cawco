@@ -69,7 +69,23 @@ export interface InboundEventView {
   via: InboundVia;
 }
 
-/** What a project's ingress is: its GitHub poller, routes, connector polls and newest events. */
+/** A GitLab's or Gitea's poll of a project's repositories there, as GitHub's is said ({@link IngressView.github}). */
+export interface ForgePollView {
+  /** The connections it polls with, comma-joined; null while none does. */
+  connection: string | null;
+  /** The forge's host: `gitlab.com`, `gitea.example.com:3000`. */
+  host: string;
+  polled: boolean;
+  polledAt: number | null;
+  provider: "gitlab" | "gitea";
+  /** The repositories it polls there, as linked: every one the project links on that host. */
+  repos: string[];
+  resumeAt: number | null;
+  /** What is true of it, in a sentence: polled, or why not. */
+  state: string;
+}
+
+/** What a project's ingress is: its GitHub poller, its GitLab and Gitea polls, routes, connector polls and newest events. */
 export interface IngressView {
   connectorPolls: ConnectorPollView[];
   events: InboundEventView[];
@@ -77,6 +93,8 @@ export interface IngressView {
   eventsMore: number;
   /** The `skip` that reads the page of older events after {@link events}. */
   eventsNext: number;
+  /** Each GitLab and Gitea the project links repositories on or follows, one poll line each. */
+  forges: ForgePollView[];
   github: {
     connection: string | null;
     polled: boolean;

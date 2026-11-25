@@ -10,7 +10,7 @@
  * | card    | `<page>#<card>`, the page by name, handle or id   | `<artifact id>#<card>`          |
  * | card    | `<page>#<card>=<option>`: only that pick settles it | `<artifact id>#<card>=<option>` |
  * | pin     | `<page>/<number>`                                 | `<artifact id>/<number>`        |
- * | pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |
+ * | pr      | a GitHub pull request's, a GitLab merge request's or a Gitea pull request's URL | its canonical URL |
  * | run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |
  * | session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |
  * | time    | an ISO 8601 date or date-time (`2026-12-01`, `2026-12-01T09:00+03:00`) | the instant in UTC, `2026-12-01T06:00:00Z` |
@@ -25,6 +25,7 @@
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
  */
+import type { ForgeId } from "@cawco/providers/provider";
 import { itemOfUrl, numberOf } from "@cawco/providers/registry";
 
 export type WaitKind =
@@ -40,7 +41,18 @@ export type WaitTarget =
       option?: string;
     }
   | { kind: "pin"; artifactId: string; number: number }
-  | { kind: "pr"; number: number; repo: string; url: string }
+  | {
+      kind: "pr";
+      /** The forge's own host: `github.com`, `gitlab.example.com`. */
+      host: string;
+      number: number;
+      provider: ForgeId;
+      /** `#12`, `!7`: as its forge writes it. */
+      ref: string;
+      /** `owner/repo`, `group/sub/project`, lower case. */
+      repo: string;
+      url: string;
+    }
   | { kind: "run"; id: string; repo: string; url: string }
   | { kind: "session"; dir: string; instanceId: string }
   /** A date: settled once the instant, in ms since the epoch, has passed. */
@@ -54,21 +66,28 @@ const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const TIME =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/iu;
 
-/** A pull request or an Actions run on GitHub, by its URL; undefined for any other. */
-export const githubTarget = (
+/** A pull or merge request on GitHub, GitLab or Gitea, or an Actions run on GitHub, by its URL; undefined for any other. */
+export const linkTarget = (
   url: string
 ): Extract<WaitTarget, { kind: "pr" | "run" }> | undefined => {
   const item = itemOfUrl(url);
-  if (item?.provider !== "github") {
+  if (!item || item.provider === "linear") {
     return;
   }
   const number = numberOf(item);
   if (item.kind === "pr" && number !== null) {
     return {
       kind: "pr",
+      provider: item.provider,
+      host: item.host,
       repo: item.container,
       number,
-      url: `https://github.com/${item.container}/pull/${number}`,
+      ref: item.ref,
+      // GitHub's as a wait's handle always was: its repository lower case.
+      url:
+        item.provider === "github"
+          ? `https://github.com/${item.container}/pull/${number}`
+          : item.url,
     };
   }
   if (item.kind === "run") {
@@ -139,9 +158,9 @@ export const waitTarget = (handle: string): WaitTarget | undefined => {
   if (task) {
     return { kind: "task", id: task };
   }
-  const github = githubTarget(kept);
-  if (github) {
-    return github;
+  const link = linkTarget(kept);
+  if (link) {
+    return link;
   }
   const pin = PIN.exec(kept);
   if (pin) {

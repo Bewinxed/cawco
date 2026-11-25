@@ -145,11 +145,15 @@ const routeLine = (route: EventRouteView, now: number): string =>
 const pollLine = (poll: ConnectorPollView, now: number): string =>
   `- ${handle(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
 
-/** `event_route_list`: GitHub polling, the routes, the polls, the newest events. */
+/** `event_route_list`: GitHub, GitLab and Gitea polling, the routes, the polls, the newest events. */
 export const ingressWords = (view: IngressView): string => {
   const now = Date.now();
   return lines(
     `GitHub: ${view.github.state}${view.github.polledAt === null ? "" : ` Polled ${ago(view.github.polledAt, now)}.`}`,
+    view.forges.map(
+      (forge) =>
+        `${forge.provider === "gitlab" ? "GitLab" : "Gitea"} on ${forge.host}: ${forge.state}${forge.polledAt === null ? "" : ` Polled ${ago(forge.polledAt, now)}.`}`
+    ),
     view.routes.length === 0
       ? "No event routes."
       : lines(

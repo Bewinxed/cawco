@@ -8871,9 +8871,9 @@ export const createServer = (
     () => false
   );
   /** Whether a project can wait on GitHub at all: its poll reads what a wait names (clock.ts); set once event routing is made. */
-  const githubWaitsPort = portOf<
-    Pick<EventRoutes, "githubWaitRefusal"> | undefined
-  >("githubWaits", undefined);
+  const linkWaitsPort = portOf<
+    Pick<EventRoutes, "linkWaitRefusal"> | undefined
+  >("linkWaits", undefined);
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
     handle: string
@@ -8979,7 +8979,7 @@ export const createServer = (
       card: (artifactId, card) => artifacts.waitCard(artifactId, card),
       pin: (artifactId, number) => artifacts.waitPin(artifactId, number),
       // A pull request's or run's state is its item's mirror row's (links.ts).
-      github: (target) => links.githubWait(projectId, target),
+      link: (target) => links.linkWait(projectId, target),
       session: (instanceId) => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (!row) {
@@ -9019,9 +9019,14 @@ export const createServer = (
         const row = db.routines.byTask(projectId, taskId);
         return row?.target ? { stop: row.stop, title: row.name } : undefined;
       },
-      githubRefusal: () =>
-        githubWaitsPort.now()?.githubWaitRefusal(projectId) ??
-        "the hub's GitHub poll is not up yet; try again in a moment.",
+      // No refusal is an answer of its own: only a hub whose routes are not
+      // up yet refuses for that.
+      linkRefusal: (target) => {
+        const routes = linkWaitsPort.now();
+        return routes
+          ? routes.linkWaitRefusal(projectId, target)
+          : "the hub's poll is not up yet; try again in a moment.";
+      },
     }),
     // A wait of a live session's task moved: it hears once, as the hub.
     tell: (instanceId, text) => {
@@ -11078,6 +11083,9 @@ export const createServer = (
   });
   // The poll loop (clock.ts): every watch read on its interval, into the door.
   const clock = createClock({ connections, db, intake, lifetime, links });
+  // Self-managed GitLabs' and Giteas' hosts named before any task file is
+  // read, so a link to one of their items reads as that item (forge-hosts.ts).
+  clock.nameHosts();
   // Event routing (event-routes.ts): routes to routines, else a trigger on
   // the task or item an event is about.
   const eventRoutes = createEventRoutes({
@@ -11093,7 +11101,7 @@ export const createServer = (
     // An event no route took, a trigger on what it is about (triggers.ts).
     trigger: (projectId, event) => triggers.route(projectId, event),
   });
-  githubWaitsPort.fill(eventRoutes);
+  linkWaitsPort.fill(eventRoutes);
   // The relay (relay.ts): a project's one public webhook path through
   // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
   const relays = createRelay({

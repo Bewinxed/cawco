@@ -498,7 +498,7 @@ export interface TaskStore {
   /** What the resolver reads of the hub past the project's tasks: cards, pins, pull requests and runs, sessions, routines' conditions. */
   readonly waitWorld: (
     projectId: string
-  ) => Pick<WaitWorld, "card" | "github" | "pin" | "routine" | "session">;
+  ) => Pick<WaitWorld, "card" | "link" | "pin" | "routine" | "session">;
 }
 
 /** A template the dashboard offers: its stages, and the stages.md it writes. */
@@ -1015,14 +1015,14 @@ const linksOf = (links: string[]) => {
     ? urls
     : problem(400, {
         code: "task-link-unknown",
-        detail: `“${unknown}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`,
+        detail: `Can't link “${unknown}”. Use the URL of a GitHub issue, pull request or discussion, a GitLab issue or merge request, a Gitea issue or pull request, or a Linear issue.`,
       });
 };
 
 /**
  * A task's links as its index row carries them: the file's `issue:` its
  * record, then `links:`, then each pull request it waits on (`waits_on:`),
- * so a wait on one reads the same item (links.ts `githubWait`).
+ * so a wait on one reads the same item (links.ts `linkWait`).
  * An item named twice is one link, the first naming.
  */
 const fileLinksOf = (

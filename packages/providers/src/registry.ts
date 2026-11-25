@@ -23,18 +23,36 @@ const BY_ID: Readonly<Record<ProviderId, ProviderDescriptor>> = {
   gitea,
 };
 
-/**
- * The providers whose items a task links. GitLab's and Gitea's join with
- * their own slice (the provider spec's build order, step 8), which is new
- * behaviour and waits for the owner's go.
- */
-const LINKED: ReadonlySet<ProviderId> = new Set(["github", "linear"]);
-
-const BY_HOST: ReadonlyMap<string, ProviderDescriptor> = new Map(
+/** The hosts that are a provider's with no connection saying so: github.com, linear.app, gitlab.com, gitea.com. */
+const OWN_HOSTS: ReadonlyMap<string, ProviderDescriptor> = new Map(
   Object.values(BY_ID).flatMap((descriptor) =>
     descriptor.hosts.map((host) => [host, descriptor] as const)
   )
 );
+
+/**
+ * The self-managed hosts the process's connections name (a GitLab's, a
+ * Gitea's), by host as a URL writes it, its port included: a GitLab or
+ * Gitea URL on one reads as that provider's item. Set by the hub
+ * ({@link nameHosts}); a process that sets none (the dashboard) reads only
+ * the providers' own hosts.
+ */
+let namedHosts: ReadonlyMap<string, ProviderDescriptor> = new Map();
+
+/**
+ * The self-managed hosts connections name now, each with its provider, in
+ * place of those named before. A provider's own host stays its own: a
+ * connection that names github.com as GitLab names nothing.
+ */
+export const nameHosts = (
+  hosts: readonly { host: string; provider: ProviderId }[]
+): void => {
+  namedHosts = new Map(
+    hosts
+      .filter(({ host }) => !OWN_HOSTS.has(host.toLowerCase()))
+      .map(({ host, provider }) => [host.toLowerCase(), BY_ID[provider]])
+  );
+};
 
 /** The scheme and the authority as written, before the URL parser drops a default port or a user. */
 const AUTHORITY = /^https?:\/\/([^/?#]*)/iu;
@@ -62,10 +80,8 @@ const located = (
   if (!parsed || authority?.toLowerCase() !== parsed.host) {
     return;
   }
-  const descriptor = BY_HOST.get(parsed.host);
-  return descriptor && LINKED.has(descriptor.id)
-    ? { descriptor, parsed }
-    : undefined;
+  const descriptor = OWN_HOSTS.get(parsed.host) ?? namedHosts.get(parsed.host);
+  return descriptor ? { descriptor, parsed } : undefined;
 };
 
 /** The one parser of an outside item's URL, with or without a comment's anchor or a trailing path; undefined for any other URL. */

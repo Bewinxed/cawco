@@ -68,7 +68,6 @@ import type {
   Ingested,
   ItemRevision,
   MirroredRef,
-  MirrorState,
   OutsideActor,
   Polled,
   SourceEvent,
@@ -81,6 +80,7 @@ import {
   request,
 } from "../read-stop";
 import { itemOfUrl } from "../registry";
+import { reopenedBy } from "../reopen";
 import {
   githubActorOf,
   outsideActorOf,
@@ -843,49 +843,8 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
 export const readGitHub = (kind: GitHubKind, payload: unknown): Ingested =>
   READERS[kind](payload);
 
-/** The states a reopen moves an item out of. */
-const SHUT: ReadonlySet<MirrorState> = new Set(["closed", "canceled"]);
-/** The states a reopen moves it into. */
-const OPEN: ReadonlySet<MirrorState> = new Set(["open", "draft"]);
-
-/**
- * A revision that opens an issue or pull request the mirror held closed
- * is its reopen: `issue.reopened` or `pr.reopened`, keyed with the
- * revision's time.
- */
-const githubMoved = (
-  revision: ItemRevision,
-  held: MirrorState | null
-): SourceEvent[] => {
-  const { item, snapshot, version } = revision;
-  if (
-    !(item.kind === "issue" || item.kind === "pr") ||
-    held === null ||
-    !SHUT.has(held) ||
-    snapshot.state === null ||
-    !OPEN.has(snapshot.state)
-  ) {
-    return [];
-  }
-  const number = Number(item.key);
-  return [
-    {
-      item,
-      source: githubSource(item.container),
-      key: eventKeys.reopened(item.kind, item.key, version),
-      kind: `${item.kind}.reopened`,
-      actor: snapshot.author && { ...snapshot.author, unvouched: null },
-      labels: snapshot.labels,
-      branch: snapshot.branch ?? null,
-      url: item.url,
-      title: snapshot.title,
-      body: snapshot.body ?? null,
-      at: Number(version),
-      ...(Number.isInteger(number) ? { number } : {}),
-      ...(item.kind === "pr" ? { draft: snapshot.state === "draft" } : {}),
-    },
-  ];
-};
+/** A reopen, read off a revision (reopen.ts). */
+const githubMoved = reopenedBy((item) => githubSource(item.container));
 
 /** A stream's list as Octokit asks for it, from its mark: its path and its query. */
 const routeOf = (

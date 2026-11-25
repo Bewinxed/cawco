@@ -55,7 +55,9 @@
  *   promise edge the sync and the outsider rule take the turn by.
  */
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { giteaIngest } from "@cawco/providers/gitea/ingest";
 import { githubIngest } from "@cawco/providers/github/ingest";
+import { gitlabIngest } from "@cawco/providers/gitlab/ingest";
 import { linearIngest } from "@cawco/providers/linear/ingest";
 import type {
   BoardRead,
@@ -135,7 +137,12 @@ const storedPayload = (source: SourceEvent): string => {
 /** The events a revision's move says, by the provider whose item it is (provider spec §2.3 `Ingest.moved`). */
 const MOVED: Partial<
   Record<MirrorProvider, NonNullable<typeof githubIngest.moved>>
-> = { github: githubIngest.moved, linear: linearIngest.moved };
+> = {
+  github: githubIngest.moved,
+  gitlab: gitlabIngest.moved,
+  gitea: giteaIngest.moved,
+  linear: linearIngest.moved,
+};
 
 /** Where a take comes from: its project, the watch it came through (none for a relay's generic delivery), and whose items it holds. */
 export interface IntakeAt {

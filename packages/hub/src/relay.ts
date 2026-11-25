@@ -69,11 +69,16 @@ import {
   hookSigningOf,
   hookSource,
 } from "@cawco/providers/connection/webhook";
+import { giteaSource } from "@cawco/providers/gitea/client";
+import { giteaWebhook } from "@cawco/providers/gitea/webhook";
 import { githubSource } from "@cawco/providers/github/ingest";
 import { githubWebhook } from "@cawco/providers/github/webhook";
+import { gitlabSource } from "@cawco/providers/gitlab/client";
+import { gitlabWebhook } from "@cawco/providers/gitlab/webhook";
 import { linearWebhook } from "@cawco/providers/linear/webhook";
 import type {
   HookAt,
+  Ingested,
   MirrorProvider,
   RawDelivery,
   WatchView,
@@ -171,7 +176,7 @@ export interface RelayDeps {
   ) => Promise<string | undefined>;
   readonly connections: Pick<
     Connections,
-    "get" | "githubClient" | "linearClient"
+    "get" | "giteaClient" | "githubClient" | "gitlabClient" | "linearClient"
   >;
   readonly db: Pick<DbShape, "ingress" | "project" | "relays" | "routines">;
   /** Tailscale; the real CLI unless a probe names another. */
@@ -183,6 +188,11 @@ export interface RelayDeps {
 
 /** A provider's webhook with its client bound: what the receiver and the lifecycle ask, by watch. */
 interface BoundHook {
+  /** What a delivery cannot say by itself, read through the watch's connection before the door takes it. */
+  complete?: (
+    watch: WatchView,
+    read: Ingested
+  ) => Effect.Effect<Ingested, ProviderFailure>;
   lifecycle?: {
     exists: (
       watch: WatchView,
@@ -199,7 +209,10 @@ interface BoundHook {
   };
   /** The service's name, for sentences. */
   service: string;
-  webhook: Pick<Webhook<unknown>, "manualStep" | "read" | "verify">;
+  webhook: Pick<
+    Webhook<unknown>,
+    "deliveryId" | "manualStep" | "mintSecret" | "read" | "verify"
+  >;
 }
 
 /**
@@ -212,7 +225,7 @@ const bound = <Client>(
   webhook: Webhook<Client>,
   open?: (watch: WatchView) => Client | Promise<Client>
 ): BoundHook => {
-  const { lifecycle } = webhook;
+  const { lifecycle, complete } = webhook;
   const client = (watch: WatchView) =>
     Effect.tryPromise({
       try: async () => {
@@ -229,7 +242,17 @@ const bound = <Client>(
       verify: webhook.verify,
       read: webhook.read,
       manualStep: webhook.manualStep,
+      ...(webhook.deliveryId ? { deliveryId: webhook.deliveryId } : {}),
+      ...(webhook.mintSecret ? { mintSecret: webhook.mintSecret } : {}),
     },
+    ...(complete && open
+      ? {
+          complete: (watch: WatchView, read: Ingested) =>
+            client(watch).pipe(
+              Effect.flatMap((made) => complete(made, watch, read, SERVICE_MS))
+            ),
+        }
+      : {}),
     ...(lifecycle && open
       ? {
           lifecycle: {
@@ -260,9 +283,29 @@ const bound = <Client>(
 /** The providers whose watches a relay goes into, as a watch row names them. */
 const HOOKED: Readonly<Record<string, MirrorProvider>> = {
   github: "github",
+  gitlab: "gitlab",
+  gitea: "gitea",
   linear: "linear",
   connection: "connection",
 };
+
+/** The forges a relay's watch is a repository of: GitHub's, a GitLab's, a Gitea's. */
+const FORGES: ReadonlySet<RelayProvider> = new Set([
+  "github",
+  "gitlab",
+  "gitea",
+]);
+
+/** The services whose relay has a watch that a connection reads. */
+const SERVICES: ReadonlySet<RelayProvider> = new Set([
+  "github",
+  "gitlab",
+  "gitea",
+  "linear",
+]);
+
+/** How long a delivery's own id is kept, so a sender's retry of it is dropped: past Standard Webhooks' five minutes of a timestamp's tolerance. Our choice. */
+const DELIVERY_IDS_MS = HOUR_MS;
 
 /** A watch as its provider reads it. */
 const viewOf = (watch: WatchRow): WatchView => ({
@@ -279,7 +322,12 @@ const viewOf = (watch: WatchRow): WatchView => ({
 
 /** What a relay is to the person, read off its watch: its provider's name, a sender's by how it signs. */
 const providerOf = (watch: WatchRow): RelayProvider => {
-  if (watch.provider === "github" || watch.provider === "linear") {
+  if (
+    watch.provider === "github" ||
+    watch.provider === "gitlab" ||
+    watch.provider === "gitea" ||
+    watch.provider === "linear"
+  ) {
     return watch.provider;
   }
   const scheme = hookSigningOf(watch.settings)?.scheme;
@@ -352,9 +400,13 @@ export const createRelay = ({
     linear: bound("Linear", linearWebhook, (watch) =>
       connections.linearClient(watch.connection)
     ),
+    gitlab: bound("GitLab", gitlabWebhook, (watch) =>
+      connections.gitlabClient(watch.connection)
+    ),
+    gitea: bound("Gitea", giteaWebhook, (watch) =>
+      connections.giteaClient(watch.connection)
+    ),
     connection: bound("the sender", connectionWebhook),
-    gitlab: undefined,
-    gitea: undefined,
   };
   const hookOf = (watch: WatchRow): BoundHook | undefined =>
     hooks[viewOf(watch).provider];
@@ -371,6 +423,23 @@ export const createRelay = ({
   };
   /** Each relay's bucket: tokens left, and when it was last filled. */
   const buckets = new Map<string, { at: number; tokens: number }>();
+  /** Each relay's deliveries' own ids it took in the last {@link DELIVERY_IDS_MS}, with when (a sender's retry of one is dropped). */
+  const deliveryIds = new Map<string, Map<string, number>>();
+  /** Whether delivery `id` came to relay `relay` already; it is kept as seen from now. */
+  const seenBefore = (relay: string, id: string, now: number): boolean => {
+    const seen = deliveryIds.get(relay) ?? new Map<string, number>();
+    for (const [one, at] of seen) {
+      if (now - at > DELIVERY_IDS_MS) {
+        seen.delete(one);
+      }
+    }
+    deliveryIds.set(relay, seen);
+    if (seen.has(id)) {
+      return true;
+    }
+    seen.set(id, now);
+    return false;
+  };
   /** When the service last refused to register a relay's webhook. */
   const refusedAt = new Map<string, number>();
   /** The receiver, while at least one relay is active; nothing listens otherwise. */
@@ -428,6 +497,13 @@ export const createRelay = ({
     }
     const now = new Date(delivery.now);
     store.update(relay.id, { lastDeliveryAt: now });
+    const id = hook.webhook.deliveryId?.(delivery);
+    if (id !== undefined && seenBefore(relay.id, id, delivery.now)) {
+      console.log(
+        `[relay] ${relay.id}: delivery ${id} came again; it was taken in already`
+      );
+      return 202;
+    }
     const read = yield* Effect.result(hook.webhook.read(delivery, view));
     if (read._tag === "Failure") {
       console.warn(
@@ -443,8 +519,37 @@ export const createRelay = ({
       );
       return 202;
     }
-    if (said === "ignored") {
-      return 202;
+    return said === "ignored"
+      ? 202
+      : yield* land({ relay, watch }, hook, said, id);
+  });
+
+  /**
+   * A verified delivery's read, read whole through the watch's connection
+   * where its provider asks ({@link BoundHook.complete}), handed to the
+   * door: the status to answer. One not read whole stores nothing, and its
+   * id is let go so the sender's retry is read again; the poll brings the
+   * change in meanwhile.
+   */
+  const land = Effect.fnUntraced(function* (
+    { relay, watch }: RelayHeld,
+    hook: BoundHook,
+    said: Ingested,
+    id: string | undefined
+  ): Effect.fn.Return<number> {
+    const view = viewOf(watch);
+    const whole = hook.complete
+      ? yield* Effect.result(hook.complete(view, said))
+      : undefined;
+    if (whole?._tag === "Failure") {
+      if (id !== undefined) {
+        deliveryIds.get(relay.id)?.delete(id);
+      }
+      const { failure } = whole;
+      console.warn(
+        `[relay] ${relay.id}: a verified delivery was not read whole through ${watch.connection}, so nothing of it is stored (503): ${failure._tag === "ProviderUnanswered" ? `${hook.service} did not answer within ${secondsOf(failure.after)} s` : failure.words}`
+      );
+      return 503;
     }
     const landed = yield* intake.take(
       {
@@ -452,7 +557,7 @@ export const createRelay = ({
         provider: view.provider,
         watchId: watch.id,
       },
-      said,
+      whole?.success ?? said,
       "webhook",
       false
     );
@@ -638,15 +743,17 @@ export const createRelay = ({
   }: RelayHeld): Promise<string> => {
     const hook = hookOf(watch);
     if (!hook?.lifecycle) {
-      return "not a GitHub relay";
+      return "not a relay whose webhook the hub registers";
     }
     if (!relay.hookId) {
       return "no webhook the hub registered";
     }
-    const where =
-      watch.provider === "github"
-        ? `; delete it at https://github.com/${watch.container}/settings/hooks`
-        : "";
+    const hooksAt: Partial<Record<string, string>> = {
+      github: `https://github.com/${watch.container}/settings/hooks`,
+      gitlab: `https://${watch.host}/${watch.container}/-/hooks`,
+    };
+    const page = hooksAt[watch.provider];
+    const where = page ? `; delete it at ${page}` : "";
     const gone = await Effect.runPromise(
       Effect.result(hook.lifecycle.unregister(viewOf(watch), relay.hookId))
     );
@@ -844,26 +951,18 @@ export const createRelay = ({
 
   // --- views ------------------------------------------------------------------------
 
-  /** A GitHub relay's sentence: whether GitHub delivers, and whether its repository is polled meanwhile. */
-  const githubInbound = (live: boolean, polled: boolean): string => {
-    if (live) {
-      return polled
-        ? "GitHub delivers here as things happen; the 60 s poll stays on beside it, and an event both bring lands once."
-        : "GitHub delivers here as things happen.";
-    }
-    return polled
-      ? "Not live yet, so events reach the project by the 60 s GitHub poll meanwhile."
-      : "Not live yet, and the project's repository isn't polled: nothing arrives from GitHub until it is.";
-  };
-
-  /** A Linear relay's sentence: none while live, its state says it. */
-  const linearInbound = (live: boolean, polled: boolean): string => {
+  /** A service's relay's sentence (GitHub's, a GitLab's, a Gitea's, Linear's): none while live, its state says it; else whether its watch is polled meanwhile. */
+  const serviceInbound = (
+    service: string,
+    live: boolean,
+    polled: boolean
+  ): string => {
     if (live) {
       return "";
     }
     return polled
-      ? "Not live yet. Polling Linear every 60 s."
-      : "Not live yet. Not polling Linear, so nothing arrives.";
+      ? `Not live yet. Polling ${service} every 60 s.`
+      : `Not live yet. Not polling ${service}, so nothing arrives.`;
   };
 
   const inboundOf = ({ relay, watch }: RelayHeld): string => {
@@ -871,11 +970,9 @@ export const createRelay = ({
       return "Off: its path answers 404.";
     }
     const live = relay.state === "live";
-    if (watch.provider === "github") {
-      return githubInbound(live, watch.enabled);
-    }
-    if (watch.provider === "linear") {
-      return linearInbound(live, watch.enabled);
+    const hook = hookOf(watch);
+    if (SERVICES.has(providerOf(watch)) && hook) {
+      return serviceInbound(hook.service, live, watch.enabled);
     }
     return live
       ? "Deliveries land as they come."
@@ -885,13 +982,12 @@ export const createRelay = ({
   const viewOfRelay = (held: RelayHeld): RelayView => {
     const { relay, watch } = held;
     const provider = providerOf(watch);
-    const service = provider === "github" || provider === "linear";
     return {
       id: relay.id,
       projectId: relay.projectId,
       provider,
-      connection: service ? watch.connection : null,
-      repo: provider === "github" ? watch.container : null,
+      connection: SERVICES.has(provider) ? watch.connection : null,
+      repo: FORGES.has(provider) ? watch.container : null,
       host: relay.host,
       publicUrl: relay.publicUrl,
       state: relay.state,
@@ -1184,6 +1280,66 @@ export const createRelay = ({
     return made;
   };
 
+  /**
+   * A GitLab's or Gitea's relay as it will be made, or the refusal: the
+   * project's watch of the repository named (its only one when left out),
+   * read through its connection. The project follows that forge first: a
+   * delivery is read whole through the watch's connection.
+   */
+  const forgeChecked = (
+    project: ProjectRow,
+    input: RelayInput,
+    provider: "gitlab" | "gitea"
+  ) => {
+    const service = provider === "gitlab" ? "GitLab" : "Gitea";
+    const followed = store
+      .watchesOf(project.id)
+      .filter((one) => one.provider === provider && one.enabled);
+    const asked = input.repo?.trim().toLowerCase();
+    const named = asked
+      ? followed.filter(
+          (one) =>
+            one.container.toLowerCase() === asked ||
+            `${one.host}/${one.container}`.toLowerCase() === asked
+        )
+      : followed;
+    const repos = followed.map((one) => `${one.host}/${one.container}`);
+    const [watch] = named;
+    const detail =
+      followed.length === 0
+        ? `This project doesn't follow a ${service} repository. Connect ${service} and link one first.`
+        : `Name the ${service} repository to relay (repo): ${repos.join(", ")}.`;
+    if (asked && named.length !== 1) {
+      return problem(400, { code: "relay-repo-unknown", detail });
+    }
+    if (!watch || named.length > 1) {
+      return problem(400, { code: "relay-repo-unnamed", detail });
+    }
+    const asksConnection = input.connection?.trim();
+    if (asksConnection && asksConnection !== watch.connection) {
+      return problem(409, {
+        code: "relay-connection-unusable",
+        detail: `${watch.container} uses ${watch.connection}. Leave connection out or name ${watch.connection}.`,
+      });
+    }
+    const taken = liveIn(project.id, watch.id, watch.container);
+    if (taken) {
+      return taken;
+    }
+    const made: RelayPlan = {
+      projectId: project.id,
+      provider,
+      repo: watch.container,
+      connection: watch.connection,
+      signatureHeader: null,
+      timestampHeader: null,
+      idPath: null,
+      teamName: null,
+      watch: { kind: "existing", id: watch.id },
+    };
+    return made;
+  };
+
   /** A sender's relay (Stripe, generic, Standard Webhooks) as it will be made, or the refusal. */
   const senderChecked = (
     project: ProjectRow,
@@ -1230,6 +1386,9 @@ export const createRelay = ({
     if (input.provider === "github") {
       return githubChecked(project, input);
     }
+    if (input.provider === "gitlab" || input.provider === "gitea") {
+      return forgeChecked(project, input, input.provider);
+    }
     return input.provider === "linear"
       ? linearChecked(project)
       : senderChecked(project, input, id);
@@ -1246,6 +1405,10 @@ export const createRelay = ({
       registers = ` The hub then registers a webhook on ${input.repo} through ${input.connection}, with a secret it makes, for pull requests, issues and issue comments.`;
     } else if (input.provider === "linear") {
       registers = ` Approving also registers a webhook for issues and comments on Linear team ${input.teamName} through ${input.connection}.`;
+    } else if (input.provider === "gitlab") {
+      registers = ` Approving also registers a webhook for issues, merge requests and comments on ${input.repo} through ${input.connection}.`;
+    } else if (input.provider === "gitea") {
+      registers = ` After approving, add a webhook on ${input.repo} in Gitea.`;
     }
     return `Approving opens one public HTTPS path on the hub's machine (${tailscale().host}) through Tailscale Funnel, port 10000: https://<its tailnet name>:10000/hooks/<a new random id>. The internet can POST ${input.provider}-signed deliveries for project “${project.name}” there; it answers nothing back, and nothing else of the hub is reachable through it.${registers}`;
   };
@@ -1269,6 +1432,12 @@ export const createRelay = ({
   const routeSourceOf = (relayId: string, watch: WatchRow): string => {
     if (watch.provider === "github") {
       return githubSource(watch.container);
+    }
+    if (watch.provider === "gitlab") {
+      return gitlabSource(watch.host, watch.container);
+    }
+    if (watch.provider === "gitea") {
+      return giteaSource(watch.host, watch.container);
     }
     if (watch.provider === "linear") {
       // Linear's source is `linear:<workspace>/<team key>`; the key leads the team's name.
@@ -1307,12 +1476,20 @@ export const createRelay = ({
     if (made instanceof ElysiaStatus) {
       return made;
     }
-    const minted = made.provider === "github" || made.provider === "linear";
+    // The hub mints the secret of a webhook it registers (GitHub's, a
+    // GitLab's in its own form, Linear's where it may), and of no other.
+    const hook = hooks[HOOKED[made.provider] ?? "connection"];
+    const minted =
+      made.provider === "github" ||
+      made.provider === "linear" ||
+      (made.provider === "gitlab" && hook?.lifecycle !== undefined);
     const held = store.create(
       {
         id,
         projectId: made.projectId,
-        secret: minted ? randomBytes(32).toString("hex") : null,
+        secret: minted
+          ? (hook?.webhook.mintSecret?.() ?? randomBytes(32).toString("hex"))
+          : null,
         secretFrom: minted ? "minted" : null,
         hookId: null,
         host: await hostOf(),
@@ -1635,7 +1812,7 @@ const RELAY_CREATE_DEFINITION = defineTool(
     repo: z
       .string()
       .optional()
-      .describe("github: owner/name, when the project links several"),
+      .describe("owner/name or group/project, when several"),
     connection: z.string().optional().describe("github"),
     signature_header: z.string().optional().describe("generic"),
     timestamp_header: z.string().optional().describe("generic"),
@@ -1654,7 +1831,7 @@ const RELAY_LIST_DEFINITION = defineTool(
 
 const RELAY_REMOVE_DEFINITION = defineTool(
   "relay_remove",
-  "Turns a relay off, with the GitHub webhook the hub made for it. Use it for a relay no longer wanted.",
+  "Turns a relay off, with the webhook the hub made for it. Use it for a relay no longer wanted.",
   { id: z.string().trim().min(1) },
   relayRemovedWords
 );

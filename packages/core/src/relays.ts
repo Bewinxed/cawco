@@ -8,6 +8,8 @@
 export const RELAY_PROVIDERS = [
   "github",
   "linear",
+  "gitlab",
+  "gitea",
   "stripe",
   "generic",
   "standard-webhooks",
@@ -41,9 +43,9 @@ export interface RelayView {
   publicUrl: string | null;
   /** The exact step or command when it isn't live; null when it is. */
   reason: string | null;
-  /** Whether GitHub's webhook was registered by the hub (and is deleted with the relay). */
+  /** Whether the service's webhook was registered by the hub (and is deleted with the relay). */
   registered: boolean;
-  /** GitHub: the repository, `owner/repo`, whose webhook it is; null for other providers. */
+  /** GitHub, GitLab, Gitea: the repository (`owner/repo`, `group/sub/project`) whose webhook it is; null for other providers. */
   repo: string | null;
   state: RelayState;
   /** When the provider's test delivery arrived. */

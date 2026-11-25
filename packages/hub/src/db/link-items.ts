@@ -21,7 +21,7 @@
  * links to it, else the first linked, and makes the other `related`.
  */
 import type { Database } from "bun:sqlite";
-import { githubTarget } from "@cawco/core/wait-targets";
+import { linkTarget } from "@cawco/core/wait-targets";
 import { itemOfUrl } from "@cawco/providers/registry";
 
 interface LinkRow {
@@ -113,7 +113,7 @@ export const placeLinkItems = (client: Database): void => {
   for (const wait of client
     .query<{ project_id: string; task_id: string; wait: string }, []>(RUN_WAITS)
     .all()) {
-    const run = githubTarget(wait.wait);
+    const run = linkTarget(wait.wait);
     const item = run && itemOfUrl(run.url);
     if (run?.kind === "run" && item) {
       insert.run(

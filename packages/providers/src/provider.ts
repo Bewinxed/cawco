@@ -23,6 +23,14 @@ import type {
 export const PROVIDER_IDS = ["github", "linear", "gitlab", "gitea"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
+/** The forges among them: a provider of repositories, its items numbered, followed through a connection that reads its API. */
+export const FORGE_IDS = [
+  "github",
+  "gitlab",
+  "gitea",
+] as const satisfies readonly ProviderId[];
+export type ForgeId = (typeof FORGE_IDS)[number];
+
 /** What a task links on a service. */
 export const LINK_KINDS = ["issue", "pr", "discussion"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
@@ -337,9 +345,25 @@ export interface WebhookLifecycle<Client> {
  * `read` gives goes through the same door under the same keys as a poll.
  */
 export interface Webhook<Client> {
+  /**
+   * What a delivery cannot say by itself, read through the watch's
+   * connection before the door takes it (an author GitLab names by id
+   * alone, whether the service vouches for an author): a read that fails
+   * stores nothing, and the poll brings the change in.
+   */
+  complete?: (
+    client: Client,
+    watch: WatchView,
+    read: Ingested,
+    requestMs: number
+  ) => Effect.Effect<Ingested, ProviderFailure>;
+  /** The delivery's own id, one across the sender's retries (`webhook-id`): a second delivery of one id is answered and dropped. */
+  deliveryId?: (delivery: RawDelivery) => string | undefined;
   lifecycle?: WebhookLifecycle<Client>;
   /** What the person does where, when the hub does not register the webhook: `why` it does not, then the step. */
   manualStep: (watch: WatchView, hook: HookAt, why: string) => string;
+  /** The secret the hub mints for a webhook it registers, in the form the service takes; 32 random bytes in hex when left out. */
+  mintSecret?: () => string;
   /** A verified delivery as what it says; its body that does not read is its failure. */
   read: (
     delivery: RawDelivery,

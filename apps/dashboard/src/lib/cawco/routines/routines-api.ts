@@ -109,6 +109,20 @@ export async function readRoutinesPage(
     ).toLowerCase();
   };
   const { github } = ingress;
+  // Each GitLab and Gitea the project polls, after GitHub, as GitHub's line.
+  polls.unshift(
+    ...ingress.forges
+      .filter((forge) => forge.connection !== null)
+      .map((forge) => ({
+        id: `${forge.provider}:${forge.host}`,
+        service: forge.provider,
+        tool: null,
+        what: forge.repos.join(", ") || routinesWords.theRepository,
+        everyS: null,
+        polledAt: forge.polledAt,
+        failure: forge.polled ? null : forge.state,
+      }))
+  );
   if (github.connection !== null) {
     polls.unshift({
       id: "github",

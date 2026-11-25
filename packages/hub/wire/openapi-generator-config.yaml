@@ -96,6 +96,7 @@ typeOverrides:
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
     FolderMoveProgressFramePhase: OpenEnums.FolderMoveProgressFramePhase
+    ForgePollViewProvider: OpenEnums.ForgePollViewProvider
     FormName: OpenEnums.FormName
     FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind

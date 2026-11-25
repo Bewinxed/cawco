@@ -71,11 +71,13 @@ export const waitLinks = (waits: readonly string[]): FileLink[] =>
     })
     .map((url) => ({ url, record: false }));
 
-/** What an inbound thing names: an item by its number (GitHub), or by the source's own id (Linear). */
+/** What an inbound thing names: an item by its number (GitHub, GitLab, Gitea), or by the source's own id (Linear). */
 export type ItemKey =
   | {
-      /** `owner/repo` on GitHub: a project may link items of more than one repository. */
+      /** `owner/repo`, `group/sub/project`: a project may link items of more than one repository. */
       container?: string;
+      /** The forge's host, where two hosts of one provider may hold the same path. */
+      host?: string;
       kind?: LinkKind | "run";
       number: number;
       source: ProviderId;
@@ -310,6 +312,9 @@ const itemNamed = (item: ItemKey): SQL | undefined => {
           : inArray(externalItems.kind, LINK_KINDS),
         item.container
           ? eq(externalItems.container, item.container.toLowerCase())
+          : undefined,
+        item.host
+          ? sql`lower(${externalItems.host}) = lower(${item.host})`
           : undefined
       );
 };

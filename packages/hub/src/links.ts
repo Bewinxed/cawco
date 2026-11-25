@@ -23,15 +23,17 @@
  *   mirror row; a moved state or title tells the project's tasks
  *   (`linksMoved`), so a wait on a pull request or a run settles.
  * - **Reading a link.** An item a task names (`links:`, `issue:`, a
- *   `waits_on` pull request or Actions run), or a plan step waits on, is
- *   read once from GitHub by the project's poll ({@link Links.readLinks},
- *   providers github/items.ts), and what it says goes in through the door.
- *   One that cannot be read keeps GitHub's words as its problem and is read
- *   again on the next poll. An open pull request is read again every poll
- *   with its ETag: a draft marked ready shows within a poll (no event says
- *   so). A run is read again every poll until it is green.
- * - **A wait on a pull request or run** reads its item's mirror row
- *   ({@link Links.githubWait}), so it survives a restart.
+ *   `waits_on` pull or merge request or Actions run), or a plan step waits
+ *   on, is read once from its forge by the project's poll of that forge
+ *   ({@link Links.readLinks}; providers github/items.ts, gitlab/items.ts,
+ *   gitea/items.ts), and what it says goes in through the door. One that
+ *   cannot be read keeps the forge's words as its problem and is read again
+ *   on the next poll. An open pull request is read again every poll (with
+ *   its ETag where the forge has them): a draft marked ready shows within a
+ *   poll (no event says so). A run is read again every poll until it is
+ *   green.
+ * - **A wait on a pull or merge request or run** reads its item's mirror
+ *   row ({@link Links.linkWait}), so it survives a restart.
  */
 import { actorNamed, type ExternalComment } from "@cawco/core/external-items";
 import { isOneOf } from "@cawco/core/one-of";
@@ -40,9 +42,12 @@ import { TRACKERS } from "@cawco/core/trackers";
 import { unhandled } from "@cawco/core/unhandled";
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
-import type { GitHubClient } from "@cawco/providers/github/ingest";
-import { githubItems } from "@cawco/providers/github/items";
-import type { ItemRead, ItemRevision } from "@cawco/providers/provider";
+import type {
+  ItemRead,
+  ItemRevision,
+  Items,
+  ProviderId,
+} from "@cawco/providers/provider";
 import { PROVIDER_IDS } from "@cawco/providers/provider";
 import type { ProviderFailure } from "@cawco/providers/read-stop";
 import { linkOfUrl, numberOf } from "@cawco/providers/registry";
@@ -59,12 +64,12 @@ import type { WritesDb } from "./db/writes";
 import type { Arrived } from "./intake";
 import type { AnyProblem } from "./refusal";
 import { intoFile } from "./sync";
-import type { GitHubWaitState } from "./task-waits";
+import type { LinkWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
 
 /** How far a comment's headings go into a task file (sync.ts `intoFile`). */
 const COMMENT_DEPTH = 2;
-/** Links read from GitHub in one poll at most; the next poll reads on. Our choice. */
+/** Links read from one forge in one poll at most; the next poll reads on. Our choice. */
 const READS_PER_POLL = 20;
 const HASH = /^#/u;
 
@@ -130,7 +135,7 @@ const commentOf = (
     : undefined;
 
 /** An item's state as a wait on its pull request or run reads it (task-waits.ts `settled`). */
-const WAIT_STATES: Readonly<Record<ItemState, GitHubWaitState>> = {
+const WAIT_STATES: Readonly<Record<ItemState, LinkWaitState>> = {
   open: "open",
   draft: "open",
   merged: "merged",
@@ -372,17 +377,24 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   };
 
   /**
-   * The project's GitHub items due a read: first the ones not read yet or
-   * whose last read stopped short, then every open pull request and every
-   * Actions run not yet green, the longest since read first, read again
-   * each poll (no event says a draft was marked ready or a run completed).
-   * A synced issue is one of them like any other: what a read finds goes
-   * through the door to the sync.
+   * The project's items on a forge due a read: first the ones not read yet
+   * or whose last read stopped short, then every open pull request and
+   * every Actions run not yet green, the longest since read first, read
+   * again each poll (no event says a draft was marked ready or a run
+   * completed). A synced issue is one of them like any other: what a read
+   * finds goes through the door to the sync.
    */
-  const dueItems = (projectId: string): ItemRow[] => {
+  const dueItems = (
+    projectId: string,
+    forge: { host: string; provider: ProviderId }
+  ): ItemRow[] => {
     const rows = db.taskLinks
       .ofProject(projectId)
-      .filter(({ item }) => item.provider === "github");
+      .filter(
+        ({ item }) =>
+          item.provider === forge.provider &&
+          item.host.toLowerCase() === forge.host.toLowerCase()
+      );
     const items = itemsOf(rows);
     const unread = items.filter(
       (item) => item.readAt === null || item.problem !== null
@@ -394,22 +406,24 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   };
 
   /**
-   * The project's GitHub items due a read ({@link dueItems}), each read
-   * once with the poll's client (providers github/items.ts): what GitHub
-   * said goes in through the door (`store`), and a read that stopped short
-   * keeps GitHub's words as the item's problem.
+   * The project's items on `forge` due a read ({@link dueItems}), each read
+   * once with the poll's client by the forge's provider (`items`): what the
+   * forge said goes in through the door (`store`), and a read that stopped
+   * short keeps the forge's words as the item's problem.
    */
-  const readLinks = async (
+  const readLinks = async <Client>(
     projectId: string,
-    client: GitHubClient,
+    forge: { host: string; provider: ProviderId },
+    items: Items<Client>,
+    client: Client,
     requestMs: number,
     store: (revisions: ItemRevision[]) => void
   ): Promise<void> => {
     const revisions: ItemRevision[] = [];
     let changed = false;
-    for (const item of dueItems(projectId).slice(0, READS_PER_POLL)) {
+    for (const item of dueItems(projectId, forge).slice(0, READS_PER_POLL)) {
       const outcome = await Effect.runPromise(
-        Effect.result(githubItems.read(client, item, item.etag, requestMs))
+        Effect.result(items.read(client, item, item.etag, requestMs))
       );
       if (Result.isSuccess(outcome) && outcome.success.kind === "read") {
         revisions.push(outcome.success.revision);
@@ -427,26 +441,34 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   };
 
   /**
-   * A pull request's or Actions run's state as a wait on it reads it
-   * (task-waits.ts `settled`): its mirror row's, the one state the hub
+   * A pull or merge request's or Actions run's state as a wait on it reads
+   * it (task-waits.ts `settled`): its mirror row's, the one state the hub
    * keeps of it, which outlives a restart; `checking` until the poll has
    * read it. The row's link is the waiter's own: a task file's `waits_on`
    * is one of its links (db task-index.ts `putTaskIndex`), a plan step's
    * one of its plan's (db `putSessionSteps`).
    */
-  const githubWait = (
+  const linkWait = (
     projectId: string,
     target: Extract<WaitTarget, { kind: "pr" | "run" }>
-  ): { state: GitHubWaitState; title: string | null } => {
+  ): { state: LinkWaitState; title: string | null } => {
     const [item] = itemsOf(
       db.taskLinks.byItem(
         projectId,
-        {
-          source: "github",
-          kind: target.kind,
-          number: target.kind === "pr" ? target.number : Number(target.id),
-          container: target.repo,
-        },
+        target.kind === "pr"
+          ? {
+              source: target.provider,
+              kind: "pr",
+              number: target.number,
+              container: target.repo,
+              host: target.host,
+            }
+          : {
+              source: "github",
+              kind: "run",
+              number: Number(target.id),
+              container: target.repo,
+            },
         "any"
       )
     );
@@ -456,7 +478,7 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     };
   };
 
-  /** The tasks linking an item (`task_read`'s `link`): its URL, or `#12` in any of the project's GitHub repositories; a refusal in words. */
+  /** The tasks linking an item (`task_read`'s `link`): its URL on any forge, or `#12` in any of the project's GitHub repositories; a refusal in words. */
   const linked = (
     projectId: string,
     link: string,
@@ -480,20 +502,29 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     if (!(number && Number.isInteger(number))) {
       return `“${link}” names no external item: give its URL, or #12 for an issue or pull request of the project's repositories.`;
     }
-    const containers = item?.container ? [item.container] : repos;
-    if (containers.length === 0) {
+    if (item) {
+      return [
+        ...new Set(
+          db.taskLinks
+            .byItem(projectId, {
+              source: item.provider,
+              kind: item.kind,
+              number,
+              container: item.container,
+              host: item.host,
+            })
+            .map((row) => row.link.taskId)
+        ),
+      ];
+    }
+    if (repos.length === 0) {
       return `#${number} names no repository: this project links none on GitHub, so give the item's URL.`;
     }
     return [
       ...new Set(
-        containers.flatMap((container) =>
+        repos.flatMap((container) =>
           db.taskLinks
-            .byItem(projectId, {
-              source: "github",
-              ...(item ? { kind: item.kind } : {}),
-              number,
-              container,
-            })
+            .byItem(projectId, { source: "github", number, container })
             .map((row) => row.link.taskId)
         )
       ),
@@ -503,7 +534,7 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   return {
     adopt,
     fileComment,
-    githubWait,
+    linkWait,
     linked,
     moved,
     onEvent,
