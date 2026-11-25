@@ -1,11 +1,7 @@
-/* The shortlisted same-family Sans + Mono pairs, for the board's type
-   switcher only (pairs.ts): Latin cuts of their variable fonts from Google
-   Fonts. Nothing in the product reads these families.
-
-   The board is set in the pair its switcher names (`data-pair`); holding a
-   pair's button down (`data-pair-hold`, `:active`, by pointer or by
-   keyboard) sets it in that pair for as long as it is held, and letting go
-   gives the board back. CSS alone: the hold's rule outweighs the pair's. */
+/* The shortlisted same-family Sans + Mono pairs, for the board's font-pair
+   dial only (pairs.ts): Latin cuts of their variable fonts from Google
+   Fonts. Nothing in the product reads these families. A section is set in
+   the pair the dial names (`data-pair`). */
 @font-face {
   font-family: "Pair Atkinson Hyperlegible Next";
   font-style: normal;
@@ -78,43 +74,24 @@
 }
 
 @layer components {
-  [data-board][data-pair="atkinson"],
-  [data-board]:has([data-pair-hold="atkinson"]:active),
-  [data-pair-hold="atkinson"] {
+  [data-board][data-pair="atkinson"] {
     --font-sans: "Pair Atkinson Hyperlegible Next", ui-sans-serif, sans-serif;
     --font-mono: "Pair Atkinson Hyperlegible Mono", ui-monospace, monospace;
   }
-  [data-board][data-pair="geist"],
-  [data-board]:has([data-pair-hold="geist"]:active),
-  [data-pair-hold="geist"] {
+  [data-board][data-pair="geist"] {
     --font-sans: "Pair Geist", ui-sans-serif, sans-serif;
     --font-mono: "Pair Geist Mono", ui-monospace, monospace;
   }
-  [data-board][data-pair="spline"],
-  [data-board]:has([data-pair-hold="spline"]:active),
-  [data-pair-hold="spline"] {
+  [data-board][data-pair="spline"] {
     --font-sans: "Pair Spline Sans", ui-sans-serif, sans-serif;
     --font-mono: "Pair Spline Sans Mono", ui-monospace, monospace;
   }
-  [data-board][data-pair="chivo"],
-  [data-board]:has([data-pair-hold="chivo"]:active),
-  [data-pair-hold="chivo"] {
+  [data-board][data-pair="chivo"] {
     --font-sans: "Pair Chivo", ui-sans-serif, sans-serif;
     --font-mono: "Pair Chivo Mono", ui-monospace, monospace;
   }
-  [data-board][data-pair="reddit"],
-  [data-board]:has([data-pair-hold="reddit"]:active),
-  [data-pair-hold="reddit"] {
+  [data-board][data-pair="reddit"] {
     --font-sans: "Pair Reddit Sans", ui-sans-serif, sans-serif;
     --font-mono: "Pair Reddit Mono", ui-monospace, monospace;
-  }
-  [data-board]:has([data-pair-hold="today"]:active),
-  [data-pair-hold="today"] {
-    --font-sans:
-      "Figtree Variable", "Figtree Variable Fallback", ui-sans-serif, system-ui,
-      sans-serif;
-    --font-mono:
-      "JetBrains Mono Variable", "JetBrains Mono Variable Fallback",
-      ui-monospace, monospace;
   }
 }

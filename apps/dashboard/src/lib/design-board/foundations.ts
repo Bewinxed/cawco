@@ -63,8 +63,6 @@ export interface Foundation {
   note: string;
   shelves: Shelf[];
   title: string;
-  /** Takes a full row of the board. */
-  wide?: boolean;
 }
 
 const shelf = (title: string, kind: Kind, names: string[]): Shelf => ({
@@ -78,14 +76,12 @@ export const ROLES: Foundation[] = [
   {
     title: "Colour",
     note: "Flexoki's model on a neutral base: 8 base roles (bg, bg-2, ui, ui-2, ui-3, tx-3, tx-2, tx), Flexoki's 8 inks, and Caw coral. No tinted fills.",
-    wide: true,
     inUse: "colour",
     shelves: [],
   },
   {
     title: "Typography",
     note: "Six roles. A component sets its text with one of them and nothing else.",
-    wide: true,
     shelves: [
       shelf("Roles", "type", [
         "type-kpi",
@@ -100,7 +96,6 @@ export const ROLES: Foundation[] = [
   {
     title: "Spacing",
     note: "Six steps on a 4px unit: 4, 8, 12, 16, 24 and 32px. Every padding and gap in the pieces below is one of them; the graph's guides measure any of it.",
-    wide: true,
     inUse: "spacing",
     shelves: [],
   },
@@ -111,7 +106,6 @@ export const SCALES: Foundation[] = [
   {
     title: "Elevation",
     note: "One ladder. Each surface takes its level from the one it opens in: a panel one step, a popover, menu or dialog two. Light turns white at level 1 and lets the shadow carry the rest; dark lightens each level.",
-    wide: true,
     inUse: "elevation",
     shelves: [],
   },
@@ -127,7 +121,6 @@ export const SCALES: Foundation[] = [
   {
     title: "Layout and layers",
     note: "Four planes, two breakpoints (640, 900) and four container tiers (320, 448, 640, 900).",
-    wide: true,
     inUse: "layout",
     shelves: [],
   },
