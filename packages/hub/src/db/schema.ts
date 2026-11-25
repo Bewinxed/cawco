@@ -98,12 +98,8 @@ import {
   FleetSyncOutcomeSchema,
   FleetSyncReportSchema,
   FolderMoveStageSchema,
-  GithubProjectSchema,
-  GithubStatusesAddedSchema,
-  GithubStatusStagesSchema,
   HookHandlerSchema,
   InstanceStatusSchema,
-  IssueTrackerSchema,
   KeptMachineCapabilitiesSchema,
   LastErrorKindSchema,
   LinkModeSchema,
@@ -148,7 +144,7 @@ import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
 import { TOOL_STATES, TOOL_UPDATES } from "@cawco/core/tools";
-import { TRACKER_DIRECTIONS, TRACKERS } from "@cawco/core/trackers";
+import { TRACKERS } from "@cawco/core/trackers";
 import { THING_KINDS, TRIGGER_KINDS } from "@cawco/core/triggers";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { USAGE_HARNESSES } from "@cawco/core/usage/types";
@@ -192,7 +188,6 @@ import {
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
   FolderMoveStateSchema,
-  GitHubResourceSchema,
   InboundViaSchema,
   InstanceKindSchema,
   InstanceTitleSourceSchema,
@@ -229,6 +224,9 @@ import {
   TrashedRowsSchema,
   TrashKindSchema,
   TrimOfferAnswerSchema,
+  WatchCursorSchema,
+  WatchSettingsSchema,
+  WatchSyncSchema,
   WorkItemSubmissionSchema,
   WorkOriginSchema,
   WorkspaceStateSchema,
@@ -632,7 +630,7 @@ export const projects = sqliteTable("projects", {
   /**
    * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
    * files in the project folder, alone or with GitHub Issues or Linear as
-   * the record of each task's issue fields (tracker.ts, `tracker_bindings`).
+   * the record of each task's issue fields (tracker.ts, its watch that syncs: `watches`).
    */
   tracker: storedEnum(z.enum(TRACKERS))("tracker").notNull().default("cawco"),
   /**
@@ -6739,169 +6737,106 @@ export interface GitHubCursor {
 }
 
 /**
- * A project's GitHub poller (ingress.ts, github.ts): the connection whose
- * token it polls every GitHub repository the project links with, and each
- * repository's cursor per resource (`github_poll_cursors`), so a hub
- * restart neither re-delivers nor misses.
+ * A watch (provider spec §2.4): one container of one outside service a
+ * project follows through one connection. `provider` is `github` (a
+ * repository, `owner/repo`, on `host` github.com), `linear` (a team, by
+ * its id, on linear.app) or `connection` (a connector poll, its container
+ * its own id). It replaces the project's GitHub poller (ingress.ts), its
+ * tracker binding (tracker.ts: `sync` not `off`) and its connector polls.
+ *
+ * Until the tracker sync reads the event poll's revisions, two polls read
+ * a GitHub watch that syncs: the event poll, whose state is the row's
+ * `reason`, `polled_at` and `resume_at` and whose streams are the
+ * resources (github.ts), and the sync's own, whose state is in
+ * `settings` (`sync*`) and whose streams are `sync:issues` and
+ * `sync:comments`. `enabled`: the event poll reads it (a GitHub watch the
+ * project follows, a connector poll switched on); a watch made only by
+ * binding a tracker is not, and the sync reads it all the same.
  */
-export const githubPollers = sqliteTable("github_pollers", {
-  projectId: projectColumn("project_id")
-    .primaryKey()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  /** The connection (service `github`, one that reads GitHub's API: core `readsGitHubApi`) it polls with. */
-  connection: text("connection").notNull(),
-  /** Why its last poll failed, or null. */
-  reason: text("reason"),
-  /** GitHub's rate limit holds polls back until then. */
-  resumeAt: timestamp("resume_at"),
-  polledAt: timestamp("polled_at"),
-});
-
-/** One resource's cursor of one repository in a project's GitHub poller ({@link GitHubCursor}). */
-export const githubPollCursors = sqliteTable(
-  "github_poll_cursors",
+export const watches = sqliteTable(
+  "watches",
   {
-    projectId: projectColumn("project_id")
-      .notNull()
-      .references(() => githubPollers.projectId, { onDelete: "cascade" }),
-    /** `owner/repo`, one of the project's links. */
-    repo: text("repo").notNull(),
-    resource: storedEnum(GitHubResourceSchema)("resource").notNull(),
-    etag: text("etag"),
-    /** The newest `updated_at` taken in, ms. */
-    since: integer("since").notNull(),
-    polls: integer("polls").notNull(),
-    notModified: integer("not_modified").notNull(),
+    id: text("id").primaryKey(),
+    projectId: projectKey(),
+    provider: text("provider").notNull(),
+    host: text("host").notNull(),
+    container: text("container").notNull(),
+    containerName: text("container_name").notNull(),
+    containerUrl: text("container_url").notNull(),
+    /** The connection (connections.ts) it reads with. */
+    connection: text("connection").notNull(),
+    sync: storedEnum(WatchSyncSchema)("sync").notNull().default("off"),
+    /** Issues opened after it become tasks; nothing older is copied. Null while it does not sync. */
+    syncSince: timestamp("sync_since"),
+    /**
+     * When its direction last changed on a binding kept as it stood; null
+     * while it is as bound. Turned to `both`, only tasks filed and comments
+     * written since go to the tracker.
+     */
+    syncDirectionAt: timestamp("sync_direction_at"),
+    settings: storedJson(WatchSettingsSchema)("settings").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Where its sync stands (core `TrackerSyncState`); null while it does not sync. */
+    state: storedEnum(TrackerSyncStateSchema)("state"),
+    /** Why its event poll stopped short, or null. */
+    reason: text("reason"),
+    /** The service's rate limit holds its event poll back until then. */
+    resumeAt: timestamp("resume_at"),
+    polledAt: timestamp("polled_at"),
+    /** `owner`, or the id of the session that made it. */
+    createdBy: sessionColumn("created_by").notNull(),
+    createdAt: timestamp("created_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.projectId, table.repo, table.resource] }),
+    uniqueIndex("watches_container").on(
+      table.projectId,
+      table.provider,
+      table.host,
+      table.container
+    ),
+    // One tracker per project, as the binding was.
+    uniqueIndex("watches_sync")
+      .on(table.projectId)
+      .where(sql`${table.sync} != 'off'`),
   ]
 );
 
 /**
- * A connector poll (ingress.ts): one connection's read tool called on an
- * interval, its items diffed by id and version into `inbound_events`.
+ * Where one stream of a watch stands ({@link WatchCursor}): a GitHub
+ * resource's (`issues`, `pulls`, `comments`, `issueEvents`,
+ * `discussions`), the tracker sync's own (`sync:issues`, `sync:comments`),
+ * or a connector poll's (`items`: there once it has looked, its items in
+ * `connector_poll_items`).
  */
-export const connectorPolls = sqliteTable(
-  "connector_polls",
+export const watchCursors = sqliteTable(
+  "watch_cursors",
   {
-    id: text("id").primaryKey(),
-    projectId: projectKey(),
-    connection: text("connection").notNull(),
-    tool: text("tool").notNull(),
-    args: storedJson(z.record(z.string(), z.unknown()))("args").notNull(),
-    /** Seconds between calls, 60 or more. */
-    intervalS: integer("interval_s").notNull(),
-    /** A dot path to the array of items in the result; empty: the result is the array. */
-    itemsPath: text("items_path").notNull().default(""),
-    /** A dot path to each item's id, and to its version (`updated_at`). */
-    idPath: text("id_path").notNull(),
-    versionPath: text("version_path").notNull(),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    /**
-     * When a call last kept what it saw (`connector_poll_items`); null until
-     * its first call, and after an edit to what it lists or keys by, when
-     * the next call only looks.
-     */
-    seenAt: timestamp("seen_at"),
-    reason: text("reason"),
-    polledAt: timestamp("polled_at"),
-    createdBy: sessionColumn("created_by").notNull(),
-    createdAt: timestamp("created_at").notNull(),
+    watchId: text("watch_id")
+      .notNull()
+      .references(() => watches.id, { onDelete: "cascade" }),
+    stream: text("stream").notNull(),
+    cursor: storedJson(WatchCursorSchema)("cursor").notNull(),
+    polls: integer("polls").notNull().default(0),
+    /** 304s answered: polls that cost nothing. */
+    notModified: integer("not_modified").notNull().default(0),
+    updatedAt: timestamp("updated_at"),
   },
-  (table) => [index("connector_polls_project").on(table.projectId)]
+  (table) => [primaryKey({ columns: [table.watchId, table.stream] })]
 );
 
 /** What a connector poll's last call saw: each item's id and version. */
 export const connectorPollItems = sqliteTable(
   "connector_poll_items",
   {
+    /** The poll's watch (provider `connection`), which keeps the poll's id. */
     pollId: text("poll_id")
       .notNull()
-      .references(() => connectorPolls.id, { onDelete: "cascade" }),
+      .references(() => watches.id, { onDelete: "cascade" }),
     itemId: text("item_id").notNull(),
     version: text("version").notNull(),
   },
   (table) => [primaryKey({ columns: [table.pollId, table.itemId] })]
 );
-
-/**
- * A project's tracker (Projects spec D2, §5.2; tracker.ts): the connection
- * it signs in with, the repository or team its tasks' issues are in, and
- * where its poll stands. One per project; none while the project keeps its
- * tasks in CawCo's files alone.
- */
-export const trackerBindings = sqliteTable("tracker_bindings", {
-  projectId: projectColumn("project_id")
-    .primaryKey()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  provider: storedEnum(IssueTrackerSchema)("provider").notNull(),
-  /** The connection's name (connections.ts). */
-  connection: text("connection").notNull(),
-  /** GitHub: `owner/repo`; Linear: the team's id. */
-  target: text("target").notNull(),
-  targetName: text("target_name").notNull(),
-  targetUrl: text("target_url").notNull(),
-  /** Issues opened after it become tasks; nothing older is copied. */
-  boundAt: timestamp("bound_at").notNull(),
-  /**
-   * Which way it syncs (core `TrackerDirection`): `both`, or `inbound`,
-   * which writes nothing to the tracker (tracker.ts `outboundOf`).
-   */
-  direction: storedEnum(z.enum(TRACKER_DIRECTIONS))("direction")
-    .notNull()
-    .default("both"),
-  /**
-   * When its direction last changed on a binding kept as it stood; null
-   * while it is as bound. Turned to `both`, only tasks filed and comments
-   * written since go to the tracker.
-   */
-  directionAt: timestamp("direction_at"),
-  /** The newest issue change its poll took in, ms: the next asks GitHub for changes since it. */
-  issuesSince: integer("issues_since").notNull(),
-  /** GitHub's ETag for the list of issue changes as it last asked it; null: none. */
-  issuesEtag: text("issues_etag"),
-  /** The newest comment its poll took in, ms. */
-  commentsSince: integer("comments_since").notNull(),
-  /** GitHub's ETag for the list of comments as it last asked it; null: none. */
-  commentsEtag: text("comments_etag"),
-  /**
-   * Where its poll stood, as it was stored, when it was there and did not
-   * read whole as it became columns (migration 0431): a list whose `since`
-   * did not read starts again from {@link trackerBindings.boundAt} with no
-   * ETag, so its next poll reads again what it may have read, and skips
-   * nothing. The next poll that goes through clears it.
-   */
-  cursorUnread: text("cursor_unread"),
-  state: storedEnum(TrackerSyncStateSchema)("state").notNull(),
-  /** Why it is refused, or why its last poll stopped short; null when all went through. */
-  reason: text("reason"),
-  polledAt: timestamp("polled_at"),
-  /** The tracker's rate limit holds polls back until then. */
-  resumeAt: timestamp("resume_at"),
-  /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
-  githubProject: storedJson(GithubProjectSchema)("github_project"),
-  /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
-  githubProjectReason: text("github_project_reason"),
-  /**
-   * GitHub: the stages the hub has made sure of a Status option for on the
-   * Project (core `GithubStatusStages`); null before the first sync that
-   * did, as on every binding made before the hub added options.
-   */
-  githubStatusStages: storedJson(GithubStatusStagesSchema)(
-    "github_status_stages"
-  ),
-  /** GitHub: its words when it refused adding a stage's Status option; null when nothing did. */
-  githubStatusesRefused: text("github_statuses_refused"),
-  /**
-   * GitHub: the Status options the hub last added to the Project, and when
-   * (core `GithubStatusesAdded`), shown beside the binding; null before it
-   * added any.
-   */
-  githubStatusesAdded: storedJson(GithubStatusesAddedSchema)(
-    "github_statuses_added"
-  ),
-});
 
 /**
  * A task linked to its issue by the tracker sync (tracker.ts): what the

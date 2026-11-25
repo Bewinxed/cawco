@@ -42,6 +42,11 @@ import type {
   ModeAsk,
   SendRefusal,
 } from "@cawco/core/session-messages";
+import type {
+  GithubProject,
+  GithubStatusesAdded,
+  GithubStatusStages,
+} from "@cawco/core/trackers";
 
 /** The session being continued, as the header names it. */
 export interface ContinuationSource {
@@ -766,6 +771,60 @@ export type SessionLineKind =
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
 export type GitHubResource =
   "pulls" | "issues" | "comments" | "issueEvents" | "discussions";
+
+/**
+ * Whether a watch's container is synced with the project's tasks (schema
+ * `watches.sync`): `off` only reads it; `inbound` and `both` are the
+ * tracker's directions (core `TrackerDirection`).
+ */
+export type WatchSync = "off" | "inbound" | "both";
+
+/**
+ * A watch's own settings (schema `watches.settings`), each provider's part
+ * of it. GitHub: the Project its stages show on, and what the hub made sure
+ * of there. A connector poll (provider `connection`): the tool it calls,
+ * with what, how often, and where its answer's items, ids and versions are.
+ * `sync*`: where the tracker sync's own poll stands, beside the event poll
+ * the row's columns hold, until the sync reads the event poll's revisions.
+ */
+export interface WatchSettings {
+  args?: Record<string, unknown>;
+  githubProject?: GithubProject | null;
+  /** GitHub's words for why stages do not show on the Project; set, that part of the sync does not run. */
+  githubProjectReason?: string | null;
+  githubStatusesAdded?: GithubStatusesAdded | null;
+  githubStatusesRefused?: string | null;
+  githubStatusStages?: GithubStatusStages | null;
+  /** A dot path to each item's id. */
+  idPath?: string;
+  /** Seconds between calls, 60 or more. */
+  intervalS?: number;
+  /** A dot path to the array of items in the answer; empty: the answer is the array. */
+  itemsPath?: string;
+  /** When the tracker sync last polled, ms. */
+  syncPolledAt?: number | null;
+  /** Why the tracker sync's last poll stopped short, or null. */
+  syncReason?: string | null;
+  /** The tracker's rate limit holds the sync's polls back until then, ms. */
+  syncResumeAt?: number | null;
+  tool?: string;
+  /** A dot path to each item's version (`updated_at`). */
+  versionPath?: string;
+}
+
+/**
+ * Where one stream of a watch stands (schema `watch_cursors.cursor`): the
+ * newest change it took in, ms, and the service's ETag for its list as it
+ * last asked it. A connector poll's one stream keeps none: its row says the
+ * poll has looked, and its items are what it saw. `unread`: a tracker
+ * cursor migration 0431 kept as stored because it did not read; the next
+ * poll that goes through writes the cursor without it.
+ */
+export interface WatchCursor {
+  etag?: string | null;
+  since?: number;
+  unread?: string;
+}
 
 /** What a machine's agent says of its Claude sign-in (schema `agents.auth`): a word it may claim, or `unknown` until it said one. */
 export type AgentAuth = AuthState | "unknown";

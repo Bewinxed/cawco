@@ -14,11 +14,13 @@
  *   App or a token, held in the hub), has its repository polled every 60
  *   s: pulls, issues, issue comments and issue events, each with its ETag,
  *   and discussions with their comments through GraphQL, each resource's
- *   high-water mark kept in
- *   `github_pollers`, so a restart neither re-delivers nor misses. A GitHub
- *   connection's projects that name none are polled with it from the moment
- *   it names them, by whichever way it signed in; dropping a project or
- *   removing the connection stops it ({@link Ingress.followConnection}).
+ *   high-water mark kept on the repository's watch (`watch_cursors`), so a
+ *   restart neither re-delivers nor misses. A GitHub connection's projects
+ *   that follow none are followed through it from the moment it names them,
+ *   by whichever way it signed in, and a repository linked later is watched
+ *   through it too (db/watches.ts); dropping a project or removing the
+ *   connection stops it ({@link Ingress.followConnection}). A repository
+ *   a tracker binding syncs reads with the binding's connection.
  *   With no connection granted, its repository isn't polled, and its ingress
  *   view says so.
  * - **Connector polls**: any connection's read-only tool, called on an
@@ -86,6 +88,7 @@ import type {
   InboundEventRow,
 } from "./db/ingress";
 import type { InboundVia } from "./db/stored-types";
+import type { GitHubWatch } from "./db/watches";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
 import { githubReposOf, pollRepo, readRunWait } from "./github";
@@ -120,23 +123,73 @@ import type { Routed } from "./triggers";
 const NO_GITHUB_LINK =
   "Nothing is polled: the project links no repository on github.com.";
 
-/** One repository's poll within a project's: what it read, and how many events were new. */
+/** One repository's poll within a project's: its watch, what it read, and how many events were new. */
 interface RepoPolled {
   landed: number;
   polled: Awaited<ReturnType<typeof pollRepo>>;
   repo: string;
+  watch: GitHubWatch;
 }
 
+/** A repository's poll that never asked: its connection could not sign in, in words. */
+const unsigned = (words: string): RepoPolled["polled"] => ({
+  cursors: {},
+  events: [],
+  problem: words,
+  resumeAt: null,
+  unanswered: null,
+});
+
+/** A client signed in as a GitHub connection (connections.ts `githubClient`). */
+type GitHubClient = ReturnType<Connections["githubClient"]>;
+
 /** What a poll's repositories' problems come to, each named when there are several; null: none. */
-const pollProblem = (polls: readonly RepoPolled[]): string | null => {
-  const problems = polls.flatMap(({ repo, polled }) => {
-    if (polled.problem === null) {
+const pollProblem = (
+  polls: readonly { reason: string | null; repo: string }[]
+): string | null => {
+  const problems = polls.flatMap(({ repo, reason }) => {
+    if (reason === null) {
       return [];
     }
-    return [polls.length > 1 ? `${repo}: ${polled.problem}` : polled.problem];
+    return [polls.length > 1 ? `${repo}: ${reason}` : reason];
   });
   return problems.length > 0 ? problems.join(" ") : null;
 };
+
+/** The project's watches of the github.com repositories it links, in its links' order. */
+const linkedWatches = (
+  links: readonly string[],
+  followed: readonly GitHubWatch[]
+): GitHubWatch[] => {
+  const byRepo = new Map(
+    followed.map((watch) => [watch.container.toLowerCase(), watch])
+  );
+  return [
+    ...new Set(
+      githubReposOf(links).flatMap(
+        (repo) => byRepo.get(repo.toLowerCase()) ?? []
+      )
+    ),
+  ];
+};
+
+/** The GitHub watches the poller reads, by project. */
+const byProject = (
+  followed: readonly GitHubWatch[]
+): Map<string, GitHubWatch[]> => {
+  const by = new Map<string, GitHubWatch[]>();
+  for (const watch of followed) {
+    by.set(watch.projectId, [...(by.get(watch.projectId) ?? []), watch]);
+  }
+  return by;
+};
+
+/** The latest of a project's watches' times, ms; 0 when none has one. */
+const latest = (
+  followed: readonly GitHubWatch[],
+  key: "polledAt" | "resumeAt"
+): number =>
+  Math.max(0, ...followed.map((watch) => watch[key]?.getTime() ?? 0));
 
 /** GitHub every 60 s (§5.5). */
 const GITHUB_EVERY_MS = 60_000;
@@ -719,39 +772,54 @@ export const createIngress = ({
   // --- GitHub -------------------------------------------------------------------
 
   /**
-   * One poll of every GitHub repository the project links: each one's
-   * events ingested, then every cursor kept.
+   * One poll of every GitHub repository the project links and watches:
+   * each one read through its watch's connection, its events ingested, then
+   * every watch's outcome and cursors kept. A repository it no longer links
+   * keeps its watch and cursors, unread.
    */
   const pollGitHub = async (projectId: string): Promise<void> => {
-    const poller = store.githubPoller(projectId);
+    const followed = store.githubWatches(projectId);
     const project = db.project(projectId);
-    if (!(poller && project)) {
+    if (!(followed.length > 0 && project)) {
       return;
     }
-    const repos = githubReposOf(project.links);
+    const linked = linkedWatches(project.links, followed);
     const now = Date.now();
-    if (repos.length === 0) {
-      store.updateGitHubPoller(projectId, {
-        reason: NO_GITHUB_LINK,
-        polledAt: new Date(now),
-      });
+    if (linked.length === 0) {
+      store.keepGitHubPoll(
+        followed.map((watch) => ({
+          id: watch.id,
+          patch: { reason: NO_GITHUB_LINK, polledAt: new Date(now) },
+        }))
+      );
       return;
     }
-    let octokit: ReturnType<Connections["githubClient"]>;
-    try {
-      octokit = connections.githubClient(poller.connection);
-    } catch (error) {
-      store.updateGitHubPoller(projectId, {
-        reason: wordsOf(error),
-        polledAt: new Date(now),
-      });
-      return;
-    }
+    const clients = new Map<string, GitHubClient | string>();
+    const clientOf = (connection: string): GitHubClient | string => {
+      const known = clients.get(connection);
+      if (known !== undefined) {
+        return known;
+      }
+      let made: GitHubClient | string;
+      try {
+        made = connections.githubClient(connection);
+      } catch (error) {
+        made = wordsOf(error);
+      }
+      clients.set(connection, made);
+      return made;
+    };
     const polls: RepoPolled[] = [];
-    for (const repo of repos) {
+    for (const watch of linked) {
+      const octokit = clientOf(watch.connection);
+      const repo = watch.container;
+      if (typeof octokit === "string") {
+        polls.push({ watch, repo, polled: unsigned(octokit), landed: 0 });
+        continue;
+      }
       const polled = await pollRepo({
-        connection: poller.connection,
-        cursors: poller.cursors[repo] ?? {},
+        connection: watch.connection,
+        cursors: watch.cursors,
         now,
         octokit,
         repo,
@@ -762,11 +830,15 @@ export const createIngress = ({
         .sort((a, b) => a.at - b.at)
         .map((event) => ingest(event, "poll", projectId))
         .filter(Boolean).length;
-      polls.push({ repo, polled, landed });
+      polls.push({ watch, repo, polled, landed });
     }
-    await readWaits(projectId, octokit);
-    await externalItems.readLinks(projectId, octokit);
-    keepGitHubPoll(projectId, now, poller.reason, polls);
+    const followedBy = store.followedBy(projectId);
+    const octokit = followedBy ? clientOf(followedBy) : undefined;
+    if (octokit !== undefined && typeof octokit !== "string") {
+      await readWaits(projectId, octokit);
+      await externalItems.readLinks(projectId, octokit);
+    }
+    keepGitHubPoll(now, followed, polls);
   };
 
   /**
@@ -816,16 +888,16 @@ export const createIngress = ({
   };
 
   /**
-   * The cursors each repository's poll moved, each over its own. The
-   * poller's reason is every repository's problem, each named when it links
-   * several, and its wait the latest any rate limit asks. A request GitHub
-   * did not answer in time leaves the poller's reason and wait as they
-   * were, and says so here.
+   * The cursors each repository's poll moved, each over its own, and its
+   * problem on its watch. The wait is the project's: the latest any rate
+   * limit asks, on every watch it polled. A request GitHub did not answer
+   * in time leaves every watch's problem and wait as they were, and says so
+   * here. Every watch of the project is dated, so the project is due again
+   * together.
    */
   const keepGitHubPoll = (
-    projectId: string,
     now: number,
-    before: string | null,
+    followed: readonly GitHubWatch[],
     polls: readonly RepoPolled[]
   ): void => {
     const unanswered = polls.flatMap(({ repo, polled }) =>
@@ -836,24 +908,38 @@ export const createIngress = ({
         `[ingress] polled ${repo}: GitHub did not answer within ${secondsOf(after)} s; the poller's state stands`
       );
     }
-    const reason = pollProblem(polls);
     const resumeAt = Math.max(
       0,
       ...polls.map(({ polled }) => polled.resumeAt ?? 0)
     );
-    store.updateGitHubPoller(projectId, {
-      cursors: Object.fromEntries(
-        polls.map(({ repo, polled }) => [repo, polled.cursors])
-      ),
-      ...(unanswered.length === 0
-        ? { reason, resumeAt: resumeAt === 0 ? null : new Date(resumeAt) }
-        : {}),
-      polledAt: new Date(now),
-    });
-    for (const { repo, polled, landed } of polls) {
+    const polledAt = new Date(now);
+    const byWatch = new Map(polls.map((poll) => [poll.watch.id, poll]));
+    store.keepGitHubPoll(
+      followed.map((watch) => {
+        const poll = byWatch.get(watch.id);
+        if (!poll) {
+          return { id: watch.id, patch: { polledAt } };
+        }
+        return {
+          id: watch.id,
+          cursors: poll.polled.cursors,
+          patch:
+            unanswered.length === 0
+              ? {
+                  polledAt,
+                  reason: poll.polled.problem,
+                  resumeAt: resumeAt === 0 ? null : new Date(resumeAt),
+                }
+              : { polledAt },
+        };
+      })
+    );
+    for (const { repo, polled, landed, watch } of polls) {
       if (
         landed > 0 ||
-        (unanswered.length === 0 && reason !== before && polled.problem)
+        (unanswered.length === 0 &&
+          polled.problem !== watch.reason &&
+          polled.problem)
       ) {
         console.log(
           `[ingress] polled ${repo}: ${landed} new${polled.problem ? `; ${polled.problem}` : ""}`
@@ -1040,15 +1126,13 @@ export const createIngress = ({
 
   /** Every poller that is due starts. */
   const look = (now: number = Date.now()): void => {
-    for (const poller of store.githubPollers()) {
+    for (const [projectId, followed] of byProject(store.githubWatches())) {
       const due =
-        (poller.polledAt?.getTime() ?? 0) + GITHUB_EVERY_MS <= now &&
-        (poller.resumeAt?.getTime() ?? 0) <= now;
+        latest(followed, "polledAt") + GITHUB_EVERY_MS <= now &&
+        latest(followed, "resumeAt") <= now;
       if (due) {
         detach(
-          once(`github:${poller.projectId}`, () =>
-            pollGitHub(poller.projectId)
-          ),
+          once(`github:${projectId}`, () => pollGitHub(projectId)),
           "github poll"
         );
       }
@@ -1095,28 +1179,38 @@ export const createIngress = ({
       return project;
     }
     const repos = githubReposOf(project.links);
-    const poller = store.githubPoller(projectId);
-    const connection = poller?.connection ?? null;
+    const followed = store.githubWatches(projectId);
+    const linked = linkedWatches(project.links, followed);
+    const reading = [...new Set(linked.map((watch) => watch.connection))];
+    const connection =
+      reading.length > 0
+        ? reading.join(", ")
+        : (store.followedBy(projectId) ?? null);
     const named = repos.join(", ");
+    const reason = pollProblem(
+      linked.map((watch) => ({ repo: watch.container, reason: watch.reason }))
+    );
     let state: string;
     if (repos.length === 0) {
       state = NO_GITHUB_LINK;
-    } else if (!connection) {
+    } else if (linked.length === 0) {
       state = `${named} ${repos.length > 1 ? "aren't" : "isn't"} polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
-    } else if (poller?.reason) {
-      state = `Polling ${named} with ${connection}; its last poll stopped: ${poller.reason}`;
+    } else if (reason) {
+      state = `Polling ${named} with ${connection}; its last poll stopped: ${reason}`;
     } else {
       state = `Polling ${named} every 60 s with ${connection}.`;
     }
+    const polledAt = latest(followed, "polledAt");
+    const resumeAt = latest(followed, "resumeAt");
     const github: IngressView["github"] = {
       repos,
       repo: repos.length > 0 ? named : null,
       connection,
-      polled: Boolean(repos.length > 0 && connection),
+      polled: linked.length > 0,
       state,
       resources: {},
-      polledAt: poller?.polledAt?.getTime() ?? null,
-      resumeAt: poller?.resumeAt?.getTime() ?? null,
+      polledAt: polledAt === 0 ? null : polledAt,
+      resumeAt: resumeAt === 0 ? null : resumeAt,
     };
     return github;
   };
@@ -1142,23 +1236,14 @@ export const createIngress = ({
     return seen;
   };
 
-  /** Names the connection a project's repository is polled with; null stops it. */
-  const setGitHubConnection = (
-    projectId: string,
-    connection: string | null
-  ): void => {
-    store.setGitHubConnection(projectId, connection);
-    console.log(
-      `[ingress] project ${projectId}: ${connection ? `polls GitHub with ${connection}` : "no longer polls GitHub"}`
-    );
-  };
-
   /**
    * A connection's projects were written (connections.ts `writeProjects`):
-   * while it reads GitHub's API, each project it names that polls with no
-   * connection polls with it from now; a project naming another keeps that
-   * one. Each project it dropped, or every one once it no longer reads
-   * GitHub's API, stops polling with it.
+   * while it reads GitHub's API, each project it names that follows GitHub
+   * with no connection follows it through this one from now, a watch of
+   * each github.com repository it links (db/watches.ts `followGitHub`); a
+   * project following another keeps that one. Each project it dropped, or
+   * every one once it no longer reads GitHub's API, whose watches read with
+   * it stops following.
    */
   const followConnection = (
     connection: string,
@@ -1168,41 +1253,46 @@ export const createIngress = ({
     const reads =
       found.service.trim().toLowerCase() === "github" &&
       readsGitHubApi(found.auth);
-    for (const poller of store.githubPollers()) {
+    for (const projectId of byProject(store.githubWatches()).keys()) {
       if (
-        poller.connection === connection &&
-        (!reads || dropped.includes(poller.projectId))
+        store.followedBy(projectId) === connection &&
+        (!reads || dropped.includes(projectId))
       ) {
-        setGitHubConnection(poller.projectId, null);
+        store.unfollowGitHub(projectId);
+        console.log(`[ingress] project ${projectId}: no longer polls GitHub`);
       }
     }
     if (!reads) {
       return;
     }
     for (const projectId of found.projects) {
-      if (!store.githubPoller(projectId)) {
-        setGitHubConnection(projectId, connection);
+      if (store.followedBy(projectId) === undefined) {
+        store.followGitHub(projectId, connection);
+        console.log(
+          `[ingress] project ${projectId}: polls GitHub with ${connection}`
+        );
       }
     }
   };
 
-  /** Polls a project's repository now, unless GitHub's rate limit holds it. */
+  /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
   const pollGitHubNow = async (projectId: string) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const poller = store.githubPoller(projectId);
-    if (!poller) {
+    const followed = store.githubWatches(projectId);
+    if (followed.length === 0) {
       return problem(409, {
         code: "ingress-github-unpolled",
         detail: `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`,
       });
     }
-    if ((poller.resumeAt?.getTime() ?? 0) > Date.now()) {
+    const resumeAt = latest(followed, "resumeAt");
+    if (resumeAt > Date.now()) {
       return problem(409, {
         code: "ingress-github-rate-limited",
-        detail: `GitHub's rate limit holds polls until ${poller.resumeAt?.toISOString()}.`,
+        detail: `GitHub's rate limit holds polls until ${new Date(resumeAt).toISOString()}.`,
       });
     }
     await once(`github:${projectId}`, () => pollGitHub(projectId));
@@ -1666,7 +1756,9 @@ export const createIngress = ({
     },
     /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
     githubWaitRefusal(projectId: string): string | undefined {
-      return store.githubPoller(projectId) ? undefined : taskLinkWords.noGitHub;
+      return store.githubWatches(projectId).length > 0
+        ? undefined
+        : taskLinkWords.noGitHub;
     },
     createPoll,
     createRoute,

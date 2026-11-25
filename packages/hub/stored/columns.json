@@ -3038,13 +3038,6 @@
       "stdio"
     ]
   },
-  "connector_polls.args": {
-    "type": "object",
-    "propertyNames": {
-      "type": "string"
-    },
-    "additionalProperties": {}
-  },
   "continuations.asked_by_kind": {
     "type": "string",
     "enum": [
@@ -6583,16 +6576,6 @@
       "targetHome",
       "targetPath",
       "way"
-    ]
-  },
-  "github_poll_cursors.resource": {
-    "type": "string",
-    "enum": [
-      "pulls",
-      "issues",
-      "comments",
-      "issueEvents",
-      "discussions"
     ]
   },
   "held_picks.effort": {
@@ -14010,117 +13993,6 @@
       "ask"
     ]
   },
-  "tracker_bindings.direction": {
-    "type": "string",
-    "enum": [
-      "both",
-      "inbound"
-    ]
-  },
-  "tracker_bindings.github_project": {
-    "type": "object",
-    "properties": {
-      "fieldId": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "id": {
-        "type": "string"
-      },
-      "number": {
-        "type": "number"
-      },
-      "options": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "name"
-          ]
-        }
-      },
-      "title": {
-        "type": "string"
-      },
-      "url": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "fieldId",
-      "id",
-      "number",
-      "options",
-      "title",
-      "url"
-    ]
-  },
-  "tracker_bindings.github_status_stages": {
-    "type": "object",
-    "properties": {
-      "projectId": {
-        "type": "string"
-      },
-      "stages": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "required": [
-      "projectId",
-      "stages"
-    ]
-  },
-  "tracker_bindings.github_statuses_added": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "options": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "projectId": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "at",
-      "options",
-      "projectId"
-    ]
-  },
-  "tracker_bindings.provider": {
-    "type": "string",
-    "enum": [
-      "github",
-      "linear"
-    ]
-  },
-  "tracker_bindings.state": {
-    "type": "string",
-    "enum": [
-      "syncing",
-      "synced",
-      "refused"
-    ]
-  },
   "tree_stops.by": {
     "anyOf": [
       {
@@ -14321,6 +14193,206 @@
       "table",
       "pipeline",
       "routines"
+    ]
+  },
+  "watch_cursors.cursor": {
+    "type": "object",
+    "properties": {
+      "etag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "since": {
+        "type": "number"
+      },
+      "unread": {
+        "type": "string"
+      }
+    }
+  },
+  "watches.settings": {
+    "type": "object",
+    "properties": {
+      "args": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "githubProject": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "fieldId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "number": {
+                "type": "number"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                }
+              },
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fieldId",
+              "id",
+              "number",
+              "options",
+              "title",
+              "url"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "githubProjectReason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "githubStatusesAdded": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "options",
+              "projectId"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "githubStatusesRefused": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "githubStatusStages": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string"
+              },
+              "stages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "projectId",
+              "stages"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "idPath": {
+        "type": "string"
+      },
+      "intervalS": {
+        "type": "number"
+      },
+      "itemsPath": {
+        "type": "string"
+      },
+      "syncPolledAt": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "syncReason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "syncResumeAt": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "tool": {
+        "type": "string"
+      },
+      "versionPath": {
+        "type": "string"
+      }
+    }
+  },
+  "watches.state": {
+    "type": "string",
+    "enum": [
+      "syncing",
+      "synced",
+      "refused"
+    ]
+  },
+  "watches.sync": {
+    "type": "string",
+    "enum": [
+      "off",
+      "inbound",
+      "both"
     ]
   },
   "work_items.blocked_kind": {

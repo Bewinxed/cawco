@@ -35,8 +35,6 @@ import {
   artifacts,
   connectionProjects,
   fleetMemoryDocProjects,
-  githubPollCursors,
-  githubPollers,
   type HubFolder,
   instances,
   passkeySettings,
@@ -55,10 +53,12 @@ import {
   taskCommentIds,
   taskTriggers,
   usageBuckets,
+  watches,
   workItems,
   workspaces,
 } from "./schema";
 import type { Tx } from "./tx";
+import { followLink, stopSyncing } from "./watches";
 
 export type PlaceRow = typeof projectPlaces.$inferSelect;
 
@@ -648,12 +648,24 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         .orderBy(asc(projectPlaces.createdAt))
         .all(),
     addProjectLink: (id, remote, publishedFrom) =>
-      db
-        .insert(projectLinks)
-        .values({ projectId: id, remote, publishedFrom: publishedFrom ?? null })
-        .onConflictDoNothing()
-        .returning({ remote: projectLinks.remote })
-        .all().length > 0,
+      db.transaction((tx) => {
+        const added =
+          tx
+            .insert(projectLinks)
+            .values({
+              projectId: id,
+              remote,
+              publishedFrom: publishedFrom ?? null,
+            })
+            .onConflictDoNothing()
+            .returning({ remote: projectLinks.remote })
+            .all().length > 0;
+        // A github.com repository linked to a project that follows GitHub is watched.
+        if (added) {
+          followLink(tx, id, remote);
+        }
+        return added;
+      }),
     movePlace: (id, machineId, path) => {
       db.update(projectPlaces)
         .set({
@@ -1257,29 +1269,65 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
                 .where(eq(connectionProjects.projectId, dupId))
                 .run();
             },
-            // Its GitHub poller, with its cursors, where the kept project
-            // polls none: both poll the one repository they share.
-            github_pollers: () => {
-              const poller = tx
-                .select()
-                .from(githubPollers)
-                .where(eq(githubPollers.projectId, dupId))
-                .get();
-              if (
-                poller &&
-                !tx
-                  .select({ projectId: githubPollers.projectId })
-                  .from(githubPollers)
-                  .where(eq(githubPollers.projectId, keepId))
-                  .get()
-              ) {
-                tx.insert(githubPollers)
-                  .values({ ...poller, projectId: keepId })
-                  .run();
-                tx.update(githubPollCursors)
-                  .set({ projectId: keepId })
-                  .where(eq(githubPollCursors.projectId, dupId))
-                  .run();
+            // Its watches. Its connector polls move. Its GitHub watches
+            // the poller reads move where the kept project follows none,
+            // both polling the repositories they share, each no longer
+            // syncing: its tracker binding goes with it, as every other
+            // watch of it does. Then each repository it linked is watched
+            // where the kept project follows GitHub (db/watches.ts
+            // `followLink`), as a link added to it.
+            watches: () => {
+              tx.update(watches)
+                .set({ projectId: keepId })
+                .where(
+                  and(
+                    eq(watches.projectId, dupId),
+                    eq(watches.provider, "connection")
+                  )
+                )
+                .run();
+              const ofGitHub = (projectId: string) =>
+                tx
+                  .select()
+                  .from(watches)
+                  .where(
+                    and(
+                      eq(watches.projectId, projectId),
+                      eq(watches.provider, "github"),
+                      eq(watches.enabled, true)
+                    )
+                  )
+                  .all();
+              if (ofGitHub(keepId).length === 0) {
+                for (const watch of ofGitHub(dupId)) {
+                  // A repository the kept project's binding made a watch of keeps that one.
+                  const kept = tx
+                    .select({ id: watches.id })
+                    .from(watches)
+                    .where(
+                      and(
+                        eq(watches.projectId, keepId),
+                        eq(watches.provider, "github"),
+                        sql`lower(${watches.container}) = lower(${watch.container})`
+                      )
+                    )
+                    .get();
+                  if (kept) {
+                    continue;
+                  }
+                  stopSyncing(tx, watch);
+                  tx.update(watches)
+                    .set({ projectId: keepId })
+                    .where(eq(watches.id, watch.id))
+                    .run();
+                }
+              }
+              for (const { remote } of tx
+                .select({ remote: projectLinks.remote })
+                .from(projectLinks)
+                .where(eq(projectLinks.projectId, dupId))
+                .all()) {
+                followLink(tx, keepId, remote);
               }
             },
             // A memory document of both stays one link to the kept project.

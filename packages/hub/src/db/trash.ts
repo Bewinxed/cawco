@@ -26,8 +26,6 @@ import {
   fleetMemoryDocProjects,
   fleetMemoryDocs,
   fleetMemoryDocTypes,
-  githubPollCursors,
-  githubPollers,
   marketplaces,
   mcpServerPlatforms,
   mcpServers,
@@ -37,6 +35,8 @@ import {
   rules,
   skillFiles,
   skills,
+  watchCursors,
+  watches,
 } from "./schema";
 import { TrashedRowsSchema } from "./stored-shapes";
 import type { TrashedRows, TrashKind } from "./stored-types";
@@ -165,6 +165,10 @@ const part = (table: string, where: SQL, kept = true): Part => ({
   where,
 });
 
+/** The GitHub watches a connection reads that only the poller reads: no tracker binding syncs them. */
+const watchesOf = (connection: string): SQL =>
+  sql`${watches.provider} = 'github' and ${watches.sync} = 'off' and ${watches.connection} = ${connection}`;
+
 /** Each kind's parts, by its key: its own table first. */
 const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
   rule: (key) => [
@@ -227,12 +231,14 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
       "connection_areas",
       sql`${connectionAreas.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`
     ),
-    // The GitHub pollers it ran stop, and come back with it, cursors and
-    // all, to a project that has named no other meanwhile.
-    part("github_pollers", eq(githubPollers.connection, key)),
+    // The GitHub watches it read for a project's poller alone stop, and
+    // come back with it, cursors and all, to a project that has watched
+    // that repository no other way meanwhile. A watch a tracker binding
+    // syncs stays, as the binding does.
+    part("watches", watchesOf(key)),
     part(
-      "github_poll_cursors",
-      sql`${githubPollCursors.projectId} in (select ${githubPollers.projectId} from ${githubPollers} where ${eq(githubPollers.connection, key)})`
+      "watch_cursors",
+      sql`${watchCursors.watchId} in (select ${watches.id} from ${watches} where ${watchesOf(key)})`
     ),
   ],
 };

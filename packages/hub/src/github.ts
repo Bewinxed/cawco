@@ -74,6 +74,7 @@ import {
 import { z } from "zod";
 import type { GitHubCursor } from "./db/schema";
 import type { GitHubResource } from "./db/stored-types";
+import { GITHUB_RESOURCES } from "./db/watches";
 import type { InboundEvent } from "./inbound-event";
 import {
   graphqlErrorsOf,
@@ -95,15 +96,6 @@ export type GitHubKind =
   | "discussion_node"
   | "discussion"
   | "discussion_comment";
-
-/** The resources a repository is polled for, in order. */
-const GITHUB_RESOURCES: readonly GitHubResource[] = [
-  "pulls",
-  "issues",
-  "comments",
-  "issueEvents",
-  "discussions",
-];
 
 /** The edge of the window read again each poll: late-visible changes are not missed. Our choice. */
 const OVERLAP_MS = 2 * 60_000;

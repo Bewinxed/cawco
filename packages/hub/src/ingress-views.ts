@@ -4,8 +4,8 @@
  */
 
 import type { OfferedMode } from "@cawco/core/harness/modes";
-import type { GitHubCursors } from "./db/ingress";
 import type { InboundVia } from "./db/stored-types";
+import type { GitHubCursors } from "./db/watches";
 
 /** The most a stored payload holds (ingress.ts). */
 export const PAYLOAD_MAX = 64 * 1024;

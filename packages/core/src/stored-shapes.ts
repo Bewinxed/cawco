@@ -83,7 +83,6 @@ import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import { declared } from "./stored-types";
 import { COMMAND_ACK_STAGES } from "./stream";
 import type { TrackerSyncState as TrackerSyncStateType } from "./trackers";
-import { TRACKERS } from "./trackers";
 import { WORK_ITEM_STATES } from "./work-items";
 import type { WorkspaceKind as WorkspaceKindType } from "./workspace/controls";
 
@@ -2967,50 +2966,6 @@ const GitChangesShape = declared(
 export const GitChangesSchema = GitChangesShape;
 export type GitChangesOutput = z.output<typeof GitChangesShape>;
 
-const StatusOptionShape = declared(
-  z.object({ id: z.string(), name: z.string() }),
-  "StatusOption",
-  "packages/core/src/trackers.ts"
-);
-export type StatusOptionOutput = z.output<typeof StatusOptionShape>;
-
-const GithubProjectShape = declared(
-  z.object({
-    fieldId: z.string().nullable(),
-    id: z.string(),
-    number: z.number(),
-    options: z.array(StatusOptionShape),
-    title: z.string(),
-    url: z.string(),
-  }),
-  "GithubProject",
-  "packages/core/src/trackers.ts"
-);
-export const GithubProjectSchema = GithubProjectShape;
-export type GithubProjectOutput = z.output<typeof GithubProjectShape>;
-
-const GithubStatusStagesShape = declared(
-  z.object({ projectId: z.string(), stages: z.array(z.string()) }),
-  "GithubStatusStages",
-  "packages/core/src/trackers.ts"
-);
-export const GithubStatusStagesSchema = GithubStatusStagesShape;
-export type GithubStatusStagesOutput = z.output<typeof GithubStatusStagesShape>;
-
-const GithubStatusesAddedShape = declared(
-  z.object({
-    at: z.number(),
-    options: z.array(z.string()),
-    projectId: z.string(),
-  }),
-  "GithubStatusesAdded",
-  "packages/core/src/trackers.ts"
-);
-export const GithubStatusesAddedSchema = GithubStatusesAddedShape;
-export type GithubStatusesAddedOutput = z.output<
-  typeof GithubStatusesAddedShape
->;
-
 const HarnessCapabilitiesShape = declared(
   z.object({
     compaction: z.boolean(),
@@ -3398,21 +3353,6 @@ const InstanceStatusShape = declared(
 export const InstanceStatusSchema: z.ZodType<InstanceStatusType> =
   InstanceStatusShape;
 export type InstanceStatusOutput = z.output<typeof InstanceStatusShape>;
-
-const TrackerShape = declared(
-  z.enum(TRACKERS),
-  "Tracker",
-  "packages/core/src/trackers.ts"
-);
-export type TrackerOutput = z.output<typeof TrackerShape>;
-
-const IssueTrackerShape = declared(
-  TrackerShape.exclude(["cawco"]),
-  "IssueTracker",
-  "packages/core/src/trackers.ts"
-);
-export const IssueTrackerSchema = IssueTrackerShape;
-export type IssueTrackerOutput = z.output<typeof IssueTrackerShape>;
 
 const WorkspaceToolShape = declared(
   z.object({
@@ -6154,6 +6094,47 @@ const UpdateReportShape = declared(
 );
 export const UpdateReportSchema = UpdateReportShape;
 export type UpdateReportOutput = z.output<typeof UpdateReportShape>;
+
+const StatusOptionShape = declared(
+  z.object({ id: z.string(), name: z.string() }),
+  "StatusOption",
+  "packages/core/src/trackers.ts"
+);
+export type StatusOptionOutput = z.output<typeof StatusOptionShape>;
+
+export const GithubProjectShape = declared(
+  z.object({
+    fieldId: z.string().nullable(),
+    id: z.string(),
+    number: z.number(),
+    options: z.array(StatusOptionShape),
+    title: z.string(),
+    url: z.string(),
+  }),
+  "GithubProject",
+  "packages/core/src/trackers.ts"
+);
+export type GithubProjectOutput = z.output<typeof GithubProjectShape>;
+
+export const GithubStatusesAddedShape = declared(
+  z.object({
+    at: z.number(),
+    options: z.array(z.string()),
+    projectId: z.string(),
+  }),
+  "GithubStatusesAdded",
+  "packages/core/src/trackers.ts"
+);
+export type GithubStatusesAddedOutput = z.output<
+  typeof GithubStatusesAddedShape
+>;
+
+export const GithubStatusStagesShape = declared(
+  z.object({ projectId: z.string(), stages: z.array(z.string()) }),
+  "GithubStatusStages",
+  "packages/core/src/trackers.ts"
+);
+export type GithubStatusStagesOutput = z.output<typeof GithubStatusStagesShape>;
 
 const WorkInFlightShape = declared(
   z.object({ since: z.number().nullable(), why: z.string() }),

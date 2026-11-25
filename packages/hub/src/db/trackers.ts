@@ -1,17 +1,33 @@
 import { isOneOf } from "@cawco/core/one-of";
-import { type IssueTracker, TRACKERS } from "@cawco/core/trackers";
-import { and, count, eq, inArray } from "drizzle-orm";
+import {
+  type GithubProject,
+  type GithubStatusesAdded,
+  type GithubStatusStages,
+  type IssueTracker,
+  TRACKERS,
+  type TrackerDirection,
+  type TrackerSyncState,
+} from "@cawco/core/trackers";
+import { withoutUndefined } from "@cawco/core/without-undefined";
+import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   projects,
   taskLinks,
-  trackerBindings,
   trackerLinkSyncedLabels,
   trackerLinks,
+  watchCursors,
+  watches,
 } from "./schema";
+import type { WatchCursor, WatchSettings } from "./stored-types";
 import type { TaskLinkRow } from "./task-links";
-
-type TrackerBindingColumns = typeof trackerBindings.$inferSelect;
+import {
+  GITHUB_HOST,
+  SYNC_STREAMS,
+  settingsWith,
+  stopSyncing,
+  type WatchRow,
+} from "./watches";
 
 /**
  * Where a tracker binding's poll stands (tracker.ts): the newest change it
@@ -27,48 +43,147 @@ export interface TrackerCursor {
   since: number;
 }
 
-/** A project's binding as tracker.ts reads and writes it: its poll's cursor whole. */
-export type TrackerBindingRow = Omit<
-  TrackerBindingColumns,
-  | "commentsEtag"
-  | "commentsSince"
-  | "cursorUnread"
-  | "issuesEtag"
-  | "issuesSince"
-> & { cursor: TrackerCursor };
+/**
+ * A project's tracker (Projects spec D2, §5.2; tracker.ts) as tracker.ts
+ * reads and writes it: the connection it signs in with, the repository or
+ * team its tasks' issues are in, and where its poll stands. One per
+ * project; none while the project keeps its tasks in CawCo's files alone.
+ * Kept as the project's watch that syncs (schema `watches`, `sync` its
+ * direction), its poll's marks the watch's `sync:` streams.
+ */
+export interface TrackerBindingRow {
+  /** Issues opened after it become tasks; nothing older is copied. */
+  boundAt: Date;
+  /** The connection's name (connections.ts). */
+  connection: string;
+  cursor: TrackerCursor;
+  /** Which way it syncs: `both`, or `inbound`, which writes nothing to the tracker (tracker.ts `outboundOf`). */
+  direction: TrackerDirection;
+  /**
+   * When its direction last changed on a binding kept as it stood; null
+   * while it is as bound. Turned to `both`, only tasks filed and comments
+   * written since go to the tracker.
+   */
+  directionAt: Date | null;
+  /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
+  githubProject: GithubProject | null;
+  /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
+  githubProjectReason: string | null;
+  /** GitHub: the Status options the hub last added to the Project, and when; null before it added any. */
+  githubStatusesAdded: GithubStatusesAdded | null;
+  /** GitHub: its words when it refused adding a stage's Status option; null when nothing did. */
+  githubStatusesRefused: string | null;
+  /** GitHub: the stages the hub has made sure of a Status option for on the Project; null before the first sync that did. */
+  githubStatusStages: GithubStatusStages | null;
+  polledAt: Date | null;
+  projectId: string;
+  provider: IssueTracker;
+  /** Why it is refused, or why its last poll stopped short; null when all went through. */
+  reason: string | null;
+  /** The tracker's rate limit holds polls back until then. */
+  resumeAt: Date | null;
+  state: TrackerSyncState;
+  /** GitHub: `owner/repo`; Linear: the team's id. */
+  target: string;
+  targetName: string;
+  targetUrl: string;
+}
 
-/** A binding as its row holds it. */
-const bindingOf = ({
-  issuesSince,
-  issuesEtag,
-  commentsSince,
-  commentsEtag,
-  cursorUnread: _unread,
-  ...row
-}: TrackerBindingColumns): TrackerBindingRow => ({
-  ...row,
-  cursor: {
-    since: issuesSince,
-    etag: issuesEtag,
-    commentsSince,
-    commentsEtag,
-  },
+/** A time kept in a watch's settings, ms, as a date. */
+const dateOf = (ms: number | null | undefined): Date | null =>
+  ms === null || ms === undefined ? null : new Date(ms);
+
+/** A binding as its watch and the watch's two `sync:` streams hold it. */
+const bindingOf = (
+  watch: WatchRow,
+  issues: WatchCursor | undefined,
+  comments: WatchCursor | undefined
+): TrackerBindingRow => {
+  const { settings } = watch;
+  const since = (watch.syncSince ?? watch.createdAt).getTime();
+  return {
+    projectId: watch.projectId,
+    provider: watch.provider === "linear" ? "linear" : "github",
+    connection: watch.connection,
+    target: watch.container,
+    targetName: watch.containerName,
+    targetUrl: watch.containerUrl,
+    boundAt: watch.syncSince ?? watch.createdAt,
+    direction: watch.sync === "inbound" ? "inbound" : "both",
+    directionAt: watch.syncDirectionAt,
+    state: watch.state ?? "syncing",
+    reason: settings.syncReason ?? null,
+    polledAt: dateOf(settings.syncPolledAt),
+    resumeAt: dateOf(settings.syncResumeAt),
+    githubProject: settings.githubProject ?? null,
+    githubProjectReason: settings.githubProjectReason ?? null,
+    githubStatusStages: settings.githubStatusStages ?? null,
+    githubStatusesRefused: settings.githubStatusesRefused ?? null,
+    githubStatusesAdded: settings.githubStatusesAdded ?? null,
+    cursor: {
+      since: issues?.since ?? since,
+      etag: issues?.etag ?? null,
+      commentsSince: comments?.since ?? since,
+      commentsEtag: comments?.etag ?? null,
+    },
+  };
+};
+
+/** What a binding's patch keeps in its watch's settings; a key it leaves out stays as it was. */
+const settingsPatch = (patch: Partial<TrackerBindingRow>): WatchSettings => ({
+  githubProject: patch.githubProject,
+  githubProjectReason: patch.githubProjectReason,
+  githubStatusStages: patch.githubStatusStages,
+  githubStatusesRefused: patch.githubStatusesRefused,
+  githubStatusesAdded: patch.githubStatusesAdded,
+  syncReason: patch.reason,
+  syncPolledAt:
+    patch.polledAt === undefined
+      ? undefined
+      : (patch.polledAt?.getTime() ?? null),
+  syncResumeAt:
+    patch.resumeAt === undefined
+      ? undefined
+      : (patch.resumeAt?.getTime() ?? null),
 });
 
-/** A cursor's columns, as every writer writes them whole: what migration 0431 kept as not read goes with it. */
-const cursorColumns = (cursor: TrackerCursor) => ({
-  issuesSince: cursor.since,
-  issuesEtag: cursor.etag,
-  commentsSince: cursor.commentsSince,
-  commentsEtag: cursor.commentsEtag,
-  cursorUnread: null,
-});
+/** A transaction or the database. */
+type Writer = Pick<
+  BunSQLiteDatabase,
+  "delete" | "insert" | "select" | "update"
+>;
 
-/** A binding's columns, its cursor's among them. */
-const bindingColumns = ({ cursor, ...row }: TrackerBindingRow) => ({
-  ...row,
-  ...cursorColumns(cursor),
-});
+/** Each `sync:` stream's cursor written whole: what migration 0431 kept as not read goes with it. */
+const putCursor = (tx: Writer, watchId: string, cursor: TrackerCursor) => {
+  const now = new Date();
+  for (const [stream, value] of [
+    [SYNC_STREAMS.issues, { etag: cursor.etag, since: cursor.since }],
+    [
+      SYNC_STREAMS.comments,
+      { etag: cursor.commentsEtag, since: cursor.commentsSince },
+    ],
+  ] as const) {
+    tx.insert(watchCursors)
+      .values({ watchId, stream, cursor: value, updatedAt: now })
+      .onConflictDoUpdate({
+        target: [watchCursors.watchId, watchCursors.stream],
+        set: {
+          cursor: value,
+          polls: sql`${watchCursors.polls} + 1`,
+          updatedAt: now,
+        },
+      })
+      .run();
+  }
+};
+
+/** The project's watch that syncs, or none. */
+const syncingOf = (tx: Writer, projectId: string): WatchRow | undefined =>
+  tx
+    .select()
+    .from(watches)
+    .where(and(eq(watches.projectId, projectId), ne(watches.sync, "off")))
+    .get();
 
 /**
  * What a task and its issue last agreed on (tracker.ts), the baseline of
@@ -236,6 +351,35 @@ const joined = (
       ]
     : [];
 
+/** A project's binding: its watch that syncs, with its `sync:` streams. */
+const readBinding = (
+  tx: Writer,
+  projectId: string
+): TrackerBindingRow | undefined => {
+  const watch = syncingOf(tx, projectId);
+  if (!watch) {
+    return undefined;
+  }
+  const cursors = new Map(
+    tx
+      .select()
+      .from(watchCursors)
+      .where(
+        and(
+          eq(watchCursors.watchId, watch.id),
+          inArray(watchCursors.stream, Object.values(SYNC_STREAMS))
+        )
+      )
+      .all()
+      .map((row) => [row.stream, row.cursor])
+  );
+  return bindingOf(
+    watch,
+    cursors.get(SYNC_STREAMS.issues),
+    cursors.get(SYNC_STREAMS.comments)
+  );
+};
+
 export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
   const forget = (
     tx: Pick<BunSQLiteDatabase, "delete">,
@@ -323,36 +467,72 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
     );
   };
   return {
-    binding: (projectId) => {
-      const row = db
-        .select()
-        .from(trackerBindings)
-        .where(eq(trackerBindings.projectId, projectId))
-        .get();
-      return row ? bindingOf(row) : undefined;
-    },
-    bindings: () => db.select().from(trackerBindings).all().map(bindingOf),
+    binding: (projectId) => readBinding(db, projectId),
+    bindings: () =>
+      db
+        .select({ projectId: watches.projectId })
+        .from(watches)
+        .where(ne(watches.sync, "off"))
+        .all()
+        .flatMap(({ projectId }) => readBinding(db, projectId) ?? []),
     bind: (row) => {
       db.transaction((tx) => {
-        const was = tx
+        const was = syncingOf(tx, row.projectId);
+        const host = row.provider === "github" ? GITHUB_HOST : "linear.app";
+        const target = tx
           .select()
-          .from(trackerBindings)
-          .where(eq(trackerBindings.projectId, row.projectId))
+          .from(watches)
+          .where(
+            and(
+              eq(watches.projectId, row.projectId),
+              eq(watches.provider, row.provider),
+              eq(watches.host, host),
+              sql`lower(${watches.container}) = lower(${row.target})`
+            )
+          )
           .get();
-        if (
-          was &&
-          (was.provider !== row.provider || was.target !== row.target)
-        ) {
+        if (was && was.id !== target?.id) {
           forget(tx, row.projectId);
+          stopSyncing(tx, was);
         }
-        const values = bindingColumns(row);
-        tx.insert(trackerBindings)
-          .values(values)
-          .onConflictDoUpdate({
-            target: trackerBindings.projectId,
-            set: values,
-          })
-          .run();
+        const columns = {
+          container: row.target,
+          containerName: row.targetName,
+          containerUrl: row.targetUrl,
+          connection: row.connection,
+          sync: row.direction,
+          syncSince: row.boundAt,
+          syncDirectionAt: row.directionAt,
+          state: row.state,
+        };
+        const settings = settingsWith(
+          target?.settings ?? {},
+          settingsPatch(row)
+        );
+        let watchId = target?.id;
+        if (watchId) {
+          tx.update(watches)
+            .set({ ...columns, settings })
+            .where(eq(watches.id, watchId))
+            .run();
+        } else {
+          watchId = crypto.randomUUID();
+          tx.insert(watches)
+            .values({
+              id: watchId,
+              projectId: row.projectId,
+              provider: row.provider,
+              host,
+              ...columns,
+              settings,
+              // The GitHub poller reads it once the project follows it.
+              enabled: false,
+              createdBy: "owner",
+              createdAt: new Date(),
+            })
+            .run();
+        }
+        putCursor(tx, watchId, row.cursor);
         tx.update(projects)
           .set({ tracker: row.provider })
           .where(eq(projects.id, row.projectId))
@@ -419,9 +599,10 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
     },
     unbind: (projectId) => {
       db.transaction((tx) => {
-        tx.delete(trackerBindings)
-          .where(eq(trackerBindings.projectId, projectId))
-          .run();
+        const was = syncingOf(tx, projectId);
+        if (was) {
+          stopSyncing(tx, was);
+        }
         forget(tx, projectId);
         tx.update(projects)
           .set({ tracker: "cawco" })
@@ -430,10 +611,31 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
       });
     },
     updateBinding: (projectId, { cursor, ...patch }) => {
-      db.update(trackerBindings)
-        .set({ ...patch, ...(cursor ? cursorColumns(cursor) : {}) })
-        .where(eq(trackerBindings.projectId, projectId))
-        .run();
+      db.transaction((tx) => {
+        const watch = syncingOf(tx, projectId);
+        if (!watch) {
+          return;
+        }
+        tx.update(watches)
+          .set({
+            ...withoutUndefined({
+              connection: patch.connection,
+              container: patch.target,
+              containerName: patch.targetName,
+              containerUrl: patch.targetUrl,
+              sync: patch.direction,
+              syncSince: patch.boundAt,
+              syncDirectionAt: patch.directionAt,
+              state: patch.state,
+            }),
+            settings: settingsWith(watch.settings, settingsPatch(patch)),
+          })
+          .where(eq(watches.id, watch.id))
+          .run();
+        if (cursor) {
+          putCursor(tx, watch.id, cursor);
+        }
+      });
     },
     updateLink: (projectId, taskId, patch) => {
       const { synced, ...held } = patch;

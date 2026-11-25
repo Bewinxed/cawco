@@ -13,6 +13,9 @@ import {
   FolderMoveProgressFrameShape,
   FolderMoveStepShape,
   FolderWalkShape,
+  GithubProjectShape,
+  GithubStatusesAddedShape,
+  GithubStatusStagesShape,
   HarnessKindShape,
   InstallDraftShape,
   InstallShape,
@@ -68,7 +71,6 @@ import type {
   DesignOfferAnswer as DesignOfferAnswerType,
   DesignProposalFile as DesignProposalFileType,
   FolderMoveState as FolderMoveStateType,
-  GitHubResource as GitHubResourceType,
   InboundVia as InboundViaType,
   InstallsRecord as InstallsRecordType,
   InstanceKind as InstanceKindType,
@@ -101,6 +103,9 @@ import type {
   TrashedRows as TrashedRowsType,
   TrashKind as TrashKindType,
   TrimOfferAnswer as TrimOfferAnswerType,
+  WatchCursor as WatchCursorType,
+  WatchSettings as WatchSettingsType,
+  WatchSync as WatchSyncType,
   WorkItemSubmission as WorkItemSubmissionType,
   WorkOrigin as WorkOriginType,
   WorkspaceState as WorkspaceStateType,
@@ -443,15 +448,6 @@ const FolderMoveStateShape = declared(
 export const FolderMoveStateSchema: z.ZodType<FolderMoveStateType> =
   FolderMoveStateShape;
 export type FolderMoveStateOutput = z.output<typeof FolderMoveStateShape>;
-
-const GitHubResourceShape = declared(
-  z.enum(["pulls", "issues", "comments", "issueEvents", "discussions"]),
-  "GitHubResource",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const GitHubResourceSchema: z.ZodType<GitHubResourceType> =
-  GitHubResourceShape;
-export type GitHubResourceOutput = z.output<typeof GitHubResourceShape>;
 
 const InboundViaShape = declared(
   z.enum(["poll", "webhook", "connector"]),
@@ -966,6 +962,50 @@ const TrimOfferAnswerShape = declared(
 export const TrimOfferAnswerSchema: z.ZodType<TrimOfferAnswerType> =
   TrimOfferAnswerShape;
 export type TrimOfferAnswerOutput = z.output<typeof TrimOfferAnswerShape>;
+
+const WatchCursorShape = declared(
+  z.object({
+    etag: z.string().nullable().optional(),
+    since: z.number().optional(),
+    unread: z.string().optional(),
+  }),
+  "WatchCursor",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const WatchCursorSchema: z.ZodType<WatchCursorType> = WatchCursorShape;
+export type WatchCursorOutput = z.output<typeof WatchCursorShape>;
+
+const WatchSettingsShape = declared(
+  z.object({
+    args: z.record(z.string(), z.unknown()).optional(),
+    githubProject: GithubProjectShape.nullable().optional(),
+    githubProjectReason: z.string().nullable().optional(),
+    githubStatusesAdded: GithubStatusesAddedShape.nullable().optional(),
+    githubStatusesRefused: z.string().nullable().optional(),
+    githubStatusStages: GithubStatusStagesShape.nullable().optional(),
+    idPath: z.string().optional(),
+    intervalS: z.number().optional(),
+    itemsPath: z.string().optional(),
+    syncPolledAt: z.number().nullable().optional(),
+    syncReason: z.string().nullable().optional(),
+    syncResumeAt: z.number().nullable().optional(),
+    tool: z.string().optional(),
+    versionPath: z.string().optional(),
+  }),
+  "WatchSettings",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const WatchSettingsSchema: z.ZodType<WatchSettingsType> =
+  WatchSettingsShape;
+export type WatchSettingsOutput = z.output<typeof WatchSettingsShape>;
+
+const WatchSyncShape = declared(
+  z.enum(["off", "inbound", "both"]),
+  "WatchSync",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const WatchSyncSchema: z.ZodType<WatchSyncType> = WatchSyncShape;
+export type WatchSyncOutput = z.output<typeof WatchSyncShape>;
 
 const WorkItemSubmissionShape = declared(
   z.object({

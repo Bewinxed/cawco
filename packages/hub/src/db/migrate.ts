@@ -62,6 +62,7 @@ import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 import { logTrackerCursorsUnread } from "./tracker-cursors-unread";
 import { logWaitHistoryUnread } from "./wait-history-unread";
 import { logWaitsUnread } from "./waits-unread";
+import { logWatchesFromPollers } from "./watches-from-pollers";
 import { logWorkspaceHeadsUnread } from "./workspace-heads-unread";
 
 /** Where a step's work runs. */
@@ -411,6 +412,17 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every account's extra usage and window set 0432 keeps as not read, read before it runs.
       logAccountReadingsUnread(client);
+    },
+  },
+  {
+    name: "watches-from-pollers",
+    before: "0486_watches",
+    at: "migrator",
+    run: (client) => {
+      // Every project whose poller and binding read one repository with
+      // different connections, and every poller 0486 makes no watch of,
+      // read before it runs.
+      logWatchesFromPollers(client);
     },
   },
   {

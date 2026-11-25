@@ -880,7 +880,7 @@ export const createRelay = ({
   // --- views ------------------------------------------------------------------------
 
   const inboundOf = (row: RelayRow): string => {
-    const polled = db.ingress.githubPoller(row.projectId) !== undefined;
+    const polled = db.ingress.followedBy(row.projectId) !== undefined;
     if (row.state === "off") {
       return "Off: its path answers 404.";
     }
@@ -977,8 +977,7 @@ export const createRelay = ({
     repo: string,
     named: string | null | undefined
   ) => {
-    const connection =
-      named?.trim() || db.ingress.githubPoller(projectId)?.connection;
+    const connection = named?.trim() || db.ingress.followedBy(projectId);
     if (!connection) {
       return problem(400, {
         code: "relay-connection-unnamed",

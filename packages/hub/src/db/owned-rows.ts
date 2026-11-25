@@ -25,7 +25,6 @@ import {
   chosenModes,
   completedTurns,
   connectionProjects,
-  connectorPolls,
   continuations,
   delegateEvents,
   designChecks,
@@ -37,7 +36,6 @@ import {
   fleetMemoryDocProjects,
   fleetWatchNotices,
   folderMoves,
-  githubPollers,
   inboundEvents,
   instanceAliases,
   instanceMayStart,
@@ -84,6 +82,7 @@ import {
   turnUsage,
   usageBuckets,
   usageLimits,
+  watches,
   workItems,
   workspaceCreates,
   workspaces,
@@ -243,7 +242,6 @@ export const OWNED_ROWS = [
   { column: rules.scopeProjectId, foldProject: "move" },
   { column: taskTriggers.projectId, foldProject: "custom" },
   { column: eventRoutes.projectId, foldProject: "move" },
-  { column: connectorPolls.projectId, foldProject: "move" },
   { column: inboundEvents.projectId, foldProject: "move" },
   { column: actions.projectId, foldProject: "custom" },
   { column: relays.projectId, foldProject: "move" },
@@ -257,7 +255,7 @@ export const OWNED_ROWS = [
   { column: skills.projectId, foldProject: "move" },
   { column: projectOffers.projectId, foldProject: "move" },
   { column: connectionProjects.projectId, foldProject: "custom" },
-  { column: githubPollers.projectId, foldProject: "custom" },
+  { column: watches.projectId, foldProject: "custom" },
   {
     column: fleetMemoryDocProjects.projectId,
     foldProject: "custom",
@@ -389,11 +387,6 @@ export const KNOWN_UNOWNED: readonly {
     column: cardSettlings.instanceId,
     reason:
       "The member's session that settles the card: the settling ledger's record of where it went, kept after it goes.",
-  },
-  {
-    column: connectorPolls.createdBy,
-    reason:
-      "`owner`, or the id of the session that made the poll: who made it, as its log lines say, kept after that session goes.",
   },
   {
     column: continuations.sourceInstanceId,
@@ -539,5 +532,10 @@ export const KNOWN_UNOWNED: readonly {
     column: treeStops.rootId,
     reason:
       "The session a tree's stop was asked of: the row stands until the stop is done, then goes (tree-stops.ts).",
+  },
+  {
+    column: watches.createdBy,
+    reason:
+      "`owner`, or the id of the session that made the watch (a connector poll's maker): who made it, as its log lines say, kept after that session goes.",
   },
 ];

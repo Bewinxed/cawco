@@ -1,10 +1,10 @@
+import { withoutUndefined } from "@cawco/core/without-undefined";
 import {
   and,
   asc,
   desc,
   eq,
   exists,
-  getTableColumns,
   gte,
   inArray,
   isNotNull,
@@ -17,33 +17,66 @@ import {
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   connectorPollItems,
-  connectorPolls,
   eventRouteKinds,
   eventRoutes,
-  type GitHubCursor,
-  githubPollCursors,
-  githubPollers,
   inboundEvents,
+  watchCursors,
+  watches,
 } from "./schema";
-import { GitHubResourceSchema } from "./stored-shapes";
-import type { GitHubResource } from "./stored-types";
+import {
+  type GitHubWatchesDb,
+  githubWatchesDb,
+  ITEMS_STREAM,
+  settingsWith,
+  type WatchRow,
+} from "./watches";
 
 export type InboundEventRow = typeof inboundEvents.$inferSelect;
 /** A route with the kinds it takes (`event_route_kinds`); none takes any. */
 export type EventRouteRow = typeof eventRoutes.$inferSelect & {
   kinds: string[];
 };
-/** A project's GitHub poller with its resources' cursors (`github_poll_cursors`). */
-/** One repository's cursors, each resource's. */
-export type GitHubCursors = Partial<Record<GitHubResource, GitHubCursor>>;
-type GitHubPollerRow = typeof githubPollers.$inferSelect & {
-  /** Each polled repository's cursors, by `owner/repo`. */
-  cursors: Record<string, GitHubCursors>;
-};
-/** A connector poll with how many items its last call kept; null until it has looked. */
-export type ConnectorPollRow = typeof connectorPolls.$inferSelect & {
+/**
+ * A connector poll (ingress.ts): one connection's read tool called on an
+ * interval, its items diffed by id and version into `inbound_events`. Kept
+ * as a watch of provider `connection` with the poll's id, its tool and
+ * paths in the watch's settings, and how many items its last call kept;
+ * null until it has looked.
+ */
+export interface ConnectorPollRow {
+  args: Record<string, unknown>;
+  connection: string;
+  createdAt: Date;
+  /** `owner`, or the id of the session that made it. */
+  createdBy: string;
+  enabled: boolean;
+  id: string;
+  /** A dot path to each item's id. */
+  idPath: string;
+  /** Seconds between calls, 60 or more. */
+  intervalS: number;
+  /** A dot path to the array of items in the result; empty: the result is the array. */
+  itemsPath: string;
+  polledAt: Date | null;
+  projectId: string;
+  reason: string | null;
   seen: number | null;
-};
+  /**
+   * When a call last kept what it saw (`connector_poll_items`); null until
+   * its first call, and after an edit to what it lists or keys by, when
+   * the next call only looks.
+   */
+  seenAt: Date | null;
+  tool: string;
+  /** A dot path to each item's version (`updated_at`). */
+  versionPath: string;
+}
+
+/** A connector poll's fields that its watch's settings hold. */
+type PollSettings = Pick<
+  ConnectorPollRow,
+  "args" | "idPath" | "intervalS" | "itemsPath" | "tool" | "versionPath"
+>;
 
 /** When a route last delivered an event. */
 export interface Delivery {
@@ -52,7 +85,7 @@ export interface Delivery {
 }
 
 /** The rows ingress.ts keeps. */
-export interface IngressDb {
+export interface IngressDb extends GitHubWatchesDb {
   readonly connectorPoll: (id: string) => ConnectorPollRow | undefined;
   /** What a connector poll's last call saw, item id to version. */
   readonly connectorPollItems: (id: string) => Map<string, string>;
@@ -75,8 +108,6 @@ export interface IngressDb {
     limit: number,
     skip?: number
   ) => InboundEventRow[];
-  readonly githubPoller: (projectId: string) => GitHubPollerRow | undefined;
-  readonly githubPollers: () => GitHubPollerRow[];
   /**
    * THE store of an event: inserted unless (source, delivery key) is there
    * already. Answers the row it inserted, or nothing when it was a repeat.
@@ -101,11 +132,6 @@ export interface IngressDb {
     id: string,
     patch: Pick<Partial<InboundEventRow>, "routedTo" | "routeId" | "handledAt">
   ) => void;
-  /** Names the connection a project's repository is polled with; null stops its poller. */
-  readonly setGitHubConnection: (
-    projectId: string,
-    connection: string | null
-  ) => void;
   /**
    * A project's events received since `since` (ms) that no route in
    * `routeIds` took, counted by source and kind in one query, most first.
@@ -120,16 +146,6 @@ export interface IngressDb {
     id: string,
     patch: Partial<Omit<ConnectorPollRow, "id" | "createdAt" | "seen">>
   ) => ConnectorPollRow | undefined;
-  /**
-   * Keeps a poll's outcome: the row's fields named, and each cursor of each
-   * repository in `cursors` over the one it had, in one transaction. A
-   * repository the project no longer links keeps its cursors until the
-   * poller goes.
-   */
-  readonly updateGitHubPoller: (
-    projectId: string,
-    patch: Partial<Omit<GitHubPollerRow, "projectId" | "connection">>
-  ) => void;
   readonly updateRoute: (
     id: string,
     patch: Partial<Omit<EventRouteRow, "id" | "createdAt">>
@@ -159,44 +175,106 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     }
     return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
   };
-  /** A connector poll's columns, and how many items its last call kept (null until it looked). */
-  const pollColumns = {
-    ...getTableColumns(connectorPolls),
-    seen: sql<
-      number | null
-    >`case when ${connectorPolls.seenAt} is null then null else (select count(*) from ${connectorPollItems} where ${connectorPollItems.pollId} = ${connectorPolls.id}) end`,
-  };
-  const pollOf = (id: string): ConnectorPollRow | undefined =>
-    db
-      .select(pollColumns)
-      .from(connectorPolls)
-      .where(eq(connectorPolls.id, id))
-      .get();
-  /** Each poller with its resources' cursors. */
-  const withCursors = (
-    rows: (typeof githubPollers.$inferSelect)[]
-  ): GitHubPollerRow[] => {
-    const cursors = new Map<string, GitHubPollerRow["cursors"]>();
-    if (rows.length > 0) {
-      for (const { projectId, repo, resource, ...cursor } of db
-        .select()
-        .from(githubPollCursors)
+  const isPoll = eq(watches.provider, "connection");
+  /** Each watch read as its connector poll, with how many items its last call kept (null until it looked). */
+  const pollsOf = (rows: WatchRow[]): ConnectorPollRow[] => {
+    if (rows.length === 0) {
+      return [];
+    }
+    const ids = rows.map((row) => row.id);
+    const looked = new Map(
+      db
+        .select({ id: watchCursors.watchId, at: watchCursors.updatedAt })
+        .from(watchCursors)
         .where(
-          inArray(
-            githubPollCursors.projectId,
-            rows.map((row) => row.projectId)
+          and(
+            inArray(watchCursors.watchId, ids),
+            eq(watchCursors.stream, ITEMS_STREAM)
           )
         )
-        .all()) {
-        const kept = cursors.get(projectId) ?? {};
-        kept[repo] = { ...kept[repo], [resource]: cursor };
-        cursors.set(projectId, kept);
-      }
-    }
-    return rows.map((row) => ({
-      ...row,
-      cursors: cursors.get(row.projectId) ?? {},
-    }));
+        .all()
+        .map(({ id, at }) => [id, at])
+    );
+    const counts = new Map(
+      db
+        .select({ id: connectorPollItems.pollId, n: sql<number>`count(*)` })
+        .from(connectorPollItems)
+        .where(inArray(connectorPollItems.pollId, ids))
+        .groupBy(connectorPollItems.pollId)
+        .all()
+        .map(({ id, n }) => [id, n])
+    );
+    return rows.map((row) => {
+      const { settings } = row;
+      const seen = looked.has(row.id);
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        connection: row.connection,
+        tool: settings.tool ?? "",
+        args: settings.args ?? {},
+        intervalS: settings.intervalS ?? 60,
+        itemsPath: settings.itemsPath ?? "",
+        idPath: settings.idPath ?? "",
+        versionPath: settings.versionPath ?? "",
+        enabled: row.enabled,
+        seenAt: seen ? (looked.get(row.id) ?? row.createdAt) : null,
+        reason: row.reason,
+        polledAt: row.polledAt,
+        createdBy: row.createdBy,
+        createdAt: row.createdAt,
+        seen: seen ? (counts.get(row.id) ?? 0) : null,
+      };
+    });
+  };
+  const pollOf = (id: string): ConnectorPollRow | undefined =>
+    pollsOf(
+      db
+        .select()
+        .from(watches)
+        .where(and(eq(watches.id, id), isPoll))
+        .all()
+    )[0];
+  /** A poll's settings as its watch keeps them. */
+  const settingsOf = ({
+    tool,
+    args,
+    intervalS,
+    itemsPath,
+    idPath,
+    versionPath,
+  }: Partial<PollSettings>): Partial<PollSettings> =>
+    withoutUndefined({ tool, args, intervalS, itemsPath, idPath, versionPath });
+  /** The poll has looked as of `at`: its stream's row, its count of calls with it. */
+  const looked = (
+    tx: Pick<BunSQLiteDatabase, "insert">,
+    id: string,
+    at: Date
+  ) => {
+    tx.insert(watchCursors)
+      .values({
+        watchId: id,
+        stream: ITEMS_STREAM,
+        cursor: {},
+        polls: 1,
+        updatedAt: at,
+      })
+      .onConflictDoUpdate({
+        target: [watchCursors.watchId, watchCursors.stream],
+        set: { updatedAt: at, polls: sql`${watchCursors.polls} + 1` },
+      })
+      .run();
+  };
+  /** The poll has not looked: what it saw goes with its stream's row. */
+  const unlooked = (tx: Pick<BunSQLiteDatabase, "delete">, id: string) => {
+    tx.delete(connectorPollItems)
+      .where(eq(connectorPollItems.pollId, id))
+      .run();
+    tx.delete(watchCursors)
+      .where(
+        and(eq(watchCursors.watchId, id), eq(watchCursors.stream, ITEMS_STREAM))
+      )
+      .run();
   };
   /** A route's kinds replaced by `kinds`, in the transaction `tx`. */
   const putKinds = (
@@ -337,83 +415,23 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     deleteRoute: (id) =>
       db.delete(eventRoutes).where(eq(eventRoutes.id, id)).returning().all()
         .length > 0,
-    githubPoller: (projectId) =>
-      withCursors(
+    ...githubWatchesDb(db),
+    connectorPolls: (projectId) =>
+      pollsOf(
         db
           .select()
-          .from(githubPollers)
-          .where(eq(githubPollers.projectId, projectId))
+          .from(watches)
+          .where(
+            and(
+              isPoll,
+              projectId === undefined
+                ? undefined
+                : eq(watches.projectId, projectId)
+            )
+          )
+          .orderBy(asc(watches.createdAt))
           .all()
-      )[0],
-    githubPollers: () => withCursors(db.select().from(githubPollers).all()),
-    setGitHubConnection: (projectId, connection) => {
-      if (connection === null) {
-        db.delete(githubPollers)
-          .where(eq(githubPollers.projectId, projectId))
-          .run();
-        return;
-      }
-      db.insert(githubPollers)
-        .values({ projectId, connection })
-        .onConflictDoUpdate({
-          target: githubPollers.projectId,
-          set: { connection, reason: null, resumeAt: null },
-        })
-        .run();
-    },
-    updateGitHubPoller: (projectId, { cursors, ...patch }) => {
-      db.transaction((tx) => {
-        const stored = tx
-          .select({ projectId: githubPollers.projectId })
-          .from(githubPollers)
-          .where(eq(githubPollers.projectId, projectId))
-          .get();
-        if (!stored) {
-          return;
-        }
-        if (Object.keys(patch).length > 0) {
-          tx.update(githubPollers)
-            .set(patch)
-            .where(eq(githubPollers.projectId, projectId))
-            .run();
-        }
-        for (const [repo, ofRepo] of Object.entries(cursors ?? {})) {
-          for (const [key, cursor] of Object.entries(ofRepo)) {
-            // `Object.entries` names its keys `string` (microsoft/TypeScript#12253).
-            const resource = GitHubResourceSchema.safeParse(key);
-            if (cursor && resource.success) {
-              tx.insert(githubPollCursors)
-                .values({
-                  projectId,
-                  repo,
-                  resource: resource.data,
-                  ...cursor,
-                })
-                .onConflictDoUpdate({
-                  target: [
-                    githubPollCursors.projectId,
-                    githubPollCursors.repo,
-                    githubPollCursors.resource,
-                  ],
-                  set: cursor,
-                })
-                .run();
-            }
-          }
-        }
-      });
-    },
-    connectorPolls: (projectId) =>
-      db
-        .select(pollColumns)
-        .from(connectorPolls)
-        .where(
-          projectId === undefined
-            ? undefined
-            : eq(connectorPolls.projectId, projectId)
-        )
-        .orderBy(asc(connectorPolls.createdAt))
-        .all(),
+      ),
     connectorPoll: (id) => pollOf(id),
     connectorPollItems: (id) =>
       new Map(
@@ -428,8 +446,31 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
           .map(({ itemId, version }) => [itemId, version])
       ),
     createConnectorPoll: (row) => {
-      db.insert(connectorPolls).values(row).run();
-      return { ...row, seen: null };
+      db.transaction((tx) => {
+        tx.insert(watches)
+          .values({
+            id: row.id,
+            projectId: row.projectId,
+            provider: "connection",
+            host: "",
+            container: row.id,
+            containerName: `${row.connection}/${row.tool}`,
+            containerUrl: "",
+            connection: row.connection,
+            sync: "off",
+            settings: settingsOf(row),
+            enabled: row.enabled,
+            reason: row.reason,
+            polledAt: row.polledAt,
+            createdBy: row.createdBy,
+            createdAt: row.createdAt,
+          })
+          .run();
+        if (row.seenAt) {
+          looked(tx, row.id, row.seenAt);
+        }
+      });
+      return { ...row, seen: row.seenAt ? 0 : null };
     },
     keepConnectorPollItems: (id, items, polledAt) => {
       db.transaction((tx) => {
@@ -447,29 +488,52 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
             )
             .run();
         }
-        tx.update(connectorPolls)
-          .set({ seenAt: polledAt, reason: null, polledAt })
-          .where(eq(connectorPolls.id, id))
+        looked(tx, id, polledAt);
+        tx.update(watches)
+          .set({ reason: null, polledAt })
+          .where(and(eq(watches.id, id), isPoll))
           .run();
       });
     },
     updateConnectorPoll: (id, patch) =>
       db.transaction((tx) => {
-        if (patch.seenAt === null) {
-          tx.delete(connectorPollItems)
-            .where(eq(connectorPollItems.pollId, id))
-            .run();
+        const was = tx
+          .select()
+          .from(watches)
+          .where(and(eq(watches.id, id), isPoll))
+          .get();
+        if (!was) {
+          return;
         }
-        tx.update(connectorPolls)
-          .set(patch)
-          .where(eq(connectorPolls.id, id))
+        const { seenAt, projectId, connection, enabled, reason, polledAt } =
+          patch;
+        if (seenAt === null) {
+          unlooked(tx, id);
+        } else if (seenAt) {
+          looked(tx, id, seenAt);
+        }
+        const settings = settingsWith(was.settings, settingsOf(patch));
+        const columns = withoutUndefined({
+          projectId,
+          connection,
+          enabled,
+          reason,
+          polledAt,
+        });
+        tx.update(watches)
+          .set({
+            ...columns,
+            settings,
+            containerName: `${connection ?? was.connection}/${settings.tool ?? ""}`,
+          })
+          .where(eq(watches.id, id))
           .run();
         return pollOf(id);
       }),
     deleteConnectorPoll: (id) =>
       db
-        .delete(connectorPolls)
-        .where(eq(connectorPolls.id, id))
+        .delete(watches)
+        .where(and(eq(watches.id, id), isPoll))
         .returning()
         .all().length > 0,
   };
