@@ -286,7 +286,7 @@ export const clipOf = (el: Element, own = false): DOMRect | null => {
 /**
  * Each top-document element's computed `position` as last read. A scroll
  * changes no element's style, so what the page's scroll asks of it on every
- * frame (the page's foot bar, the marks on what stays in view) is read once
+ * frame (the marks on what stays in view) is read once
  * per element and kept until the page's style may have changed:
  * {@link forgetPositions}.
  */

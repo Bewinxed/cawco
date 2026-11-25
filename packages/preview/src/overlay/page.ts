@@ -2309,10 +2309,18 @@ const restyles = (record: MutationRecord): boolean => {
   const el = target instanceof Element ? target : target.parentElement;
   return !wordsAlone(record) || el?.localName === "style";
 };
-/** Lets go of the kept positions (frames.ts `positionOf`) when one of the page's own `records` may restyle it. */
-const forgetIfRestyled = (records: MutationRecord[]) => {
+/** Lets go of the kept positions (frames.ts `positionOf`) when one of the page's own `records` may restyle it; whether one did. */
+const forgetIfRestyled = (records: MutationRecord[]): boolean => {
   if (records.some((record) => !ownNode(record.target) && restyles(record))) {
     forgetPositions();
+    return true;
+  }
+  return false;
+};
+/** The page's `records` taken in: a restyle lets the kept positions go and reads the page's foot bar again ({@link tellPageFoot}). */
+const restyledNow = (records: MutationRecord[]) => {
+  if (forgetIfRestyled(records)) {
+    tellPageFoot();
   }
 };
 /**
@@ -2321,7 +2329,7 @@ const forgetIfRestyled = (records: MutationRecord[]) => {
  * stylesheet put in or taken out. A stylesheet finishing its load, and the
  * viewport's size (a media query), change it too.
  */
-const restyled = new MutationObserver(forgetIfRestyled);
+const restyled = new MutationObserver(restyledNow);
 restyled.observe(document, {
   attributes: true,
   characterData: true,
@@ -2331,22 +2339,19 @@ restyled.observe(document, {
 addEventListener("resize", forgetPositions);
 addEventListener("load", forgetPositions, { capture: true });
 /** The kept positions as the page's style stands now: a write this very task taken first. */
-const positionsNow = () => forgetIfRestyled(restyled.takeRecords());
+const positionsNow = () => restyledNow(restyled.takeRecords());
 
 /**
  * How tall the page's own foot bar stands over the viewport's foot, px: a
  * fixed or sticky box (a decision page's Send, an app's tab bar) under any of
  * three points along the viewport's last pixel row, the overlay's own nodes
  * left out; 0 for none. Told to the host (`cawco:page-foot`) as it changes,
- * read on load, scroll and resize in the next frame, so what the host floats
- * over the page's foot (Changed since you looked) stands clear of it. Read
- * on every frame of a scroll: the hit tests and the bar's box share one
- * layout, and each element's position is read once while the page's style
- * stands (frames.ts `positionOf`), so the elements scrolling past the foot
- * cost a lookup each, not a style read of every ancestor.
+ * so what the host floats over the page's foot (Changed since you looked)
+ * stands clear of it. Read in the next frame after what can change it
+ * ({@link tellPageFoot}), never on a frame of a scroll.
  */
 function pageFootNow(): number {
-  positionsNow();
+  forgetIfRestyled(restyled.takeRecords());
   const y = innerHeight - 1;
   let top = innerHeight;
   for (const share of [0.25, 0.5, 0.75]) {
@@ -2384,9 +2389,19 @@ function tellPageFoot() {
     }
   });
 }
-addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
+/*
+ * What can change the foot: the page's style or elements (`restyled`, above),
+ * the viewport's size, a load (the page's, a stylesheet's, an image's), a
+ * transition or animation settling where a class change sent it, the host's
+ * hello, and a scroll's end. A fixed bar stands where a scroll leaves it; a
+ * sticky one sticks or comes free by where the page is scrolled, read once
+ * the scroll, the page's or any scroller's, has come to rest.
+ */
+addEventListener("scrollend", tellPageFoot, { passive: true, capture: true });
 addEventListener("resize", tellPageFoot);
-addEventListener("load", tellPageFoot);
+addEventListener("load", tellPageFoot, { capture: true });
+addEventListener("transitionend", tellPageFoot, { capture: true });
+addEventListener("animationend", tellPageFoot, { capture: true });
 
 /** The page's changes counted as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function tallyNow(doc: Document) {
