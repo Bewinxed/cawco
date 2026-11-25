@@ -9,7 +9,7 @@ Your brief lists everything that happened to the project's things while its trig
 
 1. **Read each thing as it stands now** (`task_read({ id })` for a task, `artifact_read` for a page, `find` for the rest). Done when you know, for each thing, whether what was held still matters: a comment someone already answered, a run a later one superseded, or an event on a pull request since merged does not.
 2. **Decide per thing** and act once:
-   - still needed and small: do it now, as that trigger's own skill says (the task-input, task-move, routine-run, routine-report, inbound-event or github-event skill);
+   - still needed and small: do it now, as that trigger's own skill says (the task-input, task-move, routine-run, routine-report or inbound-event skill);
    - still needed and real work: start it with `task_start`, or file it with `task_create` in a todo stage;
    - needs the person: one `ask`, or one decision card when it is a choice;
    - no longer matters: leave it.

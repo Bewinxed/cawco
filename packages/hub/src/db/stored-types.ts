@@ -48,6 +48,7 @@ import type {
   GithubStatusesAdded,
   GithubStatusStages,
 } from "@cawco/core/trackers";
+import type { GitHubStream } from "@cawco/providers/github/ingest";
 import type { ProviderId } from "@cawco/providers/provider";
 
 /** The session being continued, as the header names it. */
@@ -771,8 +772,7 @@ export type SessionLineKind =
   | "recap";
 
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
-export type GitHubResource =
-  "pulls" | "issues" | "comments" | "issueEvents" | "discussions";
+export type GitHubResource = GitHubStream;
 
 /**
  * Whose item a mirror row is (schema `external_items.provider`): a
@@ -896,3 +896,10 @@ export type StartingSetKind = "skill" | "server";
 
 /** How an inbound event reached the hub. */
 export type InboundVia = "poll" | "webhook" | "connector";
+
+/**
+ * Who caused an inbound event (schema `inbound_events.origin`): someone
+ * outside, or one of CawCo's own writes, which the write door records
+ * (provider spec §2.8); null on an event stored before the door read it.
+ */
+export type InboundOrigin = "outside" | "ours";

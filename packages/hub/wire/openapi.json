@@ -48183,7 +48183,6 @@
                 }
               },
               "resources": {
-                "description": "Read by nothing: kept empty for the shipped apps that declare it; it goes with {@link repo}.",
                 "type": "object",
                 "properties": {
                   "comments": {
@@ -48201,7 +48200,8 @@
                   "pulls": {
                     "$ref": "#/components/schemas/GitHubCursor"
                   }
-                }
+                },
+                "description": "Read by nothing: kept empty for the shipped apps that declare it; it goes with {@link repo}."
               },
               "resumeAt": {
                 "type": "number"

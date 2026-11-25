@@ -69,6 +69,11 @@ import type {
   DelegatePeek,
 } from "./delegation-tree";
 import type { Dispatcher } from "./dispatch";
+import {
+  type EventRoutes,
+  INGRESS_DEFINITIONS,
+  INGRESS_TOOLS,
+} from "./event-routes";
 import { type FleetWatch, TRIAGE_DEFINITIONS } from "./fleet-watch";
 import {
   type createHubTools,
@@ -76,7 +81,6 @@ import {
   HUB_DEFINITIONS,
   HUB_TOOLS,
 } from "./hub-tools";
-import { INGRESS_DEFINITIONS, INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape } from "./lifetime";
 import { bindTool, type ToolDefinition, withoutRefusalCode } from "./mcp-tool";
 import { MEMORY_DEFINITIONS, MEMORY_TOOLS, type Memory } from "./memory";
@@ -114,7 +118,7 @@ import { isVerifierParent } from "./work-item-state";
 
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
-type IngressTool = ReturnType<Ingress["tools"]>[number];
+type IngressTool = ReturnType<EventRoutes["tools"]>[number];
 type ActionTool = ReturnType<Actions["tools"]>[number];
 type RelayTool = ReturnType<Relay["tools"]>[number];
 type MemoryTool = ReturnType<Memory["tools"]>[number];
@@ -552,7 +556,7 @@ export function createDelegationMcp(options: {
    * his `folder_write` parks as a proposal is drawn at it.
    */
   cawTools?: (actor: InstanceRow | undefined, toolUseId?: string) => CawTool[];
-  /** The ingress tools (ingress.ts): event routes and connector polls, for the same roles. */
+  /** The ingress tools (event-routes.ts): event routes and connector polls, for the same roles. */
   ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
   /** The approved-action tools (actions.ts): proposing one exact call for you to approve. */
   actionTools?: (actor: InstanceRow | undefined) => ActionTool[];
@@ -1219,7 +1223,7 @@ export function createDelegationMcp(options: {
     return await groupCall(actor, name, input, toolUseId);
   };
 
-  /** A tool of one of the {@link groups} (caw.ts, fleet-watch.ts, routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts, hub-tools.ts and the asks), bound to the caller. */
+  /** A tool of one of the {@link groups} (caw.ts, fleet-watch.ts, routines.ts, event-routes.ts, actions.ts, relay.ts, memory.ts, hub-tools.ts and the asks), bound to the caller. */
   const groupCall = async (
     actor: InstanceRow,
     name: string,

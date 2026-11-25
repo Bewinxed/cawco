@@ -1,6 +1,6 @@
 /**
  * Watches (provider spec §2.4, schema `watches`, `watch_cursors`): what the
- * GitHub poller (ingress.ts) follows of a project and how it follows it.
+ * poll loop (clock.ts) follows of a project and how it follows it.
  * Its connector polls are read in db/ingress.ts and its tracker binding in
  * db/trackers.ts, over the same rows.
  *
@@ -8,7 +8,7 @@
  * (core `readsGitHubApi`). Its GitHub watches are made at the two moments
  * that can start following, and nowhere else:
  * - a connection that reads GitHub's API names the project
- *   ({@link followGitHub}, from ingress.ts `followConnection`): a watch of
+ *   ({@link followGitHub}, from clock.ts `followConnection`): a watch of
  *   each github.com repository the project links;
  * - a github.com repository link is added to a project that follows GitHub
  *   ({@link followLink}, from db/projects.ts): a watch of that repository,
@@ -31,12 +31,11 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   connectionProjects,
   connections,
-  type GitHubCursor,
   projectLinks,
   watchCursors,
   watches,
 } from "./schema";
-import type { GitHubResource, WatchSettings } from "./stored-types";
+import type { WatchCursor, WatchSettings } from "./stored-types";
 
 export type WatchRow = typeof watches.$inferSelect;
 
@@ -54,32 +53,23 @@ export const SYNC_STREAMS = {
   comments: "sync:comments",
 } as const;
 
-/** The resources a repository is polled for, in order (github.ts): each a stream of its watch. */
-export const GITHUB_RESOURCES = [
-  "pulls",
-  "issues",
-  "comments",
-  "issueEvents",
-  "discussions",
-] as const satisfies readonly GitHubResource[];
-
-/** Whether a stream of a watch is one of GitHub's resources. */
-const isResource = (stream: string): stream is GitHubResource =>
-  GITHUB_RESOURCES.some((resource) => resource === stream);
-
-/** A connector poll's one stream: there once it has looked. */
-export const ITEMS_STREAM = "items";
+/** The providers whose watches the poll loop reads (clock.ts): a GitHub repository, a connector poll. */
+const POLLED_PROVIDERS = ["github", "connection"] as const;
 
 /** The auths a `github` connection reads GitHub's REST API with (core `readsGitHubApi`), as stored. */
 const READS_GITHUB_API = CONNECTION_AUTHS.filter(readsGitHubApi);
 
-/** The repository `owner/repo` a github.com link names, or nothing (github.ts `githubReposOf`). */
+/** The repository `owner/repo` a github.com link names, or nothing. */
 const githubRepoOfLink = (remote: string): string | undefined => {
   const [host, owner, repo, ...rest] = remote.split("/");
   return host === GITHUB_HOST && owner && repo && rest.length === 0
     ? `${owner}/${repo}`
     : undefined;
 };
+
+/** The GitHub repositories, `owner/repo`, among a project's links, oldest first. */
+export const githubReposOf = (links: readonly string[]): string[] =>
+  links.flatMap((link) => githubRepoOfLink(link) ?? []);
 
 /** One GitHub repository's watch of a project: `owner/repo` compared as GitHub does, without case. */
 const githubWatchOf = (
@@ -278,7 +268,7 @@ export interface Rehomed {
  * binding syncs keeps the binding's connection, which the sync reads with;
  * the one the poller followed it by is found again the same way, and the
  * poller reads through it while the binding's no longer names the project
- * ({@link GitHubWatch.reads}) and once the binding goes.
+ * ({@link PolledWatch.reads}) and once the binding goes.
  */
 export const rehome = (
   tx: Writer,
@@ -399,38 +389,54 @@ export const unrehome = (tx: Writer, moved: readonly Rehomed[]): void => {
   }
 };
 
-/** One repository's cursors, each resource's. */
-export type GitHubCursors = Partial<Record<GitHubResource, GitHubCursor>>;
+/** A stream's mark as its watch keeps it, with its counts. */
+export interface StreamCursor {
+  cursor: WatchCursor;
+  /** 304s answered: polls that cost nothing. */
+  notModified: number;
+  polls: number;
+}
 
-/** A GitHub watch the poller reads, with each resource's cursor. */
-export interface GitHubWatch extends WatchRow {
-  cursors: GitHubCursors;
+/** A watch the poll loop reads (clock.ts), with each stream's cursor. */
+export interface PolledWatch extends WatchRow {
+  /** Each stream's cursor, by stream: the poll's own streams, the tracker sync's beside them. */
+  cursors: ReadonlyMap<string, StreamCursor>;
   /**
-   * The connection the poller reads it through: its own, but on a watch a
-   * binding syncs whose connection no longer reads GitHub's API and names
-   * the project, the one the poller followed it by
+   * The connection the poll reads it through: its own, but on a GitHub
+   * watch a binding syncs whose connection no longer reads GitHub's API and
+   * names the project, the one the poller followed it by
    * (`settings.pollerConnection`), while that one does.
    */
   reads: string;
 }
 
-/** What one poll of one watch keeps: its row's outcome and each resource's cursor over the one it had. */
-export interface GitHubWatchPolled {
-  cursors?: GitHubCursors;
-  id: string;
-  patch: Partial<Pick<WatchRow, "polledAt" | "reason" | "resumeAt">>;
-}
+/** What one stream's read keeps: its new mark, or `unchanged` for a 304. */
+export type StreamKept =
+  { cursor: WatchCursor; kind: "read" } | { kind: "unchanged" };
 
-/** The rows db/ingress.ts reads and writes for the GitHub poller. */
-export interface GitHubWatchesDb {
+/** The rows the poll loop (clock.ts) reads and writes. */
+export interface PolledWatchesDb {
   /** The connection project `projectId`'s GitHub watches read with (one that only follows first), or nothing while it follows none. */
   readonly followedBy: (projectId: string) => string | undefined;
   /** {@link followGitHub}: the repositories now watched, none while the project links none on github.com. */
   readonly followGitHub: (projectId: string, connection: string) => string[];
-  /** The GitHub watches the poller reads, a project's or every one, oldest first, each with its resources' cursors. */
-  readonly githubWatches: (projectId?: string) => GitHubWatch[];
-  /** Each poll's outcome kept, in one transaction. */
-  readonly keepGitHubPoll: (polled: readonly GitHubWatchPolled[]) => void;
+  /** The GitHub watches the poll reads, a project's or every one, oldest first, each with its streams' cursors. */
+  readonly githubWatches: (projectId?: string) => PolledWatch[];
+  /** One stream's read kept, once what it read is stored (provider spec §2.5). */
+  readonly keepStream: (
+    watchId: string,
+    stream: string,
+    kept: StreamKept
+  ) => void;
+  /** A watch's poll's outcome kept. */
+  readonly keepWatch: (
+    watchId: string,
+    patch: Partial<Pick<WatchRow, "polledAt" | "reason" | "resumeAt">>
+  ) => void;
+  /** A watch the poll loop reads, by its id; undefined when it is gone or off. */
+  readonly polledWatch: (id: string) => PolledWatch | undefined;
+  /** Every watch the poll loop reads, of any provider, oldest first, each with its streams' cursors. */
+  readonly polledWatches: () => PolledWatch[];
   /** {@link rehome} in one transaction, each watch left with no connection gone (a connection's removal rehomes in db/trash.ts). */
   readonly rehome: (
     gone: string,
@@ -438,9 +444,9 @@ export interface GitHubWatchesDb {
   ) => Rehomed[];
 }
 
-export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
-  const withCursors = (rows: WatchRow[]): GitHubWatch[] => {
-    const cursors = new Map<string, GitHubWatch["cursors"]>();
+export const polledWatchesDb = (db: BunSQLiteDatabase): PolledWatchesDb => {
+  const withCursors = (rows: WatchRow[]): PolledWatch[] => {
+    const cursors = new Map<string, Map<string, StreamCursor>>();
     if (rows.length > 0) {
       for (const row of db
         .select()
@@ -452,17 +458,12 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
           )
         )
         .all()) {
-        const resource = row.stream;
-        if (!isResource(resource)) {
-          continue;
-        }
-        const kept = cursors.get(row.watchId) ?? {};
-        kept[resource] = {
-          since: row.cursor.since ?? 0,
-          etag: row.cursor.etag ?? null,
+        const kept = cursors.get(row.watchId) ?? new Map();
+        kept.set(row.stream, {
+          cursor: row.cursor,
           polls: row.polls,
           notModified: row.notModified,
-        };
+        });
         cursors.set(row.watchId, kept);
       }
     }
@@ -478,7 +479,7 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
     };
     const readsOf = (row: WatchRow): string => {
       const poller = row.settings.pollerConnection;
-      if (row.sync === "off" || !poller) {
+      if (row.provider !== "github" || row.sync === "off" || !poller) {
         return row.connection;
       }
       const named = readerOf(row.projectId);
@@ -488,10 +489,14 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
     };
     return rows.map((row) => ({
       ...row,
-      cursors: cursors.get(row.id) ?? {},
+      cursors: cursors.get(row.id) ?? new Map(),
       reads: readsOf(row),
     }));
   };
+  const polled = and(
+    inArray(watches.provider, [...POLLED_PROVIDERS]),
+    eq(watches.enabled, true)
+  );
   return {
     followedBy: (projectId) => followedOf(db, projectId)[0]?.connection,
     githubWatches: (projectId) =>
@@ -511,33 +516,56 @@ export const githubWatchesDb = (db: BunSQLiteDatabase): GitHubWatchesDb => {
           .orderBy(asc(watches.createdAt))
           .all()
       ),
-    keepGitHubPoll: (polled) => {
-      db.transaction((tx) => {
-        const now = new Date();
-        for (const { id, patch, cursors } of polled) {
-          if (Object.keys(patch).length > 0) {
-            tx.update(watches).set(patch).where(eq(watches.id, id)).run();
-          }
-          for (const [stream, cursor] of Object.entries(cursors ?? {})) {
-            if (!cursor) {
-              continue;
+    polledWatches: () =>
+      withCursors(
+        db
+          .select()
+          .from(watches)
+          .where(polled)
+          .orderBy(asc(watches.createdAt))
+          .all()
+      ),
+    polledWatch: (id) =>
+      withCursors(
+        db
+          .select()
+          .from(watches)
+          .where(and(eq(watches.id, id), polled))
+          .all()
+      )[0],
+    keepStream: (watchId, stream, kept) => {
+      const now = new Date();
+      const set =
+        kept.kind === "read"
+          ? {
+              cursor: kept.cursor,
+              polls: sql`${watchCursors.polls} + 1`,
+              updatedAt: now,
             }
-            const values = {
-              cursor: { etag: cursor.etag, since: cursor.since },
-              polls: cursor.polls,
-              notModified: cursor.notModified,
+          : {
+              polls: sql`${watchCursors.polls} + 1`,
+              notModified: sql`${watchCursors.notModified} + 1`,
               updatedAt: now,
             };
-            tx.insert(watchCursors)
-              .values({ watchId: id, stream, ...values })
-              .onConflictDoUpdate({
-                target: [watchCursors.watchId, watchCursors.stream],
-                set: values,
-              })
-              .run();
-          }
-        }
-      });
+      db.insert(watchCursors)
+        .values({
+          watchId,
+          stream,
+          cursor: kept.kind === "read" ? kept.cursor : {},
+          polls: 1,
+          notModified: kept.kind === "read" ? 0 : 1,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [watchCursors.watchId, watchCursors.stream],
+          set,
+        })
+        .run();
+    },
+    keepWatch: (watchId, patch) => {
+      if (Object.keys(patch).length > 0) {
+        db.update(watches).set(patch).where(eq(watches.id, watchId)).run();
+      }
     },
     followGitHub: (projectId, connection) =>
       db.transaction((tx) => followGitHub(tx, projectId, connection)),

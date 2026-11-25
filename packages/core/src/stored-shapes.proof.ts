@@ -8,7 +8,11 @@ import type {
   DocAuthor as DocAuthorType,
   PlaceKind as PlaceKindType,
 } from "@cawco/jsonl-parser";
-import type { ProviderId as ProviderIdType } from "@cawco/providers/provider";
+import type {
+  ExternalActor as ExternalActorType,
+  ExternalState as ExternalStateType,
+  ProviderId as ProviderIdType,
+} from "@cawco/providers/provider";
 import type {
   AccountCheck as AccountCheckType,
   AccountIdentity as AccountIdentityType,
@@ -129,11 +133,7 @@ import type {
   AttemptResult as AttemptResultType,
   ResultArtifact as ResultArtifactType,
 } from "./deliverables";
-import type {
-  ExternalActor as ExternalActorType,
-  ExternalState as ExternalStateType,
-  LinkMode as LinkModeType,
-} from "./external-items";
+import type { LinkMode as LinkModeType } from "./external-items";
 import type {
   TranscriptAnswer as TranscriptAnswerType,
   TranscriptPlaces as TranscriptPlacesType,

@@ -2033,7 +2033,7 @@ const ExternalActorShape = declared(
     url: z.string().nullable(),
   }),
   "ExternalActor",
-  "packages/core/src/external-items.ts"
+  "packages/providers/src/provider.ts"
 );
 export const ExternalActorSchema = ExternalActorShape;
 export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
@@ -3345,7 +3345,7 @@ export type InstanceStatusOutput = z.output<typeof InstanceStatusShape>;
 export const ExternalStateShape = declared(
   z.enum(["open", "draft", "merged", "closed", "canceled"]),
   "ExternalState",
-  "packages/core/src/external-items.ts"
+  "packages/providers/src/provider.ts"
 );
 export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 

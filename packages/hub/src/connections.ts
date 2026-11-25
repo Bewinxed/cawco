@@ -342,7 +342,7 @@ export interface ConnectionsDeps {
   readonly projectExists: (id: string) => boolean;
   /**
    * A connection's projects were written, `dropped` the ones it no longer
-   * names: the GitHub poller of each project follows it (ingress.ts
+   * names: the GitHub poller of each project follows it (clock.ts
    * `followConnection`).
    */
   readonly projectsWritten: (connection: string, dropped: string[]) => void;

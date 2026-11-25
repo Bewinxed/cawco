@@ -13,7 +13,7 @@ import { itemOfUrl } from "@cawco/providers/registry";
 import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
-  type ItemRevision,
+  type ItemPatch,
   type ItemRow,
   mirrorRefOf,
   writeItem,
@@ -249,13 +249,13 @@ export interface TrackerLinkRow extends Omit<TrackerAgreement, "synced"> {
 
 /** The task's record link, by the URL its file writes, and what the issue holds now. */
 export interface TrackerRecord {
-  revision: ItemRevision;
+  revision: ItemPatch;
   url: string;
 }
 
 /** What a sync changes of a link: what they agreed on, and what its issue holds (its mirror, db external-items.ts). */
 export type TrackerLinkPatch = Partial<Pick<TrackerAgreement, "synced">> &
-  ItemRevision;
+  ItemPatch;
 
 type TrackerLinkColumns = typeof trackerLinks.$inferSelect;
 

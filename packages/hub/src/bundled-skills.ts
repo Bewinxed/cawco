@@ -51,7 +51,6 @@ export const BUNDLED_SKILLS = [
   "project-delegate-report",
   "project-attempt-judgement",
   "project-task-move",
-  "project-github-event",
   "project-inbound-event",
   "project-person-request",
   "project-task-input",

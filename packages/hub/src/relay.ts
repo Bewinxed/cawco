@@ -23,10 +23,12 @@
  *   body, or of `<timestamp>.<body>` with a configured timestamp header and
  *   the same 5 minutes. The caller hears only the status; the reason goes to
  *   the hub log.
- * - **Lands once.** A delivery is handed to ingress.ts `ingest`, whose
- *   insert is the dedup on (source, natural key): GitHub through
- *   `normalizeGitHub` (the same keys the poller uses, so a webhook and a
- *   poll of one change are one row, in either order); Stripe and generic as
+ * - **Lands once.** A delivery is handed to the door (intake.ts `take`),
+ *   whose store is the dedup on (project, source, natural key), and is
+ *   answered as soon as the store is done: GitHub through the provider's
+ *   own reader (providers github/ingest.ts `readGitHub`, the same keys the
+ *   poll uses, so a webhook and a poll of one change are one row, in either
+ *   order), through the project's watch of the repository; Stripe and generic as
  *   source `hook:<id>`, keyed by the provider's event id (Stripe's `id`; a
  *   generic relay's configured JSON path, or the body's SHA-256 when it names
  *   none). GitHub's `ping` is the test delivery: recorded on the relay, not
@@ -68,19 +70,26 @@ import {
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { cutShort } from "@cawco/core/words/helpers";
+import { valueAt } from "@cawco/providers/connection/descriptor";
+import { messageOf, octokitAnswer } from "@cawco/providers/github/answer";
+import {
+  GITHUB_WEBHOOK_EVENTS,
+  githubSource,
+  readGitHub,
+  webhookKind,
+} from "@cawco/providers/github/ingest";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { RelayPatch, RelayRow } from "./db/relays";
+import { githubReposOf } from "./db/watches";
 import { createFunnel, type Funnel, type FunnelState } from "./funnel";
-import { type GitHubKind, githubReposOf, normalizeGitHub } from "./github";
 import { byHandle } from "./handles";
-import { type Ingress, valueAt } from "./ingress";
+import type { Intake } from "./intake";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
-import { messageOf, octokitAnswer } from "./octokit-answer";
 import {
   relayCreatedWords,
   relayListWords,
@@ -111,14 +120,6 @@ const REFUSED_AGAIN_MS = 10 * 60_000;
 const PING_WAIT_MS = 30_000;
 /** One GitHub API call. Our choice. */
 const GITHUB_MS = 30_000;
-/** The events a GitHub relay's webhook sends: what the poller reads, as webhooks. */
-const GITHUB_EVENTS = [
-  "pull_request",
-  "issues",
-  "issue_comment",
-  "discussion",
-  "discussion_comment",
-] as const satisfies readonly GitHubKind[];
 const ID = /^\/hooks\/([A-Za-z0-9_-]{22})$/u;
 const HEADER = /^[A-Za-z0-9-]{1,64}$/u;
 const HEX = /^[0-9a-f]{64}$/u;
@@ -164,8 +165,8 @@ export interface RelayDeps {
   readonly db: Pick<DbShape, "ingress" | "project" | "relays" | "routines">;
   /** Tailscale; the real CLI unless a probe names another. */
   readonly funnel?: Funnel;
-  /** Ingress's one door (ingress.ts). */
-  readonly ingest: Ingress["ingest"];
+  /** The door (intake.ts). */
+  readonly intake: Pick<Intake, "take">;
   readonly lifetime: HubLifetimeShape;
 }
 
@@ -308,7 +309,7 @@ export const createRelay = ({
   connections,
   db,
   funnel: givenFunnel,
-  ingest,
+  intake,
   lifetime,
 }: RelayDeps) => {
   const store = db.relays;
@@ -370,15 +371,33 @@ export const createRelay = ({
       console.log(`[relay] ${row.id}: GitHub's test delivery (ping) arrived`);
       return 202;
     }
-    const kind = GITHUB_EVENTS.find((one) => one === event);
+    const kind = webhookKind(event);
     if (kind === undefined) {
       return 202;
     }
-    const repo = repoOf(row);
-    const source = repo ? `github:${repo.toLowerCase()}` : "";
-    const landed = normalizeGitHub(kind, JSON.parse(text))
-      .filter((one) => one.source === source)
-      .filter((one) => ingest(one, "webhook", row.projectId)).length;
+    const repo = repoOf(row)?.toLowerCase();
+    const read = readGitHub(kind, JSON.parse(text));
+    const ours = {
+      revisions: read.revisions.filter((one) => one.item.container === repo),
+      events: read.events.filter(
+        (one) => one.source === (repo ? githubSource(repo) : "")
+      ),
+    };
+    const watch = repo
+      ? db.ingress
+          .githubWatches(row.projectId)
+          .find((one) => one.container.toLowerCase() === repo)
+      : undefined;
+    const landed = intake.take(
+      {
+        projectId: row.projectId,
+        provider: "github",
+        watchId: watch?.id ?? null,
+      },
+      ours,
+      "webhook",
+      false
+    );
     console.log(`[relay] ${row.id}: GitHub ${event}, ${landed} new`);
     return 202;
   };
@@ -397,25 +416,32 @@ export const createRelay = ({
     const type = valueAt(body, "type");
     const created = Number(valueAt(body, "created"));
     const named = typeof type === "string" ? type.slice(0, 100) : null;
-    const landed = ingest(
+    const landed = intake.take(
+      { projectId: row.projectId, provider: "connection", watchId: null },
       {
-        source: `hook:${row.id}`,
-        key,
-        kind: named ?? "hook",
-        actor: null,
-        labels: [],
-        branch: null,
-        url: null,
-        title: named,
-        body: null,
-        at:
-          row.provider === "stripe" && Number.isFinite(created)
-            ? created * 1000
-            : now.getTime(),
-        data: body,
+        revisions: [],
+        events: [
+          {
+            item: null,
+            source: `hook:${row.id}`,
+            key,
+            kind: named ?? "hook",
+            actor: null,
+            labels: [],
+            branch: null,
+            url: null,
+            title: named,
+            body: null,
+            at:
+              row.provider === "stripe" && Number.isFinite(created)
+                ? created * 1000
+                : now.getTime(),
+            data: body,
+          },
+        ],
       },
       "webhook",
-      row.projectId
+      false
     );
     console.log(
       `[relay] ${row.id}: ${row.provider} ${key} ${landed ? "landed" : "was here already"}`
@@ -423,7 +449,7 @@ export const createRelay = ({
     return 202;
   };
 
-  /** A verified delivery handed to ingest: the status to answer. */
+  /** A verified delivery handed to the door: the status to answer. */
   const deliver = (
     row: RelayRow,
     headers: Headers,
@@ -611,7 +637,7 @@ export const createRelay = ({
           ...ownerRepo(repo),
           name: "web",
           active: true,
-          events: [...GITHUB_EVENTS],
+          events: [...GITHUB_WEBHOOK_EVENTS],
           config: {
             url,
             content_type: "json",

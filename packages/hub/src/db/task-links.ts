@@ -4,7 +4,7 @@
  * each pointing at its item's mirror row (db external-items.ts, schema
  * `external_items`), the one record of what the source holds of it. The
  * tracker sync (tracker.ts) and the GitHub poller's reads and events
- * (external-items.ts) find a task here ({@link TaskLinksDb.byItem}).
+ * (links.ts) find a task here ({@link TaskLinksDb.byItem}).
  *
  * A task's rows follow its file: every time the file is indexed, its
  * `issue:` and `links:` URLs, and the pull requests and Actions runs its
@@ -35,7 +35,7 @@ import { itemOfUrl } from "@cawco/providers/registry";
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
-  type ItemRevision,
+  type ItemPatch,
   type ItemRow,
   mirrorRefOf,
   writeItem,
@@ -85,7 +85,9 @@ export type ItemKey =
       number: number;
       source: ProviderId;
     }
-  | { externalId: string; source: ProviderId };
+  | { externalId: string; source: ProviderId }
+  /** Its mirror row (schema `external_items`), as the door names it. */
+  | { itemId: string };
 
 const DIGITS = /^\d+$/u;
 
@@ -250,7 +252,7 @@ export const syncTaskLinks = (
   }
 };
 
-/** The rows tracker.ts and external-items.ts keep: links with their items, and comments carried. */
+/** The rows tracker.ts and links.ts keep: links with their items, and comments carried. */
 export interface TaskLinksDb {
   /**
    * THE matcher: the links naming an item, each task's record first and
@@ -284,7 +286,7 @@ export interface TaskLinksDb {
   /** Links a task to the item its URL names, its mirror written with `revision`: a task file's link as the source holds it. */
   readonly putRef: (
     link: Omit<TaskLinkColumns, "itemId">,
-    revision: ItemRevision
+    revision: ItemPatch
   ) => void;
   /** A task's record link; undefined while it has none. */
   readonly record: (
@@ -292,7 +294,7 @@ export interface TaskLinksDb {
     taskId: string
   ) => LinkedItem | undefined;
   /** THE writer over an item a link names (db external-items.ts `writeItemById`); answers whether its state or title moved. */
-  readonly revise: (itemId: string, revision: ItemRevision) => boolean;
+  readonly revise: (itemId: string, revision: ItemPatch) => boolean;
   readonly updateComment: (
     projectId: string,
     source: ProviderId,
@@ -302,8 +304,11 @@ export interface TaskLinksDb {
 }
 
 /** What `item` names among the mirror's rows. */
-const itemNamed = (item: ItemKey): SQL | undefined =>
-  "externalId" in item
+const itemNamed = (item: ItemKey): SQL | undefined => {
+  if ("itemId" in item) {
+    return eq(externalItems.id, item.itemId);
+  }
+  return "externalId" in item
     ? and(
         eq(externalItems.provider, item.source),
         eq(externalItems.externalId, item.externalId)
@@ -318,6 +323,7 @@ const itemNamed = (item: ItemKey): SQL | undefined =>
           ? eq(externalItems.container, item.container.toLowerCase())
           : undefined
       );
+};
 
 export const taskLinksDb = (db: BunSQLiteDatabase): TaskLinksDb => {
   const linked = () =>

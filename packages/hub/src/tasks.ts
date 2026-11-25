@@ -1022,7 +1022,7 @@ const linksOf = (links: string[]) => {
 /**
  * A task's links as its index row carries them: the file's `issue:` its
  * record, then `links:`, then each pull request it waits on (`waits_on:`),
- * so a wait on one reads the same item (external-items.ts `githubWait`).
+ * so a wait on one reads the same item (links.ts `githubWait`).
  * An item named twice is one link, the first naming.
  */
 const fileLinksOf = (
@@ -6050,7 +6050,7 @@ export const createTasks = (store: TaskStore) => {
      * one its device chose, makes it one comment however often it is sent:
      * one already written is answered with the task as it stands, nothing
      * added and nobody told again. `via`: a comment written on an outside
-     * source and carried here by the hub (external-items.ts), headed by its
+     * source and carried here by the hub (links.ts), headed by its
      * author's login, the source and its URL.
      */
     async comment(
@@ -6404,7 +6404,7 @@ export const createTasks = (store: TaskStore) => {
     /**
      * Rewrites the words of the comment carried from `url`, its heading as
      * it was: the source changed them. The hub's sync alone calls it
-     * (external-items.ts); one commit, `comment_edited` in the history.
+     * (links.ts); one commit, `comment_edited` in the history.
      * Listeners hear the task changed.
      */
     async editComment(

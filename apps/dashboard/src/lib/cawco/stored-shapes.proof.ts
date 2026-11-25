@@ -52,9 +52,7 @@ import type {
   ResultArtifact as ResultArtifactType,
 } from "@cawco/core/deliverables";
 import type {
-  ExternalActor as ExternalActorType,
   ExternalRef as ExternalRefType,
-  ExternalState as ExternalStateType,
   LinkMode as LinkModeType,
   TaskLinkSummary as TaskLinkSummaryType,
 } from "@cawco/core/external-items";
@@ -180,6 +178,8 @@ import type {
 import type { WaitKind as WaitKindType } from "@cawco/core/wait-targets";
 import type { WorkItemState as WorkItemStateType } from "@cawco/core/work-items";
 import type {
+  ExternalActor as ExternalActorType,
+  ExternalState as ExternalStateType,
   LinkKind as LinkKindType,
   ProviderId as ProviderIdType,
 } from "@cawco/providers/provider";

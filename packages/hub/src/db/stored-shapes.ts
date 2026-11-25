@@ -73,6 +73,7 @@ import type {
   DesignOfferAnswer as DesignOfferAnswerType,
   DesignProposalFile as DesignProposalFileType,
   FolderMoveState as FolderMoveStateType,
+  InboundOrigin as InboundOriginType,
   InboundVia as InboundViaType,
   InstallsRecord as InstallsRecordType,
   InstanceKind as InstanceKindType,
@@ -452,6 +453,15 @@ const FolderMoveStateShape = declared(
 export const FolderMoveStateSchema: z.ZodType<FolderMoveStateType> =
   FolderMoveStateShape;
 export type FolderMoveStateOutput = z.output<typeof FolderMoveStateShape>;
+
+const InboundOriginShape = declared(
+  z.enum(["outside", "ours"]),
+  "InboundOrigin",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const InboundOriginSchema: z.ZodType<InboundOriginType> =
+  InboundOriginShape;
+export type InboundOriginOutput = z.output<typeof InboundOriginShape>;
 
 const InboundViaShape = declared(
   z.enum(["poll", "webhook", "connector"]),

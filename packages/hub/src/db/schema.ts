@@ -187,6 +187,7 @@ import {
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
   FolderMoveStateSchema,
+  InboundOriginSchema,
   InboundViaSchema,
   InstanceKindSchema,
   InstanceTitleSourceSchema,
@@ -1150,7 +1151,7 @@ export const projectPlaces = sqliteTable(
  * (server.ts `learnRemote`), set by `link_repo`, or made by publishing a
  * folder (`create_repo`). A checkout of a linked repository on any machine
  * is known as the project by it, and GitHub events and pull requests of
- * every linked repository reach the project (ingress.ts, relay.ts).
+ * every linked repository reach the project (clock.ts, relay.ts).
  */
 export const projectLinks = sqliteTable(
   "project_links",
@@ -6637,23 +6638,39 @@ export const connectionAreas = sqliteTable(
 );
 
 /**
- * One event from outside (Projects spec §5.5 Ingress, ingress.ts), stored
- * once under (source, delivery key) however many paths bring it in: a
- * GitHub poll and a webhook of one change carry the same natural key
- * (`pr:12:merged`), so the second insert finds the row and does nothing.
+ * One event from outside (provider spec §2.5, hub intake.ts), stored once
+ * per project under (source, delivery key) however many paths bring it in:
+ * a GitHub poll and a webhook of one change carry the same natural key
+ * (`pr:12:merged`), so the second insert finds the row and does nothing;
+ * a second project that watches the same repository stores its own. The
+ * door's subscribers (links, sync, lifecycle, routing) run for it in its
+ * project's turn, then mark it `processed_at`; one a stopped hub left
+ * unprocessed runs again at start.
  */
 export const inboundEvents = sqliteTable(
   "inbound_events",
   {
     id: text("id").primaryKey(),
-    /** `github:<owner>/<repo>`, or `conn:<connection>:<tool>`. */
+    /** `github:<owner>/<repo>`, `conn:<connection>:<tool>`, or `hook:<relay id>`. */
     source: text("source").notNull(),
-    /** Natural, never a transport's delivery id: `pr:12:merged`, `comment:991`, `<id>:<version>`. */
+    /** Natural, never a transport's delivery id: `pr:12:merged`, `issue:4:closed@1764050000000`, `comment:991`, `<id>:<version>`. */
     deliveryKey: text("delivery_key").notNull(),
-    /** `pr.opened`, `pr.merged`, `pr.closed`, `issue.opened`, `issue.closed`, `issue.labeled`, `comment.created`, `discussion.created`, `discussion_comment.created`, `item`. */
+    /** `pr.opened`, `pr.merged`, `pr.closed`, `pr.reopened`, `issue.opened`, `issue.closed`, `issue.reopened`, `issue.labeled`, `comment.created`, `discussion.created`, `discussion_comment.created`, `item`, or a relay's own type. */
     kind: text("kind").notNull(),
     projectId: projectKey(),
-    /** The event as ingress.ts normalised it, JSON, at most 64 KB (cut with a marker). */
+    /** The watch it came through; null for a relay's generic delivery, or a watch since gone. */
+    watchId: text("watch_id").references(() => watches.id, {
+      onDelete: "set null",
+    }),
+    /** The mirror row of the item it happened to; null when it names none, or for an event stored before the mirror. */
+    itemId: text("item_id").references(() => externalItems.id, {
+      onDelete: "set null",
+    }),
+    /** Who caused it; null on an event stored before the door read it. */
+    origin: storedEnum(InboundOriginSchema)("origin"),
+    /** The task it is about: the one linking its item, or the one a merge moved; null while none. */
+    taskId: text("task_id"),
+    /** The event as the door normalised it, JSON, at most 64 KB (cut with a marker). */
     payload: text("payload").notNull(),
     receivedAt: timestamp("received_at").notNull(),
     via: storedEnum(InboundViaSchema)("via").notNull(),
@@ -6665,21 +6682,31 @@ export const inboundEvents = sqliteTable(
     }),
     /** When it was handed on: its routine's run filed, or the conversation's wake that carried it. */
     handledAt: timestamp("handled_at"),
+    /** When its subscribers last ran to the end; null while they have not. */
+    processedAt: timestamp("processed_at"),
   },
   (table) => [
-    uniqueIndex("inbound_events_delivery").on(table.source, table.deliveryKey),
+    uniqueIndex("inbound_events_delivery").on(
+      table.projectId,
+      table.source,
+      table.deliveryKey
+    ),
     index("inbound_events_project").on(table.projectId, table.receivedAt),
     index("inbound_events_inbox").on(table.projectId, table.routedTo),
     // A route's delete sets its events' `route_id` null by key.
     index("inbound_events_route")
       .on(table.routeId)
       .where(sql`${table.routeId} is not null`),
+    // What a stopped hub left: read at start.
+    index("inbound_events_unprocessed")
+      .on(table.receivedAt)
+      .where(sql`${table.processedAt} is null`),
   ]
 );
 
 /**
  * A rule that sends a project's matching inbound events to a routine
- * (ingress.ts). Every condition set must hold; the oldest enabled route
+ * (event-routes.ts). Every condition set must hold; the oldest enabled route
  * that matches takes the event.
  */
 export const eventRoutes = sqliteTable(
@@ -6727,28 +6754,18 @@ export const eventRouteKinds = sqliteTable(
   (table) => [primaryKey({ columns: [table.routeId, table.kind] })]
 );
 
-/** Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts. */
-export interface GitHubCursor {
-  etag: string | null;
-  /** 304s answered: polls that cost nothing. */
-  notModified: number;
-  polls: number;
-  /** The newest `updated_at` taken in, ms: events at or after it are looked for. */
-  since: number;
-}
-
 /**
  * A watch (provider spec §2.4): one container of one outside service a
  * project follows through one connection. `provider` is `github` (a
  * repository, `owner/repo`, on `host` github.com), `linear` (a team, by
  * its id, on linear.app) or `connection` (a connector poll, its container
- * its own id). It replaces the project's GitHub poller (ingress.ts), its
+ * its own id). It replaces the project's GitHub poller (clock.ts), its
  * tracker binding (tracker.ts: `sync` not `off`) and its connector polls.
  *
  * Until the tracker sync reads the event poll's revisions, two polls read
  * a GitHub watch that syncs: the event poll, whose state is the row's
  * `reason`, `polled_at` and `resume_at` and whose streams are the
- * resources (github.ts), and the sync's own, whose state is in
+ * GitHub provider's streams (providers github/ingest.ts), and the sync's own, whose state is in
  * `settings` (`sync*`) and whose streams are `sync:issues` and
  * `sync:comments`. `enabled`: the event poll reads it (a GitHub watch the
  * project follows, a connector poll switched on); a watch made only by

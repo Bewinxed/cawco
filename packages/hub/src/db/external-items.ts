@@ -1,13 +1,12 @@
 /**
  * The hub's mirror of outside items (schema `external_items`, provider spec
  * §2.3): one row per project and item, and THE writer of it. Every path
- * that learns what an item holds writes it here and nowhere else: a task's
- * link made from its URL (db task-links.ts `syncTaskLinks`), a read of a
- * linked item and an Actions run a wait names (external-items.ts
- * `readLinks`), an event about a linked item (external-items.ts
- * `applyEvent`), the tracker sync's record (db trackers.ts `putLink`,
- * `updateLink`), and a connector poll's records (db ingress.ts
- * `keepConnectorPollItems`).
+ * that learns what an item holds writes it here and nowhere else: the
+ * door's store of a provider's read or delivery (db/intake.ts, through
+ * {@link takeRevision}), a task's link made from its URL (db task-links.ts
+ * `syncTaskLinks`), a link read that stopped short (links.ts `readLinks`,
+ * its problem alone), and the tracker sync's record (db trackers.ts
+ * `putLink`, `updateLink`) until it subscribes to the door.
  *
  * A revision carries a `version` (the source's updated-at in ms, or a
  * record's version) when it knows one: one older than the version held
@@ -15,34 +14,25 @@
  * (`readAt`, `etag`, `problem`), so an event read late never puts an older
  * state over a newer one.
  */
-import type { ItemKind, ItemRef } from "@cawco/providers/provider";
+import type { MirroredRef } from "@cawco/providers/provider";
 import { and, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { externalItems } from "./schema";
-import type { ItemProvider } from "./stored-types";
 
 export type ItemRow = typeof externalItems.$inferSelect;
 
 type Writer = Pick<BunSQLiteDatabase, "insert" | "select" | "update">;
 
 /** An item as the mirror keys it: one a URL names, or a connector poll's record. */
-export interface MirrorRef {
-  container: string;
-  host: string;
-  key: string;
-  kind: ItemKind;
-  provider: ItemProvider;
-  ref: string;
-  url: string | null;
-}
+export type MirrorRef = MirroredRef;
 
 /** What one read, event or sync says of an item; a field left out stays as held. */
-export type ItemRevision = Partial<
+export type ItemPatch = Partial<
   Omit<ItemRow, keyof MirrorRef | "id" | "projectId">
 >;
 
 /** The fields a revision says of the item itself, which an older version never writes. */
-const SNAPSHOT: ReadonlySet<string> = new Set<keyof ItemRevision>([
+const SNAPSHOT: ReadonlySet<string> = new Set<keyof ItemPatch>([
   "externalId",
   "title",
   "state",
@@ -65,8 +55,8 @@ const older = (
   DIGITS.test(held) &&
   BigInt(version) < BigInt(held);
 
-/** An item a URL names, as the mirror keys it. */
-export const mirrorRefOf = (item: ItemRef): MirrorRef => ({
+/** An item as the mirror keys it, whatever else its value carries. */
+export const mirrorRefOf = (item: MirroredRef): MirrorRef => ({
   provider: item.provider,
   host: item.host,
   container: item.container,
@@ -86,9 +76,9 @@ export interface ItemWritten {
 const writeOver = (
   tx: Writer,
   held: ItemRow,
-  revision: ItemRevision
+  revision: ItemPatch
 ): ItemWritten => {
-  const patch: ItemRevision =
+  const patch: ItemPatch =
     held.kind !== "record" && older(held.version, revision.version)
       ? Object.fromEntries(
           Object.entries(revision).filter(([field]) => !SNAPSHOT.has(field))
@@ -139,7 +129,7 @@ export const writeItem = (
   tx: Writer,
   projectId: string,
   ref: MirrorRef,
-  revision: ItemRevision = {}
+  revision: ItemPatch = {}
 ): ItemWritten => {
   const held = itemOf(tx, projectId, ref);
   if (held) {
@@ -160,7 +150,7 @@ export const writeItem = (
 export const writeItemById = (
   tx: Writer,
   id: string,
-  revision: ItemRevision
+  revision: ItemPatch
 ): ItemWritten | undefined => {
   const held = tx
     .select()
@@ -168,4 +158,49 @@ export const writeItemById = (
     .where(eq(externalItems.id, id))
     .get();
   return held && writeOver(tx, held, revision);
+};
+
+/** What the door's write of one revision did: the row as it stands, the state it held before, and whether the revision was new. */
+export interface RevisionTaken {
+  /** The state the mirror held before; null when it held none (or no row). */
+  held: ItemRow["state"];
+  item: ItemRow;
+  moved: boolean;
+  /** Whether the revision was newer than the one held: it wrote the item. */
+  wrote: boolean;
+}
+
+/**
+ * The door's write of one revision (hub intake.ts `take`): a revision whose
+ * version the mirror holds (or one older) writes nothing of the item, only
+ * what `read` says of the read that found it; a newer one writes the item
+ * through {@link writeItem}.
+ */
+export const takeRevision = (
+  tx: Writer,
+  projectId: string,
+  ref: MirrorRef,
+  revision: ItemPatch,
+  read: Pick<ItemPatch, "etag" | "problem" | "readAt"> = {}
+): RevisionTaken => {
+  const held = itemOf(tx, projectId, ref);
+  const version = revision.version ?? null;
+  const known =
+    held !== undefined &&
+    held.version !== null &&
+    version !== null &&
+    (held.version === version ||
+      (held.kind !== "record" && older(held.version, version)));
+  if (held && known) {
+    const kept =
+      Object.keys(read).length > 0 ? writeOver(tx, held, read).item : held;
+    return { item: kept, held: held.state, moved: false, wrote: false };
+  }
+  const written = writeItem(tx, projectId, ref, { ...revision, ...read });
+  return {
+    item: written.item,
+    held: held?.state ?? null,
+    moved: written.moved,
+    wrote: true,
+  };
 };

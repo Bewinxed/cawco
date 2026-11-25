@@ -3,7 +3,7 @@
  * triggers go", "What a trigger wakes" and "When the owner of a thing has
  * gone quiet"). Every trigger on a project's thing (a task's comment, move
  * or creation, a pin or a page's Send, a card to settle, a routine's run or
- * report, an inbound or GitHub event, fleet watch's nudge, an attempt's
+ * report, an inbound event, fleet watch's nudge, an attempt's
  * report or judgement) is one {@link TriggerEvent} through {@link route}.
  * Callers say what happened; this module alone decides who hears it. The
  * project's Caw conversation is never one of them: it hears only what the
@@ -84,7 +84,6 @@ const settingKindOf = (event: TriggerEvent): TriggerKind | undefined => {
     case "task-move":
       return "task-moves";
     case "inbound-event":
-    case "github-event":
     case "fleet-watch":
       return "inbound-events";
     case "attempt-judgement":

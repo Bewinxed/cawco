@@ -52,7 +52,7 @@
  *   (linear.app/docs/github). Stages map onto states through their kinds
  *   (tracker-adapter.ts); with GitHub, a stage is open or closed. Comments
  *   go once each way, from the link on, a CawCo comment saying who wrote it;
- *   one from the tracker is filed as data through external-items.ts (its
+ *   one from the tracker is filed as data through links.ts (its
  *   author, source and URL), and an edit there rewrites it in place.
  * - **Who opened it.** On a public repository anyone may open an issue, and
  *   a task in a `todo` stage is the dispatcher's to start. So an issue
@@ -120,7 +120,7 @@ import { connectionsWords } from "@cawco/core/words/connections";
 import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
-import type { ItemRevision } from "./db/external-items";
+import type { ItemPatch } from "./db/external-items";
 import type { ItemKey, TaskLinksDb } from "./db/task-links";
 import type {
   TrackerAgreement,
@@ -130,8 +130,8 @@ import type {
   TrackerSynced,
   TrackersDb,
 } from "./db/trackers";
-import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
+import type { Links } from "./links";
 import type { AnyProblem } from "./refusal";
 
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
@@ -191,9 +191,9 @@ export interface TrackersDeps {
     readonly taskLinks: Pick<TaskLinksDb, "byItem" | "comments" | "putComment">;
     readonly trackers: TrackersDb;
   };
-  /** Files a comment from the tracker on its task, once, as data (external-items.ts). */
-  readonly externalItems: Pick<ExternalItems, "fileComment">;
   readonly lifetime: HubLifetimeShape;
+  /** Files a comment from the tracker on its task, once, as data (links.ts). */
+  readonly links: Pick<Links, "fileComment">;
   readonly tasks: Pick<
     Tasks,
     | "comment"
@@ -411,7 +411,7 @@ const fileFields = (view: TaskView): Fields => ({
 });
 
 /** What the issue holds, as its mirror keeps it (db external-items.ts), read now. */
-const heldOf = (issue: Issue): ItemRevision => ({
+const heldOf = (issue: Issue): ItemPatch => ({
   externalId: issue.id,
   title: issue.title,
   state: externalStateOf(issue.state),
@@ -1365,7 +1365,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       });
     try {
       const filed = await own(sync.projectId, link.taskId, () =>
-        deps.externalItems.fileComment(
+        deps.links.fileComment(
           sync.projectId,
           link.taskId,
           link.ref,

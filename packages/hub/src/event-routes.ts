@@ -1,80 +1,46 @@
 /**
- * Ingress (Projects spec §5.5, P3): events from outside reach a project once.
+ * Event routing (Projects spec §5.9, provider spec §2.5 step 4): the last
+ * of the door's subscribers (intake.ts), and the project's routes, their
+ * tools and HTTP routes, and its ingress view.
  *
- * THE INVARIANT: every inbound event is stored once, under (source, delivery
- * key), however many paths bring it in. {@link Ingress.ingest} is the one
- * door: the GitHub poller, the connector poller and (slice 5) the relay's
- * webhook receiver all call it, and its insert is the dedup: a key already
- * there inserts nothing and nothing downstream runs. So "a GitHub webhook
- * and a poll of the same event land once" holds whichever comes first.
- *
- * - **GitHub** (github.ts): a project whose checkout's origin is on
- *   github.com, and that names a `github` connection that reads GitHub's
- *   API (core `readsGitHubApi`: a machine's gh, a code sign-in, a GitHub
- *   App or a token, held in the hub), has its repository polled every 60
- *   s: pulls, issues, issue comments and issue events, each with its ETag,
- *   and discussions with their comments through GraphQL, each resource's
- *   high-water mark kept on the repository's watch (`watch_cursors`), so a
- *   restart neither re-delivers nor misses. A GitHub connection's projects
- *   that follow none are followed through it from the moment it names them,
- *   by whichever way it signed in, and a repository linked later is watched
- *   through it too (db/watches.ts); dropping a project or removing the
- *   connection stops it ({@link Ingress.followConnection}). A repository
- *   a tracker binding syncs reads with the binding's connection.
- *   With no connection granted, its repository isn't polled, and its ingress
- *   view says so.
- * - **Connector polls**: any connection's read-only tool, called on an
- *   interval of 60 s or more; its items diffed by id and version against
- *   what the last call saw and stored as `conn:<connection>:<tool>`,
- *   `<id>:<version>`. A first call only looks.
- * - **Routing** (§5.9 Event routing): the matcher filters first, to the
- *   project's enabled routes whose every condition holds (source pattern,
- *   kinds, author, label, branch, a regex over title and body, both matched
- *   on RE2 in linear time). Jev on: Jev chooses among their routines, or
- *   none, which leaves it to the trigger router; a Jev that does not answer leaves the event
- *   stored and unrouted, and says so in the log. Jev off: the oldest
- *   matching route takes it. The routine runs with the event as the run's
- *   input (routines.ts `runForEvent`; behind a run still going it queues,
- *   and is handled when it starts). An event no route took is a trigger on
- *   what it is about (triggers.ts): the session on it, else a fresh one,
- *   never the project's Caw conversation; while the project's triggers are
- *   off it is held on the project, and the session that starts when they
- *   are switched on reads it with the rest.
+ * - **Routes** filter first: the project's enabled routes whose every
+ *   condition holds (source pattern, kinds, author, label, branch, a regex
+ *   over title and body, both matched on RE2 in linear time). Jev on: Jev
+ *   chooses among their routines, or none, which leaves it to the trigger;
+ *   a Jev that does not answer leaves the event stored and unrouted, and
+ *   says so in the log. Jev off: the oldest matching route takes it. The
+ *   routine runs with the event as the run's input (routines.ts
+ *   `runForEvent`; behind a run still going it queues, and is handled when
+ *   it starts). Routes see every event.
+ * - **A trigger** (triggers.ts) takes an event no route took: on the task
+ *   that links its item (thing `task`, so the task's running attempt hears
+ *   it), else on the item itself (thing `event`, keyed by its URL, so a run
+ *   of events on one item reaches one session); never the project's Caw
+ *   conversation. A merged pull request whose task the lifecycle step
+ *   moved raises none. While the project's triggers are off it is held on
+ *   the project, and the session that starts when they are switched on
+ *   reads it with the rest.
  * - **Data, never instructions.** An event reaches a model only inside a
- *   delimited block ({@link eventData}) whose JSON cannot
- *   close it, after a sentence that says it is untrusted content.
- * - **External items** (external-items.ts): every event stored is applied
- *   to the task links it names (an issue's, pull request's or discussion's
- *   state, title, labels), and a comment on a linked discussion, or on a
- *   linked issue in a project no tracker is bound to, is filed on its task
- *   as data; each poll reads the GitHub links not read yet. The routine an
- *   event goes to still hears it and judges; it never files.
- * - **A merged pull request** an attempt opened moves its task on
- *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
- * - **Waits on GitHub** (task-waits.ts): each pull request or Actions run
- *   a task or plan step waits on is a link like any other, its item's
- *   mirror row read by the project's own poll (external-items.ts
- *   `readLinks`) and kept by the events above; a wait reads its state
- *   there (external-items.ts `githubWait`). A project with no GitHub
- *   poller is refused either wait where it is written.
+ *   delimited block (inbound-event.ts `eventData`) whose JSON cannot close
+ *   it, after a sentence that says it is untrusted content.
+ * - **Connector polls** are written here (a watch of provider
+ *   `connection`), and read by the poll loop (clock.ts).
  */
-import { readsGitHubApi } from "@cawco/core/connections";
-import { detach } from "@cawco/core/detach";
 import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/modes";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { secondsOf } from "@cawco/core/time";
+import { taskLink } from "@cawco/core/references";
 import { withoutUndefined } from "@cawco/core/without-undefined";
-import { configurePage } from "@cawco/core/words/configure";
-import { cutShort } from "@cawco/core/words/helpers";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
+import { CONNECTOR_MIN_S } from "@cawco/providers/connection/descriptor";
 import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
+import type { Clock } from "./clock";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -84,11 +50,6 @@ import type {
   EventRouteRow,
   InboundEventRow,
 } from "./db/ingress";
-import type { InboundVia } from "./db/stored-types";
-import type { GitHubWatch, Rehomed } from "./db/watches";
-import type { Dispatcher } from "./dispatch";
-import type { ExternalItems } from "./external-items";
-import { githubReposOf, pollRepo } from "./github";
 import { byHandle } from "./handles";
 import { eventData, type InboundEvent } from "./inbound-event";
 import type {
@@ -98,9 +59,9 @@ import type {
   IngressView,
 } from "./ingress-views";
 import { PAYLOAD_MAX } from "./ingress-views";
+import type { Arrived, Routing } from "./intake";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import {
   deletedWords,
@@ -115,85 +76,6 @@ import { MODE } from "./tasks";
 import type { TriggerEvent } from "./trigger-event";
 import type { Routed } from "./triggers";
 
-/** What the poller says of a project that links no GitHub repository. */
-const NO_GITHUB_LINK =
-  "Nothing is polled: the project links no repository on github.com.";
-
-/** One repository's poll within a project's: its watch, what it read, and how many events were new. */
-interface RepoPolled {
-  landed: number;
-  polled: Awaited<ReturnType<typeof pollRepo>>;
-  repo: string;
-  watch: GitHubWatch;
-}
-
-/** A repository's poll that never asked: its connection could not sign in, in words. */
-const unsigned = (words: string): RepoPolled["polled"] => ({
-  cursors: {},
-  events: [],
-  problem: words,
-  resumeAt: null,
-  unanswered: null,
-});
-
-/** A client signed in as a GitHub connection (connections.ts `githubClient`). */
-type GitHubClient = ReturnType<Connections["githubClient"]>;
-
-/** What a poll's repositories' problems come to, each named when there are several; null: none. */
-const pollProblem = (
-  polls: readonly { reason: string | null; repo: string }[]
-): string | null => {
-  const problems = polls.flatMap(({ repo, reason }) => {
-    if (reason === null) {
-      return [];
-    }
-    return [polls.length > 1 ? `${repo}: ${reason}` : reason];
-  });
-  return problems.length > 0 ? problems.join(" ") : null;
-};
-
-/** The project's watches of the github.com repositories it links, in its links' order. */
-const linkedWatches = (
-  links: readonly string[],
-  followed: readonly GitHubWatch[]
-): GitHubWatch[] => {
-  const byRepo = new Map(
-    followed.map((watch) => [watch.container.toLowerCase(), watch])
-  );
-  return [
-    ...new Set(
-      githubReposOf(links).flatMap(
-        (repo) => byRepo.get(repo.toLowerCase()) ?? []
-      )
-    ),
-  ];
-};
-
-/** The GitHub watches the poller reads, by project. */
-const byProject = (
-  followed: readonly GitHubWatch[]
-): Map<string, GitHubWatch[]> => {
-  const by = new Map<string, GitHubWatch[]>();
-  for (const watch of followed) {
-    by.set(watch.projectId, [...(by.get(watch.projectId) ?? []), watch]);
-  }
-  return by;
-};
-
-/** The latest of a project's watches' times, ms; 0 when none has one. */
-const latest = (
-  followed: readonly GitHubWatch[],
-  key: "polledAt" | "resumeAt"
-): number =>
-  Math.max(0, ...followed.map((watch) => watch[key]?.getTime() ?? 0));
-
-/** GitHub every 60 s (§5.5). */
-const GITHUB_EVERY_MS = 60_000;
-/** The shortest interval a connector poll takes. */
-const CONNECTOR_MIN_S = 60;
-/** How often the pollers look for one that is due. Our choice. */
-const LOOK_MS = 5000;
-const CUT = "[cut by the hub: the event was over 64 KB]";
 /**
  * What a route's regex reads at most: what is stored of an event
  * ({@link PAYLOAD_MAX}). RE2 is linear, so reading all of it costs little.
@@ -203,69 +85,6 @@ const MATCH_TEXT_MAX = PAYLOAD_MAX;
 const REGEX_MAX = 200;
 /** Events an ingress view lists a page of; `eventsMore` counts the older ones, which `skip` reaches. */
 const EVENTS_SHOWN = 50;
-
-const bytes = (text: string) => Buffer.byteLength(text, "utf8");
-/** What a character cut in half decodes to, at the end of a cut. */
-const TORN_CHARACTER = /�$/u;
-
-/** `text` cut to at most `max` bytes, on a character boundary. */
-const cutTo = (text: string, max: number): string => {
-  const buffer = Buffer.from(text, "utf8");
-  return buffer.length <= max
-    ? text
-    : buffer
-        .subarray(0, Math.max(0, max))
-        .toString("utf8")
-        .replace(TORN_CHARACTER, "");
-};
-
-/**
- * The event as stored: JSON of at most {@link PAYLOAD_MAX} bytes. Over it,
- * the body is cut first, with a marker; a connector item over it is kept as
- * the head of its JSON, marked.
- */
-const storedPayload = (event: InboundEvent): string => {
-  const full = JSON.stringify(event);
-  if (bytes(full) <= PAYLOAD_MAX) {
-    return full;
-  }
-  const { data, body, ...rest } = event;
-  const room = PAYLOAD_MAX - bytes(JSON.stringify(rest)) - 512;
-  if (data === undefined && body !== null) {
-    return JSON.stringify({ ...rest, body: `${cutTo(body, room)}\n${CUT}` });
-  }
-  return JSON.stringify({
-    ...rest,
-    body: body === null ? null : cutTo(body, Math.floor(room / 4)),
-    cut: CUT,
-    dataHead: cutTo(String(JSON.stringify(data)), Math.floor(room / 2)),
-  });
-};
-
-/** Which kind of trigger a stored event is (trigger-event.ts `EVENT_SKILLS`). */
-const kindOf = (row: InboundEventRow): "github-event" | "inbound-event" =>
-  row.source.startsWith("github") ? "github-event" : "inbound-event";
-
-/** A value at a dot path (`fields.version`); the whole value for an empty path. */
-export const valueAt = (value: unknown, path: string): unknown =>
-  path
-    .split(".")
-    .filter(Boolean)
-    .reduce<unknown>(
-      (into, part) =>
-        into !== null && typeof into === "object"
-          ? new Map<string, unknown>(Object.entries(into)).get(part)
-          : undefined,
-      value
-    );
-
-/** A scalar as a key part; anything else is no id. A part is bounded only by its item (PAYLOAD_MAX): its columns are unbounded text. */
-const keyPart = (value: unknown): string | undefined => {
-  if (typeof value !== "string" && typeof value !== "number") {
-    return undefined;
-  }
-  return String(value);
-};
 
 /**
  * Route patterns run on RE2 (re2js, "the JavaScript port of RE2, a regular
@@ -343,6 +162,22 @@ const matches = (route: EventRouteRow, event: InboundEvent): boolean => {
   return re2(route.regex).test(text);
 };
 
+/** Who sent an event, as a trigger's line names it: its provider, and where. */
+const sourceName = (source: string): string => {
+  const [provider = "", ...rest] = source.split(":");
+  const where = rest.join(":");
+  switch (provider) {
+    case "github":
+      return `GitHub (${where})`;
+    case "conn":
+      return `The connector poll ${where}`;
+    case "hook":
+      return `Relay ${where}`;
+    default:
+      return source;
+  }
+};
+
 /** Who acts: you (the dashboard), or a session through its tools. */
 export type IngressActor = "owner" | InstanceRow;
 
@@ -372,26 +207,26 @@ export interface ConnectorPollInput {
   versionPath: string;
 }
 
-export interface IngressDeps {
-  readonly connections: Pick<
-    Connections,
-    "callConnection" | "get" | "githubClient" | "listConnectionTools"
+export interface EventRoutesDeps {
+  /** The poll loop: a project's GitHub poll as its view says it, and a poll asked for now (clock.ts). */
+  readonly clock: Pick<
+    Clock,
+    "githubView" | "pollConnectorNow" | "pollGitHubNow"
   >;
+  readonly connections: Pick<Connections, "listConnectionTools">;
   readonly db: Pick<
     DbShape,
     "connections" | "ingress" | "project" | "routines"
   >;
-  /** Moves a task on when the pull request its attempt opened merges (dispatch.ts). */
-  readonly dispatcher: Pick<Dispatcher, "pullRequestMerged">;
-  /** An event landed for a project, stored once: its starters are asked again (project-starters.ts). */
-  readonly eventLanded: (projectId: string) => void;
-  /** Applies a stored event to the task links it names, and reads links not read yet (external-items.ts). */
-  readonly externalItems: Pick<ExternalItems, "applyEvent" | "readLinks">;
   /** Jev's route while Jev is on (jev.ts `jevAccess`). */
   readonly jevAccess: () => JevAccess | undefined;
-  readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
+  /** A task's title, for the trigger that names it; undefined when it is gone. */
+  readonly taskTitle: (
+    projectId: string,
+    taskId: string
+  ) => Promise<string | undefined>;
   /** A trigger on an event no route took, to the router (triggers.ts `route`). */
   readonly trigger: (projectId: string, event: TriggerEvent) => Promise<Routed>;
 }
@@ -462,7 +297,7 @@ const conditions = {
     .array(z.string())
     .optional()
     .describe(
-      "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, discussion.created, discussion_comment.created, item."
+      "{pr,issue}.{opened,closed,reopened}, pr.merged, issue.labeled, comment.created, discussion{,_comment}.created, item."
     ),
   author: z.string().optional(),
   label: z.string().optional(),
@@ -485,21 +320,16 @@ const pollFields = {
 
 const ref = () => z.string().trim().min(1).describe("Its id.");
 
-export const createIngress = ({
+export const createEventRoutes = ({
+  clock,
   connections,
   db,
-  dispatcher,
-  eventLanded,
-  externalItems,
   jevAccess,
-  lifetime,
   routines,
+  taskTitle,
   trigger,
-}: IngressDeps) => {
+}: EventRoutesDeps) => {
   const store = db.ingress;
-  /** Polls under way, by `github:<project>` or `conn:<poll id>`: one at a time each. */
-  const running = new Map<string, Promise<void>>();
-  let timer: HubTimer | undefined;
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
@@ -538,7 +368,7 @@ export const createIngress = ({
         })
       : undefined;
 
-  // --- the one door ----------------------------------------------------------
+  // --- routing ---------------------------------------------------------------
 
   /** The routes whose every condition holds for `event`, oldest first: the matcher's filter. */
   const matching = (projectId: string, event: InboundEvent) =>
@@ -607,11 +437,43 @@ export const createIngress = ({
     }
   };
 
-  /** Where a stored event goes: a routine, the project's conversation, or nowhere. */
-  const route = async (
+  /** A routed event to its routine, delivered by the oldest matching route to it. */
+  const toRoutine = (
     row: InboundEventRow,
-    event: InboundEvent
+    to: string,
+    routes: readonly EventRouteRow[]
+  ): void => {
+    // Routed first: a queued run is handled when it starts (routines.ts
+    // `drain`).
+    store.setEvent(row.id, {
+      routedTo: to,
+      routeId: routes.find((each) => each.routineId === to)?.id ?? null,
+    });
+    const run = routines.runForEvent(to, row.id);
+    if (run?.state !== "queued") {
+      store.setEvent(row.id, { handledAt: new Date() });
+    }
+    console.log(
+      `[routing] ${row.source} ${row.deliveryKey} → routine ${to}${run ? ` (run ${run.id}, ${run.state}${run.reason ? `: ${run.reason}` : ""})` : ""}`
+    );
+  };
+
+  /**
+   * The last of the door's subscribers (intake.ts): where a stored event
+   * goes, a routine a route takes it to, else a trigger. One a routine or a
+   * trigger already took (an event run again after a stop) goes nowhere
+   * again.
+   */
+  const route = async (
+    { event, row }: Arrived,
+    routing: Routing
   ): Promise<void> => {
+    if (
+      row.handledAt !== null ||
+      (row.routedTo !== null && row.routedTo !== TO_CONVERSATION)
+    ) {
+      return;
+    }
     const routes = matching(row.projectId, event);
     const routineIds = [...new Set(routes.map((each) => each.routineId))];
     const to =
@@ -622,522 +484,76 @@ export const createIngress = ({
       return;
     }
     if (to !== TO_CONVERSATION) {
-      // Routed first: a queued run is handled when it starts (routines.ts
-      // `drain`). It was delivered by the oldest matching route to its routine.
-      store.setEvent(row.id, {
-        routedTo: to,
-        routeId: routes.find((each) => each.routineId === to)?.id ?? null,
-      });
-      const run = routines.runForEvent(to, row.id);
-      if (run?.state !== "queued") {
-        store.setEvent(row.id, { handledAt: new Date() });
-      }
+      toRoutine(row, to, routes);
+      return;
+    }
+    if (routing.lifecycle) {
+      // Its task moved on the merge (dispatch.ts): nothing more to hear.
+      store.setEvent(row.id, { handledAt: new Date() });
       console.log(
-        `[ingress] ${row.source} ${row.deliveryKey} → routine ${to}${run ? ` (run ${run.id}, ${run.state}${run.reason ? `: ${run.reason}` : ""})` : ""}`
+        `[routing] ${row.source} ${row.deliveryKey}: its task ${routing.taskId} moved on the merge, so no trigger`
       );
       return;
     }
     store.setEvent(row.id, { routedTo: TO_CONVERSATION });
-    await toConversation(row, event.url);
+    await toTrigger(row, event, routing.taskId);
   };
 
   /**
-   * An event no route took, a trigger on what it is about (triggers.ts):
-   * its pull request's, issue's or item's url, else the event itself, so a
-   * run of events on one pull request reaches one session. Handled once a
-   * session took it or the project holds it (its triggers off).
+   * An event no route took, a trigger (triggers.ts): on the task that
+   * links its item, so the task's own session hears it; else on its item's
+   * URL, else the event itself, so a run of events on one item reaches one
+   * session. Handled once a session took it or the project holds it (its
+   * triggers off).
    */
-  const toConversation = async (
+  const toTrigger = async (
     row: InboundEventRow,
-    url: string | null | undefined
+    event: InboundEvent,
+    taskId: string | null
   ): Promise<void> => {
+    const { url } = event;
+    const from = sourceName(row.source);
+    const title = taskId ? await taskTitle(row.projectId, taskId) : undefined;
+    const thing: TriggerEvent["thing"] =
+      taskId && title !== undefined
+        ? {
+            kind: "task",
+            id: taskId,
+            name: taskLink(row.projectId, taskId, title),
+          }
+        : {
+            kind: "event",
+            id: url ?? row.id,
+            name: url ?? `${row.source} ${row.deliveryKey}`,
+          };
+    const on = thing.kind === "task" ? ` on ${thing.name}` : "";
     const routed = await trigger(row.projectId, {
-      kind: kindOf(row),
-      thing: {
-        kind: "event",
-        id: url ?? row.id,
-        name: url ?? `${row.source} ${row.deliveryKey}`,
-      },
-      what: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it.`,
+      kind: "inbound-event",
+      thing,
+      what: `${from} sent ${row.kind}${on}${url ? ` (${url})` : ""}, and no route took it.`,
       delta: eventData(row),
       who: row.source,
       at: row.receivedAt,
     });
+    console.log(
+      `[routing] ${row.source} ${row.deliveryKey}: a trigger on ${thing.kind} ${thing.id} went to ${routed.to}`
+    );
     if (routed.to !== "lost") {
       store.setEvent(row.id, { handledAt: new Date() });
       return;
     }
     console.warn(
-      `[ingress] ${row.source} ${row.deliveryKey} reached no session: ${routed.why}`
+      `[routing] ${row.source} ${row.deliveryKey} reached no session: ${routed.why}`
     );
   };
 
-  /**
-   * THE door every path calls: the event stored once under (source, key),
-   * then routed, and a merged pull request handed to the dispatcher. A
-   * repeat stores nothing and runs nothing; answers the row it stored.
-   */
-  const ingest = (
-    event: InboundEvent,
-    via: InboundVia,
-    projectId: string
-  ): InboundEventRow | undefined => {
-    const row = store.insertEvent({
-      id: crypto.randomUUID(),
-      source: event.source,
-      deliveryKey: event.key,
-      kind: event.kind,
-      projectId,
-      payload: storedPayload(event),
-      receivedAt: new Date(),
-      via,
-      routedTo: null,
-      routeId: null,
-      handledAt: null,
-    });
-    if (!row) {
-      return undefined;
-    }
-    console.log(`[ingress] ${row.source} ${row.deliveryKey} landed via ${via}`);
-    eventLanded(projectId);
-    detach(
-      route(row, event).catch((error: unknown) =>
-        console.warn(
-          `[ingress] ${row.source} ${row.deliveryKey} was not routed: ${wordsOf(error)}`
-        )
-      ),
-      "route an inbound event"
-    );
-    const unlinked = (why: string) =>
-      console.warn(
-        `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${why}`
-      );
-    detach(
-      externalItems.applyEvent(projectId, event).then(
-        (refused) => refused && unlinked(refused.response.detail),
-        (error: unknown) => unlinked(wordsOf(error))
-      ),
-      "apply an inbound event to task links"
-    );
-    const { url } = event;
-    if (event.kind === "pr.merged" && url) {
-      detach(
-        dispatcher.pullRequestMerged(url).then((moved) => {
-          if (moved instanceof ElysiaStatus) {
-            console.warn(
-              `[pull request ${url} merged] failed: ${moved.response.detail}`
-            );
-            return;
-          }
-          if (moved) {
-            console.log(
-              `[ingress] ${url} merged: ${moved.task} is in ${moved.stage}`
-            );
-          }
-        }),
-        `pull request ${url} merged`
-      );
-    }
-    return row;
-  };
-
-  // --- GitHub -------------------------------------------------------------------
-
-  /**
-   * One poll of every GitHub repository the project links and watches:
-   * each one read through its watch's connection, its events ingested, then
-   * every watch's outcome and cursors kept. A repository it no longer links
-   * keeps its watch and cursors, unread.
-   */
-  const pollGitHub = async (projectId: string): Promise<void> => {
-    const followed = store.githubWatches(projectId);
-    const project = db.project(projectId);
-    if (!(followed.length > 0 && project)) {
-      return;
-    }
-    const linked = linkedWatches(project.links, followed);
-    const now = Date.now();
-    if (linked.length === 0) {
-      store.keepGitHubPoll(
-        followed.map((watch) => ({
-          id: watch.id,
-          patch: { reason: NO_GITHUB_LINK, polledAt: new Date(now) },
-        }))
-      );
-      return;
-    }
-    const clients = new Map<string, GitHubClient | string>();
-    const clientOf = (connection: string): GitHubClient | string => {
-      const known = clients.get(connection);
-      if (known !== undefined) {
-        return known;
-      }
-      let made: GitHubClient | string;
-      try {
-        made = connections.githubClient(connection);
-      } catch (error) {
-        made = wordsOf(error);
-      }
-      clients.set(connection, made);
-      return made;
-    };
-    const polls: RepoPolled[] = [];
-    for (const watch of linked) {
-      const octokit = clientOf(watch.reads);
-      const repo = watch.container;
-      if (typeof octokit === "string") {
-        polls.push({ watch, repo, polled: unsigned(octokit), landed: 0 });
-        continue;
-      }
-      const polled = await pollRepo({
-        connection: watch.reads,
-        cursors: watch.cursors,
-        now,
-        octokit,
-        repo,
-      });
-      const source = `github:${repo.toLowerCase()}`;
-      const landed = polled.events
-        .filter((event) => event.source === source)
-        .sort((a, b) => a.at - b.at)
-        .map((event) => ingest(event, "poll", projectId))
-        .filter(Boolean).length;
-      polls.push({ watch, repo, polled, landed });
-    }
-    const followedBy = store.followedBy(projectId);
-    const octokit = followedBy ? clientOf(followedBy) : undefined;
-    if (octokit !== undefined && typeof octokit !== "string") {
-      await externalItems.readLinks(projectId, octokit);
-    }
-    keepGitHubPoll(now, followed, polls);
-  };
-
-  /**
-   * The cursors each repository's poll moved, each over its own, and its
-   * problem on its watch. The wait is the project's: the latest any rate
-   * limit asks, on every watch it polled. A request GitHub did not answer
-   * in time leaves every watch's problem and wait as they were, and says so
-   * here. Every watch of the project is dated, so the project is due again
-   * together.
-   */
-  const keepGitHubPoll = (
-    now: number,
-    followed: readonly GitHubWatch[],
-    polls: readonly RepoPolled[]
-  ): void => {
-    const unanswered = polls.flatMap(({ repo, polled }) =>
-      polled.unanswered === null ? [] : [{ repo, after: polled.unanswered }]
-    );
-    for (const { repo, after } of unanswered) {
-      console.log(
-        `[ingress] polled ${repo}: GitHub did not answer within ${secondsOf(after)} s; the poller's state stands`
-      );
-    }
-    const resumeAt = Math.max(
-      0,
-      ...polls.map(({ polled }) => polled.resumeAt ?? 0)
-    );
-    const polledAt = new Date(now);
-    const byWatch = new Map(polls.map((poll) => [poll.watch.id, poll]));
-    store.keepGitHubPoll(
-      followed.map((watch) => {
-        const poll = byWatch.get(watch.id);
-        if (!poll) {
-          return { id: watch.id, patch: { polledAt } };
-        }
-        return {
-          id: watch.id,
-          cursors: poll.polled.cursors,
-          patch:
-            unanswered.length === 0
-              ? {
-                  polledAt,
-                  reason: poll.polled.problem,
-                  resumeAt: resumeAt === 0 ? null : new Date(resumeAt),
-                }
-              : { polledAt },
-        };
-      })
-    );
-    for (const { repo, polled, landed, watch } of polls) {
-      if (
-        landed > 0 ||
-        (unanswered.length === 0 &&
-          polled.problem !== watch.reason &&
-          polled.problem)
-      ) {
-        console.log(
-          `[ingress] polled ${repo}: ${landed} new${polled.problem ? `; ${polled.problem}` : ""}`
-        );
-      }
-    }
-  };
-
-  // --- connector polls -------------------------------------------------------------
-
-  /** The poll's items in a tool's answer: its structured content, else its first text as JSON. */
-  const itemsIn = (
-    poll: ConnectorPollRow,
-    result: Awaited<ReturnType<Connections["callConnection"]>>
-  ): unknown[] => {
-    if (result.isError) {
-      throw new Error("the tool answered an error");
-    }
-    let answer: unknown = result.structuredContent;
-    if (answer === undefined) {
-      const text = result.content.find((part) => part.type === "text");
-      if (text?.type !== "text") {
-        throw new Error("its answer had no text or structured content");
-      }
-      try {
-        answer = JSON.parse(text.text);
-      } catch (error) {
-        throw new Error("its answer's text is not JSON", { cause: error });
-      }
-    }
-    const items = valueAt(answer, poll.itemsPath);
-    if (!Array.isArray(items)) {
-      throw new Error(
-        `no list of items at “${poll.itemsPath || "(the whole answer)"}”`
-      );
-    }
-    return items;
-  };
-
-  /**
-   * What a call saw, id to version, and the items that are new or changed
-   * since the call before (`before`); none on a first call, which only looks.
-   */
-  const diffed = (
-    poll: ConnectorPollRow,
-    items: unknown[],
-    before: ReadonlyMap<string, string> | null
-  ) => {
-    const seen = new Map<string, string>();
-    const changed: { item: unknown; key: string }[] = [];
-    for (const item of items) {
-      const itemId = keyPart(valueAt(item, poll.idPath));
-      const version = keyPart(valueAt(item, poll.versionPath));
-      if (itemId === undefined || version === undefined) {
-        continue;
-      }
-      seen.set(itemId, version);
-      if (before !== null && before.get(itemId) !== version) {
-        changed.push({ item, key: `${itemId}:${version}` });
-      }
-    }
-    return { seen, changed };
-  };
-
-  /**
-   * The poll as it stands now when it still lists and keys what `poll` did:
-   * undefined when it was deleted, disabled, or edited in what it calls or
-   * keys by while a call was out.
-   */
-  const unmoved = (poll: ConnectorPollRow): ConnectorPollRow | undefined => {
-    const now = store.connectorPoll(poll.id);
-    const shape = (row: ConnectorPollRow) =>
-      JSON.stringify([
-        row.args,
-        row.itemsPath,
-        row.idPath,
-        row.versionPath,
-        row.enabled,
-      ]);
-    return now && shape(now) === shape(poll) ? now : undefined;
-  };
-
-  /**
-   * One call of a connector poll: new and changed items ingested, what it saw
-   * kept. An edit made while the call was out wins: the call's answer is
-   * dropped and nothing is written, so the next call starts from the edit.
-   */
-  const pollConnector = async (id: string): Promise<void> => {
-    const asked = store.connectorPoll(id);
-    if (!asked) {
-      return;
-    }
-    const polledAt = new Date();
-    let result: Awaited<ReturnType<typeof connections.callConnection>>;
-    try {
-      result = await connections.callConnection(
-        asked.connection,
-        asked.tool,
-        asked.args
-      );
-    } catch (error) {
-      failed(asked, polledAt, error);
-      return;
-    }
-    // Same synchronous step from here to the write: no edit can land between.
-    const poll = unmoved(asked);
-    if (!poll) {
-      console.log(
-        `[ingress] connector poll ${id}: edited during its call, answer dropped`
-      );
-      return;
-    }
-    try {
-      const { seen, changed } = diffed(
-        poll,
-        itemsIn(poll, result),
-        poll.seenAt === null ? null : store.connectorPollItems(id)
-      );
-      const source = `conn:${poll.connection}:${poll.tool}`;
-      const landed = changed.filter(({ item, key }) =>
-        ingest(
-          {
-            source,
-            key,
-            kind: "item",
-            actor: null,
-            labels: [],
-            branch: null,
-            url: null,
-            title: null,
-            body: null,
-            at: polledAt.getTime(),
-            data: item,
-          },
-          "connector",
-          poll.projectId
-        )
-      ).length;
-      store.keepConnectorPollItems(id, seen, polledAt);
-      if (landed > 0) {
-        console.log(`[ingress] ${source}: ${landed} new or changed`);
-      }
-    } catch (error) {
-      failed(poll, polledAt, error);
-    }
-  };
-
-  /** A call that failed keeps its reason, unless the poll moved under it. */
-  const failed = (
-    asked: ConnectorPollRow,
-    polledAt: Date,
-    error: unknown
-  ): void => {
-    const poll = unmoved(asked);
-    if (!poll) {
-      return;
-    }
-    const reason = cutShort(
-      `${poll.connection}/${poll.tool}: ${wordsOf(error)}`,
-      500
-    );
-    store.updateConnectorPoll(poll.id, { reason, polledAt });
-    if (reason !== poll.reason) {
-      console.warn(`[ingress] connector poll ${poll.id}: ${reason}`);
-    }
-  };
-
-  // --- the pollers' clock ------------------------------------------------------------
-
-  /** Runs one poll at a time per key; a failure is logged, never lost. */
-  const once = (key: string, poll: () => Promise<void>): Promise<void> => {
-    const live = running.get(key);
-    if (live !== undefined) {
-      return live;
-    }
-    const going = poll()
-      .catch((error: unknown) =>
-        console.warn(`[ingress] ${key} poll failed: ${wordsOf(error)}`)
-      )
-      .finally(() => running.delete(key));
-    running.set(key, going);
-    return going;
-  };
-
-  /** Every poller that is due starts. */
-  const look = (now: number = Date.now()): void => {
-    for (const [projectId, followed] of byProject(store.githubWatches())) {
-      const due =
-        latest(followed, "polledAt") + GITHUB_EVERY_MS <= now &&
-        latest(followed, "resumeAt") <= now;
-      if (due) {
-        detach(
-          once(`github:${projectId}`, () => pollGitHub(projectId)),
-          "github poll"
-        );
-      }
-    }
-    for (const poll of store.connectorPolls()) {
-      if (
-        poll.enabled &&
-        (poll.polledAt?.getTime() ?? 0) + poll.intervalS * 1000 <= now
-      ) {
-        detach(
-          once(`conn:${poll.id}`, () => pollConnector(poll.id)),
-          "connector poll"
-        );
-      }
-    }
-  };
-
-  const tickAgain = (): void => {
-    if (lifetime.closed()) {
-      return;
-    }
-    timer = lifetime.after("ingress look", LOOK_MS, () => {
-      try {
-        look();
-      } catch (error) {
-        console.error(`[ingress] a look failed: ${wordsOf(error)}`);
-      }
-      tickAgain();
-    });
-  };
-
-  /** Hub start: the pollers pick up from their kept cursors. */
-  const start = (): void => {
-    lifetime.cancel(timer);
-    look();
-    tickAgain();
-  };
-
-  // --- the GitHub poller's setting and the view ---------------------------------------
+  // --- the view ------------------------------------------------------------------------
 
   const githubOf = (projectId: string) => {
     const project = projectOf(projectId);
-    if (project instanceof ElysiaStatus) {
-      return project;
-    }
-    const repos = githubReposOf(project.links);
-    const followed = store.githubWatches(projectId);
-    const linked = linkedWatches(project.links, followed);
-    const reading = [...new Set(linked.map((watch) => watch.reads))];
-    const connection =
-      reading.length > 0
-        ? reading.join(", ")
-        : (store.followedBy(projectId) ?? null);
-    const named = repos.join(", ");
-    const reason = pollProblem(
-      linked.map((watch) => ({ repo: watch.container, reason: watch.reason }))
-    );
-    let state: string;
-    if (repos.length === 0) {
-      state = NO_GITHUB_LINK;
-    } else if (linked.length === 0) {
-      state = `${named} ${repos.length > 1 ? "aren't" : "isn't"} polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
-    } else if (reason) {
-      state = `Polling ${named} with ${connection}; its last poll stopped: ${reason}`;
-    } else {
-      state = `Polling ${named} every 60 s with ${connection}.`;
-    }
-    const polledAt = latest(followed, "polledAt");
-    const resumeAt = latest(followed, "resumeAt");
-    const github: IngressView["github"] = {
-      repos,
-      repo: repos.length > 0 ? named : null,
-      connection,
-      polled: linked.length > 0,
-      state,
-      resources: {},
-      polledAt: polledAt === 0 ? null : polledAt,
-      resumeAt: resumeAt === 0 ? null : resumeAt,
-    };
-    return github;
+    return project instanceof ElysiaStatus
+      ? project
+      : clock.githubView(projectId, project.links);
   };
 
   const view = (projectId: string, skip = 0) => {
@@ -1159,81 +575,6 @@ export const createIngress = ({
       ),
     };
     return seen;
-  };
-
-  /** What moving watches off a connection did, one log line each. */
-  const sayRehomed = (gone: string, moved: readonly Rehomed[]): void => {
-    for (const { projectId, container, to } of moved.filter(
-      (move) => move.field === "connection"
-    )) {
-      console.log(
-        `[ingress] project ${projectId}: ${container} ${to ? `polled with ${to}` : "no longer polled"}, in place of ${gone}`
-      );
-    }
-  };
-
-  /**
-   * A connection's projects were written (connections.ts `writeProjects`):
-   * while it reads GitHub's API, each project it names that follows GitHub
-   * with no connection follows it through this one from now, a watch of
-   * each github.com repository it links (db/watches.ts `followGitHub`); a
-   * project following another keeps that one. Each project it dropped, or
-   * every one once it no longer reads GitHub's API, has its watches that
-   * read through it moved to the connection the project follows by from
-   * now, and stops following only where none is left (db/watches.ts
-   * `rehome`).
-   */
-  const followConnection = (
-    connection: string,
-    dropped: readonly string[]
-  ): void => {
-    const found = connections.get(connection);
-    const reads =
-      found.service.trim().toLowerCase() === "github" &&
-      readsGitHubApi(found.auth);
-    if (!reads || dropped.length > 0) {
-      sayRehomed(
-        connection,
-        store.rehome(connection, reads ? dropped : undefined)
-      );
-    }
-    if (!reads) {
-      return;
-    }
-    for (const projectId of found.projects) {
-      if (store.followedBy(projectId) === undefined) {
-        const repos = store.followGitHub(projectId, connection);
-        console.log(
-          repos.length > 0
-            ? `[ingress] project ${projectId}: polls ${repos.join(", ")} with ${connection}`
-            : `[ingress] project ${projectId}: links no repository on github.com; one it links is polled with ${connection}`
-        );
-      }
-    }
-  };
-
-  /** Polls a project's repositories now, unless GitHub's rate limit holds it. */
-  const pollGitHubNow = async (projectId: string) => {
-    const project = projectOf(projectId);
-    if (project instanceof ElysiaStatus) {
-      return project;
-    }
-    const followed = store.githubWatches(projectId);
-    if (followed.length === 0) {
-      return problem(409, {
-        code: "ingress-github-unpolled",
-        detail: `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`,
-      });
-    }
-    const resumeAt = latest(followed, "resumeAt");
-    if (resumeAt > Date.now()) {
-      return problem(409, {
-        code: "ingress-github-rate-limited",
-        detail: `GitHub's rate limit holds polls until ${new Date(resumeAt).toISOString()}.`,
-      });
-    }
-    await once(`github:${projectId}`, () => pollGitHub(projectId));
-    return view(projectId);
   };
 
   // --- routes --------------------------------------------------------------------
@@ -1530,9 +871,19 @@ export const createIngress = ({
     if (known instanceof ElysiaStatus) {
       return known;
     }
-    await once(`conn:${id}`, () => pollConnector(id));
+    await clock.pollConnectorNow(id);
     const after = pollOf(id);
     return after instanceof ElysiaStatus ? after : pollView(after);
+  };
+
+  /** Polls a project's repositories now, unless GitHub's rate limit holds it: its view after. */
+  const pollGitHubNow = async (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const refused = await clock.pollGitHubNow(projectId);
+    return refused ?? view(projectId);
   };
 
   // --- tools -------------------------------------------------------------------------
@@ -1670,8 +1021,6 @@ export const createIngress = ({
     ];
   };
 
-  lifetime.onClose(() => lifetime.cancel(timer));
-
   return {
     /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
     githubWaitRefusal(projectId: string): string | undefined {
@@ -1683,11 +1032,9 @@ export const createIngress = ({
     createRoute,
     deletePoll,
     deleteRoute,
-    followConnection,
-    ingest,
     pollConnectorNow,
     pollGitHubNow,
-    start,
+    route,
     tools,
     updatePoll,
     updateRoute,
@@ -1695,7 +1042,7 @@ export const createIngress = ({
   };
 };
 
-export type Ingress = ReturnType<typeof createIngress>;
+export type EventRoutes = ReturnType<typeof createEventRoutes>;
 
 /** Every ingress tool, by name. */
 export const INGRESS_TOOLS: ReadonlySet<string> = new Set([
@@ -1731,7 +1078,7 @@ const POLL_FIELDS = {
 };
 
 /** The dashboard's routes for a project's ingress: its GitHub poller follows the connections that name the project, never a route of its own. */
-export const ingressRoutes = (ingress: Ingress) =>
+export const ingressRoutes = (ingress: EventRoutes) =>
   new Elysia()
     .get("/api/projects/:id/ingress", ({ params }) => ingress.view(params.id))
     .post("/api/projects/:id/ingress/github/poll", ({ params }) =>

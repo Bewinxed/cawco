@@ -29,10 +29,14 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
-import type { ExternalActor } from "@cawco/core/external-items";
-import { isRecord } from "@cawco/core/is-record";
 import type { TrackerTarget } from "@cawco/core/trackers";
-import { cutShort } from "@cawco/core/words/helpers";
+import { unhandled } from "@cawco/core/unhandled";
+import {
+  githubActorOf,
+  RawUserSchema,
+  unvouchedOf,
+} from "@cawco/providers/github/actor";
+import { answerOf, refusalWords } from "@cawco/providers/github/answer";
 import { linkOfUrl } from "@cawco/providers/registry";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
@@ -49,7 +53,6 @@ import {
   union,
   unknown,
 } from "valibot";
-import { messageOf, refusalOf } from "./octokit-answer";
 import {
   type Issue,
   type IssueComment,
@@ -63,9 +66,9 @@ import {
   type TrackerProblem,
 } from "./tracker-adapter";
 
-/** One request. Our choice, as github.ts's. */
+/** One request. Our choice, as the poll loop's (clock.ts). */
 const REQUEST_MS = 30_000;
-/** The edge of the window read again each poll. Our choice, as github.ts's. */
+/** The edge of the window read again each poll. Our choice, as the GitHub provider's (providers github/ingest.ts). */
 const OVERLAP_MS = 2 * 60_000;
 const PER_PAGE = 100;
 /** Pages of repositories a binding's choice lists before a search; a search reads on to the last page. Our choice. */
@@ -97,30 +100,7 @@ const ISSUES_ROUTE = "GET /repos/{owner}/{repo}/issues";
 const COMMENTS_ROUTE = "GET /repos/{owner}/{repo}/issues/comments";
 type ListRoute = typeof ISSUES_ROUTE | typeof COMMENTS_ROUTE;
 
-/**
- * The standings GitHub gives a person the repository let in: "Author is the
- * owner of the repository", "a member of the organization that owns the
- * repository", "has been invited to collaborate on the repository"
- * (docs.github.com, CommentAuthorAssociation). Anyone else's issue waits
- * for a person, as claude-code-action runs only for "users with write
- * access to the repository" (its docs/security.md).
- */
-const VOUCHED: ReadonlySet<string> = new Set([
-  "OWNER",
-  "MEMBER",
-  "COLLABORATOR",
-]);
-
 /** What an issue's raw answer is read for. */
-/** Someone as GitHub's REST answers name them. */
-const RawUserSchema = object({
-  avatar_url: nullish(string()),
-  html_url: nullish(string()),
-  login: nullish(string()),
-  type: nullish(string()),
-});
-type RawUser = InferOutput<typeof RawUserSchema>;
-
 const RawIssueSchema = object({
   author_association: optional(string()),
   body: nullish(string()),
@@ -139,28 +119,6 @@ const RawIssueSchema = object({
   user: nullish(RawUserSchema),
 });
 type RawIssue = InferOutput<typeof RawIssueSchema>;
-
-/** Someone GitHub names, as an external item carries them; null when it names no one. */
-export const githubActorOf = (
-  user: RawUser | null | undefined
-): ExternalActor | null =>
-  user?.login
-    ? {
-        source: "github",
-        login: user.login,
-        name: null,
-        avatarUrl: user.avatar_url ?? null,
-        url: user.html_url ?? null,
-        kind: user.type === "Bot" ? "bot" : "person",
-        memberId: null,
-      }
-    : null;
-
-/** Who someone is to the repository, in words, when GitHub does not vouch for them; null when it does. */
-const unvouchedOf = (name: string, standing = "NONE"): string | null =>
-  VOUCHED.has(standing)
-    ? null
-    : `${name}, no owner, member or collaborator of the repository (GitHub says “${standing}”)`;
 
 /** Who opened an issue, and who they are to the repository when GitHub does not vouch for them. */
 const openerOf = (raw: RawIssue): Issue["opener"] => {
@@ -245,94 +203,31 @@ const commentOf = (raw: RawComment): IssueComment | null => {
     : null;
 };
 
-/** An error's HTTP status and headers, as Octokit's RequestError carries them. */
-export const answerOf = (
-  error: unknown
-): {
-  headers: Readonly<Record<string, unknown>>;
-  said: string;
-  status?: number;
-} => {
-  const refused = refusalOf(error);
-  const failed = isRecord(error) ? error : {};
-  return {
-    status:
-      refused?.status ??
-      (typeof failed.status === "number" ? failed.status : undefined),
-    headers: refused?.headers ?? {},
-    said: cutShort(
-      (refused && messageOf(refused.data)) ??
-        (typeof failed.message === "string" ? failed.message : ""),
-      300
-    ),
-  };
-};
-
-/** GitHub's rate limit on an answer, as when the next request may go; null when it holds nothing back. */
-const rateLimited = (
-  status: number,
-  headers: Readonly<Record<string, unknown>>
-): number | null => {
-  const retry = Number(headers["retry-after"]);
-  const limited =
-    (status === 403 || status === 429) &&
-    (retry > 0 || headers["x-ratelimit-remaining"] === "0");
-  if (!limited) {
-    return null;
-  }
-  const reset = Number(headers["x-ratelimit-reset"]);
-  return retry > 0 ? Date.now() + retry * 1000 : reset * 1000 || Date.now();
-};
-
 /** What GitHub's error says of `what` on `repo`, in its words and with what the connection needs, as the problem its status is. */
 export const githubProblem = (
   error: unknown,
   what: string,
   repo: string
 ): TrackerProblem => {
-  const { status, headers, said } = answerOf(error);
-  if (status === undefined) {
-    return problem(400, {
-      code: "tracker-unreachable",
-      detail: `GitHub could not be reached to ${what}: ${said}`,
-    });
+  const said = refusalWords(error, what, repo);
+  switch (said.code) {
+    case "rate":
+      return problem(400, {
+        code: "tracker-rate",
+        detail: said.words,
+        resumeAt: said.resumeAt ?? Date.now(),
+      });
+    case "unreachable":
+      return problem(400, { code: "tracker-unreachable", detail: said.words });
+    case "sign-in":
+      return problem(400, { code: "tracker-sign-in", detail: said.words });
+    case "scope":
+      return problem(400, { code: "tracker-scope", detail: said.words });
+    case "input":
+      return problem(400, { code: "tracker-input", detail: said.words });
+    default:
+      return unhandled("GitHub refusal", said.code);
   }
-  if (status === 401) {
-    return problem(400, {
-      code: "tracker-sign-in",
-      detail: `GitHub refused the connection's sign-in (401 ${said}).`,
-    });
-  }
-  const resumeAt = rateLimited(status, headers);
-  if (resumeAt !== null) {
-    return problem(400, {
-      code: "tracker-rate",
-      detail: `GitHub's rate limit holds the sync back until ${new Date(resumeAt).toISOString()}.`,
-      resumeAt,
-    });
-  }
-  if (status === 403) {
-    const needs = headers["x-accepted-github-permissions"];
-    return problem(400, {
-      code: "tracker-scope",
-      detail: `GitHub refused to ${what} on ${repo}: ${said}.${typeof needs === "string" && needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`,
-    });
-  }
-  // GitHub answers a request it will not let this connection see the same
-  // as one for nothing: "GitHub uses a `404 Not Found` response instead of a
-  // `403 Forbidden` response to avoid confirming the existence of private
-  // repositories" (docs.github.com/en/rest/using-the-rest-api/
-  // troubleshooting-the-rest-api). Which of the two it was is not known here.
-  if (status === 404) {
-    return problem(400, {
-      code: "tracker-scope",
-      detail: `GitHub answered 404 to ${what} on ${repo}${said ? `: ${said}` : ""}. GitHub answers 404 both where nothing is at that name and where the connection may not see it: check that ${repo} is spelt as on GitHub, and that the connection's GitHub App is installed on it or its fine-grained token lists it.`,
-    });
-  }
-  return problem(400, {
-    code: "tracker-input",
-    detail: `GitHub answered ${status} to ${what} on ${repo}${said ? `: ${said}` : ""}.`,
-  });
 };
 
 /**

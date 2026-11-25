@@ -18,8 +18,6 @@ language js
 // - packages/agent/src/forges/gitlab.ts
 // - packages/core/src/github-api.ts
 // - packages/hub/src/connections.ts
-// - packages/hub/src/external-items.ts
-// - packages/hub/src/github.ts
 // - packages/hub/src/tracker-github-project.ts
 // - packages/hub/src/tracker-github.ts
 // - packages/hub/src/tracker-linear.ts
@@ -43,8 +41,6 @@ or {
     includes "packages/agent/src/forges/gitlab.ts",
     includes "packages/core/src/github-api.ts",
     includes "packages/hub/src/connections.ts",
-    includes "packages/hub/src/external-items.ts",
-    includes "packages/hub/src/github.ts",
     includes "packages/hub/src/tracker-github-project.ts",
     includes "packages/hub/src/tracker-github.ts",
     includes "packages/hub/src/tracker-linear.ts"

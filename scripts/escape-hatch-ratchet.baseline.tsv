@@ -191,7 +191,7 @@ as-cast	Merge	scripts/codemods/lib/token-merge.ts	2
 as-cast	never	apps/dashboard/src/lib/components/ui/select/select.svelte	1
 as-cast	never	apps/dashboard/src/lib/components/ui/toggle-group/toggle-group.svelte	1
 as-cast	never	packages/hub/scripts/tool-inputs.ts	1
-as-cast	never	packages/hub/src/github.ts	1
+as-cast	never	packages/providers/src/github/ingest.ts	1
 as-cast	never	scripts/codemods/lib/tailwind-reads.ts	1
 as-cast	never	scripts/codemods/theme-prune.ts	2
 as-cast	Node	apps/dashboard/scripts/class-strings.ts	4

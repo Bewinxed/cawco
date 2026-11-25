@@ -13,9 +13,9 @@ import type { BrowserAsks } from "./browser-tools";
 import type { Caw } from "./caw";
 import type { ConnectAsks } from "./connect-asks";
 import type { handoffTools } from "./delegation-tools";
+import type { EventRoutes } from "./event-routes";
 import type { FleetWatch } from "./fleet-watch";
 import type { createHubTools } from "./hub-tools";
-import type { Ingress } from "./ingress";
 import type { ResponseFormat, Takes } from "./mcp-tool";
 import type { Memory } from "./memory";
 import type { projectFromSessionTool } from "./project-offers";
@@ -30,7 +30,7 @@ type Defined =
   | ReturnType<typeof projectFromSessionTool>
   | ReturnType<typeof createProjectSettings>["definition"]
   | ReturnType<Caw["tools"]>[number]
-  | ReturnType<Ingress["tools"]>[number]
+  | ReturnType<EventRoutes["tools"]>[number]
   | ReturnType<Actions["tools"]>[number]
   | ReturnType<Relay["tools"]>[number]
   | ReturnType<Memory["tools"]>[number]

@@ -4,11 +4,20 @@
  */
 
 import type { OfferedMode } from "@cawco/core/harness/modes";
-import type { InboundVia } from "./db/stored-types";
-import type { GitHubCursors } from "./db/watches";
+import type { GitHubResource, InboundVia } from "./db/stored-types";
 
-/** The most a stored payload holds (ingress.ts). */
+/** The most a stored payload holds (intake.ts). */
 export const PAYLOAD_MAX = 64 * 1024;
+
+/** Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts. */
+export interface GitHubCursor {
+  etag: string | null;
+  /** 304s answered: polls that cost nothing. */
+  notModified: number;
+  polls: number;
+  /** The newest `updated_at` taken in, ms: events at or after it are looked for. */
+  since: number;
+}
 
 export interface EventRouteView {
   author: string | null;
@@ -81,7 +90,7 @@ export interface IngressView {
     /** The GitHub repositories it polls, `owner/repo`: every one the project links. */
     repos: string[];
     /** Read by nothing: kept empty for the shipped apps that declare it; it goes with {@link repo}. */
-    resources: GitHubCursors;
+    resources: Partial<Record<GitHubResource, GitHubCursor>>;
     resumeAt: number | null;
     /** What is true of it, in a sentence: polled, or why not. */
     state: string;

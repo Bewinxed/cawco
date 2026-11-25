@@ -375,6 +375,7 @@ import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
 import { type Caw, cawRoutes, createCaw, type PersonsSend } from "./caw";
 import { stallOffer } from "./chatgpt-offer";
+import { createClock } from "./clock";
 import { createCompaction } from "./compaction";
 import {
   ARTIFACTS_ROOT,
@@ -432,6 +433,7 @@ import type {
 import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
+import { githubReposOf } from "./db/watches";
 import { decide, type TurnChoice } from "./decide";
 import { decidesFileWith, decidesRoutes, type HarnessOffer } from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
@@ -454,7 +456,11 @@ import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { carryDoneRoutes } from "./done-routes-carried";
-import { createExternalItems } from "./external-items";
+import {
+  createEventRoutes,
+  type EventRoutes,
+  ingressRoutes,
+} from "./event-routes";
 import { faviconRoutes } from "./favicon";
 import { createFind } from "./find";
 import { createFindTool } from "./find-tool";
@@ -471,7 +477,6 @@ import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createFolderMoves } from "./folder-moves";
 import { createForgePosts, type ForgeCall } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
-import { githubReposOf } from "./github";
 import { handMoveOf } from "./hand-move";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
@@ -491,9 +496,9 @@ import {
   hubWordOf,
   TASK_WAITS_ORIGIN,
 } from "./hub-words";
-import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
 import { instanceTimes } from "./instance-out";
+import { createIntake } from "./intake";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
 import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
@@ -526,6 +531,7 @@ import {
   type TakenUpBy,
 } from "./limit-decision";
 import { createLimitMoves } from "./limit-moves";
+import { createLinks } from "./links";
 import { createLoginMoves } from "./login-moves";
 import {
   awayProblem,
@@ -8849,9 +8855,9 @@ export const createServer = (
     "actionMoves",
     () => false
   );
-  /** Whether a project can wait on GitHub at all: its poll reads what a wait names (ingress.ts); set once ingress is made. */
+  /** Whether a project can wait on GitHub at all: its poll reads what a wait names (clock.ts); set once event routing is made. */
   const githubWaitsPort = portOf<
-    Pick<Ingress, "githubWaitRefusal"> | undefined
+    Pick<EventRoutes, "githubWaitRefusal"> | undefined
   >("githubWaits", undefined);
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
@@ -8925,7 +8931,7 @@ export const createServer = (
         entryAt: row.entryAt,
       })),
     linked: (projectId, link) =>
-      externalItems.linked(
+      links.linked(
         projectId,
         link,
         githubReposOf(db.project(projectId)?.links ?? [])
@@ -8952,8 +8958,8 @@ export const createServer = (
     waitWorld: (projectId) => ({
       card: (artifactId, card) => artifacts.waitCard(artifactId, card),
       pin: (artifactId, number) => artifacts.waitPin(artifactId, number),
-      // A pull request's or run's state is its item's mirror row's (external-items.ts).
-      github: (target) => externalItems.githubWait(projectId, target),
+      // A pull request's or run's state is its item's mirror row's (links.ts).
+      github: (target) => links.githubWait(projectId, target),
       session: (instanceId) => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (!row) {
@@ -9023,9 +9029,9 @@ export const createServer = (
       version: HUB_VERSION,
     }).broke
   );
-  // External items on tasks (external-items.ts): links and comments from
-  // GitHub and Linear as data, filed through one door.
-  const externalItems = createExternalItems({
+  // Links (links.ts): what happens to an outside item reaches the tasks
+  // that link it, and its comments reach them as data, through one door.
+  const links = createLinks({
     db,
     tasks,
     // A link's state moved: a wait on its pull request may settle, and the board redraws it.
@@ -10877,10 +10883,10 @@ export const createServer = (
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
     areaExists: (id) => db.areas.get(id) !== undefined,
-    // A connection's projects poll their repositories with it (ingress.ts),
+    // A connection's projects poll their repositories with it (clock.ts),
     // made further down: no connection is written before the hub serves.
     projectsWritten: (connection, dropped) =>
-      ingress.followConnection(connection, dropped),
+      clock.followConnection(connection, dropped),
     // A push-only service connected (§5.5): each project with no relay for
     // its provider has its Caw woken to offer one (caw.ts `offerRelay`).
     pushOnlyConnected: (connection, projects) => {
@@ -10972,34 +10978,68 @@ export const createServer = (
   const trackers = createTrackers({
     connections,
     db,
-    externalItems,
+    links,
     lifetime,
     tasks,
   });
-  // Ingress (ingress.ts): events from GitHub and polled connections, each
-  // stored once and routed to a routine or the conversation's next wake.
-  const ingress = createIngress({
-    connections,
+  // The door (intake.ts): everything read from an outside service stored
+  // once, then links, lifecycle and routing in the project's turn.
+  const intake = createIntake({
     db,
-    dispatcher,
     // An event from outside changes what the project's routines could take
     // (project-starters.ts).
     eventLanded: (projectId) => projectStarters.eventLanded(projectId),
-    externalItems,
+    subscribers: {
+      links: (arrived) => links.onEvent(arrived),
+      linksMoved: (projectId, items) => links.moved(projectId, items),
+      // A merged pull request an attempt opened moves its task (dispatch.ts).
+      lifecycle: async ({ event, row }) => {
+        if (event.kind !== "pr.merged" || !event.url) {
+          return;
+        }
+        const moved = await dispatcher.pullRequestMerged(event.url);
+        if (moved instanceof ElysiaStatus) {
+          console.warn(
+            `[pull request ${event.url} merged] failed: ${moved.response.detail}`
+          );
+          return;
+        }
+        if (moved?.projectId !== row.projectId) {
+          return;
+        }
+        console.log(
+          `[intake] ${event.url} merged: ${moved.task} is in ${moved.stage}`
+        );
+        return moved.task;
+      },
+      route: (arrived, routing) => eventRoutes.route(arrived, routing),
+    },
+  });
+  // The poll loop (clock.ts): every watch read on its interval, into the door.
+  const clock = createClock({ connections, db, intake, lifetime, links });
+  // Event routing (event-routes.ts): routes to routines, else a trigger on
+  // the task or item an event is about.
+  const eventRoutes = createEventRoutes({
+    clock,
+    connections,
+    db,
     jevAccess: () => jevAccess(db),
-    lifetime,
     routines,
+    taskTitle: async (projectId, taskId) => {
+      const task = await tasks.get(projectId, taskId);
+      return task instanceof ElysiaStatus ? undefined : task.title;
+    },
     // An event no route took, a trigger on what it is about (triggers.ts).
     trigger: (projectId, event) => triggers.route(projectId, event),
   });
-  githubWaitsPort.fill(ingress);
+  githubWaitsPort.fill(eventRoutes);
   // The relay (relay.ts): a project's one public webhook path through
   // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
   const relays = createRelay({
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
     connections,
     db,
-    ingest: ingress.ingest,
+    intake,
     lifetime,
   });
   relayPort.fill(relays);
@@ -11661,7 +11701,7 @@ export const createServer = (
     delegationTree: (actor, query) => delegationTree.read(actor, query),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routines,
-    ingressTools: (actor) => ingress.tools(actor),
+    ingressTools: (actor) => eventRoutes.tools(actor),
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
     memoryTools: (actor) => projectMemory.tools(actor),
@@ -12818,8 +12858,10 @@ export const createServer = (
         run: () => {
           // Each connection looked at once, off the boot path: its tools for sessions' lists.
           connections.start();
-          // The pollers pick up from the cursors a stopped hub kept.
-          ingress.start();
+          // The events a stopped hub left unprocessed run again, then the
+          // poll loop picks up from the cursors it kept.
+          intake.start();
+          clock.start();
           // The receiver listens and the relays' wanted state is applied.
           relays.start();
           // A call a stopped hub left under way becomes unknown, never re-run;
@@ -14115,7 +14157,7 @@ export const createServer = (
         routineRoutes(routines),
         connectionRoutes(connections),
         trackerRoutes(trackers),
-        ingressRoutes(ingress),
+        ingressRoutes(eventRoutes),
         relayRoutes(relays),
         actionRoutes(actions),
         caps.routes(),

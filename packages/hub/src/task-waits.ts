@@ -19,7 +19,7 @@
  * a card answered differently since is told apart from one answered the
  * same way again.
  *
- * A PR's and a run's state is its item's mirror row's (external-items.ts
+ * A PR's and a run's state is its item's mirror row's (links.ts
  * `githubWait`), which the project's GitHub poll reads and its events keep,
  * so it outlives a restart. A project with no GitHub
  * poller is refused either target where it is written ({@link readWait}).

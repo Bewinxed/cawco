@@ -13,7 +13,7 @@ import type { ProblemsOf } from "./refusal";
 import type { ParsedTask } from "./task-file";
 
 /**
- * A run an inbound event started (ingress.ts): its slot is `event:<event
+ * A run an inbound event started (event-routes.ts): its slot is `event:<event
  * id>`, so an event runs a routine once, and its retry reads the same event.
  */
 export const EVENT_SLOT = "event:";

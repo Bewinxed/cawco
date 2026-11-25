@@ -448,7 +448,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       }
     },
 
-    /** An event from outside landed for the project (ingress.ts `ingest`). */
+    /** An event from outside landed for the project (intake.ts `take`). */
     eventLanded(projectId: string): void {
       touched(projectId, "event received");
     },

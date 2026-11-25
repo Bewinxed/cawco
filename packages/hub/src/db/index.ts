@@ -50,6 +50,7 @@ import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type InstancesDb, instancesDb } from "./instances";
+import { type IntakeDb, intakeDb } from "./intake";
 import { type LfsRefusalsDb, lfsRefusalsDb } from "./lfs-refusals";
 import { type MachinesDb, machinesDb } from "./machines";
 import { type McpServersDb, mcpServersDb } from "./mcp-servers";
@@ -156,8 +157,10 @@ interface HubStore {
   readonly heldPicks: HeldPicksDb;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
-  /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
+  /** Inbound events, their routes and the pollers that bring them in (event-routes.ts, clock.ts). */
   readonly ingress: IngressDb;
+  /** The door's store: inbound events and the mirror's content, once each (intake.ts). */
+  readonly intake: IntakeDb;
   /** LFS servers a checkout named that the project never declared (routes/lfs.ts). */
   readonly lfsRefusals: LfsRefusalsDb;
   /** When briefs last carried a project's knowledge lessons (memory.ts). */
@@ -408,6 +411,7 @@ const make = async (path: string): Promise<DbShape> => {
     routines: taskTriggersDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
+    intake: intakeDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
     sshMachines: sshMachinesDb(db, hubId),

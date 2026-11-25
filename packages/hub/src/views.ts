@@ -389,7 +389,7 @@ export const createViews = ({
       return unknown;
     }
     const names = new Map<string, string>([
-      // A route to the project's conversation (ingress.ts `TO_CONVERSATION`) is Caw's.
+      // A route to the project's conversation (jev-placement.ts `TO_CONVERSATION`) is Caw's.
       ["conversation", "Caw"],
       ...db.routines
         .list(projectId)

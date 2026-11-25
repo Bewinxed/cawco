@@ -3361,6 +3361,13 @@
       "when": 1795591713234,
       "tag": "0487_external_items",
       "breakpoints": true
+    },
+    {
+      "idx": 488,
+      "version": "6",
+      "when": 1795593751784,
+      "tag": "0488_inbound_events_door",
+      "breakpoints": true
     }
   ]
 }

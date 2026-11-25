@@ -38,9 +38,9 @@ import type {
   GithubProjectsView,
   StatusOption,
 } from "@cawco/core/trackers";
+import { graphqlErrorsOf } from "@cawco/providers/github/answer";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
-import { graphqlErrorsOf } from "./octokit-answer";
 import type { TrackerProblem } from "./tracker-adapter";
 import { githubProblem, partsOf } from "./tracker-github";
 

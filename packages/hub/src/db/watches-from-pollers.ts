@@ -15,7 +15,7 @@
  *   whose cursors name none: 0486 makes it no watch. Its connection is
  *   named, with the one a repository the project links later is followed by
  *   (the first connection by name that reads GitHub's API and names the
- *   project, as ingress.ts derives it), or none.
+ *   project, as the poll derived it), or none.
  */
 import type { Database } from "bun:sqlite";
 import { WatchSettingsSchema } from "./stored-shapes";

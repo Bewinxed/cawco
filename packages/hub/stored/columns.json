@@ -6738,6 +6738,13 @@
       "gemini-api"
     ]
   },
+  "inbound_events.origin": {
+    "type": "string",
+    "enum": [
+      "outside",
+      "ours"
+    ]
+  },
   "inbound_events.via": {
     "type": "string",
     "enum": [

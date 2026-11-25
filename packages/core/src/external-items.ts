@@ -16,10 +16,14 @@
  *   own id, so it is filed once and an edit rewrites it in place.
  */
 
-import type { LinkKind, ProviderId } from "@cawco/providers/provider";
+import type {
+  ExternalActor,
+  ExternalState,
+  LinkKind,
+  ProviderId,
+} from "@cawco/providers/provider";
 
-/** The source's state in five words every source maps onto; `stateName` keeps its own. */
-export type ExternalState = "open" | "draft" | "merged" | "closed" | "canceled";
+export type { ExternalActor, ExternalState } from "@cawco/providers/provider";
 
 /**
  * `record`: the task's fields are one record with it (the file's `issue:`,
@@ -27,22 +31,6 @@ export type ExternalState = "open" | "draft" | "merged" | "closed" | "canceled";
  * a URL a person or session writes into `links:` is `related`.
  */
 export type LinkMode = "record" | "closes" | "refs" | "related";
-
-/** Who wrote or opened something on a source. */
-export interface ExternalActor {
-  /** Their picture on the source; null when it gave none. */
-  avatarUrl: string | null;
-  kind: "person" | "bot" | "app";
-  /** `bewinxed` on GitHub; a Linear user's name. A comment's heading names them by it. */
-  login: string;
-  /** The fleet member they are, once a login → member map exists (tsk-138); null until then. */
-  memberId: string | null;
-  /** Their display name, when the source gives one apart from the login. */
-  name: string | null;
-  source: ProviderId;
-  /** Their page on the source; null when it gave none. */
-  url: string | null;
-}
 
 /** One external item a task links, as the board draws it. */
 export interface ExternalRef {

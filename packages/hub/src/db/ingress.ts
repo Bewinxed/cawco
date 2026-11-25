@@ -1,4 +1,5 @@
 import { withoutUndefined } from "@cawco/core/without-undefined";
+import { ITEMS_STREAM } from "@cawco/providers/connection/ingest";
 import {
   and,
   asc,
@@ -15,7 +16,6 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { writeItem } from "./external-items";
 import {
   eventRouteKinds,
   eventRoutes,
@@ -25,9 +25,8 @@ import {
   watches,
 } from "./schema";
 import {
-  type GitHubWatchesDb,
-  githubWatchesDb,
-  ITEMS_STREAM,
+  type PolledWatchesDb,
+  polledWatchesDb,
   settingsWith,
   type WatchRow,
 } from "./watches";
@@ -38,7 +37,7 @@ export type EventRouteRow = typeof eventRoutes.$inferSelect & {
   kinds: string[];
 };
 /**
- * A connector poll (ingress.ts): one connection's read tool called on an
+ * A connector poll (event-routes.ts, clock.ts): one connection's read tool called on an
  * interval, its items diffed by id and version into `inbound_events`. Kept
  * as a watch of provider `connection` with the poll's id, its tool and
  * paths in the watch's settings, and how many items its last call kept;
@@ -85,11 +84,9 @@ export interface Delivery {
   routeId: string;
 }
 
-/** The rows ingress.ts keeps. */
-export interface IngressDb extends GitHubWatchesDb {
+/** The rows event routing (event-routes.ts) and the poll loop (clock.ts) keep. */
+export interface IngressDb extends PolledWatchesDb {
   readonly connectorPoll: (id: string) => ConnectorPollRow | undefined;
-  /** What a connector poll's last call saw, item id to version. */
-  readonly connectorPollItems: (id: string) => Map<string, string>;
   /** A project's connector polls, or every one, oldest first. */
   readonly connectorPolls: (projectId?: string) => ConnectorPollRow[];
   readonly createConnectorPoll: (
@@ -109,20 +106,6 @@ export interface IngressDb extends GitHubWatchesDb {
     limit: number,
     skip?: number
   ) => InboundEventRow[];
-  /**
-   * THE store of an event: inserted unless (source, delivery key) is there
-   * already. Answers the row it inserted, or nothing when it was a repeat.
-   */
-  readonly insertEvent: (row: InboundEventRow) => InboundEventRow | undefined;
-  /**
-   * Keeps a call's outcome: what it saw replaces what the call before saw,
-   * in one transaction with its `seenAt` and `polledAt`.
-   */
-  readonly keepConnectorPollItems: (
-    id: string,
-    items: ReadonlyMap<string, string>,
-    polledAt: Date
-  ) => void;
   readonly route: (id: string) => EventRouteRow | undefined;
   /**
    * A project's routes, oldest first: the order they are tried in. With
@@ -131,7 +114,10 @@ export interface IngressDb extends GitHubWatchesDb {
   readonly routes: (projectId: string, kind?: string) => EventRouteRow[];
   readonly setEvent: (
     id: string,
-    patch: Pick<Partial<InboundEventRow>, "routedTo" | "routeId" | "handledAt">
+    patch: Pick<
+      Partial<InboundEventRow>,
+      "routedTo" | "routeId" | "handledAt" | "taskId" | "processedAt"
+    >
   ) => void;
   /**
    * A project's events received since `since` (ms) that no route in
@@ -302,13 +288,6 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     }
   };
   return {
-    insertEvent: (row) =>
-      db
-        .insert(inboundEvents)
-        .values(row)
-        .onConflictDoNothing()
-        .returning()
-        .get(),
     event: (id) =>
       db.select().from(inboundEvents).where(eq(inboundEvents.id, id)).get(),
     deliveries: (projectId) =>
@@ -424,7 +403,7 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     deleteRoute: (id) =>
       db.delete(eventRoutes).where(eq(eventRoutes.id, id)).returning().all()
         .length > 0,
-    ...githubWatchesDb(db),
+    ...polledWatchesDb(db),
     connectorPolls: (projectId) =>
       pollsOf(
         db
@@ -442,15 +421,6 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
           .all()
       ),
     connectorPoll: (id) => pollOf(id),
-    connectorPollItems: (id) =>
-      new Map(
-        db
-          .select({ key: externalItems.key, version: externalItems.version })
-          .from(externalItems)
-          .where(recordsOf([id]))
-          .all()
-          .map(({ key, version }) => [key, version ?? ""])
-      ),
     createConnectorPoll: (row) => {
       db.transaction((tx) => {
         tx.insert(watches)
@@ -477,49 +447,6 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         }
       });
       return { ...row, seen: row.seenAt ? 0 : null };
-    },
-    keepConnectorPollItems: (id, items, polledAt) => {
-      db.transaction((tx) => {
-        const poll = tx
-          .select({ projectId: watches.projectId })
-          .from(watches)
-          .where(and(eq(watches.id, id), isPoll))
-          .get();
-        if (!poll) {
-          return;
-        }
-        // What this call saw, each record through the mirror's one writer;
-        // a record it no longer lists goes, so its return is new again.
-        tx.delete(externalItems)
-          .where(
-            and(
-              recordsOf([id]),
-              notInArray(externalItems.key, [...items.keys()])
-            )
-          )
-          .run();
-        for (const [key, version] of items) {
-          writeItem(
-            tx,
-            poll.projectId,
-            {
-              provider: "connection",
-              host: "",
-              container: id,
-              kind: "record",
-              key,
-              ref: key,
-              url: null,
-            },
-            { version, readAt: polledAt }
-          );
-        }
-        looked(tx, id, polledAt);
-        tx.update(watches)
-          .set({ reason: null, polledAt })
-          .where(and(eq(watches.id, id), isPoll))
-          .run();
-      });
     },
     updateConnectorPoll: (id, patch) =>
       db.transaction((tx) => {

@@ -23,7 +23,6 @@ export const EVENT_SKILLS = {
   "delegate-report": "project-delegate-report",
   "attempt-judgement": "project-attempt-judgement",
   "task-move": "project-task-move",
-  "github-event": "project-github-event",
   "inbound-event": "project-inbound-event",
   "person-request": "project-person-request",
   "task-input": "project-task-input",
