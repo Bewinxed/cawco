@@ -326,10 +326,14 @@ import {
  * memory_read and memory_apply go, and memory_rule says it changes a rule
  * at the person's word (worker 33,360, delegate 13,945 measured); both
  * budgets are lowered to it.
+ * 2026-11-27: the knowledge move's facts in delegate (`account`,
+ * `workspace`), task_start, artifact_read and the dial names are counted
+ * after the memory cut's lowering (worker 33,463, delegate 14,009
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 33_360,
-  delegate: 13_945,
+  worker: 33_463,
+  delegate: 14_009,
   overseer: 770,
   "web-facing": 3400,
   trimmer: 1400,
