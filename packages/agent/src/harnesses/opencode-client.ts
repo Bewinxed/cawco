@@ -14,14 +14,21 @@
  * as a `ClientError` with reason `Transport`.
  */
 
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Bounded } from "@cawco/core/bounded";
+import {
+  boundedRead,
+  Unanswered as UnansweredRead,
+} from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { isRecord } from "@cawco/core/is-record";
 import type { SlashCommand } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client";
+import { Effect, Schedule } from "effect";
 import { toolBinary } from "../tools";
+import { fromPromise, runAbortable } from "./opencode-effect";
 
 export type OpencodeClient = OpenCodeClient;
 
@@ -237,47 +244,57 @@ const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
  * shell) would be gone while sessions ran on. The whole wait is one read
  * given `timeoutMs`: a list that hangs is let go at that deadline too.
  */
-export const assertPluginLoaded = async (
+export const assertPluginLoaded = (
   client: OpencodeClient,
   directory: string,
   signal?: AbortSignal,
   timeoutMs = PLUGIN_LOAD_TIMEOUT_MS
-): Promise<void> => {
-  const loaded = await readWithin(
-    timeoutMs,
-    async (within) => {
-      for (;;) {
-        within.throwIfAborted();
-        const listed = await client.plugin.list(at(directory), {
-          signal: within,
-        });
-        const ours = listed.data.find(
-          (plugin) => plugin.id === CAWCO_PLUGIN_ID
-        );
-        if (ours?.state.status === "active") {
-          return;
-        }
-        if (ours) {
-          throw new Error(
-            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${ours.state.error}`
-          );
-        }
-        await Bun.sleep(250);
+): Promise<void> =>
+  // The promise edge of pluginLoaded.
+  runAbortable(pluginLoaded(client, directory, timeoutMs), signal);
+
+/** How long a location's plugin list is let rest between two reads while CawCo's plugin is not in it yet. Ours: its load takes ~0.2 s. */
+const PLUGIN_LOOK_MS = 250;
+
+/** {@link assertPluginLoaded}: the list read until CawCo's plugin is in it, the whole wait one bounded read. */
+const pluginLoaded = Effect.fnUntraced(function* (
+  client: OpencodeClient,
+  directory: string,
+  timeoutMs: number
+) {
+  const look = fromPromise((within) =>
+    client.plugin.list(at(directory), { signal: within })
+  ).pipe(
+    Effect.flatMap((listed) => {
+      const ours = listed.data.find((plugin) => plugin.id === CAWCO_PLUGIN_ID);
+      if (ours?.state.status === "active") {
+        return Effect.succeed(true);
       }
-    },
-    signal ? { signal } : {}
+      if (ours) {
+        return Effect.fail(
+          new Error(
+            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${ours.state.error}`
+          )
+        );
+      }
+      return Effect.succeed(undefined);
+    })
   );
-  switch (loaded.kind) {
-    case "answered":
-      return;
-    case "unanswered":
-      throw new Error(
-        `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
-      );
-    default:
-      unhandled("read", loaded);
-  }
-};
+  yield* boundedRead(
+    timeoutMs,
+    lookUntil({ every: PLUGIN_LOOK_MS }, look)
+  ).pipe(
+    Effect.catch((error) =>
+      Effect.fail(
+        error instanceof UnansweredRead
+          ? new Error(
+              `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
+            )
+          : error
+      )
+    )
+  );
+});
 
 /**
  * How long a location's MCP servers may take to connect before its first
@@ -308,20 +325,18 @@ const CATALOG_SETTLE_MS = 1000;
 const catalogSettled = new WeakMap<OpencodeClient, Set<string>>();
 
 /** Waits out a location's catalog refresh, once per location on each server. */
-const settleCatalog = async (
+const settleCatalog = Effect.fnUntraced(function* (
   client: OpencodeClient,
-  directory: string,
-  signal: AbortSignal
-): Promise<void> => {
+  directory: string
+) {
   const settled = catalogSettled.get(client) ?? new Set<string>();
   catalogSettled.set(client, settled);
   if (settled.has(directory)) {
     return;
   }
-  await Bun.sleep(CATALOG_SETTLE_MS);
-  signal.throwIfAborted();
+  yield* Effect.sleep(CATALOG_SETTLE_MS);
   settled.add(directory);
-};
+});
 
 /** An MCP server that had not connected when a location took its first prompt, and why. */
 export interface McpNotConnected {
@@ -357,14 +372,35 @@ export interface McpNotConnected {
  * server then waits {@link CATALOG_SETTLE_MS} more, for OpenCode's catalog
  * to take the servers' tools.
  */
-export const waitForMcp = async (
+export const waitForMcp = (
   client: OpencodeClient,
   directory: string,
   signal: AbortSignal,
   timeoutMs = MCP_CONNECT_TIMEOUT_MS
-): Promise<McpNotConnected[]> => {
-  type Listed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>["data"];
-  const notConnected = (listed: Listed): McpNotConnected[] =>
+): Promise<McpNotConnected[]> =>
+  // The promise edge of mcpSettled.
+  runAbortable(mcpSettled(client, directory, timeoutMs), signal);
+
+/** How long a location's MCP list is let rest between two reads while a server there is still connecting. Ours. */
+const MCP_LOOK_MS = 250;
+/** How long CawCo's own server is given after it is dialled again, before the list is read again. Ours. */
+const MCP_REDIAL_MS = 1000;
+
+type McpListed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>["data"];
+
+/** One read of a location's MCP list: settled with who did not connect, CawCo's server dialled again, or still connecting. */
+type McpLook =
+  | { readonly kind: "settled"; readonly unconnected: McpNotConnected[] }
+  | { readonly kind: "redialled" }
+  | { readonly kind: "connecting" };
+
+/** {@link waitForMcp}: the list read until nothing there is connecting, the whole wait one bounded read. */
+const mcpSettled = Effect.fnUntraced(function* (
+  client: OpencodeClient,
+  directory: string,
+  timeoutMs: number
+) {
+  const notConnected = (listed: McpListed): McpNotConnected[] =>
     listed.flatMap((server): McpNotConnected[] => {
       const { status } = server;
       switch (status.status) {
@@ -384,66 +420,89 @@ export const waitForMcp = async (
       }
       return [];
     });
-  const cawcoOf = (listed: Listed) =>
+  const cawcoOf = (listed: McpListed) =>
     listed.find((server) => server.name === CAWCO_MCP_SERVER)?.status;
-  let last: Listed | undefined;
-  const settled = await readWithin(
-    timeoutMs,
-    async (within) => {
-      for (;;) {
-        within.throwIfAborted();
-        const response = await client.mcp.list(at(directory), {
-          signal: within,
-        });
-        const listed = response.data;
-        last = listed;
-        const cawco = cawcoOf(listed);
-        if (cawco?.status === "needs_auth" || cawco?.status === "disabled") {
-          throw new Error(
-            `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
-          );
-        }
-        // The hub away (a restart) or slow to answer is no refusal: CawCo's
-        // server is dialled again until the deadline, as Claude's launch gate
-        // dials its slot (claude.ts `#readCawcoSlot`).
-        if (cawco?.status === "failed") {
-          await client.experimental.mcp
-            .connect(
-              { server: CAWCO_MCP_SERVER, ...at(directory) },
-              { signal: within }
-            )
-            .catch(() => undefined);
-          await Bun.sleep(1000);
-          continue;
-        }
-        const connecting = listed.some(
-          (server) => server.status.status === "pending"
-        );
-        if (cawco?.status === "connected" && !connecting) {
-          return notConnected(listed);
-        }
-        await Bun.sleep(250);
-      }
-    },
-    { signal }
-  );
-  switch (settled.kind) {
-    case "answered":
-      await settleCatalog(client, directory, signal);
-      return settled.value;
-    case "unanswered": {
-      const cawco = last ? cawcoOf(last) : undefined;
-      if (last && cawco?.status === "connected") {
-        await settleCatalog(client, directory, signal);
-        return notConnected(last);
-      }
-      throw new Error(
-        cawco?.status === "failed"
-          ? `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds (failed: ${cawco.error}).`
-          : `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
+  let last: McpListed | undefined;
+  const look = Effect.gen(function* () {
+    const response = yield* fromPromise((within) =>
+      client.mcp.list(at(directory), { signal: within })
+    );
+    const listed = response.data;
+    last = listed;
+    const cawco = cawcoOf(listed);
+    if (cawco?.status === "needs_auth" || cawco?.status === "disabled") {
+      return yield* Effect.fail(
+        new Error(
+          `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
+        )
       );
     }
-    default:
-      unhandled("read", settled);
+    // The hub away (a restart) or slow to answer is no refusal: CawCo's
+    // server is dialled again until the deadline, as Claude's launch gate
+    // dials its slot (claude.ts `#readCawcoSlot`).
+    if (cawco?.status === "failed") {
+      yield* fromPromise((within) =>
+        client.experimental.mcp.connect(
+          { server: CAWCO_MCP_SERVER, ...at(directory) },
+          { signal: within }
+        )
+      ).pipe(Effect.ignore);
+      return { kind: "redialled" } satisfies McpLook;
+    }
+    const connecting = listed.some(
+      (server) => server.status.status === "pending"
+    );
+    if (cawco?.status === "connected" && !connecting) {
+      return {
+        kind: "settled",
+        unconnected: notConnected(listed),
+      } satisfies McpLook;
+    }
+    return { kind: "connecting" } satisfies McpLook;
+  });
+  // Read at once, then again MCP_LOOK_MS after each read, or MCP_REDIAL_MS
+  // after CawCo's server was dialled again.
+  const settled = yield* boundedRead(
+    timeoutMs,
+    look.pipe(
+      Effect.repeat(
+        Schedule.spaced(MCP_LOOK_MS).pipe(
+          Schedule.setInputType<McpLook>(),
+          Schedule.passthrough,
+          Schedule.while(({ input }) => input.kind !== "settled"),
+          Schedule.modifyDelay(({ input, duration }) =>
+            Effect.succeed(
+              input.kind === "redialled" ? MCP_REDIAL_MS : duration
+            )
+          )
+        )
+      )
+    )
+  ).pipe(
+    Effect.map((answer): McpNotConnected[] | undefined =>
+      answer.kind === "settled" ? answer.unconnected : undefined
+    ),
+    Effect.catch((error) =>
+      error instanceof UnansweredRead
+        ? Effect.succeed(undefined)
+        : Effect.fail(error)
+    )
+  );
+  if (settled) {
+    yield* settleCatalog(client, directory);
+    return settled;
   }
-};
+  // Not answered in time: the last list the server gave decides.
+  const cawco = last ? cawcoOf(last) : undefined;
+  if (last && cawco?.status === "connected") {
+    yield* settleCatalog(client, directory);
+    return notConnected(last);
+  }
+  return yield* Effect.fail(
+    new Error(
+      cawco?.status === "failed"
+        ? `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds (failed: ${cawco.error}).`
+        : `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
+    )
+  );
+});

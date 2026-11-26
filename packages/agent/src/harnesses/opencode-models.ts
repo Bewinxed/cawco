@@ -29,8 +29,10 @@ import { createHash } from "node:crypto";
 import { readFile, stat, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import {
   type OpencodeCatalog,
   opencodeCatalog,
@@ -39,7 +41,9 @@ import { isRecord } from "@cawco/core/is-record";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { delegationHubUrl } from "../delegation";
+import { fromPromise } from "./opencode-effect";
 
 /** Where OpenCode 2.0.28 reads its catalog from (`models.url`, else its own `https://models.opencode.ai`). */
 const OPENCODE_MODELS_SOURCE =
@@ -55,8 +59,12 @@ const REFRESH_MS = 5 * 60_000;
  */
 const FETCH_TIMEOUT_MS = 60_000;
 
-/** Pauses before each read of one refresh: three reads, the later ones after a moment. Ours. */
-const ATTEMPT_DELAYS_MS = [0, 2000, 8000];
+/** One refresh's reads: three, the later ones after a moment (2–4 s, then 4–8 s). Ours. */
+const CATALOG_READS: BackoffPolicy = {
+  firstMs: 4000,
+  mostMs: 8000,
+  giveUp: { afterTries: 3 },
+};
 
 /** The file every server is launched on, beside the plugin it loads: one per hub this agent serves. */
 const opencodeModelsFile = (): string =>
@@ -159,26 +167,23 @@ class OpencodeModels {
     this.#confirmedAt = Date.now();
   }
 
-  /** The source read again (one read at a time), {@link ATTEMPT_DELAYS_MS} apart; throws the last failure. */
+  /** The source read again (one read at a time), on {@link CATALOG_READS}; throws the last failure. */
   refresh(): Promise<void> {
-    this.#reading ??= (async () => {
-      await this.#load();
-      let last: unknown;
-      for (const delay of ATTEMPT_DELAYS_MS) {
-        if (delay) {
-          await Bun.sleep(delay);
-        }
-        try {
-          await this.#readOnce();
-          return;
-        } catch (error) {
-          last = error;
-        }
-      }
-      throw new Error(
-        `OpenCode's model catalog could not be read from ${OPENCODE_MODELS_SOURCE}/api.json (${said(last)}, ${ATTEMPT_DELAYS_MS.length} tries)`
-      );
-    })().finally(() => {
+    // The promise edge of the refresh's reads.
+    this.#reading ??= Effect.runPromise(
+      Effect.gen({ self: this }, function* () {
+        yield* fromPromise(() => this.#load());
+        yield* fromPromise(() => this.#readOnce()).pipe(
+          Effect.retryOrElse(backoffSchedule(CATALOG_READS), (last, tried) =>
+            Effect.fail(
+              new Error(
+                `OpenCode's model catalog could not be read from ${OPENCODE_MODELS_SOURCE}/api.json (${said(last)}, ${tried.tries} tries)`
+              )
+            )
+          )
+        );
+      })
+    ).finally(() => {
       this.#reading = null;
     });
     return this.#reading;

@@ -15,8 +15,10 @@
  * it held as gone, and the next ask starts another.
  */
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import type {
   StoreAnswer,
   StoreArg,
@@ -40,18 +42,18 @@ interface Asked {
 let thread: Worker | undefined;
 let nextId = 0;
 const asked = new Map<number, Asked>();
-/** Reads asked and not yet answered, by op, then by argument: each op's own, so its answer keeps its type. */
-const reading: { [K in StoreOp]: Map<string, Promise<StoreAnswer<K>>> } = {
-  "opencode.ownRows": new Map(),
-  "opencode.ownChanges": new Map(),
-  "opencode.ownSignInTypes": new Map(),
-  "opencode.ownIntegrations": new Map(),
-  "opencode.ownCredentials": new Map(),
-  "opencode.sessions": new Map(),
-  "opencode.backupV1": new Map(),
-  "usage.scan": new Map(),
-  "claude.saidWindow": new Map(),
-  "catalog.transcripts": new Map(),
+/** Reads asked and not yet answered, by op, then by argument: each op's own join, so its answer keeps its type. */
+const reading: { [K in StoreOp]: Join<string, StoreAnswer<K>, unknown> } = {
+  "opencode.ownRows": makeJoin(),
+  "opencode.ownChanges": makeJoin(),
+  "opencode.ownSignInTypes": makeJoin(),
+  "opencode.ownIntegrations": makeJoin(),
+  "opencode.ownCredentials": makeJoin(),
+  "opencode.sessions": makeJoin(),
+  "opencode.backupV1": makeJoin(),
+  "usage.scan": makeJoin(),
+  "claude.saidWindow": makeJoin(),
+  "catalog.transcripts": makeJoin(),
 };
 
 /** Every ask thread `ended` held, failed as gone, and the thread let go; a thread already let go is nothing more. */
@@ -112,12 +114,13 @@ const settle = (id: number): void => {
   }
 };
 
+/** `op` asked of the thread, answered when it says; let go, the ask is forgotten and its answer dropped. */
 const ask = <K extends StoreOp>(
   op: K,
   arg: StoreArg<K>,
   tell?: (value: unknown) => void
-): Promise<StoreAnswer<K>> =>
-  new Promise((resolve, reject) => {
+): Effect.Effect<StoreAnswer<K>, unknown> =>
+  Effect.callback<StoreAnswer<K>, unknown>((resume) => {
     const worker = started();
     nextId += 1;
     const id = nextId;
@@ -128,12 +131,17 @@ const ask = <K extends StoreOp>(
       // by id, whose op TypeScript cannot correlate with the answer
       // (microsoft/TypeScript#30581). The thread answers id `id` with op
       // `op`'s own answer (stores/worker.ts `storeOps`).
-      resolve: resolve as (value: unknown) => void,
-      reject,
+      resolve: (value) => resume(Effect.succeed(value as StoreAnswer<K>)),
+      reject: (error) => resume(Effect.fail(error)),
       ...(tell ? { tell } : {}),
     });
     worker.ref();
     worker.postMessage({ id, op, arg } satisfies StoreAsk);
+    return Effect.sync(() => {
+      if (asked.has(id)) {
+        settle(id);
+      }
+    });
   });
 
 /**
@@ -147,13 +155,10 @@ export const storeRead = <K extends StoreOp>(
   ms: number
 ): Promise<Bounded<StoreAnswer<K>>> => {
   const key = String(JSON.stringify(arg));
-  const held = reading[op];
-  let read = held.get(key);
-  if (!read) {
-    read = ask(op, arg).finally(() => held.delete(key));
-    held.set(key, read);
-  }
-  const shared = read;
+  // The promise edge of the join: a caller there is never interrupted, so
+  // the read goes to its end for whoever asks the same after this caller's
+  // deadline.
+  const shared = Effect.runPromise(reading[op].run(key, ask(op, arg)));
   return readWithin(ms, () => shared);
 };
 
@@ -162,4 +167,6 @@ export const storeWork = <K extends StoreOp>(
   op: K,
   arg: StoreArg<K>,
   tell?: (value: unknown) => void
-): Promise<StoreAnswer<K>> => ask(op, arg, tell);
+): Promise<StoreAnswer<K>> =>
+  // The promise edge of ask.
+  Effect.runPromise(ask(op, arg, tell));

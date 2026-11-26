@@ -18,6 +18,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import {
   errorText,
   notAnswered,
@@ -84,7 +85,8 @@ export class OpencodeActivity {
   /** Since when reads have gone unanswered, said once at the first; undefined while they are answered. */
   #unansweredSince: number | undefined;
   #pending: Promise<Reading> | undefined;
-  readonly #waves = new WeakMap<object, Promise<Reading>>();
+  /** Each recovery wave's shared read, kept as long as the wave is. */
+  readonly #waves = new WeakMap<object, Effect.Effect<Reading>>();
   #nextSampleAt = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #stopped = false;
@@ -241,14 +243,22 @@ export class OpencodeActivity {
     wave: object | undefined
   ): Promise<Reading> {
     const shared = wave ? this.#waves.get(wave) : undefined;
-    if (shared && (await shared).read > afterRead) {
-      return shared;
+    if (shared) {
+      // The promise edge of the wave's read.
+      const read = await Effect.runPromise(shared);
+      if (read.read > afterRead) {
+        return read;
+      }
     }
-    const reading = this.#read(client);
+    // One read, run once and kept: every caller of the wave from now on
+    // shares it.
+    const reading = Effect.runSync(
+      Effect.cached(Effect.promise(() => this.#read(client)))
+    );
     if (wave) {
       this.#waves.set(wave, reading);
     }
-    return reading;
+    return Effect.runPromise(reading);
   }
 
   /**

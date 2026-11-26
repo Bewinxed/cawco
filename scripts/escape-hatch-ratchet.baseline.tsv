@@ -18,6 +18,7 @@ as-cast	(typeof TARGETS)[number]	scripts/release/steps/promote.ts	2
 as-cast	(typeof was)[0]	scripts/codemods/theme-unify.ts	2
 as-cast	(typeof work)[number]	scripts/lib/import-graph.ts	1
 as-cast	(value: unknown) => void	packages/agent/src/stores/client.ts	1
+as-cast	(value: unknown) => void	packages/agent/src/search/process.ts	2
 as-cast	(Window & typeof globalThis) | null	packages/preview/src/overlay/frames.ts	1
 as-cast	[ (typeof found)[number], (typeof found)[number], (typeof found)[number]	scripts/border-width-check.ts	1
 as-cast	[ keyof typeof SECRET_VARIABLES, string, ][]	scripts/release-signing.ts	1
@@ -322,6 +323,7 @@ as-cast	Slot["holder"][] | undefined	packages/hub/scripts/openapi.ts	1
 as-cast	SourceKey	packages/core/src/preview/upstream.ts	1
 as-cast	State	packages/preview/src/overlay/artifact.ts	1
 as-cast	Step[]	packages/jsonl-parser/src/fts5.ts	1
+as-cast	StoreAnswer<K>	packages/agent/src/stores/client.ts	1
 as-cast	string	apps/dashboard/first-paint-chunks.ts	2
 as-cast	string	apps/dashboard/scripts/class-strings.ts	4
 as-cast	string	apps/dashboard/scripts/css-layers-check.ts	1
@@ -684,7 +686,6 @@ suppression	biome-ignore lint/style/noNestedTernary	packages/agent/src/harnesses
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/history.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/rules.ts	2
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/stream.ts	1
-suppression	biome-ignore lint/style/noNonNullAssertion	packages/agent/src/harnesses/opencode.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/canvas/stage.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/HoverPanel.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/preview/PinCard.svelte	1

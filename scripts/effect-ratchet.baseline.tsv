@@ -6,6 +6,8 @@ backoff-loop	new Backoff(EVENT_FEED)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(FAILED_READS)	packages/agent/src/usage/opencode-go.ts	1
 backoff-loop	new Backoff(GATE_SNAPSHOTS)	packages/agent/src/harnesses/opencode-session.ts	1
 backoff-loop	new Backoff(RECOVERY_TRIES)	packages/agent/src/harnesses/opencode.ts	1
+backoff-loop	new Backoff(FAILED_READS)	packages/agent/src/usage/opencode-go.ts	1
+backoff-loop	new Backoff(HAND_BACK)	packages/agent/src/browser/shield.ts	1
 backoff-loop	new Backoff(RELINK)	packages/agent/src/browser/front-origin.ts	1
 backoff-loop	new Backoff(RELOOKS)	packages/hub/src/relay.ts	1
 backoff-loop	new Backoff(RENEW_COOLING)	packages/hub/src/fleet-mcp.ts	1
@@ -47,6 +49,7 @@ error-class	MoveCancelled	packages/agent/src/move.ts	1
 error-class	NotRunning	packages/agent/src/session.ts	1
 error-class	NotTaken	packages/hub/src/db/forget.ts	1
 error-class	ReattachUnanswered	packages/agent/src/harnesses/opencode.ts	1
+error-class	ReattachFailed	packages/agent/src/harness.ts	1
 error-class	Refused	packages/agent/src/stage-measure.ts	1
 error-class	RelayFailed	packages/agent/src/browser/relay.ts	1
 error-class	Refused	packages/hub/src/fleet-mcp-relay.ts	1
@@ -100,6 +103,9 @@ hand-promise	new Promise	packages/agent/src/harnesses/codex-rpc.ts	3
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-docs.ts	1
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-plugin-module.ts	2
 hand-promise	new Promise	packages/agent/src/harnesses/opencode.ts	4
+hand-promise	new Promise	packages/agent/src/harnesses/pi-runtime.ts	3
+hand-promise	new Promise	packages/agent/src/harnesses/pi-sessiond.ts	2
+hand-promise	new Promise	packages/agent/src/harnesses/transcript-index.ts	1
 hand-promise	new Promise	packages/agent/src/host-lfs.ts	1
 hand-promise	new Promise	packages/agent/src/hub-command.ts	1
 hand-promise	new Promise	packages/agent/src/hub-git.ts	2
@@ -111,7 +117,6 @@ hand-promise	new Promise	packages/agent/src/sessiond-client.ts	5
 hand-promise	new Promise	packages/agent/src/sessiond-custody.ts	1
 hand-promise	new Promise	packages/agent/src/stage-host/host.ts	1
 hand-promise	new Promise	packages/agent/src/stage.ts	2
-hand-promise	new Promise	packages/agent/src/stores/client.ts	1
 hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
 hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/canvas.ts	2
@@ -135,7 +140,6 @@ hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/harnesses/claude.ts	3
 hand-promise	Promise.withResolvers	packages/agent/src/harnesses/codex-session.ts	1
-hand-promise	Promise.withResolvers	packages/agent/src/harnesses/opencode.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/machine-agent.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/session.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/usage/scans.ts	1
@@ -160,6 +164,12 @@ promise-map	#refreshing	packages/hub/src/fleet-mcp.ts	1
 promise-map	#retiring	packages/agent/src/harnesses/opencode-server.ts	1
 promise-map	#turns	packages/hub/src/meaning.ts	1
 promise-map	#waves	packages/agent/src/harnesses/opencode-activity.ts	1
+promise-map	#probing	packages/hub/src/fleet-mcp.ts	1
+promise-map	#refreshing	packages/hub/src/fleet-mcp.ts	1
+promise-map	#restoring	packages/agent/src/browser/gate.ts	1
+promise-map	#signingIn	packages/hub/src/fleet-mcp.ts	1
+promise-map	#turns	packages/hub/src/meaning.ts	1
+promise-map	accountSyncs	packages/hub/src/account-probes.ts	1
 promise-map	asking	packages/agent/src/provider-accounts.ts	1
 promise-map	built	packages/hub/src/host-build.ts	1
 promise-map	asking	packages/hub/src/preview-server/serve.ts	1
@@ -197,6 +207,12 @@ promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
 promise-map	pluginFetches	packages/hub/src/fleet-sources.ts	1
 promise-map	probing	packages/hub/src/accounts.ts	1
 promise-map	reading	packages/agent/src/stores/client.ts	1
+promise-map	passes	packages/agent/src/browser/dashboard-door.ts	1
+promise-map	pluginFetches	packages/hub/src/fleet-sources.ts	1
+promise-map	probing	packages/hub/src/accounts.ts	1
+promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
+promise-map	reading	packages/hub/src/views/catalogs.ts	1
+promise-map	readying	packages/hub/src/installs.ts	1
 promise-map	rearming	packages/agent/src/boundary/ensure.ts	1
 promise-map	reclosing	packages/hub/src/workspaces.ts	1
 promise-map	recutting	packages/hub/src/workspaces.ts	1
@@ -221,6 +237,7 @@ timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-models.ts	1
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-server.ts	2
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-session.ts	1
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode.ts	5
+timed-loop	Bun.sleep	packages/agent/src/harnesses/claude.ts	2
 timed-loop	Bun.sleep	packages/agent/src/hub-away.ts	1
 timed-loop	Bun.sleep	packages/agent/src/hub-command.ts	1
 timed-loop	Bun.sleep	packages/agent/src/keeper-watchdog.ts	1
@@ -242,5 +259,4 @@ timed-loop	lifetime.sleep	packages/hub/src/dispatch.ts	1
 timed-loop	lifetime.sleep	packages/hub/src/routines.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/session.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/sessiond-client.ts	1
-timed-loop	setTimeout → #releaseDirectory	packages/agent/src/harnesses/opencode.ts	1
 timed-loop	setTimeout → obeyLink	packages/agent/src/daemon.ts	1

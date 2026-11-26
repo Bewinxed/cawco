@@ -3,6 +3,7 @@ import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import {
   opencodeV1Sessions,
@@ -29,11 +30,13 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { launchGateForm } from "../gate-form";
 import { readJson } from "../json-file";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { OpencodeServerRecordSchema } from "../stored-shapes";
+import { fromPromise, makeFlights } from "./opencode-effect";
 
 const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 
@@ -508,7 +511,8 @@ export class OpencodeServerOwner {
   #transition: Promise<ServerIdentity> | null = null;
   #candidateProcId: string | null = null;
   readonly #writes = makeLock();
-  readonly #retiring = new Map<string, Promise<void>>();
+  /** Each retired generation being ended, by procId: one end at a time each, an end asked meanwhile sharing it. */
+  readonly #retiring = makeFlights<string, void>();
   readonly #retryAt = new Map<string, number>();
   /**
    * The last start of this server that failed, and what it was started
@@ -988,14 +992,10 @@ export class OpencodeServerOwner {
     }
     const left: string[] = [];
     for (const identity of this.#record?.retired ?? []) {
-      const ending =
-        this.#retiring.get(identity.procId) ??
-        this.#retire(identity).finally(() =>
-          this.#retiring.delete(identity.procId)
-        );
-      this.#retiring.set(identity.procId, ending);
       try {
-        await ending;
+        await this.#retiring.runPromise(identity.procId, () =>
+          this.#retire(identity)
+        );
       } catch (error) {
         left.push(`${identity.procId}/${identity.pid}: ${String(error)}`);
       }
@@ -1090,15 +1090,22 @@ export class OpencodeServerOwner {
       ) {
         continue;
       }
-      const retiring = this.#retire(identity)
-        .catch((error: unknown) => {
-          this.#retryAt.set(identity.procId, Date.now() + 5000);
-          console.warn(
-            `[opencode] retired generation ${identity.procId}: ${error}; retry in 5s`
-          );
-        })
-        .finally(() => this.#retiring.delete(identity.procId));
-      this.#retiring.set(identity.procId, retiring);
+      // Let go: the next maintain after its retry time ends it again.
+      Effect.runFork(
+        this.#retiring.run(
+          identity.procId,
+          fromPromise(() => this.#retire(identity)).pipe(
+            Effect.catch((error) =>
+              Effect.sync(() => {
+                this.#retryAt.set(identity.procId, Date.now() + 5000);
+                console.warn(
+                  `[opencode] retired generation ${identity.procId}: ${error}; retry in 5s`
+                );
+              })
+            )
+          )
+        )
+      );
     }
   }
 
@@ -1179,28 +1186,60 @@ export class OpencodeServerOwner {
     console.info(
       `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}, ${why}: SIGTERM`
     );
-    await send("SIGTERM");
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline && (await present())) {
-      await Bun.sleep(200);
-    }
-    // dd1e4ca1 protects active work and live procId reuse. This generation is
-    // retired, has no bound sessions, and its unique procId is never reused.
-    if (this.active?.procId !== identity.procId && (await present())) {
-      await send("SIGKILL");
-      console.info(
-        `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
-      );
-      const killDeadline = Date.now() + 5000;
-      while (Date.now() < killDeadline && (await present())) {
-        await Bun.sleep(100);
-      }
-      if (await present()) {
-        throw new Error("Retired generation remained alive after SIGKILL.");
-      }
-    }
+    // The promise edge of processEnd.
+    await Effect.runPromise(
+      processEnd({
+        present: fromPromise(present),
+        send: (sig) => fromPromise(() => send(sig)),
+        // dd1e4ca1 protects active work and live procId reuse. This
+        // generation is retired, has no bound sessions, and its unique
+        // procId is never reused: only while it is not the active one may
+        // it be killed.
+        mayKill: () => this.active?.procId !== identity.procId,
+        killed: () =>
+          console.info(
+            `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
+          ),
+      })
+    );
   }
 }
+
+/** How long a retired server is given to end after SIGTERM, and how often it is looked at meanwhile. Ours. */
+const TERM_GRACE = { deadlineMs: 15_000, every: 200 } as const;
+/** How long a retired server is given to end after SIGKILL, and how often it is looked at meanwhile. Ours. */
+const KILL_GRACE = { deadlineMs: 5000, every: 100 } as const;
+
+/**
+ * A process ended: SIGTERM, {@link TERM_GRACE} for it to go, then, while
+ * `mayKill` holds, SIGKILL and {@link KILL_GRACE} more. One still there
+ * after that fails the end.
+ */
+const processEnd = Effect.fnUntraced(function* (end: {
+  /** Signals the process. */
+  readonly send: (sig: NodeJS.Signals) => Effect.Effect<void, unknown>;
+  /** Whether the process is still there. */
+  readonly present: Effect.Effect<boolean, unknown>;
+  /** Whether it may be killed, read once its grace is over. */
+  readonly mayKill: () => boolean;
+  /** Said once it was sent SIGKILL. */
+  readonly killed: () => void;
+}) {
+  const gone = (present: boolean) => !present;
+  yield* end.send("SIGTERM");
+  const termed = yield* lookUntil({ ...TERM_GRACE, until: gone }, end.present);
+  if (termed.kind === "found" || !end.mayKill()) {
+    return;
+  }
+  yield* end.send("SIGKILL");
+  end.killed();
+  const killed = yield* lookUntil({ ...KILL_GRACE, until: gone }, end.present);
+  if (killed.kind === "deadline") {
+    return yield* Effect.fail(
+      new Error("Retired generation remained alive after SIGKILL.")
+    );
+  }
+});
 
 /**
  * The same process still runs, whoever holds it: its pid, with the start the

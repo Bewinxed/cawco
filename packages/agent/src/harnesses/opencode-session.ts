@@ -34,7 +34,7 @@ import {
 } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -45,6 +45,7 @@ import {
   spawningToolAllowed,
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   byPerson,
@@ -119,6 +120,7 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import { Effect } from "effect";
 import { z } from "zod";
 import { readFleetMemory } from "../fleet-memory";
 import type {
@@ -148,6 +150,7 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
+import { fromPromise } from "./opencode-effect";
 import {
   codeModeCalls,
   compactBoundary,
@@ -2378,48 +2381,63 @@ export class OpencodeSession implements HarnessSession {
         );
       }
     };
-    const tries = new Backoff(GATE_SNAPSHOTS);
-    for (;;) {
-      try {
-        const read = await askOpencode(async (options): Promise<void> => {
-          if (kind === "permission") {
-            for (const ask of await this.#client.permission.list(
-              { sessionID },
-              options
-            )) {
-              this.#asked(ask);
-            }
-          } else {
-            for (const form of await this.#client.session.form.list(
-              { sessionID },
-              options
-            )) {
-              this.#formAsked(form);
-            }
+    const read = fromPromise(() =>
+      askOpencode(async (options): Promise<void> => {
+        if (kind === "permission") {
+          for (const ask of await this.#client.permission.list(
+            { sessionID },
+            options
+          )) {
+            this.#asked(ask);
           }
-        }, this.#lifetime.signal);
-        switch (read.kind) {
+        } else {
+          for (const form of await this.#client.session.form.list(
+            { sessionID },
+            options
+          )) {
+            this.#formAsked(form);
+          }
+        }
+      }, this.#lifetime.signal)
+    ).pipe(
+      Effect.mapError(errorText),
+      Effect.flatMap((answer) => {
+        switch (answer.kind) {
           case "answered":
-            this.#gateFailures.delete(kind);
-            return;
+            return Effect.void;
           case "unanswered":
-            missed(notAnswered(`the session's pending ${kind}s`, read));
-            break;
+            return Effect.fail(
+              notAnswered(`the session's pending ${kind}s`, answer)
+            );
           default:
-            unhandled("read", read);
+            return unhandled("read", answer);
         }
-      } catch (error) {
-        if (this.#lifetime.signal.aborted) {
-          return;
-        }
-        missed(errorText(error));
-      }
-      const step = tries.failed();
-      if (step.kind === "gave-up") {
-        return;
-      }
-      await Bun.sleep(step.ms);
-    }
+      }),
+      // A session ended is no failure to say: its reads stop.
+      Effect.tapError((why) =>
+        Effect.sync(() => {
+          if (!this.#lifetime.signal.aborted) {
+            missed(why);
+          }
+        })
+      )
+    );
+    // The promise edge of the snapshot's tries (GATE_SNAPSHOTS); the last
+    // failure was said by the try that had it.
+    await Effect.runPromise(
+      read.pipe(
+        Effect.retry({
+          schedule: backoffSchedule(GATE_SNAPSHOTS),
+          while: () => !this.#lifetime.signal.aborted,
+        }),
+        Effect.match({
+          onSuccess: () => {
+            this.#gateFailures.delete(kind);
+          },
+          onFailure: () => undefined,
+        })
+      )
+    );
   }
 
   /**

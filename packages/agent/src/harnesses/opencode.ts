@@ -27,12 +27,19 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { isGone } from "@cawco/core/absent";
 import { providersOpenedBy } from "@cawco/core/accounts";
-import { Backoff, type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
+import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import {
+  boundedRead,
+  Unanswered as UnansweredRead,
+} from "@cawco/core/effect/bounded";
+import { type Join, makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -116,6 +123,17 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import {
+  Cause,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Latch,
+  Schedule,
+  Schema,
+  Semaphore,
+} from "effect";
 import { z } from "zod";
 import type {
   OpencodeAccountsHost,
@@ -210,6 +228,7 @@ import {
   unreachable,
   waitForMcp,
 } from "./opencode-client";
+import { fromPromise, makeFlights, runAbortable } from "./opencode-effect";
 import { isExportList, opencodeFolderCarry } from "./opencode-folder";
 import {
   catalogLaunchEnv,
@@ -248,12 +267,21 @@ import {
 import { opensTurn, toTranscript } from "./opencode-transcript";
 
 /** A reattach's read the server did not answer in time: undecided, so the reattach tries again, within its budget (`#recover`). */
-class ReattachUnanswered extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ReattachUnanswered";
-  }
-}
+class ReattachUnanswered extends Schema.TaggedError<ReattachUnanswered>()(
+  "ReattachUnanswered",
+  { message: Schema.String }
+) {}
+
+/** A location's release put off: the server runs something there, or the adapter is mid-operation. */
+class ReleaseDeferred extends Schema.TaggedError<ReleaseDeferred>()(
+  "ReleaseDeferred",
+  { directory: Schema.String }
+) {}
+
+/** A generation's event feed that did not come up, or came up and dropped: its pump connects again on the house backoff. */
+class FeedDown extends Schema.TaggedError<FeedDown>()("FeedDown", {
+  generation: Schema.String,
+}) {}
 
 interface RecoveryRound {
   attempt: number;
@@ -265,6 +293,9 @@ interface RecoveryWave {
   pending: number;
   round?: RecoveryRound;
 }
+
+/** How long the 1.x cutover waits before it asks a 1.x server still running to retire again. Ours. */
+const V1_RETIRE_LOOK_MS = 5000;
 
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
 const OPENCODE_SIDECAR = opencodeRecordFile("fleet.json");
@@ -534,6 +565,8 @@ const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
  * Ours, with margin.
  */
 const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
+/** How long a fleet report's wait lets the config rest between two looks. Ours. */
+const CONFIG_LOOK_MS = 250;
 
 /**
  * How long one session's reattach goes on trying a server it cannot reach
@@ -736,118 +769,115 @@ interface OpencodeServerAttach {
   timeoutMs?: number;
 }
 
+/** Each keeper connection's server attaches in flight, by procId. */
 const pendingServerAttachments = new WeakMap<
   SessiondClient,
-  Map<string, Promise<string>>
+  Join<string, string, unknown>
 >();
 
 /**
  * Puts `opencode serve` under sessiond and returns the URL it announced. One
  * listener per client/procId: concurrent callers share its whole spawn and
- * replay.
+ * replay, which goes on while any of them still waits.
  */
 const attachOpencodeServer = (
   options: OpencodeServerAttach
 ): Promise<string> => {
-  let pending = pendingServerAttachments.get(options.sessiond);
-  if (!pending) {
-    pending = new Map();
-    pendingServerAttachments.set(options.sessiond, pending);
+  let attaches = pendingServerAttachments.get(options.sessiond);
+  if (!attaches) {
+    attaches = makeJoin();
+    pendingServerAttachments.set(options.sessiond, attaches);
   }
-  const existing = pending.get(options.procId);
-  if (existing) {
-    return existing;
-  }
-  const attached = announceOpencodeServer(options).finally(() =>
-    pending.delete(options.procId)
+  // The promise edge of serverAnnounced, shared by procId.
+  return runAbortable(
+    attaches.run(options.procId, serverAnnounced(options)),
+    options.signal
   );
-  pending.set(options.procId, attached);
-  return attached;
 };
 
-const announceOpencodeServer = async (
+/** {@link attachOpencodeServer}: the server spawned unless it runs, and its announce read from its replay. */
+const serverAnnounced = Effect.fnUntraced(function* (
   options: OpencodeServerAttach
-): Promise<string> => {
+) {
   const { procId } = options;
   const timeoutMs = options.timeoutMs ?? SERVER_ANNOUNCE_TIMEOUT_MS;
   const client = options.sessiond;
-  options.signal?.throwIfAborted();
   // Fresh, not the connect-time welcome: this client is long-lived.
-  const held = (await client.list()).procs.find(
+  const held = (yield* fromPromise(() => client.list())).procs.find(
     (proc) => proc.procId === procId
   );
-  options.signal?.throwIfAborted();
   if (!held?.alive) {
-    await client.spawnProc(procId, options.spec);
+    yield* fromPromise(() => client.spawnProc(procId, options.spec));
   }
-  const announcement = await readWithin(
-    timeoutMs,
-    (signal) =>
-      new Promise<string>((resolve, reject) => {
-        let settled = false;
-        let stop = (): void => undefined;
-        const settle = (finish: () => void): void => {
+  const announced = Effect.callback<string, Error>((resume) => {
+    let settled = false;
+    let stop: (() => void) | undefined;
+    const settle = (answer: Effect.Effect<string, Error>): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      stop?.();
+      resume(answer);
+    };
+    // From seq 0: the announce line is printed once, at boot, and a returning
+    // agent reads it out of the replay ring long after it was written.
+    stop = client.subscribe(
+      procId,
+      {
+        line: (event) => {
+          const url = parseServerAnnouncement(event.data);
+          if (url) {
+            settle(Effect.succeed(url));
+          }
+        },
+        exit: (exitCode, _signal, pid) => {
           if (settled) {
             return;
           }
-          settled = true;
-          signal.removeEventListener("abort", aborted);
-          stop();
-          finish();
-        };
-        const aborted = () => settle(() => reject(signal.reason));
-        signal.addEventListener("abort", aborted, { once: true });
-        if (signal.aborted) {
-          aborted();
-          return;
-        }
-        // From seq 0: the announce line is printed once, at boot, and a returning
-        // agent reads it out of the replay ring long after it was written.
-        stop = client.subscribe(
-          procId,
-          {
-            line: (event) => {
-              const announced = parseServerAnnouncement(event.data);
-              if (announced) {
-                settle(() => resolve(announced));
-              }
-            },
-            exit: (exitCode, _signal, pid) =>
-              settle(() => {
-                // A server that never announced serves nobody: its end is read here.
-                client.release(procId, pid);
-                reject(
-                  new Error(
-                    `[opencode] serve exited (code ${exitCode}) before announcing a port`
-                  )
-                );
-              }),
-            // The ring outran the announce line: the URL is unrecoverable from here.
-            reset: (nextSeq) =>
-              settle(() =>
-                reject(
-                  new Error(
-                    `[opencode] ${procId}'s replay window lost the port announcement (resumes at ${nextSeq})`
-                  )
-                )
-              ),
-          },
-          0
-        );
-      }),
-    options.signal ? { signal: options.signal } : {}
+          // A server that never announced serves nobody: its end is read here.
+          client.release(procId, pid);
+          settle(
+            Effect.fail(
+              new Error(
+                `[opencode] serve exited (code ${exitCode}) before announcing a port`
+              )
+            )
+          );
+        },
+        // The ring outran the announce line: the URL is unrecoverable from here.
+        reset: (nextSeq) =>
+          settle(
+            Effect.fail(
+              new Error(
+                `[opencode] ${procId}'s replay window lost the port announcement (resumes at ${nextSeq})`
+              )
+            )
+          ),
+      },
+      0
+    );
+    // A replay that settled it while subscribing leaves its listener here.
+    if (settled) {
+      stop();
+    }
+    return Effect.sync(() => {
+      settled = true;
+      stop?.();
+    });
+  });
+  return yield* boundedRead(timeoutMs, announced).pipe(
+    Effect.catch((error) =>
+      Effect.fail(
+        error instanceof UnansweredRead
+          ? new Error(
+              `[opencode] no "server listening" line from ${procId} within ${timeoutMs}ms`
+            )
+          : error
+      )
+    )
   );
-  switch (announcement.kind) {
-    case "answered":
-      return announcement.value;
-    case "unanswered":
-      throw new Error(
-        `[opencode] no "server listening" line from ${procId} within ${timeoutMs}ms`
-      );
-    default:
-      unhandled("read", announcement);
-  }
-};
+});
 
 /**
  * A fleet MCP definition, in 2.0's `mcp.servers.<name>` shape. Its `timeout`
@@ -2295,10 +2325,12 @@ class OpencodeHarness implements Harness<"opencode"> {
     string,
     import("@cawco/core/protocol").SessionAddress
   >();
-  readonly #migrations = new Map<string, Promise<void>>();
-  readonly #pendingRecoveries = new Map<
+  /** Each session's handoff to its server's active generation in flight, by instanceId ({@link #migrate}). */
+  readonly #migrations = makeFlights<string, void>();
+  /** Each held session's reattach in flight, by instanceId ({@link reattach}). */
+  readonly #pendingRecoveries = makeFlights<
     string,
-    Promise<OpencodeSession | undefined>
+    OpencodeSession | undefined
   >();
   #recoveryWave: RecoveryWave | null = null;
   #handoffTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2320,16 +2352,22 @@ class OpencodeHarness implements Harness<"opencode"> {
    * replacement, so no event of a generation arrives twice.
    */
   readonly #pumps = new Map<string, AbortController>();
-  readonly #pumpReady = new Map<string, Promise<void>>();
+  /** Each generation's subscription being up, met or failed by its current one ({@link #feedOnce}). */
+  readonly #pumpReady = new Map<string, Deferred.Deferred<void, Error>>();
   /** Generations whose subscription is up right now. */
   readonly #pumpConnected = new Set<string>();
+  /** Recoveries and reconciles at once: four, the rest waiting their turn in the order they asked ({@link #withRecovery}). */
+  readonly #recoverySlots = Semaphore.makeUnsafe(4);
+  /** Recoveries and reconciles running or waiting for a slot. */
   #recovering = 0;
+  /** Recoveries and reconciles running. */
+  #recoveriesRunning = 0;
   #recoveryHighWater = 0;
-  readonly #recoveryWaiters: (() => void)[] = [];
-  readonly #reconcileJobs = new Map<OpencodeSession, Promise<void>>();
+  /** Each session's reconcile in flight ({@link #reconcile}). */
+  readonly #reconcileJobs = makeFlights<OpencodeSession, void>();
   readonly #reconcileAgain = new Set<OpencodeSession>();
   /** Session moves between servers in flight, by OpenCode session id: one at a time each. */
-  readonly #moves = new Map<string, Promise<void>>();
+  readonly #moves = makeFlights<string, void>();
 
   /** What provider accounts reach OpenCode's own sign-ins and servers through (daemon.ts hands it to them). */
   readonly accountsHost: OpencodeAccountsHost;
@@ -2433,10 +2471,9 @@ class OpencodeHarness implements Harness<"opencode"> {
   #converging: boolean;
 
   /** Lock held while a config change is applied: spawns queue behind it. */
-  #applyGate: { promise: Promise<void>; resolve: () => void } | null = null;
+  #applyGate: Latch.Latch | null = null;
   readonly #pendingSpawns: {
-    resolve: (session: HarnessSession) => void;
-    reject: (error: Error) => void;
+    started: Deferred.Deferred<HarnessSession, unknown>;
     spec: SpawnPayload;
     ctx: HarnessContext;
   }[] = [];
@@ -3154,12 +3191,8 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!(target && old && sessionId) || target.procId === old.procId) {
       return Promise.resolve();
     }
-    const prior = this.#migrations.get(session.instanceId);
-    if (prior) {
-      return prior;
-    }
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one handoff transaction verifies old custody, target provenance and attachment stability
-    const migrating = (async () => {
+    return this.#migrations.runPromise(session.instanceId, async () => {
       const oldClient = this.#clientForGeneration(old);
       const idleOn = async (): Promise<boolean> =>
         (await this.#activity(old).sessionState(oldClient, sessionId)).kind ===
@@ -3266,14 +3299,13 @@ class OpencodeHarness implements Harness<"opencode"> {
         );
       }
       await session.mcpUnconnected(unconnected);
-    })().finally(() => this.#migrations.delete(session.instanceId));
-    this.#migrations.set(session.instanceId, migrating);
-    return migrating;
+    });
   }
 
   async #prepareDispatch(session: OpencodeSession): Promise<void> {
     if (this.#applyGate) {
-      await this.#applyGate.promise;
+      // The promise edge of the gate.
+      await Effect.runPromise(this.#applyGate.await);
     }
     // The account's server stopped for being idle, or went down, since the
     // session last ran: it starts again, and the session goes to it. A
@@ -3369,14 +3401,12 @@ class OpencodeHarness implements Harness<"opencode"> {
       ...(this.#opening > 0 ? [`${this.#opening} session(s) opening`] : []),
       ...(this.#mutatingMcp > 0 ? ["an MCP change"] : []),
       ...(this.#migrations.size > 0
-        ? [`handoff of ${[...this.#migrations.keys()].join(", ")}`]
+        ? [`handoff of ${this.#migrations.keys().join(", ")}`]
         : []),
       ...(this.#moves.size > 0
-        ? [`move of ${[...this.#moves.keys()].join(", ")}`]
+        ? [`move of ${this.#moves.keys().join(", ")}`]
         : []),
-      ...(this.#pendingRecoveries.size > 0 ||
-      this.#recovering > 0 ||
-      this.#recoveryWaiters.length > 0
+      ...(this.#pendingRecoveries.size > 0 || this.#recovering > 0
         ? ["a recovery"]
         : []),
     ];
@@ -3403,8 +3433,8 @@ class OpencodeHarness implements Harness<"opencode"> {
             (_, n) => `mcp-change:${n}`
           ),
           ...Array.from({ length: this.#syncing }, (_, n) => `fleet-sync:${n}`),
-          ...[...this.#migrations.keys()].map((id) => `handoff:${id}`),
-          ...[...this.#moves.keys()].map((id) => `move:${id}`),
+          ...this.#migrations.keys().map((id) => `handoff:${id}`),
+          ...this.#moves.keys().map((id) => `move:${id}`),
         ],
       },
       {
@@ -3633,11 +3663,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       this.#checkingPublication = false;
     }
 
-    let gateResolve!: () => void;
-    const gatePromise = new Promise<void>((resolve) => {
-      gateResolve = resolve;
-    });
-    this.#applyGate = { promise: gatePromise, resolve: gateResolve };
+    const gate = Latch.makeUnsafe(false);
+    this.#applyGate = gate;
     try {
       if (
         this.#desiredHash === this.#appliedHash &&
@@ -3729,7 +3756,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       );
     } finally {
       this.#applyGate = null;
-      gateResolve();
+      gate.openUnsafe();
       for (const session of this.#sessions.values()) {
         session.configGateLifted();
       }
@@ -3740,8 +3767,11 @@ class OpencodeHarness implements Harness<"opencode"> {
   /** Drain queued spawn requests that accumulated while the config gate was held. */
   #drainPendingSpawns(): void {
     const pending = this.#pendingSpawns.splice(0);
-    for (const { resolve, reject, spec, ctx } of pending) {
-      this.spawn(spec, ctx).then(resolve, reject);
+    for (const { started, spec, ctx } of pending) {
+      this.spawn(spec, ctx).then(
+        (session) => Deferred.doneUnsafe(started, Exit.succeed(session)),
+        (error: unknown) => Deferred.doneUnsafe(started, Exit.fail(error))
+      );
     }
   }
 
@@ -4264,15 +4294,20 @@ class OpencodeHarness implements Harness<"opencode"> {
         await this.#adoptStrays();
         this.#straysSweptAt = Date.now();
       }
-      for (;;) {
-        const reads = await Promise.all(
-          this.#slots().map((slot) => slot.owner.retireV1())
-        );
-        if (reads.flat().length === 0) {
-          break;
-        }
-        await Bun.sleep(5000);
-      }
+      // The promise edge of the wait for every 1.x server to have ended:
+      // each is asked to retire, and asked again every V1_RETIRE_LOOK_MS
+      // while one still runs.
+      await Effect.runPromise(
+        lookUntil(
+          {
+            every: V1_RETIRE_LOOK_MS,
+            until: (left: unknown[]) => left.length === 0,
+          },
+          fromPromise(() =>
+            Promise.all(this.#slots().map((slot) => slot.owner.retireV1()))
+          ).pipe(Effect.map((reads) => reads.flat()))
+        )
+      );
       const backup = await storeWork("opencode.backupV1", xdgDataHome());
       if (backup) {
         console.info(
@@ -4894,11 +4929,13 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!this.#pumps.has(key)) {
       const owner = new AbortController();
       this.#pumps.set(key, owner);
-      this.#pumpReady.set(key, Promise.withResolvers<void>().promise);
       detach(this.#pump(identity, owner.signal).catch(console.warn), "pump");
     }
-    // biome-ignore lint/style/noNonNullAssertion: set above or by the pump before its first await
-    return this.#pumpReady.get(key)!;
+    // Set by the pump before its first await; none when it ended at once,
+    // its server's slot gone.
+    const ready = this.#pumpReady.get(key);
+    // The promise edge of the generation's readiness.
+    return ready ? Effect.runPromise(Deferred.await(ready)) : Promise.resolve();
   }
 
   /**
@@ -4912,8 +4949,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   #releaseDirectory(
     directory: string,
     identity: ServerIdentity,
-    caller = "directory release",
-    tries = new Backoff(DIRECTORY_RELEASES)
+    caller = "directory release"
   ): void {
     // One release of a location at a time: a second asked while one waits
     // is that one.
@@ -4922,31 +4958,41 @@ class OpencodeHarness implements Harness<"opencode"> {
       return;
     }
     this.#releasing.add(key);
-    this.#disposeUnused(directory, identity, caller)
-      .then((settled) => {
-        if (!settled) {
-          const step = tries.failed();
-          if (step.kind === "gave-up") {
+    const once = fromPromise(() =>
+      this.#disposeUnused(directory, identity, caller)
+    ).pipe(
+      Effect.flatMap((settled) =>
+        settled ? Effect.void : Effect.fail(new ReleaseDeferred({ directory }))
+      )
+    );
+    // Let go: tried again while deferred, on DIRECTORY_RELEASES, until the
+    // location is settled or the release gives up.
+    Effect.runFork(
+      once.pipe(
+        Effect.retryOrElse(
+          backoffSchedule(DIRECTORY_RELEASES).pipe(
+            Schedule.while(({ input }) => input instanceof ReleaseDeferred)
+          ),
+          (error, tried) =>
+            Effect.sync(() => {
+              if (error instanceof ReleaseDeferred) {
+                console.info(
+                  `[opencode] ${directory}: its location stays loaded after ${tried.tries} deferred releases; the next release asks again`
+                );
+                return;
+              }
+              console.warn(
+                `[opencode] ${directory}: releasing its location failed: ${errorText(error)}`
+              );
+            })
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
             this.#releasing.delete(key);
-            console.info(
-              `[opencode] ${directory}: its location stays loaded after ${step.tries} deferred releases; the next release asks again`
-            );
-            return;
-          }
-          setTimeout(() => {
-            this.#releasing.delete(key);
-            this.#releaseDirectory(directory, identity, caller, tries);
-          }, step.ms).unref();
-          return;
-        }
-        this.#releasing.delete(key);
-      })
-      .catch((error: unknown) => {
-        this.#releasing.delete(key);
-        console.warn(
-          `[opencode] ${directory}: releasing its location failed: ${errorText(error)}`
-        );
-      });
+          })
+        )
+      )
+    );
   }
 
   /** Whether the location is settled: evicted, or in use again and not this call's to evict. */
@@ -5009,86 +5055,134 @@ class OpencodeHarness implements Harness<"opencode"> {
    * reconnection"): this loop reconnects, and every session on the generation
    * is read back over REST each time it is up again.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child
   async #pump(identity: ServerIdentity, stopped: AbortSignal): Promise<void> {
     const key = identity.procId;
-    const feedTries = new Backoff(EVENT_FEED);
-    while (!stopped.aborted) {
-      const slot = this.#slotOfGeneration(identity);
-      if (!slot) {
-        break;
+    const once = fromPromise((signal) =>
+      this.#feedOnce(identity, stopped, signal)
+    ).pipe(
+      Effect.orDie,
+      Effect.flatMap((end) =>
+        end === "down"
+          ? Effect.fail(new FeedDown({ generation: key }))
+          : Effect.succeed(end)
+      )
+    );
+    // One series of the house backoff (EVENT_FEED) per feed that was up:
+    // reconnects that fail wait longer each time, and a feed that was up
+    // and dropped is the next series' first failure, so its first wait
+    // comes before the reconnect after it.
+    const series = (afterDrop: boolean) => {
+      let owed = afterDrop;
+      return Effect.suspend(() => {
+        if (owed) {
+          owed = false;
+          return Effect.fail(new FeedDown({ generation: key }));
+        }
+        return once;
+      }).pipe(Effect.retry(backoffSchedule(EVENT_FEED)));
+    };
+    const feed = Effect.gen(function* () {
+      let end = yield* series(false);
+      while (end === "dropped") {
+        end = yield* series(true);
       }
-      const ready = Promise.withResolvers<void>();
-      this.#pumpReady.set(key, ready.promise);
-      detach(
-        ready.promise.catch(() => undefined),
-        "catch"
-      );
-      // The feed is up when its first event comes, given RECOVERY_TIMEOUT_MS;
-      // the signal the read hands it then only ever aborts on `stopped`.
-      const connection = new AbortController();
-      let connected = false;
-      let unavailable = `OpenCode subscription unavailable: ${identity.procId}`;
-      try {
-        const client = this.#clientForGeneration(identity);
-        const first = await askOpencode(async ({ signal }) => {
-          const feed = client.event
-            .subscribe({ signal: AbortSignal.any([signal, connection.signal]) })
-            [Symbol.asyncIterator]();
-          return { feed, next: await feed.next() };
-        }, stopped);
-        switch (first.kind) {
-          case "unanswered":
-            unavailable = `OpenCode subscription unavailable: ${notAnswered("its event feed", first)}`;
-            console.warn(`[opencode] ${identity.procId}: ${unavailable}`);
-            break;
-          case "answered": {
-            const { feed } = first.value;
-            let { next } = first.value;
-            while (!(next.done || stopped.aborted)) {
-              if (!connected) {
-                connected = true;
-                console.info(
-                  `[opencode] ${identity.procId}/${identity.pid}: subscribe ready`
-                );
-                ready.resolve();
-                this.#pumpConnected.add(key);
-                for (const session of this.#sessions.values()) {
-                  if (
-                    this.#sessionOwners.get(session.instanceId)?.procId ===
-                    identity.procId
-                  ) {
-                    detach(this.#reconcile(session), "reconcile");
-                  }
+    });
+    try {
+      // The promise edge of the feed: it runs until its server's slot is
+      // gone, or `stopped` interrupts it.
+      const ended = await Effect.runPromiseExit(feed, { signal: stopped });
+      if (Exit.isFailure(ended) && !Cause.hasInterruptsOnly(ended.cause)) {
+        throw Cause.squash(ended.cause);
+      }
+    } finally {
+      // A pump stopped leaves the generation's tables to whoever stopped it,
+      // and to the pump started after it.
+      if (!stopped.aborted) {
+        this.#pumps.delete(key);
+        this.#pumpReady.delete(key);
+        this.#pumpConnected.delete(key);
+      }
+    }
+  }
+
+  /**
+   * One subscription to the generation's feed, read to its end: "gone" when
+   * the generation's server has no slot any more, "dropped" when the feed
+   * was up and then ended or dropped, "down" when it never came up. The
+   * generation's readiness is this subscription's: met once its first event
+   * comes, failed once it ends without.
+   */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child
+  async #feedOnce(
+    identity: ServerIdentity,
+    stopped: AbortSignal,
+    signal: AbortSignal
+  ): Promise<"down" | "dropped" | "gone"> {
+    const key = identity.procId;
+    const slot = this.#slotOfGeneration(identity);
+    if (!slot) {
+      return "gone";
+    }
+    const ready = Deferred.makeUnsafe<void, Error>();
+    this.#pumpReady.set(key, ready);
+    // The feed is up when its first event comes, given RECOVERY_TIMEOUT_MS;
+    // the signal the read hands it then only ever aborts on `stopped`.
+    const connection = new AbortController();
+    let connected = false;
+    let unavailable = `OpenCode subscription unavailable: ${identity.procId}`;
+    try {
+      const client = this.#clientForGeneration(identity);
+      const first = await askOpencode(async ({ signal: asked }) => {
+        const feed = client.event
+          .subscribe({
+            signal: AbortSignal.any([asked, connection.signal, signal]),
+          })
+          [Symbol.asyncIterator]();
+        return { feed, next: await feed.next() };
+      }, signal);
+      switch (first.kind) {
+        case "unanswered":
+          unavailable = `OpenCode subscription unavailable: ${notAnswered("its event feed", first)}`;
+          console.warn(`[opencode] ${identity.procId}: ${unavailable}`);
+          break;
+        case "answered": {
+          const { feed } = first.value;
+          let { next } = first.value;
+          while (!(next.done || stopped.aborted)) {
+            if (!connected) {
+              connected = true;
+              console.info(
+                `[opencode] ${identity.procId}/${identity.pid}: subscribe ready`
+              );
+              Deferred.doneUnsafe(ready, Exit.void);
+              this.#pumpConnected.add(key);
+              for (const session of this.#sessions.values()) {
+                if (
+                  this.#sessionOwners.get(session.instanceId)?.procId ===
+                  identity.procId
+                ) {
+                  detach(this.#reconcile(session), "reconcile");
                 }
               }
-              feedTries.succeeded();
-              this.#route(next.value, identity);
-              next = await feed.next();
             }
-            break;
+            this.#route(next.value, identity);
+            next = await feed.next();
           }
-          default:
-            unhandled("read", first);
+          break;
         }
-      } catch {
-        // The feed ended or dropped; reconnect below unless stopped.
-      } finally {
-        if (connected && !stopped.aborted) {
-          this.#pumpConnected.delete(key);
-        }
-        connection.abort();
-        ready.reject(new Error(unavailable));
+        default:
+          unhandled("read", first);
       }
-      if (stopped.aborted) {
-        break;
+    } catch {
+      // The feed ended or dropped; the pump reconnects unless stopped.
+    } finally {
+      if (connected && !stopped.aborted) {
+        this.#pumpConnected.delete(key);
       }
-      const step = feedTries.failed();
-      await Bun.sleep(step.kind === "wait" ? step.ms : EVENT_FEED.mostMs);
+      connection.abort();
+      Deferred.doneUnsafe(ready, Exit.fail(new Error(unavailable)));
     }
-    this.#pumps.delete(key);
-    this.#pumpReady.delete(key);
-    this.#pumpConnected.delete(key);
+    return connected ? "dropped" : "down";
   }
 
   /**
@@ -5185,59 +5279,77 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   async #withRecovery<T>(work: () => Promise<T>): Promise<T> {
-    // A released slot goes straight to its waiter, so newcomers cannot race
-    // a woken recovery into a fifth concurrent operation.
-    if (this.#recovering === 4) {
-      await new Promise<void>((resolve) => this.#recoveryWaiters.push(resolve));
-    } else {
-      this.#recovering += 1;
-    }
-    if (this.#recovering > this.#recoveryHighWater) {
-      this.#recoveryHighWater = this.#recovering;
-      console.info(
-        `[opencode] recovery concurrency high-water ${this.#recoveryHighWater}`
-      );
-    }
+    this.#recovering += 1;
     try {
-      return await work();
+      // The promise edge of the slots: a slot freed goes to the first
+      // waiting, so a newcomer never takes it from a recovery that waited.
+      return await Effect.runPromise(
+        this.#recoverySlots.withPermit(
+          Effect.suspend(() => {
+            this.#recoveriesRunning += 1;
+            if (this.#recoveriesRunning > this.#recoveryHighWater) {
+              this.#recoveryHighWater = this.#recoveriesRunning;
+              console.info(
+                `[opencode] recovery concurrency high-water ${this.#recoveryHighWater}`
+              );
+            }
+            return fromPromise(work);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                this.#recoveriesRunning -= 1;
+              })
+            )
+          )
+        )
+      );
     } finally {
-      const next = this.#recoveryWaiters.shift();
-      if (next) {
-        next();
-      } else {
-        this.#recovering -= 1;
-      }
+      this.#recovering -= 1;
     }
   }
 
+  /**
+   * The session's state read back after its feed was away: one run at a
+   * time. A caller while one runs shares it, and one more run follows it,
+   * for what the caller came to read may have come after the run read it.
+   */
   #reconcile(session: OpencodeSession): Promise<void> {
-    const existing = this.#reconcileJobs.get(session);
-    if (existing) {
+    if (this.#reconcileJobs.has(session)) {
       this.#reconcileAgain.add(session);
-      return existing;
+      return this.#reconcileJobs.runPromise(session, () => Promise.resolve());
     }
-    const job = this.#withRecovery(async () => {
-      if (this.#sessions.get(session.instanceId) !== session) {
-        return;
-      }
-      // The jobs that ended while nothing was subscribed go first: a missed
-      // turn's end, read next, says what still runs.
-      await session.reconcileBackground().catch((error: unknown) => {
-        console.warn(
-          `[opencode] ${session.instanceId}: its background jobs were not reconciled: ${errorText(error)}`
-        );
-      });
-      await Promise.all([session.watchResumedTurn(), session.reconcileGates()]);
-    }).finally(() => {
-      this.#reconcileJobs.delete(session);
-      if (
-        this.#reconcileAgain.delete(session) &&
-        this.#sessions.get(session.instanceId) === session
-      ) {
-        detach(this.#reconcile(session), "reconcile");
-      }
-    });
-    this.#reconcileJobs.set(session, job);
+    const job = this.#reconcileJobs.runPromise(session, () =>
+      this.#withRecovery(async () => {
+        if (this.#sessions.get(session.instanceId) !== session) {
+          return;
+        }
+        // The jobs that ended while nothing was subscribed go first: a missed
+        // turn's end, read next, says what still runs.
+        await session.reconcileBackground().catch((error: unknown) => {
+          console.warn(
+            `[opencode] ${session.instanceId}: its background jobs were not reconciled: ${errorText(error)}`
+          );
+        });
+        await Promise.all([
+          session.watchResumedTurn(),
+          session.reconcileGates(),
+        ]);
+      })
+    );
+    // The rerun follows once the run is no longer in flight.
+    detach(
+      job
+        .catch(() => undefined)
+        .then(() => {
+          if (
+            this.#reconcileAgain.delete(session) &&
+            this.#sessions.get(session.instanceId) === session
+          ) {
+            detach(this.#reconcile(session), "reconcile");
+          }
+        }),
+      "reconcile rerun"
+    );
     return job;
   }
 
@@ -5545,26 +5657,19 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (existing) {
       return Promise.resolve(existing);
     }
-    const pending = this.#pendingRecoveries.get(ctx.instanceId);
-    if (pending) {
-      return pending;
-    }
-    const wave: RecoveryWave = this.#recoveryWave ?? { pending: 0 };
-    this.#recoveryWave = wave;
-    wave.pending += 1;
-    const recovery = this.#recover(
-      spec,
-      withAccountReads(spec, ctx),
-      wave
-    ).finally(() => {
-      this.#pendingRecoveries.delete(ctx.instanceId);
-      wave.pending -= 1;
-      if (wave.pending === 0 && this.#recoveryWave === wave) {
-        this.#recoveryWave = null;
-      }
+    return this.#pendingRecoveries.runPromise(ctx.instanceId, () => {
+      const wave: RecoveryWave = this.#recoveryWave ?? { pending: 0 };
+      this.#recoveryWave = wave;
+      wave.pending += 1;
+      return this.#recover(spec, withAccountReads(spec, ctx), wave).finally(
+        () => {
+          wave.pending -= 1;
+          if (wave.pending === 0 && this.#recoveryWave === wave) {
+            this.#recoveryWave = null;
+          }
+        }
+      );
     });
-    this.#pendingRecoveries.set(ctx.instanceId, recovery);
-    return recovery;
   }
 
   /**
@@ -5586,9 +5691,14 @@ class OpencodeHarness implements Harness<"opencode"> {
     ctx: HarnessContext,
     wave: RecoveryWave
   ): Promise<OpencodeSession | undefined> {
-    const tries = new Backoff(RECOVERY_TRIES);
-    while (!this.#disposed) {
-      const attempt = tries.tries;
+    // One try, on the round of its attempt: the wave's recoveries on the
+    // same attempt share one round, and so one read of each generation.
+    let last: RecoveryRound | undefined;
+    const once = Effect.gen({ self: this }, function* () {
+      if (this.#disposed) {
+        return;
+      }
+      const { attempt } = yield* Schedule.CurrentMetadata;
       if (wave.round?.attempt !== attempt) {
         wave.round = {
           attempt,
@@ -5597,38 +5707,63 @@ class OpencodeHarness implements Harness<"opencode"> {
         };
       }
       const { round } = wave;
-      try {
-        return await this.#reattachOnce(spec, ctx, round);
-      } catch (error) {
-        if (
-          error instanceof HarnessRecoveryRefused ||
-          error instanceof SessionAddressRefused
-        ) {
-          throw error;
-        }
-        if (error instanceof ReattachFailed) {
-          await this.#decideFailed(spec, round);
-          throw error;
-        }
-        const step = tries.failed();
-        if (step.kind === "gave-up") {
-          await this.#decideFailed(spec, round);
+      last = round;
+      return yield* fromPromise(() =>
+        this.#reattachOnce(spec, ctx, round)
+      ).pipe(
+        Effect.tapError((error) =>
+          error instanceof ReattachFailed
+            ? fromPromise(() => this.#decideFailed(spec, round)).pipe(
+                Effect.ignore
+              )
+            : Effect.void
+        )
+      );
+    });
+    // A refusal or a reattach that failed is final; anything else is tried
+    // again on RECOVERY_TRIES, each wait said.
+    const final = (error: unknown): boolean =>
+      error instanceof HarnessRecoveryRefused ||
+      error instanceof SessionAddressRefused ||
+      error instanceof ReattachFailed;
+    const retries = backoffSchedule(RECOVERY_TRIES).pipe(
+      Schedule.while(({ input }) => !final(input)),
+      Schedule.tap(({ input, output, duration }) =>
+        Effect.sync(() =>
           console.warn(
-            `[opencode] recovery ${ctx.instanceId} gave up after ${step.tries} tries in ${Math.round(step.failingMs / 1000)} s, past its ${RECOVERY_BUDGET_MS / 1000} s: ${errorText(error)}`
-          );
-          throw new ReattachFailed(
-            error instanceof ReattachUnanswered
-              ? `${contactWords.reattachSilent(RECOVERY_BUDGET_MS / 1000)} (${errorText(error)}). ${contactWords.reattachSilentNext}`
-              : `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
-            { cause: error }
-          );
-        }
-        console.warn(
-          `[opencode] recovery ${ctx.instanceId} waiting; retry ${step.tries} in ${step.ms}ms: ${errorText(error)}`
-        );
-        await Bun.sleep(step.ms);
-      }
-    }
+            `[opencode] recovery ${ctx.instanceId} waiting; retry ${output.tries} in ${Duration.toMillis(duration)}ms: ${errorText(input)}`
+          )
+        )
+      )
+    );
+    // The promise edge of the reattach's tries.
+    return await Effect.runPromise(
+      once.pipe(
+        Effect.retryOrElse(retries, (error, tried) =>
+          final(error)
+            ? Effect.fail(error)
+            : Effect.gen({ self: this }, function* () {
+                const round = last;
+                if (round) {
+                  yield* fromPromise(() =>
+                    this.#decideFailed(spec, round)
+                  ).pipe(Effect.ignore);
+                }
+                console.warn(
+                  `[opencode] recovery ${ctx.instanceId} gave up after ${tried.tries} tries in ${Math.round(tried.failingMs / 1000)} s, past its ${RECOVERY_BUDGET_MS / 1000} s: ${errorText(error)}`
+                );
+                return yield* Effect.fail(
+                  new ReattachFailed(
+                    error instanceof ReattachUnanswered
+                      ? `${contactWords.reattachSilent(RECOVERY_BUDGET_MS / 1000)} (${errorText(error)}). ${contactWords.reattachSilentNext}`
+                      : `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
+                    { cause: error }
+                  )
+                );
+              })
+        )
+      )
+    );
   }
 
   /** A reattach that ended failed is decided in every generation it was looked for in. */
@@ -5652,7 +5787,8 @@ class OpencodeHarness implements Harness<"opencode"> {
   ): Promise<OpencodeSession | undefined> {
     // Wait out publication before resolving custody across generations.
     while (this.#applyGate) {
-      await this.#applyGate.promise;
+      // The promise edge of the gate.
+      await Effect.runPromise(this.#applyGate.await);
     }
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody check, inspection-only policy and cancellation belong to one recovery transaction
     return this.#withRecovery(async () => {
@@ -5701,9 +5837,9 @@ class OpencodeHarness implements Harness<"opencode"> {
             );
           }
           if (generation.state.kind === "unanswered") {
-            throw new ReattachUnanswered(
-              `OpenCode generation ${generation.identity.procId} has not said whether it runs ${resume.sessionKey}: ${generation.state.reason}`
-            );
+            throw new ReattachUnanswered({
+              message: `OpenCode generation ${generation.identity.procId} has not said whether it runs ${resume.sessionKey}: ${generation.state.reason}`,
+            });
           }
         }
       }
@@ -5761,9 +5897,9 @@ class OpencodeHarness implements Harness<"opencode"> {
           session = read.value;
           break;
         case "unanswered":
-          throw new ReattachUnanswered(
-            notAnswered(`session ${resume.sessionKey}`, read)
-          );
+          throw new ReattachUnanswered({
+            message: notAnswered(`session ${resume.sessionKey}`, read),
+          });
         default:
           unhandled("read", read);
       }
@@ -5834,9 +5970,10 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     // Config convergence gate: a spawn during a reload is delivered when it lifts.
     if (this.#applyGate) {
-      return new Promise<HarnessSession>((resolve, reject) => {
-        this.#pendingSpawns.push({ resolve, reject, spec, ctx });
-      });
+      const started = Deferred.makeUnsafe<HarnessSession, unknown>();
+      this.#pendingSpawns.push({ started, spec, ctx });
+      // The promise edge of the queued start.
+      return Effect.runPromise(Deferred.await(started));
     }
     this.#opening += 1;
     return this.#spawnResolved(spec, withAccountReads(spec, ctx)).finally(
@@ -5941,11 +6078,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (home === to) {
       return;
     }
-    const prior = this.#moves.get(sessionId);
-    if (prior) {
-      return prior;
-    }
-    const moving = (async () => {
+    return this.#moves.runPromise(sessionId, async () => {
       const ask = async <T>(
         what: string,
         read: (options: { signal: AbortSignal }) => Promise<T>
@@ -6016,9 +6149,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       console.info(
         `[opencode] session ${sessionId} moved from ${homeName(home)} server to ${homeName(to)}, with ${children.length} subagent session(s)`
       );
-    })().finally(() => this.#moves.delete(sessionId));
-    this.#moves.set(sessionId, moving);
-    return moving;
+    });
   }
 
   /**
@@ -6972,42 +7103,50 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!(this.#converging && this.#client)) {
       return;
     }
-    const settled = await readWithin(
-      CONFIG_SETTLE_TIMEOUT_MS,
-      async (signal): Promise<FleetItemState | undefined> => {
-        for (;;) {
-          signal.throwIfAborted();
-          if (this.#configState === "pending" && !this.#applyGate) {
-            this.#applyIfNeeded(true);
-          }
-          const gate = this.#applyGate;
-          if (gate) {
-            await gate.promise;
-          } else if (this.#configState === "applied") {
-            return;
-          } else if (this.#configState === "error") {
-            return {
-              state: "failed",
-              cause: "unknown",
-              detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
-            };
-          }
-          await Bun.sleep(250);
-        }
+    // One look: an apply still owed is started, one running is waited out,
+    // and the state it left is the answer once it is applied or failed.
+    const look = Effect.gen({ self: this }, function* () {
+      if (this.#configState === "pending" && !this.#applyGate) {
+        this.#applyIfNeeded(true);
       }
-    );
-    switch (settled.kind) {
-      case "answered":
-        return settled.value;
-      case "unanswered":
-        // Not settled in time is not failed: the report says it is pending.
+      const gate = this.#applyGate;
+      if (gate) {
+        yield* gate.await;
+        return;
+      }
+      if (this.#configState === "applied") {
+        return { state: undefined };
+      }
+      if (this.#configState === "error") {
         return {
-          state: "pending",
-          detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
+          state: {
+            state: "failed",
+            cause: "unknown",
+            detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
+          } satisfies FleetItemState,
         };
-      default:
-        unhandled("read", settled);
-    }
+      }
+    });
+    // The promise edge of the wait, one bounded read.
+    return await Effect.runPromise(
+      boundedRead(
+        CONFIG_SETTLE_TIMEOUT_MS,
+        lookUntil({ every: CONFIG_LOOK_MS }, look)
+      ).pipe(
+        Effect.map((looked) =>
+          looked.kind === "found" ? looked.value.state : undefined
+        ),
+        Effect.catch((error) =>
+          error instanceof UnansweredRead
+            ? // Not settled in time is not failed: the report says it is pending.
+              Effect.succeed<FleetItemState>({
+                state: "pending",
+                detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
+              })
+            : Effect.fail(error)
+        )
+      )
+    );
   }
 
   /** Runs `work` once every fleet MCP read and pass before it has ended. */
@@ -7494,6 +7633,9 @@ async function runsHere(): Promise<boolean> {
   return !(await toolGate(OPENCODE_SPEC)).refused;
 }
 
+/** How long a fleet read lets a location's MCP list rest between two reads while a server there is still connecting. Ours. */
+const MCP_LIST_LOOK_MS = 250;
+
 /**
  * The server's MCP list once none of `names` is still `pending`: 2.0
  * connects a location's servers after it answers, so a read right after a
@@ -7505,37 +7647,47 @@ async function runsHere(): Promise<boolean> {
  * what it said, and none at all is said as not answered.
  */
 async function settledMcpList(client: OpencodeClient, names: string[]) {
-  type Listed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>;
-  let last: Listed | undefined;
-  const settled = await readWithin(
-    MCP_CONNECT_MS + 30_000,
-    async (signal): Promise<Listed> => {
-      for (;;) {
-        signal.throwIfAborted();
-        const listed = await client.mcp.list({}, { signal });
+  let last: Awaited<ReturnType<OpencodeClient["mcp"]["list"]>> | undefined;
+  const look = fromPromise((signal) => client.mcp.list({}, { signal })).pipe(
+    Effect.tap((listed) =>
+      Effect.sync(() => {
         last = listed;
-        const connecting = names.some((name) => {
-          const server = listed.data.find((one) => one.name === name);
-          return !server || server.status.status === "pending";
-        });
-        if (!connecting) {
-          return listed;
-        }
-        await Bun.sleep(250);
-      }
-    }
+      })
+    )
   );
-  switch (settled.kind) {
-    case "answered":
-      return settled.value;
-    case "unanswered":
-      if (last) {
-        return last;
-      }
-      throw new Error(notAnswered("its MCP server list", settled));
-    default:
-      unhandled("read", settled);
-  }
+  const settled = (listed: NonNullable<typeof last>): boolean =>
+    !names.some((name) => {
+      const server = listed.data.find((one) => one.name === name);
+      return !server || server.status.status === "pending";
+    });
+  // The promise edge of the wait, one bounded read.
+  return await Effect.runPromise(
+    boundedRead(
+      MCP_CONNECT_MS + 30_000,
+      lookUntil({ every: MCP_LIST_LOOK_MS, until: settled }, look)
+    ).pipe(
+      Effect.map((looked) =>
+        looked.kind === "found" ? looked.value : looked.last
+      ),
+      Effect.catch((error) => {
+        if (!(error instanceof UnansweredRead)) {
+          return Effect.fail(error);
+        }
+        if (last) {
+          return Effect.succeed(last);
+        }
+        return Effect.fail(
+          new Error(
+            notAnswered("its MCP server list", {
+              kind: "unanswered",
+              after: error.after,
+              reason: error.reason,
+            })
+          )
+        );
+      })
+    )
+  );
 }
 
 /** A home in words, for the log ({@link homeOf}). */
