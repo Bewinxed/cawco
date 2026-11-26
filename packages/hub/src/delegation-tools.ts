@@ -1446,9 +1446,9 @@ export function handoffTools(view: ToolView) {
 }
 
 /**
- * The CawCo tools a Claude session loads upfront, where its toolset has them
- * (MCP `_meta` `"anthropic/alwaysLoad": true`, delegation-mcp.ts `listed`);
- * every other one is deferred behind ToolSearch. These are the calls a
+ * The CawCo tools a session loads upfront, where its toolset has them (MCP
+ * `_meta`, its harness's always-load key, delegation-mcp.ts `listedFor`);
+ * Claude Code defers every other one behind ToolSearch. These are the calls a
  * session makes every turn or must not miss: in one orchestrator, handoff
  * 69 calls, delegate 32, artifact_create 11 (2026-10-15); a leaf's
  * finish_item and every session's set_title are asked for by name, and a

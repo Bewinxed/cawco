@@ -21,6 +21,7 @@ export const PI = {
   accountDir: false,
 
   mcpPerFolder: false,
+  mcpAlwaysLoadKey: null,
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: false,

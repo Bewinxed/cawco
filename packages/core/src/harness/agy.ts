@@ -257,6 +257,12 @@ export const AGY = {
   // carries it.
   accountDir: false,
   mcpPerFolder: false,
+  // agy's changelog: "mark a tool as always loaded by setting `_meta:
+  // {"antigravity/alwaysLoad": true}` on it in their `tools/list`
+  // response". agy 1.5.18 declared no marked tool the sooner for it on a
+  // server CawCo hands it in `session/new`, so its sessions reach the tools
+  // it drops through the shell (agent agy-runtime.ts `APPEND`).
+  mcpAlwaysLoadKey: "antigravity/alwaysLoad",
   // No machine sign-in moves in: CawCo never reads a Google token, the
   // owner's `~/.gemini` included (tsk-340: "CawCo never reads or holds a
   // Google OAuth token").

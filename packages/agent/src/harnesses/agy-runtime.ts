@@ -223,13 +223,22 @@ const UNASKED: ReadonlySet<SharedMode> = new Set([
 ]);
 
 /**
- * CawCo's words appended to agy's own system prompt: as few as name CawCo's
- * tools, which stand in for agy's own question, subagent and browser tools
+ * CawCo's words appended to agy's own system prompt, as few as there can be
  * (Google limits requests carrying another harness's tool names on consumer
- * sign-in, issue #1701).
+ * sign-in, issue #1701), naming no tool. agy 1.5.18 declares a server's MCP
+ * tools smallest first until a budget it shares across every server and its
+ * skills runs out, drops the rest, offers no `call_mcp_tool` for them, and
+ * declares none the sooner for `_meta` `"antigravity/alwaysLoad"` on a
+ * server it takes in `session/new` (the project's `assets/410ca753/REPORT.md`:
+ * 39 of 90 CawCo tools declared with no mark, with the marks the hub sends
+ * and with every tool marked; finish_item, handoff and delegate never). So
+ * the words say where the rest are: the session's shell, whose `cawco tool`
+ * acts as this session (command-env.ts `commandEnv`). A call of agy's own
+ * question, subagent or browser tool is denied in words naming CawCo's
+ * (agy-judge.ts `CLASS_DENIED`).
  */
 const APPEND =
-  "You run inside CawCo. Ask the person with mcp_cawco_ask, and hand work off with mcp_cawco_delegate.";
+  "You run inside CawCo. A CawCo tool you aren't given as a function runs in the shell: `cawco tools` lists them, `cawco tool <name> '<json>'` calls one.";
 
 /** The words a session's mode refuses with when it names one agy's judge does not take. */
 const noMode = (mode: string): string => `Antigravity takes no ${mode} mode.`;
@@ -619,10 +628,24 @@ class AgySession {
     await this.#setEffort(this.#effort);
   }
 
-  /** The conversation the session runs in, said, and CawCo's note of where it runs kept (agy-notes.ts). */
+  /**
+   * The conversation the session runs in, said, and CawCo's note of where it
+   * runs kept (agy-notes.ts). Its `init` is the hub's word that the session
+   * is up, as pi's and OpenCode's say it (pi-runtime.ts, opencode.ts): the
+   * row reads running, its work item too, and the row names the
+   * conversation, a new one set aside included (hub session-signals.ts).
+   */
   #adopted(sessionId: string): void {
     this.sessionId = sessionId;
     this.#ctx.session(sessionId);
+    this.#emit({
+      type: "system",
+      subtype: "init",
+      session_id: sessionId,
+      cwd: this.#start.spec.cwd,
+      ...(this.#model ? { model: this.#model } : {}),
+      permissionMode: this.#mode,
+    });
     const { accountId, dir } = this.#start.launch;
     const { cwd } = this.#start.spec;
     this.#note(sessionId, (note) => ({

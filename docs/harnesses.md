@@ -148,7 +148,21 @@ the host, and chrome-devtools through the browser door
 its agy dir's `mcp_config.json`, which agy would start outside it; a server
 whose transport agy's ACP lacks (remote SSE) is left out. How its calls
 name a server is descriptor `callNaming` (Antigravity's:
-`mcp_<server>_<tool>`).
+`mcp_<server>_<tool>`). The few CawCo tools a session loads upfront carry
+every harness's always-load `_meta` key in `tools/list` (descriptor
+`mcpAlwaysLoadKey`, hub `delegation-mcp.ts` `listedFor`). agy 1.5.18
+declares MCP tools smallest first within a budget it shares across servers,
+drops the rest, and ignores its key on servers taken in `session/new`; so
+its appended words send the model to the shell for a CawCo tool it lacks
+(`agy-runtime.ts` `APPEND`), where `cawco tool` acts as the session because
+a harness's own commands carry the session's identity (agent
+`harnesses/command-env.ts` `commandEnv`).
+
+**Running.** A session reads running, and its work item too, on its
+`system`/`init` frame naming its conversation (hub
+`agent-socket/session-signals.ts`): Claude Code's CLI says it, and pi's,
+OpenCode's and Antigravity's adapters say it as each conversation opens
+(Antigravity: `agy-runtime.ts` `#adopted`).
 
 **Permission modes and asks.** Whether it takes modes is descriptor
 `permissionModes`; which it takes, its `permissionModes` capability, drawn

@@ -318,7 +318,7 @@ const credentialOf = (signIn: AgySignIn): Record<string, string> => {
  * agy's environment for `signIn` in `home`: the host's, every variable
  * {@link droppedForAgy} names gone, on the tools' PATH, with the method's
  * credential, the home's own sign-in store ({@link HOME_SIGN_IN}), the
- * session's own extras (its judge, its git and container doors), and what every run of agy
+ * session's own extras (its judge, its identity, its git and container doors), and what every run of agy
  * carries (core tools.ts `runEnv`: its self-update and crash reports off).
  */
 export const agyEnvironment = (

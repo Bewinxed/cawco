@@ -47,6 +47,10 @@ export const CLAUDE = {
   accountDir: true,
 
   mcpPerFolder: false,
+  // "To control how one of your server's tools loads, set
+  // "anthropic/alwaysLoad" in that tool's _meta object"
+  // (code.claude.com/docs/en/mcp#per-tool-alwaysload).
+  mcpAlwaysLoadKey: "anthropic/alwaysLoad",
   homeLogin: "dir",
   soleProvider: "anthropic",
   ownProviderIds: false,

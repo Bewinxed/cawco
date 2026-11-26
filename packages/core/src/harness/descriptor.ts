@@ -290,6 +290,12 @@ interface HarnessDescriptorFacts<K extends string> {
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
   /**
+   * The `_meta` key on a tool of a server's `tools/list` by which its MCP
+   * client loads that tool into the model's tool list from the first turn
+   * (hub delegation-mcp.ts `listedFor`), or null when it reads none.
+   */
+  readonly mcpAlwaysLoadKey: string | null;
+  /**
    * Whether one server of it runs the MCP servers of a folder for every
    * session there (OpenCode's location), so their MCP gate is the folder's
    * (core `folderGateId`); otherwise each session holds its own.

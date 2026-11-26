@@ -3,6 +3,7 @@ import { unwatchFile, watchFile } from "node:fs";
 import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
+import { HARNESS_PLUGINS } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -187,12 +188,21 @@ const upfrontFor = (row: InstanceRow | undefined): UpfrontFor => ({
 });
 
 /**
+ * The mark a tool that loads upfront carries in its `_meta`: each harness's
+ * own key (core descriptor `mcpAlwaysLoadKey`), every one set, as each
+ * client reads its own and no other.
+ */
+const ALWAYS_LOAD_META: Readonly<Record<string, true>> = Object.fromEntries(
+  HARNESS_PLUGINS.flatMap(({ mcpAlwaysLoadKey }) =>
+    mcpAlwaysLoadKey ? [[mcpAlwaysLoadKey, true] as const] : []
+  )
+);
+
+/**
  * A tool as `tools/list` answers it to `row`. One that loads upfront for it
- * ({@link loadsUpfront}) asks Claude Code to: "To control how one of your
- * server's tools loads, set "anthropic/alwaysLoad" in that tool's _meta
- * object" (code.claude.com/docs/en/mcp#per-tool-alwaysload). The server's
- * config sets no `alwaysLoad` (agent delegation.ts), so every other tool
- * stays deferred.
+ * ({@link loadsUpfront}) carries every harness's always-load mark
+ * ({@link ALWAYS_LOAD_META}). The server's config sets no `alwaysLoad`
+ * (agent delegation.ts), so every other tool stays deferred.
  */
 export const listedFor =
   (row: InstanceRow | undefined) =>
@@ -217,7 +227,7 @@ export const listedFor =
       inputSchema: objectSchema,
       ...("annotations" in entry ? { annotations: entry.annotations } : {}),
       ...(loadsUpfront(name, upfrontFor(row))
-        ? { _meta: { "anthropic/alwaysLoad": true } }
+        ? { _meta: ALWAYS_LOAD_META }
         : {}),
     };
   };

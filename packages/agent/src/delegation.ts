@@ -32,7 +32,7 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   url: harnessMcpUrl(`/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`),
   ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
   // No server-level `alwaysLoad`: the hub marks the few tools a session uses
-  // every turn with `_meta` `"anthropic/alwaysLoad": true` (hub
+  // every turn with its harness's `_meta` always-load key (hub
   // delegation-tools.ts `loadsUpfront`), and Claude Code defers the rest,
   // some 80 of them, behind ToolSearch. The server-level flag would load all
   // of them upfront in every session (code.claude.com/docs/en/mcp: "Use this

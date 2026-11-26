@@ -410,8 +410,8 @@ export const listRoleTools = (): RoleTools[] =>
       withFeedback(definedTools(toolViewOf(row, undefined)), true),
       []
     );
-    // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
-    // Claude Code's to act on, never part of the definition it sends.
+    // What the model reads: a tool's `_meta` (its always-load marks) is
+    // the harness's to act on, never part of the definition it sends.
     return {
       role,
       tools: listed.map(listedFor(row)).map(({ _meta, ...tool }) => tool),

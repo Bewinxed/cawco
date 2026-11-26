@@ -26,6 +26,7 @@ export const OPENCODE = {
   accountDir: false,
 
   mcpPerFolder: true,
+  mcpAlwaysLoadKey: null,
   homeLogin: "credentials",
   soleProvider: null,
   ownProviderIds: true,
