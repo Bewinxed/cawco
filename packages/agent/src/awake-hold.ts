@@ -4,9 +4,11 @@
  * trial (cli binary-apply.ts, the helper that decides it) take. Its argv and
  * the sources for each platform's rule are awake.ts's header.
  */
+
 import { spawn } from "node:child_process";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { findProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
 import { resolveBin, toolEnv } from "./tools";
 
 /** The most of the work's words logind's listing carries; the log line has them whole. */
@@ -79,10 +81,13 @@ export const holdAwake = async (
     env: toolEnv(),
     stdio: "ignore",
   });
-  const refused = new Promise<string | undefined>((resolve) => {
-    child.once("error", (failure) => resolve(failure.message));
-    child.once("spawn", () => resolve(undefined));
-  });
+  // Whether it started: its error, or its spawn.
+  const refused = Effect.runPromise(
+    Effect.callback<string | undefined, unknown>((resume) => {
+      child.once("error", (failure) => resume(Effect.succeed(failure.message)));
+      child.once("spawn", () => resume(Effect.succeed(undefined)));
+    })
+  );
   const error = await refused;
   const leader = spawnedPid(child);
   if (error || !leader) {

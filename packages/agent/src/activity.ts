@@ -42,12 +42,14 @@
  * A machine with none of these (no graphical session, a desktop that answers
  * none) has no activity, said once in the log, and its beats carry none.
  */
+
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { MachineActivity, MachineState } from "@cawco/core/notifications";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { z } from "zod";
@@ -214,19 +216,24 @@ const callOut = (
   args: readonly string[],
   env?: NodeJS.ProcessEnv
 ): Promise<string | undefined> =>
-  new Promise((resolve) => {
-    const child = spawn(bin, args, {
-      env,
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: CALL_MS,
-    });
-    let out = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      out += chunk.toString("utf8");
-    });
-    child.on("error", () => resolve(undefined));
-    child.on("close", (code) => resolve(code === 0 ? out : undefined));
-  });
+  // The promise edge of the call's end: its error, or its close.
+  Effect.runPromise(
+    Effect.callback<string | undefined, unknown>((resume) => {
+      const child = spawn(bin, args, {
+        env,
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: CALL_MS,
+      });
+      let out = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        out += chunk.toString("utf8");
+      });
+      child.on("error", () => resume(Effect.succeed(undefined)));
+      child.on("close", (code) =>
+        resume(Effect.succeed(code === 0 ? out : undefined))
+      );
+    })
+  );
 
 /** A D-Bus call's answer through `busctl --json=short`: its `data`, or undefined. */
 const busctl = async (
@@ -274,10 +281,12 @@ const waylandIdle = async (): Promise<IdleSource | undefined> => {
   }
   const { connect } = await import("node:net");
   const socket = connect(path);
-  const opened = await new Promise<boolean>((resolve) => {
-    socket.once("connect", () => resolve(true));
-    socket.once("error", () => resolve(false));
-  });
+  const opened = await Effect.runPromise(
+    Effect.callback<boolean, unknown>((resume) => {
+      socket.once("connect", () => resume(Effect.succeed(true)));
+      socket.once("error", () => resume(Effect.succeed(false)));
+    })
+  );
   if (!opened) {
     socket.destroy();
     return;

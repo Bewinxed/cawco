@@ -1,5 +1,7 @@
-import { backoffWait } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { Clock, Duration, Effect, Schedule, Schema } from "effect";
 
 /**
  * THE HUB AWAY IS NO ANSWER. What this machine asks of the hub over HTTP is
@@ -38,6 +40,22 @@ const isHubAway = (status: number): boolean => AWAY.has(status);
  */
 const isHubFault = (status: number): boolean => status === 500;
 
+/** The hub was not there to answer one try, in words: the last reason {@link throughHubAway} gives. */
+class HubAway extends Schema.TaggedError<HubAway>()("HubAway", {
+  away: Schema.String,
+}) {}
+
+/** The waits between tries: from 0.5 s, doubling to 5 s; the end is the bound's ({@link throughHubAway}). */
+const HUB_AWAY_WAITS: BackoffPolicy = {
+  firstMs: 500,
+  mostMs: 5000,
+  giveUp: { never: "it ends at its bound, which a held process moves out" },
+};
+
+/** `error` in words for the log and a last refusal: its message, else its name. */
+const awayWords = (error: unknown): string =>
+  error instanceof Error ? error.message || error.name : String(error);
+
 /**
  * `tryOnce`'s first response that is not the hub away ({@link isHubAway}),
  * nor one `again` says to try again past, whatever its status, for the
@@ -47,8 +65,13 @@ const isHubFault = (status: number): boolean => status === 500;
  * came (refused, reset, none within its own bound). Tries every 0.5 s
  * doubling to 5 s; a wait that ran late (this process held) moves the bound
  * out by as much.
+ *
+ * The promise edge of an `Effect.retry` on the house backoff
+ * ({@link backoffSchedule}): the schedule gives each wait, and the bound is
+ * kept beside it, since a schedule alone does not know this process was
+ * held.
  */
-export const throughHubAway = async (
+export const throughHubAway = (
   tryOnce: () => Promise<Response>,
   stopped?: AbortSignal,
   again: (status: number) => boolean = isHubAway
@@ -56,35 +79,59 @@ export const throughHubAway = async (
   // The bound is the hub's to use: time this process was held (a wait
   // that ran late) is given back, so a loop blocked here never spends it.
   let deadline = Date.now() + HUB_AWAY_BOUND_MS;
-  let tries = 0;
-  for (;;) {
-    let away: string;
-    try {
-      const answer = await tryOnce();
-      if (!again(answer.status)) {
-        return answer;
-      }
-      if (isHubAway(answer.status)) {
-        await answer.body?.cancel();
-        away = `HTTP ${answer.status}`;
-      } else {
-        // The hub's own failure, in its words, for the log and a last refusal.
-        away = `HTTP ${answer.status}: ${(await answer.text()).slice(0, 300)}`;
-      }
-    } catch (error) {
-      away =
-        error instanceof Error ? error.message || error.name : String(error);
+  /** The wait last begun, until the try after it reads how late it ran. */
+  let waited: { at: number; ms: number } | undefined;
+  const attempt = Effect.gen(function* () {
+    if (waited) {
+      const now = yield* Clock.currentTimeMillis;
+      deadline += Math.max(0, now - waited.at - waited.ms);
+      waited = undefined;
     }
-    // From 0.5 s, doubling to 5 s; it gives up at its deadline.
-    tries += 1;
-    const wait = backoffWait({ firstMs: 500, mostMs: 5000 }, tries);
-    if (stopped?.aborted || Date.now() + wait >= deadline) {
-      return { away };
+    const answer = yield* Effect.tryPromise({
+      try: tryOnce,
+      catch: (error) => new HubAway({ away: awayWords(error) }),
+    });
+    if (!again(answer.status)) {
+      return answer;
     }
-    const slept = Date.now();
-    await Bun.sleep(wait);
-    deadline += Math.max(0, Date.now() - slept - wait);
-  }
+    // What could not be read of the answer is the reason in its place.
+    const unread = (error: unknown) => new HubAway({ away: awayWords(error) });
+    if (isHubAway(answer.status)) {
+      yield* Effect.tryPromise({
+        try: async () => answer.body?.cancel(),
+        catch: unread,
+      });
+      return yield* new HubAway({ away: `HTTP ${answer.status}` });
+    }
+    // The hub's own failure, in its words, for the log and a last refusal.
+    const text = yield* Effect.tryPromise({
+      try: () => answer.text(),
+      catch: unread,
+    });
+    return yield* new HubAway({
+      away: `HTTP ${answer.status}: ${text.slice(0, 300)}`,
+    });
+  });
+  // Each wait is the house backoff's; it gives up once the asker has, or
+  // at the bound. The wait it goes on to is noted, for the next try to read
+  // how late it ran.
+  const waits = backoffSchedule(HUB_AWAY_WAITS).pipe(
+    Schedule.while(
+      ({ duration, now }) =>
+        !stopped?.aborted && now + Duration.toMillis(duration) < deadline
+    ),
+    Schedule.tap(({ duration, now }) =>
+      Effect.sync(() => {
+        waited = { at: now, ms: Duration.toMillis(duration) };
+      })
+    )
+  );
+  return Effect.runPromise(
+    attempt.pipe(
+      Effect.retry(waits),
+      Effect.catchTag("HubAway", ({ away }) => Effect.succeed({ away }))
+    )
+  );
 };
 
 /**

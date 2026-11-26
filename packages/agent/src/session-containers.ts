@@ -98,6 +98,7 @@ import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { parseRecord } from "@cawco/core/state-file";
 import { containerWords } from "@cawco/core/words/containers";
+import { Cache, Duration, Effect, Exit, Fiber, Option } from "effect";
 import { parseAllDocuments } from "yaml";
 import { z } from "zod";
 import { contextEndpoint } from "./browser/runtime";
@@ -747,11 +748,63 @@ export interface ContainerDoors {
   untracked: string[];
 }
 
-/** Each session's doors as they open and once open: its servers too. */
-const doors = new Map<
-  string,
-  Promise<ContainerDoors & { servers: Server[] }>
->();
+/** A session's doors and the servers that hold them open. */
+type OpenDoors = ContainerDoors & { servers: Server[] };
+
+/**
+ * Each session's doors as they open and once open: its servers too. One
+ * opening per session, shared by every caller meanwhile; kept once open,
+ * until {@link closeContainerDoors}; a failed opening is not kept, and the
+ * next caller opens again.
+ */
+const doors = Effect.runSync(
+  Cache.makeWith(
+    (instanceId: string) =>
+      Effect.tryPromise({
+        try: () => openDoors(instanceId),
+        catch: (error) => error,
+      }),
+    {
+      capacity: Number.POSITIVE_INFINITY,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),
+    }
+  )
+);
+
+/** Session `instanceId`'s doors opened: each runtime's server, and the variables naming them. */
+const openDoors = async (instanceId: string): Promise<OpenDoors> => {
+  const stamp = { instanceId, ...(await owner()) };
+  const env: Record<string, string> = {};
+  const untracked: string[] = [];
+  const servers: Server[] = [];
+  const upstreams = new Map<string, string>();
+  for (const kind of KINDS) {
+    const upstream = await upstreamOf(kind, true);
+    if (!upstream) {
+      continue;
+    }
+    if ("untracked" in upstream) {
+      untracked.push(upstream.untracked);
+      continue;
+    }
+    const path = doorOf(instanceId, kind);
+    await socketPlace(path, `${instanceId}'s door to ${kind}`);
+    await rm(path, { force: true });
+    const server = createServer({ allowHalfOpen: true }, (client) =>
+      serveConnection(client, upstream.path, stamp)
+    );
+    await listenOrEnd(server, path, `${instanceId}'s door to ${kind}`);
+    servers.push(server);
+    upstreams.set(kind, upstream.path);
+    env[ENV_OF[kind]] = `${UNIX}${path}`;
+  }
+  if (servers.length > 0) {
+    console.info(
+      `[containers] ${instanceId}'s doors: ${[...upstreams].map(([kind, upstream]) => `${kind} → ${upstream}`).join(", ")}`
+    );
+  }
+  return { env, untracked, servers };
+};
 
 /**
  * Session `instanceId`'s doors to the machine's container runtimes, opened
@@ -759,61 +812,37 @@ const doors = new Map<
  * whose environment already names them): the variables its environment
  * gets, `DOCKER_HOST` and `CONTAINER_HOST` for each runtime there is a door
  * to, and the endpoints there is none to. A door an earlier agent left is
- * replaced.
+ * replaced. The promise edge of the doors' cache.
  */
 export const openContainerDoors = (
   instanceId: string
-): Promise<ContainerDoors> => {
-  const open = doors.get(instanceId);
-  if (open) {
-    return open.then(({ env, untracked }) => ({ env, untracked }));
-  }
-  const opening = (async () => {
-    const stamp = { instanceId, ...(await owner()) };
-    const env: Record<string, string> = {};
-    const untracked: string[] = [];
-    const servers: Server[] = [];
-    const upstreams = new Map<string, string>();
-    for (const kind of KINDS) {
-      const upstream = await upstreamOf(kind, true);
-      if (!upstream) {
-        continue;
-      }
-      if ("untracked" in upstream) {
-        untracked.push(upstream.untracked);
-        continue;
-      }
-      const path = doorOf(instanceId, kind);
-      await socketPlace(path, `${instanceId}'s door to ${kind}`);
-      await rm(path, { force: true });
-      const server = createServer({ allowHalfOpen: true }, (client) =>
-        serveConnection(client, upstream.path, stamp)
-      );
-      await listenOrEnd(server, path, `${instanceId}'s door to ${kind}`);
-      servers.push(server);
-      upstreams.set(kind, upstream.path);
-      env[ENV_OF[kind]] = `${UNIX}${path}`;
-    }
-    if (servers.length > 0) {
-      console.info(
-        `[containers] ${instanceId}'s doors: ${[...upstreams].map(([kind, upstream]) => `${kind} → ${upstream}`).join(", ")}`
-      );
-    }
-    return { env, untracked, servers };
-  })();
-  doors.set(instanceId, opening);
-  opening.catch(() => doors.delete(instanceId));
-  return opening.then(({ env, untracked }) => ({ env, untracked }));
-};
+): Promise<ContainerDoors> =>
+  Effect.runPromise(
+    Cache.get(doors, instanceId).pipe(
+      Effect.map(({ env, untracked }) => ({ env, untracked }))
+    )
+  );
 
 /** Session `instanceId`'s doors closed and their sockets gone: nothing it runs creates a container through them again. */
 const closeContainerDoors = async (instanceId: string): Promise<void> => {
-  const open = doors.get(instanceId);
-  doors.delete(instanceId);
-  const held = await open?.catch(() => undefined);
+  // The doors held, or still opening, are read before they are let go, so
+  // an opening after this starts afresh; what was held is waited for and
+  // closed.
+  const held = Effect.runFork(
+    Cache.getOption(doors, instanceId).pipe(
+      Effect.map(Option.getOrUndefined),
+      Effect.orElseSucceed(() => undefined)
+    )
+  );
+  Effect.runSync(Cache.invalidate(doors, instanceId));
+  const open = await Effect.runPromise(Fiber.join(held));
   await Promise.all(
-    (held?.servers ?? []).map(
-      (server) => new Promise<void>((done) => server.close(() => done()))
+    (open?.servers ?? []).map((server) =>
+      Effect.runPromise(
+        Effect.callback<void>((resume) => {
+          server.close(() => resume(Effect.void));
+        })
+      )
     )
   );
   await Promise.all(

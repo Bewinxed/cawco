@@ -54,6 +54,8 @@ import {
   CONTROL_GH_TOKEN,
 } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type {
   DaemonFrame,
   MachineIdentity,
@@ -211,7 +213,16 @@ import {
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { Data, Duration, Effect, Fiber, Schedule } from "effect";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FiberHandle,
+  Schedule,
+} from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { claudeAuthNote, onSigninsChanged } from "./accounts";
 import { type Activity, desktopReadable, watchActivity } from "./activity";
@@ -580,15 +591,15 @@ class LaunchAsks {
       requestId,
       payload: { processGeneration },
     };
-    const granted = new Promise<LaunchGrant>((resolve) => {
-      const settle = (grant: LaunchGrant) => {
-        this.#pending.delete(requestId);
-        resolve(grant);
-      };
-      this.#pending.set(requestId, { envelope, settle });
-      this.#send?.(envelope);
-    });
-    return awaitGrant(instanceId, granted);
+    const granted = Deferred.makeUnsafe<LaunchGrant>();
+    const settle = (grant: LaunchGrant) => {
+      this.#pending.delete(requestId);
+      Deferred.doneUnsafe(granted, Exit.succeed(grant));
+    };
+    this.#pending.set(requestId, { envelope, settle });
+    this.#send?.(envelope);
+    // The promise edge of the wait for the hub's grant.
+    return Effect.runPromise(awaitGrant(instanceId, Deferred.await(granted)));
   }
 
   /** A connection registered: every ask not yet answered goes on it, and every one after. */
@@ -635,23 +646,19 @@ class LaunchAsks {
  * not answered within {@link CUSTODY_BOUND_MS} keeps waiting, said once,
  * never refused for the wait.
  */
-async function awaitGrant(
+const awaitGrant = (
   instanceId: string,
-  granted: Promise<LaunchGrant>
-): Promise<LaunchGrant> {
-  const first = await readWithin(CUSTODY_BOUND_MS, () => granted);
-  switch (first.kind) {
-    case "answered":
-      return first.value;
-    case "unanswered":
-      console.info(
-        `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
-      );
-      return granted;
-    default:
-      unhandled("read", first);
-  }
-}
+  granted: Effect.Effect<LaunchGrant>
+): Effect.Effect<LaunchGrant> =>
+  boundedRead(CUSTODY_BOUND_MS, granted).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.sync(() =>
+        console.info(
+          `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
+        )
+      ).pipe(Effect.andThen(granted))
+    )
+  );
 
 /** The words of an error a log line says, its name when it carries no message. */
 const errorWords = (error: unknown): string =>
@@ -1337,90 +1344,65 @@ const challengeIn = (data: unknown): Challenge | undefined => {
  * else here would listen for it.
  */
 const open = (url: string) =>
-  Effect.callback<{ challenge: Challenge; socket: WebSocket }, ConnectionLost>(
-    (resume) => {
-      // Says this agent reads parts; without it the hub sends whole messages,
-      // as to an agent on the build before (`WIRE_PARTS_PARAM`).
-      const socket = new WebSocket(announcingParts(url));
-      let opened = false;
-      const interrupted = new AbortController();
-      readWithin(
-        OPEN_TIMEOUT_MS,
-        (signal) =>
-          new Promise<Challenge>((resolve, reject) => {
-            let challenge: Challenge | undefined;
-            const settle = () => {
-              socket.removeEventListener("open", onOpen);
-              socket.removeEventListener("close", onClose);
-              socket.removeEventListener("message", onMessage);
-            };
-            const ready = () => {
-              if (opened && challenge) {
-                settle();
-                resolve(challenge);
-              }
-            };
-            const onOpen = () => {
-              opened = true;
-              ready();
-            };
-            const onMessage = (event: MessageEvent) => {
-              challenge ??= challengeIn(event.data);
-              ready();
-            };
-            const onClose = (event: CloseEvent) => {
-              settle();
-              reject(new ConnectionLost({ url, reason: closeReason(event) }));
-            };
-            signal.addEventListener(
-              "abort",
-              () => {
-                settle();
-                reject(signal.reason);
-              },
-              { once: true }
-            );
-            socket.addEventListener("open", onOpen, { once: true });
-            socket.addEventListener("close", onClose, { once: true });
-            socket.addEventListener("message", onMessage);
-          }),
-        { signal: interrupted.signal }
-      ).then(
-        (read) => {
-          switch (read.kind) {
-            case "answered":
-              resume(Effect.succeed({ socket, challenge: read.value }));
-              break;
-            case "unanswered":
-              socket.close();
-              resume(
-                Effect.fail(
-                  new ConnectionLost({
-                    url,
-                    reason: opened
-                      ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
-                      : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
-                  })
-                )
-              );
-              break;
-            default:
-              unhandled("read", read);
-          }
-        },
-        (error: unknown) => {
-          // The socket closed first; an interrupted open resumes nothing.
-          if (error instanceof ConnectionLost) {
-            resume(Effect.fail(error));
-          }
+  Effect.suspend(() => {
+    // Says this agent reads parts; without it the hub sends whole messages,
+    // as to an agent on the build before (`WIRE_PARTS_PARAM`).
+    const socket = new WebSocket(announcingParts(url));
+    let opened = false;
+    let challenge: Challenge | undefined;
+    const onMessage = (event: MessageEvent) => {
+      challenge ??= challengeIn(event.data);
+    };
+    // On as the socket is made, so a challenge before the wait is kept.
+    socket.addEventListener("message", onMessage);
+    const challenged = Effect.callback<Challenge, ConnectionLost>((resume) => {
+      const settle = () => {
+        socket.removeEventListener("open", onOpen);
+        socket.removeEventListener("close", onClose);
+        socket.removeEventListener("message", onReady);
+        socket.removeEventListener("message", onMessage);
+      };
+      const ready = () => {
+        if (opened && challenge) {
+          settle();
+          resume(Effect.succeed(challenge));
         }
-      );
-      return Effect.sync(() => {
-        interrupted.abort();
-        socket.close();
-      });
-    }
-  );
+      };
+      const onOpen = () => {
+        opened = true;
+        ready();
+      };
+      const onReady = () => ready();
+      const onClose = (event: CloseEvent) => {
+        settle();
+        resume(
+          Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
+        );
+      };
+      socket.addEventListener("open", onOpen, { once: true });
+      socket.addEventListener("close", onClose, { once: true });
+      socket.addEventListener("message", onReady);
+      ready();
+      return Effect.sync(settle);
+    });
+    return boundedRead(OPEN_TIMEOUT_MS, challenged).pipe(
+      Effect.map((read) => ({ socket, challenge: read })),
+      Effect.catchTag("Unanswered", () =>
+        Effect.fail(
+          new ConnectionLost({
+            url,
+            reason: opened
+              ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
+              : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
+          })
+        )
+      ),
+      // Unanswered or interrupted, the socket goes; closed, it has gone.
+      Effect.onExit((exit) =>
+        Exit.isSuccess(exit) ? Effect.void : Effect.sync(() => socket.close())
+      )
+    );
+  });
 
 /**
  * The key this machine held when the person refused it (`key` undefined: it
@@ -1440,17 +1422,22 @@ const NEW_KEY_POLL_MS = 5000;
  * refused machine's register by itself too (hub-auth.ts `refusals`); this
  * is the machine's side, so it stops knocking at all.
  */
-const awaitNewKey = async (): Promise<boolean> => {
+const awaitNewKey = Effect.gen(function* () {
   const refused = refusedWith;
   if (!refused) {
     return false;
   }
-  while (readMachineKey() === refused.key) {
-    await Bun.sleep(NEW_KEY_POLL_MS);
-  }
+  // Read now and every NEW_KEY_POLL_MS after, until the key is another.
+  yield* lookUntil(
+    {
+      every: NEW_KEY_POLL_MS,
+      until: (key: string | undefined) => key !== refused.key,
+    },
+    Effect.sync(readMachineKey)
+  );
   refusedWith = undefined;
   return true;
-};
+});
 
 /**
  * The register's answer to the hub's challenge: `HMAC(machineKey, nonce ‖
@@ -1704,7 +1691,7 @@ const attach = (
   Effect.gen(function* () {
     // Started before the socket, so it runs while the hub is still booting:
     // see {@link sessionsReader}.
-    if (yield* Effect.promise(awaitNewKey)) {
+    if (yield* awaitNewKey) {
       yield* Effect.logInfo(
         "[admission] this machine holds a new key: connecting again"
       );
@@ -1804,8 +1791,16 @@ const attach = (
       payload.custody.state === "available" ? payload.custody.instances : []
     );
     let recoveryController: AbortController | undefined;
-    /** The wait for a register's ack, or a lapsed register's pause: cleared by the ack and by the connection's end. */
-    let registrationDeadline: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * The wait for a register's ack, or a lapsed register's pause: one at a
+     * time, in the connection's scope, so its end interrupts it; the ack
+     * interrupts it too ({@link endRegistrationWait}).
+     */
+    const registrationWait = yield* FiberHandle.make<void>();
+    const waitForRegistration = yield* FiberHandle.runtime(registrationWait)();
+    const endRegistrationWait = (): void => {
+      Effect.runFork(FiberHandle.clear(registrationWait));
+    };
     /** The register goes out, and its ack is waited for {@link REGISTER_ACK_MS}. */
     const sendRegister = (): void => {
       send(socket, {
@@ -1813,9 +1808,12 @@ const attach = (
         machineId: identity.machineId,
         payload,
       });
-      registrationDeadline = setTimeout(
-        () => obeyLink(agentStep({ kind: "register-expired" })),
-        REGISTER_ACK_MS
+      waitForRegistration(
+        Effect.sleep(REGISTER_ACK_MS).pipe(
+          Effect.andThen(
+            Effect.sync(() => obeyLink(agentStep({ kind: "register-expired" })))
+          )
+        )
       );
     };
     /**
@@ -1834,10 +1832,23 @@ const attach = (
               `Registration did not provide a custody decision within ${REGISTER_ACK_MS / 1000} seconds`
             )
           );
-          registrationDeadline = setTimeout(async () => {
-            payload = registerPayload(await readSessions());
-            obeyLink(agentStep({ kind: "register-due" }));
-          }, command.retryIn);
+          waitForRegistration(
+            Effect.sleep(command.retryIn).pipe(
+              Effect.andThen(Effect.tryPromise(readSessions)),
+              Effect.andThen((snapshot) =>
+                Effect.sync(() => {
+                  payload = registerPayload(snapshot);
+                  obeyLink(agentStep({ kind: "register-due" }));
+                })
+              ),
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  "a lapsed register's sessions could not be read again",
+                  error
+                )
+              )
+            )
+          );
         } else if (command.kind === "register") {
           custodyEpoch = supervisor.beginCustody(
             payload.custody.state === "available"
@@ -1861,7 +1872,7 @@ const attach = (
         // Frames wait in the outbox for the next register.
         supervisor.linkDown();
         supervisor.resetStopSequence();
-        clearTimeout(registrationDeadline);
+        endRegistrationWait();
         // A new epoch first, so the aborted attempt's failure is for an epoch
         // that has ended and says nothing.
         supervisor.loseCustody();
@@ -2525,7 +2536,7 @@ const attach = (
       ack: RegisterAckPayload,
       spawns: HeldSpawn[]
     ): void => {
-      clearTimeout(registrationDeadline);
+      endRegistrationWait();
       const units = new Map(
         spawns.map((envelope) => [
           envelope.payload.instanceId,
@@ -3311,12 +3322,19 @@ const startDaemon = (rediscover = false) =>
     // each live one is capped now and on a timer (core launchd.ts).
     if (process.platform === "darwin") {
       yield* Effect.promise(() => careForLaunchdLogs(true));
-      const logCare = setInterval(
-        () => careForLaunchdLogs(false),
-        LAUNCHD_LOG_CARE_MS
-      );
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => clearInterval(logCare))
+      // Each LAUNCHD_LOG_CARE_MS after the last ended, the first a whole
+      // wait after the one above; one that fails is said, and the next goes on.
+      yield* Effect.forkScoped(
+        Effect.sleep(LAUNCHD_LOG_CARE_MS).pipe(
+          Effect.andThen(
+            Effect.tryPromise(() => careForLaunchdLogs(false)).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("the launchd logs were not cared for", error)
+              )
+            )
+          ),
+          Effect.forever
+        )
       );
     }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;

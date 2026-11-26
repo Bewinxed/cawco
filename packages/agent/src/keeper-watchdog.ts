@@ -34,6 +34,7 @@ import type {
   BinaryUpdateState,
   KeptProcess,
 } from "@cawco/core/binary-updates";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import {
   type FoundKeeper,
@@ -52,6 +53,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { cutShort } from "@cawco/core/words/helpers";
+import { Effect } from "effect";
 import {
   type KeeperJob,
   KeeperKept,
@@ -454,24 +456,30 @@ export class KeeperWatchdog {
       );
       return;
     }
-    const back = Date.now() + KEEPER_BACK_MS;
-    let answered = false;
-    while (!answered && Date.now() < back) {
-      const { dial } = await dialKeeper(machineEndpoint(), 2000);
-      switch (dial.kind) {
-        case "answered":
-          answered = dial.value.welcomed;
-          break;
-        case "unanswered":
-          // No welcome within this try's 2 s: the next try asks again.
-          break;
-        default:
-          unhandled("read", dial);
-      }
-      if (!answered) {
-        await Bun.sleep(500);
-      }
-    }
+    // Dialled every half second after the last dial ended, until a dial is
+    // welcomed or KEEPER_BACK_MS has passed.
+    const back = await Effect.runPromise(
+      lookUntil(
+        {
+          every: 500,
+          deadlineMs: KEEPER_BACK_MS,
+          until: (welcomed: boolean) => welcomed,
+        },
+        Effect.promise(async () => {
+          const { dial } = await dialKeeper(machineEndpoint(), 2000);
+          switch (dial.kind) {
+            case "answered":
+              return dial.value.welcomed;
+            case "unanswered":
+              // No welcome within this try's 2 s: the next try asks again.
+              return false;
+            default:
+              return unhandled("read", dial);
+          }
+        })
+      )
+    );
+    const answered = back.kind === "found";
     const pid = await job.pid();
     this.#log(
       answered

@@ -448,7 +448,6 @@ catch-drops-reason	block	packages/agent/src/canvas-host/scene.ts	1
 catch-drops-reason	block	packages/agent/src/fleet.ts	1
 catch-drops-reason	block	packages/agent/src/frame-picture.ts	2
 catch-drops-reason	block	packages/agent/src/harnesses/opencode-session.ts	1
-catch-drops-reason	block	packages/agent/src/keepers.ts	1
 catch-drops-reason	block	packages/agent/src/place-push.ts	2
 catch-drops-reason	block	packages/agent/src/stage-host/host.ts	2
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
@@ -464,9 +463,9 @@ catch-drops-reason	CallExpression	packages/agent/src/browser/gate.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/claude-transcript.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/opencode.ts	3
-catch-drops-reason	CallExpression	packages/agent/src/keepers.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/provider-accounts.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/session-containers.ts	1
+catch-drops-reason	CallExpression	packages/hub/src/git-remote.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
 catch-drops-reason	CallExpression	scripts/binary/sign-agent-bundle.ts	1

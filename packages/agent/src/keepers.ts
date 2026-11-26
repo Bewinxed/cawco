@@ -16,6 +16,7 @@ import {
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
+import { Cache, Duration, Effect, Exit, Option } from "effect";
 import {
   ensureSessiond,
   KEEPER_WELCOME_MS,
@@ -92,7 +93,25 @@ const keeperWord = (reading: KeeperReading): KeeperWord =>
  * the starts failed with the item each one ran (obelisk, 2026-10-16 18:43).
  */
 export class KeeperPool {
-  readonly #clients = new Map<string, Promise<SessiondClient>>();
+  /**
+   * The connection held per keeper endpoint: one dial, shared by every
+   * caller asking meanwhile; kept once it answers, until its keeper retires
+   * it; a dial that failed is not kept, and the next caller dials again.
+   */
+  readonly #clients = Effect.runSync(
+    Cache.makeWith(
+      (endpoint: string) =>
+        // Waits on the keeper's welcome or its end, as every reading here does.
+        Effect.tryPromise({
+          try: () => SessiondClient.dial(endpoint),
+          catch: (error) => error,
+        }),
+      {
+        capacity: Number.POSITIVE_INFINITY,
+        timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),
+      }
+    )
+  );
 
   /**
    * The connection new work goes to: the current keeper's, the one the
@@ -102,9 +121,13 @@ export class KeeperPool {
    */
   async current(): Promise<SessiondClient> {
     const machine = machineEndpoint();
-    const known = await this.#clients
-      .get(await currentEndpoint(machine))
-      ?.catch(() => undefined);
+    const endpoint = await currentEndpoint(machine);
+    const known = await Effect.runPromise(
+      Cache.getOption(this.#clients, endpoint).pipe(
+        Effect.map(Option.getOrUndefined),
+        Effect.orElseSucceed(() => undefined)
+      )
+    );
     if (known && !known.retired) {
       return known;
     }
@@ -302,41 +325,41 @@ export class KeeperPool {
 
   /** Closes every connection; the keepers, and what they hold, are untouched. */
   close(): void {
-    for (const dialled of this.#clients.values()) {
-      dialled.then(
-        (client) => client.close(),
-        () => undefined
+    // Each connection held or still dialled is read before it is let go,
+    // and closed once it answers.
+    for (const endpoint of [...Effect.runSync(Cache.keys(this.#clients))]) {
+      Effect.runFork(
+        Cache.getOption(this.#clients, endpoint).pipe(
+          Effect.map(Option.map((client) => client.close())),
+          Effect.ignore
+        )
       );
     }
-    this.#clients.clear();
+    Effect.runSync(Cache.invalidateAll(this.#clients));
   }
 
-  /** The keeper's connection: the one held, while it may carry work; otherwise one dial, shared by every caller asking meanwhile. */
+  /**
+   * The keeper's connection: the one held, while it may carry work;
+   * otherwise one dial, shared by every caller asking meanwhile. The promise
+   * edge of the connections' cache.
+   */
   #client(endpoint: string): Promise<SessiondClient> {
-    const known = this.#clients.get(endpoint);
-    if (!known) {
-      return this.#dial(endpoint);
-    }
-    const again = (): Promise<SessiondClient> =>
-      this.#clients.get(endpoint) === known
-        ? this.#dial(endpoint)
-        : this.#client(endpoint);
-    return known.then(
-      (client) => (client.retired ? again() : client),
-      () => again()
+    const clients = this.#clients;
+    return Effect.runPromise(
+      Cache.get(clients, endpoint).pipe(
+        Effect.flatMap((client) =>
+          client.retired
+            ? // Retired: let go, unless another caller has already, and
+              // dialled again (or joined the dial in flight).
+              Cache.invalidateWhen(
+                clients,
+                endpoint,
+                (held) => held === client
+              ).pipe(Effect.andThen(Cache.get(clients, endpoint)))
+            : Effect.succeed(client)
+        )
+      )
     );
-  }
-
-  #dial(endpoint: string): Promise<SessiondClient> {
-    // Waits on the keeper's welcome or its end, as every reading here does.
-    const dialled = SessiondClient.dial(endpoint);
-    this.#clients.set(endpoint, dialled);
-    dialled.catch(() => {
-      if (this.#clients.get(endpoint) === dialled) {
-        this.#clients.delete(endpoint);
-      }
-    });
-    return dialled;
   }
 }
 

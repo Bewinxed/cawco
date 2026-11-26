@@ -31,8 +31,10 @@ import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { type Bounded, Gone } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { boundedRead, Gone as EndedFirst } from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { answers } from "@cawco/core/keepers";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
@@ -55,6 +57,7 @@ import {
 import { SessiondServerMessageSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { notAliveReason } from "@cawco/core/words/sessiond";
+import { Deferred, Effect, Exit, Schema } from "effect";
 import { z } from "zod";
 import { parseProcId } from "./proc-id";
 import { holdRestart } from "./restart";
@@ -179,18 +182,17 @@ export const serviceManaged = (
  * caller must not paper over it with an ad-hoc spawn, and the message is the
  * whole fix.
  */
-class SessiondUnavailableError extends Error {
-  readonly endpoint: string;
-
-  constructor(endpoint: string) {
-    super(
-      `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
-        "refusing to ad-hoc spawn one (its children would land in the agent cgroup and die " +
-        "with the next agent restart). Install and start the unit: `cawco service install` " +
-        "then `systemctl --user start cawco-sessiond`."
+class SessiondUnavailableError extends Schema.TaggedError<SessiondUnavailableError>()(
+  "SessiondUnavailableError",
+  { endpoint: Schema.String }
+) {
+  override get message(): string {
+    return (
+      `[sessiond] nothing is listening on ${this.endpoint}, and this agent is service-managed — ` +
+      "refusing to ad-hoc spawn one (its children would land in the agent cgroup and die " +
+      "with the next agent restart). Install and start the unit: `cawco service install` " +
+      "then `systemctl --user start cawco-sessiond`."
     );
-    this.name = "SessiondUnavailableError";
-    this.endpoint = endpoint;
   }
 }
 
@@ -221,45 +223,54 @@ export const dialKeeper = async (
   timeoutMs: number
 ): Promise<{ dial: Bounded<KeeperDial>; accepted: boolean }> => {
   let accepted = false;
-  const dial = await readWithin(
-    timeoutMs,
-    (signal) =>
-      new Promise<KeeperDial>((resolve) => {
-        // Listeners before the dial, as in core `answers`.
-        const socket = new Socket();
-        const lines = new LineSplitter();
-        const settle = (welcomed: boolean, detail: string): void => {
-          socket.destroy();
-          resolve({ welcomed, detail });
-        };
-        signal.addEventListener("abort", () => socket.destroy(), {
-          once: true,
-        });
-        socket.setEncoding("utf8");
-        socket.once("connect", () => {
-          accepted = true;
-        });
-        socket.on("data", (chunk: string) => {
-          const [first] = lines.push(chunk);
-          if (first !== undefined) {
-            settle(
-              WELCOME_LINE.test(first),
-              WELCOME_LINE.test(first)
-                ? "welcome"
-                : "first line was not a welcome"
-            );
-          }
-        });
-        socket.once("error", (error: NodeJS.ErrnoException) =>
-          settle(
-            false,
-            accepted
-              ? `accepted, then ${error.code ?? error.message}`
-              : `connect failed: ${error.code ?? error.message}`
-          )
+  const welcome = Effect.callback<KeeperDial>((resume) => {
+    // Listeners before the dial, as in core `answers`.
+    const socket = new Socket();
+    const lines = new LineSplitter();
+    const settle = (welcomed: boolean, detail: string): void => {
+      socket.destroy();
+      resume(Effect.succeed({ welcomed, detail }));
+    };
+    socket.setEncoding("utf8");
+    socket.once("connect", () => {
+      accepted = true;
+    });
+    socket.on("data", (chunk: string) => {
+      const [first] = lines.push(chunk);
+      if (first !== undefined) {
+        settle(
+          WELCOME_LINE.test(first),
+          WELCOME_LINE.test(first) ? "welcome" : "first line was not a welcome"
         );
-        socket.connect(endpoint);
+      }
+    });
+    socket.once("error", (error: NodeJS.ErrnoException) =>
+      settle(
+        false,
+        accepted
+          ? `accepted, then ${error.code ?? error.message}`
+          : `connect failed: ${error.code ?? error.message}`
+      )
+    );
+    socket.connect(endpoint);
+    // Let go at the deadline: the dial ends with it.
+    return Effect.sync(() => socket.destroy());
+  });
+  // The promise edge of the dial within its deadline.
+  const dial = await Effect.runPromise(
+    boundedRead(timeoutMs, welcome).pipe(
+      Effect.match({
+        onSuccess: (value): Bounded<KeeperDial> => ({
+          kind: "answered",
+          value,
+        }),
+        onFailure: ({ after, reason }): Bounded<KeeperDial> => ({
+          kind: "unanswered",
+          after,
+          reason,
+        }),
       })
+    )
   );
   return { dial, accepted };
 };
@@ -324,7 +335,7 @@ export const ensureSessiond = async (
       unhandled("read", there);
   }
   if (serviceManaged(env)) {
-    throw new SessiondUnavailableError(endpoint);
+    throw new SessiondUnavailableError({ endpoint });
   }
 
   const { command, args } = adhocCommand();
@@ -335,22 +346,31 @@ export const ensureSessiond = async (
   });
   child.unref();
 
-  const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const bound = await answers(endpoint, 250);
-    switch (bound.kind) {
-      case "answered":
-        if (bound.value) {
-          return;
+  // Asked at once and again 50 ms after each answer, until it is bound or
+  // ADHOC_START_TIMEOUT_MS has passed.
+  const bound = await Effect.runPromise(
+    lookUntil(
+      {
+        every: 50,
+        deadlineMs: ADHOC_START_TIMEOUT_MS,
+        until: (listening: boolean) => listening,
+      },
+      Effect.promise(async () => {
+        const asked = await answers(endpoint, 250);
+        switch (asked.kind) {
+          case "answered":
+            return asked.value;
+          case "unanswered":
+            // Not bound yet as far as this one try saw: the next try asks again.
+            return false;
+          default:
+            return unhandled("read", asked);
         }
-        break;
-      case "unanswered":
-        // Not bound yet as far as this one try saw: the next try asks again.
-        break;
-      default:
-        unhandled("read", bound);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+      })
+    )
+  );
+  if (bound.kind === "found") {
+    return;
   }
   throw new Error(
     `[sessiond] spawned ${command} ${args.join(" ")} but it never bound ${endpoint}`
@@ -510,10 +530,7 @@ export class SessiondClient {
    * one: an ack can only come on this socket, and a caller left waiting on
    * one from a keeper that has gone waits for ever, without a word.
    */
-  readonly #acks = new Map<
-    string,
-    { resolve: (ack: SessiondAck) => void; reject: (error: Error) => void }
-  >();
+  readonly #acks = new Map<string, Deferred.Deferred<SessiondAck, Error>>();
   /**
    * Each unsettled mutation's hold on an agent restart: a message, an answer,
    * a signal or a start on its way into the keeper, which a restart now would
@@ -563,11 +580,11 @@ export class SessiondClient {
       this.#holds.clear();
       const pending = [...this.#acks.values()];
       this.#acks.clear();
-      for (const { reject } of pending) {
-        reject(keeperEnded("it answered"));
+      for (const acked of pending) {
+        Deferred.doneUnsafe(acked, Exit.fail(keeperEnded("it answered")));
       }
       for (const waiter of this.#welcomeWaiters.splice(0)) {
-        waiter.reject(keeperEnded("its listing came"));
+        waiter(Exit.fail(keeperEnded("its listing came")));
       }
       this.onClose.emit("close");
     });
@@ -588,53 +605,85 @@ export class SessiondClient {
     endpoint: string = sessiondEndpoint(),
     timeoutMs: number = DIAL_TIMEOUT_MS
   ): Promise<Bounded<SessiondClient>> {
-    return readWithin(timeoutMs, (signal) =>
-      SessiondClient.dial(endpoint, signal)
+    // The promise edge of a dial within its deadline: the keeper's end is
+    // "dead", a refusal rejects.
+    return Effect.runPromise(
+      boundedRead(
+        timeoutMs,
+        SessiondClient.#dialing(endpoint).pipe(
+          Effect.mapError((error) =>
+            error instanceof Gone
+              ? new EndedFirst({ what: error.message })
+              : error
+          )
+        )
+      ).pipe(
+        Effect.map((client): Bounded<SessiondClient> => ({
+          kind: "answered",
+          value: client,
+        })),
+        Effect.catchTag("Unanswered", ({ after, reason }) =>
+          Effect.succeed<Bounded<SessiondClient>>({
+            kind: "unanswered",
+            after,
+            reason,
+          })
+        )
+      )
     );
   }
 
   /**
    * One dial of the keeper at `endpoint`, waited on for the keeper's own
    * word: its welcome, its refusal (a thrown errno or capability refusal),
-   * its connection's end ({@link Gone}), or `signal`.
+   * its connection's end ({@link Gone}), or `signal`, which interrupts it.
+   * The promise edge of {@link SessiondClient.#dialing}.
    */
   static dial(endpoint: string, signal?: AbortSignal): Promise<SessiondClient> {
-    return new Promise((resolve, reject) => {
+    return Effect.runPromise(
+      SessiondClient.#dialing(endpoint),
+      signal ? { signal } : undefined
+    );
+  }
+
+  /** {@link SessiondClient.dial}: its first word settles it; interrupted, the socket is let go. */
+  static #dialing(endpoint: string): Effect.Effect<SessiondClient, Error> {
+    return Effect.callback<SessiondClient, Error>((resume) => {
       // Same ordering rule as core `answers`: listeners before dial.
       const socket = new Socket();
-      signal?.addEventListener("abort", () => socket.destroy(), {
-        once: true,
-      });
       socket.once("error", (error) => {
-        reject(error);
+        resume(Effect.fail(error));
       });
       const client = new SessiondClient(socket);
       socket.connect(endpoint);
       // The accept's own welcome, first in line: nothing is sent before it.
-      client.#welcomeWaiters.push({
-        resolve: (welcome) => {
-          // §5: no compatible capability is a loud refusal, never a plausible lie.
-          if (!welcome.capabilities.includes(SESSIOND_V1)) {
-            socket.destroy();
-            reject(
+      client.#welcomeWaiters.push((answer) => {
+        if (Exit.isFailure(answer)) {
+          resume(Exit.failCause(answer.cause));
+          return;
+        }
+        const welcome = answer.value;
+        // §5: no compatible capability is a loud refusal, never a plausible lie.
+        if (!welcome.capabilities.includes(SESSIOND_V1)) {
+          socket.destroy();
+          resume(
+            Effect.fail(
               new Error(
                 `[sessiond] speaks ${welcome.capabilities.join(", ") || "(nothing)"}; this agent needs ${SESSIOND_V1}`
               )
-            );
-            return;
-          }
-          // The keeper holds the session limits before the connection carries
-          // anything else: a spawn sent on it after this is read after it.
-          openClients.add(client);
-          if (sessionLimits) {
-            client.sayLimits(sessionLimits);
-          }
-          resolve(client);
-        },
-        reject: (error) => {
-          reject(error);
-        },
+            )
+          );
+          return;
+        }
+        // The keeper holds the session limits before the connection carries
+        // anything else: a spawn sent on it after this is read after it.
+        openClients.add(client);
+        if (sessionLimits) {
+          client.sayLimits(sessionLimits);
+        }
+        resume(Effect.succeed(client));
       });
+      return Effect.sync(() => socket.destroy());
     });
   }
 
@@ -649,10 +698,9 @@ export class SessiondClient {
    * too, or its welcome would answer a `list()` that asked later. The
    * connection's end fails every one still waiting.
    */
-  readonly #welcomeWaiters: {
-    resolve: (welcome: SessiondWelcomeInfo) => void;
-    reject: (error: Error) => void;
-  }[] = [];
+  readonly #welcomeWaiters: ((
+    answer: Exit.Exit<SessiondWelcomeInfo, Error>
+  ) => void)[] = [];
 
   get epoch(): string | undefined {
     return this.#welcome?.epoch;
@@ -722,14 +770,17 @@ export class SessiondClient {
             );
           }
         }
-        this.#welcomeWaiters.shift()?.resolve(this.#welcome);
+        this.#welcomeWaiters.shift()?.(Exit.succeed(this.#welcome));
         return;
       }
       case "ack": {
         this.#holds.get(message.commandId)?.();
         this.#holds.delete(message.commandId);
-        this.#acks.get(message.commandId)?.resolve(message);
+        const acked = this.#acks.get(message.commandId);
         this.#acks.delete(message.commandId);
+        if (acked) {
+          Deferred.doneUnsafe(acked, Exit.succeed(message));
+        }
         return;
       }
       case "draining":
@@ -842,26 +893,25 @@ export class SessiondClient {
   #command(
     message: SessiondClientMessage & { commandId: string }
   ): Promise<SessiondAck> {
-    return new Promise((resolve, reject) => {
-      this.#acks.set(message.commandId, { resolve, reject });
-      this.#holds.set(
-        message.commandId,
-        holdRestart(
-          message.type === "spawn" ? "starting" : "write",
-          "procId" in message
-            ? `${message.type}:${message.procId}`
-            : message.type
-        )
-      );
-      try {
-        this.#send(message);
-      } catch (error) {
-        this.#acks.delete(message.commandId);
-        this.#holds.get(message.commandId)?.();
-        this.#holds.delete(message.commandId);
-        reject(error);
-      }
-    });
+    const acked = Deferred.makeUnsafe<SessiondAck, Error>();
+    this.#acks.set(message.commandId, acked);
+    this.#holds.set(
+      message.commandId,
+      holdRestart(
+        message.type === "spawn" ? "starting" : "write",
+        "procId" in message ? `${message.type}:${message.procId}` : message.type
+      )
+    );
+    try {
+      this.#send(message);
+    } catch (error) {
+      this.#acks.delete(message.commandId);
+      this.#holds.get(message.commandId)?.();
+      this.#holds.delete(message.commandId);
+      return Promise.reject(error);
+    }
+    // The promise edge of the wait for its ack.
+    return Effect.runPromise(Deferred.await(acked));
   }
 
   // -------------------------------------------------------------------- verbs
@@ -1021,18 +1071,18 @@ export class SessiondClient {
     this.#send({ type: "list" });
     // Its welcome is read by the death check in `#onMessage`, and by this
     // listener's `gone` when it does not list the child at all.
-    this.#welcomeWaiters.push({
-      resolve: (welcome) => {
-        if (
-          listener.gone &&
-          this.#subscriptions.get(procId)?.has(subscription) &&
-          !this.#toldExit.has(listener) &&
-          !welcome.procs.some((proc) => proc.procId === procId)
-        ) {
-          listener.gone();
-        }
-      },
-      reject: () => undefined,
+    // Read as the welcome is, before the next line: the connection's end
+    // instead is the listener's word.
+    this.#welcomeWaiters.push((answer) => {
+      if (
+        Exit.isSuccess(answer) &&
+        listener.gone &&
+        this.#subscriptions.get(procId)?.has(subscription) &&
+        !this.#toldExit.has(listener) &&
+        !answer.value.procs.some((proc) => proc.procId === procId)
+      ) {
+        listener.gone();
+      }
     });
     return () => {
       const held = this.#subscriptions.get(procId);
@@ -1050,10 +1100,15 @@ export class SessiondClient {
     if (this.#closed) {
       return Promise.reject(keeperEnded("this listing was asked"));
     }
-    return new Promise((resolve, reject) => {
+    try {
       this.#send({ type: "list" });
-      this.#welcomeWaiters.push({ resolve, reject });
-    });
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const listed = Deferred.makeUnsafe<SessiondWelcomeInfo, Error>();
+    this.#welcomeWaiters.push((answer) => Deferred.doneUnsafe(listed, answer));
+    // The promise edge of the wait for its welcome.
+    return Effect.runPromise(Deferred.await(listed));
   }
 
   close(): void {
@@ -1063,13 +1118,12 @@ export class SessiondClient {
 }
 
 /** sessiond refused a command; `reason` is the keeper's own words. */
-class SessiondRefusal extends Error {
-  readonly reason: string;
-  constructor(verb: string, reason: string) {
-    super(
-      `The process that keeps this machine's sessions running refused "${verb}": ${reason}`
-    );
-    this.reason = reason;
+class SessiondRefusal extends Schema.TaggedError<SessiondRefusal>()(
+  "SessiondRefusal",
+  { verb: Schema.String, reason: Schema.String }
+) {
+  override get message(): string {
+    return `The process that keeps this machine's sessions running refused "${this.verb}": ${this.reason}`;
   }
 }
 
@@ -1083,7 +1137,10 @@ export const refusalReason = (error: unknown): string => {
 
 const assertApplied = (ack: SessiondAck, verb: string): void => {
   if (ack.stage === "failed") {
-    throw new SessiondRefusal(verb, ack.reason ?? "no reason given");
+    throw new SessiondRefusal({
+      verb,
+      reason: ack.reason ?? "no reason given",
+    });
   }
 };
 

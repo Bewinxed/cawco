@@ -36,6 +36,7 @@ import type {
 } from "@cawco/core/control-table";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type { MachineInbound, MachineSend } from "@cawco/core/envelopes";
 import { FLEET_DELTA, FLEET_STATUS } from "@cawco/core/fleet";
 import {
@@ -180,7 +181,7 @@ import {
   CutCommitGone,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
-import { Effect } from "effect";
+import { Deferred, Effect, Exit, Schema, Semaphore } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
@@ -318,11 +319,6 @@ interface Claimed {
  * their results; answers whether one started.
  */
 /** Why a stop ended a wait, in the words its `abort` was handed. */
-const stopReason = (signal: AbortSignal): string => {
-  const reason: unknown = signal.reason;
-  return reason instanceof Error ? reason.message : String(reason);
-};
-
 const shellCallsOf = (
   message: NeutralMessage,
   running: Map<string, string>
@@ -394,23 +390,67 @@ const heldBy = (
     : undefined;
 };
 
+/**
+ * `wait` as one a stop can cut, held in `cuts` under `instanceId` while it
+ * runs ({@link SessionSupervisor.dispatch}): the cut interrupts it and fails
+ * it with the cut's words. A later wait under the same id takes the place;
+ * each lets go only of its own.
+ */
+const cuttable = <A, E>(
+  cuts: Map<string, Deferred.Deferred<never, Error>>,
+  instanceId: string,
+  wait: Effect.Effect<A, E>
+): Effect.Effect<A, E | Error> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const cutBy = Deferred.makeUnsafe<never, Error>();
+      cuts.set(instanceId, cutBy);
+      return cutBy;
+    }),
+    (cutBy) => Effect.raceFirst(wait, Deferred.await(cutBy)),
+    (cutBy) =>
+      Effect.sync(() => {
+        if (cuts.get(instanceId) === cutBy) {
+          cuts.delete(instanceId);
+        }
+      })
+  );
+
+/** Cuts the wait `cutBy` holds ({@link cuttable}), with `why`. */
+const cutWait = (
+  cutBy: Deferred.Deferred<never, Error> | undefined,
+  why: string
+): void => {
+  if (cutBy) {
+    Deferred.doneUnsafe(cutBy, Exit.fail(new Error(why)));
+  }
+};
+
 /** Read-only custody probes can be abandoned; an adoption keeps its claim until it settles. */
-const custodyProbe = async <T>(
+const custodyProbe = <T>(
   read: Promise<T>,
   signal?: AbortSignal
 ): Promise<T> => {
   if (!signal) {
-    return await read;
+    return read;
   }
-  signal.throwIfAborted();
-  const aborted = Promise.withResolvers<never>();
-  const cancel = () => aborted.reject(signal.reason);
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    return await Promise.race([read, aborted.promise]);
-  } finally {
-    signal.removeEventListener("abort", cancel);
-  }
+  // The promise edge of the read raced against the abort, which fails it
+  // with the abort's reason.
+  const aborted = Effect.callback<never, unknown>((resume) => {
+    if (signal.aborted) {
+      resume(Effect.fail(signal.reason));
+      return;
+    }
+    const cancel = () => resume(Effect.fail(signal.reason));
+    signal.addEventListener("abort", cancel, { once: true });
+    return Effect.sync(() => signal.removeEventListener("abort", cancel));
+  });
+  return Effect.runPromise(
+    Effect.raceFirst(
+      Effect.promise(() => read),
+      aborted
+    )
+  );
 };
 
 /**
@@ -436,10 +476,11 @@ const titled = (info: NeutralSessionInfo): NeutralSessionInfo => {
 };
 
 /** A call for a session this agent runs no process for: a control refusal of kind `not-running`. */
-class NotRunning extends Error {
-  constructor(instanceId: string) {
-    super(`no session ${instanceId}`);
-    this.name = "NotRunning";
+class NotRunning extends Schema.TaggedError<NotRunning>()("NotRunning", {
+  instanceId: Schema.String,
+}) {
+  override get message(): string {
+    return `no session ${this.instanceId}`;
   }
 }
 
@@ -891,7 +932,7 @@ export class SessionSupervisor {
     {
       sessionId: string;
       generation: string;
-      ack: ReturnType<typeof Promise.withResolvers<void>>;
+      ack: Deferred.Deferred<void, SessionAddressRefused>;
     }
   >();
   readonly #addressAcknowledged = new Map<
@@ -943,7 +984,7 @@ export class SessionSupervisor {
    * Each start waiting for the machine's memory ({@link #roomForStart}), by
    * instance id: a stop for it ends the wait ({@link dispatch}).
    */
-  readonly #roomWaits = new Map<string, AbortController>();
+  readonly #roomWaits = new Map<string, Deferred.Deferred<never, Error>>();
   /**
    * Each start that replaces a process still in its turn, waiting for that
    * turn to end ({@link #turnEnded}), by instance id. While it waits, a
@@ -951,7 +992,7 @@ export class SessionSupervisor {
    * goes to the running process at once rather than queue behind it, and a
    * stop ends the wait: the start is dropped ({@link dispatch}).
    */
-  readonly #relaunchWaits = new Map<string, AbortController>();
+  readonly #relaunchWaits = new Map<string, Deferred.Deferred<never, Error>>();
   /** The keepers a start's room is read under: the current one names where its children start ({@link #roomForStart}). */
   readonly #keepers = new KeeperPool();
   /** The machine's fleet convergence, which reads the live sessions only to tell one to heal (fleet-converger.ts). */
@@ -1027,9 +1068,8 @@ export class SessionSupervisor {
   /** One turn at a time per instance (or lane), so envelopes about it are handled in arrival order. */
   readonly #queues = makeKeyedLock<string>();
 
-  /** Transcript reads running now ({@link TRANSCRIPT_READS_AT_ONCE} at most), and those waiting their turn. */
-  #transcriptReading = 0;
-  readonly #transcriptTurns: (() => void)[] = [];
+  /** Transcript reads running now ({@link TRANSCRIPT_READS_AT_ONCE} at most), and those waiting their turn, first come first served. */
+  readonly #transcriptReads = Semaphore.makeUnsafe(TRANSCRIPT_READS_AT_ONCE);
 
   /**
    * One stored transcript's read, {@link TRANSCRIPT_READS_AT_ONCE} at a
@@ -1038,22 +1078,13 @@ export class SessionSupervisor {
    * held the agent's loop a second (agent-loop probe, 2026-10-24). One long
    * read takes one turn, so it holds up no more than that.
    */
-  async #transcriptRead<T>(read: () => Promise<T>): Promise<T> {
-    if (this.#transcriptReading >= TRANSCRIPT_READS_AT_ONCE) {
-      await new Promise<void>((resolve) => this.#transcriptTurns.push(resolve));
-    } else {
-      this.#transcriptReading += 1;
-    }
-    try {
-      return await read();
-    } finally {
-      const next = this.#transcriptTurns.shift();
-      if (next) {
-        next();
-      } else {
-        this.#transcriptReading -= 1;
-      }
-    }
+  #transcriptRead<T>(read: () => Promise<T>): Promise<T> {
+    // The promise edge of a read in its turn; it settles as `read` does.
+    return Effect.runPromise(
+      this.#transcriptReads.withPermit(
+        Effect.tryPromise({ try: read, catch: (error) => error })
+      )
+    );
   }
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
   readonly #failOpen = new Set<string>();
@@ -1410,12 +1441,15 @@ export class SessionSupervisor {
             sessionId: pending.sessionId,
             generation: pending.generation,
           });
-          pending.ack.resolve();
+          Deferred.doneUnsafe(pending.ack, Exit.void);
         } else {
           this.#addressCancelled.add(id);
-          pending.ack.reject(
-            new SessionAddressRefused(
-              "The session ended before its address was acknowledged."
+          Deferred.doneUnsafe(
+            pending.ack,
+            Exit.fail(
+              new SessionAddressRefused(
+                "The session ended before its address was acknowledged."
+              )
             )
           );
         }
@@ -1480,20 +1514,14 @@ export class SessionSupervisor {
       this.#attaching
         .get(stopping)
         ?.abort(new Error("The session was stopped before it was attached."));
-      this.#roomWaits
-        .get(stopping)
-        ?.abort(
-          new Error(
-            "The session was stopped while it waited for its machine's memory."
-          )
-        );
-      this.#relaunchWaits
-        .get(stopping)
-        ?.abort(
-          new Error(
-            "The session was stopped while its start again waited for its turn to end, so it was not started again."
-          )
-        );
+      cutWait(
+        this.#roomWaits.get(stopping),
+        "The session was stopped while it waited for its machine's memory."
+      );
+      cutWait(
+        this.#relaunchWaits.get(stopping),
+        "The session was stopped while its start again waited for its turn to end, so it was not started again."
+      );
     }
     // The session's turn runs on while a start that replaces it waits for
     // the turn's end ({@link #turnEnded}): what the turn needs from here (an
@@ -2024,39 +2052,43 @@ export class SessionSupervisor {
    * ({@link #relaunchWaits}). Answers `stopped`, in words, when a stop ended
    * the wait; nothing once the turn has ended or the process is gone.
    */
-  async #turnEnded(
+  #turnEnded(
     instanceId: string,
     running: HarnessSession
   ): Promise<{ stopped?: string }> {
     if (!this.#inTurn(instanceId)) {
-      return {};
+      return Promise.resolve({});
     }
-    const wait = new AbortController();
-    this.#relaunchWaits.set(instanceId, wait);
     const since = Date.now();
     console.info(turnWords.relaunchWaits(instanceId));
-    try {
-      while (
-        this.#live.sessions.get(instanceId) === running &&
-        this.#inTurn(instanceId)
-      ) {
-        if (wait.signal.aborted) {
-          return { stopped: stopReason(wait.signal) };
-        }
-        await Bun.sleep(TURN_END_LOOK_MS);
-      }
-      if (wait.signal.aborted) {
-        return { stopped: stopReason(wait.signal) };
-      }
-      console.info(
-        turnWords.turnEnded(instanceId, Math.round((Date.now() - since) / 1000))
-      );
-      return {};
-    } finally {
-      if (this.#relaunchWaits.get(instanceId) === wait) {
-        this.#relaunchWaits.delete(instanceId);
-      }
-    }
+    // Looked at now and every TURN_END_LOOK_MS after, until the turn has
+    // ended or the process is gone; a stop cuts it ({@link dispatch}).
+    const ended = lookUntil(
+      { every: TURN_END_LOOK_MS, until: (inTurn: boolean) => !inTurn },
+      Effect.sync(
+        () =>
+          this.#live.sessions.get(instanceId) === running &&
+          this.#inTurn(instanceId)
+      )
+    ).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          console.info(
+            turnWords.turnEnded(
+              instanceId,
+              Math.round((Date.now() - since) / 1000)
+            )
+          );
+          return {};
+        })
+      )
+    );
+    // The promise edge of the wait, cut short by a stop.
+    return Effect.runPromise(
+      cuttable(this.#relaunchWaits, instanceId, ended).pipe(
+        Effect.catch((stopped) => Effect.succeed({ stopped: stopped.message }))
+      )
+    );
   }
 
   /**
@@ -2444,12 +2476,10 @@ export class SessionSupervisor {
           ? (await this.#keepers.current()).cgroup
           : undefined
       );
-    let room = await measure();
+    const room = await measure();
     if (room.ok) {
       return;
     }
-    const stop = new AbortController();
-    this.#roomWaits.set(instanceId, stop);
     const began = Date.now();
     console.info(`[session] ${instanceId}: start waits: ${room.words}`);
     this.sink({
@@ -2463,29 +2493,16 @@ export class SessionSupervisor {
         content: roomHeldSentence(room.words),
       }),
     });
-    try {
-      while (!room.ok) {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, ROOM_POLL_MS);
-          stop.signal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(timer);
-              reject(stop.signal.reason);
-            },
-            { once: true }
-          );
-        });
-        room = await measure();
-      }
-      console.info(
-        `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
-      );
-    } finally {
-      if (this.#roomWaits.get(instanceId) === stop) {
-        this.#roomWaits.delete(instanceId);
-      }
-    }
+    // Measured every ROOM_POLL_MS after the last measure ended, until there
+    // is room; a stop cuts it, and the start fails with the stop's words.
+    const roomMade = Effect.sleep(ROOM_POLL_MS).pipe(
+      Effect.andThen(Effect.promise(measure)),
+      Effect.repeat({ until: (measured) => measured.ok })
+    );
+    await Effect.runPromise(cuttable(this.#roomWaits, instanceId, roomMade));
+    console.info(
+      `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
+    );
   }
 
   /**
@@ -3217,12 +3234,13 @@ export class SessionSupervisor {
           previous?.sessionId === sessionId &&
           previous.generation === processGeneration
         ) {
-          return previous.ack.promise;
+          // The promise edge of the wait for the hub's acknowledgement.
+          return Effect.runPromise(Deferred.await(previous.ack));
         }
         const pending = {
           sessionId,
           generation: processGeneration,
-          ack: Promise.withResolvers<void>(),
+          ack: Deferred.makeUnsafe<void, SessionAddressRefused>(),
         };
         this.#addressWaiting.set(instanceId, pending);
         this.sink({
@@ -3231,11 +3249,18 @@ export class SessionSupervisor {
           sessionId,
           processGeneration,
         });
-        return pending.ack.promise.finally(() => {
-          if (this.#addressWaiting.get(instanceId) === pending) {
-            this.#addressWaiting.delete(instanceId);
-          }
-        });
+        // The promise edge of the wait for the hub's acknowledgement.
+        return Effect.runPromise(
+          Deferred.await(pending.ack).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (this.#addressWaiting.get(instanceId) === pending) {
+                  this.#addressWaiting.delete(instanceId);
+                }
+              })
+            )
+          )
+        );
       },
       instanceId,
       cwd: workdir,
@@ -5102,7 +5127,7 @@ export class SessionSupervisor {
   #session(instanceId: string): HarnessSession {
     const session = this.#live.sessions.get(instanceId);
     if (!session) {
-      throw new NotRunning(instanceId);
+      throw new NotRunning({ instanceId });
     }
     return session;
   }
@@ -5307,18 +5332,22 @@ function endHeld(instanceId: string, pid?: number): Promise<boolean> {
     await Promise.all(
       children.map(async ({ client, child }) => {
         await endProc(client, child.procId);
-        const deadline = Date.now() + 10_000;
-        let alive = true;
-        while (alive && Date.now() < deadline) {
-          const after = await client.list();
-          alive = after.procs.some(
-            (proc) => proc.pid === child.pid && proc.alive
-          );
-          if (alive) {
-            await Bun.sleep(100);
-          }
-        }
-        if (alive) {
+        // Listed now and every 100 ms after, for 10 s at most, until it is gone.
+        const gone = await Effect.runPromise(
+          lookUntil(
+            {
+              every: 100,
+              deadlineMs: 10_000,
+              until: (alive: boolean) => !alive,
+            },
+            Effect.promise(async () =>
+              (await client.list()).procs.some(
+                (proc) => proc.pid === child.pid && proc.alive
+              )
+            )
+          )
+        );
+        if (gone.kind === "deadline") {
           throw new Error(
             `sessiond process ${child.pid} for ${instanceId} did not exit after its stop`
           );

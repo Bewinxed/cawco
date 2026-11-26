@@ -1,5 +1,6 @@
 /** Passive custody inspection: never starts or asks a harness, model or provider. */
 
+import { Effect } from "effect";
 import { z } from "zod";
 import type { SessiondClient } from "./sessiond-client";
 
@@ -107,43 +108,49 @@ export const readRing = (
   line: NonNullable<ProcLineListener["line"]>
 ): Promise<RingRead> => {
   let oldest = afterSeq + 1;
-  return new Promise<RingRead>((settle) => {
-    // This read's own subscription, ended with the read: every other one to
-    // the child on this connection goes on.
-    let stop = (): void => undefined;
-    const finish = (read: RingRead): void => {
-      stop();
-      settle(read);
-    };
-    const done = (): void => finish({ kind: "read", oldest });
-    if (head <= afterSeq) {
-      done();
-      return;
-    }
-    let reopened = false;
-    const listener: ProcLineListener = {
-      line: (event) => {
-        if (event.seq > head) {
-          return;
-        }
-        line(event);
-        if (event.seq === head) {
-          done();
-        }
-      },
-      exit: () => done(),
-      gone: () => finish({ kind: "gone" }),
-      reset: (nextSeq, from) => {
-        oldest = from ?? nextSeq;
-        if (reopened || oldest > head) {
-          done();
-          return;
-        }
-        reopened = true;
+  // The promise edge of the read: its last line, the child's end, or that
+  // its keeper holds it no more settles it.
+  return Effect.runPromise(
+    Effect.callback<RingRead, unknown>((resume) => {
+      // This read's own subscription, ended with the read: every other one to
+      // the child on this connection goes on.
+      let stop = (): void => undefined;
+      const finish = (read: RingRead): void => {
         stop();
-        stop = client.subscribe(procId, listener, oldest - 1);
-      },
-    };
-    stop = client.subscribe(procId, listener, afterSeq);
-  });
+        resume(Effect.succeed(read));
+      };
+      const done = (): void => finish({ kind: "read", oldest });
+      if (head <= afterSeq) {
+        done();
+        return;
+      }
+      let reopened = false;
+      const listener: ProcLineListener = {
+        line: (event) => {
+          if (event.seq > head) {
+            return;
+          }
+          line(event);
+          if (event.seq === head) {
+            done();
+          }
+        },
+        exit: () => done(),
+        gone: () => finish({ kind: "gone" }),
+        reset: (nextSeq, from) => {
+          oldest = from ?? nextSeq;
+          if (reopened || oldest > head) {
+            done();
+            return;
+          }
+          reopened = true;
+          stop();
+          stop = client.subscribe(procId, listener, oldest - 1);
+        },
+      };
+      stop = client.subscribe(procId, listener, afterSeq);
+      // Interrupted, the read lets its subscription go.
+      return Effect.sync(() => stop());
+    })
+  );
 };

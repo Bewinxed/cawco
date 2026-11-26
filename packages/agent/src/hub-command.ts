@@ -12,6 +12,7 @@ import {
   type QueueSlot,
 } from "@cawco/core/commands/controls";
 import type { ControlArgs } from "@cawco/core/control-table";
+import { lookUntil } from "@cawco/core/effect/poll";
 import {
   BACKGROUND_SHELL,
   HEAVY_SLOT_ENV,
@@ -33,6 +34,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { whileSandboxDown } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
@@ -512,120 +514,129 @@ const spawned = ({
   timeoutMs,
   workspace,
 }: Spawned): Promise<CommandResult> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd,
-      detached: true,
-      // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...hostEnvironment(), ...env, PWD: cwd },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let written = 0;
-    /** Why the runner ended the command, once it has. */
-    let stopped: Stop | undefined;
-    /** What the runner adds to stderr when it ends the command itself. */
-    let said = "";
-    const running: Running = {
-      runId: named?.id,
-      words: `the command \`${shownCommand(cmd)}\``,
-      stop: (why) => {
-        // A spawn that made no process leaves nothing to signal.
-        const leader = spawnedPid(child);
-        if (stopped || leader === undefined) {
-          return;
-        }
-        stopped = why;
-        clock.stop();
-        try {
-          if (signalGroup(leader, "SIGTERM") === "denied") {
-            reject(
-              new Error(
-                `command group ${leader} is not this user's to signal, so it was not stopped`
+  // The promise edge of the command's run: its close, or why it could not run.
+  Effect.runPromise(
+    Effect.callback<CommandResult, unknown>((resume) => {
+      const child = spawn(file, args, {
+        cwd,
+        detached: true,
+        // The executor enters the boundary in `$PWD`: it names `cwd`.
+        env: { ...hostEnvironment(), ...env, PWD: cwd },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+      let written = 0;
+      /** Why the runner ended the command, once it has. */
+      let stopped: Stop | undefined;
+      /** What the runner adds to stderr when it ends the command itself. */
+      let said = "";
+      const running: Running = {
+        runId: named?.id,
+        words: `the command \`${shownCommand(cmd)}\``,
+        stop: (why) => {
+          // A spawn that made no process leaves nothing to signal.
+          const leader = spawnedPid(child);
+          if (stopped || leader === undefined) {
+            return;
+          }
+          stopped = why;
+          clock.stop();
+          try {
+            if (signalGroup(leader, "SIGTERM") === "denied") {
+              resume(
+                Effect.fail(
+                  new Error(
+                    `command group ${leader} is not this user's to signal, so it was not stopped`
+                  )
+                )
+              );
+              return;
+            }
+          } catch (error) {
+            resume(Effect.fail(error));
+            return;
+          }
+          setTimeout(() => {
+            try {
+              signalGroup(leader, "SIGKILL");
+            } catch (error) {
+              console.warn(`could not kill command group ${leader}: ${error}`);
+            }
+          }, KILL_GRACE_MS).unref();
+        },
+      };
+      if (spawnedPid(child) !== undefined) {
+        live.add(running);
+      }
+      // Never a session's: a session's sweep of its workspace leaves what it
+      // runs there running (boundary/work.ts `agentCommandStarted`).
+      const executor = spawnedPid(child);
+      const letGo =
+        workspace && executor !== undefined
+          ? agentCommandStarted(workspace.id, executor)
+          : undefined;
+      const clock = commandClock(
+        timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
+        (why) => {
+          said = why;
+          running.stop("expired");
+        },
+        (queue) => tellWait(named, queue)
+      );
+      const collect = (into: Buffer[]) => {
+        const scan = lines((line) => clock.line(line));
+        return (chunk: Buffer) => {
+          if (stopped === "overflowed") {
+            return;
+          }
+          written += chunk.length;
+          if (written > OUTPUT_LIMIT) {
+            stdout.length = 0;
+            stderr.length = 0;
+            running.stop("overflowed");
+            resume(
+              Effect.fail(
+                new Error(
+                  `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
+                )
               )
             );
             return;
           }
-        } catch (error) {
-          reject(error);
-          return;
-        }
-        setTimeout(() => {
-          try {
-            signalGroup(leader, "SIGKILL");
-          } catch (error) {
-            console.warn(`could not kill command group ${leader}: ${error}`);
-          }
-        }, KILL_GRACE_MS).unref();
-      },
-    };
-    if (spawnedPid(child) !== undefined) {
-      live.add(running);
-    }
-    // Never a session's: a session's sweep of its workspace leaves what it
-    // runs there running (boundary/work.ts `agentCommandStarted`).
-    const executor = spawnedPid(child);
-    const letGo =
-      workspace && executor !== undefined
-        ? agentCommandStarted(workspace.id, executor)
-        : undefined;
-    const clock = commandClock(
-      timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
-      (why) => {
-        said = why;
-        running.stop("expired");
-      },
-      (queue) => tellWait(named, queue)
-    );
-    const collect = (into: Buffer[]) => {
-      const scan = lines((line) => clock.line(line));
-      return (chunk: Buffer) => {
+          into.push(chunk);
+          scan(chunk);
+        };
+      };
+      child.stdout.on("data", collect(stdout));
+      child.stderr.on("data", collect(stderr));
+      child.on("error", (error) => {
+        clock.stop();
+        live.delete(running);
+        letGo?.();
+        resume(Effect.fail(error));
+      });
+      // A stopped command's KILL still comes after its leader closes: what is
+      // left of its group (a child that let go of the pipes) goes with it.
+      child.on("close", (code) => {
+        clock.stop();
+        live.delete(running);
+        letGo?.();
         if (stopped === "overflowed") {
           return;
         }
-        written += chunk.length;
-        if (written > OUTPUT_LIMIT) {
-          stdout.length = 0;
-          stderr.length = 0;
-          running.stop("overflowed");
-          reject(
-            new Error(
-              `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
-            )
-          );
-          return;
-        }
-        into.push(chunk);
-        scan(chunk);
-      };
-    };
-    child.stdout.on("data", collect(stdout));
-    child.stderr.on("data", collect(stderr));
-    child.on("error", (error) => {
-      clock.stop();
-      live.delete(running);
-      letGo?.();
-      reject(error);
-    });
-    // A stopped command's KILL still comes after its leader closes: what is
-    // left of its group (a child that let go of the pipes) goes with it.
-    child.on("close", (code) => {
-      clock.stop();
-      live.delete(running);
-      letGo?.();
-      if (stopped === "overflowed") {
-        return;
-      }
-      resolve({
-        ...(stopped === "cancelled" ? { cancelled: true as const } : {}),
-        exitCode: stopped === "expired" ? 124 : (code ?? 1),
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8") + said,
+        resume(
+          Effect.succeed({
+            ...(stopped === "cancelled" ? { cancelled: true as const } : {}),
+            exitCode: stopped === "expired" ? 124 : (code ?? 1),
+            stdout: Buffer.concat(stdout).toString("utf8"),
+            stderr: Buffer.concat(stderr).toString("utf8") + said,
+          })
+        );
       });
-    });
-  });
+    })
+  );
 
 /** A commit name a move may name: a sha, or a ref of plain words. */
 const MOVE_TARGET = /^[\w./@^~-]+$/u;
@@ -859,58 +870,68 @@ const onHost = async (
   }
   const deadline = Date.now() + run.queueMaxMs;
   let told = false;
-  try {
-    for (;;) {
-      const down = await whileSandboxDown(workspace, async () => {
-        const now = await hostGitRefusal(workspace);
-        if (now) {
-          return { exitCode: 1, stdout: "", stderr: `${now}\n` };
-        }
-        // In the copy as its layer holds it: a Linux view's, never the
-        // person's folder beneath it (layer.ts).
-        const [file = systemProgram("sh"), ...args] = inCopySync(
-          workspace.id,
-          cwd,
-          [systemProgram("sh"), "-c", cmd]
-        ).argv;
-        return await spawned({
-          file,
-          args,
-          cwd,
-          cmd,
-          env: {
-            ...SAFE_GIT_ENV,
-            GIT_LFS_SKIP_SMUDGE: "1",
-            TMPDIR: workspaceScratchDir(workspace.id),
-          },
-          timeoutMs,
-          workspace,
-          named: run,
-        });
+  /** Why the move waits, as the last look found the boundary. */
+  let words = "";
+  // Looked at every BUSY_LOOK_MS after the last look ended, for the run's
+  // `queueMaxMs` at most: the move's result, its cancel, or not yet.
+  const look = Effect.promise(async (): Promise<CommandResult | undefined> => {
+    const down = await whileSandboxDown(workspace, async () => {
+      const now = await hostGitRefusal(workspace);
+      if (now) {
+        return { exitCode: 1, stdout: "", stderr: `${now}\n` };
+      }
+      // In the copy as its layer holds it: a Linux view's, never the
+      // person's folder beneath it (layer.ts).
+      const [file = systemProgram("sh"), ...args] = inCopySync(
+        workspace.id,
+        cwd,
+        [systemProgram("sh"), "-c", cmd]
+      ).argv;
+      return await spawned({
+        file,
+        args,
+        cwd,
+        cmd,
+        env: {
+          ...SAFE_GIT_ENV,
+          GIT_LFS_SKIP_SMUDGE: "1",
+          TMPDIR: workspaceScratchDir(workspace.id),
+        },
+        timeoutMs,
+        workspace,
+        named: run,
       });
-      if ("ran" in down) {
-        console.info(
-          `[workspace] ${workspace.id}: \`${shownCommand(cmd)}\` ran on the host, its sandbox down, as it writes ${writes.join(", ")}`
-        );
-        return down.ran.exitCode === 0
-          ? await largeFilesAfter(workspace, run.moves ?? "", down.ran)
-          : down.ran;
-      }
-      if (cancelledEarly.delete(run.id)) {
-        return CANCELLED;
-      }
-      const words = `${down.busy}, and the move writes ${writes.join(", ")} on the host with its sandbox down`;
-      if (Date.now() >= deadline) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: `CawCo: the move did not run: ${words}, and it still did after ${Math.round(run.queueMaxMs / 1000)} s.\n`,
-        };
-      }
+    });
+    if ("ran" in down) {
+      console.info(
+        `[workspace] ${workspace.id}: \`${shownCommand(cmd)}\` ran on the host, its sandbox down, as it writes ${writes.join(", ")}`
+      );
+      return down.ran.exitCode === 0
+        ? await largeFilesAfter(workspace, run.moves ?? "", down.ran)
+        : down.ran;
+    }
+    if (cancelledEarly.delete(run.id)) {
+      return CANCELLED;
+    }
+    words = `${down.busy}, and the move writes ${writes.join(", ")} on the host with its sandbox down`;
+    if (Date.now() < deadline) {
       told = true;
       tellWait(run, { slot: "folder", holders: words });
-      await Bun.sleep(BUSY_LOOK_MS);
     }
+    return undefined;
+  });
+  try {
+    const looked = await Effect.runPromise(
+      lookUntil({ every: BUSY_LOOK_MS, deadlineMs: run.queueMaxMs }, look)
+    );
+    if (looked.kind === "found") {
+      return looked.value;
+    }
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: `CawCo: the move did not run: ${words}, and it still did after ${Math.round(run.queueMaxMs / 1000)} s.\n`,
+    };
   } finally {
     if (told) {
       tellWait(run, null);
