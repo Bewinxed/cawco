@@ -69,14 +69,21 @@ export const createDashboardGreeting =
         } satisfies HubEnvelope<"frames">);
       }
     });
-    // Then Recent's stored transcripts, whole (stored-recent.ts).
-    syncSection("dashboard greeted: stored transcripts", () =>
+    // Then Recent's stored transcripts, whole, this once: each `stored`
+    // frame after carries only what moved (stored-recent.ts).
+    syncSection("dashboard greeted: stored transcripts", () => {
+      const { rows, transcripts } = ctx.storedRecent.now();
       ctx.sendToClient(ws, {
         verb: "frames",
         machineId: "hub",
-        payload: { kind: "stored", stored: ctx.storedRecent.now() },
-      } satisfies HubEnvelope<"frames">)
-    );
+        payload: {
+          kind: "stored",
+          whole: true,
+          rows: { upserts: rows, removed: [] },
+          transcripts: { upserts: transcripts, removed: [] },
+        },
+      } satisfies HubEnvelope<"frames">);
+    });
     if (!older) {
       syncSection("dashboard greeted: browsers", () => {
         ctx.sendToClient(ws, {

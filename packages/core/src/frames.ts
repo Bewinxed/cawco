@@ -49,7 +49,7 @@ import type {
   MachineInventory,
   MachineStatus,
   SessionPulse,
-  StoredFrame,
+  StoredTranscript,
   Verb,
   WorkItemSummary,
 } from "./protocol";
@@ -257,6 +257,20 @@ interface RejectedFrame {
 export interface BoardKeyed<Entry> {
   removed: string[];
   upserts: Entry[];
+}
+
+/**
+ * Hub-originated: Recent's stored transcripts by key, a row by its id and a
+ * transcript by `machineId:sessionId`. `whole`: the list whole, the first on
+ * every socket, and whatever a page held before and this leaves out is
+ * gone; else only what moved, sent when something did.
+ */
+export interface StoredFrame {
+  instanceId?: undefined;
+  kind: "stored";
+  rows: BoardKeyed<InstanceRow>;
+  transcripts: BoardKeyed<StoredTranscript>;
+  whole: boolean;
 }
 
 /**

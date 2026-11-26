@@ -137,7 +137,11 @@ export const createStoredList = (deps: StoredDeps) => {
     return out;
   };
 
-  /** The list as it stands. */
+  /**
+   * The list as it stands, each part in key order: a transcript placed
+   * again (a catalog's move re-inserts it, and its wrapping, at the end of
+   * their maps) moves nothing the list says ({@link moved}).
+   */
   const held = (): StoredHeld => {
     const wrapping = [...wraps.values()].flatMap((byId) => [...byId.values()]);
     const wrapped = new Set(wrapping.map((row) => row.sessionId));
@@ -163,11 +167,15 @@ export const createStoredList = (deps: StoredDeps) => {
     return {
       candidates: [...nested.values()]
         .filter((row) => personsOwn(topOf(row)))
-        .map((row) => row.id),
-      transcripts: [...placed.values()].filter(
-        (one) =>
-          one.info.startedBy === "person" && !wrapped.has(one.info.sessionId)
-      ),
+        .map((row) => row.id)
+        .sort(),
+      transcripts: [...placed.entries()]
+        .filter(
+          ([, one]) =>
+            one.info.startedBy === "person" && !wrapped.has(one.info.sessionId)
+        )
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, one]) => one),
     };
   };
 

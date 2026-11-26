@@ -50,6 +50,15 @@ export interface BoardKeepers {
     ruleFactsMoved: () => void;
     /** A session ending ends its artifacts' asks: the lane hears which sessions moved (artifacts/lane.ts). */
     laneSessionsMoved: (ids: Iterable<string>) => void;
+    /**
+     * What these sessions are laid from moved, whether the board lists them
+     * or not, or the sessions of these machines (their presence): Recent's
+     * stored list lays its own of them again (stored-recent.ts `rowsMoved`).
+     */
+    storedRowsMoved: (
+      ids: ReadonlySet<string>,
+      machines: ReadonlySet<string>
+    ) => void;
     /** An artifact's tab hears what moved of what it shows (artifact-session.ts `moved`). */
     tabMoved: (move: TabMove) => void;
   };

@@ -574,12 +574,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    artifact's picks are gathered by the page under their conversation
  *    (core needs-rows.ts). A page built for 113 reads each row's asks, so
  *    it reloads first.
+ * 116: the `stored` frame carries Recent's stored list by key (`rows` and
+ *    `transcripts`, each upserts and removals), whole only as the socket
+ *    opens and after only what moved (core frames.ts `StoredFrame`). A
+ *    page built for 115 reads a `stored` list whole, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 115;
+export const WIRE_PROTOCOL = 116;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

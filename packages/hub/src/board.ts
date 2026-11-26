@@ -225,6 +225,14 @@ const make = ({
   const viewsOwed = createViewChanges();
   /** Which rows the board lists may have moved: worked out again. */
   let membersOwed = false;
+  /**
+   * What Recent's stored list is owed hearing (stored-recent.ts
+   * `rowsMoved`): every session laid, listed or not, and every one that
+   * left the board, by id; the machines whose presence moved, whose
+   * sessions it lays again of its own. Told once a publish has laid them.
+   */
+  const storedOwed = new Set<string>();
+  const storedMachinesOwed = new Set<string>();
   /** Whether {@link BoardShape.start} ran: nothing is laid before it. */
   let started = false;
   /** Whether a flush is under way: a flush asked for meanwhile runs after it. */
@@ -702,6 +710,7 @@ const make = ({
       sessionsOwed.add(id);
     }
     for (const id of gone) {
+      storedOwed.add(id);
       if (sessions.drop(id, at)) {
         changes.removed.push(id);
       }
@@ -714,6 +723,7 @@ const make = ({
     takeMembersOwed(at, changes);
     const rows: BoardInstanceRow[] = [];
     for (const id of sessionsOwed) {
+      storedOwed.add(id);
       const row = members.get(id);
       if (row) {
         rows.push(row);
@@ -811,6 +821,10 @@ const make = ({
     const toolInputsMoved = toolInputsOwed;
     toolsOwed.clear();
     toolInputsOwed = false;
+    const storedMoved = new Set(storedOwed);
+    const storedMachinesMoved = new Set(storedMachinesOwed);
+    storedOwed.clear();
+    storedMachinesOwed.clear();
     if (!announce) {
       return;
     }
@@ -835,6 +849,13 @@ const make = ({
       );
     }
     tellMoved(changes, written);
+    // Recent's stored list lays its own rows as the board lays its own,
+    // after it: a row that left the board is the list's from now.
+    if (storedMoved.size > 0 || storedMachinesMoved.size > 0) {
+      syncSection("publish: stored rows moved", () =>
+        keepersNow().followers.storedRowsMoved(storedMoved, storedMachinesMoved)
+      );
+    }
   };
 
   /**
@@ -955,6 +976,7 @@ const make = ({
 
   const machineMoved: BoardShape["machineMoved"] = (machineId) => {
     statusOwed.add(machineId);
+    storedMachinesOwed.add(machineId);
     for (const row of members.values()) {
       if (row.machineId === machineId) {
         sessionsOwed.add(row.id);

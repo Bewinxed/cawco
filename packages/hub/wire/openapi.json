@@ -62906,7 +62906,7 @@
         ]
       },
       "StoredFrame": {
-        "description": "Hub-originated: Recent's stored transcripts, whole, on each change.",
+        "description": "Hub-originated: Recent's stored transcripts by key, a row by its id and a\ntranscript by `machineId:sessionId`. `whole`: the list whole, the first on\nevery socket, and whatever a page held before and this leaves out is\ngone; else only what moved, sent when something did.",
         "type": "object",
         "properties": {
           "kind": {
@@ -62915,17 +62915,63 @@
               "stored"
             ]
           },
-          "stored": {
-            "$ref": "#/components/schemas/StoredRecent"
+          "rows": {
+            "description": "One keyed collection's changes: each entry that moved, whole, and the keys that went.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InstanceRow"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "transcripts": {
+            "description": "One keyed collection's changes: each entry that moved, whole, and the keys that went.",
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "upserts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StoredTranscript"
+                }
+              }
+            },
+            "required": [
+              "removed",
+              "upserts"
+            ]
+          },
+          "whole": {
+            "type": "boolean"
           }
         },
         "required": [
           "kind",
-          "stored"
+          "rows",
+          "transcripts",
+          "whole"
         ]
       },
       "StoredRecent": {
-        "description": "What Recent draws of the transcripts the machines store, kept by the hub\noff each machine's catalog (hub stored-recent.ts): `GET /api/stored`, then\neach `stored` frame, whole.\n- `rows`: the sessions wrapping a stored transcript in a project's folder\n  that the board no longer lists, where the session at the top of their\n  chain is the person's own ({@link personsOwn}), each with the sessions\n  it nests under, as the board hands a row.\n- `transcripts`: the transcripts in a project's folder that a person\n  started (`NeutralSessionInfo.startedBy`) and no session of the hub\n  wraps: transcripts run outside CawCo.",
+        "description": "What Recent draws of the transcripts the machines store, kept by the hub\noff each machine's catalog (hub stored-recent.ts): `GET /api/stored`, then\na `stored` frame whole as the socket opens, and one of what moved after\n(core frames.ts `StoredFrame`).\n- `rows`: the sessions wrapping a stored transcript in a project's folder\n  that the board no longer lists, where the session at the top of their\n  chain is the person's own ({@link personsOwn}), each with the sessions\n  it nests under, as the board hands a row.\n- `transcripts`: the transcripts in a project's folder that a person\n  started (`NeutralSessionInfo.startedBy`) and no session of the hub\n  wraps: transcripts run outside CawCo.",
         "type": "object",
         "properties": {
           "rows": {

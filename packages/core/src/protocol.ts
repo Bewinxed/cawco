@@ -1181,7 +1181,8 @@ export const TAB_NAMES_PER_ASK = 64;
 /**
  * What Recent draws of the transcripts the machines store, kept by the hub
  * off each machine's catalog (hub stored-recent.ts): `GET /api/stored`, then
- * each `stored` frame, whole.
+ * a `stored` frame whole as the socket opens, and one of what moved after
+ * (core frames.ts `StoredFrame`).
  * - `rows`: the sessions wrapping a stored transcript in a project's folder
  *   that the board no longer lists, where the session at the top of their
  *   chain is the person's own ({@link personsOwn}), each with the sessions
@@ -1201,13 +1202,6 @@ export interface StoredTranscript {
   machineId: string;
   /** The project whose folder holds it most closely (core `projectAt`). */
   projectId: string;
-}
-
-/** Hub-originated: Recent's stored transcripts, whole, on each change. */
-export interface StoredFrame {
-  instanceId?: undefined;
-  kind: "stored";
-  stored: StoredRecent;
 }
 
 /** What a session's `init` says about its MCP servers and tools. */

@@ -80,7 +80,11 @@ import {
 } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST, type ForgeAsk } from "@cawco/core/forge-post";
-import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
+import type {
+  ArrivingAsk,
+  FramePayload,
+  StoredFrame,
+} from "@cawco/core/frames";
 import type { HandoverCommand, HandoverEvent } from "@cawco/core/handover";
 import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
 import {
@@ -154,7 +158,6 @@ import type {
   SessionEndIntent,
   SessionOrigin,
   SpawnPayload,
-  StoredFrame,
 } from "@cawco/core/protocol";
 import {
   AGENT_BUSY,
@@ -2215,15 +2218,20 @@ export const createServer = (
    * Recent's stored transcripts (stored-recent.ts): the views thread keeps
    * the list off each machine's catalog (views/stored.ts) and says here
    * when it changed; the sessions wrapping them the board no longer lists
-   * are laid as the board's, and every dashboard is told it whole.
+   * are laid as the board's, and every dashboard is told what moved.
    */
   const storedRecent = createStoredRecent({
     rows: (candidates) => board.storedRows(candidates),
-    publish: (stored) =>
+    settle: () => board.settle(),
+    publish: (moved) =>
       registry.broadcast({
         verb: "frames",
         machineId: "hub",
-        payload: { kind: "stored", stored } satisfies StoredFrame,
+        payload: {
+          kind: "stored",
+          whole: false,
+          ...moved,
+        } satisfies StoredFrame,
       }),
   });
   const {
@@ -7610,6 +7618,7 @@ export const createServer = (
       toolsMoved: (ids) => toolsMovedPort.now()(ids),
       ruleFactsMoved: () => ruleEngine.forgetFacts(),
       laneSessionsMoved: (ids) => artifactLane.sessionsMoved(ids),
+      storedRowsMoved: (ids, machines) => storedRecent.rowsMoved(ids, machines),
       tabMoved: (move) => artifactSessions.moved(move),
     },
   });

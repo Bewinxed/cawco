@@ -42,13 +42,14 @@ import {
   servedBoard,
 } from "./board.svelte";
 import { machineControl } from "./machines";
+import { patchRows } from "./same";
 import { type ForkSource, forkSession } from "./session-start.svelte";
 import { session } from "./sessions.svelte";
 import { addNote, place } from "./transcripts.svelte";
 
 /**
  * Recent's stored transcripts as the hub last told them (core
- * `StoredRecent`, its `stored` frame); null until the first, while the
+ * `StoredRecent`, its `stored` frames); null until the first, while the
  * served board's stand ({@link storedNow}).
  */
 let storedHeard = $state.raw<StoredRecent | null>(null);
@@ -86,8 +87,37 @@ export function holdStored(stored: StoredRecent): void {
   storedWaiters.clear();
 }
 
+/** A transcript's key on the `stored` frame: one machine's copy of a harness session. */
+const transcriptKey = (one: StoredTranscript): string =>
+  `${one.machineId}:${one.info.sessionId}`;
+
+/**
+ * The hub's `stored` frame: the list whole as the socket opens, then only
+ * what moved, by key, laid over the list held (core `StoredFrame`).
+ */
 export function takeStored(frame: FrameOf<"stored">): void {
-  holdStored(frame.stored);
+  if (frame.whole) {
+    holdStored({
+      rows: frame.rows.upserts,
+      transcripts: frame.transcripts.upserts,
+    });
+    return;
+  }
+  const held = storedNow();
+  holdStored({
+    rows: patchRows(
+      held.rows,
+      frame.rows.upserts,
+      frame.rows.removed,
+      (row) => row.id
+    ),
+    transcripts: patchRows(
+      held.transcripts,
+      frame.transcripts.upserts,
+      frame.transcripts.removed,
+      transcriptKey
+    ),
+  });
 }
 
 /** How long a change to a session the board no longer lists waits on the hub's word on it ({@link olderMoved}). */
