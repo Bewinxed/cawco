@@ -112,7 +112,7 @@ const PROVIDER_ALIASES: Record<string, string> = {
  * Alias table ported from ccusage `pricing_alias` (pricing.rs:2072-2078), the
  * only hardcoded aliases ccusage ships, applied within a provider.
  */
-const MODEL_ALIASES: Record<string, string> = {
+export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   "gpt-5.6": "gpt-5.6-sol",
   "gpt-5.3-spark": "gpt-5.3-codex-spark",
 };
