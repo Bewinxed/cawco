@@ -72,14 +72,35 @@ export const fleetPlacesDir = (): string =>
   join(cawcoDataDir(), "fleet-places");
 
 /**
- * What this machine's agent holds of the fleet (agent fleet-desired.ts):
- * the generation of the desired state it last acknowledged (its
- * `observedGeneration`) and every item the hub's deltas carried, written
- * whole before it answers each delta. What its register claims after a
- * restart, so the hub sends only what moved while it was away, and the
- * project rows a workspace cut before that welcome places in its clone.
+ * What this machine's agent holds of the fleet (agent fleet-ledger.ts): its
+ * ledger ({@link fleetLedgerFile}) and the pool of what it names
+ * ({@link fleetFilePoolDir}).
  */
-export const fleetDesiredFile = (): string =>
+const fleetItemsDir = (): string => join(cawcoDataDir(), "fleet-items");
+
+/**
+ * The ledger of what this machine's agent holds of the fleet (agent
+ * fleet-ledger.ts): the generation of the desired state it last
+ * acknowledged (its `observedGeneration`) and every item the hub's deltas
+ * carried, by id with its hash, a skill or plugin by its tree's hash in
+ * the pool ({@link fleetFilePoolDir}), written before it answers each
+ * delta. What its register claims after a restart, so the hub sends only
+ * what moved while it was away, and the project rows a workspace cut
+ * before that welcome places in its clone.
+ */
+export const fleetLedgerFile = (): string =>
+  join(fleetItemsDir(), "ledger.json");
+
+/** The trees the ledger names and their files, each once by the hash of its content (agent fleet-file-pool.ts). */
+export const fleetFilePoolDir = (): string => join(fleetItemsDir(), "files");
+
+/**
+ * Where builds before the ledger kept what the agent holds of the fleet,
+ * every item's files inside it, written whole at each delta: moved into the
+ * ledger once, and kept as it was while the build that moved it may be
+ * rolled back to one that reads only it (agent fleet-ledger.ts).
+ */
+export const earlierFleetItemsFile = (): string =>
   join(cawcoDataDir(), "fleet-desired.json");
 
 /**

@@ -14,7 +14,7 @@
  *
  * An archive deletes the clone and nothing else: the next converge finds
  * the place gone and takes its records back. The rows are those the agent
- * holds, which the disk keeps through a restart (fleet-desired.ts), so a
+ * holds, which the disk keeps through a restart (fleet-ledger.ts), so a
  * workspace cut after the agent started again, before the hub's welcome,
  * still gets them.
  */

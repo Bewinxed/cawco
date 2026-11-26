@@ -1,6 +1,6 @@
 /**
  * The machine's fleet convergence: the deltas the hub sends held on disk as
- * they arrive (fleet-desired.ts), converged across every harness one pass at
+ * they arrive (fleet-ledger.ts), converged across every harness one pass at
  * a time (`#fleetTurn`), reported back, and probed on a
  * tick of its own. It never touches a session except to tell a live one to
  * take again what of the fleet it reads ({@link FleetConverger.healFleetMcp}),
@@ -53,7 +53,7 @@ import { applyFleetDenials } from "./denied-tools";
 import { feedbackHeard } from "./feedback-line";
 import { placeFolder, probeToolchain } from "./fleet";
 import { basisMoved, type ConvergeBasis } from "./fleet-converged";
-import { FleetDesired, itemStatuses } from "./fleet-desired";
+import { FleetLedger, itemStatuses } from "./fleet-ledger";
 import { within, writeFleetMcpSet } from "./fleet-mcp-set";
 import {
   FLEET_PARTS,
@@ -158,8 +158,8 @@ export class FleetConverger {
   // noInferrableTypes refuses `: boolean = false`.
   /** A fleet report the hub is owed and not yet read ({@link reportFleet}). */
   #fleetReportOwed: boolean;
-  /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
-  readonly #desired = new FleetDesired();
+  /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-ledger.ts). */
+  readonly #ledger = new FleetLedger();
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
   #lastReport: FleetSyncReport | undefined;
   /** The machine's probe ticks ({@link #healthSoon}), once its agent has taken a delta: they run for the agent's life. */
@@ -259,7 +259,7 @@ export class FleetConverger {
     return this.#fleetQueue.run(work);
   }
   /**
-   * A delta held as it arrives (fleet-desired.ts), in the order the hub sent
+   * A delta held as it arrives (fleet-ledger.ts), in the order the hub sent
    * them: one of a generation the disk already keeps (sent again because its
    * answer went unheard) is answered and not applied again; any other's
    * items join what this agent holds, which is written to disk before the
@@ -273,10 +273,10 @@ export class FleetConverger {
     if (!delta || typeof delta.generation !== "number") {
       return;
     }
-    await this.#desired.loaded;
-    if (this.#desired.observed(delta)) {
+    await this.#ledger.loaded;
+    if (this.#ledger.observed(delta)) {
       console.info(
-        `[fleet] gen ${delta.generation} sent again: this machine keeps gen ${this.#desired.generation} already, so it is answered and not applied again`
+        `[fleet] gen ${delta.generation} sent again: this machine keeps gen ${this.#ledger.generation} already, so it is answered and not applied again`
       );
       return;
     }
@@ -284,11 +284,11 @@ export class FleetConverger {
     // mid-way): what that converge left owed converges with what it moved.
     const cutShort =
       delta.welcome &&
-      this.#desired.behind &&
+      this.#ledger.behind &&
       !this.#passing &&
       !this.#convergeOwed;
-    const applied = this.#desired.apply(delta);
-    for (const id of cutShort ? this.#desired.unconverged() : []) {
+    const applied = this.#ledger.apply(delta);
+    for (const id of cutShort ? this.#ledger.unconverged() : []) {
       this.#convergeIds.add(id);
     }
     for (const id of [...applied.changed, ...applied.removed]) {
@@ -304,7 +304,7 @@ export class FleetConverger {
     // record says what was written where it last wrote.
     if (delta.welcome) {
       const moved = basisMoved(
-        this.#desired.convergedBasis,
+        this.#ledger.convergedBasis,
         await convergeBasis()
       );
       if (moved) {
@@ -312,14 +312,14 @@ export class FleetConverger {
         this.#reconverge = true;
       }
     }
-    const { policy } = this.#desired;
+    const { policy } = this.#ledger;
     if (policy) {
       feedbackHeard(policy.usabilityFeedback);
     }
     if (policy && (applied.policy || delta.welcome)) {
       this.#writePolicy(policy, applied.policy);
     }
-    await this.#desired.keep();
+    await this.#ledger.keep();
   }
   /**
    * The fleet's denied tools written (denied-tools.ts `applyFleetDenials`,
@@ -334,12 +334,12 @@ export class FleetConverger {
     policy: { deniedTools: readonly string[]; ownTools: OwnTools },
     moved: boolean
   ): void {
-    const generation = this.#desired.generation ?? 0;
-    const hash = this.#desired.hashOf("policy");
+    const generation = this.#ledger.generation ?? 0;
+    const hash = this.#ledger.hashOf("policy");
     const started = Date.now();
     applyFleetDenials(policy.deniedTools, policy.ownTools).then(
       (cleanup) => {
-        this.#desired.policyWritten();
+        this.#ledger.policyWritten();
         if (moved) {
           this.#converging(generation, [
             { id: "policy", hash, state: "ok", ms: Date.now() - started },
@@ -368,7 +368,7 @@ export class FleetConverger {
   /**
    * A workspace's clone at `cwd`, cut for project `projectId`, given the
    * project's rows this agent holds (fleet-place.ts `place`), which the
-   * disk keeps through a restart (fleet-desired.ts): its skills and memory documents written into
+   * disk keeps through a restart (fleet-ledger.ts): its skills and memory documents written into
    * the clone, its MCP servers, hooks and harness settings into the files
    * CawCo's sessions read for that folder. Before its boundary and first
    * session start (workspace.ts `createWorkspace`), after any converge
@@ -378,8 +378,8 @@ export class FleetConverger {
    */
   placeClone(cwd: string, projectId: string): Promise<void> {
     return this.#fleetTurn(async () => {
-      await this.#desired.loaded;
-      const rows = this.#desired.config().projects[projectId];
+      await this.#ledger.loaded;
+      const rows = this.#ledger.config().projects[projectId];
       if (!rows) {
         return;
       }
@@ -457,7 +457,7 @@ export class FleetConverger {
    * the disk keeps through a restart (fleet-converged.ts).
    */
   #reportPlaced(placed: FleetSyncReport): void {
-    const last = this.#lastReport ?? this.#desired.report;
+    const last = this.#lastReport ?? this.#ledger.report;
     if (!last) {
       return;
     }
@@ -474,7 +474,7 @@ export class FleetConverger {
     }
     const report: FleetSyncReport = { ...last, placed: merged, at: Date.now() };
     this.#lastReport = report;
-    this.#desired.reported(report);
+    this.#ledger.reported(report);
     this.#sendReport(report, null);
   }
   /** The machine's fleet report to the hub: one a converge reached (its `generation`), or one read unasked (`null`), with the generation converged now. */
@@ -486,7 +486,7 @@ export class FleetConverger {
         kind: "fleet_report",
         report,
         generation,
-        convergedGeneration: this.#desired.convergedGeneration,
+        convergedGeneration: this.#ledger.convergedGeneration,
       } satisfies FleetReportFrame,
     });
   }
@@ -530,20 +530,20 @@ export class FleetConverger {
       this.#convergeOwed = false;
       this.#passing = true;
       const all = this.#reconverge;
-      const ids = (all ? this.#desired.ids() : [...this.#convergeIds]).filter(
+      const ids = (all ? this.#ledger.ids() : [...this.#convergeIds]).filter(
         (id) => id !== "policy"
       );
       this.#convergeIds.clear();
       this.#reconverge = false;
       const moves = movesOf(ids, all);
       // Said item by item: the ones held; one taken away is said gone.
-      const held = ids.filter((id) => this.#desired.has(id));
-      const generation = this.#desired.generation ?? 0;
+      const held = ids.filter((id) => this.#ledger.has(id));
+      const generation = this.#ledger.generation ?? 0;
       this.#converging(
         generation,
         held.map((id) => ({
           id,
-          hash: this.#desired.hashOf(id),
+          hash: this.#ledger.hashOf(id),
           state: "running" as const,
         }))
       );
@@ -554,7 +554,7 @@ export class FleetConverger {
         warn(`the fleet's gen ${generation} did not converge: ${thrown}`);
       }
       const statuses = itemStatuses(
-        this.#desired,
+        this.#ledger,
         held,
         report,
         Date.now() - started,
@@ -565,11 +565,11 @@ export class FleetConverger {
       this.#passing = false;
       const owedSince =
         this.#convergeOwed || this.#convergeIds.size > 0 || this.#reconverge;
-      this.#desired.converged(
+      this.#ledger.converged(
         { all, ids },
         statuses,
         report,
-        owedSince ? generation : (this.#desired.generation ?? generation),
+        owedSince ? generation : (this.#ledger.generation ?? generation),
         all && !thrown ? await convergeBasis() : undefined
       );
       this.#converging(generation, statuses);
@@ -602,7 +602,7 @@ export class FleetConverger {
   }> {
     let places: FleetPlace[] = [];
     try {
-      const holding = this.#desired.config();
+      const holding = this.#ledger.config();
       places = await placesNow(holding.projects);
       const placed = placedConfig(holding, places);
       const report = await this.#syncFleet(placed, moves.parts);
@@ -648,7 +648,7 @@ export class FleetConverger {
         probeToolchain(),
         fleetHoldings(),
       ]);
-      const last = this.#lastReport ?? this.#desired.report;
+      const last = this.#lastReport ?? this.#ledger.report;
       const probed = toolchain.claude ? toolchain : undefined;
       if (
         !last ||
@@ -664,7 +664,7 @@ export class FleetConverger {
         at: Date.now(),
       };
       this.#lastReport = report;
-      this.#desired.reported(report);
+      this.#ledger.reported(report);
       this.#sendReport(report, null);
     }).catch((error: unknown) =>
       warn(`the machine's fleet probes were not read: ${errorText(error)}`)
@@ -672,11 +672,11 @@ export class FleetConverger {
   }
   /** What this agent holds of the fleet, for its register (core `FleetHeld`): read once the disk's is ({@link fleetLoaded}). */
   fleetHeld(): FleetHeld | undefined {
-    return this.#desired.held();
+    return this.#ledger.held();
   }
   /** Once what the disk keeps of the fleet is read: a register waits for it, so it claims what this agent holds through a restart. */
   fleetLoaded(): Promise<void> {
-    return this.#desired.loaded;
+    return this.#ledger.loaded;
   }
   /**
    * The machine's fleet report read again and sent to the hub unasked, when a
@@ -1120,11 +1120,11 @@ export class FleetConverger {
     });
     if (which === "fleetStatus") {
       this.#lastReport = fresh;
-      this.#desired.reported(fresh);
+      this.#ledger.reported(fresh);
       return fresh;
     }
     const report = laidOver(
-      this.#lastReport ?? this.#desired.report,
+      this.#lastReport ?? this.#ledger.report,
       fresh,
       parts
     );
@@ -1132,13 +1132,13 @@ export class FleetConverger {
     return report;
   }
 
-  /** Each server's secret values by name, from the config in hand or else the desired one (core fleet-secrets.ts). */
+  /** Each server's secret values by name, from the config in hand or else the one held (core fleet-secrets.ts). */
   #mcpSecrets(incoming?: PlacedFleetConfig): Map<string, string[]> {
     const byName = new Map<string, string[]>();
     for (const row of [
-      ...(incoming?.mcp ?? this.#desired.config().mcp),
+      ...(incoming?.mcp ?? this.#ledger.config().mcp),
       ...(incoming?.placedMcp ??
-        Object.values(this.#desired.config().projects).flatMap(
+        Object.values(this.#ledger.config().projects).flatMap(
           (rows) => rows.mcp
         )),
     ]) {
@@ -1261,11 +1261,11 @@ export class FleetConverger {
     // A delta that moved nothing to converge, with no converge under
     // way, is converged as it is kept.
     if (!(this.#convergeOwed || this.#passing)) {
-      this.#desired.convergedTo(this.#desired.generation ?? delta.generation);
+      this.#ledger.convergedTo(this.#ledger.generation ?? delta.generation);
     }
     return {
-      observedGeneration: this.#desired.generation ?? delta.generation,
-      convergedGeneration: this.#desired.convergedGeneration,
+      observedGeneration: this.#ledger.generation ?? delta.generation,
+      convergedGeneration: this.#ledger.convergedGeneration,
     } satisfies FleetAck;
   }
 }
