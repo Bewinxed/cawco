@@ -20,7 +20,8 @@
  * (`Target.setDiscoverTargets`), attaching to it as it starts.
  */
 import { createHash } from "node:crypto";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { Deferred, Effect } from "effect";
 import { z } from "zod";
 import {
   type CableAssertionResponse,
@@ -31,6 +32,7 @@ import {
   isOwnAdvert,
 } from "./cable-initiator";
 import { CdpLink } from "./cdp-takeover";
+import { runEvery } from "./every";
 
 /** The extension's id, which its manifest's key gives it (chromium.conf). */
 const EXTENSION_ID = "ggmghgopcefkanlpdhbbjogokighkbgc";
@@ -196,18 +198,17 @@ export class PasskeyBridge {
   readonly #link: CdpLink;
   readonly #onQr: (qr: BridgeQr) => void;
   readonly #onFail: (error: unknown) => void;
-  #timer: ReturnType<typeof setInterval> | undefined;
+  /** The storage's reads every {@link POLL_MS}: their stop. */
+  #reads: (() => void) | undefined;
   /** The worker's target while it runs, as the browser's target events say. */
   #target: string | undefined;
   /** Settled when {@link #target} is found; made new when the worker stops. */
-  #found = Promise.withResolvers<void>();
+  #found = Deferred.makeUnsafe<void>();
   /** The service worker's session on {@link #link}; it goes when the worker stops. */
   #session: string | undefined;
   /** Requests already taken up, so one standing across reads is taken once. */
   readonly #taken = new Set<number>();
   #ceremony: Ceremony | undefined;
-  /** The read under way, if one is: a tick that finds one leaves it be. */
-  #reading: Promise<void> | undefined;
   #closed = false;
 
   private constructor(
@@ -226,14 +227,14 @@ export class PasskeyBridge {
         const event = TargetEvent.safeParse(params);
         if (event.success && event.data.targetInfo.url === WORKER_URL) {
           this.#target = event.data.targetInfo.targetId;
-          this.#found.resolve();
+          Deferred.doneUnsafe(this.#found, Effect.void);
         }
       } else if (method === "Target.targetDestroyed") {
         const gone = TargetGone.safeParse(params);
         if (gone.success && gone.data.targetId === this.#target) {
           this.#target = undefined;
           this.#session = undefined;
-          this.#found = Promise.withResolvers<void>();
+          this.#found = Deferred.makeUnsafe<void>();
         }
       } else if (
         method === "Target.detachedFromTarget" &&
@@ -313,7 +314,7 @@ export class PasskeyBridge {
 
   close(): void {
     this.#closed = true;
-    clearInterval(this.#timer);
+    this.#reads?.();
     this.#ceremony?.abort.abort();
     this.#ceremony = undefined;
     this.#link.close();
@@ -331,8 +332,13 @@ export class PasskeyBridge {
       filter: [{ type: "service_worker" }],
     });
     const load = this.#target ? undefined : await this.#load();
-    const read = await readWithin(WORKER_MS, () => this.#found.promise);
-    if (read.kind === "answered") {
+    const found = await Effect.runPromise(
+      boundedRead(WORKER_MS, Deferred.await(this.#found)).pipe(
+        Effect.as(true),
+        Effect.catchTag("Unanswered", () => Effect.succeed(false))
+      )
+    );
+    if (found) {
       await this.#worker();
     } else {
       this.#onFail(
@@ -343,7 +349,17 @@ export class PasskeyBridge {
     }
     // The browser's DevTools connection closed meanwhile: nothing to read.
     if (!this.closed) {
-      this.#timer = setInterval(() => this.#tick(), POLL_MS);
+      // Each read a poll's wait after the one before ended.
+      this.#reads = runEvery(
+        POLL_MS,
+        () =>
+          this.#read().catch((error: unknown) => {
+            // The worker stopped or went: attached again once it runs.
+            this.#session = undefined;
+            this.#onFail(error);
+          }),
+        String
+      );
     }
   }
 
@@ -374,18 +390,6 @@ export class PasskeyBridge {
       return `Extensions.loadUnpacked loaded ${EXTENSION_PATH} as ${id}, not ${EXTENSION_ID}: its manifest's key changed`;
     }
     return undefined;
-  }
-
-  #tick(): void {
-    this.#reading ??= this.#read()
-      .catch((error: unknown) => {
-        // The worker stopped or went: attached again once it runs.
-        this.#session = undefined;
-        this.#onFail(error);
-      })
-      .finally(() => {
-        this.#reading = undefined;
-      });
   }
 
   /** The worker's session, attached when it runs and is not yet; undefined while it does not run. */

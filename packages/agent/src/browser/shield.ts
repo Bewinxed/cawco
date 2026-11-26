@@ -38,7 +38,7 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserAskedPage,
@@ -51,8 +51,10 @@ import {
   isBrowserKey,
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { browserAskWords, browserFaultWords } from "@cawco/core/words/browser";
+import { Duration, Effect, Fiber, Schedule } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
 import {
@@ -69,6 +71,7 @@ import {
 } from "./cdp-takeover";
 import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
+import { runEvery } from "./every";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import { restoreWindows } from "./own-size";
@@ -102,8 +105,17 @@ const HAND_BACK: BackoffPolicy = {
   giveUp: { afterTries: 6 },
 };
 
-/** Each take-over whose own hand-back failed: its failures in a row ({@link HAND_BACK}), and when the next try is due. */
-const handBacks = new Map<BrowserKey, { backoff: Backoff; nextAt: number }>();
+/** Each take-over the daemon is handing back itself: its tries on {@link HAND_BACK} ({@link handBackUnwatched}). */
+const handBacks = new Map<BrowserKey, Fiber.Fiber<void>>();
+
+/** `key`'s own hand-back let go: a view came back, or the take-over ended. */
+const dropHandBack = (key: BrowserKey): void => {
+  const handing = handBacks.get(key);
+  handBacks.delete(key);
+  if (handing) {
+    Effect.runFork(Fiber.interrupt(handing));
+  }
+};
 
 /** How long neko has to answer a control or clipboard call. */
 const NEKO_MS = 5000;
@@ -744,7 +756,7 @@ const release = async (
   const take = held.get(key);
   tellHub(ports, answer, said);
   held.delete(key);
-  handBacks.delete(key);
+  dropHandBack(key);
   if (take) {
     await endView(take);
   }
@@ -822,21 +834,21 @@ export const cdpView = async (
   };
 };
 
-let watching: ReturnType<typeof setInterval> | undefined;
+/** The count of every take-over's views, every {@link WATCH_MS} while one stands ({@link watch}); its stop. */
+let watching: (() => void) | undefined;
 
 /** Counts every take-over's views; one unwatched for two minutes, or whose browser stopped, is handed back. */
 const watch = (ports: ShieldPorts): void => {
-  watching ??= setInterval(() => {
-    watchOnce(ports).catch((error: unknown) =>
-      console.warn(`[browser] take-overs not counted: ${why(error)}`)
-    );
-  }, WATCH_MS);
-  watching.unref?.();
+  watching ??= runEvery(
+    WATCH_MS,
+    () => watchOnce(ports),
+    (error) => `[browser] take-overs not counted: ${why(error)}`
+  );
 };
 
 const watchOnce = async (ports: ShieldPorts): Promise<void> => {
   if (held.size === 0 && watching) {
-    clearInterval(watching);
+    watching();
     watching = undefined;
     return;
   }
@@ -863,51 +875,59 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
     const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
       take.unwatchedSince = undefined;
+      // A view came back: the daemon's own hand-back stops trying.
+      dropHandBack(key);
       continue;
     }
     take.unwatchedSince ??= now;
-    if (now - take.unwatchedSince < TAKEOVER_UNWATCHED_MS) {
-      continue;
-    }
-    const failing = handBacks.get(key);
-    if (failing && now < failing.nextAt) {
+    if (
+      now - take.unwatchedSince < TAKEOVER_UNWATCHED_MS ||
+      handBacks.has(key)
+    ) {
       continue;
     }
     console.info(
       `[browser] ${key}: no view of its take-over for ${TAKEOVER_UNWATCHED_MS / 60_000} minutes: handed back`
     );
-    // A step that fails leaves the gate closed (handBackBrowser says which),
-    // and the hand-back is tried again on its backoff, until it gives up.
-    await handBackBrowser(ports, key, "unwatched").catch((error: unknown) =>
-      handBackFailed(ports, key, error)
-    );
+    handBacks.set(key, Effect.runFork(handBackUnwatched(ports, key)));
   }
 };
 
 /**
- * The daemon's own hand-back of `key` failed: tried again after its wait
- * ({@link HAND_BACK}), or, past its tries, given up ({@link giveUpHandBack}).
+ * The daemon's own hand-back of `key`, unwatched: a step that fails leaves
+ * the gate closed (handBackBrowser says which), and it is tried again on
+ * {@link HAND_BACK}, or, past its tries, given up ({@link giveUpHandBack}).
  */
-const handBackFailed = async (
-  ports: ShieldPorts,
-  key: BrowserKey,
-  error: unknown
-): Promise<void> => {
-  const failing = handBacks.get(key) ?? {
-    backoff: new Backoff(HAND_BACK),
-    nextAt: 0,
-  };
-  handBacks.set(key, failing);
-  const step = failing.backoff.failed();
-  if (step.kind === "wait") {
-    failing.nextAt = Date.now() + step.ms;
-    console.info(
-      `[browser] ${key}: its hand-back is tried again in ${Math.round(step.ms / 1000)} s`
-    );
-    return;
-  }
-  await giveUpHandBack(ports, key, step.tries, step.failingMs, error);
-};
+const handBackUnwatched = (ports: ShieldPorts, key: BrowserKey) =>
+  Effect.retryOrElse(
+    Effect.tryPromise({
+      try: () => handBackBrowser(ports, key, "unwatched"),
+      catch: (error) => error,
+    }),
+    backoffSchedule(HAND_BACK).pipe(
+      Schedule.tap(({ duration }) =>
+        Effect.logInfo(
+          `[browser] ${key}: its hand-back is tried again in ${Math.round(Duration.toMillis(duration) / 1000)} s`
+        )
+      )
+    ),
+    (error, tries) =>
+      Effect.promise(() =>
+        giveUpHandBack(ports, key, tries.tries, tries.failingMs, error)
+      )
+  ).pipe(
+    Effect.asVoid,
+    // Its end, however it ended, lets the next count start another.
+    Effect.ensuring(
+      Effect.withFiber((fiber) =>
+        Effect.sync(() => {
+          if (handBacks.get(key) === fiber) {
+            handBacks.delete(key);
+          }
+        })
+      )
+    )
+  );
 
 /**
  * A hand-back given up: the browser does not answer the steps that end the

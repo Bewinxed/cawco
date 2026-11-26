@@ -19,8 +19,10 @@
  * nobody holds the browser (cdp-watch.ts), told when it moves
  * ({@link onFrontMoved}).
  */
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import type { BrowserHostKind, BrowserKey } from "@cawco/core/browser";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { Deferred, Duration, Effect, Fiber, Schedule } from "effect";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 
@@ -59,14 +61,13 @@ interface Watch {
   heard: (key: BrowserKey) => void;
   /** The host it was opened on: a browser moved into a container (same ports) is watched afresh. */
   host: BrowserHostKind;
+  /** The link kept open ({@link kept}), interrupted as the watch closes. */
+  keeping?: Fiber.Fiber<never>;
   link?: CdpLink;
   /** The registry's check of a browser whose link failed: settled once it answers again, or is no longer live (browsers.ts `reviveBrowser`). */
   lost: (key: BrowserKey) => Promise<void>;
   origin?: string;
   pages: Map<string, Page>;
-  /** The link's opens that failed in a row ({@link RELINK}). */
-  relinks: Backoff;
-  retry?: ReturnType<typeof setTimeout>;
   /** The page shown, as last told. */
   shown?: string;
 }
@@ -153,15 +154,22 @@ const notePage = (watch: Watch, info: unknown): boolean => {
   return true;
 };
 
-const open = (key: BrowserKey, watch: Watch): void => {
-  CdpLink.open(watch.devtools)
-    .then(async (link) => {
+/**
+ * The link opened, its events heard, and every page asked for (each
+ * arrives as `targetCreated`, then each change); answers what settles as
+ * it closes. One that opened and then failed is closed, and fails as one
+ * that would not open does: with why.
+ */
+const linked = (key: BrowserKey, watch: Watch) =>
+  Effect.tryPromise({
+    try: async (): Promise<Deferred.Deferred<void>> => {
+      const link = await CdpLink.open(watch.devtools);
+      const closed = Deferred.makeUnsafe<void>();
       if (watch.closed) {
         link.close();
-        return;
+        return closed;
       }
       watch.link = link;
-      watch.relinks.succeeded();
       link.onEvent = (message) => {
         const { targetInfo, targetId } = message.params ?? {};
         let moved = false;
@@ -191,52 +199,69 @@ const open = (key: BrowserKey, watch: Watch): void => {
           watch.pages.clear();
           watch.front = undefined;
           show(key, watch);
-          retry(key, watch);
         }
+        Deferred.doneUnsafe(closed, Effect.void);
       };
-      // Every page there now arrives as `targetCreated`, then each change.
-      await link.call("Target.setDiscoverTargets", { discover: true });
-    })
-    .catch((error: unknown) => {
-      retry(key, watch, error instanceof Error ? error.message : String(error));
-    });
-};
+      try {
+        await link.call("Target.setDiscoverTargets", { discover: true });
+      } catch (error) {
+        link.close();
+        throw error;
+      }
+      return closed;
+    },
+    catch: (error) => (error instanceof Error ? error.message : String(error)),
+  });
 
 /**
- * The link would not open, or closed: the browser checked and, where its
- * DevTools stopped answering, brought back ({@link Watch.lost}), then the
- * link opened again after its wait ({@link RELINK}).
+ * The link failed (`why`): said with the wait before it opens again, then
+ * the browser checked and, where its DevTools stopped answering, brought
+ * back ({@link Watch.lost}).
  */
-const retry = (
-  key: BrowserKey,
-  watch: Watch,
-  why = "its link closed"
-): void => {
-  if (watch.closed) {
-    return;
-  }
-  clearTimeout(watch.retry);
-  const step = watch.relinks.failed();
-  const ms = step.kind === "wait" ? step.ms : RELINK.mostMs;
-  console.warn(
-    `[browser] ${key}'s DevTools link failed (${why}); the browser is checked, and the link opened again ${Math.round(ms / 1000)} s after`
-  );
-  watch.lost(key).finally(() => {
-    if (watch.closed || watch.link) {
-      return;
-    }
-    watch.retry = setTimeout(() => {
-      if (!(watch.closed || watch.link)) {
-        open(key, watch);
-      }
-    }, ms);
-    watch.retry.unref?.();
+const failed = (key: BrowserKey, watch: Watch, why: string, ms: number) =>
+  Effect.gen(function* () {
+    yield* Effect.logWarning(
+      `[browser] ${key}'s DevTools link failed (${why}); the browser is checked, and the link opened again ${Math.round(ms / 1000)} s after`
+    );
+    yield* Effect.promise(() => watch.lost(key));
   });
+
+/**
+ * `key`'s link kept open while the watch stands: opened, its opens that
+ * fail retried on {@link RELINK} (a series that ends once it opened), and
+ * one that closed opened again after the policy's first wait, the browser
+ * checked before each wait.
+ */
+const kept = (key: BrowserKey, watch: Watch): Effect.Effect<never> =>
+  Effect.gen(function* () {
+    const closed = yield* Effect.retry(
+      linked(key, watch),
+      backoffSchedule(RELINK).pipe(
+        Schedule.setInputType<string>(),
+        Schedule.tap(({ input, duration }) =>
+          failed(key, watch, input, Duration.toMillis(duration))
+        )
+      )
+    );
+    yield* Deferred.await(closed);
+    const ms = backoffWait(RELINK, 1);
+    yield* failed(key, watch, "its link closed", ms);
+    yield* Effect.sleep(ms);
+  }).pipe(
+    // RELINK never gives up: a retry that ended would be a defect.
+    Effect.orDie,
+    Effect.forever
+  );
+
+const open = (key: BrowserKey, watch: Watch): void => {
+  watch.keeping = Effect.runFork(kept(key, watch));
 };
 
 const close = (key: BrowserKey, watch: Watch): void => {
   watch.closed = true;
-  clearTimeout(watch.retry);
+  if (watch.keeping) {
+    Effect.runFork(Fiber.interrupt(watch.keeping));
+  }
   watch.link?.close();
   watches.delete(key);
 };
@@ -268,7 +293,6 @@ export const syncOrigins = (
         host,
         lost,
         pages: new Map(),
-        relinks: new Backoff(RELINK),
         closed: false,
       };
       watches.set(key, watch);

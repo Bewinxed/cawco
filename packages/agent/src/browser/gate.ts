@@ -60,9 +60,11 @@ import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
-import { makeLock } from "@cawco/core/keyed-lock";
+import { makeKeyedLock, makeLock } from "@cawco/core/keyed-lock";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,
@@ -76,6 +78,7 @@ import {
   SHIELD_WORDS,
 } from "@cawco/core/words/browser";
 import type { Server, ServerWebSocket } from "bun";
+import { Deferred, Effect } from "effect";
 import { z } from "zod";
 import { withFeedbackLine } from "../feedback-line";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
@@ -378,12 +381,16 @@ const answered = (calls: CdpCalls, message: Cdp): boolean => {
 
 /** A connection to Chromium at `url`, once it is open. */
 const dial = (url: string): Promise<WebSocket> =>
-  new Promise((resolve, reject) => {
-    const socket = new WebSocket(url);
-    socket.onopen = () => resolve(socket);
-    socket.onerror = () => reject(new Error(`${url} did not open.`));
-    socket.onclose = () => reject(new Error(`${url} closed as it opened.`));
-  });
+  Effect.runPromise(
+    Effect.callback<WebSocket, Error>((resume) => {
+      const socket = new WebSocket(url);
+      socket.onopen = () => resume(Effect.succeed(socket));
+      socket.onerror = () =>
+        resume(Effect.fail(new Error(`${url} did not open.`)));
+      socket.onclose = () =>
+        resume(Effect.fail(new Error(`${url} closed as it opened.`)));
+    })
+  );
 
 /** A connection to Chromium at `url` that carries the gate's own calls alone, for a few calls and closed after. */
 const dialCalls = async (
@@ -470,19 +477,22 @@ export class Gate {
   /** Each page's session on the watch, by the page's target id. */
   readonly #pageSessions = new Map<string, string>();
   /**
-   * Each page marked with its owner (or being), the call that marks it, and
-   * the script that marks its documents once that call has landed.
+   * Each page marked with its owner (or being), done as the call that
+   * marks it landed or failed, and the script that marks its documents
+   * once that call has landed.
    */
   readonly #marks = new Map<
     string,
-    { done: Promise<void>; owner: string; script?: string }
+    { landed: Deferred.Deferred<void>; owner: string; script?: string }
   >();
-  /** What waits for a page's mark that is not under way yet. */
-  readonly #markWaits = new Map<string, Set<() => void>>();
+  /** Each page's marks one at a time, in the order asked: a mark's script goes once the one before it landed. */
+  readonly #markTurns = makeKeyedLock<string>();
+  /** The next mark of a page none is under way for, done as it lands, fails, or the page goes: what waits for it. */
+  readonly #markWaits = new Map<string, Deferred.Deferred<void>>();
   /** The page each workspace drove last ({@link DRIVES}), by its id: the one a browser ask is pinned to. */
   readonly #driven = new Map<string, string>();
   /** Each door's closed pages opening again ({@link restore}), by its id: one at a time. */
-  readonly #restoring = new Map<string, Promise<void>>();
+  readonly #restoring = makeJoin<string, void>();
   #watch: Watch | undefined;
 
   constructor(deps: GateDeps) {
@@ -719,15 +729,7 @@ export class Gate {
    * its.
    */
   restore(id: string): Promise<void> {
-    const running = this.#restoring.get(id);
-    if (running) {
-      return running;
-    }
-    const restoring = this.#reopen(id).finally(() =>
-      this.#restoring.delete(id)
-    );
-    this.#restoring.set(id, restoring);
-    return restoring;
+    return this.#restoring.runPromise(id, () => this.#reopen(id));
   }
 
   async #reopen(id: string): Promise<void> {
@@ -930,72 +932,80 @@ export class Gate {
     if (!(owner && session && wire) || before?.owner === owner) {
       return;
     }
-    const mark: { done: Promise<void>; owner: string; script?: string } = {
-      owner,
-      done: Promise.resolve(),
-    };
-    mark.done = (before?.done ?? Promise.resolve())
+    const mark: {
+      landed: Deferred.Deferred<void>;
+      owner: string;
+      script?: string;
+    } = { owner, landed: Deferred.makeUnsafe<void>() };
+    this.#marks.set(page, mark);
+    const marking = Effect.gen(function* () {
       // A page's documents are told of scripts only while its Page domain is on.
-      .then(() => wire.call("Page.enable", {}, session))
-      .then(async () => {
-        if (before?.script) {
-          await wire.call(
-            "Page.removeScriptToEvaluateOnNewDocument",
-            { identifier: before.script },
-            session
-          );
-        }
-        const added = await wire.call(
-          "Page.addScriptToEvaluateOnNewDocument",
-          { source: gatedPageScript(owner), runImmediately: true },
+      yield* wire.request("Page.enable", {}, session);
+      if (before?.script) {
+        yield* wire.request(
+          "Page.removeScriptToEvaluateOnNewDocument",
+          { identifier: before.script },
           session
         );
-        mark.script = text(added.identifier);
-      })
-      .then(
-        () => undefined,
-        (error: unknown) =>
-          console.warn(
-            `[browser] ${this.key}: page ${page} of ${owner} was not marked as its: ${String(error)}`
-          )
+      }
+      const added = yield* wire.request(
+        "Page.addScriptToEvaluateOnNewDocument",
+        { source: gatedPageScript(owner), runImmediately: true },
+        session
+      );
+      mark.script = text(added.identifier);
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[browser] ${this.key}: page ${page} of ${owner} was not marked as its: ${error._tag === "Gone" ? error.what : error.message}`
+        )
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#markWaited(page);
+          Deferred.doneUnsafe(mark.landed, Effect.void);
+        })
       )
-      .finally(() => {
-        for (const go of this.#markWaits.get(page) ?? []) {
-          go();
-        }
-        this.#markWaits.delete(page);
-      });
-    this.#marks.set(page, mark);
+    );
+    // Work let go: whatever waits for the mark waits on `landed`.
+    Effect.runFork(this.#markTurns.withLock(page, marking));
+  }
+
+  /** What waited for page `page`'s next mark goes on. */
+  #markWaited(page: string): void {
+    const waiting = this.#markWaits.get(page);
+    this.#markWaits.delete(page);
+    if (waiting) {
+      Deferred.doneUnsafe(waiting, Effect.void);
+    }
   }
 
   /**
    * Whether page `page` carries its owner's mark ({@link #mark}) within `ms`:
    * a load waits for it, never past that, and does not go without it.
    */
-  async marked(page: string, ms = MARK_WAIT_MS): Promise<boolean> {
-    const read = await readWithin(ms, (signal) => this.#markOf(page, signal));
-    return read.kind === "answered";
+  marked(page: string, ms = MARK_WAIT_MS): Promise<boolean> {
+    // The promise edge of the wait for a page's mark.
+    return Effect.runPromise(
+      boundedRead(ms, this.#markOf(page)).pipe(
+        Effect.as(true),
+        Effect.catchTag("Unanswered", () => Effect.succeed(false))
+      )
+    );
   }
 
   /** Page `page`'s mark landing: the one under way, else the next one. */
-  #markOf(page: string, signal: AbortSignal): Promise<void> {
+  #markOf(page: string): Effect.Effect<void> {
     const held = this.#marks.get(page);
     if (held) {
-      return held.done;
+      return Deferred.await(held.landed);
     }
-    return new Promise((resolve) => {
-      let waits = this.#markWaits.get(page);
-      if (!waits) {
-        waits = new Set();
-        this.#markWaits.set(page, waits);
-      }
-      const go = () => {
-        waits?.delete(go);
-        resolve();
-      };
-      waits.add(go);
-      signal.addEventListener("abort", go, { once: true });
-    });
+    let next = this.#markWaits.get(page);
+    if (!next) {
+      next = Deferred.makeUnsafe<void>();
+      this.#markWaits.set(page, next);
+    }
+    return Deferred.await(next);
   }
 
   /**
@@ -1086,10 +1096,7 @@ export class Gate {
     this.#tabPage.delete(targetId);
     this.#pageSessions.delete(targetId);
     this.#marks.delete(targetId);
-    for (const go of this.#markWaits.get(targetId) ?? []) {
-      go();
-    }
-    this.#markWaits.delete(targetId);
+    this.#markWaited(targetId);
     if (this.#owners.targets[targetId]) {
       delete this.#owners.targets[targetId];
       delete this.#owners.addresses[targetId];

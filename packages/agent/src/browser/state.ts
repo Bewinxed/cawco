@@ -44,6 +44,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { Effect } from "effect";
 import { BrowserRecordSchema } from "../stored-shapes";
 
 /**
@@ -331,23 +332,30 @@ export const withBrowser = async <T>(
 };
 
 /** Whether TCP `port` binds on every address now. */
-const tcpFree = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
+const tcpFree = Effect.fnUntraced(function* (port: number) {
+  return yield* Effect.callback<boolean>((resume) => {
     const server = createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, "0.0.0.0", () => server.close(() => resolve(true)));
+    server.once("error", () => resume(Effect.succeed(false)));
+    server.listen(port, "0.0.0.0", () =>
+      server.close(() => resume(Effect.succeed(true)))
+    );
+    return Effect.sync(() => server.close());
   });
+});
 
 /** Whether UDP `port` binds on every address now. */
-const udpFree = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
+const udpFree = Effect.fnUntraced(function* (port: number) {
+  return yield* Effect.callback<boolean>((resume) => {
     const socket = createSocket("udp4");
     socket.once("error", () => {
       socket.close();
-      resolve(false);
+      resume(Effect.succeed(false));
     });
-    socket.bind(port, "0.0.0.0", () => socket.close(() => resolve(true)));
+    socket.bind(port, "0.0.0.0", () =>
+      socket.close(() => resume(Effect.succeed(true)))
+    );
   });
+});
 
 /**
  * Whether `port` is free for a browser now, as its runtime binds it: TCP and
@@ -358,8 +366,12 @@ const udpFree = (port: number): Promise<boolean> =>
  * listen tcp 0.0.0.0:43012: bind: address already in use" for a slot a
  * 127.0.0.1 probe called free).
  */
-const portFree = async (port: number): Promise<boolean> =>
-  (await tcpFree(port)) && (await udpFree(port));
+const portFree = (port: number): Promise<boolean> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return (yield* tcpFree(port)) && (yield* udpFree(port));
+    })
+  );
 
 /**
  * The record of `key`, made when it has none: asleep, holding no ports until

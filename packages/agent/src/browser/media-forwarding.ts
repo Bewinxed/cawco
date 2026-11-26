@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { errnoCode, isGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -35,6 +36,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { parse } from "yaml";
 import { z } from "zod";
 import { MediaMeasurementSchema } from "../stored-shapes";
@@ -372,18 +374,20 @@ const netstatBinds = async (proto: "udp" | "tcp", port: number) => {
 };
 
 /** Whether a TCP connection to `host`:`port` is taken. */
-const tcpAnswers = (host: string, port: number): Promise<boolean> =>
-  new Promise((resolve) => {
+const tcpAnswers = Effect.fnUntraced(function* (host: string, port: number) {
+  return yield* Effect.callback<boolean>((resume) => {
     const socket = connect({ host, port });
     const done = (answered: boolean) => {
       socket.destroy();
-      resolve(answered);
+      resume(Effect.succeed(answered));
     };
     socket.setTimeout(READ_MS);
     socket.once("connect", () => done(true));
     socket.once("timeout", () => done(false));
     socket.once("error", () => done(false));
+    return Effect.sync(() => socket.destroy());
   });
+});
 
 /**
  * What reaches `port` now through a rootful engine on Linux. It forwards
@@ -398,7 +402,7 @@ const natForwards = async (port: number): Promise<MediaPath> => {
   const addresses = await machineAddresses();
   const host =
     addresses.find((one) => !one.includes(":")) ?? addresses[0] ?? "127.0.0.1";
-  return (await tcpAnswers(host, port)) ? "udp+tcp" : "none";
+  return (await Effect.runPromise(tcpAnswers(host, port))) ? "udp+tcp" : "none";
 };
 
 /** What the host binds on every address for `port` now. */
@@ -459,12 +463,15 @@ export const measureMedia = async (
   if (!reader) {
     return;
   }
-  const until = Date.now() + MEASURE_MS;
-  for (;;) {
-    const forwarded = await reader.read(port);
-    if (!carriesLess(forwarded, published) || Date.now() > until) {
-      return forwarded;
-    }
-    await Bun.sleep(MEASURE_POLL_MS);
-  }
+  const looked = await Effect.runPromise(
+    lookUntil(
+      {
+        every: MEASURE_POLL_MS,
+        deadlineMs: MEASURE_MS,
+        until: (forwarded: MediaPath) => !carriesLess(forwarded, published),
+      },
+      Effect.promise(() => reader.read(port))
+    )
+  );
+  return looked.kind === "found" ? looked.value : looked.last;
 };

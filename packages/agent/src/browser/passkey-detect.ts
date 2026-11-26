@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { platform } from "node:os";
 import type { PasskeyRelayCapability } from "@cawco/core/browser";
+import { Effect } from "effect";
 
 /** macOS `system_profiler` output when BLE hardware is present. */
 const BLE_SUPPORTED = /Bluetooth Low Energy Supported:\s*Yes/iu;
@@ -16,15 +17,17 @@ const BLE_SUPPORTED = /Bluetooth Low Energy Supported:\s*Yes/iu;
 const PROFILER_MS = 10_000;
 
 /** Whether macOS reports BLE hardware: its `system_profiler`. */
-const darwinHasBle = (): Promise<boolean> =>
-  new Promise((resolve) => {
+const darwinHasBle: Effect.Effect<boolean> = Effect.callback<boolean>(
+  (resume) => {
     execFile(
       "system_profiler",
       ["SPBluetoothDataType", "-detailLevel", "basic"],
       { timeout: PROFILER_MS },
-      (error, stdout) => resolve(!error && BLE_SUPPORTED.test(stdout))
+      (error, stdout) =>
+        resume(Effect.succeed(!error && BLE_SUPPORTED.test(stdout)))
     );
-  });
+  }
+);
 
 /** Whether Linux has a Bluetooth adapter: entries under /sys/class/bluetooth/. */
 const linuxHasBle = (): boolean => {
@@ -40,7 +43,7 @@ let bleRead: Promise<boolean> | undefined;
 const detectBle = (): Promise<boolean> => {
   bleRead ??=
     platform() === "darwin"
-      ? darwinHasBle()
+      ? Effect.runPromise(darwinHasBle)
       : Promise.resolve(platform() === "linux" && linuxHasBle());
   return bleRead;
 };

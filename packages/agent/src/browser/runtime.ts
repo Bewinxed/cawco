@@ -13,6 +13,7 @@ import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
 import Docker from "dockerode";
+import { Effect } from "effect";
 import { z } from "zod";
 import { colimaHome, colimaProfileOf } from "./colima";
 
@@ -234,13 +235,15 @@ const rootlessNetworkOf = async (
   socketPath: string
 ): Promise<Runtime["rootlessNetwork"]> => {
   try {
-    const info = await new Promise<unknown>((resolve, reject) => {
-      docker.modem.dial(
-        { path: LIBPOD_INFO, method: "GET", statusCodes: { 200: true } },
-        (error: unknown, data: unknown) =>
-          error ? reject(error) : resolve(data)
-      );
-    });
+    const info = await Effect.runPromise(
+      Effect.callback<unknown, unknown>((resume) => {
+        docker.modem.dial(
+          { path: LIBPOD_INFO, method: "GET", statusCodes: { 200: true } },
+          (error: unknown, data: unknown) =>
+            resume(error ? Effect.fail(error) : Effect.succeed(data))
+        );
+      })
+    );
     return LibpodInfoShape.safeParse(info).data?.host?.rootlessNetworkCmd;
   } catch (error) {
     console.info(

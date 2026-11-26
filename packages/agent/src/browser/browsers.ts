@@ -45,9 +45,12 @@ import type {
   BrowserViewerSession,
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
+import { makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { Deferred, Effect } from "effect";
 import type { AgentPorts } from "../agent-ports";
 import {
   ContainerHost,
@@ -57,6 +60,7 @@ import {
 } from "./container-host";
 import { closeDoor, openDoor } from "./dashboard-door";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
+import { runEvery } from "./every";
 import { frontOrigin, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -697,19 +701,31 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
   }
   await makeFolder(browserDir(key), { mode: 0o700 });
   const fd = openLockFile(join(browserDir(key), "lock"), true);
-  const until = Date.now() + RESERVE_MS;
   try {
-    while (!tryLock(fd)) {
-      await Bun.sleep(RESERVE_POLL_MS);
-      const made = await readBrowser(key);
-      if (made) {
-        return made;
-      }
-      if (Date.now() > until) {
-        throw new Error(
-          `The browser ${key} is held by another process of this machine, which made no record of it in ${RESERVE_MS / 1000} s.`
-        );
-      }
+    // The lock taken, or the record another process made while it held it.
+    const looked = await Effect.runPromise(
+      lookUntil(
+        { every: RESERVE_POLL_MS, deadlineMs: RESERVE_MS },
+        Effect.promise(
+          async (): Promise<
+            { locked: true } | { made: BrowserRecord } | undefined
+          > => {
+            if (tryLock(fd)) {
+              return { locked: true };
+            }
+            const made = await readBrowser(key);
+            return made ? { made } : undefined;
+          }
+        )
+      )
+    );
+    if (looked.kind === "deadline") {
+      throw new Error(
+        `The browser ${key} is held by another process of this machine, which made no record of it in ${RESERVE_MS / 1000} s.`
+      );
+    }
+    if ("made" in looked.value) {
+      return looked.value.made;
     }
     return (
       (await readBrowser(key)) ??
@@ -846,7 +862,7 @@ const readBack = async (ports: BrowserPorts): Promise<void> => {
 };
 
 /** Each browser's revival under way ({@link reviveBrowser}), by key. */
-const reviving = new Map<BrowserKey, Promise<void>>();
+const reviving = makeJoin<BrowserKey, void>();
 
 /**
  * `key`'s browser checked on its host, as its record says it is live but
@@ -861,12 +877,12 @@ const reviving = new Map<BrowserKey, Promise<void>>();
  * why. One that no longer runs is asleep. Settles once that is done, and
  * never rejects: a failure is said in the log. One revival at a time each.
  */
-const reviveBrowser = (ports: BrowserPorts, key: BrowserKey): Promise<void> => {
-  const under = reviving.get(key);
-  if (under) {
-    return under;
-  }
-  const revival = withBrowser(key, async () => {
+const reviveBrowser = (ports: BrowserPorts, key: BrowserKey): Promise<void> =>
+  reviving.runPromise(key, () => revive(ports, key));
+
+/** {@link reviveBrowser}'s one revival of `key`: it never rejects. */
+const revive = (ports: BrowserPorts, key: BrowserKey): Promise<void> =>
+  withBrowser(key, async () => {
     const record = await readBrowser(key);
     if (record?.state !== "live") {
       return;
@@ -889,14 +905,9 @@ const reviveBrowser = (ports: BrowserPorts, key: BrowserKey): Promise<void> => {
     );
     const held = (await host.heldSlots?.()) ?? new Set<number>();
     await launch(ports, record, host, undefined, held);
-  })
-    .catch((error: unknown) =>
-      console.warn(`[browser] ${key} was not revived: ${why(error)}`)
-    )
-    .finally(() => reviving.delete(key));
-  reviving.set(key, revival);
-  return revival;
-};
+  }).catch((error: unknown) =>
+    console.warn(`[browser] ${key} was not revived: ${why(error)}`)
+  );
 
 /**
  * Stops the browsers nobody has used for {@link BROWSER_IDLE_MS}, and those
@@ -959,7 +970,8 @@ const atRest = (record: BrowserRecord): boolean =>
   !starting.has(record.key);
 
 /** The move under way, if one is: aborted, and awaited, as the agent stops ({@link stopBrowsers}). */
-let moving: { abort: AbortController; done: Promise<void> } | undefined;
+let moving:
+  { abort: AbortController; done: Deferred.Deferred<void> } | undefined;
 /** The agent is stopping: no move starts. */
 let stopping = false;
 
@@ -980,7 +992,7 @@ export const stopBrowsers = async (): Promise<void> => {
   stopping = true;
   if (moving) {
     moving.abort.abort();
-    await moving.done;
+    await Effect.runPromise(Deferred.await(moving.done));
   }
 };
 
@@ -1060,13 +1072,8 @@ const moveIntoContainer = (
     }
     const container = new ContainerHost(answering);
     const abort = new AbortController();
-    let settle = noop;
-    moving = {
-      abort,
-      done: new Promise<void>((resolve) => {
-        settle = resolve;
-      }),
-    };
+    const done = Deferred.makeUnsafe<void>();
+    moving = { abort, done };
     starting.set(key, { state: "starting" });
     told(ports);
     try {
@@ -1117,13 +1124,11 @@ const moveIntoContainer = (
       );
     } finally {
       moving = undefined;
-      settle();
+      Deferred.doneUnsafe(done, Effect.void);
       starting.delete(key);
       told(ports);
     }
   });
-
-const noop = (): void => undefined;
 
 /** Every local browser moved into a container now that `answering` answers, each at rest, a failed one a recheck later. */
 const moveLocals = async (
@@ -1238,18 +1243,11 @@ const followNetwork = (
   };
   const look = (always: boolean): Promise<void> =>
     queue.run(() => once(always));
-  const polls = setInterval(() => {
-    look(false).catch((error: unknown) =>
-      console.warn(
-        `[browser] the machine's network was not read: ${why(error)}`
-      )
-    );
-  }, pollMs);
-  polls.unref();
-  look(true).catch((error: unknown) =>
-    console.warn(`[browser] the machine's network was not read: ${why(error)}`)
-  );
-  return { sweep: () => look(true), stop: () => clearInterval(polls) };
+  const unread = (error: unknown): string =>
+    `[browser] the machine's network was not read: ${why(error)}`;
+  const stop = runEvery(pollMs, () => look(false), unread);
+  look(true).catch((error: unknown) => console.warn(unread(error)));
+  return { sweep: () => look(true), stop };
 };
 
 /** The daemon's {@link followNetwork}, while {@link watchBrowsers} runs on a runtime that places containers in a namespace of their own. */
@@ -1332,12 +1330,12 @@ export const watchBrowsers = async (
     }
   });
   records.unref();
-  let ticks: ReturnType<typeof setInterval> | undefined;
+  let ticks: (() => void) | undefined;
   const stop = (): void => {
     records.close();
     following?.stop();
     following = undefined;
-    clearInterval(ticks);
+    ticks?.();
   };
   try {
     const found = await browserRuntime(true);
@@ -1361,21 +1359,11 @@ export const watchBrowsers = async (
     throw error;
   }
   // A tick waits on a browser's lock while a start holds it (an image build
-  // takes minutes): the next one is skipped rather than stacked behind it.
-  let ticking = false;
-  ticks = setInterval(() => {
-    if (ticking) {
-      return;
-    }
-    ticking = true;
-    tick(ports)
-      .catch((error: unknown) =>
-        console.warn(`[browser] tick failed: ${why(error)}`)
-      )
-      .finally(() => {
-        ticking = false;
-      });
-  }, TICK_MS);
-  ticks.unref();
+  // takes minutes): the next one waits for it rather than stacking behind it.
+  ticks = runEvery(
+    TICK_MS,
+    () => tick(ports),
+    (error) => `[browser] tick failed: ${why(error)}`
+  );
   return stop;
 };

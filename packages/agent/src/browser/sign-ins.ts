@@ -30,6 +30,8 @@
  * {@link IDB_CAP_CHARS} is not carried, and the log names it and its size.
  */
 
+import { lookUntil } from "@cawco/core/effect/poll";
+import { Effect } from "effect";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 import { idbRead, idbWrite } from "./sign-ins-page";
@@ -167,15 +169,20 @@ const blankPage = async (
     // evaluated as the navigation commits can still run in the one before.
     open: async (origin) => {
       await link.call("Page.navigate", { url: `${origin}/` }, session);
-      const until = Date.now() + OPEN_MS;
-      while (
-        (await evaluate(link, session, "location.origin", CALL_SHORT_MS)) !==
-        origin
-      ) {
-        if (Date.now() > until) {
-          throw new Error(`The page did not stand at ${origin}.`);
-        }
-        await Bun.sleep(OPEN_POLL_MS);
+      const looked = await Effect.runPromise(
+        lookUntil(
+          {
+            every: OPEN_POLL_MS,
+            deadlineMs: OPEN_MS,
+            until: (at: unknown) => at === origin,
+          },
+          Effect.promise(() =>
+            evaluate(link, session, "location.origin", CALL_SHORT_MS)
+          )
+        )
+      );
+      if (looked.kind === "deadline") {
+        throw new Error(`The page did not stand at ${origin}.`);
       }
     },
     close: async () => {

@@ -23,6 +23,8 @@ import {
   writeSync,
 } from "node:fs";
 import { errnoCode } from "@cawco/core/absent";
+import { lookUntil } from "@cawco/core/effect/poll";
+import { Effect, Fiber, Schedule } from "effect";
 
 const DEV_VHCI = "/dev/vhci";
 
@@ -36,22 +38,38 @@ const BTMGMT = "btmgmt";
 const ON_BUS_MS = 5000;
 const ON_BUS_POLL_MS = 250;
 
-/** BlueZ's object paths on the system bus, from `busctl`; rejects when it has none (no bluetoothd). */
-const bluezObjects = (): Promise<string[]> =>
-  new Promise((resolve, reject) => {
-    execFile(
-      "busctl",
-      ["--system", "--list", "tree", "org.bluez"],
-      { timeout: 5000 },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr.trim() || error.message));
-          return;
-        }
-        resolve(stdout.split("\n").map((line) => line.trim()));
-      }
+/** BlueZ's object paths on the system bus, from `busctl`; fails when it has none (no bluetoothd). */
+const bluezObjects: Effect.Effect<string[], Error> = Effect.callback<
+  string[],
+  Error
+>((resume) => {
+  execFile(
+    "busctl",
+    ["--system", "--list", "tree", "org.bluez"],
+    { timeout: 5000 },
+    (error, stdout, stderr) =>
+      resume(
+        error
+          ? Effect.fail(new Error(stderr.trim() || error.message))
+          : Effect.succeed(stdout.split("\n").map((line) => line.trim()))
+      )
+  );
+});
+
+/** How often the vhci fd is read: for its creation response, then for the kernel's HCI commands. */
+const FD_POLL_MS = 50;
+
+/** One non-blocking read of `fd` into `buf`: its error (EAGAIN when nothing waits), or how many bytes it read. */
+const readFd = Effect.fnUntraced(function* (fd: number, buf: Buffer) {
+  return yield* Effect.callback<{
+    err: NodeJS.ErrnoException | null;
+    bytesRead: number;
+  }>((resume) => {
+    fsRead(fd, buf, 0, buf.length, null, (err, bytesRead) =>
+      resume(Effect.succeed({ err, bytesRead }))
     );
   });
+});
 
 // ── HCI byte markers ───────────────────────────────────────────────
 
@@ -279,32 +297,26 @@ const handleCreationRead = (
 /**
  * Read the vhci creation response with polling, returning the adapter index.
  */
-const readCreationResponse = (fd: number): Promise<number> =>
-  new Promise<number>((resolve, reject) => {
-    const buf = Buffer.alloc(4);
-    let attempts = 0;
-    const maxAttempts = 100; // 100 × 50 ms = 5 s
-    const timer = setInterval(() => {
-      attempts += 1;
-      fsRead(fd, buf, 0, 4, null, (err, bytesRead) => {
-        try {
-          const result = handleCreationRead(
-            err,
-            bytesRead,
-            attempts,
-            maxAttempts
-          );
-          if (result === "done") {
-            clearInterval(timer);
-            resolve(buf.readUInt16LE(2));
-          }
-        } catch (thrown: unknown) {
-          clearInterval(timer);
-          reject(thrown);
-        }
-      });
-    }, 50);
+const readCreationResponse = Effect.fnUntraced(function* (fd: number) {
+  const buf = Buffer.alloc(4);
+  let attempts = 0;
+  const maxAttempts = 100; // 100 × 50 ms = 5 s
+  const once = Effect.gen(function* () {
+    const { err, bytesRead } = yield* readFd(fd, buf);
+    attempts += 1;
+    return yield* Effect.try({
+      try: () => handleCreationRead(err, bytesRead, attempts, maxAttempts),
+      catch: (thrown) => thrown,
+    });
   });
+  // The first read a poll's wait after the fd opened, as each after it.
+  yield* Effect.sleep(FD_POLL_MS);
+  yield* Effect.repeat(once, {
+    schedule: Schedule.spaced(FD_POLL_MS),
+    until: (result) => result === "done",
+  });
+  return buf.readUInt16LE(2);
+});
 
 /**
  * Passkey BLE advert injector: creates a virtual HCI adapter via `/dev/vhci`
@@ -320,8 +332,8 @@ class PasskeyInjector {
   #up = false;
   /** The setup under way, shared by every caller until it settles. */
   #starting: Promise<void> | undefined;
-  /** The polling interval handle. */
-  #poll: ReturnType<typeof setInterval> | undefined;
+  /** The read loop answering the kernel's HCI commands ({@link PasskeyInjector.#startReadLoop}). */
+  #poll: Fiber.Fiber<unknown> | undefined;
   /** Random static BLE address reused for every injected advert. */
   readonly #advertAddr: Buffer;
   /** Random BD_ADDR for the virtual adapter. */
@@ -347,7 +359,8 @@ class PasskeyInjector {
     if (this.#fd >= 0 && this.#up) {
       return Promise.resolve();
     }
-    this.#starting ??= this.#start().finally(() => {
+    // The promise edge of the setup, shared by every caller until it settles.
+    this.#starting ??= Effect.runPromise(this.#start()).finally(() => {
       this.#starting = undefined;
     });
     return this.#starting;
@@ -381,7 +394,7 @@ class PasskeyInjector {
   stop(): void {
     this.#up = false;
     if (this.#poll !== undefined) {
-      clearInterval(this.#poll);
+      Effect.runFork(Fiber.interrupt(this.#poll));
       this.#poll = undefined;
     }
     if (this.#fd >= 0) {
@@ -400,38 +413,39 @@ class PasskeyInjector {
   // ── Private ────────────────────────────────────────────────────
 
   /** Open `/dev/vhci`, answer the kernel's HCI init, and power the adapter on. */
-  async #start(): Promise<void> {
-    let fd: number;
-    try {
-      fd = openSync(
-        DEV_VHCI,
-        // Two distinct flag bits: their sum is their union.
-        constants.O_RDWR + constants.O_NONBLOCK
+  #start(): Effect.Effect<void, unknown> {
+    return Effect.gen({ self: this }, function* () {
+      const fd = yield* Effect.try({
+        try: () =>
+          openSync(
+            DEV_VHCI,
+            // Two distinct flag bits: their sum is their union.
+            constants.O_RDWR + constants.O_NONBLOCK
+          ),
+        catch: (cause) =>
+          new Error(
+            "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci",
+            { cause }
+          ),
+      });
+      this.#fd = fd;
+      yield* Effect.gen({ self: this }, function* () {
+        // The 4-byte creation response: 2 bytes opcode + 2 bytes adapter index.
+        this.#adapterIndex = yield* readCreationResponse(fd);
+        yield* Effect.logInfo(
+          `[browser] passkey-inject: virtual adapter hci${this.#adapterIndex} created`
+        );
+        // Answer the kernel's HCI commands, then power on: btmgmt's management
+        // commands start a second round of HCI init the read loop answers.
+        this.#startReadLoop();
+        yield* this.#powerOn();
+      }).pipe(Effect.onError(() => Effect.sync(() => this.stop())));
+      this.#up = true;
+      yield* Effect.logInfo(
+        `[browser] passkey-inject: hci${this.#adapterIndex} is UP`
       );
-    } catch (cause: unknown) {
-      throw new Error(
-        "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci",
-        { cause }
-      );
-    }
-    this.#fd = fd;
-    try {
-      // The 4-byte creation response: 2 bytes opcode + 2 bytes adapter index.
-      this.#adapterIndex = await readCreationResponse(fd);
-      console.info(
-        `[browser] passkey-inject: virtual adapter hci${this.#adapterIndex} created`
-      );
-      // Answer the kernel's HCI commands, then power on: btmgmt's management
-      // commands start a second round of HCI init the read loop answers.
-      this.#startReadLoop();
-      await this.#powerOn();
-    } catch (error) {
-      this.stop();
-      throw error;
-    }
-    this.#up = true;
-    console.info(`[browser] passkey-inject: hci${this.#adapterIndex} is UP`);
-    await this.#onBus();
+      yield* this.#onBus();
+    });
   }
 
   /**
@@ -440,29 +454,31 @@ class PasskeyInjector {
    * or warns when it doesn't: bluetoothd running on the machine is part of
    * its setup, and the agent starts no system service.
    */
-  async #onBus(): Promise<void> {
+  #onBus(): Effect.Effect<void> {
     const path = `/org/bluez/hci${this.#adapterIndex}`;
-    const deadline = Date.now() + ON_BUS_MS;
-    for (;;) {
-      try {
-        if ((await bluezObjects()).includes(path)) {
-          console.info(`[browser] passkey-inject: BlueZ has ${path}`);
-          return;
-        }
-      } catch (error) {
-        console.warn(
-          `[browser] passkey-inject: BlueZ isn't on the system bus, so Chromium sees no adapter: is bluetoothd running on this machine? (${error instanceof Error ? error.message : String(error)})`
-        );
+    return Effect.gen(function* () {
+      const looked = yield* lookUntil(
+        {
+          every: ON_BUS_POLL_MS,
+          deadlineMs: ON_BUS_MS,
+          until: (paths: string[]) => paths.includes(path),
+        },
+        bluezObjects
+      );
+      if (looked.kind === "found") {
+        yield* Effect.logInfo(`[browser] passkey-inject: BlueZ has ${path}`);
         return;
       }
-      if (Date.now() >= deadline) {
-        console.warn(
-          `[browser] passkey-inject: BlueZ has no ${path} after ${ON_BUS_MS} ms, so Chromium sees no adapter`
-        );
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, ON_BUS_POLL_MS));
-    }
+      yield* Effect.logWarning(
+        `[browser] passkey-inject: BlueZ has no ${path} after ${ON_BUS_MS} ms, so Chromium sees no adapter`
+      );
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[browser] passkey-inject: BlueZ isn't on the system bus, so Chromium sees no adapter: is bluetoothd running on this machine? (${error.message})`
+        )
+      )
+    );
   }
 
   /**
@@ -471,20 +487,23 @@ class PasskeyInjector {
    */
   #startReadLoop(): void {
     const buf = Buffer.alloc(4096);
-    this.#poll = setInterval(() => {
+    const once = Effect.gen({ self: this }, function* () {
       if (this.#fd < 0) {
         return;
       }
-      fsRead(this.#fd, buf, 0, buf.length, null, (err, bytesRead) => {
-        if (err) {
-          return; // EAGAIN or closed — ignore.
-        }
-        if (bytesRead <= 0) {
-          return;
-        }
+      const { err, bytesRead } = yield* readFd(this.#fd, buf);
+      // EAGAIN or closed, or nothing read: nothing to answer.
+      if (!err && bytesRead > 0) {
         this.#processCommands(buf.subarray(0, bytesRead));
-      });
-    }, 50);
+      }
+    });
+    // Each read a poll's wait after the one before, the first one after the start.
+    this.#poll = Effect.runFork(
+      Effect.gen(function* () {
+        yield* Effect.sleep(FD_POLL_MS);
+        yield* Effect.repeat(once, Schedule.spaced(FD_POLL_MS));
+      })
+    );
   }
 
   /** Parse and handle HCI command packets from the kernel. */
@@ -524,31 +543,33 @@ class PasskeyInjector {
   }
 
   /** Power on the adapter via btmgmt. */
-  #powerOn(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  #powerOn(): Effect.Effect<void, Error> {
+    return Effect.callback<void, Error>((resume) => {
       const child = spawn(
         BTMGMT,
         ["--index", String(this.#adapterIndex), "power", "on"],
         { stdio: "ignore", timeout: 15_000 }
       );
       child.on("error", (err) =>
-        reject(
-          new Error(
-            `btmgmt power on failed for hci${this.#adapterIndex}: ${err.message}`
+        resume(
+          Effect.fail(
+            new Error(
+              `btmgmt power on failed for hci${this.#adapterIndex}: ${err.message}`
+            )
           )
         )
       );
-      child.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(
-            new Error(
-              `btmgmt power on exited ${code} for hci${this.#adapterIndex}`
-            )
-          );
-        }
-      });
+      child.on("close", (code) =>
+        resume(
+          code === 0
+            ? Effect.void
+            : Effect.fail(
+                new Error(
+                  `btmgmt power on exited ${code} for hci${this.#adapterIndex}`
+                )
+              )
+        )
+      );
     });
   }
 

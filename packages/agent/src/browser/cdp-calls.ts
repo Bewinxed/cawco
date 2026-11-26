@@ -4,6 +4,8 @@
  * (the gate's own calls beside its client's) never share an id.
  */
 
+import { Gone } from "@cawco/core/effect/bounded";
+import { Deferred, Effect, Schema } from "effect";
 import { z } from "zod";
 
 type Json = Record<string, unknown>;
@@ -19,12 +21,18 @@ interface Answer {
   result?: Json;
 }
 
+/** Chromium answered a call with an error: its message. */
+export class CdpRefused extends Schema.TaggedError<CdpRefused>()("CdpRefused", {
+  message: Schema.String,
+}) {}
+
 export class CdpCalls {
   readonly #send: (text: string) => void;
   #next: number;
+  /** Each call waiting for its answer, by its id: failed with {@link Gone} when the connection goes. */
   readonly #waiting = new Map<
     number,
-    { resolve: (result: Json) => void; reject: (error: Error) => void }
+    Deferred.Deferred<Json, CdpRefused | Gone>
   >();
 
   constructor(send: (text: string) => void, first = 1) {
@@ -32,18 +40,38 @@ export class CdpCalls {
     this.#next = first;
   }
 
-  /** Sends one call; its answer settles the promise. An abort of `signal` stops waiting for it. */
-  call(
+  /**
+   * Sends one call as the Effect runs, and answers with its answer:
+   * {@link CdpRefused} when Chromium refused it, {@link Gone} when the
+   * connection went first. Interrupting it stops waiting for the answer.
+   */
+  readonly request = Effect.fnUntraced(function* (
+    this: CdpCalls,
     method: string,
     params: Json,
-    sessionId?: string,
-    signal?: AbortSignal
-  ): Promise<Json> {
-    return new Promise<Json>((resolve, reject) => {
-      const id = this.#post(method, params, sessionId);
-      signal?.addEventListener("abort", () => this.#waiting.delete(id));
-      this.#waiting.set(id, { resolve, reject });
-    });
+    sessionId?: string
+  ) {
+    const id = this.#post(method, params, sessionId);
+    const answer = yield* Deferred.make<Json, CdpRefused | Gone>();
+    this.#waiting.set(id, answer);
+    return yield* Deferred.await(answer).pipe(
+      Effect.ensuring(Effect.sync(() => this.#waiting.delete(id)))
+    );
+  });
+
+  /**
+   * The promise edge of {@link CdpCalls.request}: sends one call at once,
+   * and rejects with an `Error` of Chromium's message, or of why the
+   * connection went.
+   */
+  call(method: string, params: Json, sessionId?: string): Promise<Json> {
+    return Effect.runPromise(
+      this.request(method, params, sessionId).pipe(
+        Effect.mapError((failed) =>
+          failed._tag === "Gone" ? new Error(failed.what) : failed
+        )
+      )
+    );
   }
 
   /** Sends one call and waits for no answer. */
@@ -69,18 +97,23 @@ export class CdpCalls {
   settle(id: number, message: Answer): void {
     const waiting = this.#waiting.get(id);
     this.#waiting.delete(id);
-    if (message.error) {
-      waiting?.reject(new Error(message.error.message));
-    } else {
-      waiting?.resolve(message.result ?? {});
+    if (!waiting) {
+      return;
     }
+    Deferred.doneUnsafe(
+      waiting,
+      message.error
+        ? Effect.fail(new CdpRefused({ message: message.error.message }))
+        : Effect.succeed(message.result ?? {})
+    );
   }
 
   /** Fails every call still waiting with `why`: the connection is gone. */
   fail(why: string): void {
-    for (const waiting of this.#waiting.values()) {
-      waiting.reject(new Error(why));
-    }
+    const waiting = [...this.#waiting.values()];
     this.#waiting.clear();
+    for (const answer of waiting) {
+      Deferred.doneUnsafe(answer, Effect.fail(new Gone({ what: why })));
+    }
   }
 }

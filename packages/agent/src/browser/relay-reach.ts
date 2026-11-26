@@ -10,22 +10,24 @@
 import { networkInterfaces } from "node:os";
 import { stunServer } from "@cawco/core/env-ports";
 import { isPublicAddress } from "@cawco/core/public-address";
+import { Effect } from "effect";
 import { getPublicIP } from "turn-server";
 
 /** How long a STUN binding has to be answered. */
 const STUN_MS = 3000;
 
 /** The address a binding through `url` maps this machine to; undefined when none answered within {@link STUN_MS}. */
-const mappedBy = (url: string): Promise<string | undefined> =>
-  new Promise((resolve) => {
+const mappedBy = Effect.fnUntraced(function* (url: string) {
+  return yield* Effect.callback<string | undefined>((resume) => {
     try {
       getPublicIP(url, { timeout: STUN_MS }, (error, address) =>
-        resolve(error ? undefined : address?.ip)
+        resume(Effect.succeed(error ? undefined : address?.ip))
       );
     } catch {
-      resolve(undefined);
+      resume(Effect.succeed(undefined));
     }
   });
+});
 
 const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/u;
 
@@ -55,7 +57,8 @@ export const routerAddress = async (): Promise<
   if (!lan) {
     return;
   }
-  const address = await mappedBy(stunServer());
+  // The promise edge of mappedBy, for the capability report.
+  const address = await Effect.runPromise(mappedBy(stunServer()));
   return address && isPublicAddress(address) ? { address, lan } : undefined;
 };
 
@@ -65,9 +68,10 @@ const TURN_SCHEME = /^turn(s?):/u;
 const asStun = (url: string): string => url.replace(TURN_SCHEME, "stun$1:");
 
 /** `relay.prove`: each of the relay's URLs that answered a STUN binding from this machine. */
-export const proveRelay = async (urls: string[]): Promise<string[]> => {
-  const answered = await Promise.all(
-    urls.map(async (url) => ((await mappedBy(asStun(url))) ? url : null))
+export const proveRelay = (urls: string[]): Promise<string[]> =>
+  // The promise edge of the bindings through each URL, for the daemon.
+  Effect.runPromise(
+    Effect.forEach(urls, (url) => mappedBy(asStun(url)), {
+      concurrency: "unbounded",
+    }).pipe(Effect.map((addresses) => urls.filter((_url, at) => addresses[at])))
   );
-  return answered.filter((url): url is string => url !== null);
-};

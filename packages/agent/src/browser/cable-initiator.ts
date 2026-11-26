@@ -24,6 +24,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { decode, encode } from "cborg";
+import { Effect, Queue } from "effect";
 
 export interface CableInitiatorOptions {
   allowCredentials?: Array<{ type: string; id: Buffer }>;
@@ -485,27 +486,19 @@ const decodePaddedMap = (data: Buffer): CborMap => {
 /** One WebSocket to the tunnel server, read a message at a time. */
 class TunnelLink {
   readonly #socket: WebSocket;
-  readonly #queue: Buffer[] = [];
-  #waiting:
-    | { resolve: (data: Buffer) => void; reject: (error: Error) => void }
-    | undefined;
-  #ended: Error | undefined;
+  /** Each message as it came, until the tunnel ends: then why, after every message before it. */
+  readonly #messages = Effect.runSync(Queue.unbounded<Buffer, Error>());
 
   private constructor(socket: WebSocket) {
     this.#socket = socket;
     socket.binaryType = "arraybuffer";
     socket.addEventListener("message", (event) => {
-      const data =
+      Queue.offerUnsafe(
+        this.#messages,
         event.data instanceof ArrayBuffer
           ? Buffer.from(event.data)
-          : Buffer.from(String(event.data));
-      const waiting = this.#waiting;
-      this.#waiting = undefined;
-      if (waiting) {
-        waiting.resolve(data);
-      } else {
-        this.#queue.push(data);
-      }
+          : Buffer.from(String(event.data))
+      );
     });
     socket.addEventListener("close", (event) => {
       this.#end(
@@ -514,17 +507,18 @@ class TunnelLink {
     });
   }
 
-  static open(
+  /** The tunnel at `url` once it opens on the caBLE subprotocol; an abort of `signal` ends it. */
+  static readonly opened = Effect.fnUntraced(function* (
     url: string,
     signal: AbortSignal | undefined
-  ): Promise<TunnelLink> {
-    return new Promise((resolve, reject) => {
+  ) {
+    return yield* Effect.callback<TunnelLink, Error>((resume) => {
       const socket = new WebSocket(url, ["fido.cable"]);
       const link = new TunnelLink(socket);
       const abort = (): void => {
         const aborted = new Error("caBLE: ceremony aborted");
         link.close(aborted);
-        reject(aborted);
+        resume(Effect.fail(aborted));
       };
       if (signal?.aborted) {
         abort();
@@ -534,29 +528,36 @@ class TunnelLink {
       socket.addEventListener("open", () => {
         // websocket_adapter.cc: the server must pick the caBLE subprotocol.
         if (socket.protocol === "fido.cable") {
-          resolve(link);
+          resume(Effect.succeed(link));
         } else {
           link.close();
-          reject(new Error(`caBLE: tunnel server picked "${socket.protocol}"`));
+          resume(
+            Effect.fail(
+              new Error(`caBLE: tunnel server picked "${socket.protocol}"`)
+            )
+          );
         }
       });
       socket.addEventListener("error", () => {
-        reject(new Error(`caBLE: tunnel at ${url} failed to connect`));
+        resume(
+          Effect.fail(new Error(`caBLE: tunnel at ${url} failed to connect`))
+        );
       });
+      return Effect.sync(() => link.close());
     });
+  });
+
+  /** The promise edge of {@link TunnelLink.opened}, for the ceremony. */
+  static open(
+    url: string,
+    signal: AbortSignal | undefined
+  ): Promise<TunnelLink> {
+    return Effect.runPromise(TunnelLink.opened(url, signal));
   }
 
+  /** The next message, or why the tunnel ended once none is left. */
   next(): Promise<Buffer> {
-    const queued = this.#queue.shift();
-    if (queued) {
-      return Promise.resolve(queued);
-    }
-    if (this.#ended) {
-      return Promise.reject(this.#ended);
-    }
-    return new Promise((resolve, reject) => {
-      this.#waiting = { resolve, reject };
-    });
+    return Effect.runPromise(Queue.take(this.#messages));
   }
 
   send(data: Buffer): void {
@@ -568,11 +569,9 @@ class TunnelLink {
     this.#socket.close();
   }
 
+  /** Ends the tunnel with `error`, its first end kept. */
   #end(error: Error): void {
-    this.#ended ??= error;
-    const waiting = this.#waiting;
-    this.#waiting = undefined;
-    waiting?.reject(this.#ended);
+    Effect.runSync(Queue.fail(this.#messages, error));
   }
 }
 

@@ -55,12 +55,14 @@ import { TLSSocket, connect as tlsConnect } from "node:tls";
 import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { type BrowserKey, browserSlug } from "@cawco/core/browser";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import {
   BROWSER_PASS_SCHEME,
   OWNER_COOKIE,
   OWNER_COOKIE_SECURE,
 } from "@cawco/core/hub-auth";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { machineId } from "@cawco/core/machine-id";
 import { localDashboardPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
@@ -80,6 +82,7 @@ import {
   Validity,
   Version,
 } from "@peculiar/asn1-x509";
+import { Cause, Effect, Exit, Scope } from "effect";
 import { delegationHubUrl } from "../delegation";
 import { hubPorts } from "../hub-ports";
 import { provenFetch } from "../hub-proof";
@@ -233,7 +236,10 @@ const loopbackOrigins = (): string[] => {
   );
 };
 
-const passes = new Map<BrowserKey, Promise<DoorPass>>();
+/** Each door's last pass read, or why its last ask failed. */
+const passes = new Map<BrowserKey, { pass: DoorPass } | { failed: unknown }>();
+/** Each door's pass being read now ({@link passOf}): a caller meanwhile shares its answer. */
+const passReads = makeJoin<BrowserKey, DoorPass>();
 /** The origins each door last read, kept past a pass that lapsed or a hub that is away. */
 const knownOrigins = new Map<BrowserKey, ReadonlySet<string>>();
 const readAt = new Map<BrowserKey, number>();
@@ -279,30 +285,36 @@ const askPass = async (key: BrowserKey): Promise<DoorPass> => {
  * that failed, or for a reread, so a hub that is away is not asked on every
  * request.
  */
-const passOf = async (key: BrowserKey, reread = false): Promise<DoorPass> => {
+const passOf = (key: BrowserKey, reread = false): Promise<DoorPass> =>
+  passReads.runPromise(key, () => passNow(key, reread));
+
+/** {@link passOf} with no read under way: the pass held while it is fresh, else read now. */
+const passNow = async (key: BrowserKey, reread: boolean): Promise<DoorPass> => {
   const held = passes.get(key);
   const now = Date.now();
   const recent = now - (readAt.get(key) ?? 0) <= REREAD_MS;
-  const current = held
-    ? await held.then(
-        (one) => one,
-        (): undefined => undefined
-      )
-    : undefined;
-  const fresh = current
-    ? current.expiresAt - now >= RENEW_BEFORE_MS && !(reread && !recent)
-    : recent;
-  if (held && fresh) {
-    return held;
+  if (held && "failed" in held) {
+    if (recent) {
+      throw held.failed;
+    }
+  } else if (
+    held &&
+    held.pass.expiresAt - now >= RENEW_BEFORE_MS &&
+    !(reread && !recent)
+  ) {
+    return held.pass;
   }
-  const asked = askPass(key);
-  passes.set(key, asked);
-  asked.catch((error: unknown) => {
+  try {
+    const pass = await askPass(key);
+    passes.set(key, { pass });
+    return pass;
+  } catch (error) {
+    passes.set(key, { failed: error });
     console.warn(
       `[browser] ${key}: its dashboard door has no pass: ${error instanceof Error ? error.message : String(error)}`
     );
-  });
-  return asked;
+    throw error;
+  }
 };
 
 /**
@@ -756,26 +768,66 @@ export const doorTarget = (
     ? `UNIX-CONNECT:${CONTAINER_DOOR_DIR}/${DOOR_SOCKET}`
     : `TCP:${how.host}:${how.port}`;
 
+/** An open door: its slot's port, and the scope its listeners close with. */
 interface Open {
   port: number;
-  servers: Server[];
+  scope: Scope.Closeable;
 }
 
-const open = new Map<BrowserKey, Promise<Open>>();
+const open = new Map<BrowserKey, Open>();
+/** One door's open or close at a time, each in the order asked. */
+const doorTurns = makeKeyedLock<BrowserKey>();
 
-const listen = (server: Server, at: number | string): Promise<void> =>
-  new Promise((resolve, reject) => {
-    server.once("error", reject);
-    const done = () => {
-      server.off("error", reject);
-      resolve();
-    };
-    if (typeof at === "number") {
-      server.listen(at, "127.0.0.1", done);
-    } else {
-      server.listen(at, done);
-    }
-  });
+/** `server` listening at `at` (a loopback port or a socket's path), closed with the scope. */
+const listening = (server: Server, at: number | string) =>
+  Effect.acquireRelease(
+    Effect.callback<void, Error>((resume) => {
+      const failed = (error: Error) => resume(Effect.fail(error));
+      server.once("error", failed);
+      const done = () => {
+        server.off("error", failed);
+        resume(Effect.void);
+      };
+      if (typeof at === "number") {
+        server.listen(at, "127.0.0.1", done);
+      } else {
+        server.listen(at, done);
+      }
+    }),
+    () => Effect.sync(() => server.close())
+  );
+
+/** A promise step of opening a door, its rejection the open's failure. */
+const step = <A>(work: () => Promise<A>) =>
+  Effect.tryPromise({ try: work, catch: (error) => error });
+
+/** Browser `key`'s listeners on `port` and on its folder's socket, each closed with the scope. */
+const listeners = Effect.fnUntraced(function* (key: BrowserKey, port: number) {
+  yield* listening(yield* step(() => doorServer(key)), port);
+  const dir = doorDir(key);
+  yield* step(() => makeFolder(dir, { mode: 0o755 }));
+  // The container's user, another uid, reaches the socket through it.
+  yield* step(() => chmod(dir, 0o755));
+  const path = join(dir, DOOR_SOCKET);
+  yield* step(() => rm(path, { force: true }));
+  yield* listening(yield* step(() => doorServer(key)), path);
+  yield* step(() => chmod(path, 0o666));
+});
+
+/** Browser `key`'s door closed: its listeners, its pass forgotten, its folder removed. */
+const shut = Effect.fnUntraced(function* (key: BrowserKey) {
+  const held = open.get(key);
+  open.delete(key);
+  passes.delete(key);
+  readAt.delete(key);
+  knownOrigins.delete(key);
+  if (held) {
+    yield* Scope.close(held.scope, Exit.void);
+  }
+  yield* Effect.promise(() =>
+    rm(doorDir(key), { recursive: true, force: true })
+  );
+});
 
 /**
  * Opens browser `key`'s door on `port` (its slot's) and on its folder's
@@ -783,59 +835,41 @@ const listen = (server: Server, at: number | string): Promise<void> =>
  * moved. A port another process holds is said, and the browser's dashboard
  * stays shut until it is free: nothing else reaches the dashboard for it.
  */
-export const openDoor = async (
-  key: BrowserKey,
-  port: number
-): Promise<void> => {
-  const held = open.get(key);
-  if (held) {
-    const now = await held.catch(() => undefined);
-    if (now?.port === port) {
-      return;
-    }
-    await closeDoor(key);
-  }
-  const opening = (async (): Promise<Open> => {
-    const servers: Server[] = [];
-    const tcp = await doorServer(key);
-    await listen(tcp, port);
-    servers.push(tcp);
-    const dir = doorDir(key);
-    await makeFolder(dir, { mode: 0o755 });
-    // The container's user, another uid, reaches the socket through it.
-    await chmod(dir, 0o755);
-    const path = join(dir, DOOR_SOCKET);
-    await rm(path, { force: true });
-    const unix = await doorServer(key);
-    await listen(unix, path);
-    await chmod(path, 0o666);
-    servers.push(unix);
-    return { port, servers };
-  })();
-  open.set(key, opening);
-  // Its origins read now, so its gate knows the dashboard's loopback ones
-  // before a page asks (gate.ts `#closedAddress`).
-  doorOrigins(key).catch(() => undefined);
-  try {
-    await opening;
-  } catch (error) {
-    open.delete(key);
-    console.warn(
-      `[browser] ${key}: its dashboard door did not open on 127.0.0.1:${port}: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
+export const openDoor = (key: BrowserKey, port: number): Promise<void> =>
+  // The promise edge of a door's open, in its turn.
+  Effect.runPromise(
+    doorTurns.withLock(
+      key,
+      Effect.gen(function* () {
+        const held = open.get(key);
+        if (held?.port === port) {
+          return;
+        }
+        if (held) {
+          yield* shut(key);
+        }
+        // Its origins read now, so its gate knows the dashboard's loopback
+        // ones before a page asks (gate.ts `#closedAddress`).
+        doorOrigins(key).catch(() => undefined);
+        const scope = yield* Scope.make();
+        const opened = yield* listeners(key, port).pipe(
+          Scope.provide(scope),
+          Effect.exit
+        );
+        if (Exit.isSuccess(opened)) {
+          open.set(key, { port, scope });
+          return;
+        }
+        yield* Scope.close(scope, Exit.void);
+        const error = Cause.squash(opened.cause);
+        yield* Effect.logWarning(
+          `[browser] ${key}: its dashboard door did not open on 127.0.0.1:${port}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+    )
+  );
 
 /** Closes browser `key`'s door, its pass forgotten and its folder removed. */
-export const closeDoor = async (key: BrowserKey): Promise<void> => {
-  const held = open.get(key);
-  open.delete(key);
-  passes.delete(key);
-  readAt.delete(key);
-  knownOrigins.delete(key);
-  const now = await held?.catch(() => undefined);
-  for (const server of now?.servers ?? []) {
-    server.close();
-  }
-  await rm(doorDir(key), { recursive: true, force: true });
-};
+export const closeDoor = (key: BrowserKey): Promise<void> =>
+  // The promise edge of a door's close, in its turn.
+  Effect.runPromise(doorTurns.withLock(key, shut(key)));

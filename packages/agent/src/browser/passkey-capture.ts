@@ -30,7 +30,19 @@ import {
   type Interface as ReadlineInterface,
 } from "node:readline";
 import type { BrowserKey } from "@cawco/core/browser";
+import { Effect } from "effect";
 import { detectPasskeyRelay } from "./passkey-detect";
+
+/** What `file` printed, given 5 s, or why it failed. */
+const printed = Effect.fnUntraced(function* (file: string, args: string[]) {
+  return yield* Effect.callback<{ out: string } | { failed: string }>(
+    (resume) => {
+      execFile(file, args, { timeout: 5000 }, (err, stdout) =>
+        resume(Effect.succeed(err ? { failed: err.message } : { out: stdout }))
+      );
+    }
+  );
+});
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -138,27 +150,18 @@ export class PasskeyScanner {
 
   /** Whether this machine can scan: a BLE adapter and the tool that reads it (BlueZ's `bluetoothctl`, or macOS's `swift`). */
   static available(): Promise<boolean> {
-    if (platform() === "darwin") {
-      return detectPasskeyRelay().then(
-        ({ hasBle }) =>
-          hasBle &&
-          new Promise<boolean>((resolve) => {
-            execFile("swift", ["--version"], { timeout: 5000 }, (err) =>
-              resolve(!err)
-            );
-          })
-      );
-    }
-    return new Promise<boolean>((resolve) => {
-      execFile("bluetoothctl", ["list"], { timeout: 5000 }, (err, stdout) => {
-        if (err) {
-          resolve(false);
-          return;
+    // The promise edge of the scanner's tools asked whether they run.
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        if (platform() === "darwin") {
+          const { hasBle } = yield* Effect.promise(detectPasskeyRelay);
+          return hasBle && "out" in (yield* printed("swift", ["--version"]));
         }
+        const listed = yield* printed("bluetoothctl", ["list"]);
         // Each controller line starts with "Controller".
-        resolve(RE_CONTROLLER.test(stdout));
-      });
-    });
+        return "out" in listed && RE_CONTROLLER.test(listed.out);
+      })
+    );
   }
 
   /**
@@ -187,8 +190,15 @@ export class PasskeyScanner {
       return;
     }
 
-    // Try to power on the adapter (it may already be on; ignore errors).
-    await this.#powerOn();
+    // Try to power on the adapter: a failure is said and passed, as it may be on already.
+    const powered = await Effect.runPromise(
+      printed("bluetoothctl", ["power", "on"])
+    );
+    if ("failed" in powered) {
+      console.error(
+        `[passkey-capture] power on failed (adapter may already be on): ${powered.failed}`
+      );
+    }
 
     // Spawn bluetoothctl with stdin/stdout pipes.
     const proc = spawn("bluetoothctl", [], {
@@ -410,21 +420,6 @@ export class PasskeyScanner {
       this.#deviceRssi.delete(deviceAddr);
       onAdvert({ serviceData, rssi });
     }
-  }
-
-  /** Try to power on the default BLE adapter. */
-  #powerOn(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      execFile("bluetoothctl", ["power", "on"], { timeout: 5000 }, (err) => {
-        if (err) {
-          console.error(
-            `[passkey-capture] power on failed (adapter may already be on): ${err.message}`
-          );
-        }
-        // Always resolve — the adapter might already be powered.
-        resolve();
-      });
-    });
   }
 }
 

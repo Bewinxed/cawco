@@ -44,6 +44,7 @@ import {
   browserSlug,
 } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { stunServer } from "@cawco/core/env-ports";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -54,6 +55,7 @@ import {
 } from "@cawco/core/process-identity";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
+import { Effect } from "effect";
 import { z } from "zod";
 import { type BluezBus, standBluezBus, stopBluezBus } from "./bluez-bus";
 import {
@@ -392,16 +394,17 @@ const startedOn = (
 };
 
 /** Whether `url` answers 2xx within `ms`, asked again every {@link LIVE_POLL_MS}. */
-const answersWithin = async (url: string, ms: number): Promise<boolean> => {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    if (await httpAnswers(url, 2000)) {
-      return true;
-    }
-    await Bun.sleep(LIVE_POLL_MS);
-  }
-  return false;
-};
+const answersWithin = (url: string, ms: number): Promise<boolean> =>
+  Effect.runPromise(
+    lookUntil(
+      {
+        every: LIVE_POLL_MS,
+        deadlineMs: ms,
+        until: (answered: boolean) => answered,
+      },
+      Effect.promise(() => httpAnswers(url, 2000))
+    ).pipe(Effect.map((looked) => looked.kind === "found"))
+  );
 
 /** Waits until `url` answers 2xx, or throws after {@link LIVE_MS}. */
 const answers = async (url: string, what: string): Promise<void> => {

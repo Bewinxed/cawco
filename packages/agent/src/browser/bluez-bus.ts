@@ -36,8 +36,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserKey } from "@cawco/core/browser";
 import { browserSlug } from "@cawco/core/browser";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { runInC } from "@cawco/core/run-captured";
+import { Effect } from "effect";
 import { browserOwner } from "./state";
 
 /** The machine's D-Bus system bus. */
@@ -80,16 +82,17 @@ const unitOf = async (key: BrowserKey): Promise<string> =>
   `cawco-bluez-${await browserOwner()}-${browserSlug(key)}.service`;
 
 /** Whether `socket` is there within {@link READY_MS}: the proxy listens once it is. */
-const listens = async (socket: string): Promise<boolean> => {
-  const until = Date.now() + READY_MS;
-  while (!existsSync(socket)) {
-    if (Date.now() >= until) {
-      return false;
-    }
-    await Bun.sleep(READY_POLL_MS);
-  }
-  return true;
-};
+const listens = (socket: string): Promise<boolean> =>
+  Effect.runPromise(
+    lookUntil(
+      {
+        every: READY_POLL_MS,
+        deadlineMs: READY_MS,
+        until: (there: boolean) => there,
+      },
+      Effect.sync(() => existsSync(socket))
+    ).pipe(Effect.map((looked) => looked.kind === "found"))
+  );
 
 /**
  * Starts `unit` running `proxy` to listen at `socket`. `UMask=0000`: the

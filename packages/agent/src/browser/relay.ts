@@ -64,6 +64,7 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { isPublicAddress } from "@cawco/core/public-address";
 import type {
@@ -87,6 +88,7 @@ import {
 } from "@cawco/core/stream-relay";
 import { lastLines } from "@cawco/core/words/helpers";
 import type Docker from "dockerode";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
 import { browserRuntime } from "./browsers";
@@ -192,14 +194,15 @@ const tell = (
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** A relay failure thrown: its sentence as the message, its command kept beside it. */
-class RelayFailed extends Error {
-  readonly command: string | undefined;
-  constructor(failure: RelayFailure) {
-    super(failure.why);
-    this.command = failure.command;
-  }
-}
+/** A relay failure: its sentence as the message, its command kept beside it. */
+class RelayFailed extends Schema.TaggedError<RelayFailed>()("RelayFailed", {
+  message: Schema.String,
+  command: Schema.UndefinedOr(Schema.String),
+}) {}
+
+/** {@link RelayFailed} saying `failure`. */
+const relayFailed = (failure: RelayFailure): RelayFailed =>
+  new RelayFailed({ message: failure.why, command: failure.command });
 
 /** Runs `work` after every relay command before it. */
 const serial = <T>(work: () => Promise<T>): Promise<T> => queue.run(work);
@@ -397,7 +400,7 @@ const runCertbot = async (
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
-      throw new RelayFailed(RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000));
+      throw relayFailed(RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000));
     }
     return { code: ended.value.StatusCode, said: await logsOf(container) };
   } finally {
@@ -643,34 +646,43 @@ const waitLive = async (
   runtime: Runtime,
   tls: boolean
 ): Promise<RelayPorts> => {
-  const until = Date.now() + LIVE_MS;
-  let ports = NO_PORTS;
-  while (Date.now() < until) {
-    const inspected = await relayContainer(docker);
-    if (!inspected?.State.Running) {
-      const said = await logsOf(docker.getContainer(RELAY_CONTAINER)).catch(
-        () => ""
-      );
-      throw new RelayFailed(
-        RELAY_FAILURES.coturnExited(
-          hostname(),
-          String(inspected?.State.ExitCode ?? "unknown"),
-          lastLines(said.trim().split("\n"), 4, " ")
-        )
-      );
-    }
-    ports = await listenerBound(runtime, tls);
-    if (ports.udp && ports.tcp && (!tls || ports.tls)) {
-      return ports;
-    }
-    await Bun.sleep(LIVE_POLL_MS);
+  // What is bound, read while coturn runs; its exit throws its last lines.
+  const looked = await Effect.runPromise(
+    lookUntil(
+      {
+        every: LIVE_POLL_MS,
+        deadlineMs: LIVE_MS,
+        until: (bound: RelayPorts) =>
+          bound.udp && bound.tcp && (!tls || bound.tls),
+      },
+      Effect.promise(async () => {
+        const inspected = await relayContainer(docker);
+        if (!inspected?.State.Running) {
+          const said = await logsOf(docker.getContainer(RELAY_CONTAINER)).catch(
+            () => ""
+          );
+          throw relayFailed(
+            RELAY_FAILURES.coturnExited(
+              hostname(),
+              String(inspected?.State.ExitCode ?? "unknown"),
+              lastLines(said.trim().split("\n"), 4, " ")
+            )
+          );
+        }
+        return await listenerBound(runtime, tls);
+      })
+    )
+  );
+  if (looked.kind === "found") {
+    return looked.value;
   }
+  const ports = looked.last;
   const missing = [
     ports.udp ? null : `UDP ${STREAM_RELAY_PORT}`,
     ports.tcp ? null : `TCP ${STREAM_RELAY_PORT}`,
     !tls || ports.tls ? null : `TCP ${STREAM_RELAY_TLS_PORT}`,
   ].filter((port): port is string => port !== null);
-  throw new RelayFailed(
+  throw relayFailed(
     runtime.ownNetwork
       ? RELAY_FAILURES.coturnUnbound(hostname(), missing, LIVE_MS / 1000)
       : RELAY_FAILURES.unforwarded(hostname(), missing, LIVE_MS / 1000)
@@ -685,7 +697,7 @@ const waitLive = async (
 const relayRuntime = async (): Promise<Runtime> => {
   const found = await browserRuntime(true);
   if ("missing" in found) {
-    throw new RelayFailed(
+    throw relayFailed(
       RELAY_FAILURES.noRuntime(hostname(), runtimeInstallCommand())
     );
   }
@@ -773,12 +785,12 @@ const failed = (line: StreamRelayPorts, error: unknown): never => {
 /** The relay's settings checked and the machine's leave read: its runtime, or the refusal thrown. */
 const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
   if (args.hostname && !RELAY_DNS_NAME.test(args.hostname)) {
-    throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), args.hostname));
+    throw relayFailed(RELAY_FAILURES.notDnsName(hostname(), args.hostname));
   }
   const runtime = await relayRuntime();
   const need = await runtimeNeed(runtime);
   if (need) {
-    throw new RelayFailed(RELAY_FAILURES.runtimeNeed(hostname(), need));
+    throw relayFailed(RELAY_FAILURES.runtimeNeed(hostname(), need));
   }
   return runtime;
 };
@@ -846,7 +858,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
   serial(async () => {
     const name = args.hostname;
     if (!RELAY_DNS_NAME.test(name)) {
-      throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), name));
+      throw relayFailed(RELAY_FAILURES.notDnsName(hostname(), name));
     }
     const runtime = await relayRuntime();
     const { docker } = runtime;
@@ -871,13 +883,13 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
       )
     );
     if (code !== 0) {
-      throw new RelayFailed(
+      throw relayFailed(
         RELAY_FAILURES.certificateDns(name, certbotWords(said))
       );
     }
     const expiresAt = await certificateEnd(runtime, name);
     if (expiresAt === undefined) {
-      throw new RelayFailed(
+      throw relayFailed(
         RELAY_FAILURES.certificateDns(
           name,
           "certbot exited 0 and no certificate stands in its volume"
@@ -912,7 +924,7 @@ export const startRelay = (
       await removeRelayContainer(docker);
       const refused = await portsRefusal(!!args.hostname);
       if (refused) {
-        throw new RelayFailed(refused);
+        throw relayFailed(refused);
       }
       tell(line, { state: "pulling", ports: NO_PORTS });
       await pullImage(docker, RELAY_IMAGE, (progress) =>
@@ -923,7 +935,7 @@ export const startRelay = (
           tell(line, { state: "pulling", ports: NO_PORTS, progress })
         );
         if ((await certificateEnd(runtime, args.hostname)) === undefined) {
-          throw new RelayFailed(
+          throw relayFailed(
             RELAY_FAILURES.noCertificate(hostname(), args.hostname)
           );
         }
@@ -1066,7 +1078,7 @@ export const renewRelay = (
     const kept = await relayContainer(docker);
     const name = kept?.Config.Labels?.[HOSTNAME_LABEL];
     if (!(kept && name)) {
-      throw new RelayFailed(RELAY_FAILURES.renewNone(hostname()));
+      throw relayFailed(RELAY_FAILURES.renewNone(hostname()));
     }
     const before = await certificateEnd(runtime, name);
     const { code, said } = await withToken(args.cloudflareToken, (dir) =>
@@ -1085,7 +1097,7 @@ export const renewRelay = (
       )
     );
     if (code !== 0) {
-      throw new RelayFailed(
+      throw relayFailed(
         RELAY_FAILURES.renewRefused(hostname(), name, certbotWords(said))
       );
     }

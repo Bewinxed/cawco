@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import type Docker from "dockerode";
+import { Effect } from "effect";
 
 /** The image's inputs, by their name in the build context. */
 const BROWSER_IMAGE_FILES = [
@@ -53,25 +54,27 @@ const follow = (
   stream: NodeJS.ReadableStream,
   onEvent: (event: ProgressEvent) => void
 ): Promise<void> =>
-  new Promise((resolve, reject) => {
-    docker.modem.followProgress(
-      stream,
-      (error: Error | null, events: ProgressEvent[]) => {
-        const failed = events.find((event) => event.error);
-        if (error || failed) {
-          reject(
-            error ??
-              new Error(
-                failed?.errorDetail?.message ?? failed?.error ?? "failed"
-              )
+  Effect.runPromise(
+    Effect.callback<void, Error>((resume) => {
+      docker.modem.followProgress(
+        stream,
+        (error: Error | null, events: ProgressEvent[]) => {
+          const failed = events.find((event) => event.error);
+          resume(
+            error || failed
+              ? Effect.fail(
+                  error ??
+                    new Error(
+                      failed?.errorDetail?.message ?? failed?.error ?? "failed"
+                    )
+                )
+              : Effect.void
           );
-          return;
-        }
-        resolve();
-      },
-      onEvent
-    );
-  });
+        },
+        onEvent
+      );
+    })
+  );
 
 /** Whether the runtime holds `tag`. */
 const hasImage = (docker: Docker, tag: string): Promise<boolean> =>

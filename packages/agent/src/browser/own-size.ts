@@ -33,6 +33,8 @@
  * brought to its window's width is loaded again by GET (never a reload,
  * which would post a form again), the one way left that sets it right.
  */
+import { lookUntil } from "@cawco/core/effect/poll";
+import { Effect } from "effect";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 
@@ -121,18 +123,17 @@ const atWidth = async (link: CdpLink, targetId: string): Promise<boolean> => {
 };
 
 /** Waits up to {@link SETTLE_MS} for page `targetId` to stand at its window's width; answers whether it did. */
-const settled = async (link: CdpLink, targetId: string): Promise<boolean> => {
-  const until = performance.now() + SETTLE_MS;
-  for (;;) {
-    if (await atWidth(link, targetId)) {
-      return true;
-    }
-    if (performance.now() >= until) {
-      return false;
-    }
-    await Bun.sleep(SETTLE_STEP_MS);
-  }
-};
+const settled = (link: CdpLink, targetId: string): Promise<boolean> =>
+  Effect.runPromise(
+    lookUntil(
+      {
+        every: SETTLE_STEP_MS,
+        deadlineMs: SETTLE_MS,
+        until: (at: boolean) => at,
+      },
+      Effect.promise(() => atWidth(link, targetId))
+    ).pipe(Effect.map((looked) => looked.kind === "found"))
+  );
 
 /**
  * Window `window` moved off its bounds and back, its `move`th time, each

@@ -23,6 +23,7 @@ import {
   type BrowserRelay,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
@@ -35,6 +36,7 @@ import {
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
+import { Effect } from "effect";
 import { z } from "zod";
 import { browserExecutable, chromiumSandboxed } from "../capabilities";
 import { resolveBin, toolEnv } from "../tools";
@@ -327,20 +329,28 @@ export class LocalHost implements BrowserHost {
         ...(boot ? { bootId: boot } : {}),
       },
     };
-    const liveBy = Date.now() + LIVE_MS;
-    while (!(await answers(devtools))) {
-      if (!isAlive(pid)) {
-        throw new Error(
-          `Chromium ended before its DevTools answered: ${await lastWords(record)}`
-        );
-      }
-      if (Date.now() > liveBy) {
-        await this.stop(next);
-        throw new Error(
-          `Chromium's DevTools did not answer on 127.0.0.1:${devtools} within ${LIVE_MS / 1000} s.`
-        );
-      }
-      await Bun.sleep(POLL_MS);
+    // Its DevTools answering, or Chromium gone first.
+    const looked = await Effect.runPromise(
+      lookUntil(
+        { every: POLL_MS, deadlineMs: LIVE_MS },
+        Effect.promise(async () => {
+          if (await answers(devtools)) {
+            return "answers" as const;
+          }
+          return isAlive(pid) ? undefined : ("ended" as const);
+        })
+      )
+    );
+    if (looked.kind === "deadline") {
+      await this.stop(next);
+      throw new Error(
+        `Chromium's DevTools did not answer on 127.0.0.1:${devtools} within ${LIVE_MS / 1000} s.`
+      );
+    }
+    if (looked.value === "ended") {
+      throw new Error(
+        `Chromium ended before its DevTools answered: ${await lastWords(record)}`
+      );
     }
     return { ...next, state: "live" };
   }

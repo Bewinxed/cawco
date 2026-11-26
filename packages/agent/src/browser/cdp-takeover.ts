@@ -42,8 +42,10 @@ import {
   type TakeoverInput,
   type TakeoverLayout,
 } from "@cawco/core/browser";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
@@ -112,6 +114,8 @@ const FINGERS_MOST = 10;
 
 /** How long one call to Chromium may take before it is given up. */
 const CALL_MS = 15_000;
+/** Why a call on a {@link CdpLink} whose connection closed got no answer. */
+const LINK_CLOSED = "The browser's DevTools connection closed.";
 
 /**
  * One CDP connection of the daemon's own, at the browser's level, with
@@ -140,7 +144,7 @@ export class CdpLink {
       this.onEvent(message);
     };
     socket.onclose = () => {
-      this.#calls.fail("The browser's DevTools connection closed.");
+      this.#calls.fail(LINK_CLOSED);
       this.onClose();
     };
   }
@@ -162,27 +166,52 @@ export class CdpLink {
       throw new Error(`The browser's DevTools at ${devtools} named no socket.`);
     }
     const socket = new WebSocket(url);
-    await new Promise<void>((resolve, reject) => {
-      socket.onopen = () => resolve();
-      socket.onerror = () => reject(new Error(`${url} did not open.`));
-    });
+    await Effect.runPromise(
+      Effect.callback<void, Error>((resume) => {
+        socket.onopen = () => resume(Effect.void);
+        socket.onerror = () =>
+          resume(Effect.fail(new Error(`${url} did not open.`)));
+      })
+    );
     return new CdpLink(socket);
   }
 
-  /** One call, answered within `ms` (a page's script reading a whole database takes longer than a protocol call). */
-  async call(
+  /**
+   * One call, answered within `ms` (a page's script reading a whole
+   * database takes longer than a protocol call): Chromium's refusal, or an
+   * `Error` saying the connection closed or the time ran out.
+   */
+  readonly request = Effect.fnUntraced(function* (
+    this: CdpLink,
+    method: string,
+    params: Json = {},
+    sessionId?: string,
+    ms = CALL_MS
+  ) {
+    return yield* boundedRead(
+      ms,
+      this.#calls.request(method, params, sessionId)
+    ).pipe(
+      Effect.catchTag("Unanswered", (unanswered) =>
+        Effect.fail(
+          new Error(
+            unanswered.reason === "dead"
+              ? LINK_CLOSED
+              : `${method} got no answer within ${ms / 1000} s.`
+          )
+        )
+      )
+    );
+  });
+
+  /** The promise edge of {@link CdpLink.request}. */
+  call(
     method: string,
     params: Json = {},
     sessionId?: string,
     ms = CALL_MS
   ): Promise<Json> {
-    const read = await readWithin(ms, (signal) =>
-      this.#calls.call(method, params, sessionId, signal)
-    );
-    if (read.kind === "unanswered") {
-      throw new Error(`${method} got no answer within ${ms / 1000} s.`);
-    }
-    return read.value;
+    return Effect.runPromise(this.request(method, params, sessionId, ms));
   }
 
   /**
@@ -445,7 +474,7 @@ export class CdpTakeover {
   #size: { width: number; height: number } = { ...FRAME };
   /** Frames sent; a sharp picture taken while one came is dropped. */
   #frames = 0;
-  #settle: ReturnType<typeof setTimeout> | undefined;
+  #settle: Fiber.Fiber<void> | undefined;
   /** The sharp picture asked for and not yet answered: settled either way. */
   #capture: Promise<void> | undefined;
   /** The daemon's clock less the phone's, the least seen: a finger's time on this machine's clock, never ahead of it. */
@@ -544,7 +573,7 @@ export class CdpTakeover {
     const cast = this.#cast;
     this.#cast = undefined;
     this.#lastFrame = undefined;
-    clearTimeout(this.#settle);
+    this.#unsettle();
     if (cast) {
       this.#link.call("Page.stopScreencast", {}, cast).catch(() => undefined);
     }
@@ -839,7 +868,7 @@ export class CdpTakeover {
     this.#skew = undefined;
     const cast = this.#cast;
     this.#cast = undefined;
-    clearTimeout(this.#settle);
+    this.#unsettle();
     if (cast) {
       await this.#link
         .call("Page.stopScreencast", {}, cast)
@@ -902,7 +931,7 @@ export class CdpTakeover {
       return;
     }
     this.#cast = undefined;
-    clearTimeout(this.#settle);
+    this.#unsettle();
     if (cast && this.#sessions.has(cast)) {
       await this.#link
         .call("Page.stopScreencast", {}, cast)
@@ -1094,13 +1123,26 @@ export class CdpTakeover {
       this.#size = size;
     }
     this.#send(jpeg);
-    clearTimeout(this.#settle);
+    this.#unsettle();
     const scale = this.#layout?.form === "phone" ? this.#layout.scale : 1;
     if (scale > 1) {
       const page = message.sessionId;
-      this.#settle = setTimeout(() => {
-        this.#sharpen(page).catch(() => undefined);
-      }, SETTLE_MS);
+      // Work let go: a frame meanwhile interrupts the wait, not a capture under way.
+      this.#settle = Effect.runFork(
+        Effect.sleep(SETTLE_MS).pipe(
+          Effect.andThen(
+            Effect.promise(() => this.#sharpen(page).catch(() => undefined))
+          )
+        )
+      );
+    }
+  }
+
+  /** The wait for a still page's sharp picture cut: the page moved, or is laid out again or let go. */
+  #unsettle(): void {
+    if (this.#settle) {
+      Effect.runFork(Fiber.interrupt(this.#settle));
+      this.#settle = undefined;
     }
   }
 
@@ -1194,7 +1236,7 @@ export class CdpTakeover {
       return;
     }
     this.#state = "stopped";
-    clearTimeout(this.#settle);
+    this.#unsettle();
     for (const viewer of this.#viewers) {
       viewer.close(code, why);
     }
