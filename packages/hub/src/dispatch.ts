@@ -120,7 +120,6 @@ import {
   deliverableKind,
   POST_OUTPUT_RULE,
 } from "@cawco/core/deliverables";
-import { detach } from "@cawco/core/detach";
 import type { LandsMode } from "@cawco/core/injected";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -140,6 +139,7 @@ import type { StageKind, TaskMover } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { judgedWords } from "@cawco/core/words/judged";
 import { workWords } from "@cawco/core/words/work";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkItemTexts } from "./db/project-work";
@@ -175,7 +175,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
 import type { ProblemsOf } from "./refusal";
 import { orchestrates } from "./roles";
-import type { RunStart, RunStarted } from "./routine-run";
+import { placeWithin, type RunStart, type RunStarted } from "./routine-run";
 import { fits, type PlacedMachine, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
@@ -346,9 +346,6 @@ const NO_LEAD =
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
-/** How long a routine's run waits for its place's machine to be online before it is skipped. */
-const PLACE_WAIT_MS = 60_000;
-const PLACE_POLL_MS = 1000;
 const MAX_ATTEMPTS_LIMIT = 20;
 const REVIEW_LIMIT_LIMIT = 100;
 
@@ -1636,7 +1633,7 @@ export const createDispatcher = ({
   /**
    * Where a routine's run is cut (§5.5, Dispatch starts every run): the
    * project's place for its work on a machine its task's `runs_on` names,
-   * else its project's, waited for up to {@link PLACE_WAIT_MS}, since a hub
+   * else its project's, waited for as {@link placeWithin} waits, since a hub
    * that just started fires its catch-up before its machines are back. A
    * sentence when there is still nowhere.
    */
@@ -1650,17 +1647,15 @@ export const createDispatcher = ({
       return task;
     }
     const runsOn = task.runsOn ?? project.runsOn;
-    const deadline = Date.now() + PLACE_WAIT_MS;
-    for (;;) {
-      const place = workPlace(db.project(projectId) ?? project, { runsOn });
-      if (place.kind !== "none") {
-        return { cwd: place.cwd, machineId: place.machineId };
-      }
-      if (Date.now() >= deadline || lifetime.closed()) {
-        return `${capitalized(place.why)}: ${place.fix}`;
-      }
-      await lifetime.sleep(PLACE_POLL_MS);
-    }
+    const place = await lifetime.run(
+      placeWithin(
+        () => workPlace(db.project(projectId) ?? project, { runsOn }),
+        (looked) => looked.kind !== "none"
+      )
+    );
+    return place.kind === "none"
+      ? `${capitalized(place.why)}: ${place.fix}`
+      : { cwd: place.cwd, machineId: place.machineId };
   };
 
   /**
@@ -2273,14 +2268,16 @@ export const createDispatcher = ({
         }
       } while (again.has(projectId));
     };
-    detach(
-      look().finally(() => {
-        looking.delete(projectId);
-        if (again.has(projectId)) {
-          evaluate(projectId);
-        }
-      }),
-      "dispatch look"
+    lifetime.fork(
+      "dispatch look",
+      Effect.tryPromise(() =>
+        look().finally(() => {
+          looking.delete(projectId);
+          if (again.has(projectId)) {
+            evaluate(projectId);
+          }
+        })
+      )
     );
   };
 
@@ -2873,17 +2870,22 @@ export const createDispatcher = ({
       console.warn(
         `[dispatch] ${item.taskId}'s attempt ${item.id} ended ${item.state}, and the task did not move: ${why}`
       );
-    settle(item)
-      .then(
-        (refused) => {
-          if (refused) {
-            unmoved(refused.response.detail);
-          }
-        },
-        (error: unknown) =>
-          unmoved(error instanceof Error ? error.message : String(error))
+    lifetime.fork(
+      "dispatch attempt ended",
+      Effect.tryPromise(() =>
+        settle(item)
+          .then(
+            (refused) => {
+              if (refused) {
+                unmoved(refused.response.detail);
+              }
+            },
+            (error: unknown) =>
+              unmoved(error instanceof Error ? error.message : String(error))
+          )
+          .finally(() => evaluate(projectId))
       )
-      .finally(() => evaluate(projectId));
+    );
   };
 
   /**
@@ -2951,27 +2953,32 @@ export const createDispatcher = ({
       const moved = said("moved to");
       const hookedIn = said("entered");
       // The lead's verdict is stamped before the project is looked at again.
-      (event.kind === "moved" ? leadSentBack(event) : Promise.resolve())
-        .then(
-          (refused) => {
-            if (refused) {
-              moved(refused.response.detail);
-            }
-          },
-          (error: unknown) =>
-            moved(error instanceof Error ? error.message : String(error))
+      lifetime.fork(
+        "dispatch task changed",
+        Effect.tryPromise(() =>
+          (event.kind === "moved" ? leadSentBack(event) : Promise.resolve())
+            .then(
+              (refused) => {
+                if (refused) {
+                  moved(refused.response.detail);
+                }
+              },
+              (error: unknown) =>
+                moved(error instanceof Error ? error.message : String(error))
+            )
+            .then(() => hooked({ ...event, to: entered }))
+            .then(
+              (refused) => {
+                if (refused) {
+                  hookedIn(refused.response.detail);
+                }
+              },
+              (error: unknown) =>
+                hookedIn(error instanceof Error ? error.message : String(error))
+            )
+            .finally(() => evaluate(event.projectId))
         )
-        .then(() => hooked({ ...event, to: entered }))
-        .then(
-          (refused) => {
-            if (refused) {
-              hookedIn(refused.response.detail);
-            }
-          },
-          (error: unknown) =>
-            hookedIn(error instanceof Error ? error.message : String(error))
-        )
-        .finally(() => evaluate(event.projectId));
+      );
       return;
     }
     evaluate(event.projectId);

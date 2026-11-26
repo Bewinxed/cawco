@@ -45,6 +45,7 @@ import {
 } from "@cawco/core/triggers";
 import { unhandled } from "@cawco/core/unhandled";
 import { type HeldThing, triggerWords } from "@cawco/core/words/triggers";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import { isProjectConversation, type PersonsSend } from "./caw";
 import type { DbShape } from "./db";
@@ -133,7 +134,7 @@ export interface TriggersDeps {
   };
   /** How long a fresh session may sit idle; {@link FRESH_IDLE_MS} unless the scratch fleet names less. */
   readonly idleMs?: number;
-  readonly lifetime: Pick<HubLifetimeShape, "every">;
+  readonly lifetime: Pick<HubLifetimeShape, "every" | "fork">;
   /** What of the session waits on the person now (an open ask); undefined when nothing does. */
   readonly openAsk: (instanceId: string) => string | undefined;
   /** Why the session's context is over its token cap, or nothing (server.ts, core `STANDING_CONTEXT_SHARE`). */
@@ -169,8 +170,12 @@ export const createTriggers = (deps: TriggersDeps) => {
   const { db } = deps;
   const idleMs = deps.idleMs ?? FRESH_IDLE_MS;
   const idleMinutes = Math.max(1, Math.round(idleMs / MINUTE_MS));
-  /** Fresh sessions being started now, by project and thing: triggers at once share one start. */
-  const starting = new Map<string, Promise<Routed>>();
+  /**
+   * One trigger routed at a time per project and thing ({@link route}): one
+   * that comes while a fresh session starts for its thing waits for that
+   * start, and so reaches the session it started.
+   */
+  const routing = makeKeyedLock<string>();
   /** Fresh sessions the sweep found idle and held open, said once each. */
   const heldSaid = new Set<string>();
   /** One run of a project's held list at a time ({@link rerunHeld}). */
@@ -519,7 +524,8 @@ export const createTriggers = (deps: TriggersDeps) => {
    * thing's fresh session, else its live owner, else a fresh one; held on
    * the project while its triggers are off, it is past its spend cap, or no
    * machine of its is online.
-   * Triggers on one thing while its fresh session starts wait for it.
+   * Triggers on one thing are routed one at a time: one that comes while
+   * its fresh session starts waits for it.
    */
   const route = async (
     projectId: string,
@@ -529,39 +535,33 @@ export const createTriggers = (deps: TriggersDeps) => {
     if (!project) {
       return { to: "lost", why: `The hub keeps no project ${projectId}.` };
     }
-    const key = keyOf(projectId, event.thing);
-    const pending = starting.get(key);
-    if (pending !== undefined) {
-      await pending.catch(() => undefined);
-    }
-    const run = routeNow(project, event).catch((error: unknown): Routed => ({
-      to: "lost",
-      why: errorWords(error),
-    }));
-    starting.set(key, run);
-    try {
-      return await run;
-    } finally {
-      if (starting.get(key) === run) {
-        starting.delete(key);
-      }
-    }
+    return await routing.run(keyOf(projectId, event.thing), () =>
+      routeNow(project, event).catch((error: unknown): Routed => ({
+        to: "lost",
+        why: errorWords(error),
+      }))
+    );
   };
 
   /** {@link route} for callers that only log where it did not go: a trigger is never lost silently. */
   const routeQuietly = (projectId: string, event: TriggerEvent): void => {
-    route(projectId, event).then(
-      (routed) => {
-        if (routed.to === "lost") {
-          console.warn(
-            `[triggers] ${projectId}: ${event.kind} on ${event.thing.kind} ${event.thing.id} reached nobody: ${routed.why}`
-          );
-        }
-      },
-      (error: unknown) =>
-        console.warn(
-          `[triggers] ${projectId}: ${event.kind} on ${event.thing.kind} ${event.thing.id} reached nobody: ${errorWords(error)}`
+    deps.lifetime.fork(
+      "trigger route",
+      Effect.tryPromise(() =>
+        route(projectId, event).then(
+          (routed) => {
+            if (routed.to === "lost") {
+              console.warn(
+                `[triggers] ${projectId}: ${event.kind} on ${event.thing.kind} ${event.thing.id} reached nobody: ${routed.why}`
+              );
+            }
+          },
+          (error: unknown) =>
+            console.warn(
+              `[triggers] ${projectId}: ${event.kind} on ${event.thing.kind} ${event.thing.id} reached nobody: ${errorWords(error)}`
+            )
         )
+      )
     );
   };
 

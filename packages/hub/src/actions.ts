@@ -37,12 +37,12 @@
 import { createHash } from "node:crypto";
 import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
 import type { SessionRole } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -750,16 +750,18 @@ export const createActions = ({
         `[actions] ${claimed.id} claimed: calling ${claimed.connection}/${claimed.tool}`
       );
       told();
-      detach(
-        call(claimed).catch((error: unknown) => {
-          // The call path never throws; anything here is the hub's own
-          // failure after the claim, so the call may have gone.
-          file(claimed, {
-            state: "unknown",
-            error: `The hub failed while running it (${wordsOf(error)}): it may or may not have happened. Check ${claimed.service}.`,
-          });
-        }),
-        `approved action ${claimed.id}`
+      lifetime.fork(
+        `approved action ${claimed.id}`,
+        Effect.tryPromise(() =>
+          call(claimed).catch((error: unknown) => {
+            // The call path never throws; anything here is the hub's own
+            // failure after the claim, so the call may have gone.
+            file(claimed, {
+              state: "unknown",
+              error: `The hub failed while running it (${wordsOf(error)}): it may or may not have happened. Check ${claimed.service}.`,
+            });
+          })
+        )
       );
     }
   };
@@ -806,13 +808,19 @@ export const createActions = ({
     }
     for (const row of store.inStates(["done"])) {
       if (row.thenStage && row.stageResult === null) {
-        detach(moveTask(row), `approved action ${row.id} stage move`);
+        lifetime.fork(
+          `approved action ${row.id} stage move`,
+          Effect.tryPromise(() => moveTask(row))
+        );
       }
     }
     started = true;
     tick();
     schedule();
-    detach(warmTitles(), "approved action task titles");
+    lifetime.fork(
+      "approved action task titles",
+      Effect.tryPromise(() => warmTitles())
+    );
   };
 
   /** The titles of the tasks waiting actions are for, read once after a start. */

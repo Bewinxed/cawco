@@ -10,9 +10,9 @@
  * `customTools`), and this file is the body they share.
  */
 
-import { readWithin } from "@cawco/core/bounded";
 import type { AddressedControl } from "@cawco/core/control-table";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import type { MachineWriteOp } from "@cawco/core/forge-post";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -39,11 +39,11 @@ import { sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { contextWords } from "@cawco/core/words/context";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Started } from "./call-cuts";
 import type {
@@ -61,6 +61,7 @@ import type {
 import { byId, handleId, isHandle, mentioned } from "./handles";
 import { type KeepAliveRow, provenCold, type TurnReading } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import { handle as idHandle } from "./presenters/words";
 import type { ProblemsOf } from "./refusal";
 import type {
@@ -701,6 +702,9 @@ const deliveryWords = (delivery: SendDelivery): string => {
     : "It was idle, so it reads it now.";
 };
 
+/** What runs the hand-off tools' reads with a deadline: the hub's lifetime. */
+type Reads = Pick<HubLifetimeShape, "run">;
+
 export interface HandoffDeps {
   /**
    * The harness's id for this call (Claude Code's tool_use id, pi's
@@ -766,6 +770,8 @@ export interface HandoffDeps {
   readonly instancesByShortId?: (prefix: string) => InstanceRow[];
   /** Whether this session is the conversation of the project of the work item a session runs: it may steer, answer and stop it. */
   readonly ledBy?: (instanceId: string) => boolean;
+  /** The hub's lifetime: its reads with a deadline run on it. */
+  readonly lifetime: Reads;
   /** The person's message this session has read still has no reply: `no_reply_needed` refuses. */
   readonly personOwed: () => boolean;
   /**
@@ -1282,13 +1288,16 @@ function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
  * delivered. Answers nothing when the message may go, else why it did not.
  */
 async function checkCold(
+  lifetime: Reads,
   calls: SessionCalls,
   instanceId: string | undefined,
   workspace: string | undefined,
   caller: string,
   message: string
 ) {
-  const state = await readFollowupState(calls, instanceId, workspace, message);
+  const state = await lifetime.run(
+    followupStateRead(calls, instanceId, workspace, message)
+  );
   if (state instanceof ElysiaStatus) {
     return state;
   }
@@ -1322,7 +1331,7 @@ async function checkCold(
   }
   const contextTokens =
     row.contextTokens === null
-      ? await measuredContext(calls, row.id)
+      ? await lifetime.run(measuredContext(calls, row.id))
       : row.contextTokens;
   return problem(409, {
     code: "session-cold",
@@ -1370,55 +1379,57 @@ function unlandedVerdict(
   });
 }
 
-/** A session's context size, read once for a cold refusal; null when its machine does not say in time. */
-async function measuredContext(
+/**
+ * A session's context size, read once for a cold refusal; null when its
+ * machine does not say in time, or the read fails: a context read cannot
+ * keep a cold-session refusal waiting on an offline machine, and the
+ * refusal says the size is unknown as it always has.
+ */
+const measuredContext = (
   calls: SessionCalls,
   id: string
-): Promise<number | null> {
-  try {
-    const measured = await readWithin(CONTEXT_SIZE_MS, async () => {
-      const reported = await calls.contextSize(id);
-      return reported instanceof ElysiaStatus ? undefined : reported;
-    });
-    switch (measured.kind) {
-      case "answered":
-        return measured.value && "tokens" in measured.value
-          ? measured.value.tokens
-          : null;
-      case "unanswered":
-        // The size stays unknown; the refusal says so as it always has.
-        return null;
-      default:
-        unhandled("read", measured);
-    }
-  } catch {
-    // A context read cannot keep a cold-session refusal waiting on an offline machine.
-    return null;
-  }
-}
+): Effect.Effect<number | null> =>
+  boundedRead(
+    CONTEXT_SIZE_MS,
+    Effect.tryPromise(() => calls.contextSize(id))
+  ).pipe(
+    Effect.map((reported) =>
+      reported instanceof ElysiaStatus || !(reported && "tokens" in reported)
+        ? null
+        : reported.tokens
+    ),
+    Effect.orElseSucceed(() => null)
+  );
 
-/** What the hub reads of a session a message is about to reach (`/api/followup-state`), or why it read nothing; unknown is never read as cold or warm. */
-async function readFollowupState(
+/**
+ * What the hub reads of a session a message is about to reach
+ * (`/api/followup-state`), or why it read nothing; unknown is never read as
+ * cold or warm. A read that fails fails with its own error.
+ */
+const followupStateRead = (
   calls: SessionCalls,
   instanceId: string | undefined,
   workspace: string | undefined,
   message: string
-) {
-  const read = await readWithin(FOLLOWUP_STATE_MS, () =>
-    calls.followupState({ instanceId, workspace, message })
+) =>
+  boundedRead(
+    FOLLOWUP_STATE_MS,
+    Effect.tryPromise({
+      try: () => calls.followupState({ instanceId, workspace, message }),
+      catch: (error) => error,
+    })
+  ).pipe(
+    Effect.catchIf(
+      (error) => error instanceof Unanswered,
+      (unanswered) =>
+        Effect.succeed(
+          problem(504, {
+            code: "followup-state-unanswered",
+            detail: `The hub did not answer within ${secondsOf(unanswered.after)} s whether that session's cache is warm, so nothing was sent. Retry.`,
+          })
+        )
+    )
   );
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      return problem(504, {
-        code: "followup-state-unanswered",
-        detail: `The hub did not answer within ${secondsOf(read.after)} s whether that session's cache is warm, so nothing was sent. Retry.`,
-      });
-    default:
-      return unhandled("read", read);
-  }
-}
 
 function coldRefusalText(
   row: KeepAliveRow,
@@ -1521,6 +1532,7 @@ export const handoffActions = ({
   instancesByShortId,
   work,
   calls,
+  lifetime,
 }: HandoffDeps): HandoffActions => {
   /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
   const runningDelegate = (target: string) => {
@@ -1623,20 +1635,26 @@ export const handoffActions = ({
       };
     },
     async generateImage(request) {
-      const read = await readWithin(IMAGE_GENERATION_TIMEOUT_MS + 60_000, () =>
-        calls.generateImage(instanceId, request)
+      return await lifetime.run(
+        boundedRead(
+          IMAGE_GENERATION_TIMEOUT_MS + 60_000,
+          Effect.tryPromise({
+            try: () => calls.generateImage(instanceId, request),
+            catch: (error) => error,
+          })
+        ).pipe(
+          Effect.catchIf(
+            (error) => error instanceof Unanswered,
+            (unanswered) =>
+              Effect.succeed(
+                problem(504, {
+                  code: "image-hub-unanswered",
+                  detail: `The hub did not answer within ${secondsOf(unanswered.after)} s with the image.`,
+                })
+              )
+          )
+        )
       );
-      switch (read.kind) {
-        case "answered":
-          return read.value;
-        case "unanswered":
-          return problem(504, {
-            code: "image-hub-unanswered",
-            detail: `The hub did not answer within ${secondsOf(read.after)} s with the image.`,
-          });
-        default:
-          unhandled("read", read);
-      }
     },
     forgePost: (ask) => calls.forgePost(instanceId, ask),
     artifacts: calls.artifacts(instanceId),
@@ -1751,6 +1769,7 @@ export const handoffActions = ({
       }
       if (peer.row.id !== own?.parentInstanceId) {
         const cold = await checkCold(
+          lifetime,
           calls,
           peer.row.id,
           undefined,
@@ -1904,6 +1923,7 @@ export const handoffActions = ({
         : undefined;
       if (opts.workspace) {
         const cold = await checkCold(
+          lifetime,
           calls,
           undefined,
           opts.workspace,

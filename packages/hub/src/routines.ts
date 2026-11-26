@@ -70,7 +70,6 @@
 
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { DelegateType } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
 import { FLEET_PROJECT_ID, isFleetProject } from "@cawco/core/fleet-project";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
@@ -104,7 +103,7 @@ import { curatorPrompt } from "@cawco/core/words/memory-run";
 import { checkWords } from "@cawco/core/words/routine-check";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
-import { Cron, DateTime } from "effect";
+import { Cron, DateTime, Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
@@ -137,7 +136,7 @@ import {
   hostCommand,
   type MachineAnswer,
 } from "./routine-check";
-import type { RunStart } from "./routine-run";
+import { placeWithin, type RunStart } from "./routine-run";
 import {
   checkLinesProblem,
   cronOf,
@@ -187,9 +186,6 @@ const AGENT_LIFETIME_MS = 7 * DAY_MS;
 const NAP_MS = 15_000;
 /** The soonest the scheduler looks again. */
 const MIN_GAP_MS = 500;
-/** How long a conversation run waits for a machine to be online before it goes on. */
-const PLACE_WAIT_MS = 60_000;
-const PLACE_POLL_MS = 1000;
 /** Runs a routine's read carries, and a page of `/api/routines/:id/runs` holds: the newest; its `runsTotal` says how many it has had. */
 const RUNS_SHOWN = 20;
 /** The longest delivered output its line on the routine's thread carries. */
@@ -756,17 +752,19 @@ export const createRoutines = ({
       return;
     }
     const text = body ? `**${title}**\n\n${threadBody(body)}` : `**${title}**`;
-    detach(
-      tasks()
-        .comment(projectId, taskId, text, hubActor(reason))
-        .then((written) => {
-          if (written instanceof ElysiaStatus) {
-            console.warn(
-              `[routines] ${routine.name}: ${title} was not said on its task: ${written.response.detail}`
-            );
-          }
-        }),
-      "routine thread"
+    lifetime.fork(
+      "routine thread",
+      Effect.tryPromise(() =>
+        tasks()
+          .comment(projectId, taskId, text, hubActor(reason))
+          .then((written) => {
+            if (written instanceof ElysiaStatus) {
+              console.warn(
+                `[routines] ${routine.name}: ${title} was not said on its task: ${written.response.detail}`
+              );
+            }
+          })
+      )
     );
   };
 
@@ -907,11 +905,9 @@ export const createRoutines = ({
       return task;
     }
     // Caw starts on a machine of the project's, or the hub's: a run just
-    // after a hub start waits for one to be back.
-    const deadline = Date.now() + PLACE_WAIT_MS;
-    while (!anyOnline() && Date.now() < deadline && !lifetime.closed()) {
-      await lifetime.sleep(PLACE_POLL_MS);
-    }
+    // after a hub start waits for one to be back ({@link placeWithin}),
+    // and goes on without one.
+    await lifetime.run(placeWithin(anyOnline, (online) => online));
     // An event's run takes the mode of the route that delivered it.
     const route = run.slot.startsWith(EVENT_SLOT)
       ? db.ingress.event(run.slot.slice(EVENT_SLOT.length))?.routeId
@@ -1239,10 +1235,15 @@ export const createRoutines = ({
       );
       settle(run.id, { outcome: "failed", reason, output: null, usd: null });
     };
-    startedOpen(routine, run).then(
-      (refused) => refused && failed(refused.response.detail),
-      (error: unknown) =>
-        failed(error instanceof Error ? error.message : String(error))
+    lifetime.fork(
+      "routine run start",
+      Effect.tryPromise(() =>
+        startedOpen(routine, run).then(
+          (refused) => refused && failed(refused.response.detail),
+          (error: unknown) =>
+            failed(error instanceof Error ? error.message : String(error))
+        )
+      )
     );
   };
 
@@ -1482,25 +1483,30 @@ export const createRoutines = ({
         `${noted}\n\nNo session heard this result: ${why}`
       );
     const label = slotLabel(run.slot, zoneOf(routine));
-    toRouter(routine.projectId, {
-      kind: "routine-report",
-      routine: routine.id,
-      thing: {
-        kind: "routine",
-        id: routine.id,
-        name: `the routine ${linkOf(routine)}`,
-      },
-      what: `The routine ${linkOf(routine)}'s ${label} run${report ? ` in ${report.session}` : ""} delivered its result (run ${run.id}).`,
-      delta: `## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
-      who: report?.session ?? "the routine",
-    }).then(
-      (told) => {
-        if (told.to === "held" || told.to === "lost") {
-          unheard(told.why);
-        }
-      },
-      (error: unknown) =>
-        unheard(error instanceof Error ? error.message : String(error))
+    lifetime.fork(
+      "routine report",
+      Effect.tryPromise(() =>
+        toRouter(routine.projectId, {
+          kind: "routine-report",
+          routine: routine.id,
+          thing: {
+            kind: "routine",
+            id: routine.id,
+            name: `the routine ${linkOf(routine)}`,
+          },
+          what: `The routine ${linkOf(routine)}'s ${label} run${report ? ` in ${report.session}` : ""} delivered its result (run ${run.id}).`,
+          delta: `## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
+          who: report?.session ?? "the routine",
+        }).then(
+          (told) => {
+            if (told.to === "held" || told.to === "lost") {
+              unheard(told.why);
+            }
+          },
+          (error: unknown) =>
+            unheard(error instanceof Error ? error.message : String(error))
+        )
+      )
     );
   };
 
@@ -1555,15 +1561,17 @@ export const createRoutines = ({
       );
       return moved instanceof ElysiaStatus ? moved.response.detail : undefined;
     };
-    detach(
-      moving().then((unmoved) => {
-        if (unmoved) {
-          console.warn(
-            `[routines] ${routine.name} said stop, and its task did not move: ${unmoved}`
-          );
-        }
-      }),
-      "routine stopped"
+    lifetime.fork(
+      "routine stopped",
+      Effect.tryPromise(() =>
+        moving().then((unmoved) => {
+          if (unmoved) {
+            console.warn(
+              `[routines] ${routine.name} said stop, and its task did not move: ${unmoved}`
+            );
+          }
+        })
+      )
     );
   };
 
@@ -1601,13 +1609,18 @@ export const createRoutines = ({
     if (!item) {
       return;
     }
-    workItems
-      .archive(item.workspaceId)
-      .catch((error: unknown) =>
-        console.warn(
-          `[routines] run ${run.id}: its workspace ${item.workspaceId} was not archived: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+    lifetime.fork(
+      "routine workspace archive",
+      Effect.tryPromise(() =>
+        workItems
+          .archive(item.workspaceId)
+          .catch((error: unknown) =>
+            console.warn(
+              `[routines] run ${run.id}: its workspace ${item.workspaceId} was not archived: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+      )
+    );
   };
 
   // --- answers -------------------------------------------------------------------------
@@ -2379,32 +2392,38 @@ export const createRoutines = ({
     row: RoutineRow,
     then: (open: RoutineRow | undefined) => void
   ): void => {
-    if (asking.has(row.id) || !row.taskId) {
+    const { taskId } = row;
+    if (asking.has(row.id) || !taskId) {
       return;
     }
     asking.add(row.id);
-    tasks()
-      .get(row.projectId, row.taskId)
-      .then((task) => {
-        const fresh = store.get(row.id);
-        const shut =
-          task instanceof ElysiaStatus
-            ? task.status === 404
-            : task.kind === "done" || task.kind === "dropped";
-        if (shut) {
-          closed.add(row.id);
-        }
-        then(fresh && firing(fresh) && !shut ? fresh : undefined);
-      })
-      .catch((error: unknown) =>
-        console.warn(
-          `[routines] ${row.name}: its task did not read: ${error instanceof Error ? error.message : String(error)}`
-        )
+    lifetime.fork(
+      "routine task open",
+      Effect.tryPromise(() =>
+        tasks()
+          .get(row.projectId, taskId)
+          .then((task) => {
+            const fresh = store.get(row.id);
+            const shut =
+              task instanceof ElysiaStatus
+                ? task.status === 404
+                : task.kind === "done" || task.kind === "dropped";
+            if (shut) {
+              closed.add(row.id);
+            }
+            then(fresh && firing(fresh) && !shut ? fresh : undefined);
+          })
+          .catch((error: unknown) =>
+            console.warn(
+              `[routines] ${row.name}: its task did not read: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+          .finally(() => {
+            asking.delete(row.id);
+            schedule();
+          })
       )
-      .finally(() => {
-        asking.delete(row.id);
-        schedule();
-      });
+    );
   };
 
   /** Routines whose due slot waits on whether its task is open. */
@@ -2421,32 +2440,37 @@ export const createRoutines = ({
     }
     asking.add(routine.id);
     const { nextSlot: due, taskId } = routine;
-    tasks()
-      .get(routine.projectId, taskId)
-      .then((task) => {
-        const now = Date.now();
-        const fresh = store.get(routine.id);
-        if (
-          !(fresh && firing(fresh)) ||
-          fresh.nextSlot?.getTime() !== due.getTime()
-        ) {
-          return;
-        }
-        if (openFor(task)) {
-          fireDue(fresh, now);
-          return;
-        }
-        store.update(fresh.id, { nextSlot: nextFrom(fresh, now) });
-      })
-      .catch((error: unknown) =>
-        console.warn(
-          `[routines] ${routine.name}: its task did not read: ${error instanceof Error ? error.message : String(error)}`
-        )
+    lifetime.fork(
+      "routine due run",
+      Effect.tryPromise(() =>
+        tasks()
+          .get(routine.projectId, taskId)
+          .then((task) => {
+            const now = Date.now();
+            const fresh = store.get(routine.id);
+            if (
+              !(fresh && firing(fresh)) ||
+              fresh.nextSlot?.getTime() !== due.getTime()
+            ) {
+              return;
+            }
+            if (openFor(task)) {
+              fireDue(fresh, now);
+              return;
+            }
+            store.update(fresh.id, { nextSlot: nextFrom(fresh, now) });
+          })
+          .catch((error: unknown) =>
+            console.warn(
+              `[routines] ${routine.name}: its task did not read: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+          .finally(() => {
+            asking.delete(routine.id);
+            schedule();
+          })
       )
-      .finally(() => {
-        asking.delete(routine.id);
-        schedule();
-      });
+    );
   };
 
   /** Whether a read of a routine's task lets it fire: it is there, open, and waits on nothing unsettled. */
@@ -2507,16 +2531,18 @@ export const createRoutines = ({
     if (!carry.due()) {
       return;
     }
-    detach(
-      carry.carry().then((count) => {
-        if (count.filed > 0) {
-          console.log(
-            `[routines] carried over: ${count.filed} filed, ${count.waiting} waiting, ${count.waitsRewritten} task files' waits rewritten`
-          );
-          schedule();
-        }
-      }),
-      "routines carried over"
+    lifetime.fork(
+      "routines carried over",
+      Effect.tryPromise(() =>
+        carry.carry().then((count) => {
+          if (count.filed > 0) {
+            console.log(
+              `[routines] carried over: ${count.filed} filed, ${count.waiting} waiting, ${count.waitsRewritten} task files' waits rewritten`
+            );
+            schedule();
+          }
+        })
+      )
     );
   };
 
@@ -3245,21 +3271,23 @@ export const createRoutines = ({
           },
       "hub"
     );
-    detach(
-      made
-        .then((done) => {
-          if (done instanceof ElysiaStatus) {
-            console.warn(
-              `[routines] the hub's ${target} routine was not filed in ${projectId}: ${done.response.detail}`
+    lifetime.fork(
+      "hub routine filed",
+      Effect.tryPromise(() =>
+        made
+          .then((done) => {
+            if (done instanceof ElysiaStatus) {
+              console.warn(
+                `[routines] the hub's ${target} routine was not filed in ${projectId}: ${done.response.detail}`
+              );
+              return;
+            }
+            console.log(
+              `[routines] the hub's ${target} routine filed in ${projectId} as ${done.task.id}`
             );
-            return;
-          }
-          console.log(
-            `[routines] the hub's ${target} routine filed in ${projectId} as ${done.task.id}`
-          );
-        })
-        .finally(() => filing.delete(key)),
-      "hub routine filed"
+          })
+          .finally(() => filing.delete(key))
+      )
     );
   };
 

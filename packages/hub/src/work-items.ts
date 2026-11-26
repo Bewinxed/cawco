@@ -115,6 +115,7 @@ import {
   IGNORED_STATUS,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { HandedReceiver } from "./artifacts/shapes";
 import { briefingFor } from "./briefings";
@@ -1527,20 +1528,25 @@ export const createWorkItems = ({
       if (row?.machineId !== machineId) {
         continue;
       }
-      between(row)
-        .then((idle) => {
-          if (idle && db.workItem(item.id)?.lastTurnAt) {
-            console.log(
-              `[work-items] ${item.id}: the turn that called finish_item ended while the hub was away; what waited on it goes`
-            );
-            closeTurn(item, true);
-          }
-        })
-        .catch((error: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: whether its finish_item turn ended was not read: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
+      lifetime.fork(
+        "finish_item turn read",
+        Effect.tryPromise(() =>
+          between(row)
+            .then((idle) => {
+              if (idle && db.workItem(item.id)?.lastTurnAt) {
+                console.log(
+                  `[work-items] ${item.id}: the turn that called finish_item ended while the hub was away; what waited on it goes`
+                );
+                closeTurn(item, true);
+              }
+            })
+            .catch((error: unknown) =>
+              console.warn(
+                `[work-items] ${item.id}: whether its finish_item turn ended was not read: ${error instanceof Error ? error.message : String(error)}`
+              )
+            )
+        )
+      );
     }
   };
   /**
@@ -1973,9 +1979,14 @@ export const createWorkItems = ({
     if (row) {
       report(row, `${reason}${reportLine(ended)}`, ended.state === "failed");
     }
-    end(item.instanceId).catch((error: unknown) =>
-      console.warn(
-        `[work-items] ${item.id} reached its budget, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+    lifetime.fork(
+      "budget session end",
+      Effect.tryPromise(() =>
+        end(item.instanceId).catch((error: unknown) =>
+          console.warn(
+            `[work-items] ${item.id} reached its budget, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+          )
+        )
       )
     );
   };
@@ -2521,9 +2532,14 @@ export const createWorkItems = ({
     if (owning) {
       completeIfDrained(owning);
     }
-    drainQueued().catch((error: unknown) =>
-      console.warn(
-        `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+    lifetime.fork(
+      "queued delegates start",
+      Effect.tryPromise(() =>
+        drainQueued().catch((error: unknown) =>
+          console.warn(
+            `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+          )
+        )
       )
     );
   };
@@ -3711,9 +3727,14 @@ export const createWorkItems = ({
       // retry runs in a new workspace, and the old one's sessions are
       // stopped all the same, the stop stored for a machine that is away.
       for (const row of sessionsUpIn(request.reuse)) {
-        end(row.id).catch((error: unknown) =>
-          console.warn(
-            `[work-items] ${row.id}, an earlier attempt's session, is told to stop and has not confirmed it: ${error instanceof Error ? error.message : String(error)}`
+        lifetime.fork(
+          "earlier attempt session stop",
+          Effect.tryPromise(() =>
+            end(row.id).catch((error: unknown) =>
+              console.warn(
+                `[work-items] ${row.id}, an earlier attempt's session, is told to stop and has not confirmed it: ${error instanceof Error ? error.message : String(error)}`
+              )
+            )
           )
         );
       }
@@ -4244,19 +4265,25 @@ export const createWorkItems = ({
       );
     const handAndBrief = (): void => {
       const [receiver] = db.getInstancesByIds([instanceId]);
-      (receiver
-        ? handIn(workspace, inputs, receiver)
-        : Promise.reject(new Error(`its session ${instanceId} has no row`))
-      )
-        .then(
-          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
-          notIn
-        )
-        .catch((stopped: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+      lifetime.fork(
+        "inputs handed in",
+        Effect.tryPromise(() =>
+          (receiver
+            ? handIn(workspace, inputs, receiver)
+            : Promise.reject(new Error(`its session ${instanceId} has no row`))
           )
-        );
+            .then(
+              (unhanded) =>
+                unhanded ? notIn(unhanded.response.detail) : brief(),
+              notIn
+            )
+            .catch((stopped: unknown) =>
+              console.warn(
+                `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+              )
+            )
+        )
+      );
     };
     const { machineId } = workspace;
     if (
@@ -4521,16 +4548,21 @@ export const createWorkItems = ({
         );
       }
     };
-    landingRun
-      .settleLanding(item.id)
-      .then((settled) => {
-        if (!settled.done && row) {
-          tell(row, settled.text);
-        }
-      })
-      .catch((error: unknown) =>
-        notRun(error instanceof Error ? error.message : String(error))
-      );
+    lifetime.fork(
+      "landing settle",
+      Effect.tryPromise(() =>
+        landingRun
+          .settleLanding(item.id)
+          .then((settled) => {
+            if (!settled.done && row) {
+              tell(row, settled.text);
+            }
+          })
+          .catch((error: unknown) =>
+            notRun(error instanceof Error ? error.message : String(error))
+          )
+      )
+    );
   };
 
   /**
@@ -5073,9 +5105,14 @@ export const createWorkItems = ({
     }
     quiet.delete(item.id);
     finish(item, { ...change(item), ...LANDING_ENDED });
-    end(item.instanceId).catch((error: unknown) =>
-      console.warn(
-        `[work-items] ${item.id} ${how}, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+    lifetime.fork(
+      "hub item session end",
+      Effect.tryPromise(() =>
+        end(item.instanceId).catch((error: unknown) =>
+          console.warn(
+            `[work-items] ${item.id} ${how}, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+          )
+        )
       )
     );
   };
@@ -5224,9 +5261,14 @@ export const createWorkItems = ({
 
     /** Starts the queued delegates whose files are free: at hub start, and after a machine returns. */
     resumeQueued(): void {
-      drainQueued().catch((error: unknown) =>
-        console.warn(
-          `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+      lifetime.fork(
+        "queued delegates start",
+        Effect.tryPromise(() =>
+          drainQueued().catch((error: unknown) =>
+            console.warn(
+              `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
         )
       );
     },
@@ -5533,12 +5575,22 @@ export const createWorkItems = ({
         console.warn(`[workspaces] ${instanceId}: ${reason}`);
         recutFailed?.(instanceId, reason);
       };
-      workspaces.recutInTurn(instanceId, workspace.id)?.then(
-        (stopped) =>
-          stopped ? notCut(stopped.response.detail) : recutDone?.(instanceId),
-        (error: unknown) =>
-          notCut(error instanceof Error ? error.message : String(error))
-      );
+      const recut = workspaces.recutInTurn(instanceId, workspace.id);
+      if (recut) {
+        lifetime.fork(
+          "workspace recut",
+          Effect.tryPromise(() =>
+            recut.then(
+              (stopped) =>
+                stopped
+                  ? notCut(stopped.response.detail)
+                  : recutDone?.(instanceId),
+              (error: unknown) =>
+                notCut(error instanceof Error ? error.message : String(error))
+            )
+          )
+        );
+      }
     },
 
     /**
@@ -5994,11 +6046,16 @@ export const createWorkItems = ({
       ) {
         return;
       }
-      inputsNotIn(item, workWords.inputsLostToRestart).catch(
-        (stopped: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: its session, whose inputs were lost, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+      lifetime.fork(
+        "lost inputs session stop",
+        Effect.tryPromise(() =>
+          inputsNotIn(item, workWords.inputsLostToRestart).catch(
+            (stopped: unknown) =>
+              console.warn(
+                `[work-items] ${item.id}: its session, whose inputs were lost, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+              )
           )
+        )
       );
     },
 
@@ -6518,9 +6575,14 @@ export const createWorkItems = ({
         ...LANDING_ENDED,
       });
       console.log(`[work-items] ${item.id}: dismissed while live; cancelled`);
-      end(item.instanceId).catch((error: unknown) =>
-        console.warn(
-          `[work-items] ${item.id} was dismissed, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+      lifetime.fork(
+        "dismissed session end",
+        Effect.tryPromise(() =>
+          end(item.instanceId).catch((error: unknown) =>
+            console.warn(
+              `[work-items] ${item.id} was dismissed, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
         )
       );
       return summaryOf(cancelled);

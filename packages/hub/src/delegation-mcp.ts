@@ -3,7 +3,6 @@ import { unwatchFile, watchFile } from "node:fs";
 import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -20,6 +19,7 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { Effect, Schedule } from "effect";
 import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import {
@@ -177,6 +177,9 @@ const CREDENTIAL_TOKEN =
  * github.com/modelcontextprotocol/python-sdk/issues/2579).
  */
 const TOOL_USE_META = CLAUDE_CALL_META;
+
+/** How often a long tool call says it is still under way, in seconds. */
+const PROGRESS_S = 15;
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
@@ -677,33 +680,37 @@ export function createDelegationMcp(options: {
     // Reload source definitions for the next request; every open list is looked at.
     watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
       // A failed reload is logged and the registry keeps what it had.
-      detach(
-        import(`${moduleUrl.href}?revision=${Date.now()}`).then((module) => {
-          const definitions = module.handoffTools(viewOf(undefined));
-          const all = [...definitions, ...admin];
-          if (new Set(all.map((tool) => tool.name)).size !== all.length) {
-            throw new Error("Duplicate delegation tool names");
-          }
-          tools = module.handoffTools;
-          builtFor.clear();
-          registry = undefined;
-          toolInputsChanged();
-        }),
-        "delegation-mcp tool reload"
-      );
-    });
-    watchFile(adminModuleUrl, { interval: 1000, persistent: false }, () => {
-      detach(
-        import(`${adminModuleUrl.href}?revision=${Date.now()}`).then(
-          (module) => {
-            admin = module.adminTools();
-            adminNames = new Set(admin.map((tool) => tool.name));
+      options.lifetime.fork(
+        "delegation-mcp tool reload",
+        Effect.tryPromise(() =>
+          import(`${moduleUrl.href}?revision=${Date.now()}`).then((module) => {
+            const definitions = module.handoffTools(viewOf(undefined));
+            const all = [...definitions, ...admin];
+            if (new Set(all.map((tool) => tool.name)).size !== all.length) {
+              throw new Error("Duplicate delegation tool names");
+            }
+            tools = module.handoffTools;
             builtFor.clear();
             registry = undefined;
             toolInputsChanged();
-          }
-        ),
-        "delegation-mcp admin reload"
+          })
+        )
+      );
+    });
+    watchFile(adminModuleUrl, { interval: 1000, persistent: false }, () => {
+      options.lifetime.fork(
+        "delegation-mcp admin reload",
+        Effect.tryPromise(() =>
+          import(`${adminModuleUrl.href}?revision=${Date.now()}`).then(
+            (module) => {
+              admin = module.adminTools();
+              adminNames = new Set(admin.map((tool) => tool.name));
+              builtFor.clear();
+              registry = undefined;
+              toolInputsChanged();
+            }
+          )
+        )
       );
     });
     options.lifetime.onClose(() => {
@@ -1350,6 +1357,7 @@ export function createDelegationMcp(options: {
       started: startedBy(actor, name, cut),
       work: options.workItemCalls,
       calls: options.sessionCalls,
+      lifetime: options.lifetime,
     };
   };
 
@@ -1508,11 +1516,16 @@ export function createDelegationMcp(options: {
         console.info(
           `[delegation-mcp] tools/list_changed -> ${listing}: its tools changed since it last listed them`
         );
-        stream.server.sendToolListChanged().catch((error: unknown) => {
-          console.warn(
-            `[delegation-mcp] tools/list_changed to ${listing} failed: ${String(error)}`
-          );
-        });
+        options.lifetime.fork(
+          "tools list changed",
+          Effect.tryPromise(() =>
+            stream.server.sendToolListChanged().catch((error: unknown) => {
+              console.warn(
+                `[delegation-mcp] tools/list_changed to ${listing} failed: ${String(error)}`
+              );
+            })
+          )
+        );
       }
     }
   };
@@ -1668,25 +1681,34 @@ export function createDelegationMcp(options: {
       const token = message.params._meta?.progressToken;
       let elapsed = 0;
       const doing = LONG_CALLS[message.params.name];
+      /**
+       * A long call's progress, every {@link PROGRESS_S} seconds of it, the
+       * first once that much has passed, until it answers.
+       */
       const heartbeat =
         doing && token !== undefined
-          ? options.lifetime.every("long tool call progress", 15_000, () => {
-              elapsed += 15;
-              // A disconnected client cannot receive progress; that is no failure.
-              detach(
-                extra
-                  .sendNotification({
-                    method: "notifications/progress",
-                    params: {
-                      progressToken: token,
-                      progress: elapsed,
-                      message: `${doing} (${elapsed}s elapsed).`,
-                    },
-                  })
-                  .catch(() => undefined),
-                "delegation-mcp progress"
-              );
-            })
+          ? options.lifetime.fork(
+              "long tool call progress",
+              Effect.schedule(
+                Effect.suspend(() => {
+                  elapsed += PROGRESS_S;
+                  return Effect.tryPromise(() =>
+                    extra.sendNotification({
+                      method: "notifications/progress",
+                      params: {
+                        progressToken: token,
+                        progress: elapsed,
+                        message: `${doing} (${elapsed}s elapsed).`,
+                      },
+                    })
+                  );
+                }).pipe(
+                  // A disconnected client cannot receive progress; that is no failure.
+                  Effect.ignore
+                ),
+                Schedule.fixed(`${PROGRESS_S} seconds`)
+              )
+            )
           : undefined;
       // The tool call this request is, as Claude Code names it in `_meta`
       // (`claudecode/toolUseId`): an ask it parks is drawn at that call.
@@ -1707,7 +1729,7 @@ export function createDelegationMcp(options: {
         );
       } finally {
         cut.answered();
-        options.lifetime.cancel(heartbeat);
+        heartbeat?.interruptUnsafe();
       }
     });
     await server.connect(transport);

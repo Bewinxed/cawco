@@ -45,7 +45,6 @@ error-class	HarnessRecoveryRefused	packages/agent/src/harness.ts	1
 error-class	HeldProcessRefused	packages/agent/src/harness.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
 error-class	HubUnreachable	packages/agent/src/binary-update.ts	1
-error-class	JevFailed	packages/hub/src/jev-placement.ts	1
 error-class	KeeperKept	packages/agent/src/service-manager/keeper-job.ts	1
 error-class	KeeperRefused	packages/agent/src/sessiond-client.ts	1
 error-class	MoveCancelled	packages/agent/src/move.ts	1
@@ -248,7 +247,6 @@ promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
 promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1
 promise-map	starting	packages/agent/src/boundary/state.ts	1
-promise-map	starting	packages/hub/src/triggers.ts	1
 promise-map	viewing	packages/agent/src/layer.ts	1
 promise-map	warming	packages/agent/src/stage.ts	1
 timed-loop	Bun.sleep	packages/agent/src/binary-update.ts	1
@@ -284,8 +282,6 @@ timed-loop	Bun.sleep	packages/hub/src/ssh-tunnels.ts	2
 timed-loop	Bun.sleep	packages/hub/src/wire-socket.ts	1
 timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.ts	1
 timed-loop	delay	packages/agent/src/mcp-status.ts	1
-timed-loop	lifetime.sleep	packages/hub/src/dispatch.ts	1
-timed-loop	lifetime.sleep	packages/hub/src/routines.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/browser/passkey-inject.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/session.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/sessiond-client.ts	1

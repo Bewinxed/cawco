@@ -4,7 +4,36 @@
  * both read, below them both.
  */
 import type { SessionRole } from "@cawco/core/delegate-types";
+import { lookUntil } from "@cawco/core/effect/poll";
+import { Effect } from "effect";
 import type { WorkItemRow } from "./db/project-work";
+
+/**
+ * How long a run waits for a machine to run on before it goes without one:
+ * a hub that just started fires its catch-up before its machines are back.
+ */
+const PLACE_WAIT_MS = 60_000;
+/** How often a run waiting for a machine looks again. */
+const PLACE_POLL_MS = 1000;
+
+/**
+ * A run's place, waited for: `look` now, and again every
+ * {@link PLACE_POLL_MS} until `found` holds of its answer or
+ * {@link PLACE_WAIT_MS} pass; its last answer either way. Run on the hub's
+ * lifetime, its waits stop when the hub closes.
+ */
+export const placeWithin = <A>(
+  look: () => A,
+  found: (answer: A) => boolean
+): Effect.Effect<A> =>
+  lookUntil(
+    { every: PLACE_POLL_MS, deadlineMs: PLACE_WAIT_MS, until: found },
+    Effect.sync(look)
+  ).pipe(
+    Effect.map((looked) =>
+      looked.kind === "found" ? looked.value : looked.last
+    )
+  );
 
 /** A run a session does, as the engine asks dispatch to start it (dispatch.ts `startRun`). */
 export interface RunStart {

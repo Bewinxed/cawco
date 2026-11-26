@@ -10405,6 +10405,7 @@ export const createServer = (
     caw,
     db,
     dispatcher,
+    lifetime,
     tasks,
   });
   tasks.listen(jevTasks.taskChanged);

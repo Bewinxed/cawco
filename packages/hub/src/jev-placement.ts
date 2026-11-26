@@ -18,13 +18,13 @@
  *   to a stated length and every list to a stated count before it is sent.
  */
 
-import type { Bounded } from "@cawco/core/bounded";
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
 import type {
   Experimental_DecisionQuestion,
   Experimental_DecisionState,
 } from "ai";
+import { Schema } from "effect";
 import { askJev, type JevAccess, jevCost, jevUnanswered } from "./jev";
 import type { JevResult } from "./jev-types";
 import {
@@ -63,8 +63,16 @@ export type PlacementRow = keyof typeof ROWS;
 /** A placement question is asked inside a hub action, so it is asked briefly. Our own call. */
 const PLACEMENT_TIMEOUT_MS = 20_000;
 
-/** Jev was on and did not answer: the decision is not made, and the caller says so. */
-export class JevFailed extends Error {}
+/**
+ * Jev was on and did not answer: the decision is not made, and the caller
+ * says so. Promise callers outside this module catch it by `instanceof` and
+ * read its `message`, as an `Error` of its own.
+ */
+export class JevFailed extends Schema.TaggedError<JevFailed>()("JevFailed", {
+  message: Schema.String,
+  /** What the call failed with, when it failed rather than ran out of time. */
+  cause: Schema.optional(Schema.Unknown),
+}) {}
 
 const words = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -95,19 +103,17 @@ export async function askRow<
   const named = (Array.isArray(rows) ? rows : [rows])
     .map((row) => ROWS[row])
     .join(" + ");
-  let asking: Bounded<JevResult<Questions>>;
-  try {
-    asking = await askJev(access, state, questions, {
-      timeoutMs: PLACEMENT_TIMEOUT_MS,
-    });
-  } catch (error) {
+  const asking = await askJev(access, state, questions, {
+    timeoutMs: PLACEMENT_TIMEOUT_MS,
+  }).catch((error: unknown) => {
     console.warn(
       `[jev] ${named} project=${projectId ?? "none"} route=${access.route} failed: ${words(error)}`
     );
-    throw new JevFailed(`Jev did not answer (${named}): ${words(error)}`, {
+    throw new JevFailed({
+      message: `Jev did not answer (${named}): ${words(error)}`,
       cause: error,
     });
-  }
+  });
   switch (asking.kind) {
     case "answered":
       console.log(
@@ -120,7 +126,7 @@ export async function askRow<
       console.warn(
         `[jev] ${named} project=${projectId ?? "none"} route=${access.route}: ${said}`
       );
-      throw new JevFailed(`${said} (${named}).`);
+      throw new JevFailed({ message: `${said} (${named}).` });
     }
     default:
       unhandled("read", asking);

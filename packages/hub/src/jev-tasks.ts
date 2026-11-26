@@ -17,8 +17,8 @@
  *   not this and always work.
  */
 
-import { detach } from "@cawco/core/detach";
 import { taskLink } from "@cawco/core/references";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
@@ -36,6 +36,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
+import type { HubLifetimeShape } from "./lifetime";
 import { grepScore, wordsOf } from "./memory-lessons";
 import {
   hubActor,
@@ -58,6 +59,8 @@ export interface JevTasksDeps {
     | "workItemTexts"
   >;
   readonly dispatcher: Pick<Dispatcher, "retryFor" | "startFor">;
+  /** The hub's lifetime: what runs after a task is filed is named work on it. */
+  readonly lifetime: Pick<HubLifetimeShape, "fork">;
   readonly tasks: Tasks;
 }
 
@@ -105,6 +108,7 @@ export const createJevTasks = ({
   caw,
   db,
   dispatcher,
+  lifetime,
   tasks,
 }: JevTasksDeps) => {
   const key = () => jevAccess(db);
@@ -351,16 +355,18 @@ export const createJevTasks = ({
         console.warn(
           `[tasks] ${event.id} in ${event.projectId} was filed; its duplicates and triage were not judged: ${why}`
         );
-      detach(
-        work().then(
-          (answer) => {
-            if (answer) {
-              unjudged(answer.response.detail);
-            }
-          },
-          (error: unknown) => unjudged(words(error))
-        ),
-        "task filed"
+      lifetime.fork(
+        "task filed",
+        Effect.tryPromise(() =>
+          work().then(
+            (answer) => {
+              if (answer) {
+                unjudged(answer.response.detail);
+              }
+            },
+            (error: unknown) => unjudged(words(error))
+          )
+        )
       );
     }
   };
