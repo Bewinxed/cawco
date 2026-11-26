@@ -9,8 +9,10 @@
  * binary serves both prebuilt and never starts the thread.
  */
 
+import { once } from "node:events";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 
 /** Which host a build is of. */
@@ -43,8 +45,11 @@ const preloads = (): string[] =>
     return arg.startsWith("--preload=") ? [arg.slice("--preload=".length)] : [];
   });
 
-/** Each host's files by name: one build per process; a failure clears its slot so the next request retries. */
-const built = new Map<HostName, Promise<Map<string, Blob>>>();
+/** Each host's files by name, once built: one build per process. */
+const built = new Map<HostName, Map<string, Blob>>();
+
+/** Each host's build in flight: a request while it runs shares it; a failure keeps nothing, so the next request builds again. */
+const building = makeJoin<HostName, Map<string, Blob>, unknown>();
 
 /** What each host is called in a failed build's error. */
 const LABELS: Record<HostName, string> = {
@@ -52,46 +57,56 @@ const LABELS: Record<HostName, string> = {
   canvas: "The canvas host",
 };
 
+/**
+ * Host `host` built on a thread of its own: the thread's answer, or its
+ * error event, whichever comes first; the thread is ended either way.
+ */
+const buildOnThread = async (host: HostName): Promise<Map<string, Blob>> => {
+  const worker = new Worker(WORKER_URL, { preload: preloads() });
+  const answered = new AbortController();
+  try {
+    const failed = once(worker, "error", { signal: answered.signal }).then(
+      ([event]: ErrorEvent[]) => {
+        throw new Error(
+          `${LABELS[host]}'s build thread failed: ${event?.message || "no reason given"}`
+        );
+      }
+    );
+    const message = once(worker, "message", { signal: answered.signal }).then(
+      ([event]: MessageEvent<HostBuilt>[]) => event?.data
+    );
+    worker.postMessage(host);
+    const answer = await Promise.race([message, failed]);
+    if (answer === undefined) {
+      throw new Error(`${LABELS[host]}'s build thread answered nothing.`);
+    }
+    if ("error" in answer) {
+      throw new Error(answer.error);
+    }
+    return new Map(
+      answer.files.map(({ name, bytes, type }) => [
+        name,
+        new Blob([bytes], { type }),
+      ])
+    );
+  } finally {
+    // The race's other wait let go, so it settles as an abort no one reads.
+    answered.abort();
+    worker.terminate();
+  }
+};
+
 /** Host `host`'s files by name, built on a thread of its own once per process. */
 export const hostFiles = (host: HostName): Promise<Map<string, Blob>> => {
   const kept = built.get(host);
   if (kept !== undefined) {
-    return kept;
+    return Promise.resolve(kept);
   }
-  const building = new Promise<Map<string, Blob>>((done, fail) => {
-    const worker = new Worker(WORKER_URL, { preload: preloads() });
-    const end = () => worker.terminate();
-    worker.onmessage = (event: MessageEvent<HostBuilt>) => {
-      end();
-      const answer = event.data;
-      if ("error" in answer) {
-        fail(new Error(answer.error));
-        return;
-      }
-      done(
-        new Map(
-          answer.files.map(({ name, bytes, type }) => [
-            name,
-            new Blob([bytes], { type }),
-          ])
-        )
-      );
-    };
-    worker.onerror = (event) => {
-      end();
-      fail(
-        new Error(
-          `${LABELS[host]}'s build thread failed: ${event.message || "no reason given"}`
-        )
-      );
-    };
-    worker.postMessage(host);
-  }).catch((error: unknown) => {
-    built.delete(host);
-    throw error;
+  return building.runPromise(host, async () => {
+    const files = await buildOnThread(host);
+    built.set(host, files);
+    return files;
   });
-  built.set(host, building);
-  return building;
 };
 
 /**

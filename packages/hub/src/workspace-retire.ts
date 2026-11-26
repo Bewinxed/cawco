@@ -44,6 +44,8 @@
  * of every other one, and of each design whose folder went (artifacts
  * service `pinsBack`, folder-move.ts, agent stage.ts `keepPins`).
  */
+import { makeJoin } from "@cawco/core/effect/join";
+import { Effect, Schedule } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
 import type { WorkItems } from "./work-items";
 import type { HeldWork } from "./workspaces";
@@ -79,7 +81,8 @@ export interface WorkspaceRetireDeps {
 }
 
 export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
-  let running: Promise<RetireSweep> | undefined;
+  /** The sweep running now: one asked for while it runs shares it. */
+  const sweeps = makeJoin<"sweep", RetireSweep, unknown>();
 
   /** `work` run; a failure logged as `what` failed, and the sweep goes on. */
   const tried = (what: string, work: () => void): void => {
@@ -139,21 +142,38 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   };
 
   /** One sweep now; a sweep already running is that one's answer. */
-  const sweep = (asked: boolean): Promise<RetireSweep> => {
-    running ??= sweepOnce(asked).finally(() => {
-      running = undefined;
-    });
-    return running;
-  };
-
-  deps.lifetime.every("workspaces retired", RETIRE_SWEEP_MS, () => {
-    sweep(false).catch((error: unknown) =>
-      console.warn(
-        `[workspace-retire] the sweep failed: ${error instanceof Error ? error.message : String(error)}`
-      )
+  const sweep = (asked: boolean): Effect.Effect<RetireSweep, unknown> =>
+    sweeps.run(
+      "sweep",
+      Effect.tryPromise({
+        try: () => sweepOnce(asked),
+        catch: (error) => error,
+      })
     );
-  });
 
-  /** A sweep someone asked for (`POST /api/workspaces/retire`): every workspace tried now. */
-  return { sweep: () => sweep(true) };
+  // Every RETIRE_SWEEP_MS from the hub's start, the first a whole wait in,
+  // each counted from the end of the one before; a failed sweep is said and
+  // the next one comes all the same.
+  deps.lifetime.fork(
+    "workspaces retired",
+    sweep(false).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.warn(
+            `[workspace-retire] the sweep failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+      ),
+      Effect.repeat(Schedule.spaced(RETIRE_SWEEP_MS)),
+      Effect.delay(RETIRE_SWEEP_MS)
+    )
+  );
+
+  return {
+    /**
+     * A sweep someone asked for (`POST /api/workspaces/retire`): every
+     * workspace tried now. The promise edge of the sweep.
+     */
+    sweep: () => deps.lifetime.run(sweep(true)),
+  };
 };

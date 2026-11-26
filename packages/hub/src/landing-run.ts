@@ -471,7 +471,9 @@ export interface LandingsHub {
 }
 
 interface LandingRunDeps
-  extends LandingsHub, Pick<WorkspacesDeps, "call" | "command" | "db"> {
+  extends
+    LandingsHub,
+    Pick<WorkspacesDeps, "call" | "command" | "db" | "lifetime"> {
   readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
   readonly finish: (
     item: WorkItemRow,
@@ -504,6 +506,7 @@ export const createLandingRun = ({
   db,
   finish,
   heldForGroup,
+  lifetime,
   published,
   report,
   sessionUrl,
@@ -723,6 +726,7 @@ export const createLandingRun = ({
       onStepOut: (words) => {
         stepped.push(words);
       },
+      lifetime,
       queue: landings,
       skip: db.workItemOutputs(item.id),
       stopped: landingStopped(item),
@@ -851,6 +855,7 @@ export const createLandingRun = ({
     const branch = landingBranch(item);
     const pushed = await pushBranch(base, branch, {
       last: lastBranchPush(item),
+      lifetime,
       logsUrl: sessionUrl(item.instanceId),
       run: runIn(workspace, item),
       skip: db.workItemOutputs(item.id),
@@ -907,7 +912,7 @@ export const createLandingRun = ({
     const origin = (
       await runIn(workspace, item)("git remote get-url origin", GIT_TIMEOUT_MS)
     ).stdout.trim();
-    const outcome = await Effect.runPromise(
+    const outcome = await lifetime.run(
       Effect.result(
         writes.post({
           by: { work: item.id },
@@ -1524,6 +1529,7 @@ export const createLandingRun = ({
     }
     const branch = landingBranch(item);
     const refused = await branchPushCheck(
+      lifetime,
       runIn(workspace, item),
       branch,
       lastBranchPush(item)

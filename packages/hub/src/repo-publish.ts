@@ -24,19 +24,19 @@
  *   project then links it as that repository's published copy.
  */
 
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import { CONTROL_PLACE_PUSH } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
+import type { HubLifetimeShape } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 import type { PlaceRepos } from "./place-repo";
 import type { Writes } from "./writes";
@@ -58,6 +58,8 @@ export interface RepoPublishDeps {
     "githubClient" | "githubToken" | "list"
   >;
   readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
+  /** The hub's lifetime: the publish's steps run on it. */
+  readonly lifetime: HubLifetimeShape;
   readonly places: Pick<PlaceRepos, "ensure">;
   /** The write door: the repository is made through it, and recorded (writes.ts). */
   readonly writes: Pick<Writes, "post">;
@@ -71,11 +73,17 @@ export interface Published {
 
 const TRAILING_SLASHES = /\/+$/u;
 
+/** The hub's push of a published repository to GitHub did not go: its words, the token never in them. */
+class PushFailed extends Schema.TaggedError<PushFailed>()("PushFailed", {
+  message: Schema.String,
+}) {}
+
 export const createRepoPublish = ({
   bare,
   call,
   connections,
   db,
+  lifetime,
   places,
   writes,
 }: RepoPublishDeps) => {
@@ -233,64 +241,74 @@ export const createRepoPublish = ({
     return change;
   };
 
-  /** The hub's push from its bare repository to GitHub, the token in git's environment. */
-  const pushFromHub = async (
+  /**
+   * The hub's push from its bare repository to GitHub, the token in git's
+   * environment, given {@link PUSH_MS} (the kit's bounded read): its child
+   * killed when the deadline passes first, or when the hub closes.
+   */
+  const pushFromHub = Effect.fnUntraced(function* (
     key: HubRepoKey,
     branch: string,
     url: string,
     token: string
-  ): Promise<void> => {
+  ): Effect.fn.Return<void, PushFailed> {
     const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-    const ran = await readWithin(PUSH_MS, async (signal) => {
-      const child = Bun.spawn(
-        [
-          "git",
-          "-C",
-          bare(key),
-          "push",
-          "--quiet",
-          url,
-          `refs/heads/${branch}:refs/heads/${branch}`,
-        ],
-        {
-          env: {
-            PATH: startedPath(),
-            HOME: process.env.HOME ?? "/",
-            ...GIT_LOCALE,
-            GIT_TERMINAL_PROMPT: "0",
-            GIT_CONFIG_COUNT: "1",
-            GIT_CONFIG_KEY_0: "http.extraHeader",
-            GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
-          },
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "pipe",
-          signal,
-        }
+    const push = Effect.gen(function* () {
+      const child = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(
+            [
+              "git",
+              "-C",
+              bare(key),
+              "push",
+              "--quiet",
+              url,
+              `refs/heads/${branch}:refs/heads/${branch}`,
+            ],
+            {
+              env: {
+                PATH: startedPath(),
+                HOME: process.env.HOME ?? "/",
+                ...GIT_LOCALE,
+                GIT_TERMINAL_PROMPT: "0",
+                GIT_CONFIG_COUNT: "1",
+                GIT_CONFIG_KEY_0: "http.extraHeader",
+                GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+              },
+              stdin: "ignore",
+              stdout: "ignore",
+              stderr: "pipe",
+            }
+          )
+        ),
+        (spawned) =>
+          Effect.sync(() => {
+            if (spawned.exitCode === null) {
+              spawned.kill();
+            }
+          })
       );
-      const [stderr, code] = await Promise.all([
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
+      const [stderr, code] = yield* Effect.promise(() =>
+        Promise.all([new Response(child.stderr).text(), child.exited])
+      );
       return { stderr, code };
-    });
-    switch (ran.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `The hub's push to ${url} did not finish within ${secondsOf(ran.after)} s; the repository may hold part of it.`
-        );
-      default:
-        unhandled("read", ran);
-    }
-    const { stderr, code } = ran.value;
+    }).pipe(Effect.scoped);
+    const { stderr, code } = yield* boundedRead(PUSH_MS, push).pipe(
+      Effect.catchTag("Unanswered", (unanswered) =>
+        Effect.fail(
+          new PushFailed({
+            message: `The hub's push to ${url} did not finish within ${secondsOf(unanswered.after)} s; the repository may hold part of it.`,
+          })
+        )
+      )
+    );
     if (code !== 0) {
-      throw new Error(
-        `The hub's push to ${url} failed: ${stderr.split(token).join("[token]").split(basic).join("[token]").trim()}`
-      );
+      return yield* new PushFailed({
+        message: `The hub's push to ${url} failed: ${stderr.split(token).join("[token]").split(basic).join("[token]").trim()}`,
+      });
     }
-  };
+  });
 
   /** Approved: pushed to the hub, created on GitHub, pushed there; answers what it made, from where. */
   const publish = async (project: ProjectRow, change: CreateRepo) => {
@@ -317,7 +335,7 @@ export const createRepoPublish = ({
     // The connection's token as it is now, taken before the repository is
     // made so a connection that holds none makes nothing on GitHub.
     const token = await connections.githubToken(change.connection);
-    const created = await Effect.runPromise(
+    const created = await lifetime.run(
       Effect.result(
         writes.post({
           by: "hub",
@@ -346,7 +364,7 @@ export const createRepoPublish = ({
         `GitHub returned no repository when creating ${change.name}.`
       );
     }
-    await pushFromHub(hub, pushed.branch, made.cloneUrl, token);
+    await lifetime.run(pushFromHub(hub, pushed.branch, made.cloneUrl, token));
     console.log(
       `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.fullName}`
     );

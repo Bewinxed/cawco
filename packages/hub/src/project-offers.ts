@@ -18,6 +18,7 @@
  */
 
 import type { CommandResult } from "@cawco/core/commands/controls";
+import { makeJoin } from "@cawco/core/effect/join";
 import type {
   AcceptResult,
   ProjectOfferReason,
@@ -28,12 +29,14 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
 import type { CreateOrJoinProject } from "./project-making";
@@ -51,6 +54,8 @@ export interface ProjectOffersDeps {
    */
   createProject: CreateOrJoinProject;
   db: DbShape;
+  /** The hub's lifetime: a folder's remote is read on it. */
+  lifetime: HubLifetimeShape;
   online: (machineId: string) => boolean;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
@@ -76,8 +81,10 @@ const plural = (n: number, one: string, many: string): string =>
 
 export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const { db } = deps;
-  /** `machine:folder` → its normalised remote (null: none). Read once per folder. */
-  const remotes = new Map<string, Promise<string | null>>();
+  /** `machine:folder` → its normalised remote (null: none), once read. Read once per folder. */
+  const remotes = new Map<string, string | null>();
+  /** Each folder's read of its remote in flight: a second ask while it runs shares it. */
+  const reading = makeJoin<string, string | null>();
   /** Sessions being looked at now, so a burst of ends asks once. */
   const looking = new Set<string>();
 
@@ -115,26 +122,33 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     const key = `${machineId}:${cwd}`;
     const known = remotes.get(key);
     if (known !== undefined) {
-      return known;
+      return Promise.resolve(known);
     }
     if (!deps.online(machineId)) {
       // Not known, which is not "no remote": asked again when it is back.
       return Promise.resolve(undefined);
     }
-    const reading = deps
-      .run(
+    const read = Effect.tryPromise(() =>
+      deps.run(
         machineId,
         cwd,
         `${SAFE_GIT_SHELL}git remote get-url origin`,
         READ_MS
       )
-      .then((result) =>
+    ).pipe(
+      Effect.map((result) =>
         result.exitCode === 0 ? normaliseRemote(result.stdout) : null
-      )
+      ),
       // A folder that is gone answers nothing, now or later.
-      .catch(() => null);
-    remotes.set(key, reading);
-    return reading;
+      Effect.orElseSucceed(() => null),
+      Effect.tap((remote) =>
+        Effect.sync(() => {
+          remotes.set(key, remote);
+        })
+      )
+    );
+    // The promise edge of the read: its callers are promise code.
+    return deps.lifetime.run(reading.run(key, read));
   };
 
   const offer = (

@@ -4853,6 +4853,7 @@ export const createWorkItems = ({
     report,
     landingRuns: (itemId) => landingRun.landingRuns(itemId),
     leadFor,
+    lifetime,
     mayReopen,
     notPaused,
   });
@@ -4867,6 +4868,7 @@ export const createWorkItems = ({
     update,
     finish,
     heldForGroup,
+    lifetime,
     workspaces,
   });
 

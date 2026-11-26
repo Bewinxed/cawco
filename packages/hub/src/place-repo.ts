@@ -27,16 +27,21 @@
  *   if any, has finished, whichever way: a move's plan inspects after it.
  */
 
+import { makeJoin } from "@cawco/core/effect/join";
 import {
   CONTROL_PLACE_REPO,
   type PlaceRepo,
 } from "@cawco/core/workspace/controls";
+import { Effect, Schema } from "effect";
+import type { HubLifetimeShape } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 
 /** What {@link createPlaceRepos} needs of the hub. */
 export interface PlaceRepoDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: MachineCall;
+  /** The hub's lifetime: each place's step runs on it. */
+  readonly lifetime: HubLifetimeShape;
 }
 
 /** A place as {@link PlaceRepos.ensure} takes it. */
@@ -45,7 +50,10 @@ export interface PlaceRef {
   path: string;
 }
 
-export const createPlaceRepos = ({ call }: PlaceRepoDeps) => {
+/** What {@link PlaceRepos.settled} starts when no step is in flight: none, so it ends at once. */
+class NoStep extends Schema.TaggedError<NoStep>()("NoStep", {}) {}
+
+export const createPlaceRepos = ({ call, lifetime }: PlaceRepoDeps) => {
   const make = async (place: PlaceRef): Promise<PlaceRepo> => {
     const answer = await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
@@ -59,41 +67,36 @@ export const createPlaceRepos = ({ call }: PlaceRepoDeps) => {
   };
 
   /** Each place's one repo step in flight, by machine and path. */
-  const inFlight = new Map<string, Promise<PlaceRepo>>();
+  const inFlight = makeJoin<string, PlaceRepo, unknown>();
   const keyOf = (machineId: string, path: string): string =>
     `${machineId}\0${path}`;
 
-  const track = (key: string, step: Promise<PlaceRepo>): void => {
-    inFlight.set(key, step);
-    const forget = () => {
-      if (inFlight.get(key) === step) {
-        inFlight.delete(key);
-      }
-    };
-    step.then(forget, forget);
-  };
-
-  /** A place's repo step: the one in flight, joined, else a new one, registered before this returns. */
-  const ensure = (place: PlaceRef): Promise<PlaceRepo> => {
-    const key = keyOf(place.machineId, place.path);
-    const running = inFlight.get(key);
-    if (running !== undefined) {
-      return running;
-    }
-    const mine = make(place);
-    track(key, mine);
-    return mine;
-  };
+  /**
+   * A place's repo step: the one in flight, joined, else a new one,
+   * registered before this returns. The promise edge of the step.
+   */
+  const ensure = (place: PlaceRef): Promise<PlaceRepo> =>
+    lifetime.run(
+      inFlight.run(
+        keyOf(place.machineId, place.path),
+        Effect.tryPromise({ try: () => make(place), catch: (error) => error })
+      )
+    );
 
   /**
    * Resolves once the place at `path` on `machineId` has no repo step in
    * flight: what reads the folder to decide what to ask or do (a move's
    * plan) reads its settled state, whichever step started first. A step
-   * that fails leaves the folder as it was; its error is its caller's.
+   * that fails leaves the folder as it was; its error is its caller's. With
+   * none in flight, the step it starts ({@link NoStep}) ends at once and is
+   * kept by nothing.
    */
-  const settled = async (machineId: string, path: string): Promise<void> => {
-    await inFlight.get(keyOf(machineId, path))?.catch(() => undefined);
-  };
+  const settled = (machineId: string, path: string): Promise<void> =>
+    lifetime.run(
+      inFlight
+        .run(keyOf(machineId, path), Effect.fail(new NoStep()))
+        .pipe(Effect.ignore)
+    );
 
   return {
     ensure,

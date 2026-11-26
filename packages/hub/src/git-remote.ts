@@ -22,7 +22,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { detach } from "@cawco/core/detach";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import {
   type HubRepoKey,
@@ -33,17 +33,22 @@ import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { startedPath } from "@cawco/core/workspace-needs";
+import type { Subprocess } from "bun";
+import { Effect, Schema, type Scope } from "effect";
 import { Elysia } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { HUB_DEBUG } from "./config";
 import { hidden } from "./hidden";
+import type { HubLifetimeShape } from "./lifetime";
 
 export interface GitRemoteDeps {
   /** The machine or session an `Authorization` header proves, else undefined. */
   readonly authenticate: (authorization: string | null) => string | undefined;
   /** Where large files are kept: `<lfsRoot>/objects/<aa>/<bb>/<oid>`. */
   readonly lfsRoot: string;
+  /** The hub's lifetime: each git child is held by a fiber of it, and killed if the hub closes first. */
+  readonly lifetime: HubLifetimeShape;
   /** Only a project the hub has gets a repository. */
   readonly projectExists: (projectId: string) => boolean;
   /** `GIT_PROJECT_ROOT`: each repository's bare one is `<root>/<segment>` (core `hubRepoSegment`). */
@@ -74,39 +79,64 @@ const gitEnv = (): Record<string, string | undefined> => ({
   ...GIT_LOCALE,
 });
 
-const run = async (argv: string[]): Promise<void> => {
-  const child = Bun.spawn(argv, {
-    env: gitEnv(),
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  const [code, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stderr).text(),
-  ]);
+/** A git command the hub runs for its repositories exited non-zero: its words. */
+class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", {
+  message: Schema.String,
+}) {}
+
+/**
+ * A child process held in the scope: killed when the scope closes before it
+ * exited (the fiber holding it interrupted, the hub closing).
+ */
+const heldChild = <T extends Subprocess>(spawn: () => T) =>
+  Effect.acquireRelease(Effect.sync(spawn), (child) =>
+    Effect.sync(() => {
+      if (child.exitCode === null) {
+        child.kill();
+      }
+    })
+  );
+
+/** `argv` run to its end; fails with git's stderr when it exits non-zero. */
+const run = Effect.fnUntraced(function* (
+  argv: string[]
+): Effect.fn.Return<void, GitFailed, Scope.Scope> {
+  const child = yield* heldChild(() =>
+    Bun.spawn(argv, {
+      env: gitEnv(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+  );
+  const [code, stderr] = yield* Effect.promise(() =>
+    Promise.all([child.exited, new Response(child.stderr).text()])
+  );
   if (code !== 0) {
-    throw new Error(`${argv.slice(0, 3).join(" ")} failed: ${stderr.trim()}`);
+    return yield* new GitFailed({
+      message: `${argv.slice(0, 3).join(" ")} failed: ${stderr.trim()}`,
+    });
   }
-};
+}, Effect.scoped);
 
 /** git's stdout in `repo`, or undefined when it exits non-zero. */
-const read = async (
+const read = Effect.fnUntraced(function* (
   repo: string,
   args: string[]
-): Promise<string | undefined> => {
-  const child = Bun.spawn(["git", "-C", repo, ...args], {
-    env: gitEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const [code, out] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-  ]);
+): Effect.fn.Return<string | undefined, never, Scope.Scope> {
+  const child = yield* heldChild(() =>
+    Bun.spawn(["git", "-C", repo, ...args], {
+      env: gitEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+  );
+  const [code, out] = yield* Effect.promise(() =>
+    Promise.all([child.exited, new Response(child.stdout).text()])
+  );
   return code === 0 ? out.trim() : undefined;
-};
+}, Effect.scoped);
 
 /**
  * The repository's HEAD at a branch it has, after a push: a new bare
@@ -116,14 +146,16 @@ const read = async (
  * is set to `main`, else `master`, else the first branch by name; never to a
  * move's `cawco/` branch.
  */
-const settleHead = async (repo: string): Promise<void> => {
+const settleHead = Effect.fnUntraced(function* (
+  repo: string
+): Effect.fn.Return<void, GitFailed> {
   if (
-    (await read(repo, ["rev-parse", "-q", "--verify", "HEAD"])) !== undefined
+    (yield* read(repo, ["rev-parse", "-q", "--verify", "HEAD"])) !== undefined
   ) {
     return;
   }
   const branches = (
-    (await read(repo, [
+    (yield* read(repo, [
       "for-each-ref",
       "--format=%(refname)",
       "refs/heads/",
@@ -136,9 +168,9 @@ const settleHead = async (repo: string): Promise<void> => {
     branches.find((ref) => ref === "refs/heads/master") ??
     branches.sort()[0];
   if (head) {
-    await run(["git", "-C", repo, "symbolic-ref", "HEAD", head]);
+    yield* run(["git", "-C", repo, "symbolic-ref", "HEAD", head]);
   }
-};
+});
 
 /** Where the bytes of a CGI's header block end, and how long its terminator is. */
 const headerEnd = (bytes: Uint8Array): { at: number; length: number } => {
@@ -241,36 +273,33 @@ const LFS_BATCH = z.object({
 
 export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   /** Repositories being made now, so two first requests make one. */
-  const making = new Map<string, Promise<string>>();
+  const making = makeJoin<string, string, GitFailed>();
 
   /**
    * `key`'s bare repository, made on first use with `http.receivepack` on.
-   * Undefined for a project the hub does not have.
+   * Undefined for a project the hub does not have. The promise edge of its
+   * making.
    */
   const repository = (key: HubRepoKey): Promise<string> | undefined => {
     if (!deps.projectExists(key.projectId)) {
       return undefined;
     }
     const path = bareRepoPath(deps.root, key);
-    const made = making.get(path);
-    if (made !== undefined) {
-      return made;
-    }
-    const make = (async () => {
-      const exists = await stat(join(path, "HEAD")).then(
-        () => true,
-        () => false
+    const make = Effect.gen(function* () {
+      const exists = yield* Effect.promise(() =>
+        stat(join(path, "HEAD")).then(
+          () => true,
+          () => false
+        )
       );
       if (!exists) {
-        await makeFolder(deps.root);
-        await run(["git", "init", "--quiet", "--bare", path]);
-        await run(["git", "-C", path, "config", "http.receivepack", "true"]);
+        yield* Effect.promise(() => makeFolder(deps.root));
+        yield* run(["git", "init", "--quiet", "--bare", path]);
+        yield* run(["git", "-C", path, "config", "http.receivepack", "true"]);
       }
       return path;
-    })();
-    making.set(path, make);
-    make.catch(() => making.delete(path));
-    return make;
+    });
+    return deps.lifetime.run(making.run(path, make));
   };
 
   /** Who the request is, for a route that refuses everyone else. */
@@ -340,23 +369,30 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     });
     const stderr = newTail();
     const decoder = new TextDecoder();
-    // What the backend says on stderr goes to the log once it ends.
-    detach(
-      (async () => {
-        for await (const chunk of child.stderr) {
-          writeTail(stderr, decoder.decode(chunk), STDERR_KEPT);
-        }
-        const code = await child.exited;
+    // The backend held by a fiber of the lifetime, which takes it in this
+    // same step (a fork runs at once up to its first wait): what it says on
+    // stderr goes to the log once it ends, a push settles HEAD after it,
+    // and a hub that closes first kills it. The response's cancel kills it
+    // too, and the fiber ends with it.
+    deps.lifetime.fork(
+      "git http-backend",
+      Effect.gen(function* () {
+        yield* heldChild(() => child);
+        const code = yield* Effect.promise(async () => {
+          for await (const chunk of child.stderr) {
+            writeTail(stderr, decoder.decode(chunk), STDERR_KEPT);
+          }
+          return await child.exited;
+        });
         if (code !== 0 || stderr.text.trim()) {
           console.warn(
             `[git] ${service} for ${hubRepoSegment(key)} by ${user} exited ${code}: ${saidTail(stderr).trim()}`
           );
         }
         if (service === "git-receive-pack" && code === 0) {
-          await settleHead(repo);
+          yield* settleHead(repo);
         }
-      })(),
-      "git http-backend"
+      }).pipe(Effect.scoped)
     );
     const reader = child.stdout.getReader();
     const head = await cgiHead(reader);

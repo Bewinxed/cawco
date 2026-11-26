@@ -53,6 +53,8 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { Cause, Duration, Effect, Schedule, Schema } from "effect";
+import type { HubLifetimeShape } from "./lifetime";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
@@ -112,6 +114,8 @@ interface Busy {
 }
 
 export interface LandingDeps {
+  /** The hub's lifetime: a push or fetch tried again waits on its clock ({@link triedOnFault}). */
+  lifetime: HubLifetimeShape;
   /**
    * The link to the session whose commits these are (its dashboard page),
    * stamped on each as its `Agent-Logs-Url` trailer ({@link stampCommand}).
@@ -307,38 +311,83 @@ const remoteFault = (result: CommandResult): boolean => {
   return !REASONED_REFUSAL.test(said) && FAULT_WORDS.test(said);
 };
 
+/** A try of {@link triedOnFault} the remote failed on its own fault ({@link remoteFault}): one a next try may not meet. */
+class RemoteFault extends Schema.TaggedError<RemoteFault>()("RemoteFault", {
+  /** The command's answer, as it came. */
+  tried: Schema.Struct({
+    cancelled: Schema.optionalKey(Schema.Literal(true)),
+    exitCode: Schema.Number,
+    stderr: Schema.String,
+    stdout: Schema.String,
+  }),
+}) {}
+
+/**
+ * {@link FAULT_WAITS_MS} as a {@link Schedule}: the nth try again after the
+ * table's nth wait, and none past its end. Not a doubling backoff: the
+ * table's numbers are the measured ones.
+ */
+const faultWaits = Schedule.fromStepWithMetadata(
+  Effect.succeed((meta: Schedule.InputMetadata<RemoteFault>) => {
+    const wait = FAULT_WAITS_MS[meta.attempt - 1];
+    return wait === undefined
+      ? Cause.done(meta.attempt)
+      : Effect.succeed<[number, Duration.Duration]>([
+          meta.attempt,
+          Duration.millis(wait),
+        ]);
+  })
+);
+
 /**
  * A push or fetch, tried again while the remote fails it on its own fault
  * ({@link remoteFault}) and the landing is not stopped, after each wait of
- * {@link FAULT_WAITS_MS}, each try logged. `settled` is whether one that
- * answered needs no other: a fetch that answered 0; a push that it landed (0, or the branch holds the commit
- * when read after it: a 5xx can come after the remote took the ref), or its
+ * {@link FAULT_WAITS_MS} ({@link faultWaits}), each try again logged.
+ * `settled` is whether one that answered needs no other: a fetch that
+ * answered 0; a push that it landed (0, or the branch holds the commit when
+ * read after it: a 5xx can come after the remote took the ref), or its
  * boundary cut it off ({@link CUT_OFF}), which is read once and never tried
  * again. Answers the last push; a push that failed every time is refused in
  * its words, as one try is.
+ *
+ * The promise edge of the retry, on the hub's lifetime: each wait is one of
+ * its timers, stopped at close, and the series lives as long as this call.
+ * A command's own throw (a stop, a turn that would wait) is none of the
+ * retry's: a defect it never repeats, the edge rejecting with it as thrown.
  */
-async function triedOnFault(
+function triedOnFault(
+  lifetime: HubLifetimeShape,
   what: string,
   push: () => Promise<CommandResult>,
   settled: (pushed: CommandResult) => Promise<boolean>,
   stopped?: () => boolean
 ): Promise<CommandResult> {
-  for (let n = 1; ; n += 1) {
-    const pushed = await push();
-    const wait = FAULT_WAITS_MS[n - 1];
+  const once = Effect.gen(function* () {
+    const pushed = yield* Effect.promise(push);
     if (
-      (await settled(pushed)) ||
-      wait === undefined ||
-      !remoteFault(pushed) ||
-      stopped?.()
+      (yield* Effect.promise(() => settled(pushed))) ||
+      !remoteFault(pushed)
     ) {
       return pushed;
     }
-    console.warn(
-      `[landing] ${what}: try ${n} of ${FAULT_WAITS_MS.length + 1} failed on the remote's own fault, trying again in ${wait / 1000} s: ${detailOf(pushed).replaceAll("\n", " | ")}`
-    );
-    await Bun.sleep(wait);
-  }
+    return yield* new RemoteFault({ tried: pushed });
+  });
+  const again = faultWaits.pipe(
+    Schedule.while(() => !stopped?.()),
+    Schedule.tap(({ attempt: tries, duration, input }) =>
+      Effect.sync(() => {
+        console.warn(
+          `[landing] ${what}: try ${tries} of ${FAULT_WAITS_MS.length + 1} failed on the remote's own fault, trying again in ${Duration.toSeconds(duration)} s: ${detailOf(input.tried).replaceAll("\n", " | ")}`
+        );
+      })
+    )
+  );
+  return lifetime.run(
+    once.pipe(
+      Effect.retry(again),
+      Effect.catchTag("RemoteFault", (fault) => Effect.succeed(fault.tried))
+    )
+  );
 }
 
 /**
@@ -346,11 +395,13 @@ async function triedOnFault(
  * ({@link triedOnFault}): every fetch of a landing, and of a branch push.
  */
 const fetchBase = (
+  lifetime: HubLifetimeShape,
   run: (cmd: string, timeoutMs: number) => Promise<CommandResult>,
   base: string,
   stopped?: () => boolean
 ): Promise<CommandResult> =>
   triedOnFault(
+    lifetime,
     `the fetch of ${base}`,
     () => run(`git fetch origin ${shellQuote(base)}`, NETWORK_MS),
     async (fetched) => fetched.exitCode === 0,
@@ -673,7 +724,7 @@ async function onBase(
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, inTurn);
   const target = shellQuote(`origin/${base}`);
-  const fetched = await fetchBase(run, base, deps.stopped);
+  const fetched = await fetchBase(deps.lifetime, run, base, deps.stopped);
   if (fetched.exitCode !== 0) {
     return refusal("fetch", fetched);
   }
@@ -701,6 +752,7 @@ async function onBase(
   }
   if (!inTurn) {
     const checked = await pushCheck(
+      deps.lifetime,
       deps.run,
       `refs/heads/${base}`,
       onto.stdout.trim()
@@ -743,11 +795,13 @@ interface Moved {
  * its branch, run `--force` as the real one is leased) is never `moved`.
  */
 async function pushCheck(
+  lifetime: HubLifetimeShape,
   run: LandingDeps["run"],
   ref: string,
   onto?: string
 ): Promise<Refusal | Moved | undefined> {
   const tried = await triedOnFault(
+    lifetime,
     `the push check of ${ref}`,
     () =>
       run(
@@ -808,11 +862,12 @@ async function holds(
  * another reason, and git's words on it are the landing's.
  */
 async function movedOn(
+  lifetime: HubLifetimeShape,
   run: LandingDeps["run"],
   base: string,
   onto: string
 ): Promise<boolean> {
-  const fetched = await fetchBase(run, base);
+  const fetched = await fetchBase(lifetime, run, base);
   if (fetched.exitCode !== 0) {
     return false;
   }
@@ -860,6 +915,7 @@ async function attempt(
   const { head: after, onto, rebased } = onTop;
   let landed = false;
   const pushed = await triedOnFault(
+    deps.lifetime,
     `${deps.turn?.who ?? "a landing"}'s push to ${base}`,
     () =>
       deps.run(
@@ -885,7 +941,7 @@ async function attempt(
   // Read in the turn, as the push was: a command that would wait steps out.
   const inTurn: LandingDeps["run"] = (cmd, timeoutMs) =>
     deps.run(cmd, timeoutMs, true);
-  if (!(await movedOn(inTurn, base, onto))) {
+  if (!(await movedOn(deps.lifetime, inTurn, base, onto))) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
@@ -905,6 +961,7 @@ async function attempt(
  * not checked: its push says so ({@link pushBranch}'s `no-remote`).
  */
 export async function branchPushCheck(
+  lifetime: HubLifetimeShape,
   run: LandingDeps["run"],
   branch: string,
   last: string | undefined
@@ -914,7 +971,7 @@ export async function branchPushCheck(
     return;
   }
   const ref = `refs/heads/${branch}`;
-  const checked = await pushCheck(run, ref);
+  const checked = await pushCheck(lifetime, run, ref);
   if (checked) {
     return checked.kind === "moved" ? checked.refusal : checked;
   }
@@ -1022,7 +1079,10 @@ async function ready(
 export function pushBranch(
   base: string,
   branch: string,
-  deps: Pick<LandingDeps, "logsUrl" | "run" | "skip" | "stopped"> & {
+  deps: Pick<
+    LandingDeps,
+    "lifetime" | "logsUrl" | "run" | "skip" | "stopped"
+  > & {
     last: string | undefined;
   }
 ): Promise<BranchOutcome> {
@@ -1042,7 +1102,7 @@ async function pushOwnBranch(
   if (deps.stopped?.()) {
     return { kind: "stopped" };
   }
-  const fetched = await fetchBase(run, base, deps.stopped);
+  const fetched = await fetchBase(deps.lifetime, run, base, deps.stopped);
   if (fetched.exitCode !== 0) {
     return refusal("fetch", fetched);
   }
@@ -1077,7 +1137,7 @@ async function pushOwnBranch(
   if (deps.stopped?.()) {
     return { kind: "stopped" };
   }
-  const refused = await leasedPush(run, branch, sha, deps.last);
+  const refused = await leasedPush(deps.lifetime, run, branch, sha, deps.last);
   return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
     ? refused
     : { kind: "pushed", sha };
@@ -1096,6 +1156,7 @@ const SPACE = /\s+/u;
  * it was refused, or nothing when it was pushed.
  */
 async function leasedPush(
+  lifetime: HubLifetimeShape,
   run: LandingDeps["run"],
   branch: string,
   sha: string,
@@ -1114,6 +1175,7 @@ async function leasedPush(
     return before;
   }
   const pushed = await triedOnFault(
+    lifetime,
     `the push to ${branch}`,
     () =>
       run(

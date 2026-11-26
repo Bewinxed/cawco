@@ -8560,7 +8560,7 @@ export const createServer = (
     sources: (projectId) => designOffers.sources(projectId),
   });
   // A plain folder made a git repository when it is first needed as one.
-  const placeRepos = createPlaceRepos({ call: callMachine });
+  const placeRepos = createPlaceRepos({ call: callMachine, lifetime });
   /**
    * A stage frame of machine `machineId` kept, a place's sheet stage's or
    * any workspace's preview server's or sheet's alike: one that fell asleep
@@ -10164,6 +10164,7 @@ export const createServer = (
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
     db,
+    lifetime,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
@@ -11289,6 +11290,7 @@ export const createServer = (
       call: callMachine,
       connections,
       db,
+      lifetime,
       places: placeRepos,
       writes: writeDoor,
     }),
@@ -14243,6 +14245,7 @@ export const createServer = (
         gitRemoteRoutes({
           root: GIT_ROOT,
           lfsRoot: LFS_ROOT,
+          lifetime,
           projectExists: (projectId) => db.project(projectId) !== undefined,
           authenticate: (authorization) =>
             basicCaller(

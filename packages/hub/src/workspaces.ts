@@ -2,7 +2,7 @@ import { type BackoffPolicy, backoffStep } from "@cawco/core/backoff";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
@@ -47,6 +47,7 @@ import {
   type WorkspaceUnlanded,
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
+import { Deferred, Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -57,7 +58,7 @@ import {
   type WorkItemRow,
   type WorkspaceRow,
 } from "./db/project-work";
-import { soon } from "./lifetime";
+import { type HubLifetimeShape, soon } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 import {
   CUT_COMMIT_GONE,
@@ -449,6 +450,8 @@ export interface WorkspacesDeps extends WorkspacesHub {
   /** Whether this hub process runs item `itemId`'s landing now (landing-run.ts `landingRuns`). */
   readonly landingRuns: (itemId: string) => boolean;
   readonly leadFor: (item: WorkItemRow) => InstanceRow | undefined;
+  /** The hub's lifetime: every Effect here runs on it, and work let go is its fork. */
+  readonly lifetime: HubLifetimeShape;
   readonly mayReopen: (item: WorkItemRow, origin: NeutralOrigin) => boolean;
   /** The problem of a start on a machine the owner paused (work-items.ts `notPaused`), or nothing. */
   readonly notPaused: (
@@ -479,6 +482,7 @@ export const createWorkspaces = ({
   landingRuns,
   launchesOn,
   leadFor,
+  lifetime,
   makingFrom,
   mayReopen,
   notPaused,
@@ -491,19 +495,27 @@ export const createWorkspaces = ({
 }: WorkspacesDeps) => {
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
   const opening = new Set<string>();
-  const discarding = new Map<string, Promise<void>>();
+  /** Each create's discard on its machine in flight: a second ask while one runs joins it. */
+  const discarding = makeJoin<string, void, unknown>();
   /** The filed and unfiled cases use the same machine archive, acknowledged before forgetting it. */
-  const discardCreate = (id: string, machineId: string): Promise<void> => {
-    const pending = discarding.get(id);
-    if (pending !== undefined) {
-      return pending;
-    }
+  const discardCreate = (
+    id: string,
+    machineId: string
+  ): Effect.Effect<void, unknown> => {
     const unmade: WorkspaceArchive = { id, unlanded: "unmade" };
-    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [unmade])
-      .then(() => db.finishWorkspaceCreate(id))
-      .finally(() => discarding.delete(id));
-    discarding.set(id, discarded);
-    return discarded;
+    return discarding.run(
+      id,
+      Effect.tryPromise({
+        try: () => call(machineId, CONTROL_WORKSPACE_ARCHIVE, [unmade]),
+        catch: (error) => error,
+      }).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            db.finishWorkspaceCreate(id);
+          })
+        )
+      )
+    );
   };
   /** Replays durable discards, including creates whose reply a previous hub never received. */
   const discardUnfiled = (machineId: string): void => {
@@ -511,11 +523,18 @@ export const createWorkspaces = ({
       if (opening.has(id)) {
         continue;
       }
-      discardCreate(id, machineId).catch((error: unknown) => {
-        console.warn(
-          `[workspaces] discard ${id} on ${machineId} is still pending: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
+      lifetime.fork(
+        `discard ${id}`,
+        discardCreate(id, machineId).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              console.warn(
+                `[workspaces] discard ${id} on ${machineId} is still pending: ${error instanceof Error ? error.message : String(error)}`
+              );
+            })
+          )
+        )
+      );
     }
   };
   /** The one workspace `needle` names; refused when it names none or several. */
@@ -1344,8 +1363,8 @@ export const createWorkspaces = ({
       return failed(error instanceof Error ? error.message : String(error));
     }
   };
-  /** Each archived workspace whose folder is being cleared ({@link closeLeftClones}), from its turn's start: a cut again of it waits for that ({@link recut}). */
-  const reclosing = new Map<string, Promise<void>>();
+  /** Each archived workspace whose folder is being cleared ({@link closeLeftClones}), from its turn's start, done as the clearing ends however it ends: a cut again of it waits for that ({@link recut}). */
+  const reclosing = new Map<string, Deferred.Deferred<void>>();
   /** The last reason each machine's folders could not be listed ({@link clonesOn}): one line per change, not per sweep. */
   const listFailures = new Map<string, string>();
   /**
@@ -1399,40 +1418,51 @@ export const createWorkspaces = ({
       if (workspaceTurns.isBusy(left.id) || recutting.has(left.id)) {
         continue;
       }
-      const outcome = await inWorkspaceTurn(
-        left.id,
-        async (): Promise<Settled> => {
-          const [now] = db.workspacesNamed(left.id);
-          if (now?.state !== "archived" || recutting.has(now.id)) {
-            return { kind: "none" };
-          }
-          const { promise, resolve } = Promise.withResolvers<void>();
-          reclosing.set(now.id, promise);
-          try {
-            await call(now.machineId, CONTROL_WORKSPACE_ARCHIVE, [
+      const reclose = Effect.gen(function* () {
+        const [now] = db.workspacesNamed(left.id);
+        if (now?.state !== "archived" || recutting.has(now.id)) {
+          return { kind: "none" } satisfies Settled;
+        }
+        const cleared = Deferred.makeUnsafe<void>();
+        reclosing.set(now.id, cleared);
+        yield* Effect.tryPromise({
+          try: () =>
+            call(now.machineId, CONTROL_WORKSPACE_ARCHIVE, [
               {
                 ...refOf(now),
                 base: now.base,
                 unlanded: "unmade",
                 skip: [],
               } satisfies WorkspaceArchive,
-            ]);
-            console.log(
-              `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: archived, and a folder stood at ${now.path} again; it is gone`
-            );
-            return { kind: "retired", carry: null };
-          } finally {
-            reclosing.delete(now.id);
-            resolve();
-          }
-        }
-      ).catch((error: unknown): Settled => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.warn(
-          `[workspaces] ${left.id}: archived, a folder stands at ${left.path} again, and clearing it failed: ${reason}`
+            ]),
+          catch: (error) => error,
+        }).pipe(
+          Effect.ensuring(
+            Effect.suspend(() => {
+              reclosing.delete(now.id);
+              return Deferred.succeed(cleared, undefined);
+            })
+          )
         );
-        return { kind: "failed", reason };
+        console.log(
+          `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: archived, and a folder stood at ${now.path} again; it is gone`
+        );
+        return { kind: "retired", carry: null } satisfies Settled;
       });
+      const outcome = await lifetime.run(
+        workspaceTurns.withLock(left.id, reclose).pipe(
+          Effect.catch((error) =>
+            Effect.sync((): Settled => {
+              const reason =
+                error instanceof Error ? error.message : String(error);
+              console.warn(
+                `[workspaces] ${left.id}: archived, a folder stands at ${left.path} again, and clearing it failed: ${reason}`
+              );
+              return { kind: "failed", reason };
+            })
+          )
+        )
+      );
       done.push({ workspace: left, outcome });
     }
     return done;
@@ -1487,26 +1517,33 @@ export const createWorkspaces = ({
       `[workspaces] ${workspace.id} on ${machine}: ${workWords.workEnding(awake, hold)}`
     );
     const asked: WorkspaceWorkEnd = { id: workspace.id, instanceIds: awake };
-    detach(
-      call(workspace.machineId, CONTROL_WORKSPACE_WORK_END, [asked]).then(
-        () => {
-          workEndFailures.delete(workspace.id);
-        },
-        (error: unknown) => {
-          // Asked again at the next settle.
-          if (workEndedFor.get(workspace.id) === ended) {
-            workEndedFor.delete(workspace.id);
-          }
-          const reason = error instanceof Error ? error.message : String(error);
-          if (workEndFailures.get(workspace.id) !== reason) {
-            console.warn(
-              `[workspaces] ${workspace.id} on ${machine}: ${workWords.workNotEnded(reason)}`
-            );
-          }
-          workEndFailures.set(workspace.id, reason);
-        }
-      ),
-      `end left work ${workspace.id}`
+    lifetime.fork(
+      `end left work ${workspace.id}`,
+      Effect.tryPromise({
+        try: () =>
+          call(workspace.machineId, CONTROL_WORKSPACE_WORK_END, [asked]),
+        catch: (error) => error,
+      }).pipe(
+        Effect.match({
+          onSuccess: () => {
+            workEndFailures.delete(workspace.id);
+          },
+          onFailure: (error) => {
+            // Asked again at the next settle.
+            if (workEndedFor.get(workspace.id) === ended) {
+              workEndedFor.delete(workspace.id);
+            }
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            if (workEndFailures.get(workspace.id) !== reason) {
+              console.warn(
+                `[workspaces] ${workspace.id} on ${machine}: ${workWords.workNotEnded(reason)}`
+              );
+            }
+            workEndFailures.set(workspace.id, reason);
+          },
+        })
+      )
     );
   };
   /**
@@ -1670,8 +1707,13 @@ export const createWorkspaces = ({
       settleSoon(workspaceId);
     };
   };
-  /** A settle queued in its workspace's turn and not yet begun: every caller meanwhile shares it. */
-  const settleQueued = new Map<string, Promise<Settled>>();
+  /**
+   * A settle queued in its workspace's turn and not yet begun: every caller
+   * meanwhile shares its outcome. Not a cache, and not a join: the entry
+   * goes as the settle begins, so one asked while it runs is one more after
+   * it.
+   */
+  const settleQueued = new Map<string, Deferred.Deferred<Settled>>();
   /**
    * THE way a workspace is settled ({@link settle}), in its turn: asked while
    * one runs, one more runs after it, shared by every caller asking before
@@ -1679,34 +1721,52 @@ export const createWorkspaces = ({
    * all come here. Never rejects. `clones`: the sweep's list of its
    * machine's folders ({@link clonesOn}).
    */
+  const settling = (
+    id: string,
+    clones?: ReadonlySet<string>
+  ): Effect.Effect<Settled> =>
+    Effect.suspend(() => {
+      const queued = settleQueued.get(id);
+      if (queued !== undefined) {
+        return Deferred.await(queued);
+      }
+      // Queued before its turn is asked for: a turn nothing runs in begins
+      // at once, in this step, and takes the entry out as it begins.
+      const shared = Deferred.makeUnsafe<Settled>();
+      settleQueued.set(id, shared);
+      return workspaceTurns
+        .withLock(
+          id,
+          Effect.suspend(() => {
+            settleQueued.delete(id);
+            return Effect.tryPromise({
+              try: () => settle(id, clones),
+              catch: (error) => error,
+            });
+          })
+        )
+        .pipe(
+          Effect.catch((error) =>
+            Effect.sync((): Settled => {
+              const reason =
+                error instanceof Error ? error.message : String(error);
+              console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
+              return { kind: "failed", reason };
+            })
+          ),
+          Effect.onExit((exit) => Deferred.done(shared, exit))
+        );
+    });
+  /** The promise edge of {@link settling}. */
   const settleNow = (
     id: string,
     clones?: ReadonlySet<string>
-  ): Promise<Settled> => {
-    const queued = settleQueued.get(id);
-    if (queued !== undefined) {
-      return queued;
-    }
-    // The turn may begin before inWorkspaceTurn returns, when nothing runs
-    // in it: then the settle has begun and is no longer queued to share.
-    let begun = false;
-    const run = inWorkspaceTurn(id, () => {
-      begun = true;
-      settleQueued.delete(id);
-      return settle(id, clones);
-    }).catch((error: unknown): Settled => {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
-      return { kind: "failed", reason };
-    });
-    if (!begun) {
-      settleQueued.set(id, run);
-    }
-    return run;
-  };
-  /** {@link settleNow}, off the caller's step. */
+  ): Promise<Settled> => lifetime.run(settling(id, clones));
+  /** {@link settling}, off the caller's step. */
   const settleSoon = (id: string): void => {
-    soon(() => detach(settleNow(id), `settle ${id}`));
+    soon(() => {
+      lifetime.fork(`settle ${id}`, settling(id));
+    });
   };
   /**
    * A held workspace whose items have all ended and whose starter will
@@ -1806,7 +1866,7 @@ export const createWorkspaces = ({
     if (workspace?.state !== "held") {
       return;
     }
-    const again = inWorkspaceTurn(id, async (): Promise<void> => {
+    const again = async (): Promise<void> => {
       const [now] = db.workspacesNamed(id);
       if (now?.state !== "held") {
         return;
@@ -1832,8 +1892,14 @@ export const createWorkspaces = ({
       console.log(
         `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
       );
-    });
-    detach(again, `resettle ${id}`);
+    };
+    lifetime.fork(
+      `resettle ${id}`,
+      workspaceTurns.withLock(
+        id,
+        Effect.tryPromise({ try: again, catch: (error) => error })
+      )
+    );
   };
   /**
    * What workspace `id` holds on no remote, in its turn
@@ -2106,8 +2172,10 @@ export const createWorkspaces = ({
       >
     | ReturnType<typeof cutUnread>
     | NonNullable<ReturnType<typeof notPaused>>;
-  /** Each workspace's cut under way ({@link recut}): one at a time. */
-  const recutting = new Map<string, Promise<WorkspaceRow | NotCut>>();
+  /** Each workspace's cut under way ({@link recut}): one at a time, every caller sharing it. */
+  const recuts = makeJoin<string, WorkspaceRow | NotCut, unknown>();
+  /** The workspaces a cut again is under way for ({@link recuts}), from its start to its end. */
+  const recutting = new Set<string>();
   /**
    * A retired workspace ({@link recuttable}) cut again on its machine, at the
    * same path (a function of its id) with the same id and branch, at the
@@ -2182,31 +2250,23 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     onCut?: () => void
   ): Promise<WorkspaceRow | NotCut> => {
-    const pending = recutting.get(workspace.id);
-    if (pending !== undefined) {
-      return onCut
-        ? pending.then((row) => {
-            if (!(row instanceof ElysiaStatus)) {
-              onCut();
-            }
-            return row;
-          })
-        : pending;
-    }
-    if (isHostFolder(workspace)) {
+    // One under way is joined, whatever the row read now says.
+    const underWay = recutting.has(workspace.id);
+    if (isHostFolder(workspace) && !underWay) {
       return Promise.resolve(reopenHost(workspace, onCut));
     }
     const head = headOf(workspace);
-    if (!head && workspaceOf(workspace).kind !== "folderOverlay") {
+    if (
+      !(head || underWay) &&
+      workspaceOf(workspace).kind !== "folderOverlay"
+    ) {
       return Promise.reject(
         new Error(
           `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
         )
       );
     }
-    const work = (async (): Promise<WorkspaceRow | NotCut> => {
-      // A folder at its path being cleared: cut once that is done.
-      await reclosing.get(workspace.id);
+    const cut = async (): Promise<WorkspaceRow | NotCut> => {
       const paused = notPaused(workspace.machineId);
       if (paused) {
         return paused;
@@ -2252,9 +2312,30 @@ export const createWorkspaces = ({
       workspaceChanged?.(again);
       console.log(recutLine(workspace, head));
       return again;
-    })().finally(() => recutting.delete(workspace.id));
-    recutting.set(workspace.id, work);
-    return work;
+    };
+    /** Whether this call's start is the run: one that joins a cut under way hears it after. */
+    let mine = false;
+    const start = Effect.gen(function* () {
+      mine = true;
+      recutting.add(workspace.id);
+      // A folder at its path being cleared: cut once that is done.
+      const cleared = reclosing.get(workspace.id);
+      if (cleared !== undefined) {
+        yield* Deferred.await(cleared);
+      }
+      return yield* Effect.tryPromise({ try: cut, catch: (error) => error });
+    }).pipe(Effect.ensuring(Effect.sync(() => recutting.delete(workspace.id))));
+    return lifetime.run(
+      recuts.run(workspace.id, start).pipe(
+        Effect.tap((row) =>
+          Effect.sync(() => {
+            if (!mine && onCut && !(row instanceof ElysiaStatus)) {
+              onCut();
+            }
+          })
+        )
+      )
+    );
   };
   /**
    * THE ONE WAY WORK GOES ON IN A FINISHED ITEM'S WORKSPACE from outside
@@ -2620,7 +2701,7 @@ export const createWorkspaces = ({
     const letGo = async (reason: string): Promise<string> => {
       opening.delete(id);
       const waited = ((Date.now() - started) / 1000).toFixed(1);
-      const pending = await discardCreate(id, machineId).then(
+      const pending = await lifetime.run(discardCreate(id, machineId)).then(
         () => undefined,
         (discardError: unknown) =>
           discardError instanceof Error
