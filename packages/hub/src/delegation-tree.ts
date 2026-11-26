@@ -9,6 +9,7 @@
 
 import type { FilingStage } from "@cawco/core/context-filing";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { HOUR_MS } from "@cawco/core/time";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { WorkItemState } from "@cawco/core/work-items";
@@ -456,7 +457,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       : { lastActivityAt: item.endedAt ?? item.createdAt, cacheWarm: false };
     return {
       instanceId: item.instanceId,
-      name: row ? sessionLabel(row).name : item.instanceId.slice(0, 8),
+      name: row ? sessionLabel(row).name : shortId(item.instanceId),
       title: item.title,
       state: item.state,
       machine: row ? deps.machineName(row.machineId) : "",
@@ -673,7 +674,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
           const label = row ? sessionLabel(row) : undefined;
           return [one.item.title, label?.name, label?.tag, row?.cwd];
         },
-        said: (one) => `${handleOf(one.item.instanceId)} “${one.item.title}”`,
+        said: (one) => `${shortId(one.item.instanceId)} “${one.item.title}”`,
       },
       "delegate of yours"
     );
@@ -696,5 +697,3 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
 
   return { read };
 };
-
-const handleOf = (id: string): string => id.slice(0, 8);

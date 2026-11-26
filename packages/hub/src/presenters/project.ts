@@ -8,6 +8,7 @@
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { taskLink } from "@cawco/core/references";
 import type { RelayView } from "@cawco/core/relays";
+import { shortId } from "@cawco/core/short-id";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import type {
@@ -18,16 +19,7 @@ import type {
 import { PAYLOAD_MAX } from "../ingress-views";
 import type { FolderFile, FolderListing } from "../project-folder";
 import type { RelayCreated } from "../relay-created";
-import {
-  ago,
-  ahead,
-  count,
-  handle,
-  lines,
-  listed,
-  quote,
-  valueWords,
-} from "./words";
+import { ago, ahead, count, lines, listed, quote, valueWords } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
 const LIST_MARK = /^- /u;
@@ -140,10 +132,10 @@ export const deletedWords =
       : `There was no such ${what} to delete.`;
 
 const routeLine = (route: EventRouteView, now: number): string =>
-  `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
+  `- ${shortId(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${shortId(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
 
 const pollLine = (poll: ConnectorPollView, now: number): string =>
-  `- ${handle(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
+  `- ${shortId(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
 
 /** `event_route_list`: GitHub, GitLab and Gitea polling, the routes, the polls, the newest events. */
 export const ingressWords = (view: IngressView): string => {
@@ -174,7 +166,7 @@ export const ingressWords = (view: IngressView): string => {
             : "Newest inbound events:",
           view.events.map(
             (event) =>
-              `- ${event.kind} from ${event.source} ${ago(event.receivedAt, now)} · ${event.routedTo ? `to routine ${handle(event.routedTo)}` : "routed to no routine"}${event.handledAt === null ? ", not handled yet" : ""}`
+              `- ${event.kind} from ${event.source} ${ago(event.receivedAt, now)} · ${event.routedTo ? `to routine ${shortId(event.routedTo)}` : "routed to no routine"}${event.handledAt === null ? ", not handled yet" : ""}`
           )
         )
   );
@@ -200,7 +192,7 @@ export const pollWords = (poll: ConnectorPollView): string =>
   pollLine(poll, Date.now()).replace(LIST_MARK, "Poll ");
 
 const actionLine = (action: ApprovedActionView, now: number): string =>
-  `- ${handle(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
+  `- ${shortId(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
 
 /** `action_list`. */
 export const actionListWords = ({
@@ -228,14 +220,14 @@ export const actionProposedWords = (proposed: {
   id: string;
   said: string;
   state: string;
-}): string => `Proposed ${handle(proposed.id)}: ${proposed.said}`;
+}): string => `Proposed ${shortId(proposed.id)}: ${proposed.said}`;
 
 /** `action_cancel`. */
 export const actionWords = (action: ApprovedActionView): string =>
   actionLine(action, Date.now()).replace(LIST_MARK, "Action ");
 
 const relayLine = (relay: RelayView, now: number): string =>
-  `- ${handle(relay.id)} · ${relay.provider}${relay.repo ? ` ${relay.repo}` : ""} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
+  `- ${shortId(relay.id)} · ${relay.provider}${relay.repo ? ` ${relay.repo}` : ""} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
 
 /** `relay_list`. */
 export const relayListWords = (relays: RelayView[]): string => {
@@ -253,7 +245,7 @@ export const relayCreatedWords = (created: RelayCreated): string =>
   lines(
     relayLine(created.relay, Date.now()).replace(LIST_MARK, "Relay "),
     created.suggestedRoutes.routines.length > 0
-      ? `${created.suggestedRoutes.note} Routes to propose (event_route_create) for ${created.suggestedRoutes.source}: ${listed(created.suggestedRoutes.routines.map((routine) => `${routine.name} ${handle(routine.id)}`))}.`
+      ? `${created.suggestedRoutes.note} Routes to propose (event_route_create) for ${created.suggestedRoutes.source}: ${listed(created.suggestedRoutes.routines.map((routine) => `${routine.name} ${shortId(routine.id)}`))}.`
       : created.suggestedRoutes.note
   );
 

@@ -12,21 +12,32 @@
  * - `.max(N)` on a schema (zod's method, Valibot's and Effect Schema's
  *   `maxLength(N)`-style actions), and `.min(N)` or a `min…` action for N > 1;
  * - a JSON-schema or TypeBox option: `maxItems`, `maxLength`, `maximum`,
- *   `maxProperties`, and `minItems`, `minLength`, `minimum` for N > 1;
- * - `.slice(0, N)`, `.substring(0, N)`, `.splice(N)`, for N > 0;
+ *   `maxProperties`, `exclusiveMaximum`, and `minItems`, `minLength`, `minimum` for N > 1;
+ * - `.slice(0, N)`, `.substring(0, N)`, `.splice(N)` for N > 0, and `.slice(-N)` for N > 1;
  * - `Math.min(x, N)`, or a call of a function named `clamp…` with a fixed bound;
+ *   a bound of 0 or 1 is unit-interval arithmetic (`Math.min(t, 1)`,
+ *   `clamp(t, 0, 1)`), no limit;
+ * - a query's limit: Drizzle's `.limit(N)` and `LIMIT N` in SQL text, for N > 1;
+ * - `take(N)` for N > 1;
+ * - a length guard: `.length` or `.size` compared (`<`, `<=`, `>`, `>=`) with N > 1;
  * - a `const` named as a limit ({@link LIMIT_NAME}, {@link LIMIT_CAMEL}) whose
- *   value is a number, or an object of numbers, each numeric property its own bound.
+ *   value is a number, or an object of numbers, each numeric property its own bound;
+ * - an object property or a default parameter named as a limit
+ *   ({@link LIMIT_PROPERTY}: `limit`, `max…`, `…Limit`, `…Max`, `…Cap`, `…Most`)
+ *   whose value is a number.
  *
  * A use of a limit-named constant is that constant's bound, reported where it
  * is declared; a use of another constant declared in the same file stands
- * when that declaration carries the tag.
+ * when that declaration carries the tag. A selection of one thing
+ * (`slice(-1)`, `take(1)`, `limit(1)`) bounds nothing.
  *
  * A bound stands with a comment directly above it, its property, or the
  * statement holding it, that carries `@limit asked: <cawco: link or URL>`,
  * `@limit measured: <what, where>` or `@limit external: <platform, citation>`.
  * A tag above something that holds more than one bound covers only the bounds
- * it names. There is no other way past it.
+ * it names. In Svelte markup the tag is a JS comment inside the `{…}`,
+ * before the bound (`{items.slice(0, /* @limit … *\/ 3)}`): Biome reads no
+ * comment that opens the braces. There is no other way past it.
  *
  * golar.config.ts runs it over every TypeScript and Svelte file under
  * packages/, apps/ (not the paused apps/apple) and scripts/;
@@ -36,10 +47,10 @@ import { defineRule } from "golar/unstable";
 import {
   type BinaryExpression,
   type CallExpression,
-  getLeadingCommentRanges,
   isArrowFunction,
   isAsExpression,
   isBinaryExpression,
+  isBindingElement,
   isCallExpression,
   isElementAccessExpression,
   isFunctionExpression,
@@ -48,15 +59,20 @@ import {
   isNoSubstitutionTemplateLiteral,
   isNumericLiteral,
   isObjectLiteralExpression,
+  isParameterDeclaration,
   isParenthesizedExpression,
   isPrefixUnaryExpression,
   isPropertyAccessExpression,
   isPropertyAssignment,
+  isRelationalOperator,
   isSatisfiesExpression,
   isSourceFile,
   isSpreadElement,
   isStatement,
   isStringLiteral,
+  isTemplateHead,
+  isTemplateMiddle,
+  isTemplateTail,
   isTypeAssertion,
   isVariableDeclaration,
   isVariableDeclarationList,
@@ -82,6 +98,11 @@ const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/gu;
 /** A `const` declaration list's keyword, read off its text. */
 const CONST_KEYWORD = /^const\b/u;
 const CLAMP = /^clamp/iu;
+/** A property or parameter named as a limit: `limit`, `maxWidth`, `rowLimit`, `retryCap`, `atMost`. */
+const LIMIT_PROPERTY =
+  /^(?:limit|max(?:[A-Z0-9_].*)?)$|[a-z0-9](?:Limit|Max|Cap|Most)$/u;
+/** A literal `LIMIT N` in SQL text. */
+const SQL_LIMIT = /\bLIMIT\s+(\d+)\b/gu;
 
 /** The JSON-schema and TypeBox options that cap, and those that floor. */
 const OPTION_MAX = new Set([
@@ -89,6 +110,7 @@ const OPTION_MAX = new Set([
   "maxLength",
   "maximum",
   "maxProperties",
+  "exclusiveMaximum",
 ]);
 const OPTION_MIN = new Set(["minItems", "minLength", "minimum"]);
 /** Valibot's and Effect Schema's actions that cap a schema, and those that floor one. */
@@ -135,7 +157,11 @@ export type BoundKind =
   | "schema option"
   | "slice/substring/splice"
   | "Math.min/clamp"
-  | "limit-named const";
+  | "query limit"
+  | "take(N)"
+  | "length guard"
+  | "limit-named const"
+  | "limit-named property/default";
 
 interface Bound {
   /** Where it is reported, and where the walk for its tag starts. */
@@ -184,6 +210,12 @@ const named = (name: string): boolean =>
   LIMIT_NAME.test(name) || LIMIT_CAMEL.test(name);
 
 const values = (numbers: number[]): string => numbers.join(" | ");
+
+/** 0 or 1: the unit interval's ends, and a selection of one thing. */
+const unit = (n: number): boolean => n === 0 || n === 1;
+
+/** Whether some value bounds more than one thing. */
+const many = (numbers: number[]): boolean => numbers.some((n) => n > 1);
 
 /** Whether `node` can hold no number, so the checker need not be asked. */
 const notNumeric = (node: Node): boolean =>
@@ -256,6 +288,37 @@ const leaves = (outer: Node): number => {
   return Math.max(count, 1);
 };
 
+/** A comment and the whitespace before it, read from where a node's trivia starts. */
+const COMMENT = /(\s*)(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/uy;
+const NEWLINE = /\n/u;
+const NEWLINE_NEXT = /^[ \t]*\r?\n/u;
+
+/**
+ * The comments in the trivia from `pos` to the next token: those on lines
+ * above it and one on its line before it (`items.slice(0, /* @limit … *\/ 3)`,
+ * as a Svelte expression carries its tag), but not one trailing the token
+ * before, on that token's line.
+ */
+const commentsBefore = (text: string, pos: number): string[] => {
+  const found: string[] = [];
+  let at = pos;
+  let crossedLine = pos === 0;
+  for (;;) {
+    COMMENT.lastIndex = at;
+    const match = COMMENT.exec(text);
+    if (!match) {
+      return found;
+    }
+    const [whole, space = "", comment = ""] = match;
+    crossedLine ||= NEWLINE.test(space);
+    at += whole.length;
+    const trailing = !crossedLine && NEWLINE_NEXT.test(text.slice(at));
+    if (!trailing) {
+      found.push(comment);
+    }
+  }
+};
+
 const names = (comment: string, leaf: string): boolean =>
   new RegExp(`\\b${leaf.replace(REGEX_SPECIAL, "\\$&")}\\b`, "u").test(comment);
 
@@ -290,6 +353,13 @@ export const limitHasAReason = defineRule({
     const file: SourceFile = context.sourceFile;
     const { text } = file;
     const bounds: Bound[] = [];
+    /** `LIMIT N` in SQL text: a range inside its literal, not a node of its own. */
+    const sqlLimits: {
+      begin: number;
+      count: number;
+      end: number;
+      node: Node;
+    }[] = [];
     const declarations = new Map<string, VariableDeclaration>();
 
     /** The number the checker types `node` as, or the numbers of its union of number literals. */
@@ -369,7 +439,8 @@ export const limitHasAReason = defineRule({
           isSpreadElement(argument) || readsNamed(argument)
             ? undefined
             : fixed(argument);
-        return numbers ? [{ argument, numbers }] : [];
+        // A bound of 0 or 1 is unit-interval arithmetic, no limit.
+        return numbers && !numbers.every(unit) ? [{ argument, numbers }] : [];
       });
       const [head] = found;
       if (head) {
@@ -399,6 +470,10 @@ export const limitHasAReason = defineRule({
     /** `slice(0, N)` or `substring(0, N)` with N > 0: a count of 0 or less drops from the end and caps nothing. */
     const sliceBound = (call: CallExpression, method: string): void => {
       const [first, second] = call.arguments;
+      if (method === "slice" && call.arguments.length === 1 && first) {
+        tailBound(call, first);
+        return;
+      }
       if (call.arguments.length !== 2 || !first || !second) {
         return;
       }
@@ -412,6 +487,33 @@ export const limitHasAReason = defineRule({
           values(numbers),
           `.${method}(0, N)`
         );
+      }
+    };
+
+    /** `slice(-N)` with N > 1: the last N kept; `slice(-1)` is the last one. */
+    const tailBound = (call: CallExpression, first: Node): void => {
+      const numbers = fixed(first);
+      if (numbers?.some((n) => n < -1)) {
+        callBound(
+          "slice/substring/splice",
+          call,
+          first,
+          values(numbers.map((n) => -n)),
+          ".slice(-N)"
+        );
+      }
+    };
+
+    /** `.limit(N)` (Drizzle) or `take(N)` with N > 1: `limit(1)` and `take(1)` select one row. */
+    const countBound = (
+      call: CallExpression,
+      kind: BoundKind,
+      label: string
+    ): void => {
+      const [first] = call.arguments;
+      const numbers = first && fixed(first);
+      if (first && numbers && many(numbers)) {
+        callBound(kind, call, first, values(numbers), label);
       }
     };
 
@@ -441,6 +543,14 @@ export const limitHasAReason = defineRule({
       }
     };
 
+    /** The bounds a method's name alone tells. */
+    const byMethod: Record<string, (call: CallExpression) => void> = {
+      slice: (call) => sliceBound(call, "slice"),
+      substring: (call) => sliceBound(call, "substring"),
+      splice: spliceBound,
+      limit: (call) => countBound(call, "query limit", ".limit"),
+    };
+
     const visitCall = (call: CallExpression): void => {
       const { fn, method, receiver } = calleeOf(call);
       const args = call.arguments;
@@ -450,10 +560,10 @@ export const limitHasAReason = defineRule({
         schemaBound(call, `.${method}`, method === "max");
       } else if (fn && (ACTION_MAX.has(fn) || ACTION_MIN.has(fn))) {
         schemaBound(call, fn, ACTION_MAX.has(fn));
-      } else if (method === "slice" || method === "substring") {
-        sliceBound(call, method);
-      } else if (method === "splice") {
-        spliceBound(call);
+      } else if (method && Object.hasOwn(byMethod, method)) {
+        byMethod[method]?.(call);
+      } else if (fn === "take") {
+        countBound(call, "take(N)", "take");
       } else if (fn && CLAMP.test(fn)) {
         clampBound(call, args.slice(1), fn);
       }
@@ -526,13 +636,109 @@ export const limitHasAReason = defineRule({
       }
     };
 
+    /** An object property or a default parameter named as a limit, holding a number. */
+    const visitNamedValue = (
+      name: Node | undefined,
+      value: Node | undefined
+    ): void => {
+      const key =
+        name && (isIdentifier(name) || isStringLiteral(name))
+          ? name.text
+          : undefined;
+      if (
+        key === undefined ||
+        value === undefined ||
+        !LIMIT_PROPERTY.test(key) ||
+        OPTION_MAX.has(key) ||
+        readsNamed(value)
+      ) {
+        return;
+      }
+      const numbers = fixed(value);
+      if (name && numbers && !bounds.some((b) => b.at === name)) {
+        bounds.push({
+          kind: "limit-named property/default",
+          at: name,
+          leaf: key,
+          name: key,
+          value: values(numbers),
+          reads: readName(value) ? value : undefined,
+        });
+      }
+    };
+
+    /** `.length` or `.size` compared with a fixed N > 1. */
+    const visitGuard = (guard: BinaryExpression): void => {
+      if (!isRelationalOperator(guard.operatorToken.kind)) {
+        return;
+      }
+      const sized = (side: Node): string | undefined => {
+        const at = unwrap(side);
+        return isPropertyAccessExpression(at) &&
+          (at.name.text === "length" || at.name.text === "size")
+          ? at.name.text
+          : undefined;
+      };
+      const pairs: [Node, Node][] = [
+        [guard.left, guard.right],
+        [guard.right, guard.left],
+      ];
+      for (const [measured, against] of pairs) {
+        const what = sized(measured);
+        const numbers =
+          what && !readsNamed(against) ? fixed(against) : undefined;
+        if (what && numbers && many(numbers)) {
+          callBound(
+            "length guard",
+            guard,
+            against,
+            values(numbers),
+            `.${what}`
+          );
+          return;
+        }
+      }
+    };
+
+    /** A literal `LIMIT N` in SQL text, N > 1, reported at its number. */
+    const visitSql = (literal: Node): void => {
+      const start = literal.getStart(file);
+      const written = text.slice(start, literal.end);
+      for (const match of written.matchAll(SQL_LIMIT)) {
+        const count = Number(match[1]);
+        if (count > 1) {
+          const at =
+            start + match.index + match[0].length - (match[1] ?? "").length;
+          sqlLimits.push({
+            node: literal,
+            begin: at,
+            end: at + (match[1] ?? "").length,
+            count,
+          });
+        }
+      }
+    };
+
     const visit = (node: Node): void => {
       if (isVariableDeclaration(node)) {
         visitDeclaration(node);
       } else if (isPropertyAssignment(node)) {
         visitOption(node);
+        visitNamedValue(node.name, node.initializer);
+      } else if (isParameterDeclaration(node) || isBindingElement(node)) {
+        visitNamedValue(node.name, node.initializer);
       } else if (isCallExpression(node)) {
         visitCall(node);
+      } else if (isBinaryExpression(node)) {
+        visitGuard(node);
+      } else if (
+        isStringLiteral(node) ||
+        isNoSubstitutionTemplateLiteral(node) ||
+        isTemplateHead(node) ||
+        isTemplateMiddle(node) ||
+        isTemplateTail(node)
+      ) {
+        visitSql(node);
       }
       node.forEachChild(visit);
     };
@@ -540,9 +746,7 @@ export const limitHasAReason = defineRule({
 
     /** The comment carrying a valid tag directly before `pos`, if one does. */
     const tagAt = (pos: number): string | undefined =>
-      (getLeadingCommentRanges(text, pos) ?? [])
-        .map((range) => text.slice(range.pos, range.end))
-        .find((comment) => TAG.test(comment));
+      commentsBefore(text, pos).find((comment) => TAG.test(comment));
 
     const within = (outer: Node): number =>
       bounds.filter((b) => b.at.pos >= outer.pos && b.at.end <= outer.end)
@@ -609,9 +813,22 @@ export const limitHasAReason = defineRule({
       );
     };
 
+    const inside = (outer: Node): number =>
+      within(outer) +
+      sqlLimits.filter((l) => l.begin >= outer.pos && l.end <= outer.end)
+        .length;
+    for (const limit of sqlLimits) {
+      if (!tagged(limit.node, "LIMIT", inside)) {
+        context.report({
+          message: `${MESSAGE} SQL LIMIT = ${limit.count}`,
+          range: { begin: limit.begin, end: limit.end },
+        });
+      }
+    }
+
     for (const bound of bounds) {
       const stands =
-        tagged(bound.at, bound.leaf, within) ||
+        tagged(bound.at, bound.leaf, inside) ||
         (bound.reads !== undefined && declaredTagged(bound.reads));
       if (!stands) {
         context.report({

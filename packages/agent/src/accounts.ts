@@ -36,6 +36,7 @@ import {
 } from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { z } from "zod";
@@ -995,7 +996,7 @@ const shareDirNow = async (
   }
   await makeFolder(target);
   if (there) {
-    const id8 = account.slice(0, 8);
+    const id8 = shortId(account);
     for (const name of await readdir(path)) {
       const from = join(path, name);
       const into = join(target, name);

@@ -1,6 +1,7 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 
 /**
@@ -129,7 +130,7 @@ export function resolveSessionTitle(input: {
     return leaf;
   }
 
-  return input.id ? input.id.slice(0, 8) : "session";
+  return input.id ? shortId(input.id) : "session";
 }
 
 /**

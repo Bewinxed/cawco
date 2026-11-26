@@ -11,6 +11,9 @@
  */
 
 /** The words every account move's relaunch line carries. */
+
+import { shortId } from "../short-id";
+
 const RELAUNCHES_ON = "relaunches on";
 
 /** What each relaunch is for: its log tag, and where it relaunches the session. */
@@ -61,7 +64,7 @@ export const relaunchWords = {
 
 /** Why a session whose work a continuation took on never runs again. */
 export const continuedWords = (continuedInto: string): string =>
-  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
+  `This session was continued in session ${shortId(continuedInto)}, which carries its work on; it doesn't run again. Write to ${shortId(continuedInto)}.`;
 
 /**
  * Where a continued session's work went, as its page says it in its

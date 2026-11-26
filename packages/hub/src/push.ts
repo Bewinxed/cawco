@@ -92,6 +92,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
@@ -1246,7 +1247,7 @@ export const createPush = ({
       atDesk.set(id, item);
       alertDesk(tab, item);
       console.log(
-        `[notify] ${presenceLogWords.heldAtDesk(id)}; shown on tab ${tab.slice(0, 8)}`
+        `[notify] ${presenceLogWords.heldAtDesk(id)}; shown on tab ${shortId(tab)}`
       );
     }
     return going;
@@ -1268,7 +1269,7 @@ export const createPush = ({
       timer: lifetime.after("push desk ack missed", DESK_ACK_MS, () => {
         unanswered.delete(id);
         console.log(
-          `[notify] push ${id}: tab ${tab.slice(0, 8)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
+          `[notify] push ${id}: tab ${shortId(tab)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
         );
         notifications.dropDeskTab(tab);
         deskOn(id);
@@ -1306,9 +1307,7 @@ export const createPush = ({
         ? notifications.deskTab()
         : undefined;
     if (tab) {
-      console.log(
-        `[notify] push ${id}: shown on tab ${tab.slice(0, 8)} instead`
-      );
+      console.log(`[notify] push ${id}: shown on tab ${shortId(tab)} instead`);
       alertDesk(tab, item);
       return;
     }
@@ -1338,7 +1337,7 @@ export const createPush = ({
       return;
     }
     console.log(
-      `[notify] push ${collapseId}: tab ${clientId.slice(0, 8)} can't show a desktop notification; it is no longer an alert target`
+      `[notify] push ${collapseId}: tab ${shortId(clientId)} can't show a desktop notification; it is no longer an alert target`
     );
     notifications.dropDeskTab(clientId);
     deskOn(collapseId);

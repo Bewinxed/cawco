@@ -63,6 +63,7 @@ import { openLockFile, tryLock, unlock } from "./flock";
 import { makeFolderSync } from "./folders";
 import { workspaceCacheDir } from "./paths/workspace";
 import { parentPid } from "./process-identity";
+import { shortId } from "./short-id";
 import { parseRecord } from "./state-file";
 import { HOUR_MS } from "./time";
 
@@ -294,9 +295,7 @@ export function heldAbove(place: SlotPlace): string | null {
 }
 
 const where = (): string =>
-  process.env.CAWCO_WORKSPACE
-    ? process.env.CAWCO_WORKSPACE.slice(0, 8)
-    : "host";
+  process.env.CAWCO_WORKSPACE ? shortId(process.env.CAWCO_WORKSPACE) : "host";
 
 const minutes = (ms: number): string => {
   const s = Math.round(ms / 1000);

@@ -61,6 +61,7 @@ import {
   wordsOf,
 } from "@cawco/core/find-match";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { searchWords } from "@cawco/core/words/search";
 import { ElysiaStatus, problem } from "elysia";
@@ -952,7 +953,7 @@ export const createFindTool = (deps: FindToolDeps) => {
       header: {
         kind: "conversation",
         id,
-        title: sessionId.slice(0, 8),
+        title: shortId(sessionId),
         where: machine ? `on ${machine}` : "",
       },
       read: (centre: Centre, side: number, chars: number) =>

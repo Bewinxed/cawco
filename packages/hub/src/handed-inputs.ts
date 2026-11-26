@@ -22,6 +22,7 @@ import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import { readRange } from "@cawco/core/file-range";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { cutShort } from "@cawco/core/words/helpers";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus, problem } from "elysia";
@@ -115,8 +116,6 @@ export interface HandedInputDeps {
   workspaceText: (workspaceId: string, path: string) => Promise<string>;
 }
 
-const short = (id: string) => id.slice(0, 8);
-
 /** Media types an attachment's picture lands with, by extension. */
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": ".png",
@@ -206,7 +205,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         {
           id: ([key]) => key,
           said: ([key, item]) =>
-            `${item.title} (${key === item.id ? "item" : "session"} ${short(key)})`,
+            `${item.title} (${key === item.id ? "item" : "session"} ${shortId(key)})`,
         },
         "work item"
       )
@@ -229,7 +228,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         409,
         "handed-report-none",
         `{ report: "${id}" }`,
-        `${item.title} (${short(item.id)}) is ${item.state} and has no report yet; hand it once it has finished`
+        `${item.title} (${shortId(item.id)}) is ${item.state} and has no report yet; hand it once it has finished`
       );
     }
     const text = [
@@ -243,9 +242,9 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     ].join("\n");
     const files: HandedFile[] = [
       {
-        name: `report-${short(item.id)}.md`,
+        name: `report-${shortId(item.id)}.md`,
         bytes: Buffer.from(text),
-        from: `report of ${item.title} (${short(item.id)})`,
+        from: `report of ${item.title} (${shortId(item.id)})`,
       },
     ];
     return files;
@@ -314,7 +313,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       return artifactRefused(`{ pins: "${id}" }`, read);
     }
     const [one] = read.artifacts;
-    const name = one?.name ?? short(id);
+    const name = one?.name ?? shortId(id);
     const files: HandedFile[] = [
       {
         name: `pins-${name}.json`,
@@ -393,7 +392,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         {
           id: (row) => row.id,
           said: (row) =>
-            `${row.title ?? row.derivedTitle ?? "untitled"} (${short(row.id)})`,
+            `${row.title ?? row.derivedTitle ?? "untitled"} (${shortId(row.id)})`,
         },
         "session of your delegation tree"
       )
@@ -428,7 +427,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         all.length > names.length
           ? `its newest ${names.length} of ${all.length} are`
           : "its newest are";
-      const where = own ? "your session" : `session ${short(holder.id)}`;
+      const where = own ? "your session" : `session ${shortId(holder.id)}`;
       return unhanded(
         404,
         "handed-attachment-unknown",
@@ -468,7 +467,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         (one) =>
           one.startsWith(picture.hash) && one.endsWith(`.${picture.extension}`)
       );
-    const where = own ? "your session" : `session ${short(holder.id)}`;
+    const where = own ? "your session" : `session ${shortId(holder.id)}`;
     if (!name) {
       return unhanded(
         404,
@@ -491,7 +490,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         name: `attachment-${pictureName(name)}`,
         bytes: Buffer.from(bytes),
         // Read by the receiver: the caller is its parent.
-        from: `a picture sent to ${own ? "your parent" : `session ${short(holder.id)}`}`,
+        from: `a picture sent to ${own ? "your parent" : `session ${shortId(holder.id)}`}`,
       },
     ];
     return files;
@@ -552,7 +551,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         409,
         "handed-assets-no-project",
         entry,
-        `${item.title} (${short(item.id)}) is in no project, so there is no ${folder}/ to copy from`
+        `${item.title} (${shortId(item.id)}) is in no project, so there is no ${folder}/ to copy from`
       );
     }
     const paths = await folderFiles(item.projectId, folder);

@@ -95,6 +95,7 @@ import type {
   StoredRun,
 } from "@cawco/core/session-messages";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { shortId } from "@cawco/core/short-id";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
@@ -4519,7 +4520,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       const { client } = slot;
       if (!client) {
         throw new Error(
-          `Workspace ${view.slice(0, 8)}'s OpenCode server went away.`
+          `Workspace ${shortId(view)}'s OpenCode server went away.`
         );
       }
       console.info(
@@ -5917,7 +5918,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         });
       }
       console.info(
-        `[opencode] workspace ${view.slice(0, 8)}: archived, and no session is in its view's server's database: that server's record and data home are gone`
+        `[opencode] workspace ${shortId(view)}: archived, and no session is in its view's server's database: that server's record and data home are gone`
       );
     }
   }
@@ -7457,7 +7458,7 @@ async function putSlotCredential(
           {
             id: credential.id,
             integrationID: credential.integrationID,
-            label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
+            label: `The machine's own sign-in, for workspace ${slot.view && shortId(slot.view)}`,
             value: opencodeCredentialValue(credential.value),
             activate: true,
           },
@@ -7543,7 +7544,7 @@ async function settledMcpList(client: OpencodeClient, names: string[]) {
 function homeName(home: string): string {
   const { account, view } = homeParts(home);
   if (view !== undefined) {
-    return `workspace ${view.slice(0, 8)}'s view's`;
+    return `workspace ${shortId(view)}'s view's`;
   }
   return account === undefined ? "the machine's" : `account ${account}'s`;
 }
@@ -7694,7 +7695,7 @@ async function ownCredentials(): Promise<OpencodeOwnCredential[]> {
 /** A slot's server in words, for the log. */
 function slotName(slot: ServerSlot): string {
   if (slot.view !== undefined) {
-    return `workspace ${slot.view.slice(0, 8)}'s view's`;
+    return `workspace ${shortId(slot.view)}'s view's`;
   }
   return slot.account === undefined
     ? "the machine's"

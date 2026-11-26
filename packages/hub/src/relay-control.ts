@@ -14,6 +14,7 @@ import {
   CONTROL_SET_MODEL,
 } from "@cawco/core/session/controls";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import {
   STAGE_COMPONENTS,
   STAGE_DESIGN,
@@ -242,7 +243,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     console.log(
       `[hub] send -> ${message.payload.instanceId} (${taken})${
         provenance
-          ? ` client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
+          ? ` client ${provenance.clientId ?? "?"} presence ${provenance.presenceId ? shortId(provenance.presenceId) : "?"}`
           : ""
       }`
     );
@@ -901,7 +902,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         provenance
           ? turnWords.fromScreenBy(
               provenance.clientId ?? "?",
-              provenance.presenceId?.slice(0, 8) ?? "?"
+              provenance.presenceId ? shortId(provenance.presenceId) : "?"
             )
           : turnWords.fromScreen
       );

@@ -26,6 +26,7 @@ import {
 } from "./artifact-kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
 import { isOneOf } from "./one-of";
+import { shortId } from "./short-id";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
 import { type CarryRestored, INPUTS_DIR } from "./workspace/controls";
@@ -142,7 +143,7 @@ const handoffLine = (from: string, short: string): string =>
  * report names its delegate, so a reader can link, mark and relate the sender.
  */
 export const handoffMarker = (from: string, id: string): string =>
-  `${markerTag("handoff", { from, short: id.slice(0, 8) })}${handoffLine(from, id.slice(0, 8))}`;
+  `${markerTag("handoff", { from, short: shortId(id) })}${handoffLine(from, shortId(id))}`;
 
 /**
  * Where a hand-off's marker ends, its tag and its line and the whitespace

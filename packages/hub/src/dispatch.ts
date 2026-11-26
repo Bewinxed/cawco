@@ -129,6 +129,7 @@ import {
   taskLink,
   todoLink,
 } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import type {
   AttemptStart,
   Stage,
@@ -352,8 +353,6 @@ const PLACE_POLL_MS = 1000;
 const MAX_ATTEMPTS_LIMIT = 20;
 const REVIEW_LIMIT_LIMIT = 100;
 
-const short = (id: string): string => id.slice(0, 8);
-
 /** How long a commit is named in a task's history: git's own short form for a large repository. */
 const SHA_SHOWN = 9;
 
@@ -551,7 +550,7 @@ const attemptWork = async (
 
 /** How a session is named in a sentence. */
 const named = (row: InstanceRow): string =>
-  `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${short(row.id)}`}”`;
+  `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${shortId(row.id)}`}”`;
 
 /**
  * The one rule for who takes a project's reports: why `row` cannot take an
@@ -911,7 +910,7 @@ const retrySection = (
   );
   const fence = "`".repeat(Math.max(3, longest + 1));
   return [
-    `## The last attempt\n\nThis is a retry. The last attempt (work item ${short(retry.workItemId)}) ${retry.state === "cancelled" ? "was cancelled" : "failed"}; the hub reported:\n\n${fence}\n${tail}\n${fence}`,
+    `## The last attempt\n\nThis is a retry. The last attempt (work item ${shortId(retry.workItemId)}) ${retry.state === "cancelled" ? "was cancelled" : "failed"}; the hub reported:\n\n${fence}\n${tail}\n${fence}`,
     done.length > 0
       ? `Done so far, by the task's to-dos: ${done.map((todo) => (todo.id ? todoLink(projectId, task.id, todo.id, todo.text) : todo.text)).join("; ")}.`
       : "None of the task's to-dos is ticked yet.",
@@ -1746,7 +1745,7 @@ export const createDispatcher = ({
         projectId,
         task.id,
         active.name,
-        hubActor(`attempt ${short(item.id)} started`)
+        hubActor(`attempt ${shortId(item.id)} started`)
       );
       return moved instanceof ElysiaStatus
         ? unmoved(moved.response.detail)
@@ -2467,8 +2466,8 @@ export const createDispatcher = ({
     const noted = await tasks.comment(
       projectId,
       taskId,
-      `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
-      hubActor(`attempt ${short(item.id)}'s follow-up ended`)
+      `Attempt ${shortId(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
+      hubActor(`attempt ${shortId(item.id)}'s follow-up ended`)
     );
     return noted instanceof ElysiaStatus ? noted : undefined;
   };
@@ -2595,8 +2594,8 @@ export const createDispatcher = ({
       target.name,
       hubActor(
         closed
-          ? `its coordinator ${short(item.id)} reported and every part is done${landedAs(item)}`
-          : `its coordinator ${short(item.id)} ${item.state}`
+          ? `its coordinator ${shortId(item.id)} reported and every part is done${landedAs(item)}`
+          : `its coordinator ${shortId(item.id)} ${item.state}`
       )
     );
     return moved instanceof ElysiaStatus ? moved : undefined;
@@ -2651,23 +2650,23 @@ export const createDispatcher = ({
     criteria: number
   ): string => {
     if (judged === "done" && kind === "you") {
-      return `attempt ${short(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
+      return `attempt ${shortId(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
     }
     if (kind === "you" && item.state === "done" && item.error) {
-      return `attempt ${short(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
+      return `attempt ${shortId(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
     }
     if (kind === "you" && item.prUrl && item.lands === "pr") {
-      return `attempt ${short(item.id)} opened ${item.prUrl}`;
+      return `attempt ${shortId(item.id)} opened ${item.prUrl}`;
     }
     if (kind === "you") {
-      return `attempt ${short(item.id)} ${item.state}; with Jev and events off, its acceptance criteria wait for you`;
+      return `attempt ${shortId(item.id)} ${item.state}; with Jev and events off, its acceptance criteria wait for you`;
     }
     if (kind === "todo" && item.state === "done") {
-      return `attempt ${short(item.id)} ${item.state}; Jev does not show its acceptance criteria met`;
+      return `attempt ${shortId(item.id)} ${item.state}; Jev does not show its acceptance criteria met`;
     }
     return closedMet(judged, kind, criteria)
-      ? `attempt ${short(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
-      : `attempt ${short(item.id)} ${item.state}`;
+      ? `attempt ${shortId(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
+      : `attempt ${shortId(item.id)} ${item.state}`;
   };
 
   /**
@@ -2702,7 +2701,7 @@ export const createDispatcher = ({
       offLine(
         "judged",
         projectId,
-        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
+        `${task.id}'s attempt ${shortId(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
       );
       placement.judgeByLead(
         projectId,
@@ -2722,7 +2721,7 @@ export const createDispatcher = ({
     offLine(
       "judged",
       projectId,
-      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
+      `${task.id}'s attempt ${shortId(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
     );
     return "you";
   };
@@ -2748,7 +2747,7 @@ export const createDispatcher = ({
     criteria: string[],
     item: WorkItemRow
   ) => {
-    const about = hubActor(`attempt ${short(item.id)} judged`);
+    const about = hubActor(`attempt ${shortId(item.id)} judged`);
     const attempt = attemptNamed(item, task);
     const link = taskLink(projectId, task.id, task.title);
     // The comment on the task, then one line to the attempt's starter
@@ -2932,7 +2931,7 @@ export const createDispatcher = ({
     }
     db.markAttemptUnmet(newest.id);
     console.log(
-      `[dispatch] ${id}: the project's conversation sent it back to ${to}; its attempt ${short(newest.id)} counts as unmet, and the task waits for task_retry.`
+      `[dispatch] ${id}: the project's conversation sent it back to ${to}; its attempt ${shortId(newest.id)} counts as unmet, and the task waits for task_retry.`
     );
   };
 

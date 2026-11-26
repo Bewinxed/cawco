@@ -27,6 +27,7 @@ import {
 } from "@cawco/core/fleet";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
+import { shortId } from "@cawco/core/short-id";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
@@ -193,7 +194,7 @@ const listedNamed = <T extends Listed>(
     {
       id: (row) => row.id,
       names: (row) => [row.name],
-      said: (row) => `${row.name} (${row.id.slice(0, 8)})`,
+      said: (row) => `${row.name} (${shortId(row.id)})`,
     },
     what
   );

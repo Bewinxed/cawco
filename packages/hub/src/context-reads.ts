@@ -17,6 +17,7 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
 } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { secondsOf } from "@cawco/core/time";
 import { ElysiaStatus, problem } from "elysia";
 import { machineAccount } from "./accounts";
@@ -475,7 +476,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     const formers = Object.entries(ctx.db.formerIds()).flatMap(
       ([former, now]) => (now === parent ? [former] : [])
     );
-    return [parent, ...formers].map((id) => id.slice(0, 8));
+    return [parent, ...formers].map((id) => shortId(id));
   };
 
   return {

@@ -35,6 +35,7 @@ import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { MINUTE_MS } from "@cawco/core/time";
 import {
   FRESH_IDLE_MS,
@@ -236,7 +237,7 @@ export const createTriggers = (deps: TriggersDeps) => {
     }
     const why = await unfit(parent, project, false);
     if (why !== undefined) {
-      console.log(triggerWords.passedOver(parent.id.slice(0, 8), why));
+      console.log(triggerWords.passedOver(shortId(parent.id), why));
       return;
     }
     return parent;
@@ -303,7 +304,7 @@ export const createTriggers = (deps: TriggersDeps) => {
       if (why === undefined) {
         return owner;
       }
-      console.log(triggerWords.passedOver(owner.id.slice(0, 8), why));
+      console.log(triggerWords.passedOver(shortId(owner.id), why));
     }
   };
 
@@ -407,7 +408,7 @@ export const createTriggers = (deps: TriggersDeps) => {
       });
     }
     console.log(
-      `[triggers] ${project.name}: a fresh session for ${thing.kind} ${thing.id} started (item ${begun.item.id}, session ${begun.item.instanceId.slice(0, 8)})`
+      `[triggers] ${project.name}: a fresh session for ${thing.kind} ${thing.id} started (item ${begun.item.id}, session ${shortId(begun.item.instanceId)})`
     );
     return {
       to: "fresh",
@@ -467,7 +468,7 @@ export const createTriggers = (deps: TriggersDeps) => {
       if (why === undefined) {
         return { to: "owner", instanceId: owner.id };
       }
-      console.log(triggerWords.passedOver(owner.id.slice(0, 8), why));
+      console.log(triggerWords.passedOver(shortId(owner.id), why));
     }
   };
 

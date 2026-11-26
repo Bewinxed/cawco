@@ -4,6 +4,7 @@ import type { LayoutRead } from "@cawco/core/layout-guides";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import {
   type CanvasShapes,
   type CanvasSpec,
@@ -35,7 +36,6 @@ import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
 import { openProblem } from "../../preview-stops";
 import type { AnyProblem } from "../../refusal";
-
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
@@ -390,7 +390,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     return {
       hop: "stage",
-      at: `design ${tree.slice(0, 8)}'s stage on ${machine}`,
+      at: `design ${shortId(tree)}'s stage on ${machine}`,
     };
   };
   /** One write as the session reads of it: where, and what. */
@@ -932,7 +932,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       return designMissed(
         ask,
         "show",
-        `session ${making.owner.id.slice(0, 8)}'s panel`,
+        `session ${shortId(making.owner.id)}'s panel`,
         openProblem(shown.stop, "artifact-sheet-unshown", shown.why)
       );
     }

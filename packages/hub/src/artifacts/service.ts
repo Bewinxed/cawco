@@ -126,6 +126,7 @@ import type {
   SessionQuestion,
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
+import { shortId } from "@cawco/core/short-id";
 import {
   type CanvasDirection,
   type CanvasSpec,
@@ -2060,7 +2061,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? artifactToolWords.serverOnPort(
             source.port,
             source.workspace && workspaceIdKindOf(source.workspace) !== "place"
-              ? `in workspace ${source.workspace.slice(0, 8)}`
+              ? `in workspace ${shortId(source.workspace)}`
               : `on ${machine}`
           )
         : `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`;
@@ -4527,7 +4528,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         const key = server && `${machineId}:${server.workspace}@${server.port}`;
         if (key && !servers.has(key)) {
           servers.add(key);
-          letGoServer(machineId, source, `${name} (${id.slice(0, 8)}) deleted`);
+          letGoServer(machineId, source, `${name} (${shortId(id)}) deleted`);
         }
       }
     },
@@ -5177,7 +5178,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         // A preview's create refused (its folder missing, a home folder its copy refuses, a server that didn't start) is said once in the journal.
         if (created instanceof ElysiaStatus && input.kind === "preview") {
           console.warn(
-            `[artifacts] preview ${input.name} of session ${instance.id.slice(0, 8)} (${sessionLabel(instance).name}) refused: ${String(created.response.detail)}`
+            `[artifacts] preview ${input.name} of session ${shortId(instance.id)} (${sessionLabel(instance).name}) refused: ${String(created.response.detail)}`
           );
         }
         return created;
@@ -5848,7 +5849,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         writeStage(next, moved.stage);
       }
       console.log(
-        `[artifacts] ${row.name} (${row.id.slice(0, 8)}): moved to workspace ${to.id.slice(0, 8)}, where its workspace's work went on and landed`
+        `[artifacts] ${row.name} (${shortId(row.id)}): moved to workspace ${shortId(to.id)}, where its workspace's work went on and landed`
       );
       return next;
     },
@@ -6271,7 +6272,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         },
         {
           author: { name: sessionLabel(instance).name },
-          message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
+          message: `Promote ${row.kind} ${row.name} from session ${shortId(instance.id)}`,
         }
       );
       if (changed instanceof ElysiaStatus) {

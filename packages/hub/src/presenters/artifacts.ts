@@ -12,6 +12,7 @@ import type { ArtifactPick } from "@cawco/core/artifact-kinds";
 import { pinStandsOn } from "@cawco/core/comments/deliver";
 import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import { artifactLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import {
   type CanvasSpec,
   type DesignMap,
@@ -53,7 +54,6 @@ import {
   ago,
   ahead,
   count,
-  handle,
   lines,
   listed,
   quote,
@@ -518,7 +518,7 @@ export const artifactReadWords = (
     canvasLines(read, now),
     writeLines(read),
     read.workspace &&
-      `It previews a server of workspace ${handle(read.workspace)}.`,
+      `It previews a server of workspace ${shortId(read.workspace)}.`,
     stageWords(read),
     "errors" in read && componentLines(read),
     read.program !== undefined &&
@@ -828,7 +828,7 @@ const pinLines = (
     heading ?? `## ${pin.number}.`,
     ...facts.map((fact) =>
       fact.startsWith("- Inside the artifact ")
-        ? fact.replace(WHOLE_ID, (id) => handle(id))
+        ? fact.replace(WHOLE_ID, (id) => shortId(id))
         : fact
     ),
     ...(pin.inkBox
@@ -836,7 +836,7 @@ const pinLines = (
           `- Ink: ${Math.round(pin.inkBox.w)} × ${Math.round(pin.inkBox.h)} px at ${Math.round(pin.inkBox.x)}, ${Math.round(pin.inkBox.y)} in the page`,
         ]
       : []),
-    `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${handle(pin.id)}`,
+    `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${shortId(pin.id)}`,
     ...threadLines(pin.thread, now),
   ];
 };

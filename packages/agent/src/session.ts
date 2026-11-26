@@ -152,6 +152,7 @@ import {
   type SessiondLimit,
 } from "@cawco/core/sessiond";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import type { FrameProvenance, RegisterAckPayload } from "@cawco/core/stream";
 import { alreadyIngested, resumeCursor } from "@cawco/core/stream";
@@ -4930,7 +4931,7 @@ export class SessionSupervisor {
       const window = await adapter.readTranscriptWindow(key, dir, asked);
       catalogRead(
         at,
-        `readTranscriptWindow ${adapter.kind} ${key.slice(0, 8)} ${JSON.stringify(asked)}: ${window.entries.length} message(s)`
+        `readTranscriptWindow ${adapter.kind} ${shortId(key)} ${JSON.stringify(asked)}: ${window.entries.length} message(s)`
       );
       return window;
     },
@@ -4946,7 +4947,7 @@ export class SessionSupervisor {
       );
       catalogRead(
         at,
-        `getSessionMessages ${adapter.kind} ${key.slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
+        `getSessionMessages ${adapter.kind} ${shortId(key)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
       );
       return messages;
     },
@@ -4958,7 +4959,7 @@ export class SessionSupervisor {
       ]);
       const read = readContinuation(live, whole, options?.askers ?? []);
       console.info(
-        `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
+        `[catalog] readContinuation ${adapter.kind} ${shortId(key)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
       );
       return read;
     },

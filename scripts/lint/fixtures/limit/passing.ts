@@ -45,3 +45,26 @@ export const kept = clamp(width, 320, 1200);
 // A count of 0 or less caps nothing: these stand with no tag.
 export const allButLast = items.slice(0, -1);
 export const drained = items.splice(0);
+
+declare const db: { select: () => { limit: (count: number) => unknown } };
+declare const take: (count: number) => unknown;
+declare const progress: number;
+
+// Unit-interval arithmetic and a selection of one thing bound nothing.
+export const share = Math.min(progress, 1);
+export const below = Math.min(progress, 0);
+export const unitClamp = clamp(progress, 0, 1);
+export const last = items.slice(-1);
+export const one = db.select().limit(1);
+export const head = take(1);
+export const pair = items.length === 2;
+export const some = items.length > 1;
+
+// @limit asked: cawco:card/9c8d7e6f
+export const recent = items.slice(-5);
+// @limit measured: the slowest history read, 50 rows in 40 ms, packages/hub/src/db
+export const rows = db.select().limit(50);
+export const query = {
+  // @limit external: the GitHub REST API's documented largest page, https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api
+  limit: 100,
+};

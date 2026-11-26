@@ -73,6 +73,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./session-messages";
+import { shortId } from "./short-id";
 import { withoutSkillMarkers } from "./skill-words";
 import {
   ContextLineSchema,
@@ -2290,7 +2291,7 @@ function cawcoRow(
         ...carried,
         peerName: origin.name ?? "another session",
         ...(origin.fromSession
-          ? { peerSession: origin.fromSession.slice(0, 8) }
+          ? { peerSession: shortId(origin.fromSession) }
           : {}),
       },
     };

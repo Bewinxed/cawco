@@ -60,6 +60,7 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import {
   isDamagedRecord,
@@ -699,7 +700,7 @@ const clearUnmarked = async (id: string): Promise<void> => {
     return;
   }
   const path = await createdAt(id);
-  const id8 = id.slice(0, 8);
+  const id8 = shortId(id);
   const name = path ? basename(path) : "";
   if (
     !path ||
@@ -986,7 +987,7 @@ const cutClone = async (
   );
   const remoteEnv = hub ? hubGitEnv(hub) : hostEnvironment();
   const authed = hub ? gitUntil(deadline, remoteEnv) : plain;
-  const id8 = id.slice(0, 8);
+  const id8 = shortId(id);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
   const branch = `ws/${id8}`;
   const state = join(workspacesDir(), id);
@@ -1110,7 +1111,7 @@ const makeFolderLayer = async (
   const path =
     process.platform === "linux"
       ? folder
-      : expandHome(`~/.worktrees/${basename(folder)}-${id.slice(0, 8)}`);
+      : expandHome(`~/.worktrees/${basename(folder)}-${shortId(id)}`);
   const state = join(workspacesDir(), id);
   await clearStaleLayer(id, path, Boolean(cut));
   try {

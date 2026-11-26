@@ -38,6 +38,7 @@ import {
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { externalItemWords } from "@cawco/core/words/external-items";
@@ -944,7 +945,7 @@ export const createEventRoutes = ({
             store.routes(projectId),
             {
               id: (one) => one.id,
-              said: (one) => `${one.source} ${one.id.slice(0, 8)}`,
+              said: (one) => `${one.source} ${shortId(one.id)}`,
             },
             "event route"
           ).id;
@@ -960,7 +961,7 @@ export const createEventRoutes = ({
             {
               id: (poll) => poll.id,
               said: (poll) =>
-                `${poll.connection}:${poll.tool} ${poll.id.slice(0, 8)}`,
+                `${poll.connection}:${poll.tool} ${shortId(poll.id)}`,
             },
             "connector poll"
           ).id;

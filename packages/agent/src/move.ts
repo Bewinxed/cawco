@@ -44,6 +44,7 @@ import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
@@ -175,7 +176,7 @@ const runStep = <T>(
   work: (run: Run) => Promise<T>
 ): Promise<T> => {
   const running = runs.get(jobId);
-  const job = jobId.slice(0, 8);
+  const job = shortId(jobId);
   const inFlight = flights.get(jobId);
   if (inFlight) {
     console.info(
@@ -1090,7 +1091,7 @@ const MARKER = "cawco-move";
 
 /** The place the clone is made before it takes its name. */
 const cloneScratch = (path: string, jobId: string): string =>
-  join(dirname(path), `.${basename(path)}.cawco-move-${jobId.slice(0, 8)}`);
+  join(dirname(path), `.${basename(path)}.cawco-move-${shortId(jobId)}`);
 
 /**
  * Leaves the clone as the source stood: on the source's branch at its HEAD,

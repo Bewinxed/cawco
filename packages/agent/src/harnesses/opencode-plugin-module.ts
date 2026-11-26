@@ -104,6 +104,7 @@ import {
   hookToolInputBack,
 } from "@cawco/core/hooks";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type * as Judge from "@cawco/core/workspace-judge";
@@ -334,7 +335,7 @@ const workspaceOf = (directory: string): Holding | undefined => {
   const [top] = (
     at.startsWith(`${worktrees}/`) ? at.slice(worktrees.length + 1) : ""
   ).split("/");
-  const hit = damaged.find(({ id }) => top?.endsWith(`-${id.slice(0, 8)}`));
+  const hit = damaged.find(({ id }) => top?.endsWith(`-${shortId(id)}`));
   if (hit) {
     throw new Error(
       `cawco: workspace ${hit.id}'s record is damaged: ${hit.damage}. Archive the workspace to remove it.`

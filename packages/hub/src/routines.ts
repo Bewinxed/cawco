@@ -95,6 +95,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
 } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import type { TaskRoutine } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import type { StageKind } from "@cawco/core/views";
@@ -780,7 +781,7 @@ export const createRoutines = ({
     const label = slotLabel(run.slot, zoneOf(routine));
     onThread(
       routine,
-      `its run ${run.id.slice(0, 8)} (${label})`,
+      `its run ${shortId(run.id)} (${label})`,
       title(label),
       body
     );
@@ -1550,7 +1551,7 @@ export const createRoutines = ({
         projectId,
         taskId,
         done,
-        hubActor(`its run ${run.id.slice(0, 8)} said stop: ${evidence}`),
+        hubActor(`its run ${shortId(run.id)} said stop: ${evidence}`),
         evidence || undefined
       );
       return moved instanceof ElysiaStatus ? moved.response.detail : undefined;
@@ -1702,7 +1703,7 @@ export const createRoutines = ({
     }
     if (watched && HUB_DEBUG) {
       console.log(
-        `[routines] frame ${instanceId.slice(0, 8)} ${neutral.type} armed=${armed.has(instanceId)}`
+        `[routines] frame ${shortId(instanceId)} ${neutral.type} armed=${armed.has(instanceId)}`
       );
     }
     if (neutral.type === "result") {
@@ -3181,7 +3182,7 @@ export const createRoutines = ({
   const commandChanged = (routine: RoutineRow, by: InstanceRow): void => {
     onThread(
       routine,
-      `${by.id.slice(0, 8)} changed its check`,
+      `${shortId(by.id)} changed its check`,
       checkWords.changedNote,
       checkWords.changedBody(routine.command ?? "")
     );

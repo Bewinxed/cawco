@@ -96,6 +96,7 @@ import {
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { STAGE_CLONE_GIT_MS, STAGE_COPY_LIMIT } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -992,7 +993,7 @@ const cloneNow = async (
   const kept = await keptOf(id);
   const path =
     (await recordedPath(id)) ??
-    expandHome(`~/.worktrees/${basename(from)}-stage-${id.slice(0, 8)}`);
+    expandHome(`~/.worktrees/${basename(from)}-stage-${shortId(id)}`);
   const boundary: WorkspaceRef = { id, path };
   const whole = await wholeAt(path, repo ? { repo } : { folder: real }, kept);
   if (whole) {
@@ -1176,7 +1177,7 @@ const heard = (
     follow.named.add(what.path);
   }
   follow.settle ??= setTimeout(() => {
-    detach(settled(id, follow), `stage ${id.slice(0, 8)} follow`);
+    detach(settled(id, follow), `stage ${shortId(id)} follow`);
   }, SETTLE_MS);
 };
 
@@ -1198,7 +1199,7 @@ const rewatch = (id: string, follow: Following, after: number): void => {
   unwatch(follow);
   follow.rewatch = setTimeout(() => {
     follow.rewatch = undefined;
-    detach(watchSource(id, follow), `stage ${id.slice(0, 8)} watch`);
+    detach(watchSource(id, follow), `stage ${shortId(id)} watch`);
   }, after);
 };
 
@@ -1221,7 +1222,7 @@ const watchSource = async (id: string, follow: Following): Promise<void> => {
   const source = sourceOf(kept);
   const ignored = await ignoredBy(kept).catch((error: unknown) => {
     console.warn(
-      `[stage] ${id.slice(0, 8)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
+      `[stage] ${shortId(id)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
     );
     return [];
   });
@@ -1255,7 +1256,7 @@ const watchSource = async (id: string, follow: Following): Promise<void> => {
     .on("ready", () => heard(id, follow, "whole"))
     .on("error", (error) => {
       console.warn(
-        `[stage] ${id.slice(0, 8)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
+        `[stage] ${shortId(id)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
       );
       if (follow.watcher === watcher) {
         rewatch(id, follow, REWATCH_MS);
@@ -1277,7 +1278,7 @@ export const followCheckout = (place: WorkspaceRef): (() => void) => {
   if (!follow) {
     follow = { users: 0, named: new Set(), gone: new Set(), whole: false };
     following.set(id, follow);
-    detach(watchSource(id, follow), `stage ${id.slice(0, 8)} watch`);
+    detach(watchSource(id, follow), `stage ${shortId(id)} watch`);
   }
   follow.users += 1;
   const mine = follow;
@@ -1435,7 +1436,7 @@ export const dropPin = (pin: string): Promise<void> =>
       return;
     }
     await dropped(pin, await recordedPath(pin));
-    console.info(`[stage] pin ${pin.slice(0, 8)}: let go`);
+    console.info(`[stage] pin ${shortId(pin)}: let go`);
   });
 
 /**

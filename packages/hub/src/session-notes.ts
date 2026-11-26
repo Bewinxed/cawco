@@ -2,6 +2,7 @@ import type { AccountMove } from "@cawco/core/accounts";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { LeakFound } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { accountMoveSentence } from "@cawco/core/words/account-lines";
 import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
@@ -113,9 +114,9 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
         parent,
         leakWords.delegateLeft(
           item.title,
-          item.id.slice(0, 8),
+          shortId(item.id),
           item.state,
-          item.workspaceId.slice(0, 8),
+          shortId(item.workspaceId),
           told.content
         ),
         {
@@ -203,7 +204,7 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
         parent,
         containerWords.delegateEnded(
           item.title,
-          item.id.slice(0, 8),
+          shortId(item.id),
           told.content
         ),
         {

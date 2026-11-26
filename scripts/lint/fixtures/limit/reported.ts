@@ -41,3 +41,21 @@ export const MAX_DEPTH = 8;
 // A tag above more than one bound covers only those it names.
 // @limit measured: the board's widest row, apps/dashboard/src/lib/board.ts
 export const PANE_LIMITS = { width: 480, height: 320 };
+
+declare const db: { select: () => { limit: (count: number) => unknown } };
+declare const sql: (
+  parts: TemplateStringsArray,
+  ...values: unknown[]
+) => unknown;
+declare const take: (count: number) => unknown;
+declare const seen: Set<string>;
+declare const table: string;
+
+export const recent = items.slice(-5);
+export const rows = db.select().limit(20);
+export const latest = sql`SELECT * FROM ${table} ORDER BY at DESC LIMIT 50`;
+export const query = { limit: 25, maxWidth: 480, exclusiveMaximum: 99 };
+export const page = (rowCap = 40): number => rowCap;
+export const crowded = items.length > 10;
+export const full = seen.size >= 100;
+export const firstFive = take(5);

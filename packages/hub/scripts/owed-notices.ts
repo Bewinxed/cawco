@@ -15,6 +15,7 @@ import { byPerson } from "@cawco/core/harness";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { asLastErrorKind } from "@cawco/core/relaunch";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { OWED_NOTICE_DAYS, owedNoticeEnd } from "../src/owed-ends";
 import { countedDatabase } from "./counted-database";
@@ -144,6 +145,6 @@ const keptWhy = (row: OwedRow): string => {
 console.log(`stays owed: ${kept.length} (${tally(kept.map(keptWhy))})`);
 for (const [instanceId, one] of sessions) {
   console.log(
-    `  ${instanceId.slice(0, 8)} ${one.status}: ${one.count} ${one.why}`
+    `  ${shortId(instanceId)} ${one.status}: ${one.count} ${one.why}`
   );
 }

@@ -133,7 +133,7 @@ scripts/lint/fixtures/limit/reported.ts:29:37 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:30:36 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:31:33 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:32:39 house/limit-has-a-reason
-scripts/lint/fixtures/limit/reported.ts:33:34 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:33:37 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:34:14 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:35:14 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:36:37 house/limit-has-a-reason
@@ -141,3 +141,13 @@ scripts/lint/fixtures/limit/reported.ts:36:48 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:40:14 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:43:30 house/limit-has-a-reason
 scripts/lint/fixtures/limit/reported.ts:43:42 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:54:35 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:55:39 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:56:73 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:57:24 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:57:35 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:57:50 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:58:22 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:59:39 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:60:34 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:61:31 house/limit-has-a-reason

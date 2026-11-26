@@ -15,6 +15,7 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import {
   isDamagedRecord,
   readRecord,
@@ -247,12 +248,12 @@ export const refusal = (id: string, why: string): Error => {
       return new Error(`place ${id} cannot be bounded on this machine: ${why}`);
     case "design":
       return new Error(
-        `design ${id.slice(0, 8)}'s stage cannot run on this machine: ${why}`
+        `design ${shortId(id)}'s stage cannot run on this machine: ${why}`
       );
     case "clone":
     case undefined:
       return new Error(
-        `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
+        `workspace ${shortId(id)} cannot run a delegate on this machine: ${why}`
       );
   }
 };

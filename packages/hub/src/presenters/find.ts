@@ -4,7 +4,9 @@
  * and the handle `around` (or the hit's own tool) takes back; `around`'s
  * turns, a line each. The detailed form is the hits as JSON, every id whole.
  */
-import { ago, count, handle, lines, quote } from "./words";
+
+import { shortId } from "@cawco/core/short-id";
+import { ago, count, lines, quote } from "./words";
 
 /** A task hit's id, `<project>:tsk-1`. */
 const TASK_HIT = /:(tsk-\d+)$/u;
@@ -22,7 +24,7 @@ const idWords = (id: string): string => {
   if (task?.[1]) {
     return task[1];
   }
-  return WHOLE_ID.test(id) ? handle(id) : id;
+  return WHOLE_ID.test(id) ? shortId(id) : id;
 };
 
 /** A ref, `<hit id>#<record>@<when>`, as `around` takes it back: the id's and the record's handles, the time whole. */
@@ -33,8 +35,8 @@ const refWords = (ref: string): string => {
   }
   const at = record.lastIndexOf("@");
   return at < 0
-    ? `${idWords(id ?? "")}#${handle(record)}`
-    : `${idWords(id ?? "")}#${handle(record.slice(0, at))}${record.slice(at)}`;
+    ? `${idWords(id ?? "")}#${shortId(record)}`
+    : `${idWords(id ?? "")}#${shortId(record.slice(0, at))}${record.slice(at)}`;
 };
 
 /** Where a hit is, its ids as handles. */

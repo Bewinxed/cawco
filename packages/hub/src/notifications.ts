@@ -78,6 +78,7 @@ import {
   type PresenceDevice,
 } from "@cawco/core/notifications";
 import { plainAddress } from "@cawco/core/public-address";
+import { shortId } from "@cawco/core/short-id";
 import { MachineStateSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
@@ -340,7 +341,7 @@ const lockSince = (
 const labelOf = (device: DeviceFacts): string =>
   device.kind === "send"
     ? "a send from no device that beats"
-    : `${device.kind} ${device.id.slice(0, 8)}`;
+    : `${device.kind} ${shortId(device.id)}`;
 
 /** The device with the newest input, or null when none has said any. */
 const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
@@ -966,7 +967,7 @@ export const createNotifications = ({
       : `input ${Math.round((now - at) / 1000)}s ago`;
 
   const said = (clientId: string, client: Client, now: number): string =>
-    `[presence] ${client.client} ${clientId.slice(0, 8)}: ${client.active && client.sessionId ? `active on ${client.sessionId}` : `inactive (${client.sessionId ?? "no session"} in front)`}, ${ago(client.inputAt, now)}${client.machine ? `, machine ${client.machine}` : ""}${client.handheld ? ", handheld" : ""}`;
+    `[presence] ${client.client} ${shortId(clientId)}: ${client.active && client.sessionId ? `active on ${client.sessionId}` : `inactive (${client.sessionId ?? "no session"} in front)`}, ${ago(client.inputAt, now)}${client.machine ? `, machine ${client.machine}` : ""}${client.handheld ? ", handheld" : ""}`;
 
   /**
    * A beat worth a log line: a new client, another session or state, one
@@ -1012,7 +1013,7 @@ export const createNotifications = ({
       lapsed.add(clientId);
       if (client.active && client.sessionId) {
         console.log(
-          `[presence] ${client.client} ${clientId.slice(0, 8)}: lapsed, no beat for ${PRESENCE_TTL_MS / 1000}s while active on ${client.sessionId}`
+          `[presence] ${client.client} ${shortId(clientId)}: lapsed, no beat for ${PRESENCE_TTL_MS / 1000}s while active on ${client.sessionId}`
         );
       }
     }
@@ -1063,7 +1064,7 @@ export const createNotifications = ({
       // Said before the beat already kept: it landed late, and is over.
       if (before !== undefined && beat.saidAt < before.saidAt) {
         console.log(
-          `[presence] ${beat.client} ${beat.clientId.slice(0, 8)}: a beat said ${before.saidAt - beat.saidAt}ms before the one kept landed late; dropped`
+          `[presence] ${beat.client} ${shortId(beat.clientId)}: a beat said ${before.saidAt - beat.saidAt}ms before the one kept landed late; dropped`
         );
         return;
       }
@@ -1127,12 +1128,12 @@ export const createNotifications = ({
         const [clientId, client] = found;
         keepClient(clientId, { ...client, inputAt: now, at: now });
         console.log(
-          `[presence] ${client.client} ${clientId.slice(0, 8)}: the person's send to ${instanceId.slice(0, 8)}, counted as input there`
+          `[presence] ${client.client} ${shortId(clientId)}: the person's send to ${shortId(instanceId)}, counted as input there`
         );
       } else {
         keepSpoke(now, instanceId);
         console.log(
-          `[presence] the person's send to ${instanceId.slice(0, 8)} from no device that beats on it: counted as input`
+          `[presence] the person's send to ${shortId(instanceId)} from no device that beats on it: counted as input`
         );
       }
       reroll();
@@ -1157,7 +1158,7 @@ export const createNotifications = ({
       // states this hub reads.
       if (!MachineStateSchema.safeParse(activity.state).success) {
         console.log(
-          `[presence] machine ${machineId.slice(0, 8)}: a state this hub does not know, ${JSON.stringify(activity.state)}; dropped`
+          `[presence] machine ${shortId(machineId)}: a state this hub does not know, ${JSON.stringify(activity.state)}; dropped`
         );
         return;
       }
@@ -1172,7 +1173,7 @@ export const createNotifications = ({
       });
       if (before?.state !== activity.state) {
         console.log(
-          `[presence] machine ${machineId.slice(0, 8)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)`
+          `[presence] machine ${shortId(machineId)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)`
         );
       }
       reroll();
@@ -1256,7 +1257,7 @@ export const createNotifications = ({
         db.presence.dropClient(machineId);
       }
       console.log(
-        `[presence] machine ${machineId.slice(0, 8)}: ${on ? "counts" : "does not count"} toward the person`
+        `[presence] machine ${shortId(machineId)}: ${on ? "counts" : "does not count"} toward the person`
       );
       reroll();
       return viewOf(told, Date.now());

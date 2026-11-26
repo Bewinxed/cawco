@@ -39,6 +39,7 @@ import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
 import type { SessionRole } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -947,7 +948,7 @@ export const createActions = ({
                   {
                     id: (action) => action.id,
                     said: (action) =>
-                      `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
+                      `${action.connection}:${action.tool} ${shortId(action.id)}`,
                   },
                   "action"
                 ).id,

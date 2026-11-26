@@ -59,6 +59,7 @@ import type { ResultArtifact } from "@cawco/core/deliverables";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { lastLines } from "@cawco/core/words/helpers";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { stageCloneId } from "@cawco/core/workspace-policy";
@@ -179,8 +180,6 @@ export interface DesignVerifyDeps {
     tellSession: (instanceId: string, content: string) => void;
   };
 }
-
-const short = (id: string): string => id.slice(0, 8);
 
 /** One finding as the builder and the task read it. */
 const findingLine = (finding: DesignFinding, at: number): string =>
@@ -451,7 +450,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
           `rm -rf ${shellQuote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
         ).catch((error: unknown) =>
           console.warn(
-            `[design-verify] ${short(check.itemId)}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
+            `[design-verify] ${shortId(check.itemId)}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
           )
         );
       }
@@ -505,11 +504,11 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     workItems.holdWords(item.id, CHECKING);
     await comment(
       check,
-      `Being checked against the design system: a verifier session judges attempt ${short(item.id)}'s work (on ${at.head.slice(0, 9)}${at.patch ? ", with changes not yet committed" : ""}) before it reaches review.`,
-      `attempt ${short(item.id)} handed in design work`
+      `Being checked against the design system: a verifier session judges attempt ${shortId(item.id)}'s work (on ${at.head.slice(0, 9)}${at.patch ? ", with changes not yet committed" : ""}) before it reaches review.`,
+      `attempt ${shortId(item.id)} handed in design work`
     );
     console.log(
-      `[design-verify] ${item.taskId}: attempt ${short(item.id)}, tree ${at.tree.slice(0, 9)}, goes to a verifier`
+      `[design-verify] ${item.taskId}: attempt ${shortId(item.id)}, tree ${at.tree.slice(0, 9)}, goes to a verifier`
     );
     return "Not yet: this project has a design system, so a verifier session (never you) checks your result against it before it reaches review. Its findings come back to you as one message, each a must-fix: fix them and call finish_item again. On a pass the hub finishes your item itself. End your turn now.";
   };
@@ -655,7 +654,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       );
     } catch (error) {
       console.warn(
-        `[design-verify] ${short(check.itemId)}: verifier ${short(actor.id)}'s clone was not put back at ${workspace.branch}: ${error instanceof Error ? error.message : String(error)}`
+        `[design-verify] ${shortId(check.itemId)}: verifier ${shortId(actor.id)}'s clone was not put back at ${workspace.branch}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
@@ -737,7 +736,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       }
       const [workspace] = db.workspacesNamed(cutFrom);
       if (!workspace) {
-        return `The workspace ${short(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
+        return `The workspace ${shortId(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
       }
       if (!(await command(workspace, HAS_SYSTEM)).includes("system")) {
         return "This repository holds no design system (no design/manifest.json), so there is nothing to check it against.";
@@ -776,7 +775,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         return `The verifier did not start: ${failed}. Ask again.`;
       }
       console.log(
-        `[design-verify] artifact ${short(artifact.id)}: tree ${at.tree.slice(0, 9)}, goes to a verifier (asked by ${short(requester.id)})`
+        `[design-verify] artifact ${shortId(artifact.id)}: tree ${at.tree.slice(0, 9)}, goes to a verifier (asked by ${shortId(requester.id)})`
       );
       return "A verifier session (never you) is checking it against the project's design system now; its findings come to you as one message, each a must-fix.";
     },

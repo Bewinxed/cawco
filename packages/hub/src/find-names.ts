@@ -16,6 +16,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { fencedBlocks } from "@cawco/core/markdown-code";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { StageKind } from "@cawco/core/views";
@@ -318,7 +319,7 @@ export const storedEntry = (
     info.summary?.trim() ||
     first ||
     dir ||
-    info.sessionId.slice(0, 8);
+    shortId(info.sessionId);
   const result: FindConversation = {
     kind: "conversation",
     id: `${machine.id}:${info.sessionId}`,

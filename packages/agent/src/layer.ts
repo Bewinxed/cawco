@@ -87,6 +87,7 @@ import {
 } from "@cawco/core/paths/workspace";
 import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { PolicySchema, WorkspaceKindSchema } from "@cawco/core/stored-shapes";
@@ -252,7 +253,7 @@ export const overlaySync = (id: string): boolean =>
  */
 const clonePath = (id: string, path: string): boolean =>
   dirname(path) === join(homedir(), ".worktrees") &&
-  basename(path).endsWith(`-${id.slice(0, 8)}`);
+  basename(path).endsWith(`-${shortId(id)}`);
 
 /**
  * Whether workspace `id`'s `path` is a folder of its own (read from its

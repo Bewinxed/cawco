@@ -16,6 +16,7 @@ import { doing } from "@cawco/core/loop-watch";
 import { modelAdmitted, modelListingOn } from "@cawco/core/model-names";
 import type { InstanceStatus } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
+import { shortId } from "@cawco/core/short-id";
 import { HOUR_MS } from "@cawco/core/time";
 import {
   accountMoveSentence,
@@ -1344,7 +1345,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         }
       } catch (error) {
         console.warn(
-          `[accounts] ${id.slice(0, 8)}'s owed move was not taken up: ${error instanceof Error ? error.message : String(error)}`
+          `[accounts] ${shortId(id)}'s owed move was not taken up: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }

@@ -43,6 +43,7 @@ import {
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
@@ -338,7 +339,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         return;
       }
       console.info(
-        `[plan-changes] ${ended.id.slice(0, 8)} cannot go on (${reason}): the person's plan changes went to the new session ${next.slice(0, 8)}`
+        `[plan-changes] ${shortId(ended.id)} cannot go on (${reason}): the person's plan changes went to the new session ${shortId(next)}`
       );
       db.closePlanChanges(ids, { at: new Date() });
     } catch (error) {

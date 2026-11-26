@@ -62,6 +62,7 @@ import {
   type RelayProvider,
   type RelayView,
 } from "@cawco/core/relays";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { HookScheme } from "@cawco/providers/connection/descriptor";
 import {
@@ -1717,7 +1718,7 @@ export const createRelay = ({
           relays,
           {
             id: (relay) => relay.id,
-            said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
+            said: (relay) => `${relay.provider} ${shortId(relay.id)}`,
           },
           "relay"
         );

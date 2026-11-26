@@ -25,6 +25,7 @@ import {
 } from "@cawco/core/harness-config";
 import type { FleetHook } from "@cawco/core/hooks";
 import type { Rule, RuleRow } from "@cawco/core/rules";
+import { shortId } from "@cawco/core/short-id";
 import {
   memoryKeptWords,
   memoryListWords,
@@ -58,10 +59,10 @@ const placeWords = (row: {
   scope?: string;
 }): string => {
   if (row.projectId) {
-    return `project ${row.projectId.slice(0, 8)} only`;
+    return `project ${shortId(row.projectId)} only`;
   }
   return row.areaId
-    ? `area ${row.areaId.slice(0, 8)}'s projects only`
+    ? `area ${shortId(row.areaId)}'s projects only`
     : "every machine";
 };
 
@@ -115,7 +116,7 @@ export const delegateTypeSettingsWords = (
 };
 
 const connectionLine = (connection: ConnectionView): string =>
-  `- ${connection.name}: ${connection.service} as ${connection.account} · ${connection.transport}${connection.url ? ` ${connection.url}` : ""}${connection.command ? ` ${connection.command}` : ""} · ${connection.state}${connection.reason ? ` (${connection.reason})` : ""} · ${connection.hasSecret ? "key held" : "no key held"} · ${connection.tools ? `tools ${listed(connection.tools) || "none"}` : "tools not listed yet"}${connection.projects.length > 0 ? ` · projects ${connection.projects.map((id) => id.slice(0, 8)).join(", ")}` : ""}`;
+  `- ${connection.name}: ${connection.service} as ${connection.account} · ${connection.transport}${connection.url ? ` ${connection.url}` : ""}${connection.command ? ` ${connection.command}` : ""} · ${connection.state}${connection.reason ? ` (${connection.reason})` : ""} · ${connection.hasSecret ? "key held" : "no key held"} · ${connection.tools ? `tools ${listed(connection.tools) || "none"}` : "tools not listed yet"}${connection.projects.length > 0 ? ` · projects ${connection.projects.map((id) => shortId(id)).join(", ")}` : ""}`;
 
 /** admin_connections: each connection, or the one written. */
 export const connectionSettingsWords = (
@@ -269,7 +270,7 @@ const ruleLine = (rule: RuleRow): string => {
     rule.stats.lastFiredAt === null
       ? "never fired"
       : `fired ${count(rule.stats.totalFires, "time")}, last ${ago(rule.stats.lastFiredAt, now)}`;
-  return `- ${rule.name} (${rule.id.slice(0, 8)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern, 120)} · replies ${quote(rule.reply, 160)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}${rule.stats.unjudged > 0 ? ` · ${rulesWords.unjudged(rule.stats.unjudged, rule.stats.lastUnjudgedWhy ?? "no reason kept")}` : ""}`;
+  return `- ${rule.name} (${shortId(rule.id)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern, 120)} · replies ${quote(rule.reply, 160)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}${rule.stats.unjudged > 0 ? ` · ${rulesWords.unjudged(rule.stats.unjudged, rule.stats.lastUnjudgedWhy ?? "no reason kept")}` : ""}`;
 };
 
 const templateLine = (template: RuleTemplate): string =>
@@ -296,7 +297,7 @@ export const ruleSettingsWords = (
       templates.map(templateLine)
     );
   }
-  return `Saved rule ${answer.name} (${answer.id.slice(0, 8)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern, 120)}.`;
+  return `Saved rule ${answer.name} (${shortId(answer.id)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern, 120)}.`;
 };
 
 interface HookTemplate {
@@ -305,7 +306,7 @@ interface HookTemplate {
 }
 
 const hookLine = (hook: FleetHook): string =>
-  `- ${hook.name} (${hook.id.slice(0, 8)}) · ${hook.enabled ? "on" : "off"} · on ${hook.event}${hook.matcher ? ` matching ${hook.matcher}` : ""} · ${hook.handler.type}${hook.script ? ", with a script" : ""} · ${placeWords(hook)}`;
+  `- ${hook.name} (${shortId(hook.id)}) · ${hook.enabled ? "on" : "off"} · on ${hook.event}${hook.matcher ? ` matching ${hook.matcher}` : ""} · ${hook.handler.type}${hook.script ? ", with a script" : ""} · ${placeWords(hook)}`;
 
 /** admin_hooks: each hook and the templates, or the one written. */
 export const hookSettingsWords = (
@@ -390,10 +391,10 @@ const scopeWords = (scope: MemoryScope | undefined): string => {
       : []),
     ...(scope.model ? [`models matching ${scope.model}`] : []),
     ...(scope.projectIds?.length
-      ? [`projects ${scope.projectIds.map((id) => id.slice(0, 8)).join(", ")}`]
+      ? [`projects ${scope.projectIds.map((id) => shortId(id)).join(", ")}`]
       : []),
     ...(scope.areaIds?.length
-      ? [`areas ${scope.areaIds.map((id) => id.slice(0, 8)).join(", ")}`]
+      ? [`areas ${scope.areaIds.map((id) => shortId(id)).join(", ")}`]
       : []),
     ...(scope.briefer ? ["handed to the delegate's caller"] : []),
   ];

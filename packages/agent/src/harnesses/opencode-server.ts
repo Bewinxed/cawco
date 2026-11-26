@@ -20,6 +20,7 @@ import {
   sessiondEndpoint,
   sessiondHomePath,
 } from "@cawco/core/sessiond";
+import { shortId } from "@cawco/core/short-id";
 import {
   identifiedPid,
   signalGroup,
@@ -348,8 +349,8 @@ const serverWords = (
 ): { name: string; whose: string } => {
   if (view !== undefined) {
     return {
-      name: `workspace ${view.slice(0, 8)}'s view's`,
-      whose: `Workspace ${view.slice(0, 8)}'s OpenCode server`,
+      name: `workspace ${shortId(view)}'s view's`,
+      whose: `Workspace ${shortId(view)}'s OpenCode server`,
     };
   }
   return account === undefined
@@ -724,7 +725,7 @@ export class OpencodeServerOwner {
     const client = await this.#sessiond();
     let kind = this.account === undefined ? "" : `account-${this.account}-`;
     if (this.view !== undefined) {
-      kind = `view-${this.view.slice(0, 8)}-`;
+      kind = `view-${shortId(this.view)}-`;
     }
     const procId = `${OPENCODE_SERVER_PROC_ID}-${kind}${crypto.randomUUID()}`;
     const password = randomBytes(24).toString("base64url");

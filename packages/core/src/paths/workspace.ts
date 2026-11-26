@@ -3,6 +3,7 @@
 import { readlinkSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { shortId } from "../short-id";
 import { shortLink } from "../socket-root";
 import { darwinSocketRoot, workspaceScratchRoot } from "./roots";
 
@@ -56,7 +57,7 @@ const SCRATCH_SOCKET_SUFFIX = "org.chromium.Chromium.XXXXXX/SingletonSocket";
  * Chromium launch in a workspace aborted.
  */
 export const workspaceScratchDir = (id: string): string =>
-  join(workspaceScratchRoot(), id.slice(0, 8));
+  join(workspaceScratchRoot(), shortId(id));
 
 /**
  * A session with no work item's own scratch dir, where what another session
@@ -66,7 +67,7 @@ export const workspaceScratchDir = (id: string): string =>
  * forgets the session (agent session.ts `#stop`).
  */
 export const sessionScratchDir = (instanceId: string): string =>
-  join(workspaceScratchRoot(), `s-${instanceId.slice(0, 8)}`);
+  join(workspaceScratchRoot(), `s-${shortId(instanceId)}`);
 
 /**
  * The name a workspace's commands are given for its scratch dir, their
@@ -138,7 +139,7 @@ export const workspaceClaudeTmpDir = (id: string): string =>
   join(workspaceReadOnlyDir(id), "claude-tmp");
 
 /** The short name of workspace `id`'s scratch dir on macOS ({@link shortLink}). */
-const scratchLinkName = (id: string): string => `t-${id.slice(0, 8)}`;
+const scratchLinkName = (id: string): string => `t-${shortId(id)}`;
 
 /**
  * Where a workspace's unix sockets are: its tool door, its git door and its
@@ -161,7 +162,7 @@ const scratchLinkName = (id: string): string => `t-${id.slice(0, 8)}`;
 export const workspaceDoorDir = (id: string): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
   if (process.platform === "linux" && runtime) {
-    return join(runtime, "cawco-ws", id.slice(0, 8));
+    return join(runtime, "cawco-ws", shortId(id));
   }
   if (process.platform === "darwin") {
     return join(darwinSocketRoot(), id);

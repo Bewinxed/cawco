@@ -5,6 +5,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { shortId } from "@cawco/core/short-id";
 import type {
   TranscriptBlock,
   TranscriptPage,
@@ -743,7 +744,7 @@ async function readNewestPage(
     });
     trackWorking(target);
     console.info(
-      `[cawco] read ${viewId.slice(0, 8)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`
+      `[cawco] read ${shortId(viewId)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`
     );
   } catch (error) {
     if (cancel.aborted) {

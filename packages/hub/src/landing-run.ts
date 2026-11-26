@@ -4,6 +4,7 @@ import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { workWords } from "@cawco/core/words/work";
 import {
   type ChangedPath,
@@ -39,7 +40,6 @@ import {
 import { MALFORMED_REPLY, MachineProblem } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { CommandStopped, WouldWait } from "./machine-pause";
-import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
   folderFreeBytes,
@@ -65,8 +65,8 @@ import type { Writes } from "./writes";
 /** The line a parent's report carries about the item behind it. */
 export const reportLine = (item: WorkItemRow): string =>
   LIVE.has(item.state)
-    ? `\n\n[Work item ${handle(item.id)} is ${item.state} in workspace ${handle(item.workspaceId)}.]`
-    : `\n\n[Work item ${handle(item.id)} is ${item.state} in workspace ${handle(item.workspaceId)}. A handoff to it continues this same session.]`;
+    ? `\n\n[Work item ${shortId(item.id)} is ${item.state} in workspace ${shortId(item.workspaceId)}.]`
+    : `\n\n[Work item ${shortId(item.id)} is ${item.state} in workspace ${shortId(item.workspaceId)}. A handoff to it continues this same session.]`;
 /** Lines of diffstat a report keeps: the last, its summary, always among them. */
 const DIFFSTAT_LINES = 40;
 /** A full commit id, as a machine names one: never an option or a ref. */
@@ -349,7 +349,7 @@ const refusedLine = (
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
-  return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${handle(workspace.id)}.`;
+  return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${shortId(workspace.id)}.`;
 };
 /**
  * Why a finished item fails, when it does: the
@@ -696,7 +696,7 @@ export const createLandingRun = ({
   };
   /** The item in the landing queue: named as `“title” (id)`, its wait its status. */
   const turnOf = (item: WorkItemRow): LandingTurn => ({
-    who: `“${item.title}” (${item.id.slice(0, 8)})`,
+    who: `“${item.title}” (${shortId(item.id)})`,
     onWait: (words) => landingWait(item.id, words),
   });
   /**
@@ -799,7 +799,7 @@ export const createLandingRun = ({
   const pullRequestBody = (item: WorkItemRow, summary: string): string => {
     const what = item.taskId
       ? `an attempt at the task “${item.title}”`
-      : `work item ${handle(item.id)}`;
+      : `work item ${shortId(item.id)}`;
     return [
       summary.trim(),
       `This is ${what}; its report and transcript: ${sessionUrl(item.instanceId)}`,
@@ -1186,7 +1186,7 @@ export const createLandingRun = ({
     }
     return await writeFolderFiles(item.projectId, files, {
       author: { name: item.title },
-      message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
+      message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${shortId(item.id)}` : `outputs of work item ${shortId(item.id)}`}`,
     });
   };
   /**

@@ -24,6 +24,7 @@ import {
   todoLink,
 } from "@cawco/core/references";
 import type { RoutineRunView } from "@cawco/core/routine-kinds";
+import { shortId } from "@cawco/core/short-id";
 import type {
   AttemptStart,
   StagesView,
@@ -43,7 +44,6 @@ import {
   ago,
   ahead,
   count,
-  handle,
   lasted,
   lines,
   listed,
@@ -181,7 +181,7 @@ const attemptWords = (
 
 /** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand), how it ended and its words. */
 const runLine = (run: RoutineRunView, zone: string, now: number): string =>
-  `  - ${slotLabel(run.slot, zone)} run ${handle(run.id)}: ${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${run.endedAt ? `, after ${lasted(run.endedAt - run.startedAt)}` : ""}${run.verdict ? `, ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
+  `  - ${slotLabel(run.slot, zone)} run ${shortId(run.id)}: ${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${run.endedAt ? `, after ${lasted(run.endedAt - run.startedAt)}` : ""}${run.verdict ? `, ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
 
 /** Why a routine stands in Needs you, in words. */
 const NEEDS: Record<NonNullable<TaskRoutine["needs"]>["why"], string> = {
@@ -197,7 +197,7 @@ const routineLines = (routine: TaskRoutine, now: number): string[] => {
     routine.schedule.timeZone ||
     Intl.DateTimeFormat().resolvedOptions().timeZone;
   return [
-    `Routine ${handle(routine.id)}: ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · target ${routine.target} · ${routine.stop ? `stops when: ${quote(routine.stop, 300)}` : "no stop condition, runs until ended"}${routine.deadline === null ? "" : ` · deadline ${ahead(routine.deadline, now)}`}`,
+    `Routine ${shortId(routine.id)}: ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · target ${routine.target} · ${routine.stop ? `stops when: ${quote(routine.stop, 300)}` : "no stop condition, runs until ended"}${routine.deadline === null ? "" : ` · deadline ${ahead(routine.deadline, now)}`}`,
     ...(routine.needs
       ? [
           `Needs the owner: ${NEEDS[routine.needs.why]}${routine.needs.said ? `: ${quote(routine.needs.said, 300)}` : ""}`,
@@ -347,7 +347,7 @@ const artifactWords = (artifact: ResultArtifact): string => {
     case "artifact":
       return artifact.name
         ? artifactLink(artifact.artifactId, artifact.name)
-        : `artifact ${handle(artifact.artifactId)}`;
+        : `artifact ${shortId(artifact.artifactId)}`;
     case "file":
     case "post":
       return `${shown}${artifact.path}`;
@@ -430,7 +430,7 @@ const fileLines = (task: TaskView, links: LinkScope): string[] =>
 /** A task's handed-in result, or that its attempts have handed in none. */
 const taskResultLine = (task: TaskView, now: number): string | false => {
   if (task.result) {
-    return `Result, handed in ${ago(task.result.at, now)} by work item ${handle(task.result.workItemId)}${task.result.headline ? `: ${quote(task.result.headline, 300)}` : ""}\n${task.result.report}`;
+    return `Result, handed in ${ago(task.result.at, now)} by work item ${shortId(task.result.workItemId)}${task.result.headline ? `: ${quote(task.result.headline, 300)}` : ""}\n${task.result.report}`;
   }
   return task.attempts.length > 0 && "No result handed in yet.";
 };
@@ -668,7 +668,7 @@ export const attemptStartWords = (start: AttemptStart): string =>
   lines(
     start.text,
     start.instanceId && start.workspaceId
-      ? `Its workspace ${handle(start.workspaceId)}; type ${start.type ?? "the hub's default"}.`
+      ? `Its workspace ${shortId(start.workspaceId)}; type ${start.type ?? "the hub's default"}.`
       : `It has no session yet: it waits for owned files; type ${start.type ?? "the hub's default"}; lands ${start.lands}.`
   );
 

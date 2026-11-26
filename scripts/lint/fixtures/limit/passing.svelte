@@ -9,3 +9,5 @@
 {#each shown as item (item)}
   <p>{item}</p>
 {/each}
+<!-- In markup, the tag is a JS comment inside the braces, before the bound. -->
+<p>{items.slice(0, /* @limit asked: cawco:pin/0a1b2c3d */ 3).join(", ")}</p>

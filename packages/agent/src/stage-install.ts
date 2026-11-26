@@ -38,6 +38,7 @@ import {
   type PackageManager,
 } from "@cawco/core/deps";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
+import { shortId } from "@cawco/core/short-id";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -325,7 +326,7 @@ const runInstall = async (
     STAGE_INSTALL_MS,
     at.boundary,
     // A heavy run: it waits for one of the machine's heavy-work slots.
-    `the stage's install of ${where}@${at.boundary.id.slice(0, 8)}`
+    `the stage's install of ${where}@${shortId(at.boundary.id)}`
   );
   if (result.stdout.includes(NO_MANAGER)) {
     throw new Error(
@@ -355,6 +356,6 @@ const runInstall = async (
     `${JSON.stringify({ ...record, [key]: installedFrom })}\n`
   );
   console.info(
-    `[stage] ${at.boundary.id.slice(0, 8)}: ${key} installed with \`${command}\` (${install.named})`
+    `[stage] ${shortId(at.boundary.id)}: ${key} installed with \`${command}\` (${install.named})`
   );
 };

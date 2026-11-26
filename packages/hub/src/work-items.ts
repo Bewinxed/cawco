@@ -83,6 +83,7 @@ import {
   waitsOnItself,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
@@ -165,7 +166,6 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { awayProblem, MachineProblem, thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
-import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
 import type { ProblemsOf } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
@@ -1148,11 +1148,11 @@ const FOLLOW_UP_STOPPED = "Its follow-up was stopped before it landed.";
 
 /** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
-  `${item.title} (${handle(item.id)}) is ${item.state}. Only the reader, the session that delegated it, or its project's conversation can continue it.`;
+  `${item.title} (${shortId(item.id)}) is ${item.state}. Only the reader, the session that delegated it, or its project's conversation can continue it.`;
 
 /** What a message to finished work is answered with once a newer item holds its workspace. */
 const supersededText = (item: WorkItemRow, latest: WorkItemRow): string =>
-  `${item.title} (${handle(item.id)}) is ${item.state}, and workspace ${handle(item.workspaceId)} has moved on to ${latest.title} (${handle(latest.id)}, ${latest.state}). Message that one.`;
+  `${item.title} (${shortId(item.id)}) is ${item.state}, and workspace ${shortId(item.workspaceId)} has moved on to ${latest.title} (${shortId(latest.id)}, ${latest.state}). Message that one.`;
 
 /** The first line with words on it. */
 const firstLine = (text: string | null): string =>
@@ -2106,7 +2106,7 @@ export const createWorkItems = ({
       console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
       report(
         standIn(item),
-        `${failed ? `${item.title} failed` : `${item.title}'s follow-up ended; its landed work stays`}: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${handle(ended.id)} is ${ended.state} in workspace ${handle(ended.workspaceId)}.]`,
+        `${failed ? `${item.title} failed` : `${item.title}'s follow-up ended; its landed work stays`}: ${SESSION_GONE}. The hub has no row for its session ${shortId(item.instanceId)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${shortId(ended.id)} is ${ended.state} in workspace ${shortId(ended.workspaceId)}.]`,
         failed
       );
     }
@@ -2271,7 +2271,7 @@ export const createWorkItems = ({
     }
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (workspace?.state !== "active") {
-      return `Its session was asleep with its work item open, and its workspace ${handle(item.workspaceId)} is ${workspace?.state ?? "gone"}: there is nowhere for it to carry on.`;
+      return `Its session was asleep with its work item open, and its workspace ${shortId(item.workspaceId)} is ${workspace?.state ?? "gone"}: there is nowhere for it to carry on.`;
     }
     if (!row.sessionId) {
       return "Its session was asleep with its work item open, and it never began a conversation, so there is nothing to wake it into.";
@@ -2383,7 +2383,7 @@ export const createWorkItems = ({
 
   /** One item's part of its group's combined report. */
   const groupPart = (item: WorkItemRow, index: number): string => {
-    const head = `${index + 1}. ${item.title} (work item ${item.id.slice(0, 8)}, workspace ${item.workspaceId.slice(0, 8)}): ${item.state}`;
+    const head = `${index + 1}. ${item.title} (work item ${shortId(item.id)}, workspace ${shortId(item.workspaceId)}): ${item.state}`;
     if (item.state === "done") {
       const words = db.workItemTexts(item.id);
       return `${head}\n${(words.digest ?? firstLine(words.result)).trim()}`;
@@ -2600,7 +2600,7 @@ export const createWorkItems = ({
           parent,
           workWords.queuedHeld(
             queued.title,
-            queued.id.slice(0, 8),
+            shortId(queued.id),
             workWords.queuedRequestUnread(queued.requestUnread)
           )
         );
@@ -2941,7 +2941,7 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Continued ${sessionLink(session.id, boardTitle(session))}, ${label}, as work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): ` +
+        `Continued ${sessionLink(session.id, boardTitle(session))}, ${label}, as work item ${shortId(item.id)} in workspace ${shortId(workspace.id)} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         `${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
@@ -3018,7 +3018,7 @@ export const createWorkItems = ({
       const { reason } = unconfirmed;
       return problem(409, {
         code: "work-item-earlier-session-unconfirmed",
-        detail: `The last attempt's session in workspace ${handle(workspace.id)} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`,
+        detail: `The last attempt's session in workspace ${shortId(workspace.id)} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`,
       });
     }
     if (up.length > 0) {
@@ -3121,7 +3121,7 @@ export const createWorkItems = ({
     return live
       ? problem(409, {
           code: "work-item-workspace-busy",
-          detail: `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time.`,
+          detail: `Workspace ${shortId(workspace.id)} already has a live work item: ${live.title} (${shortId(live.id)}) is ${live.state}. A workspace runs one work item at a time.`,
         })
       : undefined;
   };
@@ -3751,7 +3751,7 @@ export const createWorkItems = ({
       filed ?? (await call(machineId, CONTROL_CLONE_HOLDING, [path]));
     return held
       ? workWords.hostRefused([
-          `cwd ${path}: it is inside workspace ${handle(held.id)}'s clone ${held.path} on ${machineName(db, machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
+          `cwd ${path}: it is inside workspace ${shortId(held.id)}'s clone ${held.path} on ${machineName(db, machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
         ])
       : undefined;
   };
@@ -4295,7 +4295,7 @@ export const createWorkItems = ({
     const instanceId =
       ahead?.instanceId ?? request.queuedAs?.instanceId ?? crypto.randomUUID();
     // Not a row yet: it is launched in the workspace's root.
-    const label = `${leafOf(workspace.path)}#${instanceId.slice(0, 8)}`;
+    const label = `${leafOf(workspace.path)}#${shortId(instanceId)}`;
     const item = fileItem(workspace.machineId, {
       id: request.queuedAs?.id ?? crypto.randomUUID(),
       workspaceId: workspace.id,
@@ -4395,8 +4395,8 @@ export const createWorkItems = ({
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, starting with every turn of yours so far, `
           : `a fresh ${harness} session, `) +
         (isHostFolder(workspace)
-          ? `work item ${item.id.slice(0, 8)} with host scope on ${machineName(db, workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
-          : `work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}).`) +
+          ? `work item ${shortId(item.id)} with host scope on ${machineName(db, workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
+          : `work item ${shortId(item.id)} in workspace ${shortId(workspace.id)} (${placeOf(workspace)}).`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...): the message lands in the same session and its cached transcript.` +
         ` ${workWords.startsDelegates(mayStart)}` +
@@ -4437,7 +4437,7 @@ export const createWorkItems = ({
 
   /** A completing item's group, as a line names it: `“Theme” (1a2b3c4d), …`. */
   const groupWords = (group: readonly { id: string; title: string }[]) =>
-    group.map((one) => `“${one.title}” (${handle(one.id)})`).join(", ");
+    group.map((one) => `“${one.title}” (${shortId(one.id)})`).join(", ");
 
   /** A completing item's status, as its chip says it. */
   const completingWords = (group: readonly { id: string; title: string }[]) =>
@@ -4909,7 +4909,7 @@ export const createWorkItems = ({
       counts.some((count) => !Number.isInteger(count))
     ) {
       throw new Error(
-        `git in workspace ${handle(workspace.id)} on ${machineName(db, workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+        `git in workspace ${shortId(workspace.id)} on ${machineName(db, workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
       );
     }
     return counts.some((count) => count > 0);
@@ -4947,7 +4947,7 @@ export const createWorkItems = ({
     if (!LIVE.has(item.state)) {
       return problem(409, {
         code: "work-item-not-live",
-        detail: `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`,
+        detail: `${item.title} (${shortId(item.id)}) is ${item.state}; finish_item finishes live work only.`,
       });
     }
     const hold = itemHold(item, ["stopping", "landing", "finishing"], {
@@ -5009,7 +5009,7 @@ export const createWorkItems = ({
       const result = await run(cmd, GIT_TIMEOUT_MS);
       if (result.exitCode !== 0) {
         throw new Error(
-          `the hub could not read ${what} in workspace ${handle(workspace.id)}: ${failedWith(result)}`
+          `the hub could not read ${what} in workspace ${shortId(workspace.id)}: ${failedWith(result)}`
         );
       }
       return result.stdout;
@@ -5202,7 +5202,7 @@ export const createWorkItems = ({
           : `${detail} It waits in your delegate tray and starts when no live item owns its files any more`;
       return {
         queued: queued.id,
-        text: `Queued “${queued.title}” (${queued.id.slice(0, 8)}): ${until}; its report reaches you as any delegate's does.`,
+        text: `Queued “${queued.title}” (${shortId(queued.id)}): ${until}; its report reaches you as any delegate's does.`,
       };
     },
 
@@ -5264,11 +5264,11 @@ export const createWorkItems = ({
       if (startingQueued.has(queued.id)) {
         return problem(409, {
           code: "work-item-queued-starting",
-          detail: `Your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}) is starting now that its files are free. Stop it by its id once delegate_list shows its session.`,
+          detail: `Your queued delegate “${queued.title}” (${shortId(queued.id)}) is starting now that its files are free. Stop it by its id once delegate_list shows its session.`,
         });
       }
       unqueue(queued);
-      return `Withdrew your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}): it never started, so it has no session or workspace.`;
+      return `Withdrew your queued delegate “${queued.title}” (${shortId(queued.id)}): it never started, so it has no session or workspace.`;
     },
 
     /**
@@ -5433,7 +5433,7 @@ export const createWorkItems = ({
       if (!LIVE.has(item.state) || item.landingSince) {
         return problem(409, {
           code: "work-item-wait-not-live",
-          detail: `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "it lands" : `it is ${item.state}`}. Continue a live item before calling wait_item.`,
+          detail: `${item.title} (${shortId(item.id)}) cannot wait while ${item.landingSince ? "it lands" : `it is ${item.state}`}. Continue a live item before calling wait_item.`,
         });
       }
       const waitReason = reason.trim().replace(/\s+/gu, " ");
@@ -5518,7 +5518,7 @@ export const createWorkItems = ({
         const wait = recutWaitsForAgent(message);
         if (wait !== undefined) {
           console.info(
-            `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
+            `[workspaces] ${instanceId}: its workspace ${shortId(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
           );
           if (wait === "fenced") {
             lifetime.after("kept workspace recut", RESTART_RECUT_MS, () =>
@@ -5529,7 +5529,7 @@ export const createWorkItems = ({
           }
           return;
         }
-        const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
+        const reason = `Its workspace ${shortId(workspace.id)} retired and could not be cut again: ${message}`;
         console.warn(`[workspaces] ${instanceId}: ${reason}`);
         recutFailed?.(instanceId, reason);
       };
@@ -5614,7 +5614,7 @@ export const createWorkItems = ({
           !workspaces.recuttable(workspace)
         ) {
           return {
-            reason: `${item.title} (${handle(item.id)}) is ${item.state}, and ${workspaces.archivedWords(workspace)}`,
+            reason: `${item.title} (${shortId(item.id)}) is ${item.state}, and ${workspaces.archivedWords(workspace)}`,
             refusal: {
               kind: "workspace-archived",
               itemId: item.id,
@@ -5698,7 +5698,7 @@ export const createWorkItems = ({
         }
         if (!(await withClone(workspace))) {
           return unplaced(
-            `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(db, workspace.machineId)}`
+            `the clone of workspace ${shortId(workspace.id)} is gone from ${machineName(db, workspace.machineId)}`
           );
         }
         return workspaces.holdForContinuation(itemId, workspaceId);
@@ -5730,7 +5730,7 @@ export const createWorkItems = ({
         rerun(item);
       }
       console.log(
-        `[work-items] ${item.id}: goes on in ${to.slice(0, 8)}, the continuation of ${item.instanceId.slice(0, 8)}`
+        `[work-items] ${item.id}: goes on in ${shortId(to)}, the continuation of ${shortId(item.instanceId)}`
       );
     },
 
@@ -6076,7 +6076,7 @@ export const createWorkItems = ({
           if (!workspace || workspace.state === "archived") {
             return problem(409, {
               code: "work-item-handoff-workspace-gone",
-              detail: `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`,
+              detail: `${item.title} (${shortId(item.id)}) is in workspace ${shortId(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`,
             });
           }
           const unhanded = await handIn(workspace, inputs, row);
@@ -6276,7 +6276,7 @@ export const createWorkItems = ({
       if (!workspaces.isHeld(workspace)) {
         return problem(409, {
           code: "workspace-not-held",
-          detail: `Workspace ${handle(workspace.id)} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`,
+          detail: `Workspace ${shortId(workspace.id)} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`,
         });
       }
       return workspaces.heldWork(workspace);

@@ -65,6 +65,7 @@ import {
   processLineage,
   residentBytes,
 } from "@cawco/core/process-identity";
+import { shortId } from "@cawco/core/short-id";
 import { cutShort } from "@cawco/core/words/helpers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { keeperChildren } from "./sessiond-client";
@@ -219,7 +220,7 @@ const commandOf = async (pid: number): Promise<string> => {
 /** Where a child's process runs, in words: its workspace, else this machine and its directory. */
 const whereOf = async (target: LeakTarget, pid: number): Promise<string> => {
   if (target.workspace) {
-    return `in workspace ${target.workspace.slice(0, 8)}`;
+    return `in workspace ${shortId(target.workspace)}`;
   }
   const cwd =
     process.platform === "linux"
@@ -623,7 +624,7 @@ const lookAtChild = async (
   if (!cpu || cpu.share < WORKING_SHARE) {
     return;
   }
-  return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => id.slice(0, 8)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
+  return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => shortId(id)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
 };
 
 /**

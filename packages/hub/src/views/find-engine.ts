@@ -55,6 +55,7 @@ import {
 } from "@cawco/core/find-match";
 import { harnessLabel } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
@@ -305,7 +306,7 @@ const storedConversation = (
     sessionId: hit.sessionId,
     harness: hit.harness,
     handle: null,
-    title: dir ?? hit.sessionId.slice(0, 8),
+    title: dir ?? shortId(hit.sessionId),
     purpose: null,
     lastReport: null,
     children: { count: 0, needsYou: 0 },

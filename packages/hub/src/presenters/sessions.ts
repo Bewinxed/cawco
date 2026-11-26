@@ -13,6 +13,7 @@ import {
   planLink,
   sessionLink,
 } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { contextWords } from "@cawco/core/words/context";
 import { delegateTypesWords as delegateTypesUiWords } from "@cawco/core/words/delegate-types";
 import {
@@ -34,7 +35,7 @@ import type { SessionList, SessionListRow } from "../session-list";
 import type { Step } from "../transcript-steps";
 import type { PersonWait, QueuedDelegate } from "../work-items";
 import { excludedNamed, type HeldWork } from "../workspaces";
-import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
+import { ago, ahead, count, lasted, lines, quote } from "./words";
 
 /** How many of a list's newest a concise answer names; the rest are counted. */
 const LISTED = 25;
@@ -43,7 +44,7 @@ const LISTED = 25;
 const tagOf = (node: Pick<DelegateNode, "instanceId" | "name">): string =>
   node.name.includes("#")
     ? node.name
-    : `${node.name}#${handle(node.instanceId)}`;
+    : `${node.name}#${shortId(node.instanceId)}`;
 
 /** What a delegate resting on the person waits on: each card by its link, each ask by what it asks. */
 const personWords = (wait: PersonWait): string =>
@@ -138,11 +139,11 @@ const newestFirst = (nodes: DelegateNode[]): DelegateNode[] =>
   nodes.toSorted((a, b) => b.startedAt.localeCompare(a.startedAt));
 
 const queuedLine = (one: QueuedDelegate, now: number): string =>
-  `- ${quote(one.title, 120)} ${handle(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}${one.unreadable ? " · held: request unreadable" : ""}`;
+  `- ${quote(one.title, 120)} ${shortId(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}${one.unreadable ? " · held: request unreadable" : ""}`;
 
 const heldLine = (work: HeldWork, now: number): string => {
   const excluded = excludedNamed(work.excluded);
-  return `- workspace ${handle(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
+  return `- workspace ${shortId(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
 };
 
 /** How much of a delegate's last words a look at it quotes. */

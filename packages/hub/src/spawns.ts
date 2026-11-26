@@ -30,6 +30,7 @@ import type {
 import { resumedKey } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { secondsOf } from "@cawco/core/time";
 import { markWords } from "@cawco/core/words/account-lines";
 import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
@@ -1524,7 +1525,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       const row = instanceId
         ? ctx.db.getInstancesByIds([instanceId])[0]
         : undefined;
-      const name = row ? ctx.sessionName(row) : String(instanceId).slice(0, 8);
+      const name = row ? ctx.sessionName(row) : shortId(String(instanceId));
       const machine = row ? ctx.machineName(row.machineId) : "its machine";
       return {
         refusal: `${name}'s conversation is no longer on ${machine}, so it can't be resumed.`,
@@ -1926,7 +1927,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
     if (!row) {
       throw new Error(
-        `the session ${payload.instanceId.slice(0, 8)} started, and the hub has no row for it`
+        `the session ${shortId(payload.instanceId)} started, and the hub has no row for it`
       );
     }
     return row.cwd;

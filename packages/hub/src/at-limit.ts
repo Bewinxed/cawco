@@ -15,6 +15,7 @@ import { detach } from "@cawco/core/detach";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   openedAt,
@@ -2154,7 +2155,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     return serially(
       providerOf(held.accountId),
-      `the look at ${instanceId.slice(0, 8)}'s hold`,
+      `the look at ${shortId(instanceId)}'s hold`,
       async () => {
         const now = db.atLimit.hold(instanceId);
         if (
@@ -2277,7 +2278,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       if (held || was) {
         console.info(
-          `[at-limit] ${instanceId.slice(0, 8)} was continued in a new session, so its ${held ? `hold${held.until === null ? "" : ` until ${clockWords(held.until)}`}` : "look at its turn's end"} is dropped: nothing resumes it.`
+          `[at-limit] ${shortId(instanceId)} was continued in a new session, so its ${held ? `hold${held.until === null ? "" : ` until ${clockWords(held.until)}`}` : "look at its turn's end"} is dropped: nothing resumes it.`
         );
       }
       ports.changed();
@@ -2374,7 +2375,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const row = rowOf(instanceId);
       return serially(
         providerOf(row?.accountId),
-        `the answer to ${instanceId.slice(0, 8)}'s refused turn`,
+        `the answer to ${shortId(instanceId)}'s refused turn`,
         () => answerRefused(instanceId)
       );
     },
@@ -2388,7 +2389,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const row = rowOf(instanceId);
       return serially(
         providerOf(row?.accountId),
-        `the answer to ${instanceId.slice(0, 8)}'s refused sign-in`,
+        `the answer to ${shortId(instanceId)}'s refused sign-in`,
         async () => {
           const fresh = rowOf(instanceId);
           const current = fresh ? currentOf(fresh) : undefined;
@@ -2415,7 +2416,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       detach(
         serially(
           providerOf(row?.accountId),
-          `the decision at ${instanceId.slice(0, 8)}'s turn's end`,
+          `the decision at ${shortId(instanceId)}'s turn's end`,
           async () => {
             await extraUsageTurn(instanceId);
             await rebalancer.turnEnded(instanceId);

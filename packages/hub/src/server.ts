@@ -200,6 +200,7 @@ import type {
   SentMessage,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import {
   isEmbedShape,
   STAGE_COMPONENTS,
@@ -590,7 +591,6 @@ import {
 } from "./plan-changes";
 import { createPlans, planRoutes } from "./plans";
 import { machinesUpdatedWords } from "./presenters/hub";
-import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
   noteParent,
@@ -3615,7 +3615,7 @@ export const createServer = (
     derivedTitle?: string | null;
     id: string;
     title?: string | null;
-  }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
+  }): string => row.title || row.derivedTitle || shortId(row.id);
   /**
    * A session a send wakes: its process is gone, or ended and on its way out
    * (`stopping`), its conversation on record. A stopping one is woken as a
@@ -3984,7 +3984,7 @@ export const createServer = (
       const [now] = db.getInstancesByIds([continuationNow(row.id)]);
       return {
         reason: continuedInWords(
-          now ? sessionName(now) : row.continuedInto.slice(0, 8)
+          now ? sessionName(now) : shortId(row.continuedInto)
         ),
       };
     }
@@ -4734,7 +4734,7 @@ export const createServer = (
     const listed = sessions
       .map(
         ({ row }) =>
-          `${artifactLink(row.id, row.title)} (${row.kind} ${idHandle(row.id)})`
+          `${artifactLink(row.id, row.title)} (${row.kind} ${shortId(row.id)})`
       )
       .join(", ");
     const now = sessions.every(
@@ -7480,7 +7480,7 @@ export const createServer = (
     machineName,
     sessionName: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
-      return row ? sessionName(row) : instanceId.slice(0, 8);
+      return row ? sessionName(row) : shortId(instanceId);
     },
     projectMoved: (projectId, machines, folderMoved) =>
       projectMoved(projectId, machines, folderMoved),

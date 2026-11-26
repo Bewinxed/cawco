@@ -6,9 +6,6 @@
 
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
-/** An id's short handle: its first eight characters, what every tool taking that id takes back (handles.ts). */
-export const handle = (id: string): string => id.slice(0, 8);
-
 const dateOf = (at: Date | string | number): number =>
   at instanceof Date ? at.getTime() : new Date(at).getTime();
 

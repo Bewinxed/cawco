@@ -76,6 +76,7 @@ import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
@@ -611,7 +612,7 @@ const sendState = (stage: Stage) => {
 /** A change of the stage: logged, one line each, and told to the hub. */
 const tell = (stage: Stage) => {
   console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
+    `[stage] ${shortId(stage.workspace.id)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
   );
   sendState(stage);
 };
@@ -995,7 +996,7 @@ async function askStage<T>(
   const at =
     reached === "host"
       ? stageRenderWords.loopback(stage.port)
-      : stageRenderWords.bridged(stage.port, stage.boundary.id.slice(0, 8));
+      : stageRenderWords.bridged(stage.port, shortId(stage.boundary.id));
   const asked = async (signal: AbortSignal) => {
     // An abort is the read's own deadline, which its bound answers.
     const cut = (error: unknown): never => {
@@ -2215,7 +2216,7 @@ export async function warmStage(
     );
   } catch (error) {
     console.warn(
-      `[stage] ${workspace.id.slice(0, 8)}: not warmed for ${warm.by}: ${error instanceof Error ? error.message : String(error)}`
+      `[stage] ${shortId(workspace.id)}: not warmed for ${warm.by}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
@@ -2339,7 +2340,7 @@ const used = (stage: Stage, by: string): void => {
   const quiet = Date.now() - stage.lastUse;
   if (quiet >= QUIET_SAID_MS) {
     console.info(
-      `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: used by ${by} after ${Math.round(quiet / 60_000)} min quiet`
+      `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: used by ${by} after ${Math.round(quiet / 60_000)} min quiet`
     );
   }
   stage.lastUse = Date.now();
@@ -2570,7 +2571,7 @@ function viewing(stage: Stage): () => void {
   stage.lookedAt = Date.now();
   // What keeps a stage awake, said as it changes.
   console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+    `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: ${stage.viewers} viewer(s)`
   );
   let released = false;
   return () => {
@@ -2579,7 +2580,7 @@ function viewing(stage: Stage): () => void {
       stage.viewers -= 1;
       stage.lastUse = Date.now();
       console.info(
-        `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+        `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: ${stage.viewers} viewer(s)`
       );
     }
   };
@@ -2619,7 +2620,7 @@ export function stopServed(workspace: string, port: number): boolean {
     return false;
   }
   console.info(
-    `[stage] ${workspace.slice(0, 8)} ${stageWords(stage)}: stopped, as no artifact is served from it now`
+    `[stage] ${shortId(workspace)} ${stageWords(stage)}: stopped, as no artifact is served from it now`
   );
   stopOne(stage);
   return true;
@@ -2642,7 +2643,7 @@ export async function keepPins(moving: readonly string[]): Promise<number> {
   for (const design of await designsGone()) {
     await unpin(design).catch((error: unknown) =>
       console.warn(
-        `[stage] design ${design.slice(0, 8)}: its folder is gone, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+        `[stage] design ${shortId(design)}: its folder is gone, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
       )
     );
   }
@@ -2656,7 +2657,7 @@ export async function keepPins(moving: readonly string[]): Promise<number> {
       gone += 1;
     } catch (error) {
       console.warn(
-        `[stage] pin ${pin.slice(0, 8)}: the hub keeps its files now, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+        `[stage] pin ${shortId(pin)}: the hub keeps its files now, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
