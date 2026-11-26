@@ -365,6 +365,7 @@ const ARGS: {
     object({
       author: optional(TranscriptAuthor),
       before: optional(text),
+      call: optional(literal(true)),
       context: optional(boolean()),
       limit: count,
       sessions: optional(texts),

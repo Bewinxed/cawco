@@ -1,11 +1,12 @@
 /**
  * The agent's side of its search processes (search/host.ts): the one place
  * the transcript index is asked, and where a question that runs too long
- * ends, with the process that held it. The agent runs two: the index's
- * writer, which syncs it, and a reader beside it, which answers questions.
+ * ends, with the process that held it. The agent runs three: the index's
+ * writer, which syncs it, and two readers beside it, which answer questions:
+ * one a person's typing asks, one agents' `find` asks (search/index.ts).
  *
  * A question of the index (a search, a listing, a conversation's turns) goes
- * to the reader, and is given {@link READ_LIMIT_MS} from when it is asked,
+ * to a reader, and is given {@link TRANSCRIPT_READ_LIMIT_MS} from when it is asked,
  * and may be let go sooner by its asker's signal (the hub stopped waiting).
  * Questions go to the reader one at a time, in the order they came: the one
  * there is the one running. One past its limit there is stopped by killing
@@ -29,6 +30,7 @@
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { TRANSCRIPT_READ_LIMIT_MS } from "@cawco/core/find";
 import {
   keepLimitReadings,
   recordLimitReading,
@@ -48,16 +50,6 @@ import type {
   SearchSaid,
 } from "./host";
 
-/**
- * How long a question of the index is given, ms, from its ask: past it, it
- * is refused, and stopped where it runs. The hub waits 1.5 s on a machine's
- * search and 5 s on its turns (core find.ts `TRANSCRIPT_ANSWER_MS`, hub server.ts
- * `FIND_TURNS_MS`) and tells the agent when it stops waiting; this bounds
- * every asker. A search of obelisk's 1.47M-document index answers in under
- * 0.8 s (fts5.ts `MARKED_CHARS`). Our call.
- */
-// @limit recording: agent.search-read-ms until 2026-12-10
-const READ_LIMIT_MS = 5000;
 /**
  * How long a question let go while it runs may go on holding the reader
  * while another waits, ms: about what a new reader takes to start, open the
@@ -389,7 +381,7 @@ export class SearchProcess<R extends SearchRole> {
   }
 
   /**
-   * `op` asked of the index, given {@link READ_LIMIT_MS} from now and let go
+   * `op` asked of the index, given {@link TRANSCRIPT_READ_LIMIT_MS} from now and let go
    * when `signal` aborts: its answer, or a {@link SearchStopped} that says
    * why there is none.
    */
@@ -432,8 +424,8 @@ export class SearchProcess<R extends SearchRole> {
       }
     };
     const timer = setTimeout(
-      () => end(searchWords.pastLimit(READ_LIMIT_MS / 1000), true),
-      READ_LIMIT_MS
+      () => end(searchWords.pastLimit(TRANSCRIPT_READ_LIMIT_MS / 1000), true),
+      TRANSCRIPT_READ_LIMIT_MS
     );
     const abandoned = () => end(searchWords.letGo, false);
     signal?.addEventListener("abort", abandoned, { once: true });

@@ -37,6 +37,14 @@ export interface TranscriptQuery {
    */
   before?: string;
   /**
+   * The asker is one call (an agent's `find`), not a keystroke: the machine
+   * answers it from a reader of its own (agent search/index.ts), so a search
+   * that runs for seconds, which an agent's find waits out
+   * ({@link TRANSCRIPT_CALL_MS}), never holds the reader a person's typing
+   * waits on.
+   */
+  call?: true;
+  /**
    * Each moment carries the words around its snippet (`TranscriptMoment.context`;
    * a listing's, the start of its words): the person's Find asks while it
    * hides secrets, and an agent's find always, for the hub's filter to read.
@@ -95,14 +103,19 @@ interface TranscriptConversation {
   sidechain: boolean;
 }
 
+/** Who waits on a find (hub views/find-engine.ts `FindRequest.asker`): a person typing, a query a keystroke, or an agent's one call. */
+export type FindAsker = "typing" | "call";
+
 /**
- * How long the hub waits on each machine's transcript search, ms (hub
- * find.ts): one query per keystroke, so a slow machine is named as one that
- * didn't answer rather than holding every other machine's moments back.
- * Chosen from what a current index answers within
- * ({@link TRANSCRIPT_QUERY_MS}), with room for the sync a search may wait on
- * first (agent search/index.ts `SYNC_WAIT_MS`).
+ * How long the hub waits on each machine's transcript search while a person
+ * types (Find, Jump, a mention; hub find.ts), ms: one query per keystroke,
+ * so a slow machine is named as one that didn't answer rather than holding
+ * every other machine's moments back. Chosen from what a current index
+ * answers within ({@link TRANSCRIPT_QUERY_MS}), with room for the sync a
+ * search may wait on first ({@link TRANSCRIPT_SYNC_WAIT_MS}). An agent's
+ * `find` waits {@link TRANSCRIPT_CALL_MS}.
  */
+// @limit measured: what obelisk's index took to answer the person's Find as the hub saw it (GET /api/find, each machine's tookMs, 2026-11-26, a load average of 90 to 200 on 48 cores): "the" 571 to 1,117 ms, two or three words 104 to 315 ms, a rare word 9 ms
 export const TRANSCRIPT_ANSWER_MS = 1500;
 
 /**
@@ -112,7 +125,48 @@ export const TRANSCRIPT_ANSWER_MS = 1500;
  * agent's `find` asked answered in 552 ms, the 16- to 20-word ones in
  * 111–318 ms, a word or two in tens of ms. Our call: the worst of those, with room.
  */
-export const TRANSCRIPT_QUERY_MS = 800;
+const TRANSCRIPT_QUERY_MS = 800;
+
+/**
+ * What the wire and the hub take of a machine's window, ms, besides its
+ * sync and its query. Our call.
+ */
+const TRANSCRIPT_WIRE_MS = 200;
+
+/**
+ * How long a search waits for the sync it starts on the machine, ms (agent
+ * search/index.ts `#fresh`): what is left of the person's window
+ * ({@link TRANSCRIPT_ANSWER_MS}) once the query ({@link TRANSCRIPT_QUERY_MS})
+ * and the wire ({@link TRANSCRIPT_WIRE_MS}) have theirs.
+ */
+export const TRANSCRIPT_SYNC_WAIT_MS =
+  TRANSCRIPT_ANSWER_MS - TRANSCRIPT_QUERY_MS - TRANSCRIPT_WIRE_MS;
+
+/**
+ * How long a question of a machine's transcript index is given there, ms,
+ * from its ask (agent search/process.ts): past it, it is refused, and
+ * stopped where it runs. It bounds every asker: the hub tells the machine
+ * when it stops waiting sooner. A search of obelisk's 1.47M-document index
+ * answers in under 0.8 s (jsonl-parser fts5.ts `MARKED_CHARS`). Our call.
+ */
+// @limit recording: agent.search-read-ms until 2026-12-10
+export const TRANSCRIPT_READ_LIMIT_MS = 5000;
+
+/**
+ * How long the hub waits on each machine's transcript search for an agent's
+ * `find` (hub find-tool.ts), ms: every bound the machine itself holds the
+ * search to, the sync it may wait on first ({@link TRANSCRIPT_SYNC_WAIT_MS})
+ * and the question ({@link TRANSCRIPT_READ_LIMIT_MS}), with the wire
+ * ({@link TRANSCRIPT_WIRE_MS}). An agent's find is one call, not a keystroke,
+ * and a machine left out of it leaves the agent without that machine's
+ * transcripts, so the hub never gives up on a search the machine still
+ * works on; one past the machine's own limit is refused there, and its
+ * reason is the answer. Held to the person's window instead, obelisk's
+ * searches for agents were cut off 30 times in 26 hours (its journal,
+ * 2026-11-25 to 26), one of them a search still running 5 s on.
+ */
+export const TRANSCRIPT_CALL_MS =
+  TRANSCRIPT_SYNC_WAIT_MS + TRANSCRIPT_READ_LIMIT_MS + TRANSCRIPT_WIRE_MS;
 
 /** A machine's answer to a {@link TranscriptQuery}. */
 export interface TranscriptAnswer {
@@ -135,7 +189,7 @@ export interface TranscriptAnswer {
    * transcript last written before then). 0 when it can say no time yet.
    */
   indexedThrough: number;
-  /** How many conversations the words match on this machine in all, of which `conversations` holds the page asked for; for a listing, how many documents its window holds; absent from an agent that does not say. */
+  /** How many conversations the words match on this machine in all, of which `conversations` holds the page asked for: said when the page filled, absent otherwise, from a listing and from an agent that does not say. */
   matched?: number;
   /** What the query itself took on the machine, ms. */
   queryMs: number;

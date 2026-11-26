@@ -130,15 +130,13 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
 const readOps = (index: TranscriptIndex) => ({
   turns: (options: TurnsOptions) => Promise.resolve(index.turns(options)),
   places: (options: PlacesOptions) => Promise.resolve(index.places(options)),
-  listed: (options: ListOptions) => {
-    const { hits, matched } = index.listed(options);
-    return Promise.resolve({ conversations: hits, matched });
-  },
+  listed: (options: ListOptions) =>
+    Promise.resolve({ conversations: index.listed(options).hits }),
   search: (args: { query: string; options: SearchOptions }) => {
     const { hits, matched } = index.search(args.query, args.options);
     return Promise.resolve({
       conversations: hits,
-      matched,
+      ...(matched === undefined ? {} : { matched }),
       // The word a typed query left out ({@link matchQueries}), for the answer to say.
       dropped: matchQueries(args.query, args.options.submitted).dropped,
     });

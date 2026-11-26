@@ -2,8 +2,9 @@
  * Transcript search service: keeps the transcript index in sync with Claude
  * Code and pi transcripts and OpenCode sessions, in the background and
  * before a search, and asks it each search. Nothing of the index's SQLite
- * runs in the agent: its writer and its reader are processes of their own
- * (search/host.ts, search/process.ts). A sync runs in the writer to its end
+ * runs in the agent: its writer and its two readers (a person's typing, and
+ * agents' `find`) are processes of their own (search/host.ts,
+ * search/process.ts). A sync runs in the writer to its end
  * whatever happens to the searches; a question that runs past its limit, or
  * that its asker lets go, ends with the reader that ran it, and the next
  * question is answered by the reader started in its place.
@@ -11,8 +12,7 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import {
-  TRANSCRIPT_ANSWER_MS,
-  TRANSCRIPT_QUERY_MS,
+  TRANSCRIPT_SYNC_WAIT_MS,
   type TranscriptAnswer,
   type TranscriptPlaces,
   type TranscriptPlacesQuery,
@@ -56,23 +56,6 @@ const SYNC_INTERVAL_MS = 10 * 60_000;
  * writes nothing.
  */
 const SEARCH_FRESH_MS = 10_000;
-/**
- * What the wire and the hub take of a machine's window, ms, besides its
- * sync and its query. Our call.
- */
-const WIRE_MS = 200;
-/**
- * How long a search waits for the sync it starts, ms: what is left of the
- * hub's window for each machine ({@link TRANSCRIPT_ANSWER_MS}) once the
- * query ({@link TRANSCRIPT_QUERY_MS}) and the wire ({@link WIRE_MS}) have
- * theirs. A sync of the few turns ten busy sessions add in ten minutes takes
- * 150 ms. A sync still running past it goes on in the writer, and the
- * search answers from what the index holds so far, saying how far that is
- * ({@link TranscriptAnswer.indexedThrough}); a search that finds a sync
- * already running waits for none. A sync that fails within it refuses the
- * search with its reason.
- */
-const SYNC_WAIT_MS = TRANSCRIPT_ANSWER_MS - TRANSCRIPT_QUERY_MS - WIRE_MS;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -115,8 +98,25 @@ export class TranscriptSearchService {
   };
   /** The index's one writer, in its own process: syncs and forgets, never stopped for a search. */
   readonly #writer = new SearchProcess("write", this.#heardOpen);
-  /** The index's reader, in its own process: killed with a question past its limit or let go. */
+  /**
+   * The index's reader for a person typing (Find, Jump, a mention, find in
+   * a conversation), in its own process: killed with a question past its
+   * limit or let go.
+   */
   readonly #reader = new SearchProcess(
+    "read",
+    this.#heardOpen,
+    this.#writer.firstOpen
+  );
+  /**
+   * The index's reader for agents' `find` (core `TranscriptQuery.call`, and
+   * a hit's turns), in a process of its own, started at its first question.
+   * The hub waits out an agent's search as long as this machine works on it
+   * (core `TRANSCRIPT_CALL_MS`), and a reader answers one question at a
+   * time: on one reader, a search that ran for seconds held every keystroke
+   * of the person's Find behind it.
+   */
+  readonly #callReader = new SearchProcess(
     "read",
     this.#heardOpen,
     this.#writer.firstOpen
@@ -230,7 +230,7 @@ export class TranscriptSearchService {
     );
     return {
       conversations,
-      matched,
+      ...(matched === undefined ? {} : { matched }),
       ...(dropped === null ? {} : { dropped }),
       unreadTranscripts: this.#unread,
       // Only a sync of an index that was never whole is a catch-up: a slow
@@ -245,10 +245,13 @@ export class TranscriptSearchService {
   /**
    * The index brought up to date when its last sync began more than
    * {@link SEARCH_FRESH_MS} ago and none is running: waited for up to
-   * {@link SYNC_WAIT_MS}, then answered from as far as it has come. A sync
-   * already running is never waited for: in a catch-up, every search waited
-   * its whole second for a sync that ran on for hours. A sync that fails
-   * within the wait refuses, with the reason the hub names this machine by.
+   * {@link TRANSCRIPT_SYNC_WAIT_MS} (a sync of the few turns ten busy
+   * sessions add in ten minutes takes 150 ms), then answered from as far as
+   * it has come ({@link TranscriptAnswer.indexedThrough}), the sync going on
+   * in the writer. A sync already running is never waited for: in a
+   * catch-up, every search waited its whole second for a sync that ran on
+   * for hours. A sync that fails within the wait refuses, with the reason
+   * the hub names this machine by.
    */
   async #fresh(): Promise<void> {
     if (
@@ -257,7 +260,7 @@ export class TranscriptSearchService {
     ) {
       return;
     }
-    const outcome = await readWithin(SYNC_WAIT_MS, () =>
+    const outcome = await readWithin(TRANSCRIPT_SYNC_WAIT_MS, () =>
       this.sync().then(
         () => undefined,
         (error: unknown) => ({ error })
@@ -291,7 +294,7 @@ export class TranscriptSearchService {
     signal?: AbortSignal
   ): Promise<TranscriptTurns> {
     await this.#fresh();
-    return this.#reader.read(
+    return this.#callReader.read(
       "turns",
       {
         sessions: query.sessions,
@@ -343,12 +346,13 @@ export class TranscriptSearchService {
     signal: AbortSignal | undefined
   ) {
     const { author, limit } = options;
+    const reader = options.call ? this.#callReader : this.#reader;
     const narrowed = {
       ...(options.sessions ? { sessions: options.sessions } : {}),
       ...(options.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      const { conversations, matched } = await this.#reader.read(
+      const { conversations } = await reader.read(
         "listed",
         {
           author,
@@ -360,9 +364,9 @@ export class TranscriptSearchService {
         },
         signal
       );
-      return { conversations, dropped: null, matched };
+      return { conversations, dropped: null, matched: undefined };
     }
-    return await this.#reader.read(
+    return await reader.read(
       "search",
       {
         query,
@@ -385,6 +389,7 @@ export class TranscriptSearchService {
       this.#ticks = null;
     }
     this.#reader.close();
+    this.#callReader.close();
     this.#writer.close();
   }
 }

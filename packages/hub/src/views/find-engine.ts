@@ -11,10 +11,10 @@
  * (views/find-index.ts), and answers in milliseconds:
  * every word of the query, in any order, has to match one of a result's
  * recognisers (find-names.ts). The transcripts part asks every machine's
- * index (`searchTranscripts`, agent search/index.ts), each within
- * {@link TRANSCRIPT_ANSWER_MS}, and folds what they say into conversations,
- * each with its best moments; a machine that did not answer is named in the answer's
- * coverage, never dropped in silence.
+ * index (`searchTranscripts`, agent search/index.ts), each within its
+ * asker's deadline ({@link FindRequest.asker}), and folds what they
+ * say into conversations, each with its best moments; a machine that did
+ * not answer is named in the answer's coverage, never dropped in silence.
  *
  * Ranking, one order for both parts: how well the words matched (a title
  * above a purpose above a project; in a transcript, your words above an
@@ -31,6 +31,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import {
   type FindAnswer,
+  type FindAsker,
   type FindConversation,
   type FindCoverage,
   type FindKind,
@@ -41,6 +42,7 @@ import {
   type FindResult,
   type MomentAuthor,
   TRANSCRIPT_ANSWER_MS,
+  TRANSCRIPT_CALL_MS,
   type TranscriptAnswer,
   type TranscriptQuery,
   type WaitingAnswer,
@@ -123,6 +125,13 @@ export interface FindWhere {
 
 /** What a page of a find is asked for. */
 export interface FindRequest {
+  /**
+   * Who waits on it: a person typing (find.ts), each machine waited for
+   * {@link TRANSCRIPT_ANSWER_MS}, or an agent's one call (find-tool.ts),
+   * each machine waited for {@link TRANSCRIPT_CALL_MS} and answering from
+   * a reader of its own (core `TranscriptQuery.call`).
+   */
+  asker: FindAsker;
   /** Only words said by this author (`by=me`: the person's own). */
   author?: MomentAuthor;
   /**
@@ -563,7 +572,7 @@ export const createFindEngine = (deps: EngineDeps) => {
     machine: ViewMachine,
     query: string,
     options: TranscriptQuery & { limit: number },
-    ask: Pick<FindRequest, "caller" | "requestId">,
+    ask: Pick<FindRequest, "asker" | "caller" | "requestId">,
     liveNow: Live
   ): Promise<Asked> => {
     const base = {
@@ -590,7 +599,7 @@ export const createFindEngine = (deps: EngineDeps) => {
       machine.machineId,
       query,
       options,
-      TRANSCRIPT_ANSWER_MS,
+      ask.asker === "call" ? TRANSCRIPT_CALL_MS : TRANSCRIPT_ANSWER_MS,
       ask
     );
     const tookMs = Math.round(performance.now() - started);
@@ -730,10 +739,14 @@ export const createFindEngine = (deps: EngineDeps) => {
     }
   };
 
-  /** How the words are asked, as the machines' query carries it: what tools answered too, the words around each moment, a finished query. */
+  /** How the words are asked, as the machines' query carries it: by an agent's call or a person typing, what tools answered too, the words around each moment, a finished query. */
   const askedHow = (
-    asks: Pick<FindRequest, "context" | "submitted" | "toolOutput">
-  ): Pick<TranscriptQuery, "context" | "submitted" | "toolOutput"> => ({
+    asks: Pick<FindRequest, "asker" | "context" | "submitted" | "toolOutput">
+  ): Pick<
+    TranscriptQuery,
+    "call" | "context" | "submitted" | "toolOutput"
+  > => ({
+    ...(asks.asker === "call" ? { call: true } : {}),
     ...(asks.toolOutput ? { toolOutput: true } : {}),
     ...(asks.context ? { context: true } : {}),
     ...(asks.submitted ? { submitted: true } : {}),
@@ -751,7 +764,7 @@ export const createFindEngine = (deps: EngineDeps) => {
     author: TranscriptQuery["author"],
     asks: Pick<
       FindRequest,
-      "caller" | "context" | "requestId" | "submitted" | "toolOutput"
+      "asker" | "caller" | "context" | "requestId" | "submitted" | "toolOutput"
     >,
     where: FindWhere | undefined,
     held: Names,
@@ -825,6 +838,7 @@ export const createFindEngine = (deps: EngineDeps) => {
           "",
           author,
           {
+            asker: request.asker,
             caller: request.caller,
             context: request.context,
             requestId: request.requestId,

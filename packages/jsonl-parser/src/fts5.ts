@@ -126,6 +126,17 @@ END;
  * `docs_author_ts`'s land at each author's. On that index it is 88 MB, 3%
  * of the file, built in 2.6 s as the writer first opens it.
  *
+ * `docs_facets` is what a search reads of each match ({@link TranscriptIndex.search}):
+ * its conversation, who said it and when, keyed by the rowid FTS5 answers,
+ * so the ranking, its filters (author, conversations, `before`) and the
+ * count of conversations read them off the index alone. Read off `docs`,
+ * each match's row is a page of its own among the documents' words: on a
+ * 1,000,000-record index built from this repository's text (2026-11-26,
+ * interleaved runs on a loaded obelisk), an agent's search for "the" took
+ * 599 ms on `docs`, 255 ms on this index; narrowed to 40 conversations,
+ * 1,187 to 493; "error" 205 to 64. It is 41 MB there, 4% of `docs`, and
+ * built in 1.7 s as the writer first opens it.
+ *
  * The harness, session, role, author, cwd and model are the same few strings
  * on row after row, so a row holds each as the id of its one copy in
  * `strings`. As text they were ~100 of a row's ~320 bytes, and half the rows
@@ -161,6 +172,7 @@ CREATE TABLE IF NOT EXISTS docs (
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE INDEX IF NOT EXISTS docs_author_ts ON docs(author, ts);
 CREATE INDEX IF NOT EXISTS docs_conversation ON docs(session, sidechain, ts, id, author);
+CREATE INDEX IF NOT EXISTS docs_facets ON docs(id, harness, session, author, ts);
 ${ftsTable("docs_fts")}
 ${FTS_TRIGGERS}
 CREATE TABLE IF NOT EXISTS files (
@@ -292,15 +304,22 @@ const SCAN_PER_CONVERSATION = 12;
 /** The SQL that holds documents to the conversations `#sessionIds` names. */
 const SESSIONS_FILTER = " AND d.session IN (SELECT value FROM json_each(?))";
 
-/** What a search or a listing answers: its page of conversations, and how many matched in all. */
+/** What a search or a listing answers: its page of conversations, and, when the page filled, how many matched in all. */
 export interface Searched {
   hits: ConversationHit[];
-  /** Conversations a search matched; documents a listing's window holds. */
-  matched: number;
+  /**
+   * How many conversations a search matched in all, counted only when its
+   * page filled: a page that did not fill holds every conversation it found,
+   * and the hub reads the count of a full one alone (views/find-engine.ts
+   * `beyond`). The count reads every match the words have in the whole
+   * history, which the ranking's tiers ({@link RECENT_TIERS}) exist to
+   * avoid: counted on every search, it was most of a common word's time.
+   */
+  matched?: number;
 }
 
 /** The answer when nothing can match. */
-const EMPTY: Searched = { hits: [], matched: 0 };
+const EMPTY: Searched = { hits: [] };
 
 export interface SearchOptions {
   /** How many conversations to answer with. */
@@ -1752,7 +1771,9 @@ export class TranscriptIndex {
   /**
    * The best `scan` documents `match` finds among the rowids `within` says
    * (by author and conversation when `filters` say), as ids and scores only: BM25 weighed
-   * by whose words they are, read off ids, never the strings table.
+   * by whose words they are, read off ids, never the strings table, and
+   * each match's conversation, author and time off `docs_facets`, never
+   * its row of `docs`.
    */
   #ranked(pass: Pass, filters: string, params: (string | number)[], scan: number): Ranked[] {
     const weight = Object.entries(AUTHOR_WEIGHT)
@@ -1766,7 +1787,7 @@ export class TranscriptIndex {
         `SELECT docs_fts.rowid AS id, d.harness AS harness, d.session AS session,
                 -bm25(docs_fts, ${COLUMN_WEIGHTS}) * (CASE d.author ${weight} ELSE 1 END) AS score
          FROM docs_fts
-         JOIN docs d ON d.id = docs_fts.rowid
+         JOIN docs d INDEXED BY docs_facets ON d.id = docs_fts.rowid
          WHERE docs_fts MATCH ? ${filters} AND ${pass.within}
          ORDER BY score DESC
          LIMIT ?`,
@@ -1952,17 +1973,19 @@ export class TranscriptIndex {
         }),
       }))
       .slice(0, limit);
-    return { hits, matched: this.#matched(widest, filters, params) };
+    return kept.length < limit
+      ? { hits }
+      : { hits, matched: this.#matched(widest, filters, params) };
   }
 
-  /** How many conversations hold a document `pass` matches under `filters`: all of them, not the page. */
+  /** How many conversations hold a document `pass` matches under `filters`: all of them, not the page, read off `docs_facets`. */
   #matched(pass: Pick<Pass, "match">, filters: string, params: (string | number)[]): number {
     const row = this.db
       .query<{ n: number }, (string | number)[]>(
         `SELECT count(*) AS n FROM (
            SELECT DISTINCT d.harness, d.session
            FROM docs_fts
-           JOIN docs d ON d.id = docs_fts.rowid
+           JOIN docs d INDEXED BY docs_facets ON d.id = docs_fts.rowid
            WHERE docs_fts MATCH ? ${filters})`,
       )
       .get(pass.match, ...params);
@@ -2036,14 +2059,6 @@ export class TranscriptIndex {
       filters += SESSIONS_FILTER;
       params.push(ids);
     }
-    // The documents the window holds in all: the page is `limit` of them.
-    const matched =
-      this.db
-        .query<{ n: number }, (string | number)[]>(
-          `SELECT count(*) AS n FROM docs d INDEXED BY docs_author_ts
-           WHERE d.author = ? AND d.ts IS NOT NULL${filters}`,
-        )
-        .get(...params)?.n ?? 0;
     const ids = (
       this.db
         .prepare(
@@ -2093,7 +2108,7 @@ export class TranscriptIndex {
         ...(context === undefined ? {} : { context }),
       });
     }
-    return { hits: [...conversations.values()], matched };
+    return { hits: [...conversations.values()] };
   }
 
   /**

@@ -1154,6 +1154,9 @@ export const createFindTool = (deps: FindToolDeps) => {
       q: query,
       caller: `the find tool of session ${actor.id}`,
       limit,
+      // One call, not a keystroke: each machine waited for as long as it
+      // works on the search.
+      asker: "call",
       transcripts: true,
       // Everything: what was said, and what tools returned in any session.
       toolOutput: true,
@@ -1221,6 +1224,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const { atLimit, results, coverage } = await deps.find.listing({
       author: AUTHOR[input.by],
       caller: `the find tool of session ${actor.id}`,
+      asker: "call",
       transcripts: true,
       context: true,
       where: { ...where, ...(before === undefined ? {} : { before }) },

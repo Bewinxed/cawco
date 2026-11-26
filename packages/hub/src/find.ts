@@ -248,6 +248,7 @@ export const answerFind = async (
     ...(query.relist ? { relist: query.relist } : {}),
     ...(query.by ? { author: AUTHOR_OF[query.by] } : {}),
     kinds,
+    asker: "typing",
     transcripts: query.transcripts !== "0",
   });
   if (page instanceof ElysiaStatus) {
