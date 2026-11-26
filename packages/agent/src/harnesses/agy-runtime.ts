@@ -214,6 +214,8 @@ class AgySession {
   #context: { size: number; used: number } | undefined;
   #stderr = "";
   #stopped: boolean;
+  /** The running agy's version, as its last `initialize` said it. */
+  #version: string | undefined;
 
   constructor(start: AgyStart, ctx: AgyHostContext) {
     this.#start = start;
@@ -304,6 +306,7 @@ class AgySession {
       this.#start.clientVersion
     );
     if (initialized.agentInfo?.version) {
+      this.#version = initialized.agentInfo.version;
       this.#ctx.version(initialized.agentInfo.version);
     }
     return takesAppend(initialized);
@@ -826,6 +829,7 @@ class AgySession {
       busy: this.#prompts > 0,
       held: [...this.#unread],
       asks: [...this.#asks.values()].map((ask) => ask.asked),
+      ...(this.#version ? { version: this.#version } : {}),
     };
   }
 

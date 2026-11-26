@@ -54,6 +54,8 @@ const AGY_HOST_STATE = object({
   /** The sends the host handed agy that agy has not read yet, by uuid. */
   held: array(string()),
   sessionId: nullable(string()),
+  /** The running agy's version as its `initialize` said it: what an agent that takes the host back reads it as outdated against. */
+  version: optional(string()),
 });
 
 /** An Antigravity host's state ({@link AGY_HOST_STATE}). */

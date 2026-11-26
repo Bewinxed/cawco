@@ -41,7 +41,7 @@ import { throughMcpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { agyDeniedTools } from "./agy-judge";
-import { agyLaunch } from "./agy-launch";
+import { agyLaunch, agyToStart } from "./agy-launch";
 import { hostSnapshot } from "./host-line";
 import { HostedSession } from "./hosted-session";
 
@@ -84,7 +84,11 @@ class AgyRemoteSession
   }
 
   protected override applySnapshot(value: unknown): void {
-    this.applyShared(agyHostState(value));
+    const state = agyHostState(value);
+    // An agent that takes the host back hears no `version` the host said
+    // before its cursor: the host's state says it.
+    this.#running = state.version ?? this.#running;
+    this.applyShared(state);
   }
 
   protected override ownEvent(_seq: number, event: AgyHostEvent): void {
@@ -330,7 +334,11 @@ export const agySnapshot = (instanceId: string): Promise<AgyHostState> =>
     agyHostEvent
   );
 
-/** An Antigravity session's host, taken back after an agent restart: its unread sends said held, each ask it holds parked again. */
+/**
+ * An Antigravity session's host, taken back after an agent restart: read
+ * from the hub's mark, its unread sends said held, each ask it holds parked
+ * again, and the agy it runs read against the machine's as it is now.
+ */
 export const adoptAgy = async (
   instanceId: string,
   ctx: HarnessContext,
@@ -340,9 +348,17 @@ export const adoptAgy = async (
   if (!proc) {
     throw new Error(`Antigravity's host for ${instanceId} is gone`);
   }
+  // The promise edge of the machine's agy, read as a start reads it.
+  const installed = await Effect.runPromise(
+    agyToStart().pipe(
+      Effect.map((agy) => agy.version),
+      Effect.orElseSucceed(() => undefined)
+    )
+  );
   const session = new AgyRemoteSession(proc.client, ctx, proc, {
     afterSeq: options.afterSeq ?? options.head,
     recoveryHead: options.head,
+    ...(installed ? { installed } : {}),
   });
   const state = agyHostState(await session.request({ type: "snapshot" }));
   session.sayHeld(state);
