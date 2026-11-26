@@ -29,6 +29,7 @@ import {
   type HarnessKind,
   harnessName,
 } from "@cawco/core/harness/kinds";
+import { signsInApart } from "@cawco/core/harness/traits";
 import { machineLabel } from "@cawco/core/machine-names";
 import { keyTail } from "@cawco/core/short-id";
 import { sinceWords } from "@cawco/core/words/account-lines";
@@ -294,8 +295,8 @@ export function signinState(
  */
 function signinsOn(account: Account, machine: AccountMachine): boolean[] {
   const harnesses = harnessesOn(machine, account.provider);
-  const codex = isChatgptPlan(account) && harnesses.includes("codex");
-  const own = harnesses.some((one) => !(codex && one === "codex"));
+  const codex = isChatgptPlan(account) && harnesses.some(signsInApart);
+  const own = harnesses.some((one) => !(codex && signsInApart(one)));
   return [
     ...(own
       ? [

@@ -17,6 +17,7 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
 import { harnessLabel } from "@cawco/core/harness/kinds";
+import { type ApartSigninKind, signsInApart } from "@cawco/core/harness/traits";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
@@ -1679,24 +1680,30 @@ export const accountFacts = (
   bench: db.accounts.bench(),
 });
 
+/** Where each account is signed in for each harness whose sign-in is a home of its own (core traits.ts `signsInApart`), by its kind: one row per account and machine whose home for it holds a sign-in. */
+export type ApartSignins = Readonly<
+  Record<ApartSigninKind, readonly { accountId: string; machineId: string }[]>
+>;
+
 /**
- * The sign-ins a session in `harness` can run on. Codex runs in the
- * account's Codex home on a machine, signed in there by Codex itself (a
- * ChatGPT account's device code, or an OpenAI key handed to it), so a
- * Codex session's are those homes alone (`codexOn`: hub account-signin.ts
- * `codexSignins`), each read as signed in; the account's own sign-in there
- * says nothing of Codex. Any other harness runs on the account's own
- * sign-ins (`signins`).
+ * The sign-ins a session in `harness` can run on. A harness whose sign-in is
+ * a home of its own beside the account's (core traits.ts `signsInApart`:
+ * Codex) runs in the account's home for it on a machine, signed in there by
+ * the harness itself (a ChatGPT account's device code, or an OpenAI key
+ * handed to it), so its session's are those homes alone (`apart`: hub
+ * account-signin.ts `apartSignins`), each read as signed in; the account's
+ * own sign-in there says nothing of that harness. Any other harness runs on
+ * the account's own sign-ins (`signins`).
  */
 export const harnessSignins = (
   harness: string,
   signins: readonly AccountSignin[],
-  codexOn: readonly { accountId: string; machineId: string }[]
+  apart: ApartSignins
 ): AccountSignin[] => {
-  if (harness !== "codex") {
+  if (!signsInApart(harness)) {
     return [...signins];
   }
-  return codexOn.map(({ accountId, machineId }) => ({
+  return apart[harness].map(({ accountId, machineId }) => ({
     accountId,
     machineId,
     checkedAt:
@@ -1711,6 +1718,6 @@ export const harnessSignins = (
   }));
 };
 
-/** " for Codex" of a Codex session's sign-in ({@link harnessSignins}), else nothing. */
+/** " for Codex" of the sign-in of a session in a harness whose sign-in is a home of its own ({@link harnessSignins}), else nothing. */
 export const signedInForWords = (harness: string | undefined): string =>
-  harness === "codex" ? ` for ${harnessLabel(harness)}` : "";
+  signsInApart(harness) ? ` for ${harnessLabel(harness)}` : "";

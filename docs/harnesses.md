@@ -61,7 +61,10 @@ nothing), the usage scanner's sources (`UsageHarness`, for a descriptor whose
 `credentials`). The daemon still reaches three harnesses by name for beats
 of their own (OpenCode's file watch and providers, pi's credential check,
 Claude Code's re-read on a version answer and a keychain unlock), named in
-the lint rule; and the wire names OpenCode and pi in a few fields of its
+the lint rule; the hub's Codex home sign-out and its keep select Codex's
+rows by `CODEX.kind`, while which sign-ins a session runs on is read from
+`homeLogin` and core traits.ts `SELF_SIGNIN` (`signsInApart`, hub
+placement.ts `harnessSignins`, a table keyed by each such kind); and the wire names OpenCode and pi in a few fields of its
 own (a machine's providers, its OpenCode custody).
 The iOS app (`apps/apple/Packages/CawCoKit`) keys harnesses by string and is
 on hold.

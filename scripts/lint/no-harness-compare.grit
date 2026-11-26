@@ -9,9 +9,17 @@ language js
 // harness is one descriptor and one adapter, and the type-checker names
 // whatever either one is missing (docs/harnesses.md). The two plugin folders
 // are a harness naming itself.
+//
+// A flow that is one harness's own, end to end (Codex's home sign-out and
+// its keep: hub account-carry.ts `leaveCodexHomes`, limit-moves.ts
+// `signOutCodex` and `keepCodex`, the routes beside them), selects that
+// harness's rows by its descriptor's kind (`CODEX.kind`), never a string.
 
 pattern harness_name() {
-  or { `"claude"`, `"opencode"`, `"pi"`, `'claude'`, `'opencode'`, `'pi'` }
+  or {
+    `"claude"`, `"opencode"`, `"pi"`, `"codex"`, `"agy"`,
+    `'claude'`, `'opencode'`, `'pi'`, `'codex'`, `'agy'`
+  }
 }
 
 pattern a_named_file() {

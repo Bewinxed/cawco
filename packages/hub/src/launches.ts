@@ -859,8 +859,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
       Pick<InstanceRow, "harness" | "machineId" | "permissionMode"> | undefined
   ): string | undefined =>
     row &&
-    (row.permissionMode ??
-      ctx.db.chosenMode(row.machineId, row.harness ?? "claude"));
+    (row.permissionMode ?? ctx.db.chosenMode(row.machineId, row.harness));
 
   /** The hub's row for `instanceId`, when it names one the hub has. */
   const rowNamed = (instanceId: string | undefined) =>

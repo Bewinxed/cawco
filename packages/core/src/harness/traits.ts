@@ -149,6 +149,55 @@ export const CREDENTIAL_STORE_HARNESSES: readonly KindsWhere<
 /** A harness whose own store holds a credential per provider, which an account can hold one of. */
 export type CredentialStoreKind = (typeof CREDENTIAL_STORE_HARNESSES)[number];
 
+const isSelfSigned = (
+  kind: HarnessKind
+): kind is KindsWhere<"homeLogin", "none"> =>
+  descriptorOf(kind).homeLogin === "none";
+
+/**
+ * Every kind each account signs in itself, in a home CawCo keeps for the
+ * account on each machine (descriptor `homeLogin` "none"), in
+ * {@link HARNESSES} order: a session of one runs on that home's sign-in,
+ * never on the account's own.
+ */
+const SELF_SIGNED_HARNESSES: readonly KindsWhere<"homeLogin", "none">[] =
+  HARNESSES.filter(isSelfSigned);
+
+/** A harness each account signs in itself, in its own home ({@link SELF_SIGNED_HARNESSES}). */
+export type SelfSignedKind = (typeof SELF_SIGNED_HARNESSES)[number];
+
+/** Whether `harness`, a kind or whatever a row or a frame says one is, is signed in by each account in its own home. */
+const signsInItself = (harness: unknown): harness is SelfSignedKind => {
+  const named = harnessNamed(harness);
+  return named !== undefined && isSelfSigned(named);
+};
+
+/**
+ * Where a session of each harness each account signs in itself finds its
+ * sign-in. `apart`: a home of the harness's own, signed in beside the
+ * account's own sign-in, which says nothing of it (Codex's, beside a
+ * ChatGPT account's for pi and OpenCode). `own`: the account's own
+ * sign-in, which is that home's (Antigravity's: its whole sign-in is its
+ * agy home, reported as the account's).
+ */
+const SELF_SIGNIN = {
+  codex: "apart",
+  agy: "own",
+} as const satisfies Readonly<Record<SelfSignedKind, "apart" | "own">>;
+
+/** A harness whose sign-in is a home of its own, beside the account's ({@link SELF_SIGNIN}). */
+export type ApartSigninKind = {
+  [K in SelfSignedKind]: (typeof SELF_SIGNIN)[K] extends "apart" ? K : never;
+}[SelfSignedKind];
+
+/** Whether `harness`, a kind or whatever a row or a frame says one is, signs in apart from the account's own sign-in ({@link SELF_SIGNIN}). */
+export const signsInApart = (harness: unknown): harness is ApartSigninKind =>
+  signsInItself(harness) && SELF_SIGNIN[harness] === "apart";
+
+/** Every kind whose sign-in is a home of its own beside the account's, in {@link HARNESSES} order. */
+export const APART_SIGNIN_HARNESSES: readonly ApartSigninKind[] =
+  SELF_SIGNED_HARNESSES.filter(signsInApart);
+
 const isCompactNamed = (
   kind: HarnessKind
 ): kind is KindsWhere<"compactByOnMovedLine", "named"> =>

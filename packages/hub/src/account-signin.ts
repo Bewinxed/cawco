@@ -55,7 +55,7 @@ import {
   silentProblem,
   type Unanswered,
 } from "./machine-answers";
-import { harnessSignins } from "./placement";
+import { type ApartSignins, harnessSignins } from "./placement";
 import { unreachable } from "./unreachable";
 
 /** Why an account's marks end as it signs in (account-marks.ts `marksRenewed`). */
@@ -243,12 +243,19 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     );
 
   /**
+   * Where each account is signed in for each harness whose sign-in is a
+   * home of its own beside the account's (placement.ts `ApartSignins`).
+   */
+  const apartSignins = (): ApartSignins => ({ codex: codexSignins() });
+
+  /**
    * The sign-ins a session in `harness` can run on (placement.ts
-   * `harnessSignins`): Codex's own sign-ins for a Codex session, the
-   * accounts' own for any other. Placement and the launch read the same.
+   * `harnessSignins`): a harness's own sign-ins for a harness whose sign-in
+   * is a home of its own, the accounts' own for any other. Placement and the
+   * launch read the same.
    */
   const signinsFor = (harness: string): AccountSignin[] =>
-    harnessSignins(harness, ctx.db.accounts.signins(), codexSignins());
+    harnessSignins(harness, ctx.db.accounts.signins(), apartSignins());
 
   /** Every provider any machine knows, one entry each, the first machine's word on it. */
   const knownProviders = (): ProviderInfo[] => {

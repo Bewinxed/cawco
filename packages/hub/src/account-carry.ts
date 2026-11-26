@@ -7,8 +7,9 @@ import {
 } from "@cawco/core/accounts/controls";
 import { RESTART_WAIT_CAP_MS, waitedOut } from "@cawco/core/binary-updates";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { CODEX } from "@cawco/core/harness/codex";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { traitsOf } from "@cawco/core/harness/traits";
+import { APART_SIGNIN_HARNESSES, traitsOf } from "@cawco/core/harness/traits";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type {
   CarrySessionOutcome,
@@ -659,22 +660,29 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
 
   /**
    * Which of `accountId`'s rows on `machineId` ran on the store its sign-out
-   * there takes away. A Codex session runs on the account's Codex home,
-   * which the machine keeps through that sign-out while Codex is signed in
-   * there (agent provider-accounts.ts `removeAccount`): while it is, and
-   * the account is still the hub's, its Codex sessions are none of that
-   * sign-out's. A removed account's go with it, Codex's too.
+   * there takes away. A session of a harness whose sign-in is a home of its
+   * own (core traits.ts `signsInApart`) runs on the account's home for it,
+   * which the machine keeps through that sign-out while the harness is
+   * signed in there (agent provider-accounts.ts `removeAccount`, Codex's):
+   * while it is, and the account is still the hub's, that harness's
+   * sessions are none of that sign-out's. A removed account's go with it,
+   * those too.
    */
   const outOfStore = (accountId: string, machineId: string) => {
-    const codexStays =
-      ctx.db.accounts.get(accountId) !== undefined &&
-      ctx
-        .signinsFor("codex")
-        .some(
-          (one) => one.accountId === accountId && one.machineId === machineId
-        );
-    return (row: { harness: HarnessKind }): boolean =>
-      !(codexStays && row.harness === "codex");
+    const kept = ctx.db.accounts.get(accountId) !== undefined;
+    const stays = new Set<HarnessKind>(
+      APART_SIGNIN_HARNESSES.filter(
+        (harness) =>
+          kept &&
+          ctx
+            .signinsFor(harness)
+            .some(
+              (one) =>
+                one.accountId === accountId && one.machineId === machineId
+            )
+      )
+    );
+    return (row: { harness: HarnessKind }): boolean => !stays.has(row.harness);
   };
 
   /**
@@ -733,7 +741,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         .filter(
           (row) =>
             row.accountId === accountId &&
-            row.harness === "codex" &&
+            row.harness === CODEX.kind &&
             processMayRun(row)
         );
       const waitKey = `${accountId}\u0000${machineId}`;

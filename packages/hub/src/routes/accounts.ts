@@ -10,6 +10,7 @@ import {
   providerChoices,
 } from "@cawco/core/accounts";
 import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
+import { CODEX } from "@cawco/core/harness/codex";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, problem, t } from "elysia";
@@ -75,7 +76,7 @@ export const accountsListed = (
         .filter(
           (row) =>
             row.accountId === leave.accountId &&
-            row.harness === "codex" &&
+            row.harness === CODEX.kind &&
             processMayRun(row)
         ).length,
     })),

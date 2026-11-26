@@ -8,6 +8,7 @@
  * first paint draws (first-paint.ts) and in the page from the machine's own
  * row once the socket has brought it.
  */
+import { CREDENTIAL_STORE_HARNESSES } from "@cawco/core/harness/traits";
 import type { AgentRow } from "@cawco/core/protocol";
 import { machineSync, syncNotice } from "./convergence";
 import { machineFaults } from "./fleet-faults";
@@ -22,10 +23,13 @@ export function machineVerdict(
   now: number
 ): MachineVerdict {
   const blocks = machineBlocksOf(machine);
-  const signIn = [
-    signInWarning(machine, "pi"),
-    signInWarning(machine, "opencode"),
-  ]
+  // The sign-ins of the harnesses whose machine sign-in is a store of
+  // credentials (pi's, OpenCode's): Claude Code's is the machine's own
+  // (`auth`), and a harness each account signs in itself says only its
+  // version refused, which `blocks` says.
+  const signIn = CREDENTIAL_STORE_HARNESSES.map((harness) =>
+    signInWarning(machine, harness)
+  )
     .filter(Boolean)
     .join(" ");
   // A server waiting on a sign-in is no fault of the machine's: the

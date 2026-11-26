@@ -42,6 +42,7 @@
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { harnessName } from "@cawco/core/harness/kinds";
+  import { signsInApart } from "@cawco/core/harness/traits";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { configureWords } from "@cawco/core/words/configure";
   import { onMount, untrack } from "svelte";
@@ -309,10 +310,10 @@
   /** What each of a machine's rows signs in for: its own sign-in's harnesses, and Codex's. */
   const rowsOn = (machine: AccountMachine) => {
     const all = choice ? harnessesOn(machine, choice.provider) : [];
-    const codex = chatgpt && all.includes("codex");
+    const codex = chatgpt && all.some(signsInApart);
     return {
       codex,
-      others: codex ? all.filter((one) => one !== "codex") : all,
+      others: codex ? all.filter((one) => !signsInApart(one)) : all,
     };
   };
   const codexOn = (machineId: string): DeviceFlow | undefined => {

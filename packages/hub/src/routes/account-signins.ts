@@ -11,6 +11,7 @@ import {
   CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_SET_PROVIDER_KEY,
 } from "@cawco/core/accounts/controls";
+import { CODEX } from "@cawco/core/harness/codex";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { marksRenewed } from "../account-marks";
 import type { HubContext } from "../hub-context";
@@ -401,7 +402,7 @@ export const accountSigninRoutes = ({
             .some(
               (row) =>
                 row.machineId === params.machineId &&
-                row.harness === "codex" &&
+                row.harness === CODEX.kind &&
                 processMayRun(row)
             );
           if (leaves) {

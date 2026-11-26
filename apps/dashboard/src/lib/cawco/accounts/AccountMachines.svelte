@@ -33,6 +33,7 @@
    */
   import { type Account, isChatgptPlan } from "@cawco/core/accounts";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { signsInApart } from "@cawco/core/harness/traits";
   import { accountsWords as words } from "@cawco/core/words/accounts";
   import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
@@ -118,19 +119,20 @@
   const places = $derived(
     machines.flatMap((machine): Place[] => {
       const all = harnessesOn(machine, account.provider);
-      if (!(chatgpt && all.includes("codex"))) {
+      const own = all.filter((one) => !signsInApart(one));
+      const apart = all.filter(signsInApart);
+      if (!(chatgpt && apart.length > 0)) {
         return [
           { machine, codex: false, harnesses: all, key: machine.machineId },
         ];
       }
-      const others = all.filter((one) => one !== "codex");
       return [
-        ...(others.length > 0
+        ...(own.length > 0
           ? [
               {
                 machine,
                 codex: false,
-                harnesses: others,
+                harnesses: own,
                 key: machine.machineId,
               },
             ]
@@ -138,7 +140,7 @@
         {
           machine,
           codex: true,
-          harnesses: ["codex" as const],
+          harnesses: apart,
           key: `${machine.machineId}:codex`,
         },
       ];

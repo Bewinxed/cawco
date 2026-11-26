@@ -131,7 +131,7 @@ const refreshesOf = (
   capabilities: HarnessCapabilities | undefined,
   moved: FleetMoved
 ): (keyof typeof REFRESH_CAPABILITY)[] => {
-  const harness = row.harness ?? "claude";
+  const { harness } = row;
   const answers = (method: keyof typeof REFRESH_CAPABILITY) =>
     capabilities?.[REFRESH_CAPABILITY[method]] === true &&
     answersControl(harness, method);
@@ -269,7 +269,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     for (const row of ctx.db.liveInstancesOn(machineId)) {
       const methods = refreshesOf(
         row,
-        ctx.harnessReportOf(machineId, row.harness ?? "claude")?.capabilities,
+        ctx.harnessReportOf(machineId, row.harness)?.capabilities,
         moved
       );
       for (const method of methods) {

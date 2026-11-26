@@ -8,6 +8,7 @@ import {
   LIMITED_PROVIDERS,
   namedAccount,
 } from "@cawco/core/accounts";
+import { CODEX } from "@cawco/core/harness/codex";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -2567,7 +2568,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       account,
       "signed-out",
       machineId,
-      { of: (row) => row.harness === "codex", strand: "codex-signed-out" }
+      { of: (row) => row.harness === CODEX.kind, strand: "codex-signed-out" }
     );
     if (leaves) {
       carryBetweenTurns(live);
@@ -2595,7 +2596,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     ctx.noteCodexSignin(account.id, machineId, true);
     const rows = ctx.db
       .instancesOnAccount(account.id)
-      .filter((row) => row.machineId === machineId && row.harness === "codex");
+      .filter(
+        (row) => row.machineId === machineId && row.harness === CODEX.kind
+      );
     for (const row of rows) {
       const owed = ctx.owedMoves.get(row.id);
       if (
