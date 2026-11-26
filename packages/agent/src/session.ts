@@ -240,12 +240,12 @@ import {
   runControl,
   SessionAddressRefused,
 } from "./harness";
-import { Harnesses, type HarnessRegistry } from "./harnesses";
 import {
   installCredential,
   installOf,
   verifyHeldCredential,
 } from "./harnesses/credential-controls";
+import { Harnesses, type HarnessRegistry } from "./harnesses/service";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";

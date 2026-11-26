@@ -32,6 +32,7 @@ import {
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import type * as RealHarnesses from "../packages/agent/src/harnesses/index";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { bundled } from "../packages/core/src/bundled";
 import { fileViewerAssets } from "../packages/core/src/file-viewer";
@@ -40,6 +41,7 @@ import { agentReact } from "../packages/hub/src/agent-react";
 import { canvasHostAssets } from "../packages/hub/src/canvas-host";
 import { decisionHostAssets } from "../packages/hub/src/decision-host";
 import { bundleOverlay } from "../packages/preview/src/proxy";
+import type * as TestHarnesses from "./binary/test-harnesses";
 import { dashboardBuild } from "./dashboard-build-cache";
 
 export const PINNED_BUN = "1.4.4";
@@ -344,17 +346,212 @@ const publishedHashes = async (
     )
   );
 
-/** One target compiled from the prepared assets; release.ts owns locking, gates, signing and archives. */
-export async function compileBinary(options: {
-  target: string;
-  outfile: string;
-  version: string;
-  commit: string;
+/** Which binary a bundle is: the release's, the smoke test's (`proof`) or the end-to-end test's (`stubHarness`). */
+export interface BinaryVariant {
   proof?: boolean;
   /** Link the credential-free stub harnesses into the real entry point; for the tests only. */
   stubHarness?: boolean;
   testPublicKey?: string;
-}) {
+}
+
+/** The binary's entries, each by the name Bun gives it in the binary's root and the module it imports. */
+export const binaryEntries = ({ proof }: BinaryVariant): [string, string][] => {
+  const { pi } = piPackages();
+  return [
+    [
+      "cawco.ts",
+      join(
+        ROOT,
+        proof ? "scripts/binary/test-entry.ts" : "scripts/binary/entry.ts"
+      ),
+    ],
+    ...[
+      "transcript-worker.ts",
+      "process-table-worker.ts",
+      "loop-watch-worker.ts",
+      "stores-worker.ts",
+      "views-worker.ts",
+    ].map((name): [string, string] => [
+      `scripts/binary/${name}`,
+      join(ROOT, "scripts/binary", name),
+    ]),
+    [
+      "src/utils/image-resize-worker.ts",
+      join(pi, "dist/utils/image-resize-worker.js"),
+    ],
+    [
+      "src/extensions/codemode/worker.ts",
+      join(pi, "dist/extensions/codemode/worker.js"),
+    ],
+  ];
+};
+
+/** Compiles only when every proof it is given holds; a call, so nothing need be exported for it. */
+const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
+/**
+ * A test build links scripts/binary/test-harnesses.ts in place of the agent's
+ * harnesses/index.ts (below, {@link binaryBundle}), whose importers the type
+ * check reads against the real one alone: a name the stand-in lacks fails
+ * only Bun's bundle of a test build. So the stand-in exports every export of
+ * the real one, each of its type.
+ */
+prove<[typeof TestHarnesses extends typeof RealHarnesses ? true : false]>();
+
+/**
+ * The bundle of a binary, every compile's and the bundle check's
+ * (binary-bundle-check.ts): resolution, the modules a variant links in place
+ * of others, and what the code reads at build time. `assetsSource` is the
+ * module given for core binary-assets.ts; `version` and `commit` are the
+ * binary's own.
+ */
+export const binaryBundle = (
+  options: BinaryVariant & {
+    assetsSource: string;
+    commit: string;
+    version: string;
+  }
+): Pick<
+  Bun.BuildConfig,
+  "define" | "external" | "minify" | "plugins" | "sourcemap"
+> => {
+  const { pi, requirePi, tui } = piPackages();
+  const { assetsSource } = options;
+  return {
+    // A CPU profile of the hub (hub-profile.ts) names each function by its
+    // source name, file and line: identifiers keep their names, and the
+    // executable embeds the source map ("linked" in a compile).
+    minify: { whitespace: true, syntax: true, identifiers: false },
+    sourcemap: "linked",
+    // cpu-features: an optional native addon of ssh2 (dockerode's
+    // docker-modem loads it), built by no install here; ssh2 requires it
+    // inside a try and goes on without it, and the browser runtime speaks to
+    // unix sockets alone, never SSH. lightningcss and browserslist: the
+    // runtime pages' CSS compiler (hub page-css.ts), which loads them on a
+    // compile only; the binary carries every page prebuilt and compiles none.
+    // postcss, @tailwindcss/postcss and unplugin-icons: the decision host's
+    // Tailwind compile and its icons (hub decision-host.ts), loaded the same
+    // way; the binary carries the host prebuilt and never builds it.
+    // fontkit, subset-font and woff2-encoder: what cuts the house faces into
+    // their woff2 pieces (core house-faces.ts), loaded the same way; the
+    // binary carries the decision host's and the stage host's pieces
+    // prebuilt.
+    external: [
+      "cpu-features",
+      "lightningcss",
+      "browserslist",
+      "postcss",
+      "@tailwindcss/postcss",
+      "unplugin-icons",
+      "fontkit",
+      "subset-font",
+      "woff2-encoder",
+    ],
+    define: {
+      __CAWCO_RELEASE__: "true",
+      __CAWCO_VERSION__: JSON.stringify(options.version),
+      __CAWCO_COMMIT__: JSON.stringify(options.commit),
+      "process.env.NODE_ENV": '"production"',
+    },
+    plugins: [
+      agentReact,
+      {
+        name: "owned-runtime-resources",
+        setup(build) {
+          if (options.testPublicKey) {
+            build.onLoad(
+              { filter: /packages\/core\/src\/release-key\.ts$/u },
+              () => ({
+                contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
+                loader: "ts",
+              })
+            );
+          }
+          build.onResolve({ filter: /^cawco:pi-runtime$/u }, () => ({
+            path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
+          }));
+          build.onResolve({ filter: /^cawco:pi-config$/u }, () => ({
+            path: join(pi, "dist/config.js"),
+          }));
+          build.onResolve({ filter: /^cawco:quickjs$/u }, () => ({
+            path: requirePi.resolve("quickjs-wasi/quickjs.wasm"),
+          }));
+          build.onLoad(
+            { filter: /packages\/core\/src\/binary-assets\.ts$/u },
+            () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
+          );
+          // A package that reads files beside itself is never bundled, whose
+          // __dirname the bundle would fix at this machine's node_modules:
+          // every import of it is core published-package.ts loading the
+          // tree the binary publishes.
+          build.onResolve({ filter: PUBLISHED_PACKAGE }, ({ path }) => ({
+            path,
+            namespace: "published-package",
+          }));
+          build.onLoad(
+            { filter: /.*/u, namespace: "published-package" },
+            ({ path }) => ({
+              contents: `module.exports=require(${JSON.stringify(join(ROOT, "packages/core/src/published-package.ts"))}).publishedPackage(${JSON.stringify(PUBLISHED_PACKAGES[path])});`,
+              loader: "js",
+            })
+          );
+          build.onResolve({ filter: /^socket-activation$/u }, () => ({
+            path: join(ROOT, "scripts/binary/socket-activation.ts"),
+          }));
+          if (options.stubHarness) {
+            // The end-to-end test's builds run the update's timed steps at
+            // the pace its machines set (scripts/binary/test-clock.ts).
+            build.onLoad(
+              { filter: /packages\/core\/src\/clock\.ts$/u },
+              () => ({
+                contents: readFileSync(
+                  join(ROOT, "scripts/binary/test-clock.ts"),
+                  "utf8"
+                ),
+                loader: "ts",
+              })
+            );
+          }
+          if (options.proof) {
+            // smoke-runtime.ts `smoke-pi` calls pi's and pi-tui's own
+            // exports, which the scripts package does not declare.
+            build.onResolve({ filter: /^cawco:smoke-pi$/u }, () => ({
+              path: join(pi, "dist/index.js"),
+            }));
+            build.onResolve({ filter: /^cawco:smoke-pi-tui$/u }, () => ({
+              path: join(tui, "dist/index.js"),
+            }));
+          }
+          if (options.proof || options.stubHarness) {
+            // The stand-in exports every export of the module it replaces,
+            // each of its type (the `prove` above {@link binaryBundle}).
+            build.onLoad(
+              { filter: /packages\/agent\/src\/harnesses\/index\.ts$/u },
+              async () => ({
+                // Its imports are relative to scripts/binary, not to the file it replaces.
+                contents: (
+                  await Bun.file(
+                    join(ROOT, "scripts/binary/test-harnesses.ts")
+                  ).text()
+                ).replaceAll('"../../packages/', `"${ROOT}/packages/`),
+                loader: "ts",
+              })
+            );
+          }
+        },
+      },
+    ],
+  };
+};
+
+/** One target compiled from the prepared assets; release.ts owns locking, gates, signing and archives. */
+export async function compileBinary(
+  options: BinaryVariant & {
+    target: string;
+    outfile: string;
+    version: string;
+    commit: string;
+  }
+) {
   pinnedBun();
   if (!TARGETS.includes(options.target as (typeof TARGETS)[number])) {
     throw new Error(`Unsupported target ${options.target}`);
@@ -368,7 +565,7 @@ export async function compileBinary(options: {
       );
     }
   );
-  const { pi, requirePi, tui } = piPackages();
+  const { tui } = piPackages();
   const linuxTarget = options.target.startsWith("linux-");
   const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
   const own: [string, string][] = linuxTarget
@@ -400,35 +597,7 @@ export async function compileBinary(options: {
   await mkdir(WORK, { recursive: true });
   const root = await mkdtemp(join(WORK, `root-${options.target}-`));
   try {
-    const entries: [string, string][] = [
-      [
-        "cawco.ts",
-        join(
-          ROOT,
-          options.proof
-            ? "scripts/binary/test-entry.ts"
-            : "scripts/binary/entry.ts"
-        ),
-      ],
-      ...[
-        "transcript-worker.ts",
-        "process-table-worker.ts",
-        "loop-watch-worker.ts",
-        "stores-worker.ts",
-        "views-worker.ts",
-      ].map((name): [string, string] => [
-        `scripts/binary/${name}`,
-        join(ROOT, "scripts/binary", name),
-      ]),
-      [
-        "src/utils/image-resize-worker.ts",
-        join(pi, "dist/utils/image-resize-worker.js"),
-      ],
-      [
-        "src/extensions/codemode/worker.ts",
-        join(pi, "dist/extensions/codemode/worker.js"),
-      ],
-    ];
+    const entries = binaryEntries(options);
     await Promise.all(
       entries.map(async ([name, module]) => {
         await mkdir(dirname(join(root, name)), { recursive: true });
@@ -451,127 +620,7 @@ export async function compileBinary(options: {
         autoloadDotenv: false,
         autoloadBunfig: false,
       },
-      // A CPU profile of the hub (hub-profile.ts) names each function by its
-      // source name, file and line: identifiers keep their names, and the
-      // executable embeds the source map ("linked" in a compile).
-      minify: { whitespace: true, syntax: true, identifiers: false },
-      sourcemap: "linked",
-      // cpu-features: an optional native addon of ssh2 (dockerode's
-      // docker-modem loads it), built by no install here; ssh2 requires it
-      // inside a try and goes on without it, and the browser runtime speaks to
-      // unix sockets alone, never SSH. lightningcss and browserslist: the
-      // runtime pages' CSS compiler (hub page-css.ts), which loads them on a
-      // compile only; the binary carries every page prebuilt and compiles none.
-      // postcss, @tailwindcss/postcss and unplugin-icons: the decision host's
-      // Tailwind compile and its icons (hub decision-host.ts), loaded the same
-      // way; the binary carries the host prebuilt and never builds it.
-      // fontkit, subset-font and woff2-encoder: what cuts the house faces into
-      // their woff2 pieces (core house-faces.ts), loaded the same way; the
-      // binary carries the decision host's and the stage host's pieces
-      // prebuilt.
-      external: [
-        "cpu-features",
-        "lightningcss",
-        "browserslist",
-        "postcss",
-        "@tailwindcss/postcss",
-        "unplugin-icons",
-        "fontkit",
-        "subset-font",
-        "woff2-encoder",
-      ],
-      define: {
-        __CAWCO_RELEASE__: "true",
-        __CAWCO_VERSION__: JSON.stringify(options.version),
-        __CAWCO_COMMIT__: JSON.stringify(options.commit),
-        "process.env.NODE_ENV": '"production"',
-      },
-      plugins: [
-        agentReact,
-        {
-          name: "owned-runtime-resources",
-          setup(build) {
-            if (options.testPublicKey) {
-              build.onLoad(
-                { filter: /packages\/core\/src\/release-key\.ts$/u },
-                () => ({
-                  contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
-                  loader: "ts",
-                })
-              );
-            }
-            build.onResolve({ filter: /^cawco:pi-runtime$/u }, () => ({
-              path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
-            }));
-            build.onResolve({ filter: /^cawco:pi-config$/u }, () => ({
-              path: join(pi, "dist/config.js"),
-            }));
-            build.onResolve({ filter: /^cawco:quickjs$/u }, () => ({
-              path: requirePi.resolve("quickjs-wasi/quickjs.wasm"),
-            }));
-            build.onLoad(
-              { filter: /packages\/core\/src\/binary-assets\.ts$/u },
-              () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
-            );
-            // A package that reads files beside itself is never bundled, whose
-            // __dirname the bundle would fix at this machine's node_modules:
-            // every import of it is core published-package.ts loading the
-            // tree the binary publishes.
-            build.onResolve({ filter: PUBLISHED_PACKAGE }, ({ path }) => ({
-              path,
-              namespace: "published-package",
-            }));
-            build.onLoad(
-              { filter: /.*/u, namespace: "published-package" },
-              ({ path }) => ({
-                contents: `module.exports=require(${JSON.stringify(join(ROOT, "packages/core/src/published-package.ts"))}).publishedPackage(${JSON.stringify(PUBLISHED_PACKAGES[path])});`,
-                loader: "js",
-              })
-            );
-            build.onResolve({ filter: /^socket-activation$/u }, () => ({
-              path: join(ROOT, "scripts/binary/socket-activation.ts"),
-            }));
-            if (options.stubHarness) {
-              // The end-to-end test's builds run the update's timed steps at
-              // the pace its machines set (scripts/binary/test-clock.ts).
-              build.onLoad(
-                { filter: /packages\/core\/src\/clock\.ts$/u },
-                () => ({
-                  contents: readFileSync(
-                    join(ROOT, "scripts/binary/test-clock.ts"),
-                    "utf8"
-                  ),
-                  loader: "ts",
-                })
-              );
-            }
-            if (options.proof) {
-              // smoke-runtime.ts `smoke-pi` calls pi's and pi-tui's own
-              // exports, which the scripts package does not declare.
-              build.onResolve({ filter: /^cawco:smoke-pi$/u }, () => ({
-                path: join(pi, "dist/index.js"),
-              }));
-              build.onResolve({ filter: /^cawco:smoke-pi-tui$/u }, () => ({
-                path: join(tui, "dist/index.js"),
-              }));
-            }
-            if (options.proof || options.stubHarness) {
-              build.onLoad(
-                { filter: /packages\/agent\/src\/harnesses\/index\.ts$/u },
-                async () => ({
-                  // Its imports are relative to scripts/binary, not to the file it replaces.
-                  contents: (
-                    await Bun.file(
-                      join(ROOT, "scripts/binary/test-harnesses.ts")
-                    ).text()
-                  ).replaceAll('"../../packages/', `"${ROOT}/packages/`),
-                  loader: "ts",
-                })
-              );
-            }
-          },
-        },
-      ],
+      ...binaryBundle({ ...options, assetsSource }),
     });
     // The executable carries every entry's map; the copies Bun also writes
     // beside the outfile (`cawco.map`, each worker's) are not shipped.

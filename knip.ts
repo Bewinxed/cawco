@@ -139,6 +139,8 @@ export default {
         "scripts/lib/tool-call.fixtures.ts",
         // scripts/check.ts
         "scripts/runtime-bundles-check.ts",
+        // scripts/check.ts, beside runtime-bundles-check.ts
+        "scripts/binary-bundle-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/import-rules-check.ts",
         // scripts/check.ts, beside css-scope-check.ts

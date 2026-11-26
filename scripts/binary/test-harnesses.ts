@@ -48,6 +48,7 @@ import {
   type SessiondAdoption,
 } from "../../packages/agent/src/harness";
 import { neutralSubagentChange } from "../../packages/agent/src/harnesses/neutral-subagents";
+import { registryOf } from "../../packages/agent/src/harnesses/service";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
 import {
@@ -491,6 +492,5 @@ for (const kind of HARNESSES) {
   };
   registry.set(kind, adapter);
 }
-export const harnesses = (): Harness[] => [...registry.values()];
-export const harness = (kind: HarnessKind): Harness | undefined =>
-  registry.get(kind);
+/** What harnesses/index.ts exports, of these stand-ins (build-binary.ts proves it every export of that one's). */
+export const { harnesses, harness, HarnessesLayer } = registryOf(registry);

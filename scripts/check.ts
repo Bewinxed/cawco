@@ -580,6 +580,10 @@ const gated: Gated[] = [
   bun("scripts/css-scope-check.ts"),
   bun("scripts/browser-core-check.ts"),
   bun("scripts/runtime-bundles-check.ts"),
+  // Every binary (the release's and each test build's) through Bun's
+  // bundler as its compile runs it: a module a build links in place of
+  // another, and the names imported from it, are the bundle's alone.
+  bun("scripts/binary-bundle-check.ts"),
   bun("apps/dashboard/scripts/mark-line-check.ts"),
   bun("apps/dashboard/scripts/outro-reads-check.ts"),
   bun("apps/dashboard/scripts/specificity-trap.ts"),
