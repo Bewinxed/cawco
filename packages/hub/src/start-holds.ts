@@ -1,6 +1,7 @@
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { updatesWords } from "@cawco/core/words/updates";
+import { Schema } from "effect";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
@@ -15,15 +16,11 @@ import { blockWords } from "./work-items";
  * continuation waits for the hold to end (`flushOwedStarts`), never for a
  * register that is not coming.
  */
-export class StartsHeld extends Error {
-  readonly machineId: string;
-  /** `words`: the hold, in `startHold`'s words. */
-  constructor(machineId: string, words: string) {
-    super(words);
-    this.name = "StartsHeld";
-    this.machineId = machineId;
-  }
-}
+export class StartsHeld extends Schema.TaggedError<StartsHeld>()("StartsHeld", {
+  machineId: Schema.String,
+  /** The hold, in `startHold`'s words. */
+  message: Schema.String,
+}) {}
 
 /** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
 interface Pacing {

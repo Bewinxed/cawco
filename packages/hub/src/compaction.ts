@@ -7,7 +7,6 @@ import type {
   FilingStage,
   FilingWrote,
 } from "@cawco/core/context-filing";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { CONTEXT_LINE } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -19,6 +18,7 @@ import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { ClosureContext } from "./closure-context";
@@ -79,6 +79,7 @@ export type CompactionContext = Pick<
   | "db"
   | "inputRefusal"
   | "lastRequestContext"
+  | "lifetime"
   | "noteAtLimit"
   | "openItems"
   | "owedMoves"
@@ -375,7 +376,13 @@ export const createCompaction = (ctx: CompactionContext) => {
       if (stage === "stopped") {
         sayFiling(plan, "stopped");
       } else {
-        detach(sayFiled(plan), "a filing's line");
+        ctx.lifetime.fork(
+          "a filing's line",
+          Effect.tryPromise({
+            try: () => sayFiled(plan),
+            catch: (error) => error,
+          })
+        );
       }
       const [row] = ctx.db.getInstancesByIds([plan.instanceId]);
       console.info(
@@ -392,7 +399,13 @@ export const createCompaction = (ctx: CompactionContext) => {
       console.info(
         `[at-limit] ${plan.instanceId.slice(0, 8)}: ${why}. It moves to ${ctx.accountWords(plan.move.to.id)} now.`
       );
-      detach(moveCompacted(plan, plan.move), "move after compaction");
+      ctx.lifetime.fork(
+        "move after compaction",
+        Effect.tryPromise({
+          try: () => moveCompacted(plan, plan.move),
+          catch: (error) => error,
+        })
+      );
       return;
     }
     sayCompaction(plan, stage);

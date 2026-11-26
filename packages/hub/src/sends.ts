@@ -12,7 +12,6 @@ import {
 } from "@cawco/core/attachments";
 import { backoffWait } from "@cawco/core/backoff";
 import type { Bounded } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
 import { byPerson } from "@cawco/core/harness";
@@ -30,6 +29,7 @@ import {
   withReminder,
 } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
@@ -46,6 +46,7 @@ import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
 import { type UnsentWhy, unsentWords } from "@cawco/core/words/unsent";
+import { Deferred, Effect, Exit, Semaphore } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
 import type { ClosureContext } from "./closure-context";
@@ -543,12 +544,15 @@ export const createSends = (ctx: SendsContext) => {
       !isKeepAlive(moved.body)
     ) {
       ctx.leadRuns?.sendLeft(moved);
-      sendSettles.get(moved.uuid)?.(moved);
+      const settles = sendSettles.get(moved.uuid);
+      if (settles) {
+        Deferred.doneUnsafe(settles, Exit.succeed(moved));
+      }
     }
     return moved;
   };
   /** Who waits on a send leaving `pending`, by its uuid (a tray's Retry). */
-  const sendSettles = new Map<string, (row: SentMessageRow) => void>();
+  const sendSettles = new Map<string, Deferred.Deferred<SentMessageRow>>();
 
   /**
    * A tray's Retry: the reader's word to the failed delegate's own session,
@@ -573,9 +577,8 @@ export const createSends = (ctx: SendsContext) => {
       return refused?.reason ?? "This session is gone.";
     }
     const uuid = crypto.randomUUID();
-    const settled = new Promise<SentMessageRow>((resolve) => {
-      sendSettles.set(uuid, resolve);
-    });
+    const settled = Deferred.makeUnsafe<SentMessageRow>();
+    sendSettles.set(uuid, settled);
     const error = item.error?.split("\n")[0]?.trim();
     const sent = deliverSend({
       verb: "send",
@@ -601,7 +604,9 @@ export const createSends = (ctx: SendsContext) => {
     }
     const owed = sent?.state === "pending" && sent.owedHeld;
     const outcome =
-      owed || (sent && sent.state !== "pending") ? sent : await settled;
+      owed || (sent && sent.state !== "pending")
+        ? sent
+        : await ctx.lifetime.run(Deferred.await(settled));
     sendSettles.delete(uuid);
     if (!outcome || owed || outcome.state === "read") {
       return undefined;
@@ -788,57 +793,44 @@ export const createSends = (ctx: SendsContext) => {
    */
   const storedIn = (
     instanceId: string
-  ): Promise<Map<string, boolean> | { unread: string }> => {
-    const before = settleReads.get(instanceId);
-    // After the one before it, whatever became of that one.
-    const read = (before ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => settleRead(instanceId))
-      .finally(() => {
-        if (settleReads.get(instanceId) === read) {
-          settleReads.delete(instanceId);
-        }
-      });
-    settleReads.set(instanceId, read);
-    return read;
-  };
+  ): Effect.Effect<Map<string, boolean> | { unread: string }, unknown> =>
+    // In the session's turn, after the read before it whatever became of
+    // that one: its turn is taken now, and the read begins once the step
+    // that asked for it is over, as what it decides reads that step's rows.
+    settleReads.withLock(
+      instanceId,
+      Effect.yieldNow.pipe(
+        Effect.andThen(Effect.suspend(() => settleRead(instanceId)))
+      )
+    );
 
-  /** Each session's settle read in flight, or waiting its turn behind one: one at a time per session. */
-  const settleReads = new Map<string, Promise<unknown>>();
+  /**
+   * Each session's settle reads, one at a time: a later send's state, which
+   * {@link overtaken} reads, is decided by the read before it.
+   */
+  const settleReads = makeKeyedLock<string>();
   /** A session whose last settle read went unanswered: its next is asked no sooner than `until`. */
   const settleBackoff = new Map<string, { tries: number; until: number }>();
-  /** Settle reads each machine is being asked now ({@link SETTLE_READS_PER_MACHINE} at most). */
-  const settleAsked = new Map<string, number>();
-  /** Settle reads waiting for one of their machine's turns, oldest first. */
-  const settleWaiting = new Map<string, (() => void)[]>();
+  /**
+   * Each machine's settle-read turns ({@link SETTLE_READS_PER_MACHINE}),
+   * made on its first read and kept, as the hub keeps its machines:
+   * a turn given back goes straight to the read waiting longest.
+   */
+  const settleTurns = new Map<string, Semaphore.Semaphore>();
 
-  /** One of the machine's settle-read turns: taken now, or when one is given back. */
-  const settleTurn = (machineId: string): Promise<void> => {
-    const asked = settleAsked.get(machineId) ?? 0;
-    if (asked < SETTLE_READS_PER_MACHINE) {
-      settleAsked.set(machineId, asked + 1);
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      const queue = settleWaiting.get(machineId) ?? [];
-      queue.push(resolve);
-      settleWaiting.set(machineId, queue);
+  /** `ask` in one of `machineId`'s settle-read turns: at once, or when one is given back. */
+  const inSettleTurn = <A, E>(
+    machineId: string,
+    ask: Effect.Effect<A, E>
+  ): Effect.Effect<A, E> =>
+    Effect.suspend(() => {
+      let turns = settleTurns.get(machineId);
+      if (!turns) {
+        turns = Semaphore.makeUnsafe(SETTLE_READS_PER_MACHINE);
+        settleTurns.set(machineId, turns);
+      }
+      return turns.withPermit(ask);
     });
-  };
-
-  /** A turn given back: handed straight to the read waiting longest, else freed. */
-  const settleTurnBack = (machineId: string): void => {
-    const next = settleWaiting.get(machineId)?.shift();
-    if (next) {
-      next();
-      return;
-    }
-    settleWaiting.delete(machineId);
-    settleAsked.set(
-      machineId,
-      Math.max(0, (settleAsked.get(machineId) ?? 1) - 1)
-    );
-  };
 
   /**
    * The stored transcript a settle read decides the session's pending sends
@@ -900,59 +892,76 @@ export const createSends = (ctx: SendsContext) => {
    * puts the session's next read off ({@link SETTLE_READS}); one answered
    * clears that.
    */
-  const askSettle = async (row: InstanceRow & { sessionId: string }) => {
-    const backoff = settleBackoff.get(row.id);
-    if (backoff && backoff.until > Date.now()) {
-      await ctx.lifetime.sleep(backoff.until - Date.now());
-    }
-    await settleTurn(row.machineId);
-    const askedAt = Date.now();
-    try {
-      const answer = await settleWindows(row);
-      if (answer.kind !== "unanswered") {
-        settleBackoff.delete(row.id);
-        return answer;
+  const askSettle = (
+    row: InstanceRow & { sessionId: string }
+  ): Effect.Effect<Bounded<CallAnswer<SessionMessage[]>>, unknown> =>
+    Effect.gen(function* () {
+      const backoff = settleBackoff.get(row.id);
+      if (backoff && backoff.until > Date.now()) {
+        yield* Effect.sleep(backoff.until - Date.now());
       }
-      const tries = (backoff?.tries ?? 0) + 1;
-      const ms = backoffWait(SETTLE_READS, tries);
-      const until = Date.now() + ms;
-      settleBackoff.set(row.id, { tries, until });
-      console.warn(
-        `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${Math.round(ms / 1000)} s on`
+      return yield* inSettleTurn(
+        row.machineId,
+        Effect.gen(function* () {
+          const askedAt = Date.now();
+          const answer = yield* Effect.tryPromise({
+            try: () => settleWindows(row),
+            catch: (error) => error,
+          });
+          if (answer.kind !== "unanswered") {
+            settleBackoff.delete(row.id);
+            return answer;
+          }
+          // The count lives on the session's entry, across its reads: a
+          // backoff kept between reads, not a retry of this one.
+          const tries = (backoff?.tries ?? 0) + 1;
+          const ms = backoffWait(SETTLE_READS, tries);
+          const until = Date.now() + ms;
+          settleBackoff.set(row.id, { tries, until });
+          console.warn(
+            `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${Math.round(ms / 1000)} s on`
+          );
+          return answer;
+        })
       );
-      return answer;
-    } finally {
-      settleTurnBack(row.machineId);
-    }
-  };
+    });
 
   /** {@link storedIn}'s one read of the session, through {@link askSettle}. */
-  const settleRead = async (
+  const settleRead = (
     instanceId: string
-  ): Promise<Map<string, boolean> | { unread: string }> => {
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!row?.sessionId) {
-      return new Map();
-    }
-    const answer = await askSettle({ ...row, sessionId: row.sessionId });
-    switch (answer.kind) {
-      case "unanswered":
-        return { unread: ctx.silentWords(row.machineId, answer) };
-      case "answered":
-        if (!answer.value.ok) {
-          return {
-            unread: `${ctx.machineName(row.machineId)} could not read its transcript: ${answer.value.error ?? "it gave no reason"}`,
-          };
-        }
-        break;
-      default:
-        throw unreachable(answer);
-    }
-    // Read as the newest history page is: linked, a send it took up read,
-    // and the session's anchor seeded when the hub has heard nothing of it
-    // since it started — so a send this fails goes after what the session
-    // last said, not at the conversation's start.
-    const entries = answer.value.result;
+  ): Effect.Effect<Map<string, boolean> | { unread: string }, unknown> =>
+    Effect.gen(function* () {
+      const [row] = ctx.db.getInstancesByIds([instanceId]);
+      if (!row?.sessionId) {
+        return new Map<string, boolean>();
+      }
+      const answer = yield* askSettle({ ...row, sessionId: row.sessionId });
+      switch (answer.kind) {
+        case "unanswered":
+          return { unread: ctx.silentWords(row.machineId, answer) };
+        case "answered":
+          if (!answer.value.ok) {
+            return {
+              unread: `${ctx.machineName(row.machineId)} could not read its transcript: ${answer.value.error ?? "it gave no reason"}`,
+            };
+          }
+          break;
+        default:
+          throw unreachable(answer);
+      }
+      return storedOf(instanceId, answer.value.result);
+    });
+
+  /**
+   * The sends a settle read's entries hold, read as the newest history page
+   * is: linked, a send it took up read, and the session's anchor seeded when
+   * the hub has heard nothing of it since it started — so a send this fails
+   * goes after what the session last said, not at the conversation's start.
+   */
+  const storedOf = (
+    instanceId: string,
+    entries: SessionMessage[]
+  ): Map<string, boolean> => {
     const { last } = linkEntries(instanceId, entries);
     if (last && !anchors.has(instanceId)) {
       anchors.set(instanceId, last);
@@ -1016,36 +1025,38 @@ export const createSends = (ctx: SendsContext) => {
       deciding.add(send.uuid);
     }
     // The callers are frame handlers that do not wait on a machine round trip.
-    detach(
-      storedIn(instanceId)
-        .then((answer) => {
-          const read = readOrUnread(instanceId, answer, sends.length, why);
-          // `unheld` is decided only on a read the machine answered: asked
-          // again at its next heartbeat.
-          if (read.unread && unstored === "unheld") {
-            return;
-          }
-          let owed = false;
-          for (const send of sends) {
-            owed =
-              settleSend(send, read.stored, unstored, read.said, refusal) ||
-              owed;
-          }
-          if (whole) {
-            decided();
-          }
-          // What is owed goes now to a process up or starting, or wakes an
-          // asleep session for it.
-          if (owed) {
-            releaseOwed({ instanceId });
-          }
-        })
-        .finally(() => {
-          for (const send of sends) {
-            deciding.delete(send.uuid);
-          }
-        }),
-      "pending sends"
+    ctx.lifetime.fork(
+      "pending sends",
+      Effect.gen(function* () {
+        const answer = yield* storedIn(instanceId);
+        const read = readOrUnread(instanceId, answer, sends.length, why);
+        // `unheld` is decided only on a read the machine answered: asked
+        // again at its next heartbeat.
+        if (read.unread && unstored === "unheld") {
+          return;
+        }
+        let owed = false;
+        for (const send of sends) {
+          owed =
+            settleSend(send, read.stored, unstored, read.said, refusal) || owed;
+        }
+        if (whole) {
+          decided();
+        }
+        // What is owed goes now to a process up or starting, or wakes an
+        // asleep session for it.
+        if (owed) {
+          releaseOwed({ instanceId });
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const send of sends) {
+              deciding.delete(send.uuid);
+            }
+          })
+        )
+      )
     );
   };
 
@@ -1229,26 +1240,28 @@ export const createSends = (ctx: SendsContext) => {
       return;
     }
     handedBack.set(instanceId, [send]);
-    ctx.lifetime.after("sends handed back", 0, () => {
-      const back = handedBack.get(instanceId) ?? [];
-      handedBack.delete(instanceId);
-      detach(
-        storedIn(instanceId).then((stored) => {
-          // The earliest hand-off among them: a process event since then is
-          // a process that may take them ({@link processAt}).
-          let handedAt = Number.POSITIVE_INFINITY;
-          for (const one of back) {
-            handedAt = Math.min(handedAt, holdBack(instanceId, one, stored));
-          }
-          if ((ctx.processAt.get(instanceId) ?? 0) > handedAt) {
-            releaseOwed({ instanceId });
-          } else if (Number.isFinite(handedAt)) {
-            ctx.waitingForProcess.add(instanceId);
-          }
-        }),
-        "sends handed back"
-      );
-    });
+    // The batch is read once the step that handed this back is over, with
+    // whatever else that step handed back.
+    ctx.lifetime.fork(
+      "sends handed back",
+      Effect.gen(function* () {
+        yield* Effect.yieldNow;
+        const back = handedBack.get(instanceId) ?? [];
+        handedBack.delete(instanceId);
+        const stored = yield* storedIn(instanceId);
+        // The earliest hand-off among them: a process event since then is
+        // a process that may take them ({@link processAt}).
+        let handedAt = Number.POSITIVE_INFINITY;
+        for (const one of back) {
+          handedAt = Math.min(handedAt, holdBack(instanceId, one, stored));
+        }
+        if ((ctx.processAt.get(instanceId) ?? 0) > handedAt) {
+          releaseOwed({ instanceId });
+        } else if (Number.isFinite(handedAt)) {
+          ctx.waitingForProcess.add(instanceId);
+        }
+      })
+    );
   };
 
   /**
@@ -1461,14 +1474,15 @@ export const createSends = (ctx: SendsContext) => {
       failSend(row, reason);
       return;
     }
-    detach(
-      storedIn(row.instanceId).then(() => {
+    ctx.lifetime.fork(
+      "failed send",
+      Effect.gen(function* () {
+        yield* storedIn(row.instanceId);
         const now = ctx.db.sendRecord(row.uuid);
         if (now?.state === "pending" || now?.state === "read") {
           failSend(now, reason);
         }
-      }),
-      "failed send"
+      })
     );
   };
 
@@ -2678,13 +2692,17 @@ export const createSends = (ctx: SendsContext) => {
     // has room for, is tried now, and the send goes on the account it lands
     // on ({@link AtLimit.lookNow}).
     if (agent && limited) {
-      detach(
-        ctx.atLimit.lookNow(
-          instanceId,
-          "a message to it is held at its account's limit",
-          ctx.takenUpBy(target, message.origin)
-        ),
-        "at-limit look"
+      ctx.lifetime.fork(
+        "at-limit look",
+        Effect.tryPromise({
+          try: () =>
+            ctx.atLimit.lookNow(
+              instanceId,
+              "a message to it is held at its account's limit",
+              ctx.takenUpBy(target, message.origin)
+            ),
+          catch: (error) => error,
+        })
       );
     }
     if (accepted) {

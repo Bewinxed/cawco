@@ -2020,7 +2020,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     }
     const held = ctx.startHold(machineId);
     if (held) {
-      throw new StartsHeld(machineId, held.words);
+      throw new StartsHeld({ machineId, message: held.words });
     }
     const own = await ctx.ownDefaultOf(machineId, asked);
     if (own instanceof ElysiaStatus) {

@@ -1,6 +1,6 @@
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { CutCommand } from "@cawco/core/commands/controls";
-import { detach } from "@cawco/core/detach";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ArrivingAsk, AsleepFrame } from "@cawco/core/frames";
 import {
@@ -14,6 +14,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { ClosureContext } from "./closure-context";
@@ -213,26 +214,28 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     }
   };
 
-  /** Resolves once `instanceId`'s process is up (running), or after `ms`; true when it is. */
-  const untilUp = async (instanceId: string, ms: number): Promise<boolean> => {
-    const until = Date.now() + ms;
-    for (;;) {
-      const [row] = ctx.db.getInstancesByIds([instanceId]);
-      if (row?.status === "running" && ctx.registry.agent(row.machineId)) {
-        return true;
-      }
-      if (
-        Date.now() >= until ||
-        !row ||
-        row.status === "stopped" ||
-        row.status === "discarded" ||
-        row.status === "error"
-      ) {
-        return false;
-      }
-      await ctx.lifetime.sleep(1000);
-    }
-  };
+  /**
+   * Once `instanceId`'s process is up (running), or it stopped, or `ms`
+   * passed: true when it is up. Looked at now and every second after.
+   */
+  const untilUp = (instanceId: string, ms: number): Effect.Effect<boolean> =>
+    lookUntil(
+      { every: 1000, deadlineMs: ms },
+      Effect.sync(() => {
+        const [row] = ctx.db.getInstancesByIds([instanceId]);
+        if (row?.status === "running" && ctx.registry.agent(row.machineId)) {
+          return true;
+        }
+        if (
+          !row ||
+          row.status === "stopped" ||
+          row.status === "discarded" ||
+          row.status === "error"
+        ) {
+          return false;
+        }
+      })
+    ).pipe(Effect.map((looked) => looked.kind === "found" && looked.value));
 
   /**
    * THE RULE THAT A CUT IS NEVER SILENT: the background tasks `row`'s
@@ -260,9 +263,13 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     console.info(
       `[hub] ${row.id}: ${cut.length} background task(s) went with its process (${how}); it is told each, interrupted, with its output so far`
     );
-    detach(
-      (async () => {
-        const up = await untilUp(row.id, CUT_OUTPUT_WAIT_MS);
+    // Let go, after the step that cut them: what that step does next (the
+    // cut turn handed back) goes first.
+    ctx.lifetime.fork(
+      "cut tasks",
+      Effect.gen(function* () {
+        yield* Effect.yieldNow;
+        const up = yield* untilUp(row.id, CUT_OUTPUT_WAIT_MS);
         const [now] = ctx.db.getInstancesByIds([row.id]);
         const told: EndedTask[] = [];
         for (const task of cut) {
@@ -270,7 +277,12 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             taskId: task.taskId,
             type: task.type,
             description: task.description,
-            ...(up && now ? await cutTaskOutput(now, task.taskId) : {}),
+            ...(up && now
+              ? yield* Effect.tryPromise({
+                  try: () => cutTaskOutput(now, task.taskId),
+                  catch: (error) => error,
+                })
+              : {}),
           });
         }
         const sent = ctx.deliverSend({
@@ -293,8 +305,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             `[hub] the cut tasks were not told to their session: ${sent.response.detail}`
           );
         }
-      })(),
-      "cut tasks"
+      })
     );
   };
 

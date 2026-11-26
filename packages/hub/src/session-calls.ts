@@ -40,6 +40,7 @@ import type {
   ContinueOutcome,
 } from "./hub-shapes";
 import type { KeepAliveRow, TurnReading } from "./keep-alive";
+import type { HubLifetimeShape } from "./lifetime";
 import type { AgentCall, Unanswered } from "./machine-answers";
 import { awayProblem, silentProblem } from "./machine-answers";
 import type { MachinePause, PauseCaller } from "./machine-pause";
@@ -94,6 +95,8 @@ export interface SessionCallsDeps {
   readonly inFlightFor: (
     sourceId: string
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
+  /** The hub's lifetime: a session's `forge_post` runs its write on it. */
+  readonly lifetime: HubLifetimeShape;
   readonly machinePause: MachinePause;
   readonly machineRow: (machineId: string) => AgentRow | undefined;
   readonly openItems: ReturnType<typeof createOpenItems>;
@@ -410,11 +413,12 @@ export const outcomeCalls = ({
 export const mediaCalls = ({
   callAgent,
   db,
+  lifetime,
   sessionWorkspace,
   writes,
 }: Pick<
   SessionCallsDeps,
-  "callAgent" | "db" | "sessionWorkspace" | "writes"
+  "callAgent" | "db" | "lifetime" | "sessionWorkspace" | "writes"
 >) => {
   /** The repository a session posts to: the one it names, else its project's only one; refused in words when there is none to take. */
   const repoFor = (projectId: string | null, named: string | undefined) => {
@@ -466,7 +470,7 @@ export const mediaCalls = ({
       if (typeof repo !== "string") {
         return repo;
       }
-      const outcome = await Effect.runPromise(
+      const outcome = await lifetime.run(
         Effect.result(
           writes.post({
             by: { session: row.id },

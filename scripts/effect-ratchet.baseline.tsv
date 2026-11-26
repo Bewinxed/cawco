@@ -20,7 +20,6 @@ bare-run	Effect.runPromise	packages/hub/src/landing-run.ts	1
 bare-run	Effect.runPromise	packages/hub/src/links.ts	1
 bare-run	Effect.runPromise	packages/hub/src/relay.ts	5
 bare-run	Effect.runPromise	packages/hub/src/repo-publish.ts	1
-bare-run	Effect.runPromise	packages/hub/src/session-calls.ts	1
 bare-run	Effect.runPromise	packages/hub/src/sync.ts	1
 bare-run	Effect.runPromise	packages/hub/src/usability-feedback.ts	1
 bare-run	Effect.runPromise	packages/hub/src/writes.ts	1
@@ -68,7 +67,6 @@ error-class	SessiondUnavailableError	packages/agent/src/sessiond-client.ts	1
 error-class	SignedOut	packages/hub/src/fleet-mcp.ts	1
 error-class	StageRefusal	packages/agent/src/stage-refusal.ts	1
 error-class	StageUnanswered	packages/agent/src/stage.ts	1
-error-class	StartsHeld	packages/hub/src/start-holds.ts	1
 error-class	StepFailed	packages/agent/src/move.ts	1
 error-class	StoredShapeError	packages/hub/src/stored-json.ts	1
 error-class	StoryRefusal	packages/agent/src/stage-host/story-file.ts	1
@@ -134,7 +132,6 @@ hand-promise	new Promise	packages/hub/src/artifacts/service.ts	1
 hand-promise	new Promise	packages/hub/src/browser-tools.ts	1
 hand-promise	new Promise	packages/hub/src/connect-asks.ts	1
 hand-promise	new Promise	packages/hub/src/context-reads.ts	1
-hand-promise	new Promise	packages/hub/src/continuations.ts	1
 hand-promise	new Promise	packages/hub/src/favicon.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-fetches.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-watch.ts	1
@@ -147,7 +144,6 @@ hand-promise	new Promise	packages/hub/src/machine-calls.ts	1
 hand-promise	new Promise	packages/hub/src/machine-pause.ts	2
 hand-promise	new Promise	packages/hub/src/preview-control.ts	1
 hand-promise	new Promise	packages/hub/src/project-stops.ts	1
-hand-promise	new Promise	packages/hub/src/sends.ts	2
 hand-promise	new Promise	packages/hub/src/server.ts	2
 hand-promise	new Promise	packages/hub/src/ssh-add.ts	1
 hand-promise	new Promise	packages/hub/src/ssh-tunnels.ts	1
@@ -170,7 +166,6 @@ hand-promise	Promise.withResolvers	packages/agent/src/usage/scans.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/tool-call-keys.ts	3
 hand-promise	Promise.withResolvers	packages/hub/src/welcome-converge.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/workspaces.ts	1
-per-key-chain	settleReads	packages/hub/src/sends.ts	1
 per-key-chain	this.#marks	packages/agent/src/browser/gate.ts	1
 promise-chain	building	packages/hub/src/artifact-documents.ts	2
 promise-chain	standing	packages/hub/src/preview-server/listeners.ts	1
@@ -251,7 +246,6 @@ promise-map	reviving	packages/hub/src/preview-server/serve.ts	1
 promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
 promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
-promise-map	settleReads	packages/hub/src/sends.ts	1
 promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1
 promise-map	starting	packages/agent/src/boundary/state.ts	1
 promise-map	starting	packages/hub/src/triggers.ts	1
@@ -289,8 +283,6 @@ timed-loop	Bun.sleep	packages/hub/src/landing.ts	1
 timed-loop	Bun.sleep	packages/hub/src/ssh-tunnels.ts	2
 timed-loop	Bun.sleep	packages/hub/src/wire-socket.ts	1
 timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.ts	1
-timed-loop	ctx.lifetime.sleep	packages/hub/src/continuations.ts	3
-timed-loop	ctx.lifetime.sleep	packages/hub/src/cut-turns.ts	1
 timed-loop	delay	packages/agent/src/mcp-status.ts	1
 timed-loop	lifetime.sleep	packages/hub/src/dispatch.ts	1
 timed-loop	lifetime.sleep	packages/hub/src/routines.ts	1

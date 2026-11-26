@@ -6,7 +6,10 @@ import type { MachineReadsContext } from "../machine-reads";
 import { mediaCalls } from "../session-calls";
 
 export const instanceMediaRoutes = (
-  ctx: Pick<HubContext, "callAgent" | "db" | "sessionWorkspace" | "writes"> &
+  ctx: Pick<
+    HubContext,
+    "callAgent" | "db" | "lifetime" | "sessionWorkspace" | "writes"
+  > &
     MachineReadsContext
 ) => {
   const { forgePost, generateImage } = mediaCalls(ctx);

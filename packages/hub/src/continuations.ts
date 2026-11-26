@@ -14,7 +14,7 @@ import type {
   ContinuationReadOptions,
 } from "@cawco/core/continuation-read";
 import { CONTROL_READ_CONTINUATION } from "@cawco/core/continuation-read";
-import { detach } from "@cawco/core/detach";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
   COMPACTION_ORIGIN,
@@ -26,6 +26,7 @@ import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { CONTINUATION_ASKER_UNREAD } from "@cawco/core/words/relaunch";
+import { Effect, Latch } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { createContextReads } from "./context-reads";
@@ -62,6 +63,13 @@ import { unwatchedMode } from "./unwatched-mode";
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
+
+/**
+ * A promise of this hub's as an Effect step: its rejection is the step's
+ * failure as it was thrown, so an `instanceof` on it still holds.
+ */
+const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: run, catch: (error) => error });
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   switch (by.kind) {
@@ -414,10 +422,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * or until the restart bound from when the job began to wait: true then.
    * False when a Cancel landed or its machine went away meanwhile.
    */
-  const untilWorkEnds = async (row: ContinuationRow): Promise<boolean> => {
+  const untilWorkEnds = (
+    row: ContinuationRow
+  ): Effect.Effect<boolean, unknown> => {
     const sourceId = row.sourceInstanceId;
     const from = row.waiting?.from ?? Date.now();
-    for (;;) {
+    const look = Effect.gen(function* () {
       if (
         cancelledContinuation(row.id) ||
         !ctx.registry.agent(machineFor(row))
@@ -430,9 +440,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         );
         return true;
       }
-      const now = await workInFlightOf(sourceId);
+      const now = yield* attempt(() => workInFlightOf(sourceId));
       const [source] = ctx.db.getInstancesByIds([sourceId]);
-      if (!now && (!source || (await ctx.sessionIdle(source)))) {
+      if (
+        !now &&
+        (!source || (yield* attempt(() => ctx.sessionIdle(source))))
+      ) {
         return true;
       }
       if (now && now.why !== row.waiting?.why) {
@@ -440,8 +453,10 @@ export const createContinuations = (ctx: ContinuationsContext) => {
           waiting: { why: now.why, since: now.since, from },
         });
       }
-      await ctx.lifetime.sleep(WAIT_LOOK_MS);
-    }
+    });
+    return lookUntil({ every: WAIT_LOOK_MS }, look).pipe(
+      Effect.map((looked) => looked.kind === "found" && looked.value)
+    );
   };
 
   /**
@@ -480,7 +495,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * has nothing to continue from now.
    */
   const waitStep = async (row: ContinuationRow) => {
-    if (!(await untilWorkEnds(row))) {
+    if (!(await ctx.lifetime.run(untilWorkEnds(row)))) {
       return;
     }
     const sourceId = row.sourceInstanceId;
@@ -563,8 +578,11 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ? row.prepared.source.machineId
       : targetMachineOf(row);
 
-  /** Who waits on a job's end — the `continue_session` tool — by job id. */
-  const continuationWaiters = new Map<string, Set<() => void>>();
+  /**
+   * Who waits on a job's end — the `continue_session` tool — by job id: one
+   * latch each job, opened as it settles, that every waiter awaits.
+   */
+  const continuationWaiters = new Map<string, Latch.Latch>();
 
   /** Deletes a settled job once it has been kept {@link CONTINUATION_KEPT_MS}. */
   const forgetContinuationLater = (row: ContinuationRow): void => {
@@ -590,9 +608,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return undefined;
     }
     if (SETTLED.has(row.stage)) {
-      for (const wake of continuationWaiters.get(id) ?? []) {
-        wake();
-      }
+      continuationWaiters.get(id)?.openUnsafe();
       continuationWaiters.delete(id);
       forgetContinuationLater(row);
     }
@@ -702,7 +718,10 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       startedWords(prepared, request, askedBy, { files, summarise })
     );
     // The job runs on its own; its record is what anyone follows.
-    detach(advanceContinuation(row.id), "continuation");
+    ctx.lifetime.fork(
+      "continuation",
+      attempt(() => advanceContinuation(row.id))
+    );
     return row;
   };
 
@@ -773,7 +792,10 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       // on in microtasks that never yield: the hub froze 18 minutes that
       // way (2026-11-04, a start held on a machine on an older build).
       if (advanceAgain.delete(id) && waits) {
-        detach(advanceContinuation(id), "continuation");
+        ctx.lifetime.fork(
+          "continuation",
+          attempt(() => advanceContinuation(id))
+        );
       }
     }
   };
@@ -875,10 +897,10 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         );
       }
     }
-    if (!(await untilFiled(row))) {
+    if (!(await ctx.lifetime.run(untilFiled(row)))) {
       return undefined;
     }
-    await untilIdle(row, sourceId);
+    await ctx.lifetime.run(untilIdle(row, sourceId));
     return cancelledContinuation(row.id)
       ? undefined
       : moveContinuation(row.id, {
@@ -891,26 +913,30 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * when a Cancel landed first. Throws the source's refusal, and
    * {@link MachineAway} when its machine goes.
    */
-  const untilFiled = async (row: ContinuationRow): Promise<boolean> => {
-    for (;;) {
-      const sent = ctx.db.sendRecord(row.id);
-      if (sent?.state === "failed") {
-        throw new Error(
-          `it couldn't file its open items first: ${sent.reason ?? "the session refused the turn"}`
-        );
-      }
-      if (sent?.state === "read") {
-        return true;
-      }
-      if (cancelledContinuation(row.id)) {
-        return false;
-      }
-      if (!ctx.registry.agent(row.prepared.source.machineId)) {
-        throw ctx.awayError(row.prepared.source.machineId);
-      }
-      await ctx.lifetime.sleep(IDLE_LOOK_MS);
-    }
-  };
+  const untilFiled = (row: ContinuationRow): Effect.Effect<boolean, Error> =>
+    lookUntil(
+      { every: IDLE_LOOK_MS },
+      Effect.suspend(() => {
+        const sent = ctx.db.sendRecord(row.id);
+        if (sent?.state === "failed") {
+          return Effect.fail(
+            new Error(
+              `it couldn't file its open items first: ${sent.reason ?? "the session refused the turn"}`
+            )
+          );
+        }
+        if (sent?.state === "read") {
+          return Effect.succeed(true);
+        }
+        if (cancelledContinuation(row.id)) {
+          return Effect.succeed(false);
+        }
+        if (!ctx.registry.agent(row.prepared.source.machineId)) {
+          return Effect.fail(ctx.awayError(row.prepared.source.machineId));
+        }
+        return Effect.succeed(undefined);
+      })
+    ).pipe(Effect.map((looked) => looked.kind === "found" && looked.value));
 
   /**
    * The `summarising` step, while its machine is here: the summary, when
@@ -939,27 +965,28 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * running and nothing waiting on it. Throws {@link MachineAway} when its
    * machine goes meanwhile, and a Cancel's words when the job was cancelled.
    */
-  const untilIdle = async (
+  const untilIdle = (
     job: ContinuationRow,
     instanceId: string
-  ): Promise<ReturnType<typeof ctx.db.getInstancesByIds>[number]> => {
-    for (;;) {
-      const [row] = ctx.db.getInstancesByIds([instanceId]);
-      if (!row) {
-        throw new Error(`${job.prepared.source.title} is no longer recorded`);
-      }
-      if (!ctx.registry.agent(row.machineId)) {
-        throw ctx.awayError(row.machineId);
-      }
-      if (cancelledContinuation(job.id)) {
-        throw new Error(CONTINUATION_CANCELLED);
-      }
-      if (await ctx.sessionIdle(row)) {
-        return row;
-      }
-      await ctx.lifetime.sleep(IDLE_LOOK_MS);
-    }
-  };
+  ): Effect.Effect<void, unknown> =>
+    lookUntil(
+      { every: IDLE_LOOK_MS },
+      Effect.gen(function* () {
+        const [row] = ctx.db.getInstancesByIds([instanceId]);
+        if (!row) {
+          return yield* Effect.fail(
+            new Error(`${job.prepared.source.title} is no longer recorded`)
+          );
+        }
+        if (!ctx.registry.agent(row.machineId)) {
+          return yield* Effect.fail(ctx.awayError(row.machineId));
+        }
+        if (cancelledContinuation(job.id)) {
+          return yield* Effect.fail(new Error(CONTINUATION_CANCELLED));
+        }
+        return (yield* attempt(() => ctx.sessionIdle(row))) ? row : undefined;
+      })
+    ).pipe(Effect.asVoid);
 
   /**
    * A job fails in the words the hub got, all of it undone: the source was
@@ -1365,15 +1392,16 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     // Its delegate type and design proposals go on with it too: each names
     // the session it went on in from here, across restarts, and its card is
     // drawn there.
-    detach(
-      ctx.typeProposals.folded(from, to).then((done) => {
+    ctx.lifetime.fork(
+      "type proposals of a folded session",
+      Effect.gen(function* () {
+        const done = yield* attempt(() => ctx.typeProposals.folded(from, to));
         if (done instanceof ElysiaStatus) {
           console.warn(
             `[type proposals of a folded session] failed: ${done.response.detail}`
           );
         }
-      }),
-      "type proposals of a folded session"
+      })
     );
     ctx.designSystem.folded(to);
     if (folded && folded.ending.length > 0) {
@@ -1566,21 +1594,29 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     return { row: cancelled };
   };
 
-  /** A job once it has settled; undefined once it is gone. */
-  const settledContinuation = async (
+  /**
+   * A job once it has settled; undefined once it is gone. The promise edge
+   * of a wait on the job's latch ({@link continuationWaiters}), taken before
+   * this returns.
+   */
+  const settledContinuation = (
     id: string
-  ): Promise<ContinuationRow | undefined> => {
-    let row = ctx.db.continuationRow(id);
-    while (row && !SETTLED.has(row.stage)) {
-      await new Promise<void>((wake) => {
-        const waiters = continuationWaiters.get(id) ?? new Set();
-        waiters.add(wake);
-        continuationWaiters.set(id, waiters);
-      });
-      row = ctx.db.continuationRow(id);
-    }
-    return row;
-  };
+  ): Promise<ContinuationRow | undefined> =>
+    ctx.lifetime.run(
+      Effect.gen(function* () {
+        let row = ctx.db.continuationRow(id);
+        while (row && !SETTLED.has(row.stage)) {
+          let settles = continuationWaiters.get(id);
+          if (!settles) {
+            settles = Latch.makeUnsafe(false);
+            continuationWaiters.set(id, settles);
+          }
+          yield* settles.await;
+          row = ctx.db.continuationRow(id);
+        }
+        return row;
+      })
+    );
 
   /**
    * The continuation's new session, with the options the caller's form chose.

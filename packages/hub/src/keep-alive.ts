@@ -1,5 +1,4 @@
 import { modelScope } from "@cawco/core/accounts";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type KeepAlive, OVER_STATUSES } from "@cawco/core/protocol";
@@ -13,8 +12,9 @@ import { HOUR_MS } from "@cawco/core/time";
 import { resolveRates } from "@cawco/core/usage/pricing";
 import type { ClaudeLimits } from "@cawco/core/usage/types";
 import { bearing, headroom } from "@cawco/core/usage/windows";
+import { Effect, type Fiber } from "effect";
 import type { DbShape } from "./db";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 
 export type KeepAliveRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
@@ -449,13 +449,18 @@ const tickKeepAlive = async (
   }
 };
 
-/** Timers are disposable; every deadline is re-derived from the stored request. */
+/**
+ * One wait at a time, for the next due time: every deadline is re-derived
+ * from the stored request, so the wait is let go and armed again whenever a
+ * pass ends or a wake is asked.
+ */
 export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
   const { lifetime } = ports;
-  let timer: HubTimer | undefined;
+  /** The armed wait for the next pass; none while a pass runs. */
+  let next: Fiber.Fiber<void> | undefined;
   let running = false;
   const plan = () => {
-    lifetime.cancel(timer);
+    next?.interruptUnsafe();
     const now = Date.now();
     // Retry due-but-busy/unreachable sessions, while a future due time gets an
     // exact wake even when it falls between those retry ticks.
@@ -471,28 +476,53 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
         at = Math.min(at, state.nextAt);
       }
     }
-    timer = lifetime.after("keep-alive wake", Math.max(0, at - now), () => {
-      detach(wake(), "keepalive wake");
-    });
+    next = lifetime.fork(
+      "keep-alive wake",
+      Effect.sleep(Math.max(0, at - now)).pipe(
+        Effect.andThen(
+          Effect.suspend(() => {
+            // This wait is over: the pass below is no longer it to let go.
+            next = undefined;
+            return pass;
+          })
+        )
+      )
+    );
   };
-  const wake = async () => {
+  /** One pass over the sessions, unless one runs; the next wait armed as it ends. */
+  const pass: Effect.Effect<void> = Effect.suspend(() => {
     if (running || lifetime.closed()) {
-      return;
+      return Effect.void;
     }
     running = true;
-    lifetime.cancel(timer);
-    try {
-      await tickKeepAlive(ports);
-    } catch (error) {
-      console.error("[keepalive] schedule wake failed:", error);
-    } finally {
-      running = false;
-      plan();
-    }
-  };
+    next?.interruptUnsafe();
+    next = undefined;
+    return Effect.tryPromise({
+      try: () => tickKeepAlive(ports),
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.error("[keepalive] schedule wake failed:", error);
+        })
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          running = false;
+          // A pass cut by close arms nothing.
+          if (!lifetime.closed()) {
+            plan();
+          }
+        })
+      )
+    );
+  });
   // Boot and reconnect use this same path: an overdue warm schedule runs as
   // soon as its machine can supply an idle receipt, not after another margin.
   // Startup does not wait for machines to reconnect.
-  detach(wake(), "keepalive wake");
-  return { wake };
+  lifetime.fork("keep-alive wake", pass);
+  return {
+    /** The promise edge of a pass now ({@link pass}). */
+    wake: (): Promise<void> => lifetime.run(pass),
+  };
 };
