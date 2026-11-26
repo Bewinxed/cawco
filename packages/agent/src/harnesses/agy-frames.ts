@@ -24,7 +24,7 @@ const HOOK_NOTICE =
   /^A pre-tool hook changed the arguments of this tool call before it ran\. Changed: [^\n]*\n*/u;
 
 /** `text` without agy's word on CawCo's rewrite ({@link HOOK_NOTICE}). */
-const withoutHookNotice = (text: string): string =>
+export const withoutHookNotice = (text: string): string =>
   text.replace(HOOK_NOTICE, "");
 
 const TextContent = Schema.Struct({
@@ -50,18 +50,16 @@ export const carriesHookNotice = (update: {
   (isRawOutput(update.rawOutput) && HOOK_NOTICE.test(update.rawOutput.output));
 
 /**
- * What a finished call said, as its result: its text content, else its raw
- * output's, else what agy wrote of it in its transcript (`written`,
- * agy-transcript.ts: agy says an MCP tool's or `read_file`'s result
- * there alone), without CawCo's notice.
+ * What a finished call said in its ACP update, as its result: its text
+ * content, else its raw output's, without CawCo's notice. agy says an MCP
+ * tool's or `read_file`'s result, and a timer's, in its transcript alone
+ * (agy-transcript.ts), the result a call is read from wherever a hook names
+ * its step.
  */
-export const callResult = (
-  update: {
-    content?: readonly unknown[] | null;
-    rawOutput?: unknown;
-  },
-  written: string | undefined
-): string => {
+export const callResult = (update: {
+  content?: readonly unknown[] | null;
+  rawOutput?: unknown;
+}): string => {
   const texts = (update.content ?? []).flatMap((part) =>
     isTextContent(part) ? [part.content.text] : []
   );
@@ -71,7 +69,7 @@ export const callResult = (
   if (isRawOutput(update.rawOutput)) {
     return withoutHookNotice(update.rawOutput.output);
   }
-  return withoutHookNotice(written ?? "");
+  return "";
 };
 
 const Args = Schema.Record(Schema.String, Schema.Unknown);

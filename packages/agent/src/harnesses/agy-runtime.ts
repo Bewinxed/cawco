@@ -139,7 +139,12 @@ import {
 } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
 import { accountStore, applyAgyDeletes } from "./agy-store-files";
-import { type WrittenAt, writtenAt, writtenResult } from "./agy-transcript";
+import {
+  type Written,
+  type WrittenAt,
+  writtenAt,
+  writtenResult,
+} from "./agy-transcript";
 import { credentialControls } from "./credential-controls";
 
 /** A start's command, as the host was handed it. */
@@ -325,6 +330,8 @@ class AgySession {
   #refused: string | undefined;
   /** Where agy writes each ended call's result, by agy's id, until its end is said (agy-transcript.ts). */
   readonly #writtenAt = new Map<string, WrittenAt>();
+  /** The calls running when CawCo cancelled agy's turn, until their ends are said: a task cancelled writes no end to wait for. */
+  readonly #cancelled = new Set<string>();
   #models: ModelInfo[] = [];
   #commands: SlashCommand[] = [];
   /** The last answer that named the session's config options: what thinking levels its model takes. */
@@ -748,16 +755,16 @@ class AgySession {
       return Effect.sync(() => this.#turnEvent(one.turn));
     }
     const { update } = one.update;
-    const at =
+    const id =
       update.sessionUpdate === "tool_call_update" &&
-      (update.status === "completed" || update.status === "failed") &&
-      callResult(update, undefined) === ""
-        ? this.#writtenAt.get(update.toolCallId)
+      (update.status === "completed" || update.status === "failed")
+        ? update.toolCallId
         : undefined;
-    if (!at) {
+    const at = id === undefined ? undefined : this.#writtenAt.get(id);
+    if (id === undefined || !at) {
       return Effect.sync(() => this.#updated(one.update, undefined));
     }
-    return writtenResult(at).pipe(
+    return writtenResult(at, this.#cancelled.has(id)).pipe(
       Effect.map((written) =>
         this.#updated(one.update, Option.getOrUndefined(written))
       )
@@ -780,10 +787,10 @@ class AgySession {
     );
   }
 
-  /** One of agy's `session/update`s, as the session's frames; `written`, what agy wrote of a call it ends with no result. */
+  /** One of agy's `session/update`s, as the session's frames; `written`, the result agy wrote of a call it ends. */
   #updated(
     notification: SessionNotification,
-    written: string | undefined
+    written: Written | undefined
   ): void {
     const { update } = notification;
     switch (update.sessionUpdate) {
@@ -950,12 +957,12 @@ class AgySession {
     });
   }
 
-  /** A tool call ended, as its result. */
+  /** A tool call ended, as its result: the one its transcript holds where a hook named its step, else its update's. */
   #answered(
     id: string,
     failed: boolean,
     update: { content?: readonly unknown[] | null; rawOutput?: unknown },
-    written: string | undefined
+    written: Written | undefined
   ): void {
     const call = this.#calls.get(id);
     this.#calls.set(id, {
@@ -964,6 +971,7 @@ class AgySession {
       since: call?.since ?? Date.now(),
     });
     this.#writtenAt.delete(id);
+    this.#cancelled.delete(id);
     this.#emit({
       type: "user",
       parent_tool_use_id: null,
@@ -973,8 +981,8 @@ class AgySession {
           {
             type: "tool_result",
             tool_use_id: id,
-            content: callResult(update, written),
-            is_error: failed,
+            content: written?.content ?? callResult(update),
+            is_error: written?.isError ?? failed,
           },
         ],
       },
@@ -1390,6 +1398,7 @@ class AgySession {
       }
     }
     this.#writtenAt.clear();
+    this.#cancelled.clear();
     this.#ctx.busy(false);
     if (stopReason === "end_turn" && !fault && !this.#own) {
       this.#stopHooks().catch((error: unknown) => this.#ctx.failed(error));
@@ -1424,6 +1433,11 @@ class AgySession {
     const { sessionId } = this;
     this.#cancelAsks();
     if (sessionId && this.#turn && this.#prompts > 0) {
+      for (const [id, call] of this.#calls) {
+        if (!call.ended) {
+          this.#cancelled.add(id);
+        }
+      }
       await this.#connection().agent.notify(methods.agent.session.cancel, {
         sessionId,
       });

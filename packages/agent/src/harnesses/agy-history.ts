@@ -32,6 +32,7 @@ import {
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { Option, Schema } from "effect";
 import type { TranscriptSpan } from "../harness";
+import { withoutHookNotice } from "./agy-frames";
 import { windowOf } from "./codex-history";
 
 const ToolCallSchema = Schema.Struct({
@@ -80,6 +81,44 @@ const TASK_ENDED = /^Task id "[^"]*" finished with result:\n?/u;
 
 /** The task a `RUNNING` result moved to the background, as its words name it. */
 const TASK_STARTED = /task id: (\S+\/task-\d+)/u;
+
+/** The task a call's result step moved to the background (a command, a timer), whose end is a later step ({@link taskEnd}); none for a result that is whole. */
+export const backgroundTask = (step: AgyStep): string | undefined =>
+  step.type === "GENERIC" && step.status === "RUNNING"
+    ? TASK_STARTED.exec(step.content ?? "")?.[1]
+    : undefined;
+
+/** A background task's end, a command's or a timer's (a wake-up's prompt), as a `SYSTEM_MESSAGE` from it says it: the task and its result. */
+export const taskEnd = (
+  step: AgyStep
+): { readonly task: string; readonly words: string } | undefined => {
+  if (step.type !== "SYSTEM_MESSAGE") {
+    return undefined;
+  }
+  const said = SYSTEM_SAYS.exec(step.content ?? "");
+  const task = said?.[1];
+  return task?.includes("/task-")
+    ? {
+        task,
+        words: withoutHookNotice(
+          (said?.[2] ?? "").replace(TASK_ENDED, "").trim()
+        ),
+      }
+    : undefined;
+};
+
+/** A call's result step that is whole, as its result: its error for one that failed, else its content, without CawCo's notice. */
+export const stepResult = (
+  step: AgyStep
+): { readonly content: string; readonly isError: boolean } => {
+  const isError = step.status === "ERROR" || step.status === "INVALID";
+  return {
+    content: withoutHookNotice(
+      isError ? (step.error ?? step.content ?? "") : (step.content ?? "")
+    ),
+    isError,
+  };
+};
 
 /** One stop CawCo made of the conversation (agy-notes.ts `AgyNote.stops`). */
 interface AgyStop {
@@ -242,23 +281,20 @@ const toolResult = (read: Reading, step: AgyStep): void => {
   if (!toolUseId) {
     return;
   }
-  const task =
-    step.status === "RUNNING"
-      ? TASK_STARTED.exec(step.content ?? "")?.[1]
-      : undefined;
+  const task = backgroundTask(step);
   if (task) {
     // Drawn where it ends ({@link systemMessage}).
     read.tasks.set(task, toolUseId);
     return;
   }
-  const failed = step.status === "ERROR" || step.status === "INVALID";
+  const { content, isError } = stepResult(step);
   read.entries.push(
     resultEntry(
       read.sessionId,
       `${toolUseId}:result`,
       toolUseId,
-      failed ? (step.error ?? step.content ?? "") : (step.content ?? ""),
-      failed,
+      content,
+      isError,
       step.created_at
     )
   );
@@ -266,12 +302,11 @@ const toolResult = (read: Reading, step: AgyStep): void => {
 
 /** A background command's end or a wake-up, as its call's result; agy's own notices and reminders to its model, nothing. */
 const systemMessage = (read: Reading, step: AgyStep, id: string): void => {
-  const said = SYSTEM_SAYS.exec(step.content ?? "");
-  const sender = said?.[1];
-  if (!sender?.includes("/task-")) {
+  const ended = taskEnd(step);
+  if (!ended) {
     return;
   }
-  const words = (said?.[2] ?? "").replace(TASK_ENDED, "").trim();
+  const { task: sender, words } = ended;
   const toolUseId = read.tasks.get(sender);
   if (toolUseId) {
     read.tasks.delete(sender);
