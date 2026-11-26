@@ -110,9 +110,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     // What the session put to the person outside a tool call and waits on
     // (core parked.ts): its design graphs' picks between directions and its
-    // decision cards the person decides, which its composer parks.
-    .get("/api/instances/:id/parked", ({ params }) =>
-      artifacts.parked(params.id)
+    // decision cards the person decides, which its composer parks. `every`:
+    // its enlarged picks too, for the composer of the conversation he is in,
+    // which parks every pick of another session (tsk-521).
+    .get("/api/instances/:id/parked", ({ params, query }) =>
+      artifacts.parked(params.id, query.every === "1")
     )
     // Files' search: the session's artifacts a query matches by name or by
     // the words on their page, best first, with the words round a hit.

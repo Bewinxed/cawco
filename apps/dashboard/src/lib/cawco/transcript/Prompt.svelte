@@ -1,9 +1,5 @@
 <script lang="ts" module>
-  import {
-    QUESTION_STANDING,
-    questionAnswer,
-    questionDismissal,
-  } from "../question";
+  import { QUESTION_STANDING, questionAnswer } from "../question";
 
   /**
    * An answer (or a dismissal) given from inside a question's card: the
@@ -71,7 +67,6 @@
   } from "#lib/components/ui/option-group/index.js";
   import {
     IconAsk,
-    IconCheck,
     IconChevronDown,
     IconClose,
     IconGlobe,
@@ -99,11 +94,19 @@
     shown = false,
     onminimize,
     ontaken,
+    seated = null,
   }: {
     /**
-     * Folds a question down to its bar over the composer, answering nothing
-     * (minimized-asks.svelte.ts). Given only for a question; a card without
-     * it has no minimize control and no swipe.
+     * The card stands under the reply that asks it, in a pin's thread
+     * (shaping tsk-521), which already says who asks: no title and no
+     * padding of its own.
+     */
+    seated?: "thread" | null;
+    /**
+     * Folds the card down to its bar over the composer, answering nothing
+     * (minimized-asks.svelte.ts). Given for a question, and for any ask from
+     * another session; a card without it has no minimize control and no
+     * swipe.
      */
     onminimize?: () => void;
     request: PendingPermission;
@@ -257,6 +260,9 @@
   };
 
   const allAnswered = $derived(!!questions && questions.every(isAnswered));
+  const pressAnswers = $derived(
+    questions?.length === 1 && !questions[0].multiSelect
+  );
 
   /**
    * The question being answered: the one keyboard focus is in, and after a
@@ -379,6 +385,11 @@
     // A picked option is the answer: the field's own goes back to waiting.
     if (otherAt === index) {
       otherAt = null;
+    }
+    // Seated, one question with one pick: the press is the answer.
+    if (pressAnswers) {
+      submitQuestion();
+      return;
     }
     advance();
   }
@@ -623,17 +634,6 @@
     commandId = onanswer(questionAnswer(input, answers));
   }
 
-  /** The Dismiss button, and only it: the question is put down, in the words iOS sends. */
-  function dismissQuestion(): void {
-    if (!answerable) {
-      return;
-    }
-    pressed = "deny";
-    handOn = !!card?.contains(document.activeElement);
-    handedAt = Date.now();
-    commandId = onanswer(questionDismissal);
-  }
-
   /**
    * A swipe down on a question's card minimizes it, as its chevron does. It
    * is read off the touch's start and end, not tracked: the body scrolls
@@ -753,7 +753,7 @@
         figures="tabular">{place.at} of {place.of}</Kbd
       >
     {/if}
-    {#if questions && onminimize}
+    {#if onminimize}
       <!-- Folds the card to its bar over the composer; answers nothing. It
            ends the title row, in the title's muted ink, and keeps the row's
            own height (its 24px box overhangs the label line). -->
@@ -782,7 +782,12 @@
   data-prompt-shown={shown || undefined}
   data-slot="hitl"
   aria-label={cardLabel}
-  class="group/hitl flex flex-col max-h-(--ask-max) pt-space-3 pb-space-2 px-space-3"
+  class={[
+    "group/hitl flex flex-col",
+    seated
+      ? "pt-space-2"
+      : "max-h-(--ask-max) pt-space-3 pb-space-2 px-space-3",
+  ]}
   ontouchcancel={() => {
     swipe = null;
   }}
@@ -917,7 +922,9 @@
       </div>
     </div>
   {:else if questions}
-    {@render title(`Question from ${asker}`)}
+    {#if !seated}
+      {@render title(`Question from ${asker}`)}
+    {/if}
     <!-- Every box sizes to the card: the body, and what stands in it, may
          shrink below its words' longest run, which then wraps
          (`overflow-wrap` on the lede and the labels) rather than pushing
@@ -943,15 +950,6 @@
           style:translate="0 {rail.top}px"
         ></span>
       {/if}
-      <!-- A CawCo ask's line: whether work waits on the answer. -->
-      {#if presentation.detail}
-        <p
-          data-slot="detail"
-          class="text-size-label font-normal text-ink-muted mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
-        >
-          {presentation.detail}
-        </p>
-      {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
         {@const list = listed(q)}
@@ -960,7 +958,9 @@
              does. -->
         <p
           data-slot="lede"
-          class="type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
+          class={[
+            "type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2",
+          ]}
           id="{claimId}-q{qi}"
           bind:this={ledes[qi]}
         >
@@ -1090,30 +1090,19 @@
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
-      <div class="flex gap-space-2">
+      {#if !pressAnswers}
+        <!-- Several questions or picks: the one act sends them. -->
         <Button
           fit="prompt-wide"
           disabled={disabledOf("answer") || !(out || allAnswered)}
           failed={failedOf("answer")}
-          icon={IconCheck}
           label="Answer"
           onclick={submitQuestion}
           pending={pendingOf("answer")}
           pendingLabel="Answering…"
           size="sm"
         />
-        <Button
-          disabled={disabledOf("deny")}
-          fit="prompt"
-          failed={failedOf("deny")}
-          label="Dismiss"
-          onclick={dismissQuestion}
-          pending={pendingOf("deny")}
-          pendingLabel="Dismissing…"
-          size="sm"
-          variant="outline"
-        />
-      </div>
+      {/if}
       {@render wait()}
     </div>
   {:else}

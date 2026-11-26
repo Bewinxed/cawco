@@ -181,6 +181,8 @@ export interface Bridge {
   /** `control` names what the person pressed: the hub's journal says it. */
   send: (text?: string, control?: "page-send" | "page-key") => Promise<void>;
   set: (key: string, value: unknown) => Promise<void>;
+  /** His answer to card `choice` in his own words, with no pick (its Other line). */
+  words: (choice: string, text: string) => Promise<void>;
 }
 
 export const bridge = (): Bridge | null => window.cawco ?? null;
@@ -194,7 +196,27 @@ export const bridge = (): Bridge | null => window.cawco ?? null;
  */
 export interface DecisionHost {
   bare: boolean;
-  bridge: () => Pick<Bridge, "note"> | null;
+  /** Where its note is kept, and on a page his own words too (the composer's host keeps those itself, `other`). */
+  bridge: () => (Pick<Bridge, "note"> & Partial<Pick<Bridge, "words">>) | null;
+  /**
+   * An answer in his own words, where the host takes one (the composer's
+   * parked card, Needs you): the card draws Other as its last option and
+   * the line it opens under the options; the host keeps what is written
+   * and sends it.
+   */
+  other?: {
+    /** The line stands open. */
+    open: () => boolean;
+    /** Other pressed: the line opens, the keys on it. */
+    press: (event: MouseEvent) => void;
+    /** What is written on it. */
+    text: () => string;
+    write: (text: string) => void;
+    /** Enter sends, Esc puts the line down. */
+    keys: (event: KeyboardEvent) => void;
+    /** The line's field, for the host to focus. */
+    field: (field: HTMLInputElement | null) => void;
+  };
   /** A press on an option, where nothing else stores it: the options now chosen. */
   pick?: (choice: string, options: string[]) => void;
   picks: () => Record<string, ChoiceEntry>;

@@ -33,25 +33,16 @@
   import { minimizedAsks } from "#lib/cawco/minimized-asks.svelte.js";
   import Turn from "#lib/cawco/turn/Turn.svelte";
   import Who from "#lib/cawco/turn/Who.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import * as Command from "#lib/components/ui/command/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { IconArchive, IconCopy, IconFolder, IconPen } from "#lib/icons.js";
   import { hubThrough } from "#lib/platform/hub.js";
   import { track } from "#lib/platform/track.js";
-  import DirectionWell, {
-    type DirectionDrawing,
-  } from "../graph/DirectionWell.svelte";
+  import type { DirectionDrawing } from "../graph/DirectionWell.svelte";
   import Composer from "./Composer.svelte";
   import { ComposerDraft } from "./composer-draft.svelte";
   import { composerFleet } from "./composer-fleet";
+  import DirectionStandIn from "./DirectionStandIn.svelte";
   import type { ComposerAsk } from "./grown-ask.svelte";
   import ParkedRecord from "./ParkedRecord.svelte";
-  import {
-    createCall,
-    DIRECTION_GREYS,
-    QUEUED_QUESTION,
-  } from "./parked-fixtures";
+  import { createCall, QUEUED_QUESTION } from "./parked-fixtures";
 
   let {
     items,
@@ -239,16 +230,7 @@
           };
           return null;
         },
-        ondismiss: () => {
-          const key = first.kind === "directions" ? "picked" : first.card.id;
-          choices[first.artifact.id] = {
-            ...kept,
-            [key]: entry({ dismissed: true }),
-          };
-          return null;
-        },
         onanswered: () => answer(first),
-        onopen: nothing,
       };
     }
     if (!questionWaits) {
@@ -313,35 +295,7 @@
 
 <!-- A direction as the graph's stage draws it, in its grey at night. -->
 {#snippet direction(_pick: ParkedPick, one: ParkedDirection)}
-  <DirectionWell drawing={wellOf(one)} name={one.name} onretry={nothing}>
-    <div
-      class="flex flex-col gap-space-3 p-space-4"
-      style:--color-surface-hover={DIRECTION_GREYS[one.file]}
-    >
-      <div class="flex flex-wrap items-center gap-space-1">
-        <!-- Its menu open: the ghost's look under the pointer. -->
-        <Button
-          aria-expanded={true}
-          icon={IconArchive}
-          label="Archive"
-          size="sm"
-          variant="ghost"
-        />
-        <Button icon={IconPen} label="Rename" size="sm" variant="ghost" />
-      </div>
-      <Command.Root value="move">
-        <Command.List>
-          <Command.Item value="move"
-            ><IconFolder /><span>Move to project</span></Command.Item
-          >
-          <Command.Item value="copy"
-            ><IconCopy /><span>Duplicate</span></Command.Item
-          >
-        </Command.List>
-      </Command.Root>
-      <Input aria-label="Session name" value="Nightly release notes" />
-    </div>
-  </DirectionWell>
+  <DirectionStandIn direction={one} drawing={wellOf(one)} onretry={nothing} />
 {/snippet}
 
 <div

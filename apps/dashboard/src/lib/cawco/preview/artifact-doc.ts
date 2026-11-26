@@ -3,7 +3,6 @@ import {
   type ChoiceEntry,
   changedEntry,
   choiceEntryProblem,
-  dismissedEntry,
   ownWordsEntry,
 } from "@cawco/core/choices";
 import {
@@ -137,12 +136,6 @@ export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
-  /**
-   * The person puts question `key` down without a pick or a word (core
-   * `dismissedEntry`): a card's id, or a design graph's `picked`; a
-   * sentence when it was not kept.
-   */
-  dismiss: (key: string) => string | null;
   /**
    * A value kept under `key` on a page, as its own `cawco.set` keeps one
    * (a setup's stages, drawn as the board in the project's page): the hub
@@ -566,8 +559,6 @@ export function joinArtifact(
       state.set(key, entry);
       return null;
     },
-    dismiss: (key) =>
-      keepPickless(key, (pageHash, at) => dismissedEntry(pageHash, at)),
     answerInWords: (key, words) =>
       keepPickless(key, (pageHash, at) => ownWordsEntry(words, pageHash, at)),
     keepTuned: (records) => {

@@ -40,6 +40,8 @@ export class CommentKit {
     CommentComposer: typeof import("./CommentComposer.svelte").default;
     PinCard: typeof import("./PinCard.svelte").default;
     commentDrafts: typeof import("./comment-drafts.svelte").commentDrafts;
+    /** The open questions of a pin's thread and how each is answered (the asks store's, the conversation's code). */
+    pinQuestions: typeof import("./pin-questions").pinQuestions;
   } | null>(null);
 
   kitLoading: Promise<void> | null = null;
@@ -59,13 +61,15 @@ export class CommentKit {
       import("./CommentComposer.svelte"),
       import("./PinCard.svelte"),
       import("./comment-drafts.svelte"),
+      import("./pin-questions"),
       this.markdownAbove ? null : import("../markdown-live"),
-    ]).then(([composer, card, kept, markdown]) => {
+    ]).then(([composer, card, kept, questions, markdown]) => {
       this.ownMarkdown = markdown?.liveMarkdown;
       this.kit = {
         CommentComposer: composer.default,
         PinCard: card.default,
         commentDrafts: kept.commentDrafts,
+        pinQuestions: questions.pinQuestions,
       };
     });
     return this.kitLoading;

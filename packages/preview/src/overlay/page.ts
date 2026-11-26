@@ -1452,6 +1452,8 @@ declare global {
         option: string | string[] | null
       ) => Promise<void>;
       note: (choice: string, text: string) => Promise<void>;
+      /** His answer to card `choice` in his own words, with no pick (its Other line). */
+      words: (choice: string, text: string) => Promise<void>;
       set: (key: string, value: unknown) => Promise<void>;
       /** The person's Send: the session hears it has new responses to read; `text` is kept with them; `control` names what was pressed (core `SEND_CONTROLS`). */
       send: (text?: string, control?: string) => Promise<void>;
@@ -1508,6 +1510,8 @@ Object.defineProperty(window, "cawco", {
     choose,
     note: (choice: string, text: string) =>
       change({ choice, pageHash, note: text }),
+    words: (choice: string, text: string) =>
+      change({ choice, pageHash, words: text }),
     set: (key: string, value: unknown) =>
       change({ choice: key, pageHash, value }),
     send: async (text = "", control?: string) => {

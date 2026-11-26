@@ -63,6 +63,7 @@
   import { commentAttachments } from "./preview/comment-rows";
   import PinCard from "./preview/PinCard.svelte";
   import PinMark, { markState } from "./preview/PinMark.svelte";
+  import { pinQuestions } from "./preview/pin-questions";
   import ThreadSheet from "./preview/ThreadSheet.svelte";
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
@@ -463,6 +464,7 @@
     parent={null}
     pin={shown}
     {problem}
+    {...pinQuestions(shown)}
     {sheet}
   />
 {/snippet}

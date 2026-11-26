@@ -905,6 +905,7 @@
 {#snippet thread(pin: Pin, draft: ComposerDraft, pushed = false, sheet = false)}
   {#if commentKit.kit}
     {@const Card = commentKit.kit.PinCard}
+    {@const asked = commentKit.kit.pinQuestions(pin)}
     <Card
       agentName={paneSubject.ownerName}
       changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
@@ -939,6 +940,8 @@
         ? pinThread.cardParent.name
         : null}
       {pin}
+      onanswer={asked.onanswer}
+      questions={asked.questions}
       placing={paneMode.placing === pin.id}
       problem={pinThread.cardError}
       sending={pinThread.replying}

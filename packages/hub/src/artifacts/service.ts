@@ -3984,13 +3984,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * parked.ts), its own artifacts alone, oldest first: each design graph it
    * opened with two or more directions to judge, and each card of its
    * decision pages that Who decides gives the person, where its agent
-   * judged the pick quick (`pick`) (a card the hub sent to
+   * judged the pick quick (`pick`), or every pick (`every`: the composer of
+   * the conversation he is in parks another session's enlarged ones too,
+   * tsk-521) (a card the hub sent to
    * another member is that member's: settling.ts). Each is read whatever its
    * state, so the transcript can keep an answered one where it was opened;
    * one not put to the person (a draft, handed up or held, an option's
    * media, its folder gone) is none.
    */
-  const parkedOf = (instance: InstanceRow): ParkedRead => {
+  const parkedOf = (instance: InstanceRow, every = false): ParkedRead => {
     const seen = new Set<string>();
     const rows = [...db.ofInstance(instance.id), ...db.ofMaker(instance.id)]
       .filter((row) => {
@@ -3999,7 +4001,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return first && row.heldFor === null;
       })
       .sort((a, b) => -newestFirst(a, b));
-    return { items: rows.flatMap(parkedOn) };
+    return { items: rows.flatMap((row) => parkedOn(row, every)) };
   };
 
   /** Whether `row` is put to the person (needs.ts `asks`): not a draft, handed up or held, an option's media or gone, a pick or a judgement with its ask. */
@@ -4014,7 +4016,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** The picks artifact `row` puts to the person ({@link parkedOf}): its graph's directions, or its cards he decides. */
-  const parkedOn = (row: ArtifactRow): ParkedItem[] => {
+  const parkedOn = (row: ArtifactRow, every = false): ParkedItem[] => {
     const spec =
       row.kind === "component" && "path" in row.source
         ? canvasOf(row.source.path ?? "").spec
@@ -4025,7 +4027,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     if (
       pickOpened(directions.length, cards.length) === null ||
-      row.pick !== "quick" ||
+      (row.pick !== "quick" && !every) ||
       !putToPerson(row)
     ) {
       return [];
@@ -4055,7 +4057,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     stateOf: (key: string) => ParkedState;
   }
 
-  /** His dismissal of a pick, as `entry` keeps it (core choices.ts `dismissedEntry`); null while it is none. */
+  /** His dismissal of a pick, as `entry` keeps it (core choices.ts `ChoiceEntry.dismissed`); null while it is none. */
   const dismissedOf = (
     entry: ChoiceEntry | undefined
   ): ParkedItem["dismissed"] =>
@@ -6827,9 +6829,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** What session `instanceId` put to the person outside a tool call, its own artifacts' (core parked.ts, {@link parkedOf}). */
-    parked: (instanceId: string) => {
+    parked: (instanceId: string, every = false) => {
       const instance = sessionOf(instanceId);
-      return instance instanceof ElysiaStatus ? instance : parkedOf(instance);
+      return instance instanceof ElysiaStatus
+        ? instance
+        : parkedOf(instance, every);
     },
 
     /** The same questions as session `instanceId`'s own screen lists them (core session-questions.ts). */

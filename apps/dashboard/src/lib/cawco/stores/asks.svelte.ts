@@ -416,6 +416,21 @@ export const asksStore = {
         sessionChain(row.instanceId, parentOf).includes(instanceId)
     );
   },
+  /**
+   * The open asks a pin's thread carries (core `ThreadEntry.ask`), by their
+   * ask's id: each agent reply's question still waiting on the person,
+   * drawn under its reply (PinCard). One answered or withdrawn is none.
+   */
+  pinQuestions(
+    asks: readonly (string | undefined)[]
+  ): Record<string, BlockedRequest> {
+    const wanted = new Set(asks.filter((ask) => ask !== undefined));
+    return Object.fromEntries(
+      blocked
+        .filter((row) => wanted.has(row.request.requestId))
+        .map((row) => [row.request.requestId, row])
+    );
+  },
   /** How many sessions wait on the person (core `waitingOnYou`): asks for them, cards and canvases in Needs you. */
   get waitingCount(): number {
     return waiting.size;

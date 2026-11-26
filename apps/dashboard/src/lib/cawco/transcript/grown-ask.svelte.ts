@@ -46,6 +46,12 @@ import { GrownShape, layoutScale, measureShape } from "./grown";
 interface AskCommon {
   /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
   asker: string;
+  /**
+   * It came from another session (tsk-521): it waits folded on the
+   * composer's bar until he opens it there or brings it up from Caw's
+   * panel, a permission too, and its card's title names that session.
+   */
+  fromElsewhere?: boolean;
   /** How many more asks wait behind this one. */
   more: number;
 }
@@ -53,9 +59,8 @@ interface AskCommon {
 /**
  * A pick the session put to the person outside a tool call (core
  * parked.ts): a design's directions or a decision card, answered in the
- * composer as where it lives (ParkedPrompt) or in the person's own words,
- * or dismissed there as a question is. It folds to its bar as a question
- * does.
+ * composer as where it lives (ParkedPrompt) or in the person's own words.
+ * It folds to its bar as a question does.
  */
 export interface ParkedAsk extends AskCommon {
   /** Its artifact's choices as its doc holds them now. */
@@ -71,9 +76,6 @@ export interface ParkedAsk extends AskCommon {
     card: string,
     change: { options: string[] } | { note: string }
   ) => string | null;
-  /** Put down without a pick or a word; a sentence when it was not kept. */
-  ondismiss: () => string | null;
-  onopen: () => void;
   onpick: (file: string) => string | null;
   /** Answered in the person's own words, with no pick; a sentence when it was not kept. */
   onwords: (words: string) => string | null;
@@ -158,9 +160,12 @@ export class GrownAsk {
       ? questionsOf(ask.request.toolName, ask.request.input)
       : null;
   });
-  /** The parked ask can fold to its bar: a question, or a pick parked here. */
+  /** The parked ask can fold to its bar: a question, a pick parked here, or any ask from another session. */
   readonly askParks = $derived.by(
-    () => !!this.askQuestions || this.#parts.ask()?.kind === "parked"
+    () =>
+      !!this.askQuestions ||
+      this.#parts.ask()?.kind === "parked" ||
+      !!this.#parts.ask()?.fromElsewhere
   );
   /** The parked ask is one the reader minimized here. */
   readonly minimized = $derived.by(() => {

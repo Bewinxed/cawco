@@ -22,7 +22,10 @@
     joined = false,
     shell = $bindable(null),
     children,
+    caw,
   }: {
+    /** Caw's head pressed: what hangs from the glass opens or folds; its state, `expanded`. None: the head is a stand-in that does nothing. */
+    caw?: { expanded: boolean; onclick: () => void };
     /** The frame's width, px: the shell container's. */
     width: number;
     /** The frame's least height, px: room for what hangs from the glass. */
@@ -47,7 +50,12 @@
     <div class="ms-auto flex min-w-0 items-center @max-desk/shell:self-stretch">
       <BarGlass {joined}>
         {#snippet head()}
-          <BarItem label="Caw" tip={false}>
+          <BarItem
+            expanded={caw?.expanded}
+            label="Caw"
+            onclick={caw?.onclick}
+            tip={false}
+          >
             <span
               data-slot="bar-symbol"
               aria-hidden="true"

@@ -45,11 +45,18 @@
 -->
 <script lang="ts">
   import { DECISION_WELLS } from "@cawco/core/decisions-library";
+  import { askWords } from "@cawco/core/words/asks";
   import { pickedFromYourLine } from "@cawco/core/words/decides-lines";
   import { decisionsWords as words } from "@cawco/core/words/decisions";
-  import { getContext, setContext, tick } from "svelte";
+  import { parkedWords } from "@cawco/core/words/parked";
+  import { getContext, setContext, tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { OptionGroup } from "#lib/components/ui/option-group/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import {
+    OptionGroup,
+    OptionGroupItem,
+  } from "#lib/components/ui/option-group/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
@@ -58,6 +65,7 @@
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import DecidedBy from "./DecidedBy.svelte";
   import {
+    type DecisionHost,
     decisionHost,
     hearWidths,
     MEDIA_WIDTHS,
@@ -141,6 +149,10 @@
   const advice = $derived.by(() => {
     const why = props.why ? String(props.why) : "";
     const recommended = options.find((option) => option.recommended);
+    // In the composer the Recommended mark names the option: the reason stands alone.
+    if (host.bare) {
+      return why;
+    }
     return why && recommended ? words.advice(recommended.label, why) : why;
   });
   /** Each option's id in order: an option's keycap is its place. */
@@ -262,6 +274,79 @@
         DECISION_WELLS.some((well) => well === node?.typeName)
       )
   );
+
+  /** Other's value in the group: no option's id can be it. */
+  const OTHER = "\u0000other";
+  /** On a page, his own words as the page keeps them (core `ownWordsEntry`); null while it keeps none. */
+  const keptWords = $derived(
+    picked[id]?.ownWords ? (picked[id]?.note ?? null) : null
+  );
+  /** On a page, Other pressed, and what is written on its line, kept as he leaves it or presses Enter. */
+  let pageOtherOpen = $state(false);
+  let pageWords = $state<string | null>(null);
+  let pageField: HTMLInputElement | null = null;
+  /** His words kept on the page now. */
+  function keepWords(): void {
+    const own = (pageWords ?? "").trim();
+    if (own !== "" && own !== keptWords) {
+      bridge()
+        ?.words?.(id, own)
+        .catch(() => undefined);
+    }
+  }
+  /**
+   * His own words in place of a pick: the composer's host keeps them itself
+   * (`other`); a page keeps them on the card's id, as its overlay keeps a
+   * pick (`cawco.words`).
+   */
+  const other = $derived.by((): DecisionHost["other"] => {
+    if (host.other) {
+      return host.other;
+    }
+    if (!bridge()?.words) {
+      return undefined;
+    }
+    return {
+      open: () => pageOtherOpen || keptWords !== null,
+      press: async (event) => {
+        event.preventDefault();
+        pageOtherOpen = true;
+        await tick();
+        pageField?.focus();
+      },
+      text: () => pageWords ?? keptWords ?? "",
+      write: (text) => {
+        pageWords = text;
+      },
+      keys: (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          pageOtherOpen = false;
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+          event.preventDefault();
+          keepWords();
+        }
+      },
+      field: (input) => {
+        pageField = input;
+      },
+    };
+  });
+  let otherField = $state<HTMLInputElement | null>(null);
+  // A pick on the page is the answer: his line goes back to waiting.
+  $effect(() => {
+    if (chosen.length > 0) {
+      untrack(() => {
+        pageOtherOpen = false;
+        pageWords = null;
+      });
+    }
+  });
+  $effect(() => {
+    other?.field(otherField);
+  });
 
   /** The options picked that the card still offers (core `pickOf`'s rule: one a revision took out is no pick). */
   const chosen = $derived(
@@ -465,7 +550,14 @@
   >
     <OptionGroup
       aria-label={plainOf(question)}
-      bind:value={() => chosen, (next) => host.pick?.(id, next)}
+      bind:value={
+        () => (other?.open() ? [...chosen, OTHER] : chosen),
+        (next) =>
+          host.pick?.(
+            id,
+            next.filter((one) => one !== OTHER)
+          )
+      }
       class="w-full"
       disabled={!bridge()}
       {multiple}
@@ -484,8 +576,40 @@
         style:--story-w={storyWidth > 0 ? `${storyWidth}px` : undefined}
       >
         {@render renderNode(props.options)}
+        {#if other}
+          <!-- His own answer: the card's last option, its digit after the
+               writer's, opening the line under the options. -->
+          <div class="flex min-w-0 self-start" data-slot="option-other">
+            <OptionGroupItem
+              digit={options.length < 9 ? options.length + 1 : undefined}
+              onclick={other.press}
+              value={OTHER}
+            >
+              {#if options.length < 9}<Kbd
+                  aria-hidden="true"
+                  data-box
+                  look="keycap"
+                  reach="keyboard">{options.length + 1}</Kbd
+                >{/if}<span class="min-w-0 wrap-anywhere text-pretty"
+                >{parkedWords.other}</span
+              >
+            </OptionGroupItem>
+          </div>
+        {/if}
       </div>
     </OptionGroup>
+    {#if other?.open()}
+      <Input
+        aria-label={askWords.yourAnswerTo(plainOf(question))}
+        data-other
+        oninput={(event) => other.write(event.currentTarget.value)}
+        onblur={keepWords}
+        onkeydown={other.keys}
+        placeholder={askWords.yourAnswer}
+        value={other.text()}
+        bind:ref={otherField}
+      />
+    {/if}
     {#if picked[id]?.settled}
       <DecidedBy settled={picked[id].settled} />
     {/if}
@@ -497,39 +621,41 @@
         {pickedFromYourLine(from)}
       </p>
     {/if}
-    <div data-slot="note">
-      <!-- A ghost's ink starts inside its box: it hangs back by its padding so its first letter stands on the card's text edge, as RelayJourney's ghosts do. -->
-      <div bind:this={noteAdd}>
-        <Button
-          class="-ms-space-3"
-          disabled={!bridge()}
-          onclick={askNote}
-          size="sm"
-          variant="ghost">Add {noteFor}</Button
-        >
-      </div>
-      <div bind:this={noteField}>
-        <div class="flex flex-col gap-space-2">
-          <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview overlay/fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
-          <span
-            class="type-label text-ink-muted"
-            id={`decision-${id}-note-label`}>Note</span
-          >
-          <Textarea
-            bind:ref={field}
-            bind:value={note}
-            aria-labelledby={`decision-${id}-note-label`}
-            data-cawco-unkept=""
-            id={`decision-${id}-note`}
+    {#if !host.bare}
+      <div data-slot="note">
+        <!-- A ghost's ink starts inside its box: it hangs back by its padding so its first letter stands on the card's text edge, as RelayJourney's ghosts do. -->
+        <div bind:this={noteAdd}>
+          <Button
+            class="-ms-space-3"
             disabled={!bridge()}
-            onblur={leftNote}
-            oninput={typed}
-            placeholder={props.note ? String(props.note) : "Anything to add"}
-            rows={1}
-          />
+            onclick={askNote}
+            size="sm"
+            variant="ghost">Add {noteFor}</Button
+          >
+        </div>
+        <div bind:this={noteField}>
+          <div class="flex flex-col gap-space-2">
+            <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview overlay/fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
+            <span
+              class="type-label text-ink-muted"
+              id={`decision-${id}-note-label`}>Note</span
+            >
+            <Textarea
+              bind:ref={field}
+              bind:value={note}
+              aria-labelledby={`decision-${id}-note-label`}
+              data-cawco-unkept=""
+              id={`decision-${id}-note`}
+              disabled={!bridge()}
+              onblur={leftNote}
+              oninput={typed}
+              placeholder={props.note ? String(props.note) : "Anything to add"}
+              rows={1}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    {/if}
     {#if advice}
       <p
         class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"

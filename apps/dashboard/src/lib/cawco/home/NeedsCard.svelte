@@ -1,26 +1,24 @@
 <script lang="ts">
   /**
    * One thing parked on the operator, as a row of Caw's panel (NeedsCaw):
-   * a session's permission or question, a project past its spend cap, or a
-   * project's task waiting on you (its review, or a failed attempt), which
-   * opens the task with its deliverable and the way to act on it first. The
-   * session's mark leads (a budget its glyph), then the title and its wait,
-   * what it wants in the words it is asked, and the kind and where. The row
-   * itself opens it (the session at the request, the project's spend) and the panel
-   * closes (`onchoose`). In the wide layout (a desk, an iPad; not a phone)
-   * a session's ask offers Peek at the title line's end, after its wait:
-   * the session's tail, read before answering, and the panel closes as it
-   * does when a row is chosen. A permission is answered here too, with Deny and
-   * Approve as equal peers (DESIGN.md, The Peer Rule): same size, type and
-   * fill strength, tinted fail and done, told apart by hue and glyph;
-   * "Always allow" never appears.
+   * a session's question or permission, an artifact's open pick, a project
+   * past its spend cap, or a project's task waiting on you (its review, or
+   * a failed attempt), which opens the task with its deliverable and the way
+   * to act on it first. The panel is the short list of what waits (tsk-521):
+   * each row carries only what the person needs to pick it. A question is
+   * its own title, wrapped whole; a page says how many picks are left; a
+   * row names its project only when the lane spans several, and its machine
+   * only when it is offline. Its mark leads (the session's, a budget's
+   * glyph), with no status dot: every row here waits on him.
    *
-   * Nothing is optimistic: an answer is the same `permission.answer` command
-   * the session's own card sends, and the row leaves when the hub has taken
-   * it — the request card above that pane's composer leaves with it. A
-   * browser ask's Take over is the card's own take-over (`takeOverBrowser`),
-   * and leaves the same way; taken, the panel closes and the person goes to
-   * the asking session, whose panel the hub opened on the browser.
+   * A session's ask and an artifact's pick are answered in the conversation
+   * he is in, never here: the row's press brings it up on that
+   * conversation's composer, the one he last wrote in when he is in none,
+   * and the panel closes (home/chat-asks `chatAsks`). The open glyph at the
+   * title line's end goes where it lives (its session, its page), and in
+   * the wide layout a session's ask offers Peek there instead, the
+   * session's tail read before answering. A sign-in still opens its
+   * session, where it is signed in.
    *
    * An approved action is the same row with the call laid out under its
    * reason: when it runs (in this browser's zone), the connection and the
@@ -46,18 +44,10 @@
    * Detection and notifications on one press; a refusal says what the
    * browser blocked and where to change it; once allowed, the row's tick.
    *
-   * An artifact waiting on you (core artifact-needs.ts) is a session's row:
-   * its session's mark, its ask and its wait, then why it waits ("3 of 9
-   * picked · 2 unsent · 1 new answer"), then its project, its kind (Page,
-   * Canvas, Components) by its glyph, and its machine. The row opens its
-   * session with the artifact in its panel at its first pending stop. Send
-   * stands at the meta line's end while something is written and not sent,
-   * except on a decision page, whose one Send is its own at its foot (the
-   * owner's pick, "Only the page's own Send"),
-   * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
-   * with its dot, and comes back when it is raised again.
+   * Send stands at an artifact row's last line while something is written
+   * and not sent, except on a decision page, whose one Send is its own at
+   * its foot (the owner's pick, "Only the page's own Send").
    */
-  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { needLinkOf } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
   import type { WaitingOffer } from "@cawco/core/project-conversation";
@@ -68,7 +58,6 @@
   } from "@cawco/core/tailnet-https";
   import { reasonLine } from "@cawco/core/words/artifact-needs";
   import { artifactWords } from "@cawco/core/words/artifacts";
-  import { askWords } from "@cawco/core/words/asks";
   import { configurePage } from "@cawco/core/words/configure";
   import { connectWords } from "@cawco/core/words/connect";
   import { contactWords } from "@cawco/core/words/contact";
@@ -81,7 +70,6 @@
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
-  import type { Component } from "svelte";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
   import {
     actOnRelayCard,
@@ -91,17 +79,12 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
-    IconArtifactCanvas,
-    IconArtifactPage,
-    IconArtifactSheet,
     IconCheck,
     IconClose,
     IconDollar,
     IconError,
     IconExternal,
     IconFolder,
-    IconGlobe,
-    IconInteract,
     IconKey,
     IconLock,
     IconMaximize,
@@ -114,18 +97,14 @@
     IconTailnetHttps,
     IconTick,
     IconWarningTriangle,
-    IconWindow,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { isTyping } from "#lib/utils/typing.js";
-  import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
-  import { conversationHref, rowHref } from "../links";
-  import { notices } from "../notices.svelte";
+  import { conversationHref } from "../links";
   import OriginText from "../OriginText.svelte";
-  import OsMark from "../OsMark.svelte";
   import { allowHere, onPhone, person, skipHere } from "../person.svelte";
   import { sendArtifact } from "../preview/artifact-doc";
   import RowFault from "../RowFault.svelte";
@@ -134,13 +113,9 @@
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { span } from "../span";
-  import {
-    type PermissionAnswer,
-    permissionAnswer,
-  } from "../stores/asks.svelte";
+
   import { boardStore } from "../stores/board.svelte";
-  import { takeOverBrowser } from "../stores/browsers.svelte";
-  import { answerFor, submitCommand } from "../stores/commands.svelte";
+
   import { decideAction } from "../stores/needs.svelte";
   import {
     answerDesignOffer,
@@ -149,7 +124,6 @@
   } from "../stores/offers.svelte";
   import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";
-  import { choices } from "./choices.svelte";
   import {
     askView,
     clock,
@@ -158,6 +132,7 @@
   } from "./home-state.svelte";
   import NeedsMeta from "./NeedsMeta.svelte";
   import NeedsRow from "./NeedsRow.svelte";
+  import { answeredInPlace, answersHere } from "./needs-answer.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
   import StepRow from "./StepRow.svelte";
   import ToolNeedsRow from "./ToolNeedsRow.svelte";
@@ -180,7 +155,20 @@
     }
   });
 
-  const href = $derived.by(() => {
+  /** The panel brings its asks up in his conversation (shaping tsk-521): this one, when it is one. */
+  const answersOf = answersHere();
+  const answers = $derived(answersOf());
+  const inPlace = $derived(answeredInPlace(answers, item));
+
+  /**
+   * Needs you answers in place (shaping tsk-521): the row carries only what
+   * answering needs. A question is its own title, a task its title alone,
+   * a page what is left to pick; the project only when the lane spans
+   * several, the machine only when it is offline; no status dot, since every
+   * row here waits on him.
+   */
+  /** Where it lives: its session at the ask, a page in its session's panel, a task. */
+  const home = $derived.by(() => {
     if (
       item.kind === "tailnet" ||
       item.kind === "desk" ||
@@ -198,6 +186,8 @@
     // An ask opens where it was made (`askView`).
     return conversationHref(askView(item), boardStore.instanceIndex);
   });
+  /** Where a press on the row goes; none for a row whose ask comes up in his conversation. */
+  const href = $derived(inPlace ? undefined : home);
   /** A task's line: its review, its failed attempt, or its questions while it stands in `stage`. */
   const taskWant = (
     reason: "review" | "failed" | null,
@@ -270,6 +260,42 @@
     return "";
   });
 
+  /** The row's first line: a question is its own title when the panel answers it in place. */
+  const leanTitle = $derived(
+    item.kind === "ask" && item.isQuestion ? want : item.title
+  );
+  /** The row's second line, lean: none for a question (it is the title) or a task waiting only on its questions; a page's picks still to make. */
+  const leanWant = $derived.by(() => {
+    if (item.kind === "ask" && item.isQuestion) {
+      return "";
+    }
+    if (item.kind === "task" && item.reason === null) {
+      return "";
+    }
+    if (item.kind === "task" && item.reason === "review") {
+      return "Review the draft";
+    }
+    if (item.kind === "artifact") {
+      const left = item.pending.reduce(
+        (sum, one) => sum + one.asked - one.answered,
+        0
+      );
+      return `${left} left to pick`;
+    }
+    return want;
+  });
+  /** The lean row names its project only when the lane spans several, and its machine only when offline. */
+  const leanPlace = $derived.by(() => {
+    if (!("project" in item)) {
+      return null;
+    }
+    const project =
+      answers?.manyProjects && item.project ? item.project.name : null;
+    const offline = "stale" in item && item.stale ? "machine offline" : null;
+    const said = [project, offline].filter(Boolean).join(" · ");
+    return said || null;
+  });
+
   /** An offer's line: what it asks, in the hub's words for its kind. */
   function offerLine(offer: WaitingOffer): string {
     switch (offer.kind) {
@@ -313,11 +339,6 @@
       offering = null;
     }
   }
-
-  /** What Deny and Approve answer, as their names say it: what it asks and whose it is. */
-  const answered = $derived(
-    item.kind === "ask" ? `${item.ask} on ${item.title}` : ""
-  );
 
   /** An action's call, laid out: when, through what, the tool, and its arguments as JSON. */
   const call = $derived.by(() => {
@@ -459,15 +480,6 @@
     stale || ((item.kind === "ask" || item.kind === "artifact") && item.stale)
   );
 
-  /** An artifact's kind, by its glyph (ArtifactMenu's). */
-  const ARTIFACT_GLYPHS: Record<ArtifactKind, Component> = {
-    page: IconArtifactPage,
-    canvas: IconArtifactCanvas,
-    preview: IconWindow,
-    component: IconArtifactSheet,
-    browser: IconGlobe,
-  };
-
   /**
    * An artifact's Send on its way, and the hub's refusal of it: the row
    * leaves, or its unsent reason does, once the hub has it.
@@ -505,13 +517,6 @@
     }
   }
 
-  /** Not now: acknowledged for every device; it waits in Files until it is raised again. */
-  function notNow(): void {
-    if (item.kind !== "artifact") {
-      return;
-    }
-    notices.acknowledge([item.notNow]).catch(() => undefined);
-  }
   /**
    * A session's ask can be peeked, in the wide layout: a run and a budget
    * have no tail.
@@ -524,96 +529,6 @@
     }
     onchoose();
     openPeek({ viewId: item.instanceId, href: href ?? "", title: item.title });
-  }
-
-  /**
-   * A permission answered on the row, under the `answer` choice. A question
-   * and a connect ask are answered on their own card in the session (a
-   * connect ask by signing in there), which the row opens.
-   */
-  const answerable = $derived(
-    item.kind === "ask" &&
-      !item.isQuestion &&
-      !item.request.connectAsk &&
-      choices.answer === "a"
-  );
-
-  /**
-   * The last answer sent to this ask, from here or from its session's card:
-   * its stage is the row's truth. In flight, both peers hold and the pressed
-   * one spins; refused, the hub's words stand under them and either can be
-   * pressed again. The row leaves when the hub has taken the answer.
-   */
-  const sent = $derived(
-    item.kind === "ask" ? answerFor(item.request.requestId) : null
-  );
-  /**
-   * A browser ask's Take over on its way, and the hub's refusal of it: the
-   * take-over is the transcript card's own (`takeOverBrowser`), and the row
-   * leaves once the hub has taken the ask off every screen.
-   */
-  let taking = $state(false);
-  let takeRefused = $state<string | null>(null);
-  const answering = $derived(
-    taking ||
-      (sent !== null && sent.stage !== "failed" && sent.stage !== "applied")
-  );
-  const answerRefused = $derived.by(() => {
-    if (takeRefused !== null) {
-      return takeRefused;
-    }
-    if (sent?.stage !== "failed") {
-      return null;
-    }
-    return sent.reason
-      ? `Couldn't send that answer. ${sent.reason}`
-      : "Couldn't send that answer.";
-  });
-  /** What an ask is, as its meta line names it. */
-  const askKind = (ask: {
-    isQuestion: boolean;
-    request: { browserAsk?: unknown; connectAsk?: unknown };
-  }): string => {
-    if (ask.request.browserAsk) {
-      return askWords.browserAsk;
-    }
-    if (ask.request.connectAsk) {
-      return askWords.connectAsk;
-    }
-    return ask.isQuestion ? "Question" : "Permission";
-  };
-
-  /** Which peer was pressed here, for its spinner. */
-  let pressed = $state<PermissionAnswer | null>(null);
-
-  async function answer(kind: PermissionAnswer): Promise<void> {
-    if (item.kind !== "ask" || held || answering) {
-      return;
-    }
-    pressed = kind;
-    takeRefused = null;
-    const { browserAsk, requestId } = item.request;
-    if (browserAsk && kind === "allow") {
-      const asker = item.instanceId;
-      taking = true;
-      takeRefused = await takeOverBrowser(requestId, browserAsk);
-      taking = takeRefused === null;
-      if (takeRefused === null) {
-        // The browser opens in the asking session's panel (hub browsers.ts
-        // `openPanel`): the person goes there, as from its card in a
-        // session above it (SessionPane `ontaken`).
-        onchoose();
-        detach(goto(rowHref(asker)), "goto asker");
-      }
-      return;
-    }
-    submitCommand(item.instanceId, item.machineId, {
-      kind: "permission.answer",
-      intent: {
-        requestId: item.request.requestId,
-        result: permissionAnswer(item.request, kind),
-      },
-    });
   }
 
   /**
@@ -685,7 +600,7 @@
   /** The permission's own keys (`y`/`a` approve, `n`/`d` deny) while a control here has focus. */
   function onkeydown(event: KeyboardEvent): void {
     if (
-      !(answerable || approvable) ||
+      !approvable ||
       isTyping() ||
       event.metaKey ||
       event.ctrlKey ||
@@ -696,18 +611,10 @@
     const key = event.key.toLowerCase();
     if (key === "y" || key === "a") {
       event.preventDefault();
-      if (approvable) {
-        decide("approve");
-      } else {
-        answer("allow");
-      }
+      decide("approve");
     } else if (key === "n" || key === "d") {
       event.preventDefault();
-      if (approvable) {
-        decide("deny");
-      } else {
-        answer("deny");
-      }
+      decide("deny");
     }
   }
 </script>
@@ -739,24 +646,6 @@
   {@render dot()}
 {/snippet}
 
-<!-- A meta line's machine after the dot, by its OS mark, its name giving
-     way first; and that it is offline when it is. -->
-{#snippet onMachine(machine: { name: string; os: string }, offline: boolean)}
-  {@render dot()}
-  <span
-    data-slot="machine"
-    class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
-    data-box
-  >
-    <OsMark class="size-icon-md flex-none" os={machine.os} />
-    <span class="min-w-0 overflow-clip text-ellipsis">{machine.name}</span>
-  </span>
-  {#if offline}
-    {@render dot()}
-    <span class="flex-none">machine offline</span>
-  {/if}
-{/snippet}
-
 {#if item.kind === "tool"}
   <ToolNeedsRow {item} {onchoose} />
 {:else if item.kind === "relay"}
@@ -786,9 +675,14 @@
 {:else}
   <!-- A shell ask's command, or a browser ask's origin, takes the line under
        its reason: its place and the peers move down one row. -->
+  {@const command =
+    item.kind === "ask"
+      ? (item.request.presentation.command?.trim().split("\n")[0] ?? "")
+      : ""}
+  <!-- Lean, a command its line already says is said once. -->
+  {@const commandLine = Boolean(command && !leanWant.includes(command))}
   {@const lined = Boolean(
-    item.kind === "ask" &&
-    (item.request.presentation.command || item.request.browserAsk)
+    item.kind === "ask" && (commandLine || item.request.browserAsk)
   )}
   <!-- lead, end and below are this card's; the row's box, cover, title, wait and want are NeedsRow's. -->
   <NeedsRow
@@ -796,12 +690,14 @@
     {held}
     {href}
     kind={item.kind}
+    onpress={inPlace ? () => answers?.press(item.key) : undefined}
     onchoose={chosen}
     {onkeydown}
-    peek={peeks || item.kind === "artifact"}
+    peek={peeks || (inPlace && home !== undefined)}
     share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
-    title={item.title}
-    {want}
+    title={leanTitle}
+    titleWraps={inPlace}
+    want={leanWant}
     wait={item.raisedAt === undefined ? null : span(clock.now - item.raisedAt)}
   >
     {#snippet lead()}
@@ -810,7 +706,7 @@
           caw={cawOf(item.instanceId)}
           id={item.instanceId}
           place={item.cwd || item.machineId}
-          status="attn"
+          status="idle"
         />
       {:else if item.kind === "desk"}
         {#if item.done}
@@ -904,39 +800,44 @@
             {/snippet}
           </Tip>
         </span>
-      {:else if item.kind === "artifact"}
-        <!-- Not now: the first line's trailing cell, a notice's ✕ (NoticeRow),
-           its ink on the panel's one trailing edge; always shown, to a mouse
-           as to a finger, which gets the house's 44px area moved back
-           inboard by `--peek-ink`. -->
+      {:else if inPlace && home}
+        <!-- Where it lives, opened: its session at the question, or the page
+           in its session's panel; the press on the row answers it here. The
+           first line's trailing cell, as Peek stands. -->
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
           style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
           style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
-          <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
+          <Tip
+            disabled={peekTipOff()}
+            label={item.kind === "artifact" ? "Open page" : "Open session"}
+          >
             {#snippet children(tip)}
-              <button
-                data-needs-card-not-now
+              <a
                 {...tip}
-                aria-label={artifactWords.notNowNamed(item.title)}
-                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
-                onclick={notNow}
-                style:--x-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--x-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
-                style:--x-press="scale(var(--press-scale))"
-                type="button"
+                aria-label="{item.kind === 'artifact'
+                  ? 'Open page'
+                  : 'Open session'}: {item.title}"
+                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong"
+                href={home}
+                onclick={chosen}
               >
-                <IconClose aria-hidden="true" class="size-(--peek-glyph)" />
-              </button>
+                <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
+                <span class="sr-only"
+                  >{item.kind === "artifact"
+                    ? "Open page"
+                    : "Open session"}</span
+                >
+              </a>
             {/snippet}
           </Tip>
         </span>
       {/if}
     {/snippet}
     {#snippet below()}
-      {#if item.kind === "ask" && item.request.presentation.command}
+      {#if item.kind === "ask" && commandLine}
         <!-- What runs, under why: its first line, so Approve here is made on
            the command as much as on the card. A shell ask's command: one
            line under its reason, in the transcript's command rule, cut with
@@ -944,7 +845,7 @@
         <code
           data-slot="needs-command"
           class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
-          >{item.request.presentation.command.trim().split("\n")[0]}</code
+          >{command}</code
         >
       {/if}
       {#if item.kind === "ask" && item.request.browserAsk}
@@ -957,55 +858,28 @@
           ><OriginText origin={item.request.browserAsk.origin} /></code
         >
       {/if}
-      {#if item.kind === "ask"}
-        <!-- Where it came from: the project first, in its mark and strong ink;
-           then what it asks for; then the machine, by its OS mark. The meta
-           line of an ask: the project leads, its name a name (label role,
-           strong ink) beside its folder in the project's hue; the machine
-           follows by its OS mark; a session's name and the machine's name give
-           way first. Both marks stand at the house's 16px icon size
-           (`icon-md`), the box OsMark is drawn on: at 14px its marks were
-           scaled off their pixel grid and read as a smudge at 1x. -->
-        <span
-          data-where
-          data-slot="meta"
-          class={[
-            "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-            lined ? "row-4" : "row-3",
-          ]}
-        >
-          {#if item.project}
-            {@render projectMark(item.project)}
-          {/if}
-          <span class="flex-none">{askKind(item)}</span>
-          {@render onMachine(item.machine, item.stale)}
-        </span>
-      {:else if item.kind === "artifact"}
-        {@const Kind = ARTIFACT_GLYPHS[item.artifactKind]}
-        <!-- Where it came from, as an ask's: its project first, then its kind
-           by its glyph where an ask says "Question", then its machine. Send
-           ends the line while something is written and not sent. -->
-        <span
-          data-where
-          data-slot="meta"
-          class={[
-            "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-            sends ? "col-end-3" : "col-end-4",
-          ]}
-        >
-          {#if item.project}
-            {@render projectMark(item.project)}
-          {/if}
+      {#if item.kind === "ask" || item.kind === "task"}
+        {#if leanPlace}
           <span
-            data-slot="artifact-kind"
-            class="mark-line inline-flex flex-none items-center gap-space-1"
-            data-box
+            data-slot="meta"
+            class={[
+              "pointer-events-none relative col-start-2 col-end-4 min-w-0 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+              lined ? "row-4" : "row-3",
+            ]}>{leanPlace}</span
           >
-            <Kind aria-hidden="true" class="size-icon-md flex-none" data-box />
-            <span>{artifactWords.kindWord[item.artifactKind]}</span>
-          </span>
-          {@render onMachine(item.machine, item.stale)}
-        </span>
+        {/if}
+      {:else if item.kind === "artifact"}
+        <!-- Its project when the lane spans several, its machine when offline;
+           Send ends the line while something is written and not sent. -->
+        {#if leanPlace}
+          <span
+            data-slot="meta"
+            class={[
+              "pointer-events-none relative col-start-2 row-3 min-w-0 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+              sends ? "col-end-3" : "col-end-4",
+            ]}>{leanPlace}</span
+          >
+        {/if}
         {#if sends}
           <!-- Send: the kit's sm ghost over the row's cover, its last figure's
              ink on the trailing edge: it hangs past by what stands between
@@ -1169,19 +1043,8 @@
             {/each}
           </ol>
         {/if}
-      {:else if item.kind === "task"}
-        <span
-          data-where
-          data-slot="meta"
-          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-        >
-          {#if item.project}
-            {@render projectMark(item.project)}
-          {/if}
-          <span class="flex-none">Task</span>
-          {@render dot()}
-          <span class="flex-none num">{item.taskId}</span>
-        </span>
+      {:else if item.kind === "desk" && !item.done}
+
       {:else if item.kind === "desk" && !item.done}
         <!-- Where it comes from, then Skip and Allow as peers (The Peer
            Rule) on the same line while the row has the room (a desk's
@@ -1236,66 +1099,8 @@
       {:else}
         <NeedsMeta text={meta} />
       {/if}
-      {#if item.kind === "ask" && answerable}
-        <!-- Deny then Approve together at the trailing edge, the same size, each
-           tinted by what it does: Deny in the fail status's fill and ink,
-           Approve in the done status's, the house's success pair (go, not
-           "working"). Both pairs are their hue's 3-step mixed 24% toward its
-           9-step, so they are equal in salience (The Peer Rule): the same fill
-           strength, and neither changes under the pointer, as the grant
-           variant holds still, so neither is made the more inviting. On a
-           finger the gap opens (The 44 Touch Rule), the separation the rule's
-           opposite ends gave a rushed thumb. -->
-        <div
-          data-slot="peers"
-          class={[
-            "relative col-start-2 col-end-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4",
-            lined ? "row-5" : "row-4",
-          ]}
-        >
-          {#if answerRefused}
-            <ErrorText
-              message={answerRefused}
-              title="The hub refused that answer"
-            />
-          {/if}
-          <Button
-            data-deny
-            aria-label="Deny {answered}"
-            answer="deny"
-            hit="always"
-            disabled={held || (answering && pressed !== "deny")}
-            failed={answerRefused !== null && pressed === "deny"}
-            icon={IconClose}
-            label="Deny"
-            onclick={() => answer("deny")}
-            {onkeydown}
-            pending={answering && pressed === "deny"}
-            pendingLabel="Denying…"
-            size="sm"
-            variant="secondary"
-          />
-          <Button
-            data-approve
-            aria-label="{item.request.browserAsk
-              ? 'Take over'
-              : 'Approve'} {answered}"
-            answer="approve"
-            hit="always"
-            disabled={held || (answering && pressed !== "allow")}
-            failed={answerRefused !== null && pressed === "allow"}
-            icon={item.request.browserAsk ? IconInteract : IconTick}
-            label={item.request.browserAsk ? askWords.takeOver : "Approve"}
-            onclick={() => answer("allow")}
-            {onkeydown}
-            pending={answering && pressed === "allow"}
-            pendingLabel={item.request.browserAsk
-              ? askWords.takingOver
-              : "Approving…"}
-            size="sm"
-            variant="secondary"
-          />
-        </div>
+      {#if item.kind === "tailnet" && item.done}
+
       {:else if item.kind === "tailnet" && item.done}
         <!-- Ticked: the https dashboard to open. -->
         <div

@@ -15,6 +15,7 @@
   import { barGlass, glassPlacement } from "../bar-glass.svelte";
   import CawPanel from "./CawPanel.svelte";
   import type { CawFeed } from "./caw-feed.svelte";
+  import { liveAnswers } from "./chat-asks.svelte";
 
   let { feed, open = $bindable(true) }: { feed: CawFeed; open?: boolean } =
     $props();
@@ -63,6 +64,7 @@
       }
     >
       <CawPanel
+        answers={liveAnswers}
         {feed}
         onchoose={() => undefined}
         quiet={cawHeadWords.caughtUp}

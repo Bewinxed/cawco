@@ -37,16 +37,21 @@
   import ArtifactNoticeRow from "./ArtifactNoticeRow.svelte";
   import CawFace from "./CawFace.svelte";
   import type { CawFeed } from "./caw-feed.svelte";
+  import { askCount } from "./home-state.svelte";
   import MovedLogins from "./MovedLogins.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import NeedsWork from "./NeedsWork.svelte";
+  import { type NeedsAnswers, provideAnswers } from "./needs-answer.svelte";
   import UpdateCard, { forgetFold } from "./UpdateCard.svelte";
 
   let {
     feed,
     quiet,
     onchoose,
+    answers = null,
   }: {
+    /** A row's press brings its ask up in his conversation (home/chat-asks); none: each row opens where it lives. */
+    answers?: NeedsAnswers | null;
     feed: CawFeed;
     /** What he says with nothing to count (NeedsCaw `quiet`). */
     quiet: string;
@@ -82,8 +87,32 @@
       rows.disconnect();
     };
   }
+  /** The lane holds more than one project's rows: each names its project. */
+  const manyProjects = $derived(
+    new Set(
+      feed.needs.flatMap((entry) =>
+        (entry.kind === "work" ? entry.items : [entry]).flatMap((one) =>
+          "project" in one && one.project ? [one.project.name] : []
+        )
+      )
+    ).size > 1
+  );
+  // A row's press brings its ask up in his conversation, and the panel closes.
+  provideAnswers(() =>
+    answers
+      ? {
+          manyProjects,
+          press: (key) => {
+            answers.press(key);
+            onchoose();
+          },
+        }
+      : null
+  );
   const stale = $derived(!feed.live);
   const needs = $derived(feed.needs);
+  /** What waits on him, as its head counts it (home-state `askCount`). */
+  const asking = $derived(askCount(needs));
   const updated = $derived(feed.updated);
   const moved = $derived(feed.moved);
   const rebalanced = $derived(feed.rebalanced);
@@ -205,7 +234,7 @@
           id="caw-needs">{commonWords.needsYou}</span
         >
         <span data-slot="count" class="type-meta num text-ink-muted"
-          >{needs.length}</span
+          >{asking}</span
         >
       </div>
       <ul class="m-0 list-none p-0" {@attach echoBeat()}>

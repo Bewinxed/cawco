@@ -16,6 +16,8 @@
     want,
     wait = null,
     href,
+    onpress,
+    titleWraps = false,
     held = false,
     peek = false,
     artifact,
@@ -35,11 +37,15 @@
     wait?: string | null;
     /** Where a press on the row goes; none for a row answered in place. */
     href?: string;
+    /** A press on the row brings its ask up in his conversation instead of opening where it lives. */
+    onpress?: () => void;
+    /** The title is the question itself (Needs you answering in place): it wraps whole, never cut. */
+    titleWraps?: boolean;
     /** It stands but cannot be answered yet: dimmed. */
     held?: boolean;
     /** The title line ends in a control (Peek, Not now): its room is kept clear. */
     peek?: boolean;
-    /** An artifact's id: its row's hook, and its end control's glyph and ink. */
+    /** An artifact's id: its row's hook. */
     artifact?: string;
     /** The pane it opens, for a move's flight (`data-share`). */
     share: string;
@@ -69,15 +75,12 @@
   data-flip
   data-artifact={artifact}
   data-kind={kind}
+  data-wraps={titleWraps || undefined}
   data-peek={peek || undefined}
   data-share={share}
   data-stale={held || undefined}
-  style:--peek-glyph={artifact === undefined
-    ? "var(--spacing-c-peek-glyph)"
-    : "var(--spacing-icon-sm)"}
-  style:--peek-ink={artifact === undefined
-    ? "calc((var(--spacing-c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
-    : "calc((var(--spacing-c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"}
+  style:--peek-glyph="var(--spacing-c-peek-glyph)"
+  style:--peek-ink={"calc((var(--spacing-c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
   style:--peek-room={"calc(var(--spacing-c-btn-h-xs) - var(--peek-ink) + var(--spacing-space-2))"}
   style:--row-cols="auto minmax(0, 1fr) auto"
 >
@@ -94,13 +97,23 @@
       onclick={onchoose}
       {onkeydown}><span class="sr-only">Open {title}</span></a
     >
+  {:else if onpress}
+    <!-- Its ask comes up in his conversation: the press brings it there. -->
+    <button
+      data-slot="cover"
+      aria-label="Answer {title}"
+      class="press-tint focus-inset absolute inset-0 rounded-inherit border-none bg-transparent p-0 hover:bg-surface-hover"
+      onclick={onpress}
+      {onkeydown}
+      type="button"
+    ></button>
   {/if}
   <!-- The session's own mark, as the rail draws it; a run and a budget their
        glyphs; centred in the panel's one leading column, a notice's tile
        wide (NoticeRow), so both groups' words start on one line. -->
   <span
     data-slot="lead"
-    class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
+    class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted group-data-wraps/row:self-start"
   >
     {@render lead()}
   </span>
@@ -111,14 +124,18 @@
   <span
     data-slot="name"
     class={[
-      "mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong",
+      "mark-text pointer-events-none relative col-2 row-1 min-w-0 type-label text-ink-strong",
+      titleWraps ? "self-start" : "self-center",
+      titleWraps
+        ? "text-pretty wrap-anywhere"
+        : "overflow-clip text-ellipsis whitespace-nowrap",
       wait === null && "group-data-peek/row:pe-(--peek-room)",
     ]}>{title}</span
   >
   {#if wait !== null}
     <span
       data-slot="wait"
-      class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted group-data-peek/row:me-(--peek-room)"
+      class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted group-data-peek/row:me-(--peek-room) group-data-wraps/row:self-start"
       >{wait}</span
     >
   {/if}

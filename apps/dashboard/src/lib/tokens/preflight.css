@@ -510,10 +510,8 @@
 :where(.after\:z-1)::after,
 :where(.coarse\:after\:end-\(--hit-end\))::after,
 :where(.coarse\:after\:end-\(--peek-hit-end\))::after,
-:where(.coarse\:after\:end-\(--x-hit-end\))::after,
 :where(.coarse\:after\:start-\(--hit-start\))::after,
 :where(.coarse\:after\:start-\(--peek-hit-start\))::after,
-:where(.coarse\:after\:start-\(--x-hit-start\))::after,
 :where(
   .data-\[direction\=vertical\]\:after\:-translate-y-1\/2[data-direction="vertical"]
 )::after,

@@ -78,6 +78,7 @@
   import FinderCard from "./find/FinderCard.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
+  import { liveAnswers } from "./home/chat-asks.svelte";
   import { lightbox } from "./lightbox/lightbox-state.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { cawQuiet } from "./NeedsCaw.svelte";
@@ -597,7 +598,12 @@
         {@attach mountFace(one.card)}
       >
         {#if one.card === "caw"}
-          <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
+          <CawPanel
+            answers={liveAnswers}
+            feed={liveFeed}
+            onchoose={close}
+            quiet={cawQuiet()}
+          />
         {:else if one.card === "machines"}
           <!-- The list scrolls inside the card, held to the room under the bar as Caw's panel's is (CawPanel `--list-max`). -->
           <div

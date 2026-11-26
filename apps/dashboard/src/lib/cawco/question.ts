@@ -1,7 +1,4 @@
-import {
-  answeredQuestionInput,
-  QUESTION_DISMISSED,
-} from "@cawco/core/question";
+import { answeredQuestionInput } from "@cawco/core/question";
 import type {
   PermissionResult,
   UserAnswers,
@@ -29,12 +26,6 @@ export function questionAnswer(
  */
 export const CLI_REJECTED =
   "The user doesn't want to proceed with this tool use.";
-
-/** Walking away from a question, which is a denial — the CLI answers its own the same way. */
-export const questionDismissal: PermissionResult = {
-  behavior: "deny",
-  message: QUESTION_DISMISSED,
-};
 
 /**
  * A question standing open on the page: its options, or the answer field a

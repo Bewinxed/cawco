@@ -7,7 +7,7 @@
  * queued after the asks that hold its turn, oldest first, and answered there
  * as it is where it lives (`picked` on the graph, the card's pick and note on
  * its page), answered there in his own words (core choices.ts
- * `ownWordsEntry`, on the same key), or dismissed (`dismissedEntry`); once
+ * `ownWordsEntry`, on the same key); once
  * answered or dismissed, the
  * transcript keeps it at the call that opened it. `GET /api/instances/:id/parked` answers it; the dashboard reads it again
  * on each `artifact.needs` frame, as it does the session's questions.

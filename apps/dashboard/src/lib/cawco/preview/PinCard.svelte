@@ -46,6 +46,7 @@
   import type { CommentAttachment, Pin } from "@cawco/core/comments/model";
   import type { Named } from "@cawco/core/named";
   import { referenceHref } from "@cawco/core/references";
+  import type { PermissionResult } from "@cawco/core/session-messages";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
@@ -87,8 +88,10 @@
   import { refusals } from "../refusals.svelte";
   import { keysChecked } from "../repeated-keys";
   import type { SendExtras } from "../send-store";
+  import type { PendingPermission } from "../stores/sessions.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
+  import Prompt from "../transcript/Prompt.svelte";
   import Shot from "../transcript/Shot.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
@@ -126,7 +129,18 @@
     changes,
     fromChip = false,
     away,
+    questions = {},
+    onanswer,
   }: {
+    /**
+     * The questions an agent's replies carry (`comment_reply`'s question),
+     * open, by their ask's id (core `ThreadEntry.ask`): each is drawn under
+     * its reply as the question card draws it everywhere (Prompt), its
+     * options, Other and Answer (shaping tsk-521).
+     */
+    questions?: Record<string, PendingPermission>;
+    /** A question of the thread answered here: its session hears it as from its own card; the id of the command it went out as, or null. */
+    onanswer?: (ask: string, result: PermissionResult) => string | null;
     /**
      * Opened from its chip in a conversation (the transcript's popover): its
      * head keeps Resolve or Reopen and Close, without Delete comment and ⋯,
@@ -791,6 +805,18 @@
             {:else}
               <Who name={agentName.lead} shown timestamp={entry.at} />
               <MessageBody source={entry.text} wrap="pretty" />
+            {/if}
+            {#if entry.ask && questions[entry.ask] && onanswer}
+              {@const ask = entry.ask}
+              <div data-slot="entry-question" class="mt-space-1 min-w-0">
+                <Prompt
+                  asker={agentName.lead}
+                  onanswer={(result) => onanswer(ask, result)}
+                  request={questions[ask]}
+                  seated="thread"
+                  shown
+                />
+              </div>
             {/if}
             {#if entry.files?.length}
               <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">

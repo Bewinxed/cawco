@@ -11,8 +11,8 @@
  * `joinArtifact`), as the panel holds it: a pick or a note made on the
  * graph or the page shows in the composer at once, and the composer's pick
  * is written there exactly as the graph's head or the page's option writes
- * it; an answer in his own words (core choices.ts `ownWordsEntry`) and its
- * Dismiss (`dismissedEntry`) are written there too, on the same key.
+ * it; an answer in his own words (core choices.ts `ownWordsEntry`) is
+ * written there too, on the same key.
  * Answered here, an item leaves the queue at once. Answered where it
  * lives while it stands here, the composer says what was picked for a beat
  * ({@link ELSEWHERE_MS}) before it folds back.
@@ -84,6 +84,12 @@ export interface ParkedQueueInput {
   instanceId: () => string;
   /** The pane is on screen and the hub holds the session's row: only then is the list read. */
   onScreen: () => boolean;
+  /**
+   * Other sessions whose open picks this pane's composer parks too, its
+   * conversation being the one he is in (tsk-521, home/chat-asks): each
+   * artifact of theirs waiting on him. Empty while it is not his.
+   */
+  others?: () => string[];
   /** The item the composer stands at, by its id (core `parkedId`); null while it stands at none of these. */
   standing: () => string | null;
 }
@@ -91,6 +97,10 @@ export interface ParkedQueueInput {
 export class ParkedQueue {
   /** The hub's last list, oldest first; empty before the first read lands. */
   items = $state<ParkedItem[]>([]);
+  /** The hub's last list of each other session it parks the picks of, by that session. */
+  othersItems = $state<Record<string, ParkedItem[]>>({});
+  /** Every other session it parks the picks of has been read since they were named. */
+  othersRead = $state(true);
   /** The artifact whose doc the pane holds, and its choices as the doc says them now. */
   held = $state<{
     artifactId: string;
@@ -121,18 +131,42 @@ export class ParkedQueue {
     })
   );
 
-  /** The item the composer stands at; null while it stands at none of these. */
+  /** Other sessions' items still waiting on him, each with its session: what the composer parks after its own. */
+  readonly othersOpen = $derived.by(() =>
+    Object.entries(this.othersItems).flatMap(([instance, items]) =>
+      items
+        .filter((item) => {
+          const id = parkedId(item);
+          return (
+            parkedOpen(item) &&
+            !this.#answeredHere.has(id) &&
+            !this.#answeredThere.has(id)
+          );
+        })
+        .map((item) => ({ instance, item }))
+    )
+  );
+
+  /** The item the composer stands at, with the session that holds it; null while it stands at none of these. */
   readonly #standing = $derived.by(() => {
     const id = this.#input.standing();
-    return this.open.find((item) => parkedId(item) === id) ?? null;
+    const own = this.open.find((item) => parkedId(item) === id);
+    if (own) {
+      return { instance: this.#input.instanceId(), item: own };
+    }
+    return this.othersOpen.find((one) => parkedId(one.item) === id) ?? null;
   });
 
-  /** The artifact of the item the composer stands at: its doc is held while it does. */
-  readonly #heldArtifact = $derived(this.#standing?.artifact.id ?? null);
+  /** The artifact of the item the composer stands at, and its session: its doc is held while it does. */
+  readonly #heldArtifact = $derived(
+    this.#standing
+      ? `${this.#standing.instance}\n${this.#standing.item.artifact.id}`
+      : null
+  );
 
   /** The item the composer stands at, by its id, and what it was answered with where it lives; null while it wasn't. */
   readonly #standingAnswered = $derived.by(() => {
-    const item = this.#standing;
+    const item = this.#standing?.item;
     if (!item) {
       return null;
     }
@@ -166,13 +200,23 @@ export class ParkedQueue {
       needsStore.questionsMoved();
       this.#read(input.instanceId());
     });
-    // The doc of the item the composer stands at, held while it does.
+    // Each other session whose picks it parks, read with its own.
     $effect(() => {
-      const artifactId = this.#heldArtifact;
-      const instanceId = input.instanceId();
-      if (!artifactId) {
+      const others = input.others?.() ?? [];
+      if (!input.onScreen()) {
         return;
       }
+      needsStore.questionsMoved();
+      this.#readOthers(others);
+    });
+    // The doc of the item the composer stands at, held while it does, from
+    // the session that holds it.
+    $effect(() => {
+      const held = this.#heldArtifact;
+      if (!held) {
+        return;
+      }
+      const [instanceId = "", artifactId = ""] = held.split("\n");
       this.held = { artifactId, choices: {} };
       const doc = joinArtifact(
         instanceId,
@@ -246,13 +290,6 @@ export class ParkedQueue {
     return doc ? doc.answerInWords(keyOf(item), words) : parkedWords.joining;
   };
 
-  /** `item` put down here without a pick or a word, kept on its artifact the same way; a sentence when it was not kept. */
-  dismiss = (item: ParkedItem): string | null => {
-    this.#touched.add(parkedId(item));
-    const doc = this.#docOf(item);
-    return doc ? doc.dismiss(keyOf(item)) : parkedWords.joining;
-  };
-
   /** The doc held here when it is `item`'s artifact's; null while none is. */
   readonly #docOf = (item: ParkedItem): ArtifactDoc | null =>
     this.held?.artifactId === item.artifact.id ? this.#doc : null;
@@ -266,6 +303,40 @@ export class ParkedQueue {
   again = (): void => {
     this.#read(this.#input.instanceId());
   };
+
+  /** The newest read of the others asked: an older one landing after it is let go. */
+  #askedOthers = 0;
+
+  /**
+   * Each other session's list read again; a session no longer named drops
+   * out, and one whose read fails keeps its last list, said in the log.
+   */
+  #readOthers(others: string[]): void {
+    this.#askedOthers += 1;
+    const asked = this.#askedOthers;
+    this.othersItems = Object.fromEntries(
+      others.map((id) => [id, untrack(() => this.othersItems[id]) ?? []])
+    );
+    let waiting = others.length;
+    this.othersRead = waiting === 0;
+    for (const id of others) {
+      detach(
+        hubData(hub.api.instances({ id }).parked.get({ query: { every: "1" } }))
+          .then((read) => {
+            if (asked === this.#askedOthers) {
+              this.othersItems = { ...this.othersItems, [id]: read.items };
+            }
+          })
+          .finally(() => {
+            waiting -= 1;
+            if (asked === this.#askedOthers && waiting === 0) {
+              this.othersRead = true;
+            }
+          }),
+        "read another session's parked picks"
+      );
+    }
+  }
 
   /** The hub's list read again; one that fails leaves the last standing, said in the log, and the next move reads again. */
   #read(id: string): void {

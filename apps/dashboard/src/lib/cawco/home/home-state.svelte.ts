@@ -593,7 +593,7 @@ interface TaskItem {
  * the artifact in its panel at its first pending stop; its Send sends what
  * is unsent; its Not now puts it away until it is raised again.
  */
-interface ArtifactItem {
+export interface ArtifactItem {
   artifactId: string;
   artifactKind: ArtifactKind;
   /** Its title, as its panel and Files name it. */
@@ -609,8 +609,6 @@ interface ArtifactItem {
   /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
   machine: { name: string; os: string };
   machineId: string;
-  /** The notice id its Not now acknowledges. */
-  notNow: string;
   /** A decision page: its Send is its own, at its foot, and the row stands none. */
   ownSend: boolean;
   /** Its reasons, strongest first. */
@@ -665,6 +663,22 @@ export interface WorkItem {
 
 /** One row of Needs you: a thing waiting on you, or a piece of work with several. */
 export type NeedsEntry = NeedsItem | WorkItem;
+
+/**
+ * How many things wait on him in Needs you, as its head and Caw's badge
+ * count them: every row that asks him something. A piece of work counts its
+ * questions, and its task only when the task itself waits on him (in
+ * review, or failed); a task that only heads its questions is their heading.
+ */
+export const askCount = (entries: readonly NeedsEntry[]): number =>
+  entries.reduce(
+    (sum, entry) =>
+      sum +
+      (entry.kind === "work"
+        ? entry.items.length + (entry.task?.reason ? 1 : 0)
+        : 1),
+    0
+  );
 
 export type NeedsItem =
   | ToolItem
@@ -1440,7 +1454,6 @@ class Home {
           stop: need.stop,
           unsent: need.unsent,
           ownSend: need.ownSend,
-          notNow: need.notNow,
           raisedAt: need.raisedAt,
           href: need.href,
           place: row ? placeOfRow(row) : machineName(need.machineId),

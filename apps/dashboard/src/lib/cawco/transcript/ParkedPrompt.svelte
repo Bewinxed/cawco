@@ -12,22 +12,19 @@
    *   on the card). The drawing is the graph's own stage (`drawing`,
    *   DirectionStage). Each name is an option chip with its digit: a press,
    *   Space or the digit picks, writing the graph's `picked` as the graph
-   *   head's Pick does. Open graph brings the graph to the front of the
-   *   panel.
+   *   head's Pick does.
    * - **A decision card** (its page's): the page's own card (decisions/host
-   *   Decision and Option), its question, its options with Recommended and
-   *   its why, Add a note, each option's digit, drawn bare on the composer's
-   *   surface. A press picks; a several-pick card picks until Answer. Its
-   *   note goes with a pick, never alone. Open page opens its page in the
-   *   panel at the card.
+   *   Decision and Option), its question, its options with Recommended,
+   *   what each gets and costs and the agent's reason, each option's digit,
+   *   and Other as its last option, drawn bare on the composer's surface. A
+   *   press picks; a several-pick card picks until Answer.
    *
-   * Either is answered as a question is (Prompt): its Other chip opens a
-   * line for an answer in the person's own words, which Answer or Enter
-   * sends, kept on its artifact as his answer with no pick (parked-queue
-   * `answerInWords`); Dismiss puts it down without a word (parked-queue
-   * `dismiss`). Its session hears either as it hears a pick. A pick made
-   * after the line opened is the answer, and the line goes back to
-   * waiting, its words unsent.
+   * Only what answering needs stands on it (tsk-521): no Dismiss, no Open
+   * and no note. Other opens a line for an answer in the person's own
+   * words, which Answer or Enter sends, kept on its artifact as his answer
+   * with no pick (parked-queue `answerInWords`); its session hears it as it
+   * hears a pick. A pick made after the line opened is the answer, and the
+   * line goes back to waiting, its words unsent.
    *
    * Picked where it lives meanwhile, the chosen option is drawn chosen and
    * the line says where, before the composer folds back. Its title, body and
@@ -56,6 +53,7 @@
     IconCompare,
     IconDecisions,
   } from "#lib/icons.js";
+  import { cardProps, isOptionNode } from "../decisions/host/card-props";
   import Decision from "../decisions/host/Decision.svelte";
   import Option from "../decisions/host/Option.svelte";
   import {
@@ -74,9 +72,7 @@
     onpick,
     onchoose,
     onwords,
-    ondismiss,
     onanswered,
-    onopen,
     onminimize,
   }: {
     /** The item, as the hub listed it. */
@@ -101,12 +97,8 @@
     ) => string | null;
     /** Answered here in the person's own words, with no pick: kept on its artifact; a sentence when it was not. */
     onwords: (words: string) => string | null;
-    /** Put down here without a pick or a word: kept on its artifact; a sentence when it was not. */
-    ondismiss: () => string | null;
-    /** Answered or dismissed here: the composer folds back and the next comes in. */
+    /** Answered here: the composer folds back and the next comes in. */
     onanswered: () => void;
-    /** Where it lives, opened in the panel. */
-    onopen: () => void;
     /** Folds it down to its bar over the composer, answering nothing. */
     onminimize?: () => void;
   } = $props();
@@ -121,7 +113,6 @@
   const NOT_KEPT = {
     pick: words.notKept,
     words: words.wordsNotKept,
-    dismiss: words.dismissNotKept,
   };
 
   /** A direction's pick, as its graph keeps it. */
@@ -178,15 +169,6 @@
     }
   }
 
-  /** Put down without a pick or a word: the pick folds away and its session hears it. */
-  function dismiss() {
-    writing = "dismiss";
-    refused = ondismiss();
-    if (refused === null) {
-      onanswered();
-    }
-  }
-
   /** Enter sends the line's words; Esc puts the line down, the keys back on Other. */
   function otherKey(event: KeyboardEvent) {
     if (event.key === "Escape") {
@@ -231,6 +213,19 @@
   /** The card stands on this host: its picks and note are the composer's, written to its page. */
   setContext<DecisionHost>(DECISION_HOST, {
     bare: true,
+    // The card draws Other as its last option; the line and its words stay this card's.
+    other: {
+      open: () => otherOpen,
+      press: openOther,
+      text: () => own,
+      write: (text) => {
+        own = text;
+      },
+      keys: otherKey,
+      field: (field) => {
+        otherField = field;
+      },
+    },
     picks: () => (cardEntry ? { [cardId]: cardEntry } : {}),
     bridge: () => ({
       note: (_choice, text) => {
@@ -276,45 +271,9 @@
     }
   }
 
-  /** An option as the card's program names it. */
-  interface OptionNode {
-    props: {
-      builds?: string;
-      cost?: string;
-      id: string;
-      label: string;
-      line?: string;
-      recommended: boolean;
-    };
-    typeName: "Option";
-  }
-  const isOptionNode = (value: unknown): value is OptionNode =>
-    typeof value === "object" &&
-    value !== null &&
-    "typeName" in value &&
-    value.typeName === "Option";
-
   /** The card as the page's program would hand it its Decision. */
   const decisionProps = $derived(
-    item.kind === "card"
-      ? {
-          id: item.card.id,
-          question: item.card.question,
-          why: item.card.why || undefined,
-          multiple: item.card.multiple,
-          options: item.card.options.map((option): OptionNode => ({
-            typeName: "Option",
-            props: {
-              id: option.id,
-              label: option.label,
-              line: option.line || undefined,
-              cost: option.cost || undefined,
-              builds: option.builds,
-              recommended: option.recommended,
-            },
-          })),
-        }
-      : null
+    item.kind === "card" ? cardProps(item.card) : null
   );
 
   // Once it stands, and nothing else holds the keys (the composer's field
@@ -502,36 +461,39 @@
          chip and its line side by side in one row of a fixed height, so
          nothing under the thumb moves as the line opens (Prompt's browser
          ask). -->
-    <div
-      class="mt-space-3 flex h-c-input-h min-w-0 items-center gap-space-2"
-      data-slot="other"
-    >
-      <OptionGroup
-        aria-label={askWords.yourAnswerTo(asked)}
-        class="flex-none"
-        value={otherOpen ? [OTHER] : []}
+    {#if item.kind === "directions"}
+      <div
+        class="mt-space-3 flex h-c-input-h min-w-0 items-center gap-space-2"
+        data-slot="other"
       >
-        <OptionGroupItem onclick={openOther} value={OTHER}>
-          <span class="min-w-0 text-pretty wrap-anywhere" data-slot="opt-label"
-            >{words.other}</span
-          >
-        </OptionGroupItem>
-      </OptionGroup>
-      {#if otherOpen}
-        <Input
+        <OptionGroup
           aria-label={askWords.yourAnswerTo(asked)}
-          class="flex-1"
-          data-other
-          oninput={(event) => {
-            own = event.currentTarget.value;
-          }}
-          onkeydown={otherKey}
-          placeholder={askWords.yourAnswer}
-          value={own}
-          bind:ref={otherField}
-        />
-      {/if}
-    </div>
+          class="flex-none"
+          value={otherOpen ? [OTHER] : []}
+        >
+          <OptionGroupItem onclick={openOther} value={OTHER}>
+            <span
+              class="min-w-0 text-pretty wrap-anywhere"
+              data-slot="opt-label">{words.other}</span
+            >
+          </OptionGroupItem>
+        </OptionGroup>
+        {#if otherOpen}
+          <Input
+            aria-label={askWords.yourAnswerTo(asked)}
+            class="flex-1"
+            data-other
+            oninput={(event) => {
+              own = event.currentTarget.value;
+            }}
+            onkeydown={otherKey}
+            placeholder={askWords.yourAnswer}
+            value={own}
+            bind:ref={otherField}
+          />
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div
@@ -563,21 +525,6 @@
           size="sm"
         />
       {/if}
-      <!-- Puts it down without a word, as a question's Dismiss does. -->
-      <Button
-        fit="prompt"
-        label={words.dismiss}
-        onclick={dismiss}
-        size="sm"
-        variant="outline"
-      />
-      <Button
-        fit="prompt"
-        label={item.kind === "directions" ? words.openGraph : words.openPage}
-        onclick={onopen}
-        size="sm"
-        variant="outline"
-      />
     </div>
   </div>
 </section>

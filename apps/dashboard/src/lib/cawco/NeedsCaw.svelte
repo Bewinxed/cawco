@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { cawHeadWords } from "@cawco/core/words/caw-head";
   import { needs as needCount } from "@cawco/core/words/helpers";
-  import { home } from "./home/home-state.svelte";
+  import { askCount, home } from "./home/home-state.svelte";
   import { boardStore } from "./stores/board.svelte";
 
   /**
@@ -116,7 +116,7 @@
   };
 
   const needs = $derived(home.needs);
-  const count = $derived(needs.length);
+  const count = $derived(askCount(needs));
   const noticeCount = $derived(cawNotices.count);
   const quiet = $derived(cawQuiet());
   /** "· 2 notices" after what he says, while any notice stands. */

@@ -80,7 +80,11 @@ export const PAGE_HASH = /^[0-9a-f]{64}$/u;
 
 /** One change the page asks for: exactly one of options, note or value. */
 export type ChoiceChange = { choice: string; pageHash: string } & (
-  { options: string[] } | { note: string } | { value: unknown }
+  | { options: string[] }
+  | { note: string }
+  | { value: unknown }
+  /** His answer in his own words, with no pick (a card's Other): {@link ownWordsEntry}. */
+  | { words: string }
 );
 
 /** An artifact's choices as the page reads them through the bridge (`cawco.on("picks")`). */
@@ -317,6 +321,9 @@ export const changedEntry = (
   change: ChoiceChange,
   at: string
 ): ChoiceEntry => {
+  if ("words" in change) {
+    return ownWordsEntry(change.words, change.pageHash, at);
+  }
   const options =
     "options" in change ? change.options : (before?.options ?? []);
   const same = before !== undefined && sameOptions(before.options, options);
@@ -355,16 +362,6 @@ export const ownWordsEntry = (
   pageHash,
   at,
   ownWords: true,
-});
-
-/** The entry the person's Dismiss makes, stamped `at` on page `pageHash`: no pick and no words. */
-export const dismissedEntry = (pageHash: string, at: string): ChoiceEntry => ({
-  options: [],
-  note: null,
-  value: null,
-  pageHash,
-  at,
-  dismissed: true,
 });
 
 /** Whether two picks hold the same options, in any order. */

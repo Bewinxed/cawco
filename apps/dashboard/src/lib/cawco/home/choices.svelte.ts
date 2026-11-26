@@ -1,8 +1,8 @@
 /**
- * The owner's two open design choices, as temporary switches.
+ * The owner's open design choice, as a temporary switch.
  *
  * Read from `?choice=` in development only, e.g.
- * `/session?choice=ipad:a,answer:b`. Every choice not named takes
+ * `/session?choice=ipad:a`. Every choice not named takes
  * its recommended variant, which is also what a production build always
  * runs. The pick is kept for the browser tab (sessionStorage), because the
  * workspace writes conversation URLs without a query string.
@@ -10,15 +10,12 @@
  * Each variant is read in exactly one place in the app, so the losers are
  * deleted by deleting their branch once the owner picks:
  * - `ipad`     layout-policy.svelte.ts and SessionSurface (deck or grid)
- * - `answer`   NeedsCard.svelte
  */
 
 import { store, stored } from "#lib/platform/storage.js";
 import { browser, dev } from "$app/env";
 
 export interface Choices {
-  /** One answer form on the needs-you cards: (a) Approve/Deny, (b) open only. */
-  answer: "a" | "b";
   /**
    * Wide layouts: (a) one transcript, the others as tabs; (b) up to two
    * panes side by side on a tablet in landscape, one in portrait, free
@@ -27,11 +24,10 @@ export interface Choices {
   ipad: "a" | "b" | "c";
 }
 
-const RECOMMENDED: Choices = { ipad: "b", answer: "a" };
+const RECOMMENDED: Choices = { ipad: "b" };
 const KEY = "cawco-choice";
 const OPTIONS: { [K in keyof Choices]: readonly Choices[K][] } = {
   ipad: ["a", "b", "c"],
-  answer: ["a", "b"],
 };
 
 function parse(raw: string | null): Partial<Choices> {
@@ -40,9 +36,6 @@ function parse(raw: string | null): Partial<Choices> {
     const [name, value] = part.split(":");
     if (name === "ipad") {
       picked.ipad = OPTIONS.ipad.find((one) => one === value) ?? picked.ipad;
-    } else if (name === "answer") {
-      picked.answer =
-        OPTIONS.answer.find((one) => one === value) ?? picked.answer;
     }
   }
   return picked;

@@ -14,7 +14,7 @@
  *   HTML page). Answered by a pick (core `pickMade`), his own words in place
  *   of one (core choices.ts `ownWordsEntry`), a note on it, or a pin
  *   standing on it ({@link pinCard}) that the agent replied to and resolved;
- *   dismissed by his Dismiss on it (`dismissedEntry`).
+ *   dismissed when an entry says so (core choices.ts `ChoiceEntry.dismissed`).
  * - **judge**: a design graph's pick between its two or more directions,
  *   the artifact itself. Answered by any value, pick or note the person set
  *   on it (a direction picked, his own words in place of a pick,
