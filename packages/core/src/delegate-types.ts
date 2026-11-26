@@ -450,8 +450,17 @@ export const mcpServerDeniedBy = (
 export const deniedToolsOn = (
   harness: HarnessKind,
   names: readonly string[]
+): { tools: string[]; unmapped: string[] } =>
+  deniedToolsBy(descriptorOf(harness).deniedTools, names);
+
+/**
+ * {@link deniedToolsOn} by the map itself: a harness's `deniedTools` as its
+ * descriptor or plugin holds it, the same reading for every map.
+ */
+export const deniedToolsBy = (
+  map: DeniedToolNames,
+  names: readonly string[]
 ): { tools: string[]; unmapped: string[] } => {
-  const map: DeniedToolNames = descriptorOf(harness).deniedTools;
   if (map.by === "own-settings") {
     return { tools: [...names], unmapped: [] };
   }

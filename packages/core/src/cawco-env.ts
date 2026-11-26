@@ -148,6 +148,13 @@ export const CAWCO_ENV = {
   cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
   relayDns: "CAWCO_RELAY_DNS",
   stunServer: "CAWCO_STUN_SERVER",
+  /**
+   * One agy session's judge, set on its `agy acp` process and read by the
+   * hook agy runs before each tool call, which inherits agy's environment
+   * (core harness/agy.ts `AGY_JUDGE_ENV`, agent harnesses/agy-hook.ts). The
+   * hook reads it in perl, so cawco itself never does.
+   */
+  agyJudge: "CAWCO_AGY_JUDGE",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

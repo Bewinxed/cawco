@@ -30,7 +30,15 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { AgyKind } from "./harness/agy";
 import type { HarnessKind } from "./harness/kinds";
+
+/**
+ * Every harness this judge has a table for: the registered ones, and agy,
+ * whose session judge (agent harnesses/agy-judge.ts) hands it agy's file
+ * tools ahead of agy's registration as a harness.
+ */
+type JudgedHarness = HarnessKind | AgyKind;
 
 type Access = "read" | "write";
 
@@ -108,7 +116,7 @@ export type Verdict =
 export interface Call {
   /** The directory the harness resolves a relative path against. */
   readonly cwd: string;
-  readonly harness: HarnessKind;
+  readonly harness: JudgedHarness;
   readonly input: unknown;
   readonly tool: string;
   /**
@@ -368,13 +376,14 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
 
 /** What each harness adds to the policy for its own sessions; see {@link sessionPolicy}. */
 const SESSION_POLICY: Record<
-  HarnessKind,
+  JudgedHarness,
   ((policy: Policy, call: Call) => Policy) | undefined
 > = {
   claude: (policy, call) => claudeSession(policy, call.transcript),
   opencode: opencodeSession,
   pi: undefined,
   codex: undefined,
+  agy: undefined,
 };
 
 /**
@@ -382,7 +391,9 @@ const SESSION_POLICY: Record<
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
  * OpenCode: {@link opencodeSession}. pi keeps its saved outputs in the
  * session's own folder, which the policy already reads. Codex saves none
- * (it keeps a large output's head and tail).
+ * (it keeps a large output's head and tail). agy keeps its saved outputs in
+ * its home's `brain/<conversation>/`, which no workspace reads; none of them
+ * is read back yet.
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
   const session = SESSION_POLICY[call.harness];
@@ -399,6 +410,12 @@ interface Field {
   readonly key: string;
   /** OpenCode's and Codex's patch: the paths its patch text names. */
   readonly patch?: boolean;
+  /**
+   * The tool always names this path: a call without it is refused, so a
+   * field the table misnames refuses the tool rather than lets it pass
+   * unjudged. agy's, whose schemas the binary does not publish.
+   */
+  readonly required?: boolean;
 }
 
 const read = (key: string, extra: Partial<Field> = {}): Field => ({
@@ -417,10 +434,13 @@ const write = (key: string, extra: Partial<Field> = {}): Field => ({
  * document. Claude Code: code.claude.com/docs/en/tools-reference. OpenCode
  * 2.0.28: the input schemas its server sends the model (`patch` replaces
  * `edit` and `write` for `gpt-` models). pi 1.0.1: dist/core/tools/*.d.ts.
+ * agy 1.5.18: the arguments its `PreToolUse` hook is handed (`Path`,
+ * absolute), each required (core harness/agy.ts `AGY_TOOLS` holds every
+ * tool and its class).
  * A shell tool is judged by the boundary its command runs in, never here.
  * Every tool not in its harness's table is judged by {@link argumentPaths}.
  */
-const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
+const BUILT_INS: Record<JudgedHarness, Record<string, readonly Field[]>> = {
   claude: {
     Bash: [],
     Monitor: [],
@@ -470,6 +490,12 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
     Bash: [],
     apply_patch: [write("command", { patch: true })],
     view_image: [read("path")],
+  },
+  agy: {
+    run_command: [],
+    read_file: [read("Path", { required: true })],
+    write_file: [write("Path", { required: true })],
+    edit_file: [write("Path", { required: true })],
   },
 };
 
@@ -569,12 +595,13 @@ const handedToHub = (policy: Policy, path: string): boolean => {
   }
 };
 
-/** The cawco tool a harness's tool name is: Claude Code's and Codex's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
-const CAWCO_PREFIX: Record<Call["harness"], string | undefined> = {
+/** The cawco tool a harness's tool name is: Claude Code's and Codex's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`, agy's `mcp_cawco_<tool>`. */
+const CAWCO_PREFIX: Record<JudgedHarness, string | undefined> = {
   claude: "mcp__cawco__",
   opencode: "cawco_",
   pi: undefined,
   codex: "mcp__cawco__",
+  agy: "mcp_cawco_",
 };
 
 const cawcoTool = (call: Call): string | undefined => {
@@ -749,6 +776,9 @@ const targets = (policy: Policy, call: Call): Target[] => {
   return fields.flatMap((field) => {
     const value = input[field.key];
     if (typeof value !== "string" || value === "") {
+      if (field.required) {
+        throw new Error(`it names no ${field.key}`);
+      }
       return field.defaultsToCwd
         ? [{ path: call.cwd, access: field.access }]
         : [];

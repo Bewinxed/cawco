@@ -194,19 +194,39 @@ export const socketAddress = async (
   id: string,
   socket: string
 ): Promise<string> => {
+  const packed = await packedSocketAddress(socket);
+  if (!packed.ok) {
+    throw refusal(
+      id,
+      `${perl()} could not pack its judge's socket address (${packed.why})`
+    );
+  }
+  return packed.address;
+};
+
+/**
+ * `socket`'s address as perl's `Socket` packs it on this machine, in hex,
+ * or why perl could not pack it: what a hook with no module of its own
+ * connects with ({@link socketAddress}; agy's, harnesses/agy-hook.ts).
+ */
+export const packedSocketAddress = async (
+  socket: string
+): Promise<
+  | { readonly ok: true; readonly address: string }
+  | { readonly ok: false; readonly why: string }
+> => {
   const packed =
     await Bun.$`${perl()} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
       .env(hostEnvironment())
       .quiet()
       .nothrow();
   const address = packed.stdout.toString();
-  if (packed.exitCode !== 0 || !HEX.test(address)) {
-    throw refusal(
-      id,
-      `${perl()} could not pack its judge's socket address (${packed.stderr.toString().trim() || `status ${packed.exitCode}`})`
-    );
-  }
-  return address;
+  return packed.exitCode === 0 && HEX.test(address)
+    ? { ok: true, address }
+    : {
+        ok: false,
+        why: packed.stderr.toString().trim() || `status ${packed.exitCode}`,
+      };
 };
 
 /**
