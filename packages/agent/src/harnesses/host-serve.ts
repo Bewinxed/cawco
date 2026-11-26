@@ -18,7 +18,7 @@ import { readCall } from "@cawco/core/control-args";
 import type { HostEvent } from "@cawco/core/harness/pi-host-state";
 import { type HarnessSession, runControl } from "../harness";
 import { installOf } from "./credential-controls";
-import { hostFailure } from "./host-line";
+import { hostFailure, hostWords } from "./host-line";
 
 // SDK and runtime diagnostics must never enter the sequenced protocol stream.
 console.log = console.error;
@@ -123,7 +123,7 @@ export const serveHostLine = <C extends LineCommand>(options: {
       try {
         command = options.read(JSON.parse(line));
       } catch (error) {
-        sayOnLine({ type: "failed", error: String(error) });
+        sayOnLine({ type: "failed", ...hostFailure(error) });
         return;
       }
       run(command).catch((error: unknown) => {
@@ -136,7 +136,7 @@ export const serveHostLine = <C extends LineCommand>(options: {
           sayOnLine({ type: "failed", ...failure });
         } else {
           options.sendFailed(uuid);
-          sayOnLine({ type: "rejected", uuid, error: String(error) });
+          sayOnLine({ type: "rejected", uuid, error: hostWords(error) });
         }
       });
     })

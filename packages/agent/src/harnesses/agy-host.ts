@@ -13,6 +13,7 @@ import {
 } from "@cawco/core/harness/agy-host-state";
 import { unhandled } from "@cawco/core/unhandled";
 import { type AgySession, startAgyHost } from "./agy-runtime";
+import { hostWords } from "./host-line";
 import { sayOnLine, serveHostLine } from "./host-serve";
 
 const say = (event: AgyHostEvent): void => sayOnLine(event);
@@ -34,14 +35,9 @@ function begin(
     permission: (request) => say({ type: "permission", request }),
     permissionResolved: (requestId, outcome) =>
       say({ type: "permissionResolved", requestId, outcome }),
-    failed: (error) => say({ type: "failed", error: String(error) }),
-    // A refusal's own words, never `Error: ` before them (agy-pictures.ts names the picture).
+    failed: (error) => say({ type: "failed", error: hostWords(error) }),
     rejected: (uuid, error) =>
-      say({
-        type: "rejected",
-        uuid,
-        error: error instanceof Error ? error.message : String(error),
-      }),
+      say({ type: "rejected", uuid, error: hostWords(error) }),
   }).then((made) => {
     session = made;
   });

@@ -30,11 +30,15 @@ interface HostFailure {
   lastErrorKind?: LastErrorKind;
 }
 
+/** A refusal's own words, never `Error: ` before them; an Effect tagged error is an Error too. */
+export const hostWords = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /** `error` as a host says it. */
 export const hostFailure = (error: unknown): HostFailure =>
   error instanceof KindedError
     ? { error: error.message, lastErrorKind: error.lastErrorKind }
-    : { error: String(error) };
+    : { error: hostWords(error) };
 
 /** A failure a host said, as the error it was. */
 export const saidFailure = (said: HostFailure): Error =>

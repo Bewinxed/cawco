@@ -9,6 +9,7 @@ import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import type { HarnessContext, HarnessSession } from "../harness";
+import { hostWords } from "./host-line";
 import { sayOnLine, serveHostLine } from "./host-serve";
 import { startPiHost } from "./pi-runtime";
 import { backgroundShell, PI_ASKS_NOTHING } from "./pi-sessiond";
@@ -65,10 +66,10 @@ function start(
       state.sessionId = sessionId;
       output({ type: "session", sessionId });
     },
-    failed: (error) => output({ type: "failed", error: String(error) }),
+    failed: (error) => output({ type: "failed", error: hostWords(error) }),
     rejected: (uuid, error) => {
       state.held = state.held.filter((held) => held !== uuid);
-      output({ type: "rejected", uuid, error: String(error) });
+      output({ type: "rejected", uuid, error: hostWords(error) });
     },
     permission: () => {
       throw new Error(PI_ASKS_NOTHING);
