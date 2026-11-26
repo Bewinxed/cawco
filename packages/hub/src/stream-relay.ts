@@ -65,6 +65,7 @@ import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
 import {
+  type AgentAsk,
   type AgentCall,
   type AwayProblem,
   awayProblem,
@@ -138,6 +139,8 @@ export interface RelayFleetMachine {
 }
 
 export interface StreamRelayDeps {
+  /** A control asked of a machine, as an Effect (machine-calls.ts `askMachine`); {@link call} is its promise edge. */
+  ask: AgentAsk;
   call: AgentCall;
   /** The record changed: the journey's view follows. */
   changed: () => void;
@@ -392,7 +395,8 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     return refused;
   };
 
-  const send = async (relay: StoredRelay) => {
+  /** The relay started on its machine, its start step said as it goes. */
+  const send = Effect.fnUntraced(function* (relay: StoredRelay) {
     update({
       wanted: true,
       state: "starting",
@@ -403,7 +407,12 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     if (args instanceof ElysiaStatus) {
       return failed(args);
     }
-    const read = await call(relay.machineId, RELAY_START, [args], START_MS);
+    const read = yield* deps.ask(
+      relay.machineId,
+      RELAY_START,
+      [args],
+      START_MS
+    );
     const frame = answered(
       read,
       relay.machineId,
@@ -416,8 +425,8 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return failed(frame);
     }
     heard(frame);
-    await deps.lifetime.run(check);
-  };
+    yield* check;
+  });
 
   const heard = (frame: RelayFrame): void => {
     const relay = db.read();
@@ -561,7 +570,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       });
       changed();
       const relay = db.read();
-      return relay ? await send(relay) : undefined;
+      return relay ? await deps.lifetime.run(send(relay)) : undefined;
     },
     start: async () => {
       const relay = db.read();
@@ -571,7 +580,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
           detail: "The fleet has no stream relay to start.",
         });
       }
-      return await send(relay);
+      return await deps.lifetime.run(send(relay));
     },
     stop: async () => {
       const relay = db.read();
@@ -627,18 +636,19 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         );
       deps.lifetime.fork(
         "stream relay started again",
-        Effect.tryPromise(() => send(relay)).pipe(
-          Effect.match({
-            onSuccess: (sent) => {
+        send(relay).pipe(
+          Effect.tap((sent) =>
+            Effect.sync(() => {
               if (sent instanceof ElysiaStatus) {
                 notStarted(sent.response.detail);
               }
-            },
-            onFailure: ({ cause }) =>
-              notStarted(
-                cause instanceof Error ? cause.message : String(cause)
-              ),
-          })
+            })
+          ),
+          Effect.catchDefect((cause) =>
+            Effect.sync(() =>
+              notStarted(cause instanceof Error ? cause.message : String(cause))
+            )
+          )
         )
       );
     },

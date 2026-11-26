@@ -39,11 +39,11 @@ import { type HandoffInputs, mayStartRefusal } from "./work-items";
 export type DelegationSendsDeps = Pick<
   ClosureContext,
   | "cutTurn"
+  | "machineCalls"
   | "machineFault"
   | "noteInterrupt"
   | "pending"
   | "registry"
-  | "sendToMachine"
   | "sessionName"
   | "workItems"
 > & {
@@ -189,7 +189,7 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
         deps.machineFault(row.machineId, "offline")
       );
     }
-    deps.sendToMachine(agent, {
+    deps.machineCalls.sendToMachine(agent, {
       ...envelope,
       instanceId: row.id,
       machineId: row.machineId,

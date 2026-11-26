@@ -109,7 +109,6 @@ export type ContinuationsContext = Pick<
   | "atLimit"
   | "awayError"
   | "cacheWarm"
-  | "callAgent"
   | "contextTokensOf"
   | "contextWindowOf"
   | "db"
@@ -121,6 +120,7 @@ export type ContinuationsContext = Pick<
   | "lifecycle"
   | "lifetime"
   | "locateSession"
+  | "machineCalls"
   | "machineName"
   | "noteAtLimit"
   | "openItems"
@@ -129,7 +129,6 @@ export type ContinuationsContext = Pick<
   | "pending"
   | "typeProposals"
   | "publishSend"
-  | "readAgent"
   | "registry"
   | "releaseOwed"
   | "retireSession"
@@ -161,7 +160,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       dir: where.cwd || undefined,
       askers,
     };
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       where.machineId,
       CONTROL_READ_CONTINUATION,
       [where.sessionId, options],
@@ -396,7 +395,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     if (!(row && ctx.registry.agent(row.machineId))) {
       return null;
     }
-    const answer = await ctx.callAgent(
+    const answer = await ctx.machineCalls.callAgent(
       row.machineId,
       CONTROL_WORK_IN_FLIGHT,
       [],

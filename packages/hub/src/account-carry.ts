@@ -48,12 +48,11 @@ export type AccountCarryContext = Pick<
   | "MOVE_TICK_MS"
   | "SLEEP_TIMEOUT_MS"
   | "awayWords"
-  | "askMachine"
-  | "callAgent"
   | "db"
   | "keepCodexLeave"
   | "launchInFlight"
   | "lifetime"
+  | "machineCalls"
   | "machineName"
   | "mayRun"
   | "noteCodexSignin"
@@ -62,7 +61,6 @@ export type AccountCarryContext = Pick<
   | "pendingCodexLeaves"
   | "publishStalls"
   | "publishUsage"
-  | "readAgent"
   | "registry"
   | "reportedMachinePath"
   | "sessionName"
@@ -439,7 +437,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       return new Map();
     }
     const answer = await timed(
-      ctx.callAgent(
+      ctx.machineCalls.callAgent(
         machineId,
         CONTROL_CARRY_SESSIONS,
         [requests],
@@ -524,7 +522,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     for (let at = 0; at < rows.length; at += 8) {
       await Promise.all(
         rows.slice(at, at + 8).map(async (row) => {
-          const answer = await ctx.readAgent(
+          const answer = await ctx.machineCalls.readAgent(
             machineId,
             CONTROL_GET_SESSION_INFO,
             [row.sessionId],
@@ -573,14 +571,14 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     into: string | null = null
   ) =>
     account.provider === CLAUDE_PROVIDER
-      ? ctx.callAgent(
+      ? ctx.machineCalls.callAgent(
           machineId,
           CONTROL_FORGET_ACCOUNT,
           [account.id, into],
           SIGNIN_TIMEOUT_MS,
           "claude"
         )
-      : ctx.callAgent(
+      : ctx.machineCalls.callAgent(
           machineId,
           CONTROL_FORGET_PROVIDER_ACCOUNT,
           [account.id],
@@ -747,7 +745,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         sleepUnmoved(machineId, running);
         continue;
       }
-      const answer = await ctx.callAgent(
+      const answer = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_FORGET_CODEX_LOGIN,
         [accountId],
@@ -812,7 +810,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       }
       ctx.lifetime.fork(
         "sleep request",
-        ctx.askMachine(
+        ctx.machineCalls.askMachine(
           machineId,
           CONTROL_SLEEP,
           [],

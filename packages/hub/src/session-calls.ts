@@ -41,8 +41,9 @@ import type {
 } from "./hub-shapes";
 import type { KeepAliveRow, TurnReading } from "./keep-alive";
 import type { HubLifetimeShape } from "./lifetime";
-import type { AgentCall, Unanswered } from "./machine-answers";
+import type { Unanswered } from "./machine-answers";
 import { awayProblem, silentProblem } from "./machine-answers";
+import type { MachineCalls } from "./machine-calls";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
 import {
@@ -59,7 +60,6 @@ import { madeWords, type Writes } from "./writes";
 /** What the session calls act through (server.ts's hub context holds each). */
 export interface SessionCallsDeps {
   readonly artifacts: Artifacts;
-  readonly callAgent: AgentCall;
   readonly cloneForContinuation: (
     sourceId: string
   ) => Promise<(() => void) | ContinuationUnplaced>;
@@ -97,6 +97,7 @@ export interface SessionCallsDeps {
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
   /** The hub's lifetime: a session's `forge_post` runs its write on it. */
   readonly lifetime: HubLifetimeShape;
+  readonly machineCalls: Pick<MachineCalls["Service"], "callAgent">;
   readonly machinePause: MachinePause;
   readonly machineRow: (machineId: string) => AgentRow | undefined;
   readonly openItems: ReturnType<typeof createOpenItems>;
@@ -411,14 +412,14 @@ export const outcomeCalls = ({
 
 /** A session's forge_post and generate_image. */
 export const mediaCalls = ({
-  callAgent,
   db,
   lifetime,
+  machineCalls: { callAgent },
   sessionWorkspace,
   writes,
 }: Pick<
   SessionCallsDeps,
-  "callAgent" | "db" | "lifetime" | "sessionWorkspace" | "writes"
+  "db" | "lifetime" | "machineCalls" | "sessionWorkspace" | "writes"
 >) => {
   /** The repository a session posts to: the one it names, else its project's only one; refused in words when there is none to take. */
   const repoFor = (projectId: string | null, named: string | undefined) => {

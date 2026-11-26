@@ -29,7 +29,6 @@ import type { createCutTurns } from "./cut-turns";
 import type { createLaunches } from "./launches";
 import type { createLimitMoves } from "./limit-moves";
 import type { createLoginMoves } from "./login-moves";
-import type { createMachineCalls } from "./machine-calls";
 import type { createMachineCommands } from "./machine-commands";
 import type { createProjectConnect } from "./project-connect";
 import type { createProjectLocate } from "./project-locate";
@@ -110,10 +109,6 @@ export interface HubContext
       | "takeUpMovesOn"
     >,
     Pick<ReturnType<typeof createLoginMoves>, "answerBorrow" | "sleepFinished">,
-    Pick<
-      ReturnType<typeof createMachineCalls>,
-      "handAgain" | "lateAnswer" | "logUnroutedReply" | "resendHeld" | "waiting"
-    >,
     Pick<ReturnType<typeof createMachineCommands>, "learnCheckout">,
     ProjectLocateMember,
     Pick<
@@ -124,6 +119,7 @@ export interface HubContext
       ReturnType<typeof createSends>,
       | "decideCustody"
       | "deliverSend"
+      | "handAgain"
       | "deliverToSession"
       | "interruptedTurns"
       | "notesOnly"

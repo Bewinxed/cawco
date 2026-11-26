@@ -21,7 +21,7 @@ import { unreachable } from "../unreachable";
 export const accountSigninRoutes = ({
   accountOf,
   awayWords,
-  callAgent,
+  machineCalls: { callAgent },
   checkRefused,
   completeOn,
   db,
@@ -42,7 +42,6 @@ export const accountSigninRoutes = ({
   HubContext,
   | "accountOf"
   | "awayWords"
-  | "callAgent"
   | "checkRefused"
   | "completeOn"
   | "db"
@@ -50,6 +49,7 @@ export const accountSigninRoutes = ({
   | "joinOn"
   | "keepCodex"
   | "keepPending"
+  | "machineCalls"
   | "noteCodexSignin"
   | "pendingKey"
   | "pendingSignins"

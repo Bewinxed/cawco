@@ -157,12 +157,12 @@ export type RelayControlContext = Pick<
   | "answeringPermissions"
   | "browserAsks"
   | "byIdNow"
-  | "callAgent"
   | "claimAccount"
   | "connectAsks"
   | "cutTurn"
   | "db"
   | "designSystem"
+  | "machineCalls"
   | "pickAsks"
   | "endSession"
   | "forward"
@@ -359,7 +359,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         ctx.pending.resolve(requestId, "cancelled");
         throw new Error("That request is no longer pending.");
       }
-      const delivered = await ctx.callAgent(
+      const delivered = await ctx.machineCalls.callAgent(
         parked.machineId,
         RESOLVE_PERMISSION,
         [requestId, result],
@@ -402,7 +402,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   const allowGranted = async (ask: ArrivingAsk): Promise<void> => {
     const requestId = ask.requestId ?? "";
     const { input } = ask.payload;
-    const allowed = await ctx.callAgent(
+    const allowed = await ctx.machineCalls.callAgent(
       ask.machineId,
       RESOLVE_PERMISSION,
       [requestId, { behavior: "allow", updatedInput: input }],
@@ -440,7 +440,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const requestId = ask.requestId ?? "";
     const { toolName, input } = ask.payload;
     const question = questionsOf(toolName, input) !== null;
-    const withdrawn = await ctx.callAgent(
+    const withdrawn = await ctx.machineCalls.callAgent(
       ask.machineId,
       WITHDRAW_PERMISSION,
       [requestId, unshownAskMessage(question, why)],

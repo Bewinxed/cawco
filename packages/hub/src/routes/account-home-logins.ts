@@ -24,19 +24,13 @@ export const accountHomeLoginRoutes = (
     | "homeCredentialOf"
     | "moveResults"
     | "movingLogins"
-    | "readAgent"
     | "startMove"
     | keyof MachineReadsContext
   >
 ) => {
-  const {
-    awayWords,
-    homeCredentialOf,
-    moveResults,
-    movingLogins,
-    readAgent,
-    startMove,
-  } = ctx;
+  const { awayWords, homeCredentialOf, moveResults, movingLogins, startMove } =
+    ctx;
+  const { readAgent } = ctx.machineCalls;
   return (
     new Elysia()
       // What a machine's own stores hold that CawCo can move into accounts:

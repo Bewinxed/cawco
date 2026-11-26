@@ -33,10 +33,7 @@ import type { ArchiveView } from "@cawco/core/archive";
 import type { AskAnswer } from "@cawco/core/asks";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { Bounded } from "@cawco/core/bounded";
-import type {
-  CommandQueue,
-  CommandResult,
-} from "@cawco/core/commands/controls";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import type { FsOp } from "@cawco/core/control-replies";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import type { HubEnvelope } from "@cawco/core/envelopes";
@@ -174,20 +171,13 @@ import type { Laws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
 import type {
-  AgentAsk,
-  AgentCall,
-  AsRead,
-  AwaitFs,
-  AwaitReply,
-  AwaitStart,
   AwayProblem,
   CallAnswer,
   FsAnswer,
-  ReadSessionProcess,
-  ReadStoppable,
   SilentProblem,
   Unanswered,
 } from "./machine-answers";
+import type { MachineCalls } from "./machine-calls";
 import type { createMachineContact } from "./machine-contact";
 import type { MachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
@@ -230,7 +220,6 @@ import type { SessionCallsDeps } from "./session-calls";
 import type { SessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SettingPick } from "./setting-pick-shapes";
-import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { createStartModelMoves } from "./start-model-moves";
 import type { OwnDefault } from "./start-models";
@@ -391,14 +380,8 @@ export interface ClosureContext {
     park: () => boolean,
     publish: () => void
   ) => boolean;
-  /** A control asked of a machine's agent, as an Effect (machine-calls.ts `askMachine`); {@link callAgent} is its promise edge. */
-  askMachine: AgentAsk;
-  asRead: AsRead;
   atLimit: ReturnType<typeof createAtLimit>;
-  awaitFs: AwaitFs;
   awaitingFirstTurn: Set<string>;
-  awaitReply: AwaitReply;
-  awaitStart: AwaitStart;
   /** Sends a hub frame to every dashboard. */
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
@@ -418,7 +401,6 @@ export interface ClosureContext {
   byIdNow: <E extends HubEnvelope<"control" | "send">>(envelope: E) => E;
   /** Whether `instanceId`'s prompt cache is warm now (keep-alive.ts `cacheState`): false when it is cold or unknown. */
   cacheWarm: (instanceId: string) => boolean;
-  callAgent: AgentCall;
   callFs: <O extends FsOp>(
     machineId: string,
     agent: MachineSocket,
@@ -463,7 +445,6 @@ export interface ClosureContext {
   codexLeaving: (accountId: string, machineId: string) => boolean;
   coldReading: SessionCallsDeps["coldReading"];
   coldWork: WorkItemCallsDeps["coldWork"];
-  commandQueues: Map<string, (queue: CommandQueue | null) => void>;
   completeOn: (
     account: Account,
     signinId: string,
@@ -749,7 +730,6 @@ export interface ClosureContext {
     } & { id: string; parentInstanceId?: string | null | undefined }
   ) => boolean;
   keptNextWords: (why: Kept, toName: string) => string;
-  keptOn: Map<string, Set<string>>;
   /** The release each kept CLI's copies are kept at, by tool id (tool-releases.ts `keptReleases`). */
   keptReleases: () => Record<string, string>;
   keptWarm: (machineId: string, ids: string[]) => string[];
@@ -803,9 +783,10 @@ export interface ClosureContext {
   liveFrom: (move: LoginMove) => string[];
   livePendingSignins: () => PendingAccountSignin[];
   locateSession: (id: string) => Promise<Located>;
-  locations: Map<string, SessionLocation | null>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
+  /** The hub's calls to its machines, and the one way a frame goes to one (machine-calls.ts). */
+  machineCalls: MachineCalls["Service"];
   machineCredentials: MachineCredentials["Service"];
   machineCustody: Map<string, SessionCustody>;
   machineFault: (
@@ -1032,8 +1013,6 @@ export interface ClosureContext {
   previewsOnMachineMoved: (machineId: string) => void;
   /** Why the hub knows an artifact's preview can't be shown now (preview-unavailable.ts). */
   previewUnavailable: PreviewUnavailableOf;
-  processAt: Map<string, number>;
-  processEvent: (instanceId: string) => boolean;
   processFailed: (
     instanceId: string,
     reason: string,
@@ -1066,7 +1045,6 @@ export interface ClosureContext {
   pulses: Map<string, SessionPulse>;
   push: ReturnType<typeof createPush>;
   pushAgents: (machineId: string) => Promise<void>;
-  readAgent: AgentCall;
   readMachineMedia: (
     machineId: string,
     path: string
@@ -1077,9 +1055,6 @@ export interface ClosureContext {
     | { refused: string }
   >;
   readMarketplaceSource: (source: string) => Promise<MarketplaceRead>;
-  readSessionProcess: ReadSessionProcess;
-  readSkillFolder: SkillFolderReader;
-  readStoppable: ReadStoppable;
   rebalanceNotices: RebalanceNotice[];
   reconnectingFor: (machineId: string) => number;
   recordDelegateAnswer: (
@@ -1212,7 +1187,6 @@ export interface ClosureContext {
     plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
   ) => void;
-  sendAnswerable: <T extends HubEnvelope>(socket: MachineSocket, frame: T) => T;
   sendFromHub: (
     machineId: string,
     instanceId: string,
@@ -1242,8 +1216,6 @@ export interface ClosureContext {
   sendsPending: { count: (instanceId: string) => number };
   /** A frame to a client's socket (wire-socket.ts). */
   sendToClient: SendToClient;
-  /** The hub's command to a machine's socket, as it is (wire-socket.ts). */
-  sendToMachine: (socket: MachineSocket, frame: HubEnvelope) => void;
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
@@ -1494,7 +1466,6 @@ export interface ClosureContext {
   usageCounter: UsageCounter;
   /** What the change log says moved, told to the views thread (views/client.ts). */
   viewsHear: (changes: ViewChanges) => void;
-  waitingForProcess: Set<string>;
   wakeForSend: (
     agent: MachineSocket,
     machineId: string,

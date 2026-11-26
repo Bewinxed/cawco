@@ -41,9 +41,9 @@ export type AccountProbesContext = Pick<
   | "db"
   | "dispatcher"
   | "lifetime"
+  | "machineCalls"
   | "machineFault"
   | "machineName"
-  | "readAgent"
   | "registry"
   | "spendNow"
   | "stallOf"
@@ -145,7 +145,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * account's catalog fault, when it could not be read.
    */
   const probeAccount: AccountProber = async (machineId, account) => {
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_PROBE_ACCOUNT,
       [account],
@@ -224,7 +224,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       ctx.db,
       accountId,
       async (machineId, account) => {
-        const answer = await ctx.readAgent(
+        const answer = await ctx.machineCalls.readAgent(
           machineId,
           CONTROL_CHECK_ACCOUNT,
           [account],
@@ -520,7 +520,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     const whys: string[] = [];
     for (const machineId of machines) {
       const asked = Date.now();
-      const answer = await ctx.readAgent(
+      const answer = await ctx.machineCalls.readAgent(
         machineId,
         CONTROL_READ_ACCOUNT_USAGE,
         [accountId],

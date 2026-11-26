@@ -21,7 +21,7 @@ export const toolRoutes = ({
   TOOL_SIGNIN_BEGIN_MS,
   TOOL_SIGNIN_COMPLETE_MS,
   awayWords,
-  callAgent,
+  machineCalls: { callAgent },
   db,
   keepCopiesOn,
   keptReleases,
@@ -33,10 +33,10 @@ export const toolRoutes = ({
   | "TOOL_SIGNIN_BEGIN_MS"
   | "TOOL_SIGNIN_COMPLETE_MS"
   | "awayWords"
-  | "callAgent"
   | "db"
   | "keepCopiesOn"
   | "keptReleases"
+  | "machineCalls"
   | "pendingToolSignins"
   | "registry"
   | "updateAll"

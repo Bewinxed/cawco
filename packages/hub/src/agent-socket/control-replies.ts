@@ -20,9 +20,8 @@ export type ControlRepliesContext = Pick<
   | "fleetSyncs"
   | "keepPick"
   | "keepCopiesOn"
-  | "lateAnswer"
   | "lifecycle"
-  | "logUnroutedReply"
+  | "machineCalls"
   | "machineName"
   | "pending"
   | "pendingInstalls"
@@ -32,7 +31,6 @@ export type ControlRepliesContext = Pick<
   | "sendToClient"
   | "streams"
   | "transcripts"
-  | "waiting"
   | "welcomeConverge"
 >;
 
@@ -122,9 +120,9 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // answer and nobody else's news.
     if (body.kind === "control_result" && message.requestId) {
       ctx.lifecycle.answered(message.requestId, body.ok);
-      const answering = ctx.waiting.get(message.requestId);
+      const answering = ctx.machineCalls.waiting.get(message.requestId);
       if (answering) {
-        ctx.waiting.delete(message.requestId);
+        ctx.machineCalls.waiting.delete(message.requestId);
         answering(body);
         return "stop";
       }
@@ -133,7 +131,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // transcript's pictures were stored one by one on the hub's
       // thread, and three such answers held it past its updater's
       // 3 s (nightly 5575, obelisk, 2026-10-24 22:53:59).
-      if (ctx.lateAnswer({ ...message, payload: body })) {
+      if (ctx.machineCalls.lateAnswer({ ...message, payload: body })) {
         return "stop";
       }
     }
@@ -233,7 +231,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       // A reply without a live requester is not fleet news. This
       // includes late answers after a socket closed or a read timed out.
       if (!run.hubReply) {
-        ctx.logUnroutedReply({ ...message, payload: body });
+        ctx.machineCalls.logUnroutedReply({ ...message, payload: body });
       }
       return "stop";
     } else if (body.kind === "frame" && message.instanceId) {

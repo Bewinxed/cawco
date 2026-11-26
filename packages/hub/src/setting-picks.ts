@@ -47,8 +47,8 @@ const MAY_RUN: ReadonlySet<string> = new Set([
 
 export type SettingPicksContext = Pick<
   ClosureContext,
-  | "callAgent"
   | "db"
+  | "machineCalls"
   | "machineName"
   | "modelRefusal"
   | "owedMoves"
@@ -157,7 +157,7 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
       method: K,
       args: ControlArgs<K>
     ) =>
-      ctx.callAgent(
+      ctx.machineCalls.callAgent(
         row.machineId,
         method,
         args,

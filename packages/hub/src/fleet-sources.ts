@@ -30,6 +30,7 @@ import {
 } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { Effect, Fiber } from "effect";
+import { problem } from "elysia";
 import type { FleetMcpTook } from "./connect-asks";
 import type { SourceNote } from "./db/fleet-catalog";
 import type { PublicInstanceRow } from "./db/instances";
@@ -39,7 +40,7 @@ import type { RidingChanges } from "./fleet-mcp-changes";
 import { refreshOf, skillVersion } from "./fleet-versions";
 import type { HubContext } from "./hub-context";
 import { hubHttpUrl } from "./hub-self";
-import type { FetchedCopy } from "./hub-shapes";
+import type { FetchedCopy, FolderSkillBody } from "./hub-shapes";
 import { nextTurn } from "./lifetime";
 import type { CallAnswer, FsAnswer } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
@@ -47,7 +48,12 @@ import type { ResolvedPlugin } from "./plugins";
 import { readMarketplace, resolveMarketplacePlugins } from "./plugins";
 import { projectRowsFor, unbound } from "./project-placements";
 import {
+  type CheckedFolder,
+  FOLDER_CHANGED,
+  folderOf,
+  parseSkillSource,
   type ResolvedSkill,
+  readCheckedFolder,
   resolveSkill,
   type UnresolvedSkill,
 } from "./skills";
@@ -81,24 +87,16 @@ type SkillFetch = "changed" | "same" | "failed";
 
 export type FleetSourcesContext = Pick<
   HubContext,
-  | "asRead"
-  | "awaitFs"
-  | "awaitReply"
-  | "askMachine"
-  | "callAgent"
   | "connectAsks"
   | "db"
   | "fleetMcp"
   | "fleetSyncs"
   | "harnessReportOf"
   | "lifetime"
+  | "machineCalls"
   | "machineName"
   | "mcpChanges"
-  | "readAgent"
-  | "readSkillFolder"
   | "registry"
-  | "sendAnswerable"
-  | "sendToMachine"
   | "toolInputsChanged"
   | "usabilityFeedback"
 >;
@@ -282,7 +280,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           method,
           args: [],
         };
-        ctx.sendToMachine(agent, {
+        ctx.machineCalls.sendToMachine(agent, {
           verb: "control",
           machineId,
           instanceId: row.id,
@@ -317,7 +315,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       const took = ctx.connectAsks.taking(row.id, changes);
       ctx.lifetime.fork(
         `fleet MCP take in ${row.id}`,
-        ctx
+        ctx.machineCalls
           .askMachine(
             machineId,
             CONTROL_MCP_FLEET_CHANGED,
@@ -415,13 +413,18 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   ): Promise<Bounded<FsAnswer<O>>> => {
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
-    return ctx.awaitFs(machineId, op.op, requestId, READ_TIMEOUT_MS, () =>
-      ctx.sendAnswerable(agent, {
-        verb: "fs",
-        machineId,
-        requestId,
-        payload,
-      } satisfies HubEnvelope<"fs">)
+    return ctx.machineCalls.awaitFs(
+      machineId,
+      op.op,
+      requestId,
+      READ_TIMEOUT_MS,
+      () =>
+        ctx.machineCalls.sendAnswerable(agent, {
+          verb: "fs",
+          machineId,
+          requestId,
+          payload,
+        } satisfies HubEnvelope<"fs">)
     );
   };
 
@@ -445,7 +448,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     if (!agent) {
       return "offline";
     }
-    const answer = ctx.asRead(
+    const answer = ctx.machineCalls.asRead(
       await callFs(machineId, agent, { op: "media", path })
     );
     // Its own words for no answer: "offline", "timeout".
@@ -776,7 +779,11 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     // fetching, before any of it runs.
     const fetch = Effect.yieldNow.pipe(
       Effect.andThen(
-        resolveSkill(source, ctx.db.heldSkillNames(name), ctx.readSkillFolder)
+        resolveSkill(
+          source,
+          ctx.db.heldSkillNames(name),
+          ctx.machineCalls.readSkillFolder
+        )
       ),
       Effect.map((resolved) => landSkill(name, source, resolved)),
       Effect.catchDefect((error) =>
@@ -1167,7 +1174,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         resolveSkill(
           row.source,
           ctx.db.heldSkillNames(row.name),
-          ctx.readSkillFolder
+          ctx.machineCalls.readSkillFolder
         )
       );
       if (ctx.lifetime.closed()) {
@@ -1319,8 +1326,67 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         Date.now() - row.checkedAt >= UPDATE_CHECK_MS
     );
 
+  /**
+   * A skill stored from a folder on a machine (`file://<machine>/<path>`),
+   * read and checked through its agent before anything is stored: refused
+   * in its words when it can't be, and when it no longer holds the files the
+   * person approved (`contentHash`, skills.ts `FOLDER_CHANGED`). The PUT
+   * route's way in for such a source, which answers its refusals; undefined
+   * for any other source.
+   */
+  const installFromFolder = async (name: string, body: FolderSkillBody) => {
+    if (parseSkillSource(body.source)?.kind !== "file") {
+      return;
+    }
+    const folder = folderOf(body.source);
+    if (!folder) {
+      return problem(400, {
+        code: "skill-folder-unnamed",
+        detail: `${body.source} names no machine: write it as file://<machine>/<path>`,
+      });
+    }
+    let read: CheckedFolder;
+    try {
+      read = await readCheckedFolder(
+        folder.machine,
+        folder.path,
+        ctx.machineCalls.readSkillFolder
+      );
+    } catch (error) {
+      return problem(400, {
+        code: "skill-folder-unread",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (body.contentHash !== undefined && body.contentHash !== read.hash) {
+      return problem(409, {
+        code: "skill-folder-changed",
+        detail: FOLDER_CHANGED,
+      });
+    }
+    const skill = ctx.db.putSkill({
+      name,
+      source: body.source,
+      enabled: body.enabled,
+      projectId: body.projectId,
+      areaId: body.areaId,
+      hash: read.hash,
+      bytes: read.files.reduce(
+        (total, file) =>
+          total + Buffer.byteLength(file.contentBase64, "base64"),
+        0
+      ),
+      files: read.files,
+    });
+    skillChoices.delete(name);
+    fleetChanged();
+    const installed: FleetSkillMeta = skill;
+    return installed;
+  };
+
   return {
     machineFleetItems,
+    installFromFolder,
     refreshSessions,
     sendMcpChanges,
     keepReplacedMemory,

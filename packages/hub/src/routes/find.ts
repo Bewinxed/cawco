@@ -51,8 +51,8 @@ export const findRoutes = ({
   db,
   find,
   machineName,
-  readStoppable,
-}: Pick<HubContext, "db" | "find" | "machineName" | "readStoppable">) =>
+  machineCalls: { readStoppable },
+}: Pick<HubContext, "db" | "find" | "machineCalls" | "machineName">) =>
   new Elysia()
     // The fleet's one finding engine (find.ts): names and transcripts under
     // one ranking, and what waits on your eyes: read from the looks

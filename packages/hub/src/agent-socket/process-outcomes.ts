@@ -16,7 +16,7 @@ export type ProcessOutcomesContext = Pick<
   | "launchSettled"
   | "lifecycle"
   | "losePending"
-  | "processEvent"
+  | "machineCalls"
   | "processGeneration"
   | "releaseHeld"
   | "sessionAsleep"
@@ -159,7 +159,7 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
       );
       // Its held process is no longer this session's: what waited
       // for one goes to its next start.
-      ctx.processEvent(message.instanceId);
+      ctx.machineCalls.processEvent(message.instanceId);
       return "stop";
     }
     return "continue";

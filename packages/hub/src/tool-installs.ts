@@ -35,14 +35,12 @@ interface UpdateAllLeft {
 
 export type ToolInstallsContext = Pick<
   HubContext,
-  | "awaitReply"
-  | "callAgent"
   | "db"
+  | "machineCalls"
   | "machineName"
   | "machinePause"
   | "pendingInstalls"
   | "registry"
-  | "sendToMachine"
   | "silentWords"
   | "toolReleases"
 >;
@@ -163,7 +161,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       toolId: install.toolId,
       ...(install.newest ? { newest: install.newest } : {}),
     });
-    ctx.sendToMachine(agent, {
+    ctx.machineCalls.sendToMachine(agent, {
       verb: "control",
       machineId,
       payload: {
@@ -404,7 +402,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       startedBy: "cawco",
       at: Date.now(),
     });
-    return ctx.awaitReply(
+    return ctx.machineCalls.awaitReply(
       machineId,
       INSTALL_TOOL,
       requestId,
@@ -419,7 +417,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
             args: installArgs(toolId, ask, false, "cawco"),
           } satisfies AddressedControl,
         } satisfies HubEnvelope<"control">;
-        ctx.sendToMachine(agent, frame);
+        ctx.machineCalls.sendToMachine(agent, frame);
         return frame;
       }
     );
@@ -590,7 +588,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     machineId: string
   ): Promise<ToolStatus[] | { said: string }> => {
     const name = ctx.machineName(machineId);
-    const listed = await ctx.callAgent(
+    const listed = await ctx.machineCalls.callAgent(
       machineId,
       LIST_TOOLS,
       [],

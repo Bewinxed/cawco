@@ -423,7 +423,6 @@ export type SendsContext = Pick<
   | "advanceCompaction"
   | "atLimit"
   | "board"
-  | "callAgent"
   | "credentialTurns"
   | "db"
   | "forgetPending"
@@ -436,6 +435,7 @@ export type SendsContext = Pick<
   | "leadRuns"
   | "lifetime"
   | "limitRefused"
+  | "machineCalls"
   | "machineName"
   | "machinePause"
   | "machinePresence"
@@ -446,14 +446,11 @@ export type SendsContext = Pick<
   | "notifications"
   | "openAsks"
   | "planChanges"
-  | "processAt"
   | "pulses"
   | "push"
-  | "readAgent"
   | "reconnectingFor"
   | "registry"
   | "sayCompaction"
-  | "sendToMachine"
   | "sendRefusal"
   | "sessionName"
   | "silentWords"
@@ -467,7 +464,6 @@ export type SendsContext = Pick<
   | "takenUpBy"
   | "transcripts"
   | "turnInFlight"
-  | "waitingForProcess"
   | "wakeForSend"
   | "wakesForSend"
   | "watch"
@@ -858,7 +854,7 @@ export const createSends = (ctx: SendsContext) => {
     for (;;) {
       const answer: Bounded<
         ControlAnswer<typeof CONTROL_READ_TRANSCRIPT_WINDOW>
-      > = await ctx.readAgent(
+      > = await ctx.machineCalls.readAgent(
         row.machineId,
         CONTROL_READ_TRANSCRIPT_WINDOW,
         [row.sessionId, { dir: row.cwd || undefined, window: ask }],
@@ -1222,7 +1218,7 @@ export const createSends = (ctx: SendsContext) => {
    * session's next process ({@link releaseOwed}), as it was last handed
    * ({@link holdBack}): at once
    * when a process event came after the hand-off, else when the next one
-   * comes ({@link waitingForProcess}).
+   * comes (machine-calls.ts `waitingForProcess`).
    */
   const takeBack = (
     machineId: string,
@@ -1251,15 +1247,15 @@ export const createSends = (ctx: SendsContext) => {
         handedBack.delete(instanceId);
         const stored = yield* storedIn(instanceId);
         // The earliest hand-off among them: a process event since then is
-        // a process that may take them ({@link processAt}).
+        // a process that may take them (machine-calls.ts `processAt`).
         let handedAt = Number.POSITIVE_INFINITY;
         for (const one of back) {
           handedAt = Math.min(handedAt, holdBack(instanceId, one, stored));
         }
-        if ((ctx.processAt.get(instanceId) ?? 0) > handedAt) {
+        if ((ctx.machineCalls.processAt.get(instanceId) ?? 0) > handedAt) {
           releaseOwed({ instanceId });
         } else if (Number.isFinite(handedAt)) {
-          ctx.waitingForProcess.add(instanceId);
+          ctx.machineCalls.waitingForProcess.add(instanceId);
         }
       })
     );
@@ -1323,7 +1319,7 @@ export const createSends = (ctx: SendsContext) => {
       changeSend(row, { state: "cancelled" });
       return "withdrawn";
     }
-    const reply = await ctx.callAgent(
+    const reply = await ctx.machineCalls.callAgent(
       machineId,
       "withdrawSend",
       [row.uuid],
@@ -1387,7 +1383,7 @@ export const createSends = (ctx: SendsContext) => {
       );
     });
     const takeBackOne = async (send: SentMessageRow): Promise<void> => {
-      const reply = await ctx.callAgent(
+      const reply = await ctx.machineCalls.callAgent(
         row.machineId,
         "withdrawSend",
         [send.uuid],
@@ -2641,7 +2637,7 @@ export const createSends = (ctx: SendsContext) => {
     const asSent = envelope.payload;
     if (agent && !owed) {
       toldMove(envelope);
-      ctx.sendToMachine(agent, presenced(envelope));
+      ctx.machineCalls.sendToMachine(agent, presenced(envelope));
     }
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
@@ -3101,11 +3097,11 @@ export const createSends = (ctx: SendsContext) => {
     // there ({@link relaunchForStep}); the step goes once it is up.
     // Kept for a session nothing owed may wake: it waits for a send that may.
     // Handed back by a machine with no process for it: it waits for the
-    // session's next one ({@link waitingForProcess}).
+    // session's next one (machine-calls.ts `waitingForProcess`).
     if (
       relaunchForStep(send, row, agent) ||
       ctx.keptAsleep(row) ||
-      ctx.waitingForProcess.has(send.instanceId)
+      ctx.machineCalls.waitingForProcess.has(send.instanceId)
     ) {
       return false;
     }
@@ -3171,7 +3167,7 @@ export const createSends = (ctx: SendsContext) => {
       delivery,
       envelope,
     });
-    ctx.sendToMachine(agent, presenced(envelope));
+    ctx.machineCalls.sendToMachine(agent, presenced(envelope));
   };
 
   /** Sends kept for `machineId`, failed as any send to an absent machine is: on its row, with its retry. */
@@ -3324,7 +3320,48 @@ export const createSends = (ctx: SendsContext) => {
       () => ({ send: uuid, machine: machineId })
     );
 
+  /**
+   * The machine registered again: every send a session it runs was handed
+   * and has not read goes again, in the order accepted, under its own
+   * hand-off. One handed on a link that dropped may never have reached the
+   * machine: on 2026-10-20 a delegate's brief, handed 143 ms before its
+   * machine's link was cut, stayed pending while its session sat idle, and
+   * its item never started (link-under-load lane 11). The agent takes a
+   * send it had already as had, never as a second turn (session.ts
+   * `#handedBefore`): taken, it says so; held by its process, it says that.
+   * A send owed is not handed here: it goes when its hold ends. Nor is one
+   * its harness has said it holds (`held`): a process has it. An agent that
+   * restarted adopts a live Claude process and tells the hub which sends its
+   * CLI holds (claude.ts `adopt`, MESSAGES_HELD), but keeps none of them as
+   * its own hand-offs, so one handed again here would reach that CLI twice.
+   */
+  const handAgain = (machineId: string, instanceIds: string[]): void => {
+    const agent = ctx.registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    let again = 0;
+    for (const instanceId of instanceIds) {
+      for (const send of ctx.db.sendsIn(instanceId, ["pending"])) {
+        if (send.owedHeld || send.held || !(send.delivery && send.envelope)) {
+          continue;
+        }
+        const envelope = keptSend(send.envelope);
+        if (!envelope) {
+          continue;
+        }
+        ctx.machineCalls.sendToMachine(agent, presenced(envelope));
+        again += 1;
+      }
+    }
+    if (again > 0) {
+      console.info(
+        `[hub] ${ctx.machineName(machineId)} is back: ${again} unread send(s) handed to it again under their own hand-offs`
+      );
+    }
+  };
   return {
+    handAgain,
     handoffs,
     anchors,
     unanswered,

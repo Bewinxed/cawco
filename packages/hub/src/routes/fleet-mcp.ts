@@ -107,9 +107,9 @@ export const fleetMcpCalls = (
     fleetMcp,
     machineName,
     maskedMcp,
-    readAgent,
     sharedProblem,
   } = ctx;
+  const { readAgent } = ctx.machineCalls;
   /**
    * The unmanaged MCP server `name` a machine has, config and keys as it
    * holds them: what an adoption takes into the fleet. Read here and kept

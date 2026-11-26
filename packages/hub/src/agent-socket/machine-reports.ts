@@ -14,11 +14,11 @@ export type MachineReportsContext = Pick<
   | "artifacts"
   | "browserStream"
   | "browsers"
-  | "commandQueues"
   | "db"
   | "fleetSyncs"
   | "keepFleetReport"
   | "lifetime"
+  | "machineCalls"
   | "moves"
   | "folderMoves"
   | "passkeyRelay"
@@ -44,7 +44,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     const body = run.message.payload;
     if (body.kind === "command_queue") {
       const { runId, queue } = body;
-      ctx.commandQueues.get(runId)?.(queue);
+      ctx.machineCalls.commandQueues.get(runId)?.(queue);
       return "stop";
     }
     return "continue";

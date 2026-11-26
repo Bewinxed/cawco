@@ -37,6 +37,7 @@ export type StartHoldsContext = Pick<
   | "db"
   | "forgetPending"
   | "lifetime"
+  | "machineCalls"
   | "machineName"
   | "machinePause"
   | "machinePresence"
@@ -45,7 +46,6 @@ export type StartHoldsContext = Pick<
   | "registry"
   | "releaseOwed"
   | "replaceAtWake"
-  | "sendToMachine"
   | "sessionName"
   | "speaksContract"
   | "startSent"
@@ -165,7 +165,7 @@ export const createStartHolds = (
       return bound;
     }
     const frame = { ...envelope, payload: bound };
-    ctx.sendToMachine(agent, frame);
+    ctx.machineCalls.sendToMachine(agent, frame);
     // What waited for this start goes right behind it, in the order taken.
     if (envelope.instanceId) {
       ctx.releaseOwed({ instanceId: envelope.instanceId });
@@ -277,7 +277,11 @@ export const createStartHolds = (
     pacing.last = Date.now();
     // To the id the machine has now: it may have re-joined under a new one
     // since the start was owed (`takeFormerId`).
-    ctx.sendToMachine(agent, { ...asked, machineId, payload: launch });
+    ctx.machineCalls.sendToMachine(agent, {
+      ...asked,
+      machineId,
+      payload: launch,
+    });
     // What it was sent while its start was held goes right behind it, and
     // the inputs its item held for it, then its brief.
     ctx.releaseOwed({ instanceId: owed.id });

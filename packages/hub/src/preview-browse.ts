@@ -36,9 +36,9 @@ export const WORKSPACE_TIMEOUT_MS = 60_000;
 export type PreviewBrowseContext = Pick<
   HubContext,
   | "artifacts"
-  | "callAgent"
   | "db"
   | "embedKeyOf"
+  | "machineCalls"
   | "machineName"
   | "originKeyOf"
   | "ownMachineId"
@@ -265,7 +265,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const { address, path, entry } = entered;
     const asked = await timed(
-      ctx.callAgent(
+      ctx.machineCalls.callAgent(
         machineId,
         ARTIFACT_PICTURE,
         [
@@ -333,7 +333,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       });
     }
     const asked = await timed(
-      ctx.callAgent(
+      ctx.machineCalls.callAgent(
         instance.machineId,
         CONTROL_WORKSPACE_SAVE,
         [workspace, path, png],

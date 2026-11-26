@@ -7,7 +7,6 @@ import {
   type FsReply,
 } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   ControlRefusal,
   FramePayload,
@@ -19,6 +18,16 @@ import type { Effect } from "effect";
 import { HTTPError, problem } from "elysia";
 import type { z } from "zod";
 import { received } from "./stored-json";
+
+/**
+ * What a request to a machine gets when its own deadline passes with the
+ * machine away: held for it all that time, and sent again each time it came
+ * back (machine-calls.ts `resendHeld`), it never answered. A machine that is there
+ * at the deadline and silent is unanswered instead. True of a write only: a
+ * read runs nothing, and is answered as its machine being away (`asRead`).
+ */
+export const MACHINE_DISCONNECTED =
+  "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
 
 /** A machine ask that got no answer: not connected ("dead") or silent past its deadline ("timeout"). */
 export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
@@ -181,57 +190,6 @@ export type AgentCall = <K extends ControlName>(
   harness?: HarnessKind,
   instanceId?: string
 ) => Promise<Bounded<ControlAnswer<K>>>;
-
-/** A read's answer, a machine's held past its deadline while away read as away (machine-calls.ts `asRead`). */
-export type AsRead = <T>(
-  answer: Bounded<CallAnswer<T>>
-) => Bounded<CallAnswer<T>>;
-
-/**
- * A wait for the frame that answers control `method` under `requestId`,
- * sent by `send`, parsed as its reply's type (machine-calls.ts `awaitReply`).
- */
-export type AwaitReply = <K extends ControlName>(
-  machineId: string,
-  method: K,
-  requestId: string,
-  timeoutMs: number,
-  send: () => HubEnvelope | undefined,
-  letGo?: AbortSignal
-) => Promise<Bounded<ControlAnswer<K>>>;
-
-/** {@link AwaitReply} for an `fs` op (machine-calls.ts `awaitFs`). */
-export type AwaitFs = <O extends FsOp>(
-  machineId: string,
-  op: O,
-  requestId: string,
-  timeoutMs: number,
-  send: () => HubEnvelope | undefined
-) => Promise<Bounded<FsAnswer<O>>>;
-
-/** A session's start, waited on (machine-calls.ts `awaitStart`): the hub reads nothing of its answer but whether it started. */
-export type AwaitStart = (
-  machineId: string,
-  instanceId: string,
-  requestId: string,
-  send: () => HubEnvelope | undefined
-) => Promise<Bounded<CallAnswer<unknown>>>;
-
-/** A control asked of a session's own process (machine-calls.ts `readSessionProcess`). */
-export type ReadSessionProcess = <K extends ControlName>(
-  row: { id: string; machineId: string },
-  method: K,
-  args: ControlArgs<K>
-) => Promise<Bounded<ControlAnswer<K>>>;
-
-/** A read the machine stops once the hub lets it go (machine-calls.ts `readStoppable`); null when its asker let it go. */
-export type ReadStoppable = <K extends ControlName>(
-  machineId: string,
-  method: K,
-  args: ControlArgs<K>,
-  timeoutMs: number,
-  ask: { caller: string; signal?: AbortSignal | undefined }
-) => Promise<Bounded<ControlAnswer<K>> | null>;
 
 /**
  * A machine-scoped call that answers control `method`'s reply, parsed as

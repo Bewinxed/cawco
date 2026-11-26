@@ -4,7 +4,6 @@ import { type FsOp, SPAWN_REPLY } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
-import type { FleetSkillMeta } from "@cawco/core/fleet";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { recordLimitReading } from "@cawco/core/limit-readings";
@@ -12,12 +11,12 @@ import { machineLabel } from "@cawco/core/machine-names";
 import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
-import { Deferred, Effect, Schema } from "effect";
-import { problem } from "elysia";
-import type { ClosureContext } from "./closure-context";
+import { Context, Deferred, Effect, Layer, Schema } from "effect";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
-import { keptSend } from "./db/sends";
-import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
+import { Db, type DbShape } from "./db";
+import { HandoverState } from "./handover-state";
+import type { SessionLocation } from "./hub-shapes";
+import { HubLifetime, type HubLifetimeShape } from "./lifetime";
 import {
   answerOf,
   type CallAnswer,
@@ -25,22 +24,18 @@ import {
   type ControlResult,
   type FsAnswer,
   fsAnswerOf,
+  MACHINE_DISCONNECTED,
   parsedAs,
 } from "./machine-answers";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { MachineWords } from "./machine-words";
+import { Registry, type RegistryShape } from "./registry";
 import { sessionControl } from "./session-word";
-import type { CheckedFolder, SkillFolderReader } from "./skills";
-import {
-  bindSkillSource,
-  FOLDER_CHANGED,
-  folderOf,
-  parseSkillSource,
-  readCheckedFolder,
-} from "./skills";
-import { MACHINE_DISCONNECTED } from "./spawns";
+import type { SkillFolderReader } from "./skills";
+import { bindSkillSource, folderOf, readCheckedFolder } from "./skills";
 import { unreachable } from "./unreachable";
 import type { MachineSocket } from "./wire-socket";
-import { caughtUp } from "./wire-socket";
+import { caughtUp, sendToMachine as writeToMachine } from "./wire-socket";
 
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
 const ABANDON_MS = 5000;
@@ -82,22 +77,54 @@ const whenLetGo = (signal: AbortSignal): Effect.Effect<never, LetGo> =>
     return Effect.sync(() => signal.removeEventListener("abort", go));
   });
 
-export type MachineCallsContext = Pick<
-  ClosureContext,
-  | "db"
-  | "fleetChanged"
-  | "lifetime"
-  | "machineName"
-  | "machinePresence"
-  | "presenced"
-  | "registry"
-  | "sendToMachine"
-  | "silentWords"
-  | "skillChoices"
-  | "unansweredError"
->;
+/** What the machine calls read, each when it is called: the hub's services they are built from. */
+interface MachineCallsDeps {
+  db: DbShape;
+  lifetime: HubLifetimeShape;
+  machinePresence: HandoverState["Service"]["machinePresence"];
+  registry: RegistryShape;
+  words: Pick<
+    MachineWords["Service"],
+    "machineName" | "silentWords" | "unansweredError"
+  >;
+}
 
-export const createMachineCalls = (ctx: MachineCallsContext) => {
+const make = ({
+  db,
+  lifetime,
+  machinePresence,
+  registry,
+  words: { machineName, silentWords, unansweredError },
+}: MachineCallsDeps) => {
+  /**
+   * A SEND NO PROCESS TOOK WAITS FOR THE SESSION'S NEXT PROCESS, NOT A TIMER.
+   * When each session last had a process event: a start or attach sent to
+   * its machine, its launch up, its machine listing it attached, or its
+   * process ended (asleep, or settled by a beat). A send its machine hands
+   * back (sends.ts `takeBack`) is owed; when no such event has come since it
+   * was handed over, the session waits in {@link waitingForProcess} and
+   * nothing owed to it goes until one does. Handed straight back out, one
+   * send to a session no agent held went round 7,300 times in 40 minutes
+   * (2026-10-13).
+   */
+  const processAt = new Map<string, number>();
+  const waitingForProcess = new Set<string>();
+  /** A process event for `instanceId`; whether its owed sends were waiting on one. */
+  const processEvent = (instanceId: string): boolean => {
+    processAt.set(instanceId, Date.now());
+    return waitingForProcess.delete(instanceId);
+  };
+  /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
+  const sendToMachine = (socket: MachineSocket, frame: HubEnvelope): void => {
+    const instanceId =
+      frame.verb === "spawn"
+        ? (frame.instanceId ?? frame.payload.instanceId)
+        : undefined;
+    if (instanceId) {
+      processEvent(instanceId);
+    }
+    writeToMachine(socket, frame);
+  };
   /**
    * Controls a REST call is waiting on, by `requestId`. A dashboard's control is
    * answered over the socket it asked on; a route has nothing to hold the reply
@@ -122,7 +149,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   const waitOn = (requestId: string, machineId: string): void => {
     waitingMachines.set(requestId, {
       machineId,
-      socketId: ctx.registry.agent(machineId)?.id,
+      socketId: registry.agent(machineId)?.id,
       again: undefined,
     });
   };
@@ -132,7 +159,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * acknowledged, when it takes requests.
    */
   const resendHeld = (machineId: string): void => {
-    const agent = ctx.registry.agent(machineId);
+    const agent = registry.agent(machineId);
     if (!agent) {
       return;
     }
@@ -144,53 +171,13 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         call.again
       ) {
         call.socketId = agent.id;
-        ctx.sendToMachine(agent, call.again);
+        sendToMachine(agent, call.again);
         again += 1;
       }
     }
     if (again > 0) {
       console.info(
-        `[hub] ${ctx.machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
-      );
-    }
-  };
-  /**
-   * The machine registered again: every send a session it runs was handed
-   * and has not read goes again, in the order accepted, under its own
-   * hand-off. One handed on a link that dropped may never have reached the
-   * machine: on 2026-10-20 a delegate's brief, handed 143 ms before its
-   * machine's link was cut, stayed pending while its session sat idle, and
-   * its item never started (link-under-load lane 11). The agent takes a
-   * send it had already as had, never as a second turn (session.ts
-   * `#handedBefore`): taken, it says so; held by its process, it says that.
-   * A send owed is not handed here: it goes when its hold ends. Nor is one
-   * its harness has said it holds (`held`): a process has it. An agent that
-   * restarted adopts a live Claude process and tells the hub which sends its
-   * CLI holds (claude.ts `adopt`, MESSAGES_HELD), but keeps none of them as
-   * its own hand-offs, so one handed again here would reach that CLI twice.
-   */
-  const handAgain = (machineId: string, instanceIds: string[]): void => {
-    const agent = ctx.registry.agent(machineId);
-    if (!agent) {
-      return;
-    }
-    let again = 0;
-    for (const instanceId of instanceIds) {
-      for (const send of ctx.db.sendsIn(instanceId, ["pending"])) {
-        if (send.owedHeld || send.held || !(send.delivery && send.envelope)) {
-          continue;
-        }
-        const envelope = keptSend(send.envelope);
-        if (!envelope) {
-          continue;
-        }
-        ctx.sendToMachine(agent, ctx.presenced(envelope));
-        again += 1;
-      }
-    }
-    if (again > 0) {
-      console.info(
-        `[hub] ${ctx.machineName(machineId)} is back: ${again} unread send(s) handed to it again under their own hand-offs`
+        `[hub] ${machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
       );
     }
   };
@@ -234,7 +221,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     lapsed.delete(requestId);
     console.warn(
       machineReadWords.lateLine(
-        ctx.machineName(call.machineId),
+        machineName(call.machineId),
         call.what ?? "a request",
         requestId,
         Date.now() - call.sentAt - call.timeoutMs,
@@ -294,7 +281,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     socket: MachineSocket,
     frame: T
   ): T => {
-    ctx.sendToMachine(socket, frame);
+    sendToMachine(socket, frame);
     return frame;
   };
 
@@ -318,8 +305,8 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     harness?: HarnessKind,
     instanceId?: string
   ): Effect.Effect<Bounded<ControlAnswer<K>>> => {
-    const agent = ctx.registry.agent(machineId);
-    if (!agent && ctx.machinePresence(machineId).kind !== "reconnecting") {
+    const agent = registry.agent(machineId);
+    if (!agent && machinePresence(machineId).kind !== "reconnecting") {
       return Effect.succeed({ kind: "unanswered", reason: "dead", after: 0 });
     }
 
@@ -340,7 +327,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       } satisfies HubEnvelope<"control">;
       // Away: held, with no socket, for its machine's next register.
       if (agent) {
-        ctx.sendToMachine(agent, frame);
+        sendToMachine(agent, frame);
       }
       return frame;
     });
@@ -355,7 +342,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     harness?: HarnessKind,
     instanceId?: string
   ): Promise<Bounded<ControlAnswer<K>>> =>
-    ctx.lifetime.run(
+    lifetime.run(
       askMachine(machineId, method, args, timeoutMs, harness, instanceId)
     );
 
@@ -384,9 +371,9 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     args: ControlArgs<K>
   ): Promise<Bounded<ControlAnswer<K>>> => {
     const requestId = crypto.randomUUID();
-    return ctx.lifetime.run(
+    return lifetime.run(
       replyTo(row.machineId, method, requestId, READ_TIMEOUT_MS, () => {
-        const agent = ctx.registry.agent(row.machineId);
+        const agent = registry.agent(row.machineId);
         return agent
           ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
           : undefined;
@@ -415,7 +402,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    */
   const skillFolderMachine = (host: string): string => {
     const needle = host.toLowerCase();
-    const matches = ctx.db
+    const matches = db
       .namedMachines()
       .filter(
         (machine) =>
@@ -436,7 +423,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
 
   /** A local skill source's own name for `machineId`: its fleet name, else its id when another machine shares that name. */
   const skillFolderHost = (machineId: string): string => {
-    const machines = ctx.db.namedMachines();
+    const machines = db.namedMachines();
     const machine = machines.find((one) => one.machineId === machineId);
     if (!machine) {
       return machineId;
@@ -449,64 +436,6 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     )
       ? machineId
       : name;
-  };
-
-  /**
-   * A skill stored from a folder on a machine (`file://<machine>/<path>`),
-   * read and checked through its agent before anything is stored: refused
-   * in its words when it can't be, and when it no longer holds the files the
-   * person approved (`contentHash`, skills.ts `FOLDER_CHANGED`). The PUT
-   * route's way in for such a source, which answers its refusals; undefined
-   * for any other source.
-   */
-  const installFromFolder = async (name: string, body: FolderSkillBody) => {
-    if (parseSkillSource(body.source)?.kind !== "file") {
-      return;
-    }
-    const folder = folderOf(body.source);
-    if (!folder) {
-      return problem(400, {
-        code: "skill-folder-unnamed",
-        detail: `${body.source} names no machine: write it as file://<machine>/<path>`,
-      });
-    }
-    let read: CheckedFolder;
-    try {
-      read = await readCheckedFolder(
-        folder.machine,
-        folder.path,
-        readSkillFolder
-      );
-    } catch (error) {
-      return problem(400, {
-        code: "skill-folder-unread",
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-    if (body.contentHash !== undefined && body.contentHash !== read.hash) {
-      return problem(409, {
-        code: "skill-folder-changed",
-        detail: FOLDER_CHANGED,
-      });
-    }
-    const skill = ctx.db.putSkill({
-      name,
-      source: body.source,
-      enabled: body.enabled,
-      projectId: body.projectId,
-      areaId: body.areaId,
-      hash: read.hash,
-      bytes: read.files.reduce(
-        (total, file) =>
-          total + Buffer.byteLength(file.contentBase64, "base64"),
-        0
-      ),
-      files: read.files,
-    });
-    ctx.skillChoices.delete(name);
-    ctx.fleetChanged();
-    const installed: FleetSkillMeta = skill;
-    return installed;
   };
 
   /**
@@ -532,7 +461,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     }
     const source = bindSkillSource(input.source, {
       hostname: skillFolderHost(actor.machineId),
-      home: ctx.db
+      home: db
         .machineFacts()
         .find((agent) => agent.machineId === actor.machineId)?.home,
     });
@@ -564,7 +493,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        throw ctx.unansweredError(machineId, asked, `reading ${path}`);
+        throw unansweredError(machineId, asked, `reading ${path}`);
       case "answered":
         break;
       default:
@@ -572,8 +501,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     }
     if (!asked.value.ok) {
       throw new Error(
-        asked.value.error ??
-          `${ctx.machineName(machineId)} could not read ${path}`
+        asked.value.error ?? `${machineName(machineId)} could not read ${path}`
       );
     }
     return asked.value.result;
@@ -597,8 +525,8 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     ask: { caller: string; signal?: AbortSignal | undefined }
   ): Promise<Bounded<ControlAnswer<K>> | null> => {
     if (
-      !ctx.registry.agent(machineId) &&
-      ctx.machinePresence(machineId).kind !== "reconnecting"
+      !registry.agent(machineId) &&
+      machinePresence(machineId).kind !== "reconnecting"
     ) {
       return { kind: "unanswered", reason: "dead", after: 0 };
     }
@@ -608,14 +536,14 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     const requestId = crypto.randomUUID();
     /** The machine is told the read was let go (core `CONTROL_ABANDON`), and the hub does not wait for it to hear. */
     const stop = () =>
-      ctx.lifetime.fork(
+      lifetime.fork(
         "a let-go read",
         askMachine(machineId, CONTROL_ABANDON, [requestId], ABANDON_MS).pipe(
           Effect.tap((answer) =>
             answer.kind === "unanswered"
               ? Effect.sync(() =>
                   console.warn(
-                    `[find] ${ctx.silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
+                    `[find] ${silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
                   )
                 )
               : Effect.void
@@ -628,7 +556,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       requestId,
       timeoutMs,
       () => {
-        const agent = ctx.registry.agent(machineId);
+        const agent = registry.agent(machineId);
         const frame = {
           verb: "control",
           machineId,
@@ -639,19 +567,19 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
           } satisfies ControlPayload,
         } satisfies HubEnvelope<"control">;
         if (agent) {
-          ctx.sendToMachine(agent, frame);
+          sendToMachine(agent, frame);
         }
         return frame;
       },
       ask.signal ? whenLetGo(ask.signal) : undefined
     );
-    return await ctx.lifetime.run(
+    return await lifetime.run(
       read.pipe(
         Effect.map((reply) => {
           const answer = asRead(reply);
           if (answer.kind === "unanswered" && answer.reason === "timeout") {
             console.warn(
-              `[find] ${ctx.machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
+              `[find] ${machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
             );
             stop();
           }
@@ -833,7 +761,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     awaitFrame(machineId, requestId, timeoutMs, send, letGo).pipe(
       Effect.map((reply) =>
         parsedReply(reply, (frame) =>
-          answerOf(method, frame, ctx.machineName(machineId))
+          answerOf(method, frame, machineName(machineId))
         )
       )
     );
@@ -850,7 +778,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     send: () => HubEnvelope | undefined,
     letGo?: AbortSignal
   ): Promise<Bounded<ControlAnswer<K>>> =>
-    ctx.lifetime.run(
+    lifetime.run(
       replyTo(
         machineId,
         method,
@@ -869,11 +797,11 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     timeoutMs: number,
     send: () => HubEnvelope | undefined
   ): Promise<Bounded<FsAnswer<O>>> =>
-    ctx.lifetime.run(
+    lifetime.run(
       awaitFrame(machineId, requestId, timeoutMs, send).pipe(
         Effect.map((reply) =>
           parsedReply(reply, (frame) =>
-            fsAnswerOf(op, frame, ctx.machineName(machineId))
+            fsAnswerOf(op, frame, machineName(machineId))
           )
         )
       )
@@ -903,7 +831,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     requestId: string,
     send: () => HubEnvelope | undefined
   ): Promise<Bounded<CallAnswer<unknown>>> =>
-    ctx.lifetime.run(
+    lifetime.run(
       Effect.gen(function* () {
         const sentAt = Date.now();
         let sent: HubEnvelope | undefined;
@@ -919,7 +847,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         recordLimitReading("hub.spawn-start-ms", Date.now() - sentAt);
         while (
           reply.kind === "unanswered" &&
-          ctx.db
+          db
             .machineLinesOf(instanceId)
             .some((line) => line.kind === "room" && line.at >= sentAt)
         ) {
@@ -931,7 +859,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
           );
         }
         return parsedReply(reply, (frame) =>
-          parsedAs(SPAWN_REPLY, frame, ctx.machineName(machineId), "its start")
+          parsedAs(SPAWN_REPLY, frame, machineName(machineId), "its start")
         );
       })
     );
@@ -940,7 +868,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     waiting,
     waitingMachines,
     resendHeld,
-    handAgain,
+    processAt,
+    processEvent,
+    sendToMachine,
+    waitingForProcess,
     commandQueues,
     lateAnswer,
     logUnroutedReply,
@@ -952,7 +883,6 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     asRead,
     readSessionProcess,
     readAgent,
-    installFromFolder,
     bindFolderInstall,
     readSkillFolder,
     readStoppable,
@@ -962,3 +892,24 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     awaitStart,
   };
 };
+
+/**
+ * The hub's calls to its machines (`make`), as one of its services: built
+ * once, from its layer, by `createServer` (hub-layer.ts).
+ */
+export class MachineCalls extends Context.Service<
+  MachineCalls,
+  ReturnType<typeof make>
+>()("MachineCalls") {}
+
+export const MachineCallsLayer = Layer.effect(MachineCalls)(
+  Effect.gen(function* () {
+    return make({
+      db: yield* Db,
+      lifetime: yield* HubLifetime,
+      machinePresence: (yield* HandoverState).machinePresence,
+      registry: yield* Registry,
+      words: yield* MachineWords,
+    });
+  })
+);

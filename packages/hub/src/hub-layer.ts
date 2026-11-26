@@ -18,12 +18,15 @@ import { openBrowserPass } from "./browser-passes";
 import { DASHBOARD_PORT } from "./config";
 import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
 import { Db } from "./db";
+import { HandoverStateLayer } from "./handover-state";
 import { createHubAuth, HubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
 import { HubRecord, HubRecordLayer } from "./hub-record";
 import { LawsLayer } from "./laws";
 import { HubLifetime } from "./lifetime";
+import { MachineCallsLayer } from "./machine-calls";
 import { MachineCredentialsLayer } from "./machine-credentials";
+import { MachineWordsLayer } from "./machine-words";
 import { PreviewLinkLayer } from "./preview-control";
 import { Registry } from "./registry";
 import { SessionIdentities, SessionIdentitiesLayer } from "./session-identity";
@@ -79,7 +82,9 @@ const HubAuthLayer = Layer.effect(HubAuth)(
 
 /** The services the others here read: made first, and kept in what the layer gives. */
 const FirstLayer = Layer.mergeAll(
+  HandoverStateLayer,
   HubRecordLayer,
+  MachineWordsLayer,
   SessionIdentitiesLayer,
   TailnetHttpsLayer
 );
@@ -88,6 +93,7 @@ export const HubLayer = Layer.mergeAll(
   AdmissionLayer,
   HubAuthLayer,
   LawsLayer,
+  MachineCallsLayer,
   MachineCredentialsLayer,
   PageStoresLayer,
   PreviewLinkLayer,

@@ -48,9 +48,12 @@ export const agentUpdateBody = t.Object({
  * machine not connected is `awayProblem`.
  */
 export const agentUpdate =
-  (ctx: Pick<HubContext, "callAgent" | "machineName"> & MachineReadsContext) =>
+  (
+    ctx: Pick<HubContext, "machineCalls" | "machineName"> & MachineReadsContext
+  ) =>
   async (machineId: string, body: Static<typeof agentUpdateBody>) => {
-    const { callAgent, machineName } = ctx;
+    const { machineName } = ctx;
+    const { callAgent } = ctx.machineCalls;
     const answer = await timed(
       callAgent(machineId, UPDATE_CAWCO, [body], UPDATE_TIMEOUT_MS),
       (ms) => recordLimitReading("hub.agent-update-ms", ms)
@@ -80,15 +83,11 @@ export const agentUpdate =
 export const agentControlRoutes = (
   ctx: Pick<
     HubContext,
-    | "callAgent"
-    | "db"
-    | "machineFault"
-    | "machineName"
-    | "readAgent"
-    | keyof MachineReadsContext
+    "db" | "machineFault" | "machineName" | keyof MachineReadsContext
   >
 ) => {
-  const { db, machineName, readAgent } = ctx;
+  const { db, machineName } = ctx;
+  const { readAgent } = ctx.machineCalls;
   const update = agentUpdate(ctx);
   return (
     new Elysia()

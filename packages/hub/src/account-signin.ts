@@ -64,16 +64,15 @@ const SIGNED_IN_AGAIN = "it was signed in again through CawCo";
 export type AccountSigninContext = Pick<
   ClosureContext,
   | "advanceMove"
-  | "callAgent"
   | "db"
   | "forgetOn"
   | "liveFrom"
+  | "machineCalls"
   | "machineName"
   | "moveKey"
   | "moveResults"
   | "movingLogins"
   | "publishUsage"
-  | "readAgent"
   | "rowsLeave"
   | "silentWords"
   | "tickMoves"
@@ -222,7 +221,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
         keepCodexLeave(accountId, machineId, true);
         continue;
       }
-      const answer = await ctx.callAgent(
+      const answer = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_FORGET_CODEX_LOGIN,
         [accountId],
@@ -325,7 +324,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     const traits = traitsOf(store);
     if (traits.homeLogin === "dir") {
       const read = said(
-        await ctx.readAgent(
+        await ctx.machineCalls.readAgent(
           machineId,
           CONTROL_READ_HOME_LOGIN,
           [],
@@ -350,7 +349,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           });
     }
     const read = said(
-      await ctx.readAgent(
+      await ctx.machineCalls.readAgent(
         machineId,
         CONTROL_READ_HOME_CREDENTIALS,
         [],
@@ -492,7 +491,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    * and is asked again when the stores next change or the machine reconnects.
    */
   const adoptHomeCredentials = async (machineId: string): Promise<void> => {
-    const read = await ctx.readAgent(
+    const read = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_READ_HOME_CREDENTIALS,
       [],
@@ -621,14 +620,14 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   ): Promise<AccountJoined | { error: string }> => {
     const asked =
       existing.provider === CLAUDE_PROVIDER
-        ? await ctx.callAgent(
+        ? await ctx.machineCalls.callAgent(
             machineId,
             CONTROL_JOIN_ACCOUNT_LOGIN,
             [fromId, existing.id, identity],
             SIGNIN_TIMEOUT_MS,
             "claude"
           )
-        : await ctx.callAgent(
+        : await ctx.machineCalls.callAgent(
             machineId,
             CONTROL_JOIN_PROVIDER_ACCOUNT,
             [fromId, existing.id, identity],
@@ -795,7 +794,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   ): Promise<Bounded<CallAnswer<SigninFinished>>> =>
     account.provider === CLAUDE_PROVIDER
       ? answerAs(
-          await ctx.callAgent(
+          await ctx.machineCalls.callAgent(
             machineId,
             CONTROL_COMPLETE_ACCOUNT_LOGIN,
             [code ?? null, signinId, expectedOf(account)],
@@ -805,7 +804,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           (result): SigninFinished => ({ kind: "account", result })
         )
       : answerAs(
-          await ctx.callAgent(
+          await ctx.machineCalls.callAgent(
             machineId,
             CONTROL_COMPLETE_PROVIDER_LOGIN,
             [code ?? null, signinId, expectedOf(account)],

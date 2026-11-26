@@ -52,13 +52,12 @@ export type MachineReturnContext = Pick<
   | "keepAliveScheduler"
   | "keepCustody"
   | "keepPrompt"
-  | "keptOn"
   | "launchingOn"
   | "learnCheckout"
   | "lifetime"
+  | "machineCalls"
   | "projectLocate"
   | "lifecycle"
-  | "locations"
   | "losePending"
   | "machineCredentials"
   | "machineFor"
@@ -78,11 +77,9 @@ export type MachineReturnContext = Pick<
   | "relayJourney"
   | "relayingPreviews"
   | "releaseHeld"
-  | "resendHeld"
   | "restarts"
   | "restore"
   | "resumeCutTurn"
-  | "sendToMachine"
   | "settleLaunchesOn"
   | "settlePending"
   | "socketAddress"
@@ -215,9 +212,9 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // A machine arriving can turn a remembered "nobody holds this"
     // into an answer, so the negatives go. The hits stay: a
     // conversation does not move between machines.
-    for (const [id, where] of ctx.locations) {
+    for (const [id, where] of ctx.machineCalls.locations) {
       if (where === null) {
-        ctx.locations.delete(id);
+        ctx.machineCalls.locations.delete(id);
       }
     }
   };
@@ -228,7 +225,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // it is away. A register that could not read it keeps the last.
     const { resumable } = agentFrame;
     if (resumable) {
-      ctx.keptOn.set(message.machineId, new Set(resumable));
+      ctx.machineCalls.keptOn.set(message.machineId, new Set(resumable));
     }
   };
 
@@ -660,7 +657,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     } else {
       ctx.relayingPreviews.delete(message.machineId);
     }
-    ctx.sendToMachine(
+    ctx.machineCalls.sendToMachine(
       ws,
       registerAck(
         message,
@@ -704,7 +701,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     const { message, agentFrame } = ret;
     // Behind its ack, which it waits for to take requests: what
     // was held for it while it was away goes again.
-    ctx.resendHeld(message.machineId);
+    ctx.machineCalls.resendHeld(message.machineId);
     ctx.handAgain(message.machineId, agentFrame.instances);
   };
 

@@ -77,13 +77,13 @@ export type ProjectLocateContext = Pick<
   ClosureContext,
   | "askedMachinePath"
   | "db"
+  | "machineCalls"
   | "machineName"
   | "merging"
   | "online"
   | "projectOut"
   | "projectStops"
   | "projectsChanged"
-  | "readAgent"
   | "runOnMachine"
 >;
 
@@ -216,7 +216,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     machineId: string,
     folder: { path: string; placeId: string; was: string }
   ): Promise<FolderLook | undefined> => {
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_FOLDER_LOOK,
       [folder],
@@ -229,7 +229,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
 
   /** Whether a folder stands at `path` on `machineId`; undefined when it did not say. */
   const stands = (machineId: string, path: string) =>
-    folderStandsOn(ctx.readAgent, machineId, path);
+    folderStandsOn(ctx.machineCalls.readAgent, machineId, path);
 
   /** How many of the project's sessions have a conversation from the checkout's folder, or a folder inside it. */
   const conversationsIn = (project: ProjectRow, place: PlaceRow): number =>

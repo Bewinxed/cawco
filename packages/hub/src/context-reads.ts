@@ -43,10 +43,9 @@ export type ContextReadsContext = Pick<
   | "db"
   | "lifetime"
   | "locateSession"
+  | "machineCalls"
   | "machineFault"
   | "machineName"
-  | "readAgent"
-  | "readSessionProcess"
   | "registry"
   | "retireSession"
   | "sendFromHub"
@@ -192,7 +191,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     if (!model) {
       return undefined;
     }
-    const asked = await ctx.readAgent(
+    const asked = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_MODEL_CATALOG,
       [],
@@ -254,7 +253,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         reason: `no stored ${harnessName(row.harness)} conversation`,
       };
     }
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       row.machineId,
       CONTROL_READ_SESSION_CONTEXT,
       [row.sessionId, row.cwd],
@@ -323,7 +322,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
 
   /** How many tokens a running session holds right now, as its harness reads it. */
   const liveContextTokensOf = async (row: InstanceRow): Promise<number> => {
-    const answer = await ctx.readSessionProcess(row, CONTROL_CONTEXT_USAGE, []);
+    const answer = await ctx.machineCalls.readSessionProcess(
+      row,
+      CONTROL_CONTEXT_USAGE,
+      []
+    );
     switch (answer.kind) {
       case "unanswered":
         throw answer.reason === "dead"
@@ -351,7 +354,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
 
   /** When the session started, as its own harness records it. */
   const sessionStartOf = async (where: SessionLocation): Promise<string> => {
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       where.machineId,
       CONTROL_GET_SESSION_INFO,
       [where.sessionId, where.cwd || undefined],
@@ -395,7 +398,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     where: SessionLocation,
     since: string
   ): Promise<GitChanges> => {
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       where.machineId,
       CONTROL_GIT_CHANGES,
       [where.cwd, since],
@@ -428,7 +431,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     where: SessionLocation,
     whole: boolean
   ): Promise<SessionMessage[]> => {
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       where.machineId,
       CONTROL_GET_SESSION_MESSAGES,
       [

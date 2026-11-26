@@ -158,7 +158,7 @@ export interface WritesDeps {
   readonly machine: (
     machineId: string,
     ask: ForgeAsk
-  ) => Promise<MachineWriteCall>;
+  ) => Effect.Effect<MachineWriteCall>;
   /** A watch by its id; undefined when it is gone. */
   readonly watch: (id: string) => WriteWatch | undefined;
 }
@@ -359,7 +359,7 @@ export const createWrites = (deps: WritesDeps) => {
         refuse("input", `A machine makes no ${op.op} with its own sign-in.`)
       );
     }
-    return Effect.promise(() => deps.machine(machineId, { repo, op })).pipe(
+    return deps.machine(machineId, { repo, op }).pipe(
       Effect.flatMap((called) => {
         if (called.kind === "failed") {
           return Effect.fail(refuse("unreachable", called.why));

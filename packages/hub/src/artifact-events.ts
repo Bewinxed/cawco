@@ -77,12 +77,12 @@ export type ArtifactEventsContext = Pick<
   HubContext,
   | "anchors"
   | "artifactLane"
-  | "callAgent"
   | "db"
   | "decisions"
   | "deliverSend"
   | "hubAsks"
   | "inputRefusal"
+  | "machineCalls"
   | "triggers"
   | "leftoverWords"
   | "lifetime"
@@ -90,7 +90,6 @@ export type ArtifactEventsContext = Pick<
   | "pending"
   | "plans"
   | "publishSend"
-  | "readAgent"
   | "registry"
   | "sentFrame"
   | "sessionName"
@@ -702,7 +701,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     folder: string | undefined
   ) => {
     const app = posix.resolve(instance.cwd, folder ?? ".");
-    const asked = await ctx.readAgent(
+    const asked = await ctx.machineCalls.readAgent(
       instance.machineId,
       CONTROL_REPO_ROOT,
       [app],
@@ -902,7 +901,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     // stage-install.ts); a place's runs in a clone of its checkout, cut on
     // its first use (agent stage-clone.ts): its call waits for that too. A
     // design folder's installs as a clone's does.
-    const asked = await ctx.callAgent(
+    const asked = await ctx.machineCalls.callAgent(
       machineId,
       method,
       args(workspace),

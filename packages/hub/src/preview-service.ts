@@ -9,11 +9,10 @@ import {
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { startRefused } from "@cawco/preview/proxy";
-import { Effect } from "effect";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { artifactOrigin, originOfKey } from "./db/previews";
 import type { HubLifetimeShape } from "./lifetime";
-import type { AgentCall } from "./machine-answers";
+import type { AgentAsk, AgentCall } from "./machine-answers";
 import { loadedOnce, type PreviewReach } from "./preview";
 import { type MachineRow, servedByMachine } from "./preview-machine";
 import type { PreviewUnloaded } from "./preview-stops";
@@ -22,6 +21,8 @@ import type { PreviewUnloaded } from "./preview-stops";
 export interface PreviewServiceDeps {
   /** Machine `machineId`'s socket's address; undefined while it is away. */
   address: (machineId: string) => string | undefined;
+  /** {@link call} as an Effect (machine-calls.ts `askMachine`). */
+  ask: AgentAsk;
   /** How long a machine has to answer a listener's start or stop. */
   busyMs: number;
   /** Asks machine `machineId`'s agent: its answer, or that it gave none within `timeoutMs`. */
@@ -95,13 +96,11 @@ export function createPreviewService(deps: PreviewServiceDeps) {
   const stop = (machineId: string, key: string, token: string): void => {
     deps.lifetime.fork(
       "preview listener stop",
-      Effect.tryPromise(() =>
-        deps.call(
-          machineId,
-          PREVIEW_STOP,
-          [{ instanceId: key, token }],
-          deps.busyMs
-        )
+      deps.ask(
+        machineId,
+        PREVIEW_STOP,
+        [{ instanceId: key, token }],
+        deps.busyMs
       )
     );
   };

@@ -186,11 +186,11 @@ export type HistoryContext = Pick<
   | "firstTurnOf"
   | "heldSessions"
   | "locateSession"
+  | "machineCalls"
   | "machineFault"
   | "machineName"
   | "machinePresence"
   | "nameFromFirstTurn"
-  | "readAgent"
   | "refusedHarness"
   | "registry"
   | "sendLines"
@@ -389,7 +389,7 @@ export const createHistory = (ctx: HistoryContext) => {
     window: WindowAsk
   ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
-    const answer = await ctx.readAgent(
+    const answer = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,
       [where.sessionKey, { dir: where.cwd || undefined, window }],

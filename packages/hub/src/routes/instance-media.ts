@@ -8,7 +8,7 @@ import { mediaCalls } from "../session-calls";
 export const instanceMediaRoutes = (
   ctx: Pick<
     HubContext,
-    "callAgent" | "db" | "lifetime" | "sessionWorkspace" | "writes"
+    "db" | "lifetime" | "machineCalls" | "sessionWorkspace" | "writes"
   > &
     MachineReadsContext
 ) => {

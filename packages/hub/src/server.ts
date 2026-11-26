@@ -61,6 +61,7 @@ import { BUILT_IN, decidesFileProblems, doneByYou } from "@cawco/core/decides";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
+import { timedEffect } from "@cawco/core/effect/timed";
 import type {
   ClientEnvelope,
   ClientVerb,
@@ -80,13 +81,7 @@ import {
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST, type ForgeAsk } from "@cawco/core/forge-post";
 import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
-import {
-  type HandoverCommand,
-  type HandoverEvent,
-  step as handoverStep,
-  initialHandover,
-  presenceOf,
-} from "@cawco/core/handover";
+import type { HandoverCommand, HandoverEvent } from "@cawco/core/handover";
 import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
 import {
   BOUNDARY_RELAUNCH,
@@ -129,11 +124,7 @@ import { createLoopProfiler } from "@cawco/core/loop-profile";
 import { doing, syncSection } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
-import {
-  type MachineFault,
-  machineCalled,
-  machineLabel,
-} from "@cawco/core/machine-names";
+import { machineCalled, machineLabel } from "@cawco/core/machine-names";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
   type ModelListing,
@@ -265,10 +256,6 @@ import { turnCutWords } from "@cawco/core/words/cuts";
 import { harnessRefusedWords, harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { judgedWords } from "@cawco/core/words/judged";
-import {
-  machineFaultWords,
-  machineSilenceWords,
-} from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { noticeWords } from "@cawco/core/words/notices";
 import {
@@ -302,7 +289,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { quote } from "@cawco/providers/quote";
-import { Context } from "effect";
+import { Context, Effect } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
@@ -482,6 +469,7 @@ import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { handMoveOf } from "./hand-move";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
+import { HandoverState } from "./handover-state";
 import type { HarnessConfigBody } from "./harness-config-body";
 import { createHistory, custodyLine, userTurnText } from "./history";
 import { addressOf, browserName, type Caller, HubAuth } from "./hub-auth";
@@ -491,7 +479,7 @@ import { HubLayer } from "./hub-layer";
 import { HubRecord } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
-import { type AuthSocket, type Forwarded, MachineAway } from "./hub-shapes";
+import type { AuthSocket, Forwarded } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
 import {
   BROWSER_ORIGIN,
@@ -548,13 +536,13 @@ import {
   type ControlResult,
   CUT_COMMIT_GONE,
   failedProblem,
+  MACHINE_DISCONNECTED,
   type MachineCall,
   MachineProblem,
   silentProblem,
-  type Unanswered,
   unansweredIn,
 } from "./machine-answers";
-import { createMachineCalls } from "./machine-calls";
+import { MachineCalls } from "./machine-calls";
 import { createMachineCommands } from "./machine-commands";
 import { createMachineContact } from "./machine-contact";
 import { basicCaller, MachineCredentials } from "./machine-credentials";
@@ -566,6 +554,7 @@ import {
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
+import { MachineWords } from "./machine-words";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
 import { createMemory, inboxNotes } from "./memory";
@@ -767,7 +756,6 @@ import {
   awaitsItsName,
   createSpawns,
   enforceRowSessionKey,
-  MACHINE_DISCONNECTED,
   namedSpawn,
   peekKind,
   peekParent,
@@ -841,7 +829,6 @@ import {
   openLine,
   receiveFrame,
   sendToClient,
-  sendToMachine as writeToMachine,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
 import { isHubParent } from "./work-item-state";
@@ -1330,9 +1317,41 @@ export const createServer = (
       Context.add(HubLifetime, lifetime)
     )
   );
+  // The machines in the hub's sentences (machine-words.ts), its handover's
+  // state (handover-state.ts) and its calls to machines (machine-calls.ts).
+  const {
+    awayError,
+    machineFault,
+    machineName,
+    silentWords,
+    unansweredError,
+    unansweredFault,
+  } = Context.get(services, MachineWords);
+  const handoverState = Context.get(services, HandoverState);
+  const { machinePresence } = handoverState;
+  const machineCalls = Context.get(services, MachineCalls);
+  const {
+    FORGET_CREDENTIALS_TIMEOUT_MS,
+    asRead,
+    awaitReply,
+    askMachine,
+    bindFolderInstall,
+    callAgent,
+    keptOn,
+    locations,
+    logUnroutedReply,
+    processEvent,
+    readAgent,
+    readSkillFolder,
+    readStoppable,
+    sendAnswerable,
+    sendToMachine,
+    waiting,
+    waitingForProcess,
+    waitingMachines,
+  } = machineCalls;
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
-    readSessionProcess: () => readSessionProcess,
     reconnectingFor: () => (machineId: string) =>
       reconnectingFor(ctx, machineId),
     advanceContinuation: () => advanceContinuation,
@@ -1376,12 +1395,10 @@ export const createServer = (
     keepFleetReport: () => keepFleetReport,
     keepTasks: () => keepTasks,
     landSessionDir: () => landSessionDir,
-    lateAnswer: () => lateAnswer,
     launchSettled: () => launchSettled,
     launchingOn: () => launchingOn,
     learnCheckout: () => learnCheckout,
     limitAnswerFailed: () => limitAnswerFailed,
-    logUnroutedReply: () => logUnroutedReply,
     machineFor: () => machineFor,
     moveOwedAtRefusal: () => moveOwedAtRefusal,
     nameStoredSessions: () => nameStoredSessions,
@@ -1404,7 +1421,6 @@ export const createServer = (
     relayJourney: () => relayJourney,
     relayingPreviews: () => relayingPreviews,
     releaseHeld: () => releaseHeld,
-    resendHeld: () => resendHeld,
     restarts: () => restarts,
     restore: () => restore,
     resumeCutTurn: () => resumeCutTurn,
@@ -1435,7 +1451,6 @@ export const createServer = (
     turnsWritten: () => turnsWritten,
     unknownAccountsOf: () => unknownAccountsOf,
     updateAll: () => updateAll,
-    waiting: () => waiting,
     welcomeConverge: () => welcomeConverge,
     withdrawUnshown: () => withdrawUnshown,
     TOOL_SIGNIN_BEGIN_MS: () => TOOL_SIGNIN_BEGIN_MS,
@@ -1447,8 +1462,6 @@ export const createServer = (
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
     cacheWarm: () => cacheWarm,
-    askMachine: () => askMachine,
-    callAgent: () => callAgent,
     caw: () => caw,
     offersWaiting: () => offersWaiting,
     checkSources: () => checkSources,
@@ -1494,6 +1507,7 @@ export const createServer = (
     maskedMcp: () => maskedMcp,
     lifetime: () => lifetime,
     linkMarketplace: () => linkMarketplace,
+    machineCalls: () => machineCalls,
     machineCredentials: () => machineCredentials,
     machineFault: () => machineFault,
     machineFleetItems: () => machineFleetItems,
@@ -1512,10 +1526,8 @@ export const createServer = (
     projectTypes: () => projectTypes,
     publishUsage: () => publishUsage,
     pushAgents: () => pushAgents,
-    readAgent: () => readAgent,
     readMachineMedia: () => readMachineMedia,
     readMarketplaceSource: () => readMarketplaceSource,
-    readStoppable: () => readStoppable,
     registry: () => registry,
     retryFromTray: () => retryFromTray,
     sessionName: () => sessionName,
@@ -1573,11 +1585,9 @@ export const createServer = (
     nameFromLiveTurn: () => nameFromLiveTurn,
     planChanges: () => planChangesPort.now(),
     plans: () => plans,
-    processAt: () => processAt,
     push: () => push,
     sayCompaction: () => sayCompaction,
     sendToClient: () => sendToClient,
-    sendToMachine: () => sendToMachine,
     sendRefusal: () => sendRefusal,
     silentWords: () => silentWords,
     startHold: () => startHold,
@@ -1588,7 +1598,6 @@ export const createServer = (
     takenUpBy: () => takenUpBy,
     transcripts: () => transcripts,
     turnInFlight: () => turnInFlight,
-    waitingForProcess: () => waitingForProcess,
     wakeForSend: () => wakeForSend,
     wakesForSend: () => wakesForSend,
     askersOf: () => askersOf,
@@ -1668,14 +1677,10 @@ export const createServer = (
     lastRequestContext: () => lastRequestContext,
     releaseOne: () => releaseOne,
     unnoteAtLimit: () => unnoteAtLimit,
-    asRead: () => asRead,
-    awaitFs: () => awaitFs,
-    awaitReply: () => awaitReply,
     cutTasksWords: () => cutTasksWords,
     deliverToSession: () => deliverToSession,
     escalateRoutedAsks: () => escalateRoutedAsks,
     losePending: () => losePending,
-    sendAnswerable: () => sendAnswerable,
     sessionAsleep: () => sessionAsleep,
     turnOver: () => turnOver,
     keptWarm: () => keptWarm,
@@ -1713,16 +1718,13 @@ export const createServer = (
     withdrawPending: () => withdrawPending,
     accountProviderFor: () => accountProviderFor,
     accountStartRefusal: () => accountStartRefusal,
-    awaitStart: () => awaitStart,
     awaitingFirstTurn: () => awaitingFirstTurn,
     bounded: () => bounded,
     forkedFromOf: () => forkedFromOf,
     harnessReportOf: () => harnessReportOf,
     heldClaim: () => heldClaim,
     inFlightRefusal: () => inFlightRefusal,
-    keptOn: () => keptOn,
     launchAccount: () => launchAccount,
-    locations: () => locations,
     openInstance: () => openInstance,
     owedOn: () => owedOn,
     pickWithMove: () => pickWithMove,
@@ -1756,14 +1758,12 @@ export const createServer = (
     nameFromFirstTurn: () => nameFromFirstTurn,
     sendLines: () => sendLines,
     mcpChanges: () => mcpChanges,
-    readSkillFolder: () => readSkillFolder,
     toolsMoved: () => toolsMovedPort.now(),
     toolInputsChanged: () => toolInputsChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
     modelListing: () => modelListing,
     noteFreshStart: () => noteFreshStart,
-    processEvent: () => processEvent,
     processGeneration: () => processGeneration,
     replaceAtWake: () => replaceAtWake,
     moveAtMessage: () => moveAtMessage,
@@ -1813,7 +1813,6 @@ export const createServer = (
     ownMachineId: () => ownMachineId,
     sessionWorkspace: () => sessionWorkspace,
     presenced: () => presenced,
-    commandQueues: () => commandQueues,
     merging: () => merging,
     askedMachinePath: () => askedMachinePath,
     onlineMachines: () => onlineMachines,
@@ -1875,6 +1874,7 @@ export const createServer = (
     endOwedNotices,
     failOwedAway,
     failSend,
+    handAgain,
     handoffs,
     inCustody,
     interruptedTurns,
@@ -2130,6 +2130,7 @@ export const createServer = (
     fetchPlugins,
     fetchSkill,
     fleetChanged,
+    installFromFolder,
     keepHookVersion,
     keepRemovedMemory,
     keepReplacedDoc,
@@ -2271,31 +2272,6 @@ export const createServer = (
   } = createContextReads(ctx);
   const { browseAt, keepPicture, openDiagramAsCanvas, pictureOf } =
     createPreviewBrowse(ctx);
-  const {
-    FORGET_CREDENTIALS_TIMEOUT_MS,
-    asRead,
-    awaitFs,
-    awaitReply,
-    awaitStart,
-    askMachine,
-    bindFolderInstall,
-    callAgent,
-    commandQueues,
-    handAgain,
-    installFromFolder,
-    keptOn,
-    lateAnswer,
-    locations,
-    logUnroutedReply,
-    readAgent,
-    readSessionProcess,
-    readSkillFolder,
-    readStoppable,
-    resendHeld,
-    sendAnswerable,
-    waiting,
-    waitingMachines,
-  } = createMachineCalls(ctx);
   const {
     endLeak,
     leaksTold,
@@ -2494,36 +2470,6 @@ export const createServer = (
   };
 
   /**
-   * A SEND NO PROCESS TOOK WAITS FOR THE SESSION'S NEXT PROCESS, NOT A TIMER.
-   * When each session last had a process event: a start or attach sent to
-   * its machine, its launch up, its machine listing it attached, or its
-   * process ended (asleep, or settled by a beat). A send its machine hands
-   * back ({@link takeBack}) is owed; when no such event has come since it
-   * was handed over, the session waits in {@link waitingForProcess} and
-   * nothing owed to it goes until one does. Handed straight back out, one
-   * send to a session no agent held went round 7,300 times in 40 minutes
-   * (2026-10-13).
-   */
-  const processAt = new Map<string, number>();
-  const waitingForProcess = new Set<string>();
-  /** A process event for `instanceId`; whether its owed sends were waiting on one. */
-  const processEvent = (instanceId: string): boolean => {
-    processAt.set(instanceId, Date.now());
-    return waitingForProcess.delete(instanceId);
-  };
-  /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
-  const sendToMachine = (socket: MachineSocket, frame: HubEnvelope): void => {
-    const instanceId =
-      frame.verb === "spawn"
-        ? (frame.instanceId ?? frame.payload.instanceId)
-        : undefined;
-    if (instanceId) {
-      processEvent(instanceId);
-    }
-    writeToMachine(socket, frame);
-  };
-
-  /**
    * THE HUB'S HALF OF THE HANDOVER (core handover.ts): each machine's
    * presence, read from one deadline, and the order an ask is parked and
    * shown in. This hub only turns its sockets and timers into the reducer's
@@ -2532,11 +2478,9 @@ export const createServer = (
    * a machine inside its window is held for it ({@link deliverSend}), and a
    * read of one says when to ask again ({@link reconnectingFor}).
    */
-  let handover = initialHandover();
   const hubStep = (event: HandoverEvent): HandoverCommand[] => {
-    const stepped = handoverStep(handover, event);
-    handover = stepped.state;
-    for (const command of stepped.commands) {
+    const commands = handoverState.step(event);
+    for (const command of commands) {
       if (command.kind === "wake") {
         const { at } = command;
         lifetime.after("hub step wake", Math.max(0, at - Date.now()), () =>
@@ -2553,11 +2497,8 @@ export const createServer = (
         releaseOwed({ machineId: command.machineId });
       }
     }
-    return stepped.commands;
+    return commands;
   };
-  /** A machine as everything that reads its presence reads it now. */
-  const machinePresence = (machineId: string) =>
-    presenceOf(handover, machineId, Date.now());
   /**
    * An ask parked, then shown, in the order the handover says: what a screen
    * is shown is on the pending ledger first, so a hub restart keeps it.
@@ -3055,6 +2996,7 @@ export const createServer = (
   const browserStream = createBrowserStream({
     lifetime,
     artifact: (id) => db.artifacts.get(id),
+    ask: askMachine,
     call: callAgent,
     callerOf: (request) => hubAuth.callerOf(request, null),
     classify: (header, method, path, address) =>
@@ -3168,11 +3110,11 @@ export const createServer = (
     },
   });
   /** One forge write made on `machineId` with its own sign-in there (agent forges/forge.ts). */
-  const forgeCall = async (
+  const forgeCall = Effect.fnUntraced(function* (
     machineId: string,
     ask: ForgeAsk
-  ): Promise<MachineWriteCall> => {
-    const answer = await callAgent(
+  ): Effect.fn.Return<MachineWriteCall> {
+    const answer = yield* askMachine(
       machineId,
       CONTROL_FORGE_POST,
       [ask],
@@ -3193,7 +3135,7 @@ export const createServer = (
           kind: "failed",
           why: answer.value.error ?? "The machine refused the post.",
         };
-  };
+  });
   // The write door (writes.ts): every write CawCo makes to an outside
   // service, recorded, so its own come back known; a session's on its
   // machine with the machine's own sign-in, the hub's with a connection.
@@ -3554,9 +3496,6 @@ export const createServer = (
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
   };
-  /** A machine as a sentence names it (core `machineCalled`), never by its id. */
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.namedMachines());
   /**
    * The machine this hub runs on, by the id every agent registers under. The
    * id is a function of the host alone (core/machine-id.ts), and the hub and
@@ -3610,51 +3549,6 @@ export const createServer = (
       board.machineStatusMoved(machineId);
     },
   });
-  /**
-   * Why a machine could not take a request, as a client reads it (core
-   * `machineFaultWords`): by its name, and a machine not on this hub as
-   * `unknown` whatever the fault. `next: false`, the cause alone (core
-   * `machineFaultWords`).
-   */
-  const machineFault = (
-    machineId: string,
-    fault: MachineFault,
-    words: { next?: boolean } = {}
-  ): string => {
-    const agents = db.namedMachines();
-    return agents.some((each) => each.machineId === machineId)
-      ? machineFaultWords(machineCalled(machineId, agents), fault, words)
-      : machineFaultWords(undefined, "unknown", words);
-  };
-  /** `machineId` away, as a step or a read that cannot finish without it throws it. */
-  const awayError = (machineId: string): MachineAway =>
-    new MachineAway(machineId, machineFault(machineId, "offline"));
-  /** {@link machineFault} for an ask the machine did not answer: not connected, or silent. */
-  const unansweredFault = (machineId: string, answer: Unanswered): string =>
-    machineFault(machineId, answer.reason === "dead" ? "offline" : "silent");
-  /** "<machine> did not answer within N s" (or is not connected), for an ask it left unanswered. */
-  const silentWords = (machineId: string, answer: Unanswered): string =>
-    machineSilenceWords(
-      machineName(machineId),
-      answer.reason === "dead" ? undefined : answer.after
-    );
-  /**
-   * A read its machine left unanswered, as the read throws it: not connected
-   * (or away past its deadline, `asRead`) is {@link awayError}, which a route
-   * answers 503 naming the machine and a continuation waits out; silent,
-   * 504 machine-silent, `what` (the read, in words) followed by
-   * {@link silentWords}.
-   */
-  const unansweredError = (
-    machineId: string,
-    answer: Unanswered,
-    what: string
-  ): MachineProblem =>
-    answer.reason === "dead"
-      ? awayError(machineId)
-      : new MachineProblem(
-          silentProblem(`${what}: ${silentWords(machineId, answer)}`)
-        );
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;
@@ -4424,7 +4318,7 @@ export const createServer = (
    * A socket stopped being its machine's (registry `onAgentLeft`: a newer
    * register replaced it, or it closed): every call waiting on it is held,
    * not failed. It is sent again, under the same id, on the machine's next
-   * register ({@link resendHeld}), and the machine runs an id once however
+   * register (machine-calls.ts `resendHeld`), and the machine runs an id once however
    * often it comes (agent request-record.ts), so a create, an archive, an
    * inputs write or a landing's command that ran answers with what it did.
    * Only a call whose own deadline passes with its machine still away fails,
@@ -4445,27 +4339,31 @@ export const createServer = (
   });
   db.onCredentialsRevoked((hashes) => {
     for (const machineId of registry.machineIds()) {
-      detach(
-        timed(
-          callAgent(
+      lifetime.fork(
+        "revoked credentials",
+        timedEffect(
+          askMachine(
             machineId,
             CONTROL_FORGET_CREDENTIALS,
             [hashes],
             FORGET_CREDENTIALS_TIMEOUT_MS
           ),
           (ms) => recordLimitReading("hub.forget-credentials-ms", ms)
-        ).then((answer) => {
-          if (answer.kind === "unanswered") {
-            console.warn(
-              `[session-identity] ${silentWords(machineId, answer)}, so it did not hear of ${hashes.length} revoked credential(s); it asks again as it registers`
-            );
-          } else if (!answer.value.ok) {
-            console.warn(
-              `[session-identity] ${machineName(machineId)} refused ${hashes.length} revoked credential(s): ${answer.value.error ?? "no reason given"}`
-            );
-          }
-        }),
-        "revoked credentials"
+        ).pipe(
+          Effect.tap((answer) =>
+            Effect.sync(() => {
+              if (answer.kind === "unanswered") {
+                console.warn(
+                  `[session-identity] ${silentWords(machineId, answer)}, so it did not hear of ${hashes.length} revoked credential(s); it asks again as it registers`
+                );
+              } else if (!answer.value.ok) {
+                console.warn(
+                  `[session-identity] ${machineName(machineId)} refused ${hashes.length} revoked credential(s): ${answer.value.error ?? "no reason given"}`
+                );
+              }
+            })
+          )
+        )
       );
     }
   });
@@ -4550,6 +4448,7 @@ export const createServer = (
     });
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
+    ask: askMachine,
     call: callAgent,
     lifetime,
     machines: relayMachines,
@@ -5284,9 +5183,9 @@ export const createServer = (
       // Its stage ends with it and says nothing more: forgotten here now.
       workspaceStages.delete(tree);
       if (machineId) {
-        detach(
-          callAgent(machineId, STAGE_UNPIN, [tree], BUSY_TIMEOUT_MS),
-          "design let go"
+        lifetime.fork(
+          "design let go",
+          askMachine(machineId, STAGE_UNPIN, [tree], BUSY_TIMEOUT_MS)
         );
       }
     },
@@ -5361,14 +5260,14 @@ export const createServer = (
         case "unanswered":
           if (asked.reason !== "dead") {
             // It may still open after this gave up: told to close.
-            detach(
-              callAgent(
+            lifetime.fork(
+              "late canvas screen close",
+              askMachine(
                 machineId,
                 CANVAS_SCREEN_CLOSE,
                 [{ token }],
                 BUSY_TIMEOUT_MS
-              ),
-              "late canvas screen close"
+              )
             );
           }
           return asked.reason === "dead"
@@ -5392,21 +5291,23 @@ export const createServer = (
       }
       return {
         // The same open again holds the page on (agent canvas-screen.ts).
-        hold: () =>
-          detach(
-            callAgent(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS),
-            "canvas screen hold"
-          ),
-        release: () =>
-          detach(
-            callAgent(
+        hold: () => {
+          lifetime.fork(
+            "canvas screen hold",
+            askMachine(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS)
+          );
+        },
+        release: () => {
+          lifetime.fork(
+            "canvas screen close",
+            askMachine(
               machineId,
               CANVAS_SCREEN_CLOSE,
               [{ token }],
               BUSY_TIMEOUT_MS
-            ),
-            "canvas screen close"
-          ),
+            )
+          );
+        },
       };
     },
     // A preview's server, run and kept up in its workspace or place on that tree's machine: the one the person is served.
@@ -5428,21 +5329,23 @@ export const createServer = (
         : undefined;
     },
     keepPins: (machineId, pins) => {
-      detach(
-        callAgent(machineId, STAGE_PINS, [pins], BUSY_TIMEOUT_MS).then(
-          (asked) => {
-            if (
-              asked.kind === "answered" &&
-              asked.value.ok &&
-              asked.value.result > 0
-            ) {
-              console.info(
-                `[artifacts] ${machineId}: ${asked.value.result} pin(s) whose files the hub keeps let go`
-              );
-            }
-          }
-        ),
-        "pins kept"
+      lifetime.fork(
+        "pins kept",
+        askMachine(machineId, STAGE_PINS, [pins], BUSY_TIMEOUT_MS).pipe(
+          Effect.tap((asked) =>
+            Effect.sync(() => {
+              if (
+                asked.kind === "answered" &&
+                asked.value.ok &&
+                asked.value.result > 0
+              ) {
+                console.info(
+                  `[artifacts] ${machineId}: ${asked.value.result} pin(s) whose files the hub keeps let go`
+                );
+              }
+            })
+          )
+        )
       );
     },
   });
@@ -5828,6 +5731,7 @@ export const createServer = (
     lifetime,
     address: (machineId) => registry.address(machineId),
     busyMs: BUSY_TIMEOUT_MS,
+    ask: askMachine,
     call: callAgent,
     carry: (machineId, port) => sshTunnels.carry(machineId, port),
     carried: (machineId) => sshTunnels.holds(machineId),
@@ -6294,47 +6198,57 @@ export const createServer = (
       const claimed = db
         .sessionOwnership(machineId)
         .flatMap((row) => (row.sessionId ? [row.sessionId] : []));
-      callAgent(
-        machineId,
-        "removedSessionCustody",
-        [
-          rows.map((row) => ({
-            id: row.id,
-            sessionId: row.sessionId,
-            cwd: row.cwd,
-          })),
-          claimed,
-        ],
-        READ_TIMEOUT_MS
-      )
-        .then((answer) => {
-          // Each result is read against the connection that was asked.
-          if (registry.agent(machineId) !== connection) {
-            return;
-          }
-          // Unanswered or refused: custody stays unknown, asked again later.
-          switch (answer.kind) {
-            case "unanswered":
-              console.warn(
-                `[hub] removed-machine custody remains unknown: ${silentWords(machineId, answer)}`
-              );
-              return;
-            case "answered":
-              if (!answer.value.ok) {
+      lifetime.fork(
+        "removed-machine custody",
+        askMachine(
+          machineId,
+          "removedSessionCustody",
+          [
+            rows.map((row) => ({
+              id: row.id,
+              sessionId: row.sessionId,
+              cwd: row.cwd,
+            })),
+            claimed,
+          ],
+          READ_TIMEOUT_MS
+        ).pipe(
+          Effect.tap((answer) =>
+            Effect.sync(() => {
+              // Each result is read against the connection that was asked.
+              if (registry.agent(machineId) !== connection) {
                 return;
               }
-              break;
-            default:
-              throw unreachable(answer);
-          }
-          settleRemovedCustody(machineId, answer.value.result);
-        })
-        .catch((error: unknown) =>
-          console.warn(
-            `[hub] removed-machine custody remains unknown: ${String(error)}`
+              // Unanswered or refused: custody stays unknown, asked again later.
+              switch (answer.kind) {
+                case "unanswered":
+                  console.warn(
+                    `[hub] removed-machine custody remains unknown: ${silentWords(machineId, answer)}`
+                  );
+                  return;
+                case "answered":
+                  if (!answer.value.ok) {
+                    return;
+                  }
+                  break;
+                default:
+                  throw unreachable(answer);
+              }
+              settleRemovedCustody(machineId, answer.value.result);
+            })
+          ),
+          Effect.catchDefect((error) =>
+            Effect.sync(() =>
+              console.warn(
+                `[hub] removed-machine custody remains unknown: ${String(error)}`
+              )
+            )
+          ),
+          Effect.ensuring(
+            Effect.sync(() => recoveringRemoved.delete(machineId))
           )
         )
-        .finally(() => recoveringRemoved.delete(machineId));
+      );
     },
     send: (machineId, payload) => {
       const agent = registry.agent(machineId);
@@ -6455,28 +6369,33 @@ export const createServer = (
         return;
       }
       refreshingCustody.add(machineId);
-      detach(
-        callAgent(machineId, "sessionCustody", [], READ_TIMEOUT_MS)
-          .then((answer) => {
-            // Unanswered: custody keeps what the hub last knew.
-            switch (answer.kind) {
-              case "unanswered":
-                console.warn(
-                  `[hub] custody refresh: ${silentWords(machineId, answer)}; custody kept as last known`
-                );
-                return;
-              case "answered":
-                if (answer.value.ok && answer.value.result) {
-                  const snapshot = answer.value.result;
-                  lifecycle.reconcile(machineId, snapshot);
-                }
-                return;
-              default:
-                throw unreachable(answer);
-            }
-          })
-          .finally(() => refreshingCustody.delete(machineId)),
-        "custody refresh"
+      lifetime.fork(
+        "custody refresh",
+        askMachine(machineId, "sessionCustody", [], READ_TIMEOUT_MS).pipe(
+          Effect.tap((answer) =>
+            Effect.sync(() => {
+              // Unanswered: custody keeps what the hub last knew.
+              switch (answer.kind) {
+                case "unanswered":
+                  console.warn(
+                    `[hub] custody refresh: ${silentWords(machineId, answer)}; custody kept as last known`
+                  );
+                  return;
+                case "answered":
+                  if (answer.value.ok && answer.value.result) {
+                    const snapshot = answer.value.result;
+                    lifecycle.reconcile(machineId, snapshot);
+                  }
+                  return;
+                default:
+                  throw unreachable(answer);
+              }
+            })
+          ),
+          Effect.ensuring(
+            Effect.sync(() => refreshingCustody.delete(machineId))
+          )
+        )
       );
     },
   });
@@ -8511,7 +8430,7 @@ export const createServer = (
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
     // A delegate's inputs admitted or read only look at its parent's files,
-    // and a folder's checkout is only read ({@link asRead}); every other
+    // and a folder's checkout is only read (machine-calls.ts `asRead`); every other
     // method here changes the machine.
     const asked = Date.now();
     const answer =
@@ -11644,8 +11563,8 @@ export const createServer = (
     noteInterrupt,
     pending,
     registry,
+    machineCalls,
     saidInterrupt,
-    sendToMachine,
     sessionName,
     sessionSend,
     spawnSession,

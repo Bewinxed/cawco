@@ -54,6 +54,7 @@ import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
 import {
   awayProblem,
+  MACHINE_DISCONNECTED,
   MALFORMED_REPLY,
   MachineProblem,
   silentProblem,
@@ -84,16 +85,6 @@ import {
 } from "./start-models";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
-
-/**
- * What a request to a machine gets when its own deadline passes with the
- * machine away: held for it all that time, and sent again each time it came
- * back (machine-calls.ts `resendHeld`), it never answered. A machine that is there
- * at the deadline and silent is unanswered instead. True of a write only: a
- * read runs nothing, and is answered as its machine being away (`asRead`).
- */
-export const MACHINE_DISCONNECTED =
-  "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
 
 /**
  * Whether a start's first turn names its session: a fresh one its start
@@ -230,7 +221,6 @@ export type SpawnsContext = Pick<
   | "accountProviderFor"
   | "accountStartRefusal"
   | "accountWords"
-  | "awaitStart"
   | "awaitingFirstTurn"
   | "awayError"
   | "db"
@@ -240,11 +230,10 @@ export type SpawnsContext = Pick<
   | "heldClaim"
   | "homeLoginMoveOf"
   | "inFlightRefusal"
-  | "keptOn"
   | "knownProviders"
   | "launchAccount"
   | "launchClaims"
-  | "locations"
+  | "machineCalls"
   | "machineFault"
   | "machineName"
   | "modelListing"
@@ -254,11 +243,9 @@ export type SpawnsContext = Pick<
   | "pending"
   | "ownDefaultOf"
   | "projectTypes"
-  | "readAgent"
   | "refusedHarness"
   | "registry"
   | "resolvedModel"
-  | "sendAnswerable"
   | "sessionName"
   | "ownMachineIdRead"
   | "settleMode"
@@ -327,7 +314,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * goes to ONE adapter and only the one that wrote the transcript can find
    * it; a machine whose harnesses have not reported yet is asked about every
    * kind. A machine that is away cannot be asked: one whose last catalog
-   * ({@link keptOn}) holds the id answers `away`, so its readers wait for it
+   * (machine-calls.ts `keptOn`) holds the id answers `away`, so its readers wait for it
    * rather than hear that nothing goes by the id.
    *
    * The answer is kept, so a conversation is located once per hub lifetime
@@ -341,7 +328,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (ctx.db.hiddenSession(id)) {
       return { kind: "nowhere" };
     }
-    const known = ctx.locations.get(id);
+    const known = ctx.machineCalls.locations.get(id);
     if (known !== undefined) {
       return known ? { kind: "found", at: known } : { kind: "nowhere" };
     }
@@ -362,7 +349,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
         cwd: row.cwd ?? "",
         harness: row.harness,
       };
-      ctx.locations.set(id, found);
+      ctx.machineCalls.locations.set(id, found);
       return { kind: "found", at: found };
     }
 
@@ -385,7 +372,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       // rather than their sum.
       const answers = await Promise.all(
         kinds.map(async (harness) => {
-          const answer = await ctx.readAgent(
+          const answer = await ctx.machineCalls.readAgent(
             agent.machineId,
             CONTROL_GET_SESSION_INFO,
             [id],
@@ -433,7 +420,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
         cwd: hit.info.cwd ?? "",
         harness: hit.harness,
       };
-      ctx.locations.set(id, found);
+      ctx.machineCalls.locations.set(id, found);
       return { kind: "found", at: found };
     }
 
@@ -444,7 +431,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       .find(
         (agent) =>
           !ctx.registry.agent(agent.machineId) &&
-          ctx.keptOn.get(agent.machineId)?.has(id)
+          ctx.machineCalls.keptOn.get(agent.machineId)?.has(id)
       );
     if (keeper) {
       return { kind: "away", machineId: keeper.machineId };
@@ -458,7 +445,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     }
     // Remembered as unknown too, so a bad id cannot make every render sweep
     // the fleet. A machine coming online clears this (see `locations`).
-    ctx.locations.set(id, null);
+    ctx.machineCalls.locations.set(id, null);
     return { kind: "nowhere" };
   };
 
@@ -1852,7 +1839,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (!requestId) {
       return;
     }
-    const reply = await ctx.awaitStart(
+    const reply = await ctx.machineCalls.awaitStart(
       machineId,
       payload.instanceId,
       requestId,
@@ -2077,12 +2064,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (bound instanceof ElysiaStatus) {
       return bound;
     }
-    const reply = await ctx.awaitStart(
+    const reply = await ctx.machineCalls.awaitStart(
       machineId,
       payload.instanceId,
       requestId,
       () =>
-        ctx.sendAnswerable(agent, {
+        ctx.machineCalls.sendAnswerable(agent, {
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
@@ -2094,7 +2081,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
 
   /** A hub start's answer from its machine: nothing when the session is in place; else its cause thrown (`MachineProblem`), in the machine's words. */
   const startedOrThrown = (
-    reply: Awaited<ReturnType<typeof ctx.awaitStart>>,
+    reply: Awaited<ReturnType<typeof ctx.machineCalls.awaitStart>>,
     machineId: string,
     harness: string
   ): undefined => {

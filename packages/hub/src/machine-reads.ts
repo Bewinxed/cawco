@@ -23,7 +23,7 @@ import { unreachable } from "./unreachable";
 /** What a machine read reads of the hub. */
 export type MachineReadsContext = Pick<
   HubContext,
-  "db" | "machineFault" | "machinePresence" | "readAgent" | "registry"
+  "db" | "machineCalls" | "machineFault" | "machinePresence" | "registry"
 >;
 
 /**
@@ -101,7 +101,7 @@ export const nameAwayMachine =
 
 /**
  * A read its machine left unanswered, as a route answers it: not
- * connected (or away past the read's deadline, {@link asRead}) is
+ * connected (or away past the read's deadline, machine-calls.ts `asRead`) is
  * `awayProblem`; silent, `silentProblem`.
  */
 export const unansweredProblem = (
@@ -120,7 +120,7 @@ export const skillFilesOff = async (
   machineId: string,
   args: ControlArgs<typeof READ_SKILL_FILES>
 ) => {
-  const asked = await ctx.readAgent(
+  const asked = await ctx.machineCalls.readAgent(
     machineId,
     READ_SKILL_FILES,
     args,
@@ -187,7 +187,12 @@ const readOffMachine = async <K extends ControlName>(
   args: ControlArgs<K>,
   failed: string
 ) => {
-  const answer = await ctx.readAgent(machineId, method, args, READ_TIMEOUT_MS);
+  const answer = await ctx.machineCalls.readAgent(
+    machineId,
+    method,
+    args,
+    READ_TIMEOUT_MS
+  );
   switch (answer.kind) {
     case "unanswered":
       return unansweredProblem(ctx, machineId, answer);

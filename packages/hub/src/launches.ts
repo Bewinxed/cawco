@@ -104,10 +104,10 @@ export type LaunchesContext = Pick<
   | "launchAccount"
   | "launchModel"
   | "launchRefusal"
+  | "machineCalls"
   | "machineName"
   | "modelRefusal"
   | "owedOn"
-  | "processEvent"
   | "processGeneration"
   | "projectMemory"
   | "releaseOwed"
@@ -180,7 +180,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
   /** The launch of `instanceId` is up: what was kept for it meanwhile goes to it now. */
   const launchStarted = (instanceId: string, why: string): void => {
     if (launchSettled(instanceId, why)) {
-      ctx.processEvent(instanceId);
+      ctx.machineCalls.processEvent(instanceId);
       ctx.releaseOwed({ instanceId });
     }
   };

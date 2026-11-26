@@ -110,13 +110,13 @@ export type CutTurnsContext = Pick<
   | "escalateRoutedAsks"
   | "lifetime"
   | "losePending"
+  | "machineCalls"
   | "machineName"
   | "noteAtLimit"
   | "owedMoves"
   | "pending"
   | "planChanges"
   | "push"
-  | "readSessionProcess"
   | "registry"
   | "sessionAsleep"
   | "sessionName"
@@ -199,7 +199,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     row: InstanceRow,
     taskId: string
   ): Promise<Pick<EndedTask, "output" | "outputUnread">> => {
-    const answer = await ctx.readSessionProcess(row, "getTaskOutput", [taskId]);
+    const answer = await ctx.machineCalls.readSessionProcess(
+      row,
+      "getTaskOutput",
+      [taskId]
+    );
     switch (answer.kind) {
       case "unanswered":
         return { outputUnread: { after: answer.after } };

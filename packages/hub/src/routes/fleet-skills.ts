@@ -60,7 +60,6 @@ export const fleetSkillCalls = (
     | "fleetSyncs"
     | "installFromFolder"
     | "noteFetch"
-    | "readAgent"
     | "skillChoices"
     | "skillRow"
     | keyof MachineReadsContext
@@ -196,10 +195,10 @@ export const fleetSkillRoutes = (
     fetchSkill,
     fleetChanged,
     noteFetch,
-    readAgent,
     fleetSyncs,
     skillRow,
   } = ctx;
+  const { readAgent } = ctx.machineCalls;
   return (
     new Elysia()
       .put("/api/fleet/skills/:name", { body: skillBody }, ({ params, body }) =>

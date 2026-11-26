@@ -59,7 +59,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
 import type { HubLifetimeShape } from "./lifetime";
-import type { AgentCall, AwayProblem } from "./machine-answers";
+import type { AgentAsk, AgentCall, AwayProblem } from "./machine-answers";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
 const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
@@ -80,6 +80,8 @@ const REASON_BYTES = 123;
 export interface BrowserStreamDeps {
   /** The artifact `id`, when there is one. */
   artifact: (id: string) => ArtifactRow | undefined;
+  /** A control asked of a machine, as an Effect (machine-calls.ts `askMachine`); {@link call} is its promise edge. */
+  ask: AgentAsk;
   call: AgentCall;
   /** An HTTP route's caller, as the hub's gate classified its request (hub-auth.ts `callerOf`). */
   callerOf: (request: Request) => Caller;
@@ -361,24 +363,24 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   const tell = (place: Place, now: number): void => {
     deps.lifetime.fork(
       "browser viewers",
-      Effect.tryPromise(() =>
-        deps.call(
+      deps
+        .ask(
           place.machineId,
           BROWSER_VIEWERS,
           [{ key: place.key, count: now }],
           VIEWERS_MS
         )
-      ).pipe(
-        Effect.flatMap((read) =>
-          Effect.sync(() => {
-            if (read.kind === "unanswered" || !read.value.ok) {
-              console.warn(
-                `[browser] ${deps.machineName(place.machineId)} was not told ${place.key} has ${now} view${now === 1 ? "" : "s"}: ${read.kind === "unanswered" ? read.reason : (read.value.error ?? "refused")}`
-              );
-            }
-          })
+        .pipe(
+          Effect.flatMap((read) =>
+            Effect.sync(() => {
+              if (read.kind === "unanswered" || !read.value.ok) {
+                console.warn(
+                  `[browser] ${deps.machineName(place.machineId)} was not told ${place.key} has ${now} view${now === 1 ? "" : "s"}: ${read.kind === "unanswered" ? read.reason : (read.value.error ?? "refused")}`
+                );
+              }
+            })
+          )
         )
-      )
     );
   };
 

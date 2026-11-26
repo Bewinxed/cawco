@@ -17,13 +17,11 @@ import { unreachable } from "./unreachable";
 
 export type MachineCommandsContext = Pick<
   ClosureContext,
-  | "callAgent"
-  | "commandQueues"
   | "db"
   | "lifetime"
+  | "machineCalls"
   | "machinePause"
   | "projectsChanged"
-  | "readAgent"
   | "silentWords"
   | "unansweredFault"
 >;
@@ -125,7 +123,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     );
     const answers = await Promise.all(
       runs.map(async ([runId]) => {
-        const answer = await ctx
+        const answer = await ctx.machineCalls
           .callAgent(machineId, CONTROL_CANCEL_COMMAND, [runId], 15_000)
           .catch((error: unknown) =>
             error instanceof Error ? error.message : String(error)
@@ -164,7 +162,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
    * machine's words when it could not.
    */
   const cancelRun = async (machineId: string, runId: string): Promise<void> => {
-    const answer = await ctx.callAgent(
+    const answer = await ctx.machineCalls.callAgent(
       machineId,
       CONTROL_CANCEL_COMMAND,
       [runId],
@@ -224,7 +222,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     /** A `noWait` run's slot wait, which cancelled it: its words. */
     let waited: string | undefined;
     if (onWait || how.noWait) {
-      ctx.commandQueues.set(run.id, (queue) => {
+      ctx.machineCalls.commandQueues.set(run.id, (queue) => {
         if (!(how.noWait && queue) || queue.slot === "boundary") {
           onWait?.(queue ? queueWords(queue) : null);
           return;
@@ -249,7 +247,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     }
     commandsInFlight.set(run.id, { machineId });
     try {
-      const response = await ctx.callAgent(
+      const response = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_RUN_COMMAND,
         [cwd, cmd, timeoutMs, workspace, run],
@@ -279,7 +277,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       return result;
     } finally {
       how.stop?.removeEventListener("abort", cancel);
-      ctx.commandQueues.delete(run.id);
+      ctx.machineCalls.commandQueues.delete(run.id);
       commandsInFlight.delete(run.id);
     }
   };
@@ -303,7 +301,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     path: string;
   }): Promise<void> => {
     const stands = await folderStandsOn(
-      ctx.readAgent,
+      ctx.machineCalls.readAgent,
       place.machineId,
       place.path
     );

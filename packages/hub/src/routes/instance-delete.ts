@@ -14,7 +14,7 @@ export const instanceDeleteRoutes = ({
   inCustody,
   machineCustody,
   moves,
-  readAgent,
+  machineCalls: { readAgent },
 }: Pick<
   HubContext,
   | "db"
@@ -22,9 +22,9 @@ export const instanceDeleteRoutes = ({
   | "forgetInstances"
   | "heldSessions"
   | "inCustody"
+  | "machineCalls"
   | "machineCustody"
   | "moves"
-  | "readAgent"
 >) =>
   new Elysia()
     // A session with no transcript — one that never started, or whose

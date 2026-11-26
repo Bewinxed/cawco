@@ -39,11 +39,10 @@ export const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
 export type LoginMovesContext = Pick<
   ClosureContext,
   | "accountWords"
-  | "askMachine"
-  | "callAgent"
   | "db"
   | "keptWarm"
   | "lifetime"
+  | "machineCalls"
   | "machineName"
   | "moveKey"
   | "moveRowsToAccount"
@@ -90,7 +89,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     ctx.lifetime.fork(
       "sleep request",
       timedEffect(
-        ctx.askMachine(
+        ctx.machineCalls.askMachine(
           row.machineId,
           CONTROL_SLEEP,
           [],
@@ -261,7 +260,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         continue;
       }
       const lent = await timed(
-        ctx.callAgent(
+        ctx.machineCalls.callAgent(
           lender,
           CONTROL_LEND_ACCOUNT,
           [move.accountId],
@@ -288,7 +287,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
           throw unreachable(lent);
       }
       const answer = await timed(
-        ctx.callAgent(
+        ctx.machineCalls.callAgent(
           move.machineId,
           CONTROL_BORROW_ACCOUNT,
           [
@@ -334,7 +333,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   ): void => {
     ctx.lifetime.fork(
       "lent sign-in",
-      ctx.askMachine(
+      ctx.machineCalls.askMachine(
         borrower,
         CONTROL_ACCOUNT_LENT,
         [requestId, answer, accountId],
@@ -352,7 +351,12 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       return { error: lenderAway(accountId, lender) };
     }
     const lent = await timed(
-      ctx.callAgent(lender, CONTROL_LEND_ACCOUNT, [accountId], LEND_TIMEOUT_MS),
+      ctx.machineCalls.callAgent(
+        lender,
+        CONTROL_LEND_ACCOUNT,
+        [accountId],
+        LEND_TIMEOUT_MS
+      ),
       (ms) => recordLimitReading("hub.login-lend-ms", ms)
     );
     const account = ctx.db.accounts.get(accountId);
@@ -576,7 +580,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       ctx.lifetime.fork(
         "sleep request",
         timedEffect(
-          ctx.askMachine(
+          ctx.machineCalls.askMachine(
             machineId,
             CONTROL_SLEEP,
             [],
@@ -627,7 +631,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     ranFrom: string[]
   ): Promise<void> => {
     const answer = await timed(
-      ctx.callAgent(
+      ctx.machineCalls.callAgent(
         move.machineId,
         CONTROL_MOVE_HOME_CREDENTIAL,
         [move.accountId, store, move.storeProvider, move.identity],
@@ -657,7 +661,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     const ranFrom = liveFrom(move);
     if (ranFrom.length > 0) {
       const restless = await timed(
-        ctx.callAgent(
+        ctx.machineCalls.callAgent(
           machineId,
           CONTROL_RESTLESS,
           [ranFrom],
@@ -688,7 +692,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       await moveCredential(move, store, ranFrom);
     } else {
       const answer = await timed(
-        ctx.callAgent(
+        ctx.machineCalls.callAgent(
           machineId,
           CONTROL_MOVE_HOME_LOGIN,
           [move.accountId, move.identity],
