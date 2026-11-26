@@ -26,7 +26,7 @@ import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { configurePage } from "@cawco/core/words/configure";
 import { owedMoveWords } from "@cawco/core/words/owed-moves";
 import { relaunchWords } from "@cawco/core/words/relaunch";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { ElysiaStatus } from "elysia";
 import { type KeptOff, keptOffIn, markOn } from "./account-marks";
 import { machineAccount } from "./accounts";
@@ -79,6 +79,15 @@ const AT_REST: ReadonlySet<InstanceStatus> = new Set([
 
 /** A sentence's closing stop, dropped so it sits inside another. */
 const SENTENCE_STOP = /\.$/u;
+
+/**
+ * Work an account move let go on the hub's lifetime failed; the fork's
+ * name says which, and its log line the cause.
+ */
+class AccountMoveFailed extends Schema.TaggedError<AccountMoveFailed>()(
+  "AccountMoveFailed",
+  { cause: Schema.Defect() }
+) {}
 
 /** A session's row as a mover reads it. */
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
@@ -767,7 +776,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       // The carry runs on its own; the relaunch follows it.
       ctx.lifetime.fork(
         "account move",
-        Effect.tryPromise(() => going)
+        Effect.tryPromise({
+          try: () => going,
+          catch: (cause) => new AccountMoveFailed({ cause }),
+        })
       );
       return;
     }
@@ -1289,12 +1301,14 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     for (const held of heldHere) {
       ctx.lifetime.fork(
         "at-limit look",
-        Effect.tryPromise(() =>
-          ctx.atLimit.lookNow(
-            held.instanceId,
-            `${ctx.machineName(machineId)} is connected again`
-          )
-        )
+        Effect.tryPromise({
+          try: () =>
+            ctx.atLimit.lookNow(
+              held.instanceId,
+              `${ctx.machineName(machineId)} is connected again`
+            ),
+          catch: (cause) => new AccountMoveFailed({ cause }),
+        })
       );
     }
     const heldIds = new Set(heldHere.map((one) => one.instanceId));
@@ -1319,7 +1333,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     if (takenUp.length > 0) {
       ctx.lifetime.fork(
         "owed moves on register",
-        Effect.tryPromise(() => takeUpInTurn(takenUp))
+        Effect.tryPromise({
+          try: () => takeUpInTurn(takenUp),
+          catch: (cause) => new AccountMoveFailed({ cause }),
+        })
       );
     }
   };
@@ -1701,7 +1718,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     movingAtMessage.add(row.id);
     ctx.lifetime.fork(
       "move at a message",
-      Effect.tryPromise(() => carryAtMessage(row, from, woke))
+      Effect.tryPromise({
+        try: () => carryAtMessage(row, from, woke),
+        catch: (cause) => new AccountMoveFailed({ cause }),
+      })
     );
     return true;
   };
@@ -2467,7 +2487,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         Effect.gen(function* () {
           if (
             ctx.owedMoves.has(row.id) &&
-            (yield* Effect.tryPromise(() => ctx.sessionIdle(row)))
+            (yield* Effect.tryPromise({
+              try: () => ctx.sessionIdle(row),
+              catch: (cause) => new AccountMoveFailed({ cause }),
+            }))
           ) {
             relaunchOnAccount(row.id);
           }

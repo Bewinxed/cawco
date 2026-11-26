@@ -65,7 +65,7 @@ import type { PermissionResult } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { MoveHold, MoveRow, SettledMove } from "./db/moves";
@@ -228,6 +228,15 @@ const runGit = async (args: string[]): Promise<string | null> => {
   });
   return ran.code === 0 ? ran.stdout.trim() : null;
 };
+
+/**
+ * A move's step or its cancel, let go on the hub's lifetime, failed; the
+ * fork's name says which, and its log line the cause.
+ */
+class MoveJobFailed extends Schema.TaggedError<MoveJobFailed>()(
+  "MoveJobFailed",
+  { cause: Schema.Defect() }
+) {}
 
 export const createMoves = (deps: MovesDeps) => {
   const { db } = deps;
@@ -1449,7 +1458,10 @@ export const createMoves = (deps: MovesDeps) => {
   const goOn = (id: string): void => {
     deps.lifetime.fork(
       `move ${id}`,
-      Effect.tryPromise(() => advance(id))
+      Effect.tryPromise({
+        try: () => advance(id),
+        catch: (cause) => new MoveJobFailed({ cause }),
+      })
     );
   };
 
@@ -1530,9 +1542,11 @@ export const createMoves = (deps: MovesDeps) => {
     if (deps.online(machine)) {
       deps.lifetime.fork(
         `move ${id} cancel`,
-        Effect.tryPromise(() =>
-          deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS)
-        )
+        Effect.tryPromise({
+          try: () =>
+            deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS),
+          catch: (cause) => new MoveJobFailed({ cause }),
+        })
       );
     }
     console.log(`[moves] ${id}: cancelled at ${row.stage}: ${words}`);
@@ -1625,14 +1639,16 @@ export const createMoves = (deps: MovesDeps) => {
       if (row.stage === "cancelled" && row.state.stopOn === machineId) {
         deps.lifetime.fork(
           `move ${row.id} cancel`,
-          Effect.tryPromise(() =>
-            deps.call(
-              machineId,
-              CONTROL_MOVE_CANCEL,
-              [row.id],
-              INSPECT_TIMEOUT_MS
-            )
-          )
+          Effect.tryPromise({
+            try: () =>
+              deps.call(
+                machineId,
+                CONTROL_MOVE_CANCEL,
+                [row.id],
+                INSPECT_TIMEOUT_MS
+              ),
+            catch: (cause) => new MoveJobFailed({ cause }),
+          })
         );
         db.updateMove(row.id, {
           state: { ...row.state, stopOn: undefined },

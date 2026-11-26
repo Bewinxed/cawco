@@ -13,8 +13,6 @@ bare-run	Effect.runPromise	packages/hub/src/links.ts	1
 bare-run	Effect.runPromise	packages/hub/src/repo-publish.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
-error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
-error-class	CapabilityCallsRefusal	packages/hub/src/capability-calls.ts	1
 error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
@@ -140,9 +138,6 @@ promise-map	#turns	packages/hub/src/meaning.ts	1
 promise-map	#waves	packages/agent/src/harnesses/opencode-activity.ts	1
 promise-map	asking	packages/agent/src/provider-accounts.ts	1
 promise-map	built	packages/hub/src/host-build.ts	1
-promise-map	byBoundary	packages/agent/src/preview-room.ts	1
-promise-map	carried	packages/hub/src/ssh-tunnels.ts	1
-promise-map	clients	packages/hub/src/connections.ts	1
 promise-map	closing	packages/agent/src/boundary/state.ts	1
 promise-map	discarding	packages/hub/src/workspaces.ts	1
 promise-map	doors	packages/agent/src/session-containers.ts	1

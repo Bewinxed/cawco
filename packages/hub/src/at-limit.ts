@@ -25,7 +25,7 @@ import {
 import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Schema } from "effect";
 import type { KeptOff } from "./account-marks";
 import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
@@ -362,6 +362,12 @@ const actionWords = (
   accounts: readonly Account[]
 ): string =>
   `move from ${accountNameAmong(current, accounts)} to ${accountNameAmong(target, accounts)}`;
+
+/** A decision on its provider's turn threw: `what` names it in the log ({@link createAtLimit}'s `serially`). */
+class DecisionFailed extends Schema.TaggedError<DecisionFailed>()(
+  "DecisionFailed",
+  { what: Schema.String, cause: Schema.Defect() }
+) {}
 
 /** What a failure said, as a line quotes it. */
 const messageOf = (error: unknown): string =>
@@ -1824,23 +1830,24 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * events came. A failure is logged as `what`'s and ends only that work.
    * On a free provider `work` starts as this runs, before its first wait.
    */
-  const serially = (
-    provider: string,
-    what: string,
-    work: () => Promise<void>
-  ): Effect.Effect<void> =>
-    chains
-      .withLock(
+  const serially = Effect.fnUntraced(
+    function* (provider: string, what: string, work: () => Promise<void>) {
+      yield* chains.withLock(
         provider,
-        Effect.tryPromise({ try: work, catch: (error: unknown) => error })
-      )
-      .pipe(
-        Effect.catch((error) =>
-          Effect.sync(() => {
-            console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
-          })
-        )
+        Effect.tryPromise({
+          try: work,
+          catch: (cause) => new DecisionFailed({ what, cause }),
+        })
       );
+    },
+    Effect.catchTag("DecisionFailed", (failed) =>
+      Effect.sync(() => {
+        console.error(
+          `[at-limit] ${failed.what} failed: ${messageOf(failed.cause)}`
+        );
+      })
+    )
+  );
 
   /**
    * One look at every hold of `provider`, one decision each in admission
@@ -1888,36 +1895,37 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * caller waits on that look). `accountsMoved`: only a change of the
    * accounts asks; any other cause (a hold's moment) looks at every hold.
    */
-  const lookAgain = (
+  const lookAgain = Effect.fnUntraced(function* (
     provider: string,
     why: string,
     accountsMoved: boolean
-  ): Effect.Effect<void> =>
-    Effect.suspend(() => {
-      const queued = looksQueued.get(provider);
-      if (queued !== undefined) {
-        queued.accountsMoved &&= accountsMoved;
-        return Deferred.await(queued.looked);
-      }
-      const entry = { accountsMoved, looked: Deferred.makeUnsafe<void>() };
-      // Queued before its turn is asked for: a turn nothing holds begins at
-      // once, and takes it off the queue as it begins.
-      looksQueued.set(provider, entry);
-      return serially(provider, `the look at the holds (${why})`, async () => {
-        looksQueued.delete(provider);
-        await lookAtHolds(provider, entry.accountsMoved);
-        plan();
-      }).pipe(
-        Effect.onExit((exit) => {
-          // Cut before its turn began (the hub closed): a later ask queues
-          // a look of its own rather than waiting on this one.
-          if (looksQueued.get(provider) === entry) {
-            looksQueued.delete(provider);
-          }
-          return Deferred.done(entry.looked, exit);
-        })
-      );
-    });
+  ) {
+    const queued = looksQueued.get(provider);
+    if (queued !== undefined) {
+      queued.accountsMoved &&= accountsMoved;
+      return yield* Deferred.await(queued.looked);
+    }
+    // Made in place, not yielded, so nothing runs between the read above
+    // and the claim below.
+    const entry = { accountsMoved, looked: Deferred.makeUnsafe<void>() };
+    // Queued before its turn is asked for: a turn nothing holds begins at
+    // once, and takes it off the queue as it begins.
+    looksQueued.set(provider, entry);
+    yield* serially(provider, `the look at the holds (${why})`, async () => {
+      looksQueued.delete(provider);
+      await lookAtHolds(provider, entry.accountsMoved);
+      plan();
+    }).pipe(
+      Effect.onExit((exit) => {
+        // Cut before its turn began (the hub closed): a later ask queues
+        // a look of its own rather than waiting on this one.
+        if (looksQueued.get(provider) === entry) {
+          looksQueued.delete(provider);
+        }
+        return Deferred.done(entry.looked, exit);
+      })
+    );
+  });
 
   /** Whether any hold is carried on by the hub now: one not stale. */
   const anyHeld = (): boolean =>
@@ -1958,15 +1966,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }));
       lifetime.fork(
         "at-limit look",
-        lookAgain(provider, "its accounts changed", true).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              for (const one of before) {
-                rebalancer.notify(one.came, one.held);
-              }
-            })
-          )
-        )
+        Effect.gen(function* () {
+          yield* lookAgain(provider, "its accounts changed", true);
+          for (const one of before) {
+            rebalancer.notify(one.came, one.held);
+          }
+        })
       );
     }
   };
@@ -2163,16 +2168,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * Past the cutoff it is carried on only when `asked`: the message is a
    * person's or its parent's, or a Continue's ({@link goneStale}).
    */
-  const lookAtNow = (
+  const lookAtNow = Effect.fnUntraced(function* (
     instanceId: string,
     why: string,
     asked?: TakenUpBy
-  ): Effect.Effect<void> => {
+  ) {
     const held = db.atLimit.hold(instanceId);
     if (!held) {
-      return Effect.void;
+      return;
     }
-    return serially(
+    yield* serially(
       providerOf(held.accountId),
       `the look at ${instanceId.slice(0, 8)}'s hold`,
       async () => {
@@ -2192,7 +2197,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         plan();
       }
     );
-  };
+  });
 
   // The sign-ins and benches as they stand, learnt; the holds' next moment armed.
   rebalancer.came();
