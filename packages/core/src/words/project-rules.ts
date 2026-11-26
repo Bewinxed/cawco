@@ -6,8 +6,7 @@
  */
 export const projectRulesWords = {
   /** The index's line under its title, for the person who opens it. */
-  indexIntro:
-    "The rules agents follow in this project. They change when you ask. Your own notes are under Notes.",
+  indexIntro: "Rules change only when you ask.",
   /** The index's pointer to a skill's lessons. */
   skillPointer: (skill: string, path: string) =>
     `- Before \`${skill}\`: read ${path} with folder_read.`,
