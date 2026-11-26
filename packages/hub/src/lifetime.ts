@@ -1,5 +1,13 @@
 import { doing } from "@cawco/core/loop-watch";
-import { Context, Effect, Layer } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  type Fiber,
+  Layer,
+} from "effect";
 import { makeScheduler, type SchedulerShape } from "./scheduler";
 
 /** A timer a hub's lifetime holds; stop it with {@link HubLifetimeShape.cancel}. */
@@ -18,9 +26,10 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * What holds a resource gives its release to {@link HubLifetimeShape.onClose}.
  *
  * {@link HubLifetimeShape.close} stops every timer, so none can fire into
- * what follows; then runs the releases newest first, so the database,
- * registered as it opens before anything else, closes last; then says
- * `[hub] closed`. Nothing the hub scheduled runs after it.
+ * what follows; then interrupts every fiber the lifetime runs; then runs
+ * the releases newest first, so the database, registered as it opens
+ * before anything else, closes last; then says `[hub] closed`. Nothing the
+ * hub scheduled runs after it.
  *
  * Whoever builds a hub inside a process that goes on without it closes it
  * (scripts/openapi.ts, the role budgets). The service hub is never closed
@@ -35,6 +44,15 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * loop's work (core loop-watch.ts `doing`, as `timer: <name>`), so a hold
  * inside a timer's run names that timer, never the request that came
  * before it, and the hub's minute line counts its time under that name.
+ *
+ * Effect runs on the lifetime through {@link HubLifetimeShape.run} (an
+ * effect a caller awaits) and {@link HubLifetimeShape.fork} (named work let
+ * go): its fibers sleep on the lifetime's clock, whose every wait is one of
+ * these timers, so `Effect.sleep`, `Effect.delay`, `Effect.timeout` and
+ * every `Schedule` delay of `Effect.repeat` and `Effect.retry` (each reaches
+ * `Clock.sleep`) is unref'd, named and stopped at close like the rest. A
+ * fork names itself as the loop's work (`fiber: <name>`) as it starts and
+ * as it wakes from each such wait.
  *
  * Work the hub works out again after something moved is wanted through
  * {@link HubLifetimeShape.jobs} (scheduler.ts): merged by its key, run by
@@ -55,7 +73,7 @@ export interface HubLifetimeShape {
   readonly after: (name: string, ms: number, run: () => void) => HubTimer;
   /** Stops one of this lifetime's timers; none, or one that already ran, is nothing. */
   readonly cancel: (timer: HubTimer | undefined) => void;
-  /** Stops every timer, runs every release, and says so; once. */
+  /** Stops every timer, interrupts every fiber, runs every release, and says so; once. */
   readonly close: () => void;
   /** Whether {@link close} has run. */
   readonly closed: () => boolean;
@@ -64,10 +82,35 @@ export interface HubLifetimeShape {
    * `name` is what each run is known by when it holds the loop.
    */
   readonly every: (name: string, ms: number, run: () => void) => HubTimer;
+  /**
+   * Named work let go: `effect` run on the lifetime's clock, at once, up to
+   * its first wait, before `fork` returns. Its fiber is interrupted at
+   * {@link close}; one forked after close runs nothing. A failure is said in
+   * one line with `name` and the cause, and fails that fiber alone; an
+   * interruption is no failure and says nothing. `name` is what its runs are
+   * known by when they hold the loop (`fiber: <name>`), and what it forks
+   * inherits it.
+   */
+  readonly fork: <A, E>(
+    name: string,
+    effect: Effect.Effect<A, E>
+  ) => Fiber.Fiber<A, E>;
   /** The hub's admission (scheduler.ts): recompute work, merged by key and run by priority. */
   readonly jobs: SchedulerShape;
-  /** A release for {@link close}: run after every timer has stopped, newest first. */
+  /** A release for {@link close}: run after every timer and fiber has stopped, newest first. */
   readonly onClose: (release: () => void) => void;
+  /**
+   * The promise edge of an effect: `effect` run on the lifetime's clock, at
+   * once, up to its first wait, before `run` returns. The promise settles
+   * as the effect does, with the very value, or rejected with the very
+   * error it failed with (`Cause.squash`). Once {@link close} has run, the
+   * promise never settles, as {@link sleep}'s never resolves: close
+   * interrupts the effect, and whatever awaits it goes no further (a
+   * rejection would surface in a route or a timer as an error that today
+   * sees nothing). A failure other than that interruption, met while close
+   * unwinds it, is said as a fork's is.
+   */
+  readonly run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
   /**
    * Aborts when {@link close} runs, with the timers. A wait the hub holds on
    * `readWithin` (@cawco/core/bounded) passes it as its `signal`, so a read
@@ -87,6 +130,28 @@ const timerFailed = (error: unknown): void => {
     `[hub] a scheduled run failed, and only that run: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`
   );
 };
+
+/**
+ * A fiber's failure, `who` naming it: said in one line with its cause, the
+ * hub's own words before it, as {@link timerFailed} says a timer's.
+ */
+const fiberFailed = (who: string, cause: Cause.Cause<unknown>): void => {
+  console.error(`[hub] ${who} failed, and only it: ${Cause.pretty(cause)}`);
+};
+
+/**
+ * The name of the {@link HubLifetimeShape.fork} a fiber runs for, which the
+ * lifetime's clock names the loop's work by as the fiber wakes; a fiber
+ * inherits it from the one that forked it. A {@link HubLifetimeShape.run}'s
+ * fiber has none: what awaits it names its own work.
+ */
+const FiberName = Context.Reference<string | undefined>(
+  "@cawco/hub/lifetime/FiberName",
+  { defaultValue: () => undefined }
+);
+
+/** The longest wait one timer holds (setTimeout's limit); a longer one is waited in parts. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
 
 /** `run`, its throw said rather than left to end the process. */
 const guarded = (run: () => void) => (): void => {
@@ -126,6 +191,12 @@ export const soon = (run: () => void): void => {
 
 const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
+  /**
+   * Every fiber run or forked on the lifetime and not yet ended. Held here,
+   * not in a `Scope`: a scope closes its fibers one after another, each
+   * awaited, and close is synchronous; here each is interrupted at once.
+   */
+  const fibers = new Set<Fiber.Fiber<unknown, unknown>>();
   const releases: (() => void)[] = [];
   const closing = new AbortController();
   let closed = false;
@@ -151,16 +222,109 @@ const makeLifetime = (): HubLifetimeShape => {
     once(ms, named(name, run));
   const every = (name: string, ms: number, run: () => void): HubTimer =>
     hold(setInterval(guarded(named(name, run)), ms));
+  const cancel = (timer: HubTimer | undefined): void => {
+    if (timer) {
+      clearTimeout(timer);
+      timers.delete(timer);
+    }
+  };
+  /**
+   * A wait on one of the lifetime's timers: unref'd, stopped at close (and
+   * then never resumed, as {@link HubLifetimeShape.sleep}), stopped when the
+   * fiber waiting is interrupted. A forked fiber names itself as the loop's
+   * work as it wakes.
+   */
+  const sleepFor = (ms: number): Effect.Effect<void> => {
+    if (ms <= 0) {
+      return Effect.yieldNow;
+    }
+    if (!Number.isFinite(ms)) {
+      return Effect.never;
+    }
+    return Effect.withFiber((fiber) => {
+      const name = fiber.getRef(FiberName);
+      return Effect.callback<void>((resume) => {
+        const timer = once(Math.min(ms, LONGEST_TIMER_MS), () => {
+          if (name !== undefined) {
+            doing(`fiber: ${name}`);
+          }
+          resume(
+            ms > LONGEST_TIMER_MS
+              ? sleepFor(ms - LONGEST_TIMER_MS)
+              : Effect.void
+          );
+        });
+        return Effect.sync(() => cancel(timer));
+      });
+    });
+  };
+  /** The lifetime's clock: the system's time, and its waits on {@link sleepFor}. */
+  const system = Clock.Clock.defaultValue();
+  const clock: Clock.Clock = {
+    currentTimeMillisUnsafe: () => system.currentTimeMillisUnsafe(),
+    currentTimeMillis: system.currentTimeMillis,
+    currentTimeNanosUnsafe: () => system.currentTimeNanosUnsafe(),
+    currentTimeNanos: system.currentTimeNanos,
+    monotonicTimeNanosUnsafe: () => system.monotonicTimeNanosUnsafe(),
+    monotonicTimeNanos: system.monotonicTimeNanos,
+    sleep: (duration) => sleepFor(Duration.toMillis(duration)),
+  };
+  /** What every fiber of the lifetime runs with: its clock. */
+  const context = Context.make(Clock.Clock, clock);
+  /**
+   * `effect` on a fiber of the lifetime, run at once up to its first wait
+   * (`Effect.runForkWith` evaluates synchronously) and held until it ends;
+   * after close, a fiber that is interrupted before its first step.
+   */
+  const start = <A, E>(
+    name: string | undefined,
+    effect: Effect.Effect<A, E>
+  ): Fiber.Fiber<A, E> => {
+    if (closed) {
+      return Effect.runForkWith(context)<A, E>(Effect.interrupt);
+    }
+    if (name !== undefined) {
+      doing(`fiber: ${name}`);
+    }
+    const fiber = Effect.runForkWith(
+      name === undefined ? context : Context.add(context, FiberName, name)
+    )(effect);
+    if (fiber.pollUnsafe() === undefined) {
+      fibers.add(fiber);
+      fiber.addObserver(() => {
+        fibers.delete(fiber);
+      });
+    }
+    return fiber;
+  };
   return {
     after,
     every,
     jobs: makeScheduler({ after, every }),
-    cancel: (timer) => {
-      if (timer) {
-        clearTimeout(timer);
-        timers.delete(timer);
-      }
+    cancel,
+    fork: (name, effect) => {
+      const fiber = start(name, effect);
+      fiber.addObserver((exit) => {
+        if (exit._tag === "Failure" && !Cause.hasInterruptsOnly(exit.cause)) {
+          fiberFailed(`the fiber ${name}`, exit.cause);
+        }
+      });
+      return fiber;
     },
+    run: (effect) =>
+      new Promise((resolve, reject) => {
+        start(undefined, effect).addObserver((exit) => {
+          if (exit._tag === "Success") {
+            if (!closed) {
+              resolve(exit.value);
+            }
+          } else if (!closed) {
+            reject(Cause.squash(exit.cause));
+          } else if (!Cause.hasInterruptsOnly(exit.cause)) {
+            fiberFailed("a run cut by close", exit.cause);
+          }
+        });
+      }),
     // Unnamed: its run only resolves, and what awaits it runs after.
     sleep: (ms) =>
       new Promise((resolve) => {
@@ -180,6 +344,12 @@ const makeLifetime = (): HubLifetimeShape => {
         clearTimeout(timer);
       }
       timers.clear();
+      // Each interruption unwinds its fiber's finalizers at once, up to the
+      // first that waits, before any release below closes what they use.
+      for (const fiber of [...fibers]) {
+        fiber.interruptUnsafe();
+      }
+      fibers.clear();
       closing.abort(new DOMException("the hub closed", "AbortError"));
       for (const release of releases.toReversed()) {
         try {

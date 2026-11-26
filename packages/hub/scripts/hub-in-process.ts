@@ -29,6 +29,10 @@ export const writeFixtureKey = (dir: string): void => {
  * no port, dials no machine or server and starts no poller, so a check on a
  * copy of the live database, run on the live hub's machine and network,
  * leaves the live hub's ports and machines alone.
+ * Its caller closes it with the `lifetime` it returns (lifetime.ts
+ * `close`): every timer stops, every fiber run or forked on it is
+ * interrupted and its waits cleared, and the database closes last, so
+ * nothing the hub scheduled keeps the process alive after.
  */
 export async function hubInProcess(dbPath: string, home: string) {
   process.env.CAWCO_DB_PATH = dbPath;
