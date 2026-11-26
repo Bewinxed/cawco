@@ -18,6 +18,7 @@ typeOverrides:
     AgentHereWay: OpenEnums.AgentHereWay
     AgentMemberHear: OpenEnums.AgentMemberHear
     AgentMemberPose: OpenEnums.AgentMemberPose
+    AgyMethod: OpenEnums.AgyMethod
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy

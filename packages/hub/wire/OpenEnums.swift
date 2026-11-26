@@ -437,6 +437,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AgyMethod`.
+    public enum AgyMethod: OpenEnum {
+        case agentPlatform
+        case geminiApiKey
+        case oauthBusiness
+        case oauthPersonal
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent-platform": self = .agentPlatform
+            case "gemini-api-key": self = .geminiApiKey
+            case "oauth-business": self = .oauthBusiness
+            case "oauth-personal": self = .oauthPersonal
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agentPlatform: "agent-platform"
+            case .geminiApiKey: "gemini-api-key"
+            case .oauthBusiness: "oauth-business"
+            case .oauthPersonal: "oauth-personal"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agentPlatform, .geminiApiKey, .oauthBusiness, .oauthPersonal]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ArtifactDoes`.
     public enum ArtifactDoes: OpenEnum {
         case draw

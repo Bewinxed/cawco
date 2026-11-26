@@ -203,10 +203,13 @@ export type HarnessHomeLogin =
       /**
        * None CawCo moves in: each account signs the harness in itself, in a
        * home CawCo keeps for the account, and CawCo never reads the
-       * credential it holds (Codex's own sign-in).
+       * credential it holds (Codex's own sign-in, Antigravity's). Its one
+       * provider where every account of it is that provider's (Antigravity's
+       * `antigravity`); null where a model names it (Codex's ChatGPT plan or
+       * OpenAI key).
        */
       readonly homeLogin: "none";
-      readonly soleProvider: null;
+      readonly soleProvider: string | null;
     };
 
 /**
@@ -296,8 +299,9 @@ interface HarnessDescriptorFacts<K extends string> {
   readonly mcpPerFolder: boolean;
 
   /**
-   * Where its model list comes from. `account`: read per account by the
-   * hub. `machine`: the machine's own report.
+   * Where its model list comes from. `account`: read per account of its
+   * {@link HarnessHomeLogin.soleProvider} by the hub (core model-names.ts
+   * `catalogHarnessOf`). `machine`: the machine's own report.
    */
   readonly modelCatalog: "account" | "machine";
   /**

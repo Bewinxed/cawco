@@ -10,6 +10,7 @@ import {
   providerChoices,
 } from "@cawco/core/accounts";
 import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
+import { AGY_METHODS, placeOf } from "@cawco/core/harness/agy-account";
 import { CODEX } from "@cawco/core/harness/codex";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
@@ -221,13 +222,31 @@ export const accountRoutes = ({
           // Made by the dashboard's setup: the step it stands at, kept
           // until the setup is done so a reload opens it there again.
           setupStep: t.Optional(accountSetupStep),
+          // An Antigravity account: the sign-in method it runs on for good,
+          // and the Google Cloud project and location the method names.
+          agy: t.Optional(
+            t.Object({
+              method: t.UnionEnum(AGY_METHODS),
+              gcp: t.Optional(
+                t.Object({ project: t.String(), location: t.String() })
+              ),
+            })
+          ),
         }),
       },
       ({ body }) => {
-        const why = accountKindRefusal(body.provider, body.kind);
-        return why
-          ? problem(400, { code: "account-kind", detail: why })
-          : db.accounts.create(body);
+        const why = accountKindRefusal(body.provider, body.kind, body.agy);
+        if (why) {
+          return problem(400, { code: "account-kind", detail: why });
+        }
+        const { agy, ...rest } = body;
+        const gcp = placeOf(agy?.gcp);
+        return db.accounts.create({
+          ...rest,
+          ...(agy
+            ? { agy: { method: agy.method, ...(gcp ? { gcp } : {}) } }
+            : {}),
+        });
       }
     )
     .patch(

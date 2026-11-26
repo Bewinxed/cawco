@@ -1,13 +1,16 @@
 import {
+  type Account,
   accountNameAmong,
   CLAUDE_PROVIDER,
   isChatgptPlan,
 } from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_BEGIN_AGY_LOGIN,
   CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_COMPLETE_CODEX_LOGIN,
+  CONTROL_CONNECT_AGY,
   CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_SET_PROVIDER_KEY,
 } from "@cawco/core/accounts/controls";
@@ -100,6 +103,55 @@ export const accountSigninRoutes = ({
         throw unreachable(answer);
     }
   };
+  /**
+   * A machine's sign-in of `account`, under `signinId`, begun: Claude Code's
+   * own login for a Claude account; agy's own, in the account's agy home
+   * there on the account's method, for an Antigravity account; pi-ai's
+   * OAuth for any other.
+   */
+  const beginOn = (account: Account, signinId: string, machineId: string) => {
+    if (account.provider === CLAUDE_PROVIDER) {
+      return callAgent(
+        machineId,
+        CONTROL_BEGIN_ACCOUNT_LOGIN,
+        [signinId, account.kind],
+        SIGNIN_TIMEOUT_MS,
+        "claude"
+      );
+    }
+    return account.agy
+      ? callAgent(
+          machineId,
+          CONTROL_BEGIN_AGY_LOGIN,
+          [signinId, account.agy],
+          SIGNIN_TIMEOUT_MS
+        )
+      : callAgent(
+          machineId,
+          CONTROL_BEGIN_PROVIDER_LOGIN,
+          [signinId, account.provider],
+          SIGNIN_TIMEOUT_MS
+        );
+  };
+  /**
+   * A key account's key sent to `machineId`: written into the account's
+   * store there; an Antigravity account connected there on its method, with
+   * its key or, for Agent Platform, none.
+   */
+  const keyOn = (account: Account, machineId: string, key?: string) =>
+    account.agy
+      ? callAgent(
+          machineId,
+          CONTROL_CONNECT_AGY,
+          [account.id, account.agy, key ?? null, account.identity],
+          SIGNIN_TIMEOUT_MS
+        )
+      : callAgent(
+          machineId,
+          CONTROL_SET_PROVIDER_KEY,
+          [account.id, account.provider, key ?? "", account.identity],
+          SIGNIN_TIMEOUT_MS
+        );
   return (
     new Elysia()
       // Checks now whether Claude Code still refuses an account it refused
@@ -153,20 +205,7 @@ export const accountSigninRoutes = ({
           // The machine's sign-in runs under the id it was asked for, the id
           // `…/signin/complete` finishes it under: one a join removed
           // finishes into the account it joined ({@link finishJoined}).
-          const answer = claude
-            ? await callAgent(
-                params.machineId,
-                CONTROL_BEGIN_ACCOUNT_LOGIN,
-                [params.id, account.kind],
-                SIGNIN_TIMEOUT_MS,
-                "claude"
-              )
-            : await callAgent(
-                params.machineId,
-                CONTROL_BEGIN_PROVIDER_LOGIN,
-                [params.id, account.provider],
-                SIGNIN_TIMEOUT_MS
-              );
+          const answer = await beginOn(account, params.id, params.machineId);
           // Sent, whether or not it answered: only a machine not connected was
           // never asked.
           const sent = !(
@@ -241,7 +280,7 @@ export const accountSigninRoutes = ({
             return account;
           }
           const claude = account.provider === CLAUDE_PROVIDER;
-          if (claude && !body.code) {
+          if ((claude || account.agy) && !body.code) {
             return problem(400, {
               code: "paste-code-authorisation-page",
               detail: "Paste the code from the authorisation page.",
@@ -446,12 +485,15 @@ export const accountSigninRoutes = ({
       )
       // A key account's key, typed once in the dashboard: relayed to each
       // machine named, which writes it into the account's store there. The
-      // hub never stores it, never logs it and answers nothing of it.
+      // hub never stores it, never logs it and answers nothing of it. An
+      // Antigravity account is connected on its method: its key, or for
+      // Agent Platform on a Google Cloud place none (the machine's gcloud
+      // credentials), each machine refusing in words what it can't run.
       .post(
         "/api/accounts/:id/key",
         {
           body: t.Object({
-            key: t.String({ minLength: 1 }),
+            key: t.Optional(t.String({ minLength: 1 })),
             machineIds: t.Array(t.String(), { minItems: 1 }),
           }),
         },
@@ -466,17 +508,15 @@ export const accountSigninRoutes = ({
               detail: `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`,
             });
           }
+          // A key left out, for an account that needs one, is the
+          // machine's to refuse in its words, as an empty key is.
+          const { key } = body;
           const machines = await Promise.all(
             body.machineIds.map(async (machineId) => {
               // Its key sent there again while a sign-out waited on a process
               // there (`leaveAccounts`): the store stays.
               db.accounts.dropLeave(account.id, machineId);
-              const answer = await callAgent(
-                machineId,
-                CONTROL_SET_PROVIDER_KEY,
-                [account.id, account.provider, body.key, account.identity],
-                SIGNIN_TIMEOUT_MS
-              );
+              const answer = await keyOn(account, machineId, key);
               switch (answer.kind) {
                 case "unanswered":
                   return { machineId, error: awayWords(machineId, answer) };

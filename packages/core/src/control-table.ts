@@ -87,6 +87,7 @@ import type {
 } from "./folder-move";
 import type { ForgeAsk, ForgeVerdict } from "./forge-post";
 import type { AgentBusyReport, SessionCredentialInstall } from "./harness";
+import type { AgyAccountRecord } from "./harness/agy-account";
 import type { EffortLevel, ModelInfo } from "./harness/kinds";
 import type { PermissionMode } from "./harness/modes";
 import type {
@@ -247,6 +248,10 @@ interface ControlTable {
     [account: string, kind: AccountKind],
     ProviderSigninChallenge
   >;
+  beginAgyLogin: Entry<
+    [account: string, record: AgyAccountRecord],
+    ProviderSigninChallenge
+  >;
   beginCodexLogin: Entry<[account: string], ProviderSigninChallenge>;
   beginProviderLogin: Entry<
     [account: string, provider: string],
@@ -288,6 +293,10 @@ interface ControlTable {
     [code: string | null, account: string, expected?: AccountIdentity | null],
     AccountSigninResult
   >;
+  completeAgyLogin: Entry<
+    [pasted: string, account: string],
+    ProviderSigninResult
+  >;
   completeCodexLogin: Entry<[account: string], ProviderSigninResult>;
   completeProviderLogin: Entry<
     [code: string | null, account: string, expected?: AccountIdentity | null],
@@ -295,6 +304,15 @@ interface ControlTable {
   >;
   /** `policy`, the hub's, which the machine reads again where it keeps it. */
   configureBinaryUpdates: Unread<[policy: BinaryUpdatePolicy]>;
+  connectAgy: Entry<
+    [
+      account: string,
+      record: AgyAccountRecord,
+      key: string | null,
+      expected?: AccountIdentity | null,
+    ],
+    ProviderSigninResult
+  >;
   deleteSession: Unread<[sessionKey: string, dir?: CatalogDir]>;
   fleetDelta: Entry<[delta: FleetDelta], FleetAck>;
   fleetMcpChanged: Entry<[changes: FleetMcpChange[]], FleetMcpTakeAnswer>;

@@ -13,8 +13,10 @@ import {
 } from "@cawco/core/accounts/controls";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { makeJoin } from "@cawco/core/effect/join";
+import { harnessName } from "@cawco/core/harness/kinds";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { catalogHarnessOf } from "@cawco/core/model-names";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
@@ -145,12 +147,18 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * account's catalog fault, when it could not be read.
    */
   const probeAccount: AccountProber = async (machineId, account) => {
+    // The harness that lists the account's catalog (core
+    // `catalogHarnessOf`): Claude Code a Claude account's, Antigravity an
+    // Antigravity account's, each read in the account's own home there.
+    const provider = ctx.db.accounts.get(account)?.provider;
+    const harness =
+      (provider ? catalogHarnessOf(provider) : undefined) ?? "claude";
     const answer = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_PROBE_ACCOUNT,
       [account],
       SIGNIN_TIMEOUT_MS,
-      "claude"
+      harness
     );
     // Unanswered or refused, the account keeps what the hub last knew of it
     // (accounts.ts `refreshCatalog` writes nothing and tries again).
@@ -176,7 +184,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           noteCatalogFault(
             machineId,
             account,
-            `Claude Code on ${ctx.machineName(machineId)} couldn't read its models: ${error}.`
+            `${harnessName(harness)} on ${ctx.machineName(machineId)} couldn't read its models: ${error}.`
           );
           return;
         }

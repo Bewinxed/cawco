@@ -36,6 +36,7 @@ import type { Bounded } from "@cawco/core/bounded";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
+import { AGY_PROVIDER } from "@cawco/core/harness/agy-account";
 import { descriptorOf } from "@cawco/core/harness/kinds";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
@@ -633,7 +634,7 @@ const withIdentity = async (
     : credential;
 
 /** Who a credential is, as far as it says. */
-const identityOf = (
+export const identityOf = (
   provider: string,
   credential: HeldCredential
 ): AccountIdentity | undefined => {
@@ -1823,7 +1824,9 @@ const dropStore = async (
   await carryOutOpencode(accountId, ports);
   const held = signOut ? readHeld(accountId) : undefined;
   // A borrowed sign-in is its lender's grant: dropped here, never signed out.
-  if (held && !lenderOf(held.credential)) {
+  // An Antigravity key is no pi-ai provider's: there is nothing to sign out,
+  // and its agy home goes with the account's dir.
+  if (held && !lenderOf(held.credential) && held.provider !== AGY_PROVIDER) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
   }
   Effect.runSync(

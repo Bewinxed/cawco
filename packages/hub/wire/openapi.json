@@ -65,6 +65,38 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "agy": {
+                    "type": "object",
+                    "properties": {
+                      "gcp": {
+                        "type": "object",
+                        "properties": {
+                          "location": {
+                            "type": "string"
+                          },
+                          "project": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "location",
+                          "project"
+                        ]
+                      },
+                      "method": {
+                        "enum": [
+                          "agent-platform",
+                          "gemini-api-key",
+                          "oauth-business",
+                          "oauth-personal"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  },
                   "hue": {
                     "enum": [
                       "amber",
@@ -951,7 +983,6 @@
                   }
                 },
                 "required": [
-                  "key",
                   "machineIds"
                 ]
               }
@@ -34308,6 +34339,10 @@
       "Account": {
         "type": "object",
         "properties": {
+          "agy": {
+            "$ref": "#/components/schemas/AgyAccountRecord",
+            "description": "An Antigravity account's sign-in: its method and the Google Cloud place\nit names (core harness/agy-account.ts), never a key. Set when it is\nmade and kept for good: each machine it is signed in on runs it on this\nmethod alone. Absent for every other provider."
+          },
           "atPlanLimit": {
             "$ref": "#/components/schemas/AtPlanLimit",
             "description": "What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit})."
@@ -35042,6 +35077,31 @@
           {
             "$ref": "#/components/schemas/MachineInventory"
           }
+        ]
+      },
+      "AgyAccountRecord": {
+        "description": "What an account's record on its machine holds (core paths/harnesses.ts\n`agyAccountRecord`): its method and the place it names, never a key.",
+        "type": "object",
+        "properties": {
+          "gcp": {
+            "$ref": "#/components/schemas/GcpPlace",
+            "description": "A Google Cloud project and location, as agy's settings name them (`gcp`)."
+          },
+          "method": {
+            "$ref": "#/components/schemas/AgyMethod"
+          }
+        },
+        "required": [
+          "method"
+        ]
+      },
+      "AgyMethod": {
+        "type": "string",
+        "enum": [
+          "agent-platform",
+          "gemini-api-key",
+          "oauth-business",
+          "oauth-personal"
         ]
       },
       "Anchor": {
@@ -46402,6 +46462,22 @@
           "requestId"
         ]
       },
+      "GcpPlace": {
+        "description": "A Google Cloud project and location, as agy's settings name them (`gcp`).",
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location",
+          "project"
+        ]
+      },
       "GeneratedImage": {
         "type": "object",
         "properties": {
@@ -57501,6 +57577,10 @@
         "description": "One row of the account picker: a provider and one way its accounts sign\nin. A provider that takes both OAuth and a key is two rows, as Claude is\n(a subscription, and a Console organization).",
         "type": "object",
         "properties": {
+          "agy": {
+            "$ref": "#/components/schemas/AgyMethod",
+            "description": "An Antigravity row: the sign-in method its account runs on (core harness/agy-account.ts); absent for every other provider."
+          },
           "harnesses": {
             "description": "The harnesses that use an account of it.",
             "type": "array",

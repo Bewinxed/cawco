@@ -26,13 +26,16 @@ import type {
 import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_BEGIN_AGY_LOGIN,
   CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CHECK_ACCOUNT,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_AGY_LOGIN,
   CONTROL_COMPLETE_CODEX_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_CONNECT_AGY,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
@@ -485,6 +488,15 @@ const CONTROLS = {
   ),
   [CONTROL_BEGIN_CODEX_LOGIN]: reply<ProviderSigninChallenge>(
     ProviderSigninChallengeSchema
+  ),
+  [CONTROL_BEGIN_AGY_LOGIN]: reply<ProviderSigninChallenge>(
+    ProviderSigninChallengeSchema
+  ),
+  [CONTROL_COMPLETE_AGY_LOGIN]: reply<ProviderSigninResult>(
+    ProviderSigninResultSchema
+  ),
+  [CONTROL_CONNECT_AGY]: reply<ProviderSigninResult>(
+    ProviderSigninResultSchema
   ),
   [CONTROL_COMPLETE_CODEX_LOGIN]: reply<ProviderSigninResult>(
     ProviderSigninResultSchema

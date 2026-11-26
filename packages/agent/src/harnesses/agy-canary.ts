@@ -61,6 +61,7 @@ import {
   prepareAgyHome,
   readAgySignIn,
   removeAgyConversation,
+  signedInAt,
   signInAcp,
   startAcp,
 } from "./agy-launch";
@@ -273,11 +274,15 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
     yield* serveAgyJudge(socket, checkAnswer(scratch, token, seen)).pipe(
       Scope.provide(scope)
     );
+    // The keyring guard's reading (agy-launch.ts `refuseKeyring`), as agy
+    // is about to start.
+    const signedIn = yield* Effect.promise(() => signedInAt(home));
+    const since = Date.now();
     const { child, connection } = startAcp(
       {
         bin,
         args: agyArgs(home),
-        env: agyEnvironment(signIn, { ...judge, TMPDIR: scratch.dir }),
+        env: agyEnvironment(signIn, home, { ...judge, TMPDIR: scratch.dir }),
         cwd: scratch.dir,
       },
       client({ name: "cawco" })
@@ -300,7 +305,12 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
     yield* boundedRead(
       CHECK_MS,
       Effect.promise(async () => {
-        await signInAcp(connection, signIn.method, runtimeVersion);
+        await signInAcp(connection, signIn.method, runtimeVersion, {
+          end: () => endGroup(child),
+          home,
+          signedIn,
+          since,
+        });
         const opened = await connection.agent.request(
           methods.agent.session.new,
           { cwd: scratch.dir, mcpServers: [] }

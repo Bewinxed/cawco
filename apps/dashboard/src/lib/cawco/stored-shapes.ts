@@ -9,6 +9,7 @@ import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
 import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
+import { AGY_METHODS } from "@cawco/core/harness/agy-account";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
 import {
@@ -32,6 +33,18 @@ import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { z } from "zod";
+
+const GcpPlaceShape = z.object({ location: z.string(), project: z.string() });
+export type GcpPlaceOutput = z.output<typeof GcpPlaceShape>;
+
+const AgyMethodShape = z.enum(AGY_METHODS);
+export type AgyMethodOutput = z.output<typeof AgyMethodShape>;
+
+const AgyAccountRecordShape = z.object({
+  gcp: GcpPlaceShape.optional(),
+  method: AgyMethodShape,
+});
+export type AgyAccountRecordOutput = z.output<typeof AgyAccountRecordShape>;
 
 const AtPlanLimitShape = z.enum(["price", "move", "extra-usage"]);
 export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
@@ -61,6 +74,7 @@ const AccountSetupStepShape = z.enum(ACCOUNT_SETUP_STEPS);
 export type AccountSetupStepOutput = z.output<typeof AccountSetupStepShape>;
 
 const AccountShape = z.object({
+  agy: AgyAccountRecordShape.optional(),
   atPlanLimit: AtPlanLimitShape,
   createdAt: z.number(),
   email: z.string().nullable(),

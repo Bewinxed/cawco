@@ -198,6 +198,20 @@ public enum Words {
             "••••\(tail)"
         }
 
+        /// An Antigravity account's sign-in method, as its picker row and its account name it (core harness/agy-account.ts `AgyMethod`): agy's four ACP methods.
+        public enum AgyMethods {
+            public static let oauthPersonal = "Antigravity · Google account"
+
+            public static let oauthBusiness = "Antigravity · Gemini Enterprise"
+
+            public static let geminiApiKey = "Antigravity · Gemini API key"
+
+            public static let agentPlatform = "Antigravity · Agent Platform"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["oauth-personal": oauthPersonal, "oauth-business": oauthBusiness, "gemini-api-key": geminiApiKey, "agent-platform": agentPlatform]
+        }
+
         /// What is wrong with an account, in its row's second line.
         public enum Problem {
             public static func someoneElse(machine: String) -> String {

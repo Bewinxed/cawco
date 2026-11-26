@@ -1,7 +1,7 @@
 /**
  * The model list, once for the whole app: what each machine reports its
- * harnesses can run, and for Claude each signed-in account's catalog, which
- * the hub reads per account and keeps. The catalog is a property of an
+ * harnesses can run, and for Claude and Antigravity each signed-in account's
+ * catalog, which the hub reads per account and keeps. The catalog is a property of an
  * installed CLI and the account behind it, never of a session that happens
  * to be up, so nothing here asks a session. A harness with no catalog says
  * why ({@link models}`.unread`).
@@ -18,7 +18,9 @@ import { traitsOf } from "@cawco/core/harness/traits";
 import { harnessRefusal } from "@cawco/core/harness-refusal";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
+  catalogHarnessOf,
   LONG_CONTEXT,
+  listsCatalogOf,
   type ModelListing,
   modelListingOn,
   modelNameIn,
@@ -94,11 +96,17 @@ function reported(): HarnessModel[] {
   return [...rows, ...accountRows()];
 }
 
+/** The provider of account `accountId`, as the hub's accounts say; empty when it is not known. */
+const providerOfAccount = (accountId: string): string =>
+  accountsStore.accounts?.accounts.find((one) => one.id === accountId)
+    ?.provider ?? "";
+
 /**
- * Claude's models: each account's catalog, as its Claude Code answered at
- * initialize and the hub keeps, on every machine the account is signed in
- * on. A model's default effort is the one its sessions ran at when nobody
- * chose one; absent until one has.
+ * Claude's and Antigravity's models: each account's catalog, as its harness
+ * answered in the account's own home and the hub keeps, on every machine the
+ * account is signed in on, under the harness that lists it (core
+ * `catalogHarnessOf`). A model's default effort is the one its sessions ran
+ * at when nobody chose one; absent until one has.
  */
 function accountRows(): HarnessModel[] {
   const view = accountsStore.accounts;
@@ -108,16 +116,19 @@ function accountRows(): HarnessModel[] {
   return view.signins
     .filter((signin) => signin.state === "signed-in")
     .flatMap((signin) => {
+      const harness = catalogHarnessOf(providerOfAccount(signin.accountId));
       const kept = view.catalogs.find(
         (one) => one.accountId === signin.accountId
       );
-      return (kept?.models ?? []).map((model) => {
-        const learned =
-          kept?.defaultEfforts[model.resolvedModel ?? model.value];
+      if (!(harness && kept)) {
+        return [];
+      }
+      return kept.models.map((model) => {
+        const learned = kept.defaultEfforts[model.resolvedModel ?? model.value];
         return {
           ...model,
           ...(isEffortLevel(learned) ? { defaultEffort: learned } : {}),
-          harness: "claude" as const,
+          harness,
           machineId: signin.machineId,
           accountId: signin.accountId,
         };
@@ -165,7 +176,10 @@ function unread(harness: string, machineIds?: string[]): string | null {
   );
   const said =
     traitsOf(harness).modelCatalog === "account"
-      ? claudeUnread(machines.map((machine) => machine.machineId))
+      ? accountsUnread(
+          harness,
+          machines.map((machine) => machine.machineId)
+        )
       : machines.flatMap((machine) => {
           const report = machine.harnesses?.find(
             (one) => one.harness === harness
@@ -191,25 +205,31 @@ function unread(harness: string, machineIds?: string[]): string | null {
   if (said.length > 0) {
     return `${speakerName(harness)}'s models couldn't be read. ${said.join(" ")}`;
   }
-  // Only Claude's catalogs are read by the hub; another harness that says
+  // Only an account's catalog is read by the hub; another harness that says
   // nothing has said nothing yet.
   return traitsOf(harness).modelCatalog === "account"
-    ? "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can."
+    ? `The hub hasn't read the models of the ${speakerName(harness)} accounts signed in here yet. It tries again until it can.`
     : null;
 }
 
 /**
- * Claude's side of {@link unread}: the hub's fault for each account signed in
- * on `machineIds` that has no catalog; empty while none has one yet (a read
- * on its way); null with none signed in there.
+ * The side of {@link unread} for a harness whose catalog is each account's:
+ * the hub's fault for each account of its signed in on `machineIds` that has
+ * no catalog; empty while none has one yet (a read on its way); null with
+ * none signed in there.
  */
-function claudeUnread(machineIds: string[]): string[] | null {
+function accountsUnread(
+  harness: string,
+  machineIds: string[]
+): string[] | null {
   const view = accountsStore.accounts;
   const accounts = new Set(
     (view?.signins ?? [])
       .filter(
         (signin) =>
-          signin.state === "signed-in" && machineIds.includes(signin.machineId)
+          signin.state === "signed-in" &&
+          machineIds.includes(signin.machineId) &&
+          listsCatalogOf(harness, providerOfAccount(signin.accountId))
       )
       .map((signin) => signin.accountId)
   );
@@ -223,9 +243,9 @@ function claudeUnread(machineIds: string[]): string[] | null {
 
 /**
  * What `harness` lists on `machineId`, as the hub judges a start there
- * (core `modelListingOn`): the catalogs read of the Claude accounts signed
- * in there, with the faults of those not read, and the machine's report of
- * OpenCode or pi.
+ * (core `modelListingOn`): the catalogs read of its accounts signed in
+ * there (Claude's, Antigravity's), with the faults of those not read, and
+ * the machine's report of OpenCode, pi or Codex.
  */
 function listingOn(harness: HarnessKind, machineId: string): ModelListing {
   const view = accountsStore.accounts;
@@ -233,7 +253,9 @@ function listingOn(harness: HarnessKind, machineId: string): ModelListing {
     (view?.signins ?? [])
       .filter(
         (signin) =>
-          signin.state === "signed-in" && signin.machineId === machineId
+          signin.state === "signed-in" &&
+          signin.machineId === machineId &&
+          listsCatalogOf(harness, providerOfAccount(signin.accountId))
       )
       .map((signin) => signin.accountId)
   );

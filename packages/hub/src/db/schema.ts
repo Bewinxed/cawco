@@ -27,6 +27,7 @@ import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
+import { AGY_METHODS } from "@cawco/core/harness/agy-account";
 import {
   EFFORT_LEVELS,
   HARNESSES,
@@ -3163,6 +3164,15 @@ export const accounts = sqliteTable(
     orgId: text("org_id"),
     /** Where its unfinished setup stands (core `AccountSetupStep`); null once done. */
     setupStep: storedEnum(z.enum(ACCOUNT_SETUP_STEPS))("setup_step"),
+    /**
+     * An Antigravity account's sign-in method (core `Account.agy`), set when
+     * it is made; null for every other provider.
+     */
+    agyMethod: storedEnum(z.enum(AGY_METHODS))("agy_method"),
+    /** The Google Cloud project its method names (Gemini Enterprise, Agent Platform); null when none. */
+    agyGcpProject: text("agy_gcp_project"),
+    /** The Google Cloud location beside {@link agyGcpProject}. */
+    agyGcpLocation: text("agy_gcp_location"),
     /**
      * When the hub last checked, with one turn as the account, whether
      * Claude Code still refuses it account-wide (hub accounts.ts

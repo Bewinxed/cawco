@@ -20,6 +20,10 @@ import {
   type RefusalReach,
 } from "@cawco/core/accounts";
 import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
+import type {
+  AgyAccountRecord,
+  AgyMethod,
+} from "@cawco/core/harness/agy-account";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
@@ -156,6 +160,8 @@ export interface AccountsDb {
     provider: AccountProvider;
     /** Made by a setup still under way: the step it stands at. */
     setupStep?: AccountSetupStep;
+    /** An Antigravity account's sign-in method and place, kept for good. */
+    agy?: AgyAccountRecord;
   }) => Account;
   /** Every account a provider refused for want of credit (core `AccountCredit`). */
   readonly credit: () => AccountCredit[];
@@ -394,8 +400,21 @@ const toAccount = (row: AccountRow): Account => ({
           orgId: row.orgId,
         },
   ...(row.setupStep ? { setupStep: row.setupStep } : {}),
+  ...(row.agyMethod ? { agy: agyRecordOf(row.agyMethod, row) } : {}),
   createdAt: row.createdAt.getTime(),
 });
+
+/** An Antigravity account's record from its row: its method, and its place where both its names are kept. */
+const agyRecordOf = (
+  method: AgyMethod,
+  row: Pick<AccountRow, "agyGcpLocation" | "agyGcpProject">
+): AgyAccountRecord =>
+  row.agyGcpProject !== null && row.agyGcpLocation !== null
+    ? {
+        method,
+        gcp: { project: row.agyGcpProject, location: row.agyGcpLocation },
+      }
+    : { method };
 
 /** One identity as `accounts_identity` keys it: the provider, the email in any case, the organization's id. */
 const sameIdentityAs = (
@@ -619,7 +638,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         })
         .run();
     },
-    create: ({ provider, kind, label, hue, identity, setupStep }) => {
+    create: ({ provider, kind, label, hue, identity, setupStep, agy }) => {
       const taken = list().map((account) => account.hue);
       const order =
         (db
@@ -648,6 +667,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           organization: identity?.organization ?? null,
           orgId: identity?.orgId || null,
           setupStep: setupStep ?? null,
+          agyMethod: agy?.method ?? null,
+          agyGcpProject: agy?.gcp?.project ?? null,
+          agyGcpLocation: agy?.gcp?.location ?? null,
         })
         .returning()
         .get();

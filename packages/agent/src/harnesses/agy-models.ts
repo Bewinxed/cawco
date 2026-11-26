@@ -22,6 +22,7 @@ import {
   prepareAgyHome,
   readAgySignIn,
   removeAgyConversation,
+  signedInAt,
   signInAcp,
   startAcp,
 } from "./agy-launch";
@@ -56,8 +57,15 @@ export const agyAccountModels = async (
       return { bin: agy.bin, signIn: read, home: prepared };
     }).pipe(Effect.mapError((refused) => new Error(refused.message)))
   );
+  const signedIn = await signedInAt(home);
+  const since = Date.now();
   const { child, connection } = startAcp(
-    { bin, args: agyArgs(home), env: agyEnvironment(signIn, {}), cwd: home },
+    {
+      bin,
+      args: agyArgs(home),
+      env: agyEnvironment(signIn, home, {}),
+      cwd: home,
+    },
     client({ name: "cawco" }),
     { said: () => undefined, ended: () => undefined }
   );
@@ -68,7 +76,12 @@ export const agyAccountModels = async (
       boundedRead(
         READ_MS,
         Effect.promise(async () => {
-          await signInAcp(connection, signIn.method, runtimeVersion);
+          await signInAcp(connection, signIn.method, runtimeVersion, {
+            end: () => endGroup(child),
+            home,
+            signedIn,
+            since,
+          });
           const answer = await connection.agent.request(
             methods.agent.session.new,
             { cwd: home, mcpServers: [] }

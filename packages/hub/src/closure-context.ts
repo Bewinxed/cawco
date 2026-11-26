@@ -53,6 +53,7 @@ import type {
   Presence,
 } from "@cawco/core/handover";
 import type { HarnessReport } from "@cawco/core/harness";
+import type { AgyAccountRecord } from "@cawco/core/harness/agy-account";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
@@ -277,7 +278,8 @@ type ModeRefused<Status extends 400 | 502> = ReturnType<
 export interface ClosureContext {
   accountKindRefusal: (
     provider: string,
-    kind: AccountKind
+    kind: AccountKind,
+    agy?: AgyAccountRecord
   ) => string | undefined;
   accountLaunch: (
     machineId: string,

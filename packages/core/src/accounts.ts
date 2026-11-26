@@ -24,6 +24,13 @@ import {
   type PlacementStrategy,
 } from "./accounts/kinds";
 import { everyOf } from "./every-of";
+import {
+  AGY_METHODS,
+  AGY_PROVIDER,
+  type AgyAccountRecord,
+  type AgyMethod,
+  agyMethodKind,
+} from "./harness/agy-account";
 import type { HarnessKind } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
 import type { LimitWindow } from "./usage/types";
@@ -158,6 +165,8 @@ export const isOpenaiKey = (account: {
  * (a subscription, and a Console organization).
  */
 export interface ProviderChoice {
+  /** An Antigravity row: the sign-in method its account runs on (core harness/agy-account.ts); absent for every other provider. */
+  agy?: AgyMethod;
   /** The harnesses that use an account of it. */
   harnesses: import("./harness/kinds").HarnessKind[];
   /** The account kind this row adds. */
@@ -221,7 +230,19 @@ export const providerChoices = (
         : []),
     ];
   });
-  return [...claude, ...rest];
+  // Antigravity: a row per sign-in method of agy's ACP, each its own
+  // account's for good (tsk-340). Its limits are not read: agy carries no
+  // quota a client can read without its telemetry (item 5's evidence).
+  const agy = AGY_METHODS.map((method): ProviderChoice => ({
+    provider: AGY_PROVIDER,
+    kind: agyMethodKind(method),
+    name: accountsWords.agyMethods[method],
+    signin: agyMethodKind(method) === "oauth" ? "paste-code" : "api-key",
+    harnesses: ["agy"],
+    limits: false,
+    agy: method,
+  }));
+  return [...claude, ...agy, ...rest];
 };
 
 /**
@@ -268,6 +289,13 @@ export interface AccountIdentity {
 export type AtPlanLimit = "price" | "move" | "extra-usage";
 
 export interface Account {
+  /**
+   * An Antigravity account's sign-in: its method and the Google Cloud place
+   * it names (core harness/agy-account.ts), never a key. Set when it is
+   * made and kept for good: each machine it is signed in on runs it on this
+   * method alone. Absent for every other provider.
+   */
+  agy?: AgyAccountRecord;
   /** What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit}). */
   atPlanLimit: AtPlanLimit;
   createdAt: number;

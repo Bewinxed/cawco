@@ -48,6 +48,7 @@ import type {
   ControlName,
 } from "./control-table";
 import { TRANSCRIPT_AUTHORS, TRANSCRIPT_PLACE_KINDS } from "./find";
+import { AGY_METHODS } from "./harness/agy-account";
 import { HARNESSES, isEffortLevel } from "./harness/kinds";
 import { WIRE_PERMISSION_MODES } from "./harness/modes";
 import { CREDENTIAL_STORE_HARNESSES } from "./harness/traits";
@@ -109,6 +110,10 @@ const LentAccessShape = object({
   expires: count,
   identity: AccountIdentity,
   provider: text,
+});
+const AgyRecord = object({
+  method: picklist(AGY_METHODS),
+  gcp: optional(object({ project: text, location: text })),
 });
 const CredentialStore = picklist(CREDENTIAL_STORE_HARNESSES);
 const AccountKind = picklist(ACCOUNT_KINDS);
@@ -283,6 +288,9 @@ const ARGS: {
   beginProviderLogin: tuple([text, text]),
   beginCodexLogin: tuple([text]),
   completeCodexLogin: tuple([text]),
+  beginAgyLogin: tuple([text, AgyRecord]),
+  completeAgyLogin: tuple([text, text]),
+  connectAgy: tuple([text, AgyRecord, nullable(text), maybe(AccountIdentity)]),
   completeProviderLogin: tuple([nullable(text), text, maybe(AccountIdentity)]),
   setProviderKey: tuple([text, text, text, maybe(AccountIdentity)]),
   forgetCodexLogin: tuple([text]),

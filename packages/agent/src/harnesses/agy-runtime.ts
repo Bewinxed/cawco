@@ -115,7 +115,13 @@ import {
 } from "./agy-frames";
 import { serveAgyJudge } from "./agy-hook";
 import type { AgyAnswer, AgySession as Judged } from "./agy-judge";
-import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
+import {
+  type AgyChild,
+  endGroup,
+  signedInAt,
+  signInAcp,
+  startAcp,
+} from "./agy-launch";
 import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
 import { type WrittenAt, writtenAt, writtenResult } from "./agy-transcript";
@@ -438,6 +444,8 @@ class AgySession {
     const { launch } = this.#start;
     // Its end, said once the process this start made is known.
     const holder: { agy?: AgyProcess; why?: string } = {};
+    const signedIn = await signedInAt(launch.home);
+    const since = Date.now();
     const { child, connection } = startAcp(
       {
         bin: launch.bin,
@@ -478,7 +486,8 @@ class AgySession {
     const initialized = await signInAcp(
       connection,
       launch.methodId,
-      this.#start.clientVersion
+      this.#start.clientVersion,
+      { end: () => endGroup(child), home: launch.home, signedIn, since }
     );
     if (initialized.agentInfo?.version) {
       this.#version = initialized.agentInfo.version;

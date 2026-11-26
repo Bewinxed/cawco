@@ -20,6 +20,7 @@ import {
 } from "@cawco/core/accounts";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import { makeJoin } from "@cawco/core/effect/join";
+import { catalogHarnessOf } from "@cawco/core/model-names";
 import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
@@ -86,7 +87,7 @@ export const keepProbe = (
   if (probe.models.length > 0) {
     db.accounts.putCatalog(
       accountId,
-      keptAs(MODELS, probe.models, "Claude Code's model list"),
+      keptAs(MODELS, probe.models, "the account's model list"),
       at
     );
   }
@@ -223,7 +224,13 @@ const probeCatalog = async (
   const held = read.identity
     ? withOrgIdFrom(db, account, read.identity).identity
     : null;
-  if (read.identity && held && sameIdentity(read.identity, held)) {
+  // A Claude probe is kept when its dir answers as the account. An
+  // Antigravity probe names nobody (CawCo never reads its Google token):
+  // its home is the account's own, so what it lists is the account's.
+  const answersAsAccount = read.identity
+    ? held !== null && sameIdentity(read.identity, held)
+    : account.provider !== CLAUDE_PROVIDER;
+  if (answersAsAccount) {
     keepProbe(db, account.id, read);
   }
   return "read";
@@ -406,13 +413,18 @@ export const reconcileAccounts = async (
       changed =
         store.putSignin({ accountId: account.id, machineId, state }) || changed;
     }
-    if (state === "signed-in" && scope !== "providers") {
+    // An account whose models are each account's own (core
+    // `catalogHarnessOf`: Claude's, Antigravity's) has them read once it is
+    // signed in. Claude's sessions read theirs again once stale
+    // (agent-socket account-readings.ts); an Antigravity account's are read
+    // again here, on its machine's next report past the hour.
+    if (state === "signed-in" && catalogHarnessOf(account.provider)) {
       const read = await refreshCatalog(
         db,
         machineId,
         account,
         probe,
-        "missing"
+        account.provider === CLAUDE_PROVIDER ? "missing" : "stale"
       );
       failed = failed || read === "failed";
     }

@@ -74,6 +74,11 @@ import type {
   PreviewFrame as PreviewFrameType,
 } from "@cawco/core/frames";
 import type {
+  AgyAccountRecord as AgyAccountRecordType,
+  AgyMethod as AgyMethodType,
+  GcpPlace as GcpPlaceType,
+} from "@cawco/core/harness/agy-account";
+import type {
   EffortLevel as EffortLevelType,
   HarnessKind as HarnessKindType,
 } from "@cawco/core/harness/kinds";
@@ -246,6 +251,8 @@ import type {
   AccountOutput,
   AccountProviderOutput,
   AccountSetupStepOutput,
+  AgyAccountRecordOutput,
+  AgyMethodOutput,
   ArtifactKindOutput,
   ArtifactSessionFrameOutput,
   ArtifactSessionHeardOutput,
@@ -290,6 +297,7 @@ import type {
   FleetPlacementOutput,
   FleetScopeOutput,
   ForkSourceOutput,
+  GcpPlaceOutput,
   GraphKeptOutput,
   HarnessBlockTypeOutput,
   HarnessKindOutput,
@@ -459,6 +467,9 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
+    Same<GcpPlaceOutput, GcpPlaceType>,
+    Same<AgyMethodOutput, AgyMethodType>,
+    Same<AgyAccountRecordOutput, AgyAccountRecordType>,
     Same<AtPlanLimitOutput, AtPlanLimitType>,
     Same<AccountHueOutput, AccountHueType>,
     Same<AccountIdentityOutput, AccountIdentityType>,

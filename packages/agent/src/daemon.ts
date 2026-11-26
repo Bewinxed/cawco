@@ -5,11 +5,14 @@ import { dirname, join } from "node:path";
 import type { MachineProviderLists } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
+  CONTROL_BEGIN_AGY_LOGIN,
   CONTROL_BEGIN_CODEX_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
+  CONTROL_COMPLETE_AGY_LOGIN,
   CONTROL_COMPLETE_CODEX_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_CONNECT_AGY,
   CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -303,6 +306,13 @@ import { setHubGitOrigins } from "./git-credential";
 import { type Harness, isServerHarness } from "./harness";
 import { moveHarnessRecords } from "./harness-records-move";
 import { harness, harnesses } from "./harnesses";
+import {
+  beginAgyLogin,
+  completeAgyLogin,
+  connectAgy,
+  endAgySignins,
+  machineProviderAccountReports,
+} from "./harnesses/agy-signin";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
   beginCodexLogin,
@@ -367,7 +377,6 @@ import {
   lendAccount,
   moveHomeCredential,
   piProviders,
-  providerAccountReports,
   readHomeCredentials,
   setProviderKey,
 } from "./provider-accounts";
@@ -915,6 +924,15 @@ const registerProviderAccounts = (
       })()
   );
   supervisor.declareControl(CONTROL_BEGIN_CODEX_LOGIN, beginCodexLogin);
+  // An Antigravity account's sign-in, into its agy home here
+  // (harnesses/agy-signin.ts).
+  supervisor.declareControl(CONTROL_BEGIN_AGY_LOGIN, beginAgyLogin);
+  supervisor.declareControl(CONTROL_COMPLETE_AGY_LOGIN, (pasted, id) =>
+    changing(() => completeAgyLogin(pasted, id))()
+  );
+  supervisor.declareControl(CONTROL_CONNECT_AGY, (id, record, key, expected) =>
+    changing(() => connectAgy(id, record, key, expected ?? null))()
+  );
   supervisor.declareControl(CONTROL_COMPLETE_CODEX_LOGIN, (id) =>
     changing(() => completeCodexLogin(id))()
   );
@@ -1900,7 +1918,7 @@ const attach = (
     let announced = false;
     let lastPiCheck = Date.now();
     const pi = harness("pi");
-    let reportedProviderAccounts = providerAccountReports();
+    let reportedProviderAccounts = machineProviderAccountReports();
     let reportedCodexAccounts = codexSignedInAccounts();
     /** The fingerprint of pi's and OpenCode's own stores this connection last sent; undefined until one is read. */
     let reportedHomeStores: string | undefined;
@@ -2042,7 +2060,7 @@ const attach = (
     supervisor.reannounce = () => {
       detach(
         (async () => {
-          reportedProviderAccounts = providerAccountReports();
+          reportedProviderAccounts = machineProviderAccountReports();
           reportedCodexAccounts = codexSignedInAccounts();
           reportedHomeStores = (await homeStoresStamp()) ?? reportedHomeStores;
           beat({
@@ -2097,7 +2115,7 @@ const attach = (
     // it on the next beat, and each account's OpenCode server is squared with
     // its credential.
     providerAccountsChanged = (homeStores?: string) => {
-      reportedProviderAccounts = providerAccountReports();
+      reportedProviderAccounts = machineProviderAccountReports();
       reportedCodexAccounts = codexSignedInAccounts();
       reportedHomeStores = homeStores ?? reportedHomeStores;
       beat({
@@ -2285,7 +2303,7 @@ const attach = (
           if (
             !(
               Bun.deepEquals(
-                providerAccountReports(),
+                machineProviderAccountReports(),
                 reportedProviderAccounts
               ) &&
               Bun.deepEquals(codexSignedInAccounts(), reportedCodexAccounts)
@@ -4107,6 +4125,7 @@ export const runDaemon = (rediscover = false): void => {
     endSignIns();
     endProviderSignIns();
     endToolSignins();
+    endAgySignins();
   });
   // Said, then ended: a throw nothing caught may be a listener's error
   // event, and an agent that carried on past one stayed up without serving

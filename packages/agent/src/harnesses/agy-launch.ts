@@ -11,10 +11,13 @@
  *   Google login (agy changelog 1.5.9).
  * - Every Google, Gemini, gcloud and agy variable of the host is dropped
  *   ({@link agyEnvironment}), then only the method's credential is set:
- *   `GEMINI_API_KEY` for a Gemini key, `GOOGLE_API_KEY` for an Agent
- *   Platform key, the file sign-in switches for a Google account; the
- *   Google Cloud project and location go in the home's settings, never the
- *   environment, as `GOOGLE_API_KEY` there outranks them.
+ *   `GEMINI_API_KEY` for a Gemini key. Agent Platform runs on gcloud's own
+ *   default credentials, and its Google Cloud project and location, like
+ *   Gemini Enterprise's, go in the home's settings, never the environment.
+ * - Every launch of every method keeps agy's own sign-in in a file in the
+ *   account's home, never the OS keyring ({@link HOME_SIGN_IN}), so each
+ *   Google account's sign-in is its own and a key account's home holds no
+ *   Google login to fall back to.
  * - Every launch carries `--disable-telemetry`, and agy's self-update and
  *   crash reports are off.
  * - CawCo's hook is written into the home before every launch (agy-hook.ts),
@@ -25,9 +28,9 @@
  * (core accounts.ts) and hands agy in its environment.
  */
 import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
+import { delimiter, dirname, join } from "node:path";
 import {
   type ClientApp,
   type ClientConnection,
@@ -41,12 +44,15 @@ import {
   AGY_PROVIDER,
   type AgyAccountRecord,
   type AgySignIn,
+  placeOf,
 } from "@cawco/core/harness/agy-account";
 import type { AgyLaunch } from "@cawco/core/harness/agy-host-state";
 import {
   AGY_APP_DATA,
+  AGY_SIGN_IN_FILE,
   agyAccountHome,
   agyAccountRecord,
+  agySignInFile,
 } from "@cawco/core/paths/harnesses";
 import { agyJudgeSocket } from "@cawco/core/paths/hub";
 import { sessionEnvironment } from "@cawco/core/session-env";
@@ -54,6 +60,7 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { agyWords } from "@cawco/core/words/agy";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { Effect, Option, Schema } from "effect";
 import { readHeld } from "../provider-accounts";
 import { toolGate, toolPath } from "../tools";
@@ -99,17 +106,32 @@ const decodeRecord = Schema.decodeUnknownOption(
   Schema.fromJsonString(AccountRecordSchema)
 );
 
-/** A place both of whose names are written. */
-const placeOf = (record: AgyAccountRecord) =>
-  record.gcp?.project.trim() && record.gcp.location.trim()
-    ? {
-        project: record.gcp.project.trim(),
-        location: record.gcp.location.trim(),
-      }
-    : undefined;
+/** Account `accountId`'s record on this machine as it is now; none when it has none, or one that doesn't read. */
+export const agyRecordOn = (
+  accountId: string
+): AgyAccountRecord | undefined => {
+  try {
+    return Option.getOrUndefined(
+      decodeRecord(readFileSync(agyAccountRecord(accountId), "utf8"))
+    );
+  } catch {
+    return undefined;
+  }
+};
+
+/** Account `accountId`'s record written, owner-only: what every launch on it reads ({@link readAgySignIn}). */
+export const writeAgyRecord = (
+  accountId: string,
+  record: AgyAccountRecord
+): Promise<void> =>
+  writeStateFile(
+    agyAccountRecord(accountId),
+    `${JSON.stringify(record, null, 2)}\n`,
+    { mode: 0o600 }
+  );
 
 /** The key the account's credential holds, when it is an Antigravity key. */
-const keyOf = (accountId: string): string | undefined => {
+const agyKeyOf = (accountId: string): string | undefined => {
   const held = readHeld(accountId);
   return held?.provider === AGY_PROVIDER &&
     held.credential.type === "api_key" &&
@@ -134,31 +156,38 @@ export const readAgySignIn = Effect.fn("readAgySignIn")(function* (
   if (!record) {
     return yield* refuse(agyWords.noMethod);
   }
-  const place = placeOf(record);
+  const place = placeOf(record.gcp);
+  // A Google sign-in must be in the home before agy runs: agy asked to sign
+  // in with none opens a browser on this machine.
+  const signedIn = yield* Effect.promise(() =>
+    Bun.file(agySignInFile(accountId)).exists()
+  );
   switch (record.method) {
     case "oauth-personal":
+      if (!signedIn) {
+        return yield* refuse(agyWords.notSignedIn);
+      }
       return { method: "oauth-personal" } satisfies AgySignIn;
     case "oauth-business":
       if (!place) {
         return yield* refuse(agyWords.noBusinessPlace);
       }
+      if (!signedIn) {
+        return yield* refuse(agyWords.notSignedIn);
+      }
       return { method: "oauth-business", gcp: place } satisfies AgySignIn;
     case "gemini-api-key": {
-      const key = keyOf(accountId);
+      const key = agyKeyOf(accountId);
       if (!key) {
         return yield* refuse(agyWords.noKey("Gemini API key"));
       }
       return { method: "gemini-api-key", key } satisfies AgySignIn;
     }
     case "agent-platform": {
-      const key = keyOf(accountId);
-      if (key) {
-        return { method: "agent-platform", key } satisfies AgySignIn;
+      if (!place) {
+        return yield* refuse(agyWords.noPlatformPlace);
       }
-      if (place) {
-        return { method: "agent-platform", gcp: place } satisfies AgySignIn;
-      }
-      return yield* refuse(agyWords.noPlatformAccess);
+      return { method: "agent-platform", gcp: place } satisfies AgySignIn;
     }
     default:
       return yield* refuse(agyWords.noMethod);
@@ -173,6 +202,12 @@ export const readAgySignIn = Effect.fn("readAgySignIn")(function* (
  */
 const DROPPED_NAMES = new Set([
   "BROWSER",
+  // No display: agy asked to sign in where it has no sign-in refuses a
+  // browser it can't open, rather than opening one on this machine. Only a
+  // Gemini Enterprise sign-in sets one, for CawCo's own opener
+  // (agy-signin.ts).
+  "DISPLAY",
+  "WAYLAND_DISPLAY",
   "SSH_CONNECTION",
   "SSH_CLIENT",
   "SSH_TTY",
@@ -202,15 +237,90 @@ const droppedForAgy = (name: string): boolean => {
 };
 
 /**
- * agy 1.5 keeps a Google sign-in in one OS keyring entry for every home,
- * unless it believes it runs over SSH; then it keeps it in a file in the
- * home's app-data dir (T3 Code's `antigravityEnvironment`, issue #1833). Set
- * for a Google account alone, so each account's sign-in is its own.
+ * Where agy keeps a sign-in, for a launch in `home`: a file in the home's
+ * app-data dir (`<home>/cawco/antigravity-oauth-token`), never D-Bus or the
+ * OS keyring, which holds one entry for every home (agy 1.5.18's
+ * `composite_token_storage.go`, the project's `assets/22523e77/REPORT.md`);
+ * and agy's plugin secrets in the home too (`$XDG_CONFIG_HOME/antigravity`).
+ * Set on every method's launch: a key account's home then holds no Google
+ * login, so agy never falls back to one (agy changelog 1.5.9). Never
+ * `SSH_CONNECTION`, which gives the same file but makes ACP `authenticate`
+ * refuse a browser sign-in.
  */
-const FILE_SIGN_IN = {
-  SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 0",
-  AGY_ACP_FORCE_FILE_STORAGE: "1",
-} as const;
+const HOME_SIGN_IN = (home: string): Record<string, string> => ({
+  AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "1",
+  XDG_CONFIG_HOME: join(home, "xdg"),
+  ...NO_KEYRING(home),
+});
+
+/**
+ * No OS keyring for agy to reach. The force switch above picks where agy
+ * keeps a sign-in, but not where its auth chain reads one: asked to sign in
+ * with no file in the home and the session bus in reach, agy 1.5.18 took
+ * the machine's own keyring sign-in and wrote it into the home ("ChainedAuth:
+ * authenticated via keyring", the project's `assets/cbec55e2/REPORT.md`).
+ * Its keyring (go-keyring, Secret Service over D-Bus on Linux) and its own
+ * bus look both read `DBUS_SESSION_BUS_ADDRESS` first, so it names a socket
+ * that is never there: no bus, no keyring. macOS keeps its Keychain outside
+ * any variable, so there the guard after each start holds it
+ * ({@link signInAcp}).
+ */
+const NO_KEYRING = (home: string): Record<string, string> => ({
+  DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(home, "no-session-bus")}`,
+});
+
+/**
+ * The names a platform's browser opener goes by, which agy runs to open a
+ * link (Go's `pkg/browser`: `xdg-open` and its fallbacks on Linux, `open`
+ * on macOS; agy ignores `$BROWSER` and also tries `kde-open` and `gio`,
+ * `assets/cbec55e2/REPORT.md`). CawCo's stand-in for each, first on every
+ * agy launch's PATH, writes the link to `$CAWCO_AGY_OPENED` and opens
+ * nothing, so no agy CawCo starts ever opens a browser on this machine; a
+ * sign-in relays the link it wrote (agy-signin.ts).
+ */
+const OPENERS = [
+  "xdg-open",
+  "x-www-browser",
+  "www-browser",
+  "sensible-browser",
+  "kde-open",
+  "kde-open5",
+  "gio",
+  "open",
+];
+
+/** An account's openers, beside its agy home and outside it, and the file they write to. */
+export const agyOpeners = (home: string): { dir: string; opened: string } => {
+  const dir = join(dirname(home), "agy-open");
+  return { dir, opened: join(dir, "opened") };
+};
+
+/** An opener: the link it is handed, written to `$CAWCO_AGY_OPENED`, and nothing opened. */
+const opener = (): string =>
+  `#!${systemProgram("sh")}\nprintf '%s\\n' "$*" >> "$CAWCO_AGY_OPENED"\n`;
+
+/** The home's openers written afresh, owner-only, before every launch: whatever stood there is replaced. */
+const writeOpeners = async (home: string): Promise<void> => {
+  const { dir } = agyOpeners(home);
+  await makeFolder(dir, { mode: 0o700 });
+  for (const name of OPENERS) {
+    await writeStateFile(join(dir, name), opener(), { mode: 0o700 });
+  }
+};
+
+/** `env` with the home's openers first on its PATH, and `BROWSER` one of them. */
+const withOpeners = (
+  env: Record<string, string>,
+  home: string
+): Record<string, string> => {
+  const { dir, opened } = agyOpeners(home);
+  return {
+    ...env,
+    PATH: `${dir}${delimiter}${env.PATH}`,
+    BROWSER: join(dir, "xdg-open"),
+    CAWCO_AGY_OPENED: opened,
+  };
+};
 
 /** The variable the method's credential is handed in, with its value; none for a method agy signs in itself. */
 const credentialOf = (signIn: AgySignIn): Record<string, string> => {
@@ -218,9 +328,7 @@ const credentialOf = (signIn: AgySignIn): Record<string, string> => {
     case "gemini-api-key":
       return { GEMINI_API_KEY: signIn.key };
     case "agent-platform":
-      return "key" in signIn ? { GOOGLE_API_KEY: signIn.key } : {};
     case "oauth-personal":
-      return FILE_SIGN_IN;
     case "oauth-business":
       return {};
     default:
@@ -229,27 +337,33 @@ const credentialOf = (signIn: AgySignIn): Record<string, string> => {
 };
 
 /**
- * agy's environment for `signIn`: the host's, every variable
+ * agy's environment for `signIn` in `home`: the host's, every variable
  * {@link droppedForAgy} names gone, on the tools' PATH, with the method's
- * credential, the session's own extras (its judge, its git and container
- * doors), and what every run of agy carries (core tools.ts `runEnv`: its
- * self-update and crash reports off).
+ * credential, the home's own sign-in store ({@link HOME_SIGN_IN}), the
+ * session's own extras (its judge, its git and container doors), and what every run of agy
+ * carries (core tools.ts `runEnv`: its self-update and crash reports off).
  */
 export const agyEnvironment = (
   signIn: AgySignIn,
+  home: string,
   extras: Readonly<Record<string, string>>,
   host: Readonly<Record<string, string | undefined>> = process.env
-): Record<string, string> => ({
-  ...Object.fromEntries(
-    Object.entries(sessionEnvironment(host)).filter(
-      ([name]) => !droppedForAgy(name)
-    )
-  ),
-  PATH: toolPath(),
-  ...extras,
-  ...credentialOf(signIn),
-  ...AGY_SPEC.runEnv,
-});
+): Record<string, string> =>
+  withOpeners(
+    {
+      ...Object.fromEntries(
+        Object.entries(sessionEnvironment(host)).filter(
+          ([name]) => !droppedForAgy(name)
+        )
+      ),
+      PATH: toolPath(),
+      ...extras,
+      ...credentialOf(signIn),
+      ...HOME_SIGN_IN(home),
+      ...AGY_SPEC.runEnv,
+    },
+    home
+  );
 
 /**
  * The home's settings for `signIn` (its app-data dir's `settings.json`): the
@@ -284,6 +398,7 @@ export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
       { mode: 0o600 }
     )
   );
+  yield* Effect.promise(() => writeOpeners(home));
   yield* writeAgyHook(home, hookScript(home)).pipe(
     Effect.mapError((error) =>
       refuse(`CawCo couldn't write its hook into ${error.path}.`)
@@ -342,7 +457,7 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   const launch: AgyLaunch = {
     bin: agy.bin,
     args: agyArgs(home),
-    env: agyEnvironment(signIn, {
+    env: agyEnvironment(signIn, home, {
       ...extras,
       ...judge,
       ...(tmp ? { TMPDIR: tmp } : {}),
@@ -429,7 +544,8 @@ const readStderr = (
 export const signInAcp = async (
   connection: ClientConnection,
   methodId: AgySignIn["method"],
-  version: string
+  version: string,
+  guard: KeyringGuard
 ) => {
   const initialized = await connection.agent.request(methods.agent.initialize, {
     protocolVersion: PROTOCOL_VERSION,
@@ -444,7 +560,64 @@ export const signInAcp = async (
         )
       );
     });
+  await refuseKeyring(guard);
   return initialized;
+};
+
+/** What a launch's keyring guard reads ({@link refuseKeyring}): how to end its agy, its home, and whether a sign-in stood there before it. */
+export interface KeyringGuard {
+  readonly end: () => void;
+  readonly home: string;
+  /** Whether the home held a sign-in file before agy started. */
+  readonly signedIn: boolean;
+  /** When agy started: only its log lines since count. */
+  readonly since: number;
+}
+
+/** Whether the agy home `home` holds a sign-in file now: read before agy starts, for its {@link KeyringGuard}. */
+export const signedInAt = (home: string): Promise<boolean> =>
+  Bun.file(signInFileIn(home)).exists();
+
+/** The line agy's log says when its auth chain took the OS keyring's sign-in (`assets/cbec55e2/REPORT.md`). */
+const KEYRING_SIGN_IN = "authenticated via keyring";
+
+/** The sign-in file of the agy home `home` (core paths/harnesses.ts `agySignInFile`). */
+const signInFileIn = (home: string): string =>
+  join(home, AGY_APP_DATA, AGY_SIGN_IN_FILE);
+
+/** Whether any of `home`'s agy logs written since `since` says agy took the keyring's sign-in. */
+const keyringUsedSince = async (
+  home: string,
+  since: number
+): Promise<boolean> => {
+  const dir = join(home, AGY_APP_DATA, "log");
+  const names = await readdir(dir).catch((): string[] => []);
+  for (const name of names) {
+    const file = Bun.file(join(dir, name));
+    if (
+      file.lastModified >= since &&
+      (await file.text().catch(() => "")).includes(KEYRING_SIGN_IN)
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * The guard after every start: a home that held no sign-in of its own, whose
+ * agy then took the machine's keyring sign-in, is no account's. agy is
+ * ended, the sign-in file it wrote removed, and the start refused. A home
+ * whose own sign-in was there when agy started is left as it is: agy loads
+ * it through the same chain.
+ */
+export const refuseKeyring = async (guard: KeyringGuard): Promise<void> => {
+  if (guard.signedIn || !(await keyringUsedSince(guard.home, guard.since))) {
+    return;
+  }
+  guard.end();
+  await rm(signInFileIn(guard.home), { force: true });
+  throw new Error(agyWords.keyringRefused);
 };
 
 /** agy's process group ended: agy and everything it started. */

@@ -24,7 +24,6 @@ const SCREEN_LINES = 6;
 
 /**
  * What a sign-in runs: its program, as the caller built it, and the hosts its link may be on.
- * @public Until item 5 of tsk-340 calls it from the account sign-in controls (and drops this tag).
  */
 export interface PtySigninRun {
   readonly args: readonly string[];
@@ -39,7 +38,6 @@ export interface PtySigninRun {
 
 /**
  * A sign-in begun: the link the person opens, and until when it waits for its code (ms epoch).
- * @public Until item 5 of tsk-340 calls it from the account sign-in controls (and drops this tag).
  */
 export interface PtySigninChallenge {
   readonly expiresAt: number;
@@ -68,6 +66,21 @@ const waiting = new Map<string, Waiting>();
  */
 const end = (one: Waiting): void => {
   Effect.runFork(Scope.close(one.scope, Exit.void));
+};
+
+/** Whether a sign-in waits under `key` for its code. */
+export const ptySigninWaits = (key: string): boolean => {
+  const one = waiting.get(key);
+  return one !== undefined && !ended(one);
+};
+
+/** Ends the sign-in waiting under `key`, if one is. */
+export const endPtySignin = (key: string): void => {
+  const one = waiting.get(key);
+  if (one) {
+    waiting.delete(key);
+    end(one);
+  }
 };
 
 /** Ends every waiting sign-in, for the daemon's exit: the program outlives its terminal otherwise. */
@@ -132,7 +145,6 @@ const until = (
  * Starts `run`'s sign-in under `key` (one already waiting there is ended
  * first) and answers its link once it shows one on a host of its own; the
  * sign-in then waits {@link KEEP_MS} for its code.
- * @public Until item 5 of tsk-340 calls it from the account sign-in controls (and drops this tag).
  */
 export const beginPtySignin = async (
   key: string,
@@ -195,7 +207,6 @@ export const beginPtySignin = async (
  * Types the pasted code into the sign-in waiting under `key` and waits for
  * its program to end. Resolves when it ended signed in (exit 0); a sign-in
  * that ended otherwise is refused with its screen, the code never shown.
- * @public Until item 5 of tsk-340 calls it from the account sign-in controls (and drops this tag).
  */
 export const completePtySignin = async (
   key: string,

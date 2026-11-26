@@ -23,6 +23,7 @@ import {
 } from "@cawco/core/accounts";
 import {
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_AGY_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_CODEX_LOGIN,
   CONTROL_JOIN_ACCOUNT_LOGIN,
@@ -36,8 +37,14 @@ import {
   hasHarnessSignin,
 } from "@cawco/core/accounts/harness-signins";
 import type { Bounded } from "@cawco/core/bounded";
+import {
+  AGY_PROVIDER,
+  type AgyAccountRecord,
+  agyRecordRefusal,
+} from "@cawco/core/harness/agy-account";
 import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { agyWords } from "@cawco/core/words/agy";
 import { ElysiaStatus, problem } from "elysia";
 import { marksRenewed } from "./account-marks";
 import {
@@ -297,11 +304,22 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       ? undefined
       : noHarnessSigninRefusal(harness, ctx.machineName(machineId));
 
-  /** Why an account of `provider` cannot be of `kind`; undefined when it can. */
+  /**
+   * Why an account of `provider` cannot be of `kind` (and, for an
+   * Antigravity account, signed in by `agy`, its method and place:
+   * {@link agyRecordRefusal}); undefined when it can.
+   */
   const accountKindRefusal = (
     provider: string,
-    kind: AccountKind
+    kind: AccountKind,
+    agy?: AgyAccountRecord
   ): string | undefined => {
+    if (provider === AGY_PROVIDER) {
+      return agy ? agyRecordRefusal(agy, kind) : agyWords.pickMethod;
+    }
+    if (agy) {
+      return agyWords.methodOnlyForAgy;
+    }
     if (provider === CLAUDE_PROVIDER) {
       return ACCOUNT_KINDS.includes(kind)
         ? undefined
@@ -814,27 +832,42 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     signinId: string,
     machineId: string,
     code: string | undefined
-  ): Promise<Bounded<CallAnswer<SigninFinished>>> =>
-    account.provider === CLAUDE_PROVIDER
-      ? answerAs(
-          await ctx.machineCalls.callAgent(
-            machineId,
-            CONTROL_COMPLETE_ACCOUNT_LOGIN,
-            [code ?? null, signinId, expectedOf(account)],
-            SIGNIN_TIMEOUT_MS,
-            "claude"
-          ),
-          (result): SigninFinished => ({ kind: "account", result })
-        )
-      : answerAs(
-          await ctx.machineCalls.callAgent(
-            machineId,
-            CONTROL_COMPLETE_PROVIDER_LOGIN,
-            [code ?? null, signinId, expectedOf(account)],
-            SIGNIN_TIMEOUT_MS
-          ),
-          (result): SigninFinished => ({ kind: "provider", result })
-        );
+  ): Promise<Bounded<CallAnswer<SigninFinished>>> => {
+    if (account.provider === CLAUDE_PROVIDER) {
+      return answerAs(
+        await ctx.machineCalls.callAgent(
+          machineId,
+          CONTROL_COMPLETE_ACCOUNT_LOGIN,
+          [code ?? null, signinId, expectedOf(account)],
+          SIGNIN_TIMEOUT_MS,
+          "claude"
+        ),
+        (result): SigninFinished => ({ kind: "account", result })
+      );
+    }
+    // Antigravity: what the person pasted, handed to agy's own sign-in
+    // waiting in the account's agy home there.
+    if (account.agy) {
+      return answerAs(
+        await ctx.machineCalls.callAgent(
+          machineId,
+          CONTROL_COMPLETE_AGY_LOGIN,
+          [code ?? "", signinId],
+          SIGNIN_TIMEOUT_MS
+        ),
+        (result): SigninFinished => ({ kind: "provider", result })
+      );
+    }
+    return answerAs(
+      await ctx.machineCalls.callAgent(
+        machineId,
+        CONTROL_COMPLETE_PROVIDER_LOGIN,
+        [code ?? null, signinId, expectedOf(account)],
+        SIGNIN_TIMEOUT_MS
+      ),
+      (result): SigninFinished => ({ kind: "provider", result })
+    );
+  };
 
   /** Who a finished sign-in, of either kind, came out as. */
   const signedInAs = (

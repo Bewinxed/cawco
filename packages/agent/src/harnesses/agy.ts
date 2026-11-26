@@ -10,6 +10,7 @@
  * are the later items of tsk-340, and each refuses until then in its own
  * words.
  */
+import { CONTROL_PROBE_ACCOUNT } from "@cawco/core/accounts/controls";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type {
@@ -18,7 +19,6 @@ import type {
   SignInFault,
 } from "@cawco/core/harness";
 import { AGY } from "@cawco/core/harness/agy";
-import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { agyFleetRoot } from "@cawco/core/paths/harnesses";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type {
@@ -38,6 +38,7 @@ import {
   type HarnessSession,
   type KeeperCustody,
   noCarry,
+  type SomeControls,
 } from "../harness";
 import { probeStarted } from "../probe-count";
 import { procEpoch } from "../sessiond-client";
@@ -49,7 +50,7 @@ import {
   syncAgyFleet,
 } from "./agy-fleet";
 import { AGY_SPEC } from "./agy-launch";
-import { agyAccountIds, agyAccountModels } from "./agy-models";
+import { agyAccountIds } from "./agy-models";
 import {
   adoptAgy,
   agyDenials,
@@ -57,6 +58,7 @@ import {
   agySnapshot,
   spawnAgy,
 } from "./agy-sessiond";
+import { probeAgyAccount } from "./agy-signin";
 import { FULL_CAPABILITIES } from "./capabilities";
 import { keeperCustody, liveChild } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
@@ -99,34 +101,11 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
 /** Why each stored-conversation member refuses until agy's store is read. */
 const NO_STORE = "CawCo doesn't read Antigravity's stored conversations yet.";
 
-/**
- * The models every Antigravity account here offers, read live in its own
- * home, each model once; and each account whose models agy would not list,
- * in its own words.
- */
-const accountModels = async (): Promise<{
-  models: ModelInfo[];
-  unread: string[];
-}> => {
-  const models = new Map<string, ModelInfo>();
-  const unread: string[] = [];
-  for (const accountId of agyAccountIds()) {
-    try {
-      for (const model of await agyAccountModels(accountId)) {
-        models.set(model.value, models.get(model.value) ?? model);
-      }
-    } catch (error) {
-      unread.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  return { models: [...models.values()], unread };
-};
-
 class AgyHarness implements Harness<"agy"> {
   readonly kind = "agy" as const;
   readonly capabilities = AGY_CAPABILITIES;
-  /** Its `detect` starts agy in each account's home for its models. */
-  readonly detectStartsNothing = false;
+  /** Its `detect` reads agy's version alone: each account's models are the hub's probe of it ({@link machineControls}). */
+  readonly detectStartsNothing = true;
   /** Each account's sign-in is read at each start. */
   readonly authMovesLive = false;
   /** Its `/compact` runs in its session's own agy. */
@@ -146,27 +125,20 @@ class AgyHarness implements Harness<"agy"> {
   };
 
   /**
-   * agy on this machine and its version, and the models each Antigravity
-   * account here offers ({@link accountModels}).
+   * agy on this machine and its version. Its models are each account's, read
+   * by the hub's probe of the account (descriptor `modelCatalog`), never the
+   * machine's: a Gemini API key's account lists Gemini alone.
    */
   async detect(): Promise<HarnessReport> {
     const gate = await toolGate(AGY_SPEC);
     probeStarted();
     const installed = gate.refused !== "not-installed";
     this.authReason = gate.refused === "version" ? gate.words : undefined;
-    const read =
-      installed && !gate.refused
-        ? await accountModels()
-        : { models: [], unread: [] };
     return {
       harness: "agy",
       installed,
       auth: this.auth,
       capabilities: AGY_CAPABILITIES,
-      ...(read.models.length > 0 ? { models: read.models } : {}),
-      ...(read.unread.length > 0
-        ? { modelsUnread: read.unread.join(" ") }
-        : {}),
       ...(gate.version ? { version: gate.version } : {}),
       ...(gate.refused ? { refused: gate.refused } : {}),
       ...(this.authReason ? { authReason: this.authReason } : {}),
@@ -209,7 +181,10 @@ class AgyHarness implements Harness<"agy"> {
     "Antigravity's models are agy's own, listed per account."
   );
 
-  readonly machineControls = {};
+  /** The hub's probe of an Antigravity account: the models agy lists in its home (agy-signin.ts). */
+  readonly machineControls: SomeControls = {
+    [CONTROL_PROBE_ACCOUNT]: (account) => probeAgyAccount(account),
+  };
 
   /**
    * A session on its account, a work item's in its workspace: a fork and a

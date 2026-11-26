@@ -9,6 +9,7 @@
  */
 import type { ImageMediaType } from "../attachments";
 import { AGY_NOT_CLEAN, AGY_WORDS } from "../words/harness-plugins";
+import { AGY_PROVIDER } from "./agy-account";
 import type { DeniedToolNames, HarnessDescriptor } from "./descriptor";
 import { SHARED_MODES } from "./modes";
 
@@ -260,7 +261,9 @@ export const AGY = {
   // owner's `~/.gemini` included (tsk-340: "CawCo never reads or holds a
   // Google OAuth token").
   homeLogin: "none",
-  soleProvider: null,
+  // Every account it runs on is an Antigravity account (core
+  // harness/agy-account.ts), whatever model a session names.
+  soleProvider: AGY_PROVIDER,
   // Its models are agy's own ids (`gemini-3.8-flash`, `claude-opus-5-5`),
   // which no account provider names.
   ownProviderIds: false,
@@ -275,10 +278,11 @@ export const AGY = {
   },
   compactByOnMovedLine: "named",
 
-  // What `session/new` lists for the session's account, read live in its
-  // own home, never a list kept here (§P-f; a gemini-api-key account lists
-  // Gemini alone).
-  modelCatalog: "machine",
+  // Each account's own: what `session/new` lists in the account's home,
+  // read live by the hub's probe of the account (agent harnesses/agy-models.ts),
+  // never a list kept here (§P-f; a gemini-api-key account lists Gemini
+  // alone).
+  modelCatalog: "account",
   resolvesModelNames: false,
   unlistedModels: "none",
   // agy's ACP names no model's window.

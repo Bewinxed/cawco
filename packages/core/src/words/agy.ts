@@ -7,7 +7,8 @@
  * Decided by Gemini 4 Neon on 2026-11-26 (the project's
  * `assets/eb689d78/neon-answer.md`; the picture strings,
  * `assets/046b2a6e/neon-answer.md`; the workspace words,
- * `assets/9eb4dcba/neon-answer.md`).
+ * `assets/9eb4dcba/neon-answer.md`; an account's methods and sign-in,
+ * `assets/b6a2f599/neon-answer.md`).
  */
 
 export const agyWords = {
@@ -16,15 +17,46 @@ export const agyWords = {
   /** An account with no sign-in method on this machine, or one CawCo can't read. */
   noMethod:
     "This Antigravity account has no sign-in method on this machine. Add it again.",
+  /** A key given to Agent Platform, which agy runs on gcloud's credentials alone. */
+  platformNoKey: "Agent Platform uses gcloud credentials, not a key.",
   /** A key method whose key this machine doesn't hold. */
-  noKey: (method: "Gemini API key" | "Agent Platform") =>
-    `This ${method} account has no key on this machine. Connect it again.`,
+  noKey: (method: "Gemini API key") => `No ${method} on this machine.`,
   /** Gemini Enterprise without its Google Cloud project and location. */
   noBusinessPlace:
-    "This Gemini Enterprise account needs a Google Cloud project and location.",
-  /** Agent Platform with neither a key nor a project and location. */
-  noPlatformAccess:
-    "This Agent Platform account needs an API key, or a Google Cloud project and location.",
+    "Gemini Enterprise needs a Google Cloud project and location.",
+  /** Agent Platform without its Google Cloud project and location, which agy needs with a key too. */
+  noPlatformPlace: "Agent Platform needs a Google Cloud project and location.",
+  /** A Google account or Gemini Enterprise not signed in on this machine: no agy runs, so none opens a browser here. */
+  notSignedIn: "Not signed in on this machine.",
+  /** An Antigravity account asked for with no sign-in method, or another provider's with one. */
+  methodOnlyForAgy: "Only an Antigravity account has a sign-in method.",
+  /** An Antigravity account asked for with no sign-in method. */
+  pickMethod: "Choose a sign-in method.",
+  /** A method asked for under the other kind of account (a key method as a browser sign-in, or the reverse). */
+  methodNotKind: (method: string) => `${method} doesn't sign in that way.`,
+  /** A Google Cloud place given to a method that takes none. */
+  noPlace: (method: string) => `${method} takes no Google Cloud project.`,
+  /** A Google Cloud place with one of its two names left empty. */
+  halfPlace: "Enter both the Google Cloud project and location.",
+  /** Agent Platform by project and location, on a machine with no gcloud default credentials. */
+  noAdc: (path: string) =>
+    `No Google Cloud credentials at ${path}. Run gcloud auth application-default login on this machine.`,
+  /** agy showed no sign-in link in time, with its last words. */
+  noLink: (screen: string) =>
+    screen ? `No sign-in link: ${screen}` : "No sign-in link.",
+  /** A sign-in started on a machine whose agy is already signed in to the account. */
+  alreadySignedIn: "Already signed in on this machine.",
+  /** A code pasted for a sign-in no longer waiting on this machine. */
+  notWaiting: "Sign-in expired.",
+  /** A Gemini Enterprise sign-in pasted something other than the address Google sent the browser to. */
+  notCallback: "Paste the full localhost URL.",
+  /** agy ended its sign-in without signing in, in its own words. */
+  signInEnded: (said: string) =>
+    said ? `Sign-in didn't finish: ${said}` : "Sign-in didn't finish.",
+  /** agy took the machine's own keyring sign-in in place of the account's: the launch is stopped and what it wrote removed. */
+  keyringRefused: "Stopped: agy used this machine's own Google sign-in.",
+  /** agy said it signed in but left no sign-in in the account's home. */
+  noToken: "Sign-in wasn't saved.",
   /**
    * A workspace session asked to start below its clone's root, where agy
    * would read project config from folders no workspace denies hold.
@@ -65,11 +97,25 @@ export const agyWords = {
    */
   emptyTurn:
     "No reply; Google Cloud sign-in may have expired. Send again, or sign in with gcloud on this machine.",
-  /** The account's quota for the model is used up (`QUOTA_EXHAUSTED`). */
-  quota: (resetsAt: string | undefined) =>
-    resetsAt
-      ? `Out of quota for this model until ${resetsAt}.`
-      : "Out of quota for this model.",
+  /**
+   * The account's quota for the model is used up (`QUOTA_EXHAUSTED`), and
+   * when it resets as Google said it: a day and a UTC time, since the
+   * reader's own zone isn't known where this is written.
+   */
+  quota: (resetsAt: number | undefined) =>
+    resetsAt === undefined
+      ? "Out of quota for this model."
+      : `Out of quota for this model until ${new Date(resetsAt).toLocaleString(
+          "en-GB",
+          {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: "UTC",
+          }
+        )} UTC.`,
   /** agy ended the turn on an error from Google's API, in Google's words. */
   apiError: (said: string) => `Turn failed: ${said}`,
   /** A session whose agy is another version than the machine's. */

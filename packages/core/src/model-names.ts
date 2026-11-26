@@ -28,6 +28,7 @@ import type { HarnessReport } from "./harness";
 import type { UnlistedModels } from "./harness/descriptor";
 import {
   descriptorOf,
+  HARNESSES,
   type HarnessKind,
   harnessName,
   harnessNamed,
@@ -279,6 +280,22 @@ const modelListed = (
 const MODEL_ID_WORD = /[-.]/u;
 
 /**
+ * Whether `harness` lists the models of an account of `provider`: a harness
+ * whose catalog is each account's (descriptor `modelCatalog: "account"`)
+ * lists those of its one provider's accounts alone, Claude Code a Claude
+ * account's, Antigravity an Antigravity account's. Every catalog the hub
+ * keeps is an account's, so a harness reads only its own provider's.
+ */
+export const listsCatalogOf = (harness: string, provider: string): boolean => {
+  const traits = traitsOf(harness);
+  return traits.modelCatalog === "account" && traits.soleProvider === provider;
+};
+
+/** The harness that lists the catalog of an account of `provider` ({@link listsCatalogOf}); none for a provider whose models a machine reports. */
+export const catalogHarnessOf = (provider: string): HarnessKind | undefined =>
+  HARNESSES.find((harness) => listsCatalogOf(harness, provider));
+
+/**
  * What a harness lists on a machine: its rows once it has read them (none
  * when it read and lists none), or unread, with the machine's words on why
  * when it said them (`HarnessReport.modelsUnread`). A machine whose list is
@@ -291,9 +308,10 @@ export type ModelListing =
 
 /**
  * What `harness` lists on one machine, from what the hub and the dashboard
- * both hold of it: Claude Code's rows read once an account signed in there
- * has its catalog read (`catalogs`, the hub's account catalogs of those
- * accounts), else unread with the hub's fault reading one (`faults`);
+ * both hold of it: Claude Code's and Antigravity's rows read once an account
+ * of theirs signed in there has its catalog read (`catalogs`, the hub's
+ * account catalogs of those accounts, {@link listsCatalogOf}), else unread
+ * with the hub's fault reading one (`faults`);
  * OpenCode's and pi's read once the machine's `report` carries its `models`
  * (empty when it read none), else unread with its `modelsUnread`. Unread is
  * what a machine that just installed the harness, or whose read failed,

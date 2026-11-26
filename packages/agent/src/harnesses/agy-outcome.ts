@@ -84,11 +84,11 @@ const errorAfter = (
       : undefined;
   });
 
-/** When the quota resets, ISO, as the error says it: a time, else a delay from now. */
-const resetOf = (text: string, now: number): string | undefined => {
+/** When the quota resets, epoch ms, as the error says it: a time, else a delay from now. */
+const resetOf = (text: string, now: number): number | undefined => {
   const stamp = RESET_TIMESTAMP.exec(text)?.[1];
   if (stamp && !Number.isNaN(Date.parse(stamp))) {
-    return new Date(stamp).toISOString();
+    return Date.parse(stamp);
   }
   const delay = RESET_DELAY.exec(text)?.[1] ?? RESETS_IN.exec(text)?.[1];
   if (!delay) {
@@ -98,7 +98,7 @@ const resetOf = (text: string, now: number): string | undefined => {
   for (const [, amount, unit] of delay.matchAll(DURATION_PART)) {
     ms += Number(amount) * (UNIT_MS[unit ?? ""] ?? 0);
   }
-  return ms > 0 ? new Date(now + ms).toISOString() : undefined;
+  return ms > 0 ? now + ms : undefined;
 };
 
 /** How a turn ended badly, in CawCo's words; none for a turn that did not. */

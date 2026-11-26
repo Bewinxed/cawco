@@ -27,6 +27,7 @@ import {
   endGroup,
   readAgySignIn,
   removeAgyConversation,
+  signedInAt,
   signInAcp,
   startAcp,
 } from "../harnesses/agy-launch";
@@ -312,7 +313,11 @@ const runAgy = Effect.fn("runAgy")(function* (
       )
     )
   );
-  const { connection } = yield* Effect.acquireRelease(
+  // The keyring guard's reading (agy-launch.ts `refuseKeyring`), as agy is
+  // about to start.
+  const signedIn = yield* Effect.promise(() => signedInAt(launch.home));
+  const startedAt = Date.now();
+  const { child, connection } = yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
         startAcp(
@@ -353,7 +358,13 @@ const runAgy = Effect.fn("runAgy")(function* (
       )
   );
   yield* Effect.tryPromise({
-    try: () => signInAcp(connection, launch.methodId, runtimeVersion),
+    try: () =>
+      signInAcp(connection, launch.methodId, runtimeVersion, {
+        end: () => endGroup(child),
+        home: launch.home,
+        signedIn,
+        since: startedAt,
+      }),
     catch: imageRunFailed,
   });
   const opened = yield* Effect.tryPromise({

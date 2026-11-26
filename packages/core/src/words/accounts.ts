@@ -67,6 +67,17 @@ export const accountsWords = {
   unnamed: "an account not signed in yet",
   /** A key account with no nickname: its last four characters. */
   keyTail: (tail: string) => `••••${tail}`,
+  /**
+   * An Antigravity account's sign-in method, as its picker row and its
+   * account name it (core harness/agy-account.ts `AgyMethod`): agy's four
+   * ACP methods.
+   */
+  agyMethods: {
+    "oauth-personal": "Antigravity · Google account",
+    "oauth-business": "Antigravity · Gemini Enterprise",
+    "gemini-api-key": "Antigravity · Gemini API key",
+    "agent-platform": "Antigravity · Agent Platform",
+  },
   /** What is wrong with an account, in its row's second line. */
   problem: {
     someoneElse: (machine: string) => `${machine} is signed in as someone else`,

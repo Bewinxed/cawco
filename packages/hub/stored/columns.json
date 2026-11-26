@@ -124,6 +124,15 @@
       "mismatch"
     ]
   },
+  "accounts.agy_method": {
+    "type": "string",
+    "enum": [
+      "oauth-personal",
+      "oauth-business",
+      "gemini-api-key",
+      "agent-platform"
+    ]
+  },
   "accounts.at_plan_limit": {
     "type": "string",
     "enum": [

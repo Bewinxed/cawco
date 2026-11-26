@@ -3417,6 +3417,13 @@
       "when": 1795722287791,
       "tag": "0495_artifact_retired",
       "breakpoints": true
+    },
+    {
+      "idx": 496,
+      "version": "6",
+      "when": 1795723134543,
+      "tag": "0496_agy_account_method",
+      "breakpoints": true
     }
   ]
 }

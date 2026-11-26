@@ -131,6 +131,7 @@ import { writeMachineKey } from "@cawco/core/machine-key";
 import { machineCalled, machineLabel } from "@cawco/core/machine-names";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
+  listsCatalogOf,
   type ModelListing,
   modelListingOn,
   modelNameIn,
@@ -3783,11 +3784,19 @@ export const createServer = (
     machineId: string,
     harness: HarnessKind
   ): ModelListing => {
+    // The accounts signed in there whose catalog the harness lists (core
+    // `listsCatalogOf`): a Claude start reads its Claude accounts', an
+    // Antigravity start its Antigravity accounts'.
     const signedIn = db.accounts
       .signins()
       .filter(
         (signin) =>
-          signin.state === "signed-in" && signin.machineId === machineId
+          signin.state === "signed-in" &&
+          signin.machineId === machineId &&
+          listsCatalogOf(
+            harness,
+            db.accounts.get(signin.accountId)?.provider ?? ""
+          )
       )
       .map((signin) => signin.accountId);
     return modelListingOn(harness, {
@@ -4665,10 +4674,10 @@ export const createServer = (
     db.namedMachines().filter((machine) => registry.agent(machine.machineId));
   /**
    * The models `harness` offers on `machineIds`, as the dashboard's picker
-   * reads them (models.svelte.ts): Claude's from the catalog of each account
-   * signed in there (its machines report none: the catalog is each
-   * account's, HarnessReport.models), every other harness's from the
-   * machines' own reports.
+   * reads them (models.svelte.ts): Claude's and Antigravity's from the
+   * catalog of each account of theirs signed in there (their machines report
+   * none: the catalog is each account's, HarnessReport.models), every other
+   * harness's from the machines' own reports.
    */
   const harnessModels = (
     harness: HarnessKind,
@@ -4685,7 +4694,12 @@ export const createServer = (
         .signins()
         .filter(
           (signin) =>
-            signin.state === "signed-in" && machineIds.has(signin.machineId)
+            signin.state === "signed-in" &&
+            machineIds.has(signin.machineId) &&
+            listsCatalogOf(
+              harness,
+              db.accounts.get(signin.accountId)?.provider ?? ""
+            )
         )
         .map((signin) => signin.accountId)
     );

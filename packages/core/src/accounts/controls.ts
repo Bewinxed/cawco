@@ -124,6 +124,30 @@ export const CONTROL_SET_PROVIDER_KEY = "setProviderKey";
 export const CONTROL_BEGIN_CODEX_LOGIN = "beginCodexLogin";
 export const CONTROL_COMPLETE_CODEX_LOGIN = "completeCodexLogin";
 /**
+ * Machine controls for an Antigravity account on a machine, into the
+ * account's agy home there (agent harnesses/agy-signin.ts), whose sign-in
+ * is agy's own and which CawCo never reads (tsk-340). The account's record
+ * (core `AgyAccountRecord`: its method and Google Cloud place) goes with
+ * each, and is written into the home before agy runs; a record its method
+ * can't run on is refused in words before any agy process starts.
+ *
+ * - Begin (args: account id, record) starts agy's own browser sign-in of a
+ *   Google account (`agy acp --login`) or Gemini Enterprise (ACP
+ *   `authenticate`, its browser kept from opening on the machine), and
+ *   answers the link it shows ({@link ProviderSigninChallenge} `url`).
+ * - Complete (args: the code or address the person pasted, account id)
+ *   hands it to the waiting sign-in and answers how it ended
+ *   ({@link ProviderSigninResult}).
+ * - Connect (args: account id, record, key or null, the identity the
+ *   account already is or null) sets up a Gemini API key or Agent Platform
+ *   account, no browser: the record written, and the key kept in the
+ *   account's store (core `accountCredentialPath`). Answers a
+ *   {@link ProviderSigninResult}.
+ */
+export const CONTROL_BEGIN_AGY_LOGIN = "beginAgyLogin";
+export const CONTROL_COMPLETE_AGY_LOGIN = "completeAgyLogin";
+export const CONTROL_CONNECT_AGY = "connectAgy";
+/**
  * Machine control (arg: account id): Codex signs itself out of the
  * account's Codex home there (`account/logout`), and the account's other
  * sign-ins on the machine stay.

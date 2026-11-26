@@ -212,10 +212,23 @@ export const agyAccountHome = (accountId: string): string =>
  * The app-data dir every session of an account's agy home shares, by its
  * name in the home (`agy acp --app-data-dir`, which takes a relative name
  * alone). One per account, as T3 Code keeps one per profile: agy keeps a
- * file sign-in in it (`acp_token.json`), which a session in a dir of its own
- * would not find.
+ * file sign-in in it ({@link agySignInFile}), which a session in a dir of
+ * its own would not find.
  */
 export const AGY_APP_DATA = "cawco";
+
+/**
+ * Where agy keeps an account's Google sign-in: a file in its home's app-data
+ * dir, as every launch's `AGY_CLI_FORCE_FILE_TOKEN_STORAGE` has it (agy
+ * 1.5.18 `composite_token_storage.go`, the project's
+ * `assets/22523e77/REPORT.md`). CawCo looks only at whether it is there,
+ * never at what it holds.
+ */
+export const agySignInFile = (accountId: string): string =>
+  join(agyAccountHome(accountId), AGY_APP_DATA, AGY_SIGN_IN_FILE);
+
+/** The sign-in file's name in an agy home's app-data dir ({@link agySignInFile}). */
+export const AGY_SIGN_IN_FILE = "antigravity-oauth-token";
 
 /**
  * What one Antigravity account signs in with on this machine: its method,
