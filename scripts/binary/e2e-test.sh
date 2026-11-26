@@ -1503,7 +1503,7 @@ start_prunes_stale() {
   wait_until 30 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service --since "@'"$since"'" | grep -q "\[update\] pruned at start: "'
   line=$(as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service --since "@$since" | grep "\[update\] pruned at start: ")
   echo "the agent's line: $line"
-  [[ $line == *"removed 80 folders (runtime/ 40, versions/ 40) of 40 builds, "*"; kept 3 folders (runtime/ 2, versions/ 1) of 2 builds, "*": $open, $BASE"* ]] \
+  [[ $line == *"removed 80 folders (runtime/ 40, versions/ 40) of 40 builds, "*"; kept 3 folders (runtime/ 2, versions/ 1) of 2 builds, "*": $open and $BASE"* ]] \
     || { echo "ASSERTION FAILED: the agent's prune line does not say what went and what stayed"; return 1; }
   as_user "$joinerc" systemctl --user stop cawco-test-held-open-joiner.service
 }
