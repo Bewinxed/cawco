@@ -51,6 +51,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { clockWords } from "@cawco/core/words/account-lines";
 import { toolWords } from "@cawco/core/words/tools";
+import { Schema } from "effect";
 import { z } from "zod";
 import {
   readSettingsFile,
@@ -230,10 +231,12 @@ export const applyFleetDenials = (
 };
 
 /** A spawn refused because the fleet's denials are not known here, in words. */
-class FleetDenialsRefused extends Error {
+class FleetDenialsRefused extends Schema.TaggedError<FleetDenialsRefused>()(
+  "FleetDenialsRefused",
+  { message: Schema.String }
+) {
   constructor(reason: string) {
-    super(`Not started: ${reason}.`);
-    this.name = "FleetDenialsRefused";
+    super({ message: `Not started: ${reason}.` });
   }
 }
 

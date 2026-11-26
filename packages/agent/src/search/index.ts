@@ -22,6 +22,7 @@ import {
 } from "@cawco/core/find";
 import { inFlight } from "@cawco/core/loop-watch";
 import { unhandled } from "@cawco/core/unhandled";
+import { Deferred, Effect, Exit, Fiber, Schedule } from "effect";
 import { SearchProcess } from "./process";
 
 /**
@@ -88,7 +89,8 @@ function syncFailure(error: unknown): string {
 }
 
 export class TranscriptSearchService {
-  #timer: ReturnType<typeof setInterval> | null = null;
+  /** The sync every {@link SYNC_INTERVAL_MS}, once started: interrupted at {@link close}. */
+  #ticks: Fiber.Fiber<unknown> | null = null;
   /** The sync in flight: one at a time, which the timer and searches share. */
   #syncing: Promise<void> | null = null;
   /** When the last sync that ended without error began; 0 before one has. */
@@ -106,9 +108,9 @@ export class TranscriptSearchService {
   #unread = 0;
   /** The last failed sync's reason, logged once; null once a sync succeeds. */
   #failing: string | null = null;
-  readonly #firstSync = Promise.withResolvers<void>();
-  /** Settles once the first sync has ended, however it ended. */
-  readonly synced = this.#firstSync.promise;
+  readonly #firstSync = Deferred.makeUnsafe<void>();
+  /** The promise edge of the first sync's end: settles once it has ended, however it ended. */
+  readonly synced = Effect.runPromise(Deferred.await(this.#firstSync));
   /** Each process that opens the index says how far it is whole. */
   readonly #heardOpen = (through: number): void => {
     this.#indexedThrough = Math.max(this.#indexedThrough, through);
@@ -189,12 +191,23 @@ export class TranscriptSearchService {
       .catch(() => {
         // Logged in sync(); a failed initial sync is not fatal.
       })
-      .finally(() => this.#firstSync.resolve());
-    this.#timer = setInterval(() => {
-      this.sync().catch(() => {
-        // Logged in sync(); a periodic sync failure must not kill the daemon.
-      });
-    }, SYNC_INTERVAL_MS);
+      .finally(() => Deferred.doneUnsafe(this.#firstSync, Exit.void));
+    // The next SYNC_INTERVAL_MS on, then at that rate: a sync that runs
+    // longer is followed at once, and syncs never pile up.
+    this.#ticks = Effect.runFork(
+      Effect.sleep(SYNC_INTERVAL_MS).pipe(
+        Effect.andThen(
+          Effect.repeat(
+            Effect.promise(() =>
+              this.sync().catch(() => {
+                // Logged in sync(); a periodic sync failure must not kill the daemon.
+              })
+            ),
+            Schedule.fixed(SYNC_INTERVAL_MS)
+          )
+        )
+      )
+    );
   }
 
   /**
@@ -375,9 +388,9 @@ export class TranscriptSearchService {
   }
 
   close(): void {
-    if (this.#timer) {
-      clearInterval(this.#timer);
-      this.#timer = null;
+    if (this.#ticks) {
+      Effect.runFork(Fiber.interrupt(this.#ticks));
+      this.#ticks = null;
     }
     this.#reader.close();
     this.#writer.close();

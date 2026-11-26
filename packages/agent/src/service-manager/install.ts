@@ -18,6 +18,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
+import { Schema } from "effect";
 import { foreignIn, KeeperKept } from "./keeper-job";
 import {
   guiDomain,
@@ -38,7 +39,14 @@ import {
 } from "./units";
 
 /** Thrown for anything the caller can fix — a wrong platform, a failed launchctl. */
-export class ServiceError extends Error {}
+export class ServiceError extends Schema.TaggedError<ServiceError>()(
+  "ServiceError",
+  { message: Schema.String }
+) {
+  constructor(message: string) {
+    super({ message });
+  }
+}
 
 export const run = async (argv: string[]) =>
   Bun.$`${argv}`

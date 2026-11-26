@@ -7,6 +7,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubClient } from "@cawco/hub/client";
 import { Bonjour, type Service } from "bonjour-service";
+import { Effect } from "effect";
 import { z } from "zod";
 import { readConfig, writeConfig } from "./config";
 
@@ -141,33 +142,37 @@ export const firstToAnswer = (
  * do not come back and try to widen this one.
  */
 export const browseMdns = (): Promise<Bounded<string[]>> =>
-  readWithin(
-    MDNS_BROWSE_MS,
-    (signal) =>
-      new Promise<string[]>((resolve) => {
-        const bonjour = new Bonjour();
-        const stop = (): void => {
-          browser.stop();
-          bonjour.destroy();
-        };
-        const browser = bonjour.find(
-          { type: CAWCO_MDNS_TYPE, protocol: "tcp" },
-          (service: Service) => {
-            const addresses = (service.addresses ?? []).filter((address) =>
-              IPV4.test(address)
-            );
-            if (addresses.length > 0) {
-              stop();
-              resolve(
-                addresses.map((address) => `http://${address}:${service.port}`)
-              );
-            }
-          }
-        );
-        // Silence in the window is no hub answering in it, not "there is no hub".
-        signal.addEventListener("abort", stop, { once: true });
-      })
+  // Silence in the window is no hub answering in it, not "there is no hub":
+  // the deadline's signal interrupts the browse, which stops it.
+  readWithin(MDNS_BROWSE_MS, (signal) =>
+    Effect.runPromise(firstHubHeard, { signal })
   );
+
+/** The first hub that answers the browse, by its IPv4 addresses; the browse stopped once one has, or once it is interrupted. */
+const firstHubHeard = Effect.callback<string[]>((resume) => {
+  const bonjour = new Bonjour();
+  const stop = (): void => {
+    browser.stop();
+    bonjour.destroy();
+  };
+  const browser = bonjour.find(
+    { type: CAWCO_MDNS_TYPE, protocol: "tcp" },
+    (service: Service) => {
+      const addresses = (service.addresses ?? []).filter((address) =>
+        IPV4.test(address)
+      );
+      if (addresses.length > 0) {
+        stop();
+        resume(
+          Effect.succeed(
+            addresses.map((address) => `http://${address}:${service.port}`)
+          )
+        );
+      }
+    }
+  );
+  return Effect.sync(stop);
+});
 
 /** The shape of `tailscale status --json` this reads, and nothing more. */
 const TailscaleNode = z.object({

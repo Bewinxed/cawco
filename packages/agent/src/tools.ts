@@ -11,6 +11,8 @@ import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
 import { ownIdentity } from "@cawco/core/process-identity";
@@ -44,6 +46,7 @@ import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Deferred, Effect, Exit } from "effect";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { codexNative, type NativeBinary, nativeEnv } from "./codex-native";
@@ -243,6 +246,7 @@ export const onToolsMoved = (listener: () => void): (() => void) => {
  */
 const toolsMoved = (): void => {
   gateReads.clear();
+  gateGeneration += 1;
   for (const listener of movedListeners) {
     listener();
   }
@@ -424,8 +428,8 @@ const binStamp = async (bin: string): Promise<string | undefined> => {
  */
 const needAnswers = new Map<string, { stamp: string; unmet?: string }>();
 
-/** The probes running now, by binary: one at a time each. */
-const needAsking = new Map<string, Promise<string | undefined>>();
+/** The probes running now, by binary: one at a time each, a second ask joining the first. */
+const needAsking = makeJoin<string, string | undefined>();
 
 const needListeners = new Set<() => void>();
 
@@ -489,13 +493,9 @@ const askNeedOnce = (
   need: string,
   bin: string,
   stamp: string | undefined
-): Promise<string | undefined> => {
-  const running = needAsking.get(bin);
-  if (running) {
-    return running;
-  }
-  const asked = askNeed(need, bin)
-    .then((unmet) => {
+): Promise<string | undefined> =>
+  needAsking.runPromise(bin, () =>
+    askNeed(need, bin).then((unmet) => {
       const before = needAnswers.get(bin);
       if (stamp) {
         needAnswers.set(bin, { stamp, ...(unmet ? { unmet } : {}) });
@@ -512,10 +512,7 @@ const askNeedOnce = (
       }
       return unmet;
     })
-    .finally(() => needAsking.delete(bin));
-  needAsking.set(bin, asked);
-  return asked;
-};
+  );
 
 /**
  * Why a method's need (core `ToolInstallMethod.needs`) can't serve an
@@ -1775,7 +1772,14 @@ export interface ToolGate {
  * package can put the same file back with its tarball's mtime and size and
  * another version, so an install that ended is no stale read's to answer.
  */
-const gateReads = new Map<string, Promise<string | undefined>>();
+const gateReads = new Map<string, string>();
+/** The reads of {@link gateReads} running now, by stamp: a second ask joins the first. */
+const gateReading = makeJoin<string, string | undefined>();
+/**
+ * How many times the tools moved ({@link toolsMoved}): a read begun before
+ * a move is the old binary's, so it is neither joined nor kept after one.
+ */
+let gateGeneration = 0;
 
 /** What `spec` runs, in words: "2.0.29", "1.3.0 or newer". */
 const wanted = (spec: ToolSpec): string =>
@@ -1808,15 +1812,15 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
     size: 0,
   }));
   const key = `${file}:${mtimeMs}:${size}`;
-  let read = gateReads.get(key);
-  if (!read) {
-    read = probeVersion(spec, path);
-    gateReads.set(key, read);
-  }
-  const version = await read;
-  if (!version) {
-    // Not kept: the next start asks again.
-    gateReads.delete(key);
+  const generation = gateGeneration;
+  const version =
+    gateReads.get(key) ??
+    (await gateReading.runPromise(`${generation}:${key}`, () =>
+      probeVersion(spec, path)
+    ));
+  // None is not kept: the next start asks again.
+  if (version && generation === gateGeneration) {
+    gateReads.set(key, version);
   }
   sawTool(spec.id, version ?? "unsaid");
   if (toolRuns(spec, version)) {
@@ -2087,18 +2091,21 @@ const settleCopies = (wasThere: Iterable<string>): void => {
   });
 };
 
-/** The looks {@link settleCopies} runs. */
+/**
+ * The looks {@link settleCopies} runs: one now, then one every
+ * {@link COPY_SETTLE_MS} until two agree with every copy that was there
+ * before the move there again, or {@link COPY_SETTLE_MOST_MS} has gone by.
+ */
 const settleLooks = async (): Promise<void> => {
   let told = probedNow();
   let last = await copiesNow();
-  const until = Date.now() + COPY_SETTLE_MOST_MS;
-  while (Date.now() < until) {
-    await Bun.sleep(COPY_SETTLE_MS);
+  /** One look after the first, against the one before it: whether the looks are done. */
+  const lookAgain = async (): Promise<boolean> => {
     const look = await copiesNow();
     const agreed = sameCopies(look, last);
     last = look;
     if (!agreed) {
-      continue;
+      return false;
     }
     if (!sameCopies(look, told)) {
       console.info(
@@ -2114,11 +2121,23 @@ const settleLooks = async (): Promise<void> => {
       toolsMoved();
       told = look;
     }
-    if ([...thereBeforeMove].every((id) => look.get(id) !== "missing")) {
-      return;
-    }
-  }
-  if (!sameCopies(last, told)) {
+    return [...thereBeforeMove].every((id) => look.get(id) !== "missing");
+  };
+  const looked = await Effect.runPromise(
+    Effect.sleep(COPY_SETTLE_MS).pipe(
+      Effect.andThen(
+        lookUntil(
+          {
+            every: COPY_SETTLE_MS,
+            deadlineMs: COPY_SETTLE_MOST_MS - COPY_SETTLE_MS,
+            until: (done: boolean) => done,
+          },
+          Effect.tryPromise({ try: lookAgain, catch: (error) => error })
+        )
+      )
+    )
+  );
+  if (looked.kind === "deadline" && !sameCopies(last, told)) {
     toolsMoved();
   }
 };
@@ -2266,7 +2285,8 @@ export const heardUntilSignedOut = async (
   signedOut: readonly string[]
 ): Promise<ToolRunEnd> => {
   const heard: ToolHeard = { out: "", err: "" };
-  const { promise: saidOut, resolve: sayOut } = Promise.withResolvers<string>();
+  /** Its first line holding a signed-out word, once one is said. */
+  const saidOut = Deferred.makeUnsafe<string>();
   const listen = async (
     stream: ReadableStream<Uint8Array>,
     into: keyof ToolHeard
@@ -2277,7 +2297,7 @@ export const heardUntilSignedOut = async (
         heard[into] += decoder.decode(chunk, { stream: true });
         const line = signedOutLine(signedOut, heard);
         if (line !== undefined) {
-          sayOut(line);
+          Deferred.doneUnsafe(saidOut, Exit.succeed(line));
         }
       }
     } catch {
@@ -2292,10 +2312,14 @@ export const heardUntilSignedOut = async (
     ]);
     return { code };
   };
-  const signedOutFirst = async (): Promise<{ line: string }> => ({
-    line: await saidOut,
-  });
-  const ended = await Promise.race([exited(), signedOutFirst()]);
+  // The promise edge of the race: the reads go on past a signed-out line,
+  // as the run does, for the caller to end.
+  const ended = await Effect.runPromise(
+    Effect.race(
+      Effect.promise(exited),
+      Deferred.await(saidOut).pipe(Effect.map((said) => ({ line: said })))
+    )
+  );
   if ("line" in ended) {
     return { ...heard, ...ended };
   }
@@ -2366,7 +2390,9 @@ export const signinMoved = (id: string): void => {
  * the person. While one runs the tool is reported as `installing`; one that
  * ended while the probe read is read again.
  */
-const installing = new Map<string, Promise<ToolStatus>>();
+const installing = new Set<string>();
+/** Each install running or waiting its turn, by tool id: a second ask joins it ({@link installTool}). */
+const installs = makeJoin<string, ToolStatus>();
 /** The machine's installs one after another ({@link installTool}). */
 const installTurn = makeLock();
 const installEnded = new Map<string, number>();
@@ -2855,33 +2881,32 @@ export const installTool = async (
   }
   // One install of a tool at a time: a second ask while one runs or waits
   // (two dashboards pressing at once, a press while an add brings the
-  // machine up, CawCo's own pass beside a press) answers with it.
-  const running = installing.get(spec.id);
-  if (running) {
-    return await running;
-  }
-  // A tool CawCo is built against goes on at its one version, whatever is pinned.
-  const target = spec.exactVersion ?? version;
-  // One install on the machine at a time, of any tool: package managers
-  // take their own locks, and the asks arrive in lanes of their own.
-  // What it puts on is said before its turn, which may begin at once.
-  const to = target ?? ask.newest;
-  installingAs.set(spec.id, {
-    ...(to ? { to } : {}),
-    ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+  // machine up, CawCo's own pass beside a press) answers with it. The
+  // join begins the first at once, so the tool reads `installing` before
+  // this returns.
+  return await installs.runPromise(spec.id, () => {
+    // A tool CawCo is built against goes on at its one version, whatever is pinned.
+    const target = spec.exactVersion ?? version;
+    // One install on the machine at a time, of any tool: package managers
+    // take their own locks, and the asks arrive in lanes of their own.
+    // What it puts on is said before its turn, which may begin at once.
+    const to = target ?? ask.newest;
+    installing.add(spec.id);
+    installingAs.set(spec.id, {
+      ...(to ? { to } : {}),
+      ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+    });
+    return installTurn.run(async () => {
+      try {
+        return await install(spec, target, ask);
+      } finally {
+        installing.delete(spec.id);
+        installingAs.delete(spec.id);
+        installEnded.set(spec.id, Date.now());
+        toolsMoved();
+      }
+    });
   });
-  const work = installTurn.run(async () => {
-    try {
-      return await install(spec, target, ask);
-    } finally {
-      installing.delete(spec.id);
-      installingAs.delete(spec.id);
-      installEnded.set(spec.id, Date.now());
-      toolsMoved();
-    }
-  });
-  installing.set(spec.id, work);
-  return await work;
 };
 
 /** A tool {@link putOnPins} moved: from the version it said (when it said one) to `to`, with `method`. */

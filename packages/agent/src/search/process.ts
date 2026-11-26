@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
+import { Deferred, Effect, Exit, Schema } from "effect";
 import type {
   RoleOp,
   SearchAnswer,
@@ -87,18 +88,39 @@ const host = (role: SearchRole): string[] =>
       ];
 
 /** Why a question of the index got no answer: past its limit, let go, or its process gone. */
-class SearchStopped extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SearchStopped";
+class SearchStopped extends Schema.TaggedError<SearchStopped>()(
+  "SearchStopped",
+  {
+    message: Schema.String,
   }
-}
+) {}
 
 interface Owed {
-  reject: (error: unknown) => void;
-  resolve: (value: unknown) => void;
+  /**
+   * Its answer, or why there is none. Platform gap: the answer crosses the
+   * process boundary over Bun's IPC, which hands it on as `any` (read as
+   * `unknown`, `SearchSaid`), and the asks of every op wait by id, whose op
+   * TypeScript cannot correlate with the answer (microsoft/TypeScript#30581).
+   * The process answers id `id` with op `op`'s own answer (host.ts
+   * `SearchOps`).
+   */
+  answer: Deferred.Deferred<unknown, unknown>;
   tell?: (value: unknown) => void;
 }
+
+/** `owed` answered with `value`. */
+const answer = (owed: Owed, value: unknown): void => {
+  Deferred.doneUnsafe(owed.answer, Exit.succeed(value));
+};
+
+/** `owed` refused with `error`. */
+const refuse = (owed: Owed, error: unknown): void => {
+  Deferred.doneUnsafe(owed.answer, Exit.fail(error));
+};
+
+/** The promise edge of `owed`'s answer, as op `K`'s (the platform gap in {@link Owed}). */
+const answered = <A>(owed: Owed): Promise<A> =>
+  Effect.runPromise(Deferred.await(owed.answer)) as Promise<A>;
 
 interface Work extends Owed {
   ask: SearchAsk;
@@ -140,9 +162,10 @@ export class SearchProcess<R extends SearchRole> {
   /** Hears how far the index is whole (ms epoch) each time a process opens it. */
   readonly #opened: (through: number) => void;
 
-  /** Settles once a process of this role has first opened the index, or failed to. */
-  readonly #firstOpen = Promise.withResolvers<void>();
-  readonly firstOpen = this.#firstOpen.promise;
+  /** Done once a process of this role has first opened the index, or failed to. */
+  readonly #firstOpen = Deferred.makeUnsafe<void>();
+  /** The promise edge of {@link #firstOpen}. */
+  readonly firstOpen = Effect.runPromise(Deferred.await(this.#firstOpen));
   /** No process is started until `after` settles: what is asked meanwhile waits here. */
   #gated: boolean;
 
@@ -206,7 +229,7 @@ export class SearchProcess<R extends SearchRole> {
       case "ready":
         from.ready = true;
         this.#opened(said.through);
-        this.#firstOpen.resolve();
+        Deferred.doneUnsafe(this.#firstOpen, Exit.void);
         for (const work of this.#work.values()) {
           if (!work.sent) {
             work.sent = true;
@@ -216,7 +239,7 @@ export class SearchProcess<R extends SearchRole> {
         this.#next();
         return;
       case "unopened":
-        this.#firstOpen.resolve();
+        Deferred.doneUnsafe(this.#firstOpen, Exit.void);
         // Every ask would meet the same: none waits for another process.
         this.#stop(`its index could not be opened: ${said.message}`, true);
         return;
@@ -248,10 +271,14 @@ export class SearchProcess<R extends SearchRole> {
       owed = this.#work.get(said.id);
       this.#work.delete(said.id);
     }
+    if (!owed) {
+      return;
+    }
     if (said.kind === "answer") {
-      owed?.resolve(said.value);
+      answer(owed, said.value);
     } else {
-      owed?.reject(
+      refuse(
+        owed,
         Object.assign(new Error(said.message), {
           ...(said.code ? { code: said.code } : {}),
         })
@@ -286,17 +313,17 @@ export class SearchProcess<R extends SearchRole> {
       return;
     }
     this.#running = null;
-    const lost = new SearchStopped(why);
+    const lost = new SearchStopped({ message: why });
     for (const question of [
       ...(this.#asked ? [this.#asked] : []),
       ...(all ? this.#waiting.splice(0) : []),
     ]) {
       question.done();
-      question.reject(lost);
+      refuse(question, lost);
     }
     this.#asked = null;
     for (const owed of this.#work.values()) {
-      owed.reject(lost);
+      refuse(owed, lost);
     }
     this.#work.clear();
     // The next process opens the index now, so the next question does not
@@ -365,66 +392,62 @@ export class SearchProcess<R extends SearchRole> {
     arg: SearchArg<K>,
     signal?: AbortSignal
   ): Promise<SearchAnswer<K>> {
-    return new Promise((resolve, reject) => {
-      if (signal?.aborted) {
-        reject(new SearchStopped("its asker let it go before it ran"));
-        return;
-      }
-      this.#nextId += 1;
-      const id = this.#nextId;
-      /** Set once it is let go while it runs: when it is looked at again ({@link #unheld}). */
-      let held: ReturnType<typeof setTimeout> | undefined;
-      /** Its asker answered `why`: dropped while it waits; while it runs, stopped with the reader past its limit, left to finish when let go. */
-      const end = (why: string, pastLimit: boolean) => {
-        if (this.#asked === question) {
-          if (pastLimit) {
-            this.#stop(`${op} ${why}`);
-            return;
-          }
-          signal?.removeEventListener("abort", abandoned);
-          question.letGoAt = Date.now();
-          reject(new SearchStopped(`${why} while it ran`));
-          held = setTimeout(() => this.#unheld(), LET_GO_MS);
+    if (signal?.aborted) {
+      return Promise.reject(
+        new SearchStopped({ message: "its asker let it go before it ran" })
+      );
+    }
+    this.#nextId += 1;
+    const id = this.#nextId;
+    /** Set once it is let go while it runs: when it is looked at again ({@link #unheld}). */
+    let held: ReturnType<typeof setTimeout> | undefined;
+    /** Its asker answered `why`: dropped while it waits; while it runs, stopped with the reader past its limit, left to finish when let go. */
+    const end = (why: string, pastLimit: boolean) => {
+      if (this.#asked === question) {
+        if (pastLimit) {
+          this.#stop(`${op} ${why}`);
           return;
         }
-        const at = this.#waiting.indexOf(question);
-        if (at >= 0) {
-          this.#waiting.splice(at, 1);
-          question.done();
-          reject(new SearchStopped(`${why} before it ran`));
-        }
-      };
-      const timer = setTimeout(
-        () => end(searchWords.pastLimit(READ_LIMIT_MS / 1000), true),
-        READ_LIMIT_MS
-      );
-      const abandoned = () => end(searchWords.letGo, false);
-      signal?.addEventListener("abort", abandoned, { once: true });
-      const question: Question = {
-        id,
-        op,
-        arg,
-        // Platform gap: the answer crosses the process boundary over Bun's
-        // IPC, which hands it on as `any` (read as `unknown`, `SearchSaid`),
-        // and the asks of every op wait by id, whose op TypeScript cannot
-        // correlate with the answer (microsoft/TypeScript#30581). The
-        // process answers id `id` with op `op`'s own answer (host.ts
-        // `SearchOps`).
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        done: () => {
-          clearTimeout(timer);
-          clearTimeout(held);
-          signal?.removeEventListener("abort", abandoned);
-        },
-      };
-      this.#waiting.push(question);
-      if (!this.#gated) {
-        this.#process();
-        this.#next();
-        this.#unheld();
+        signal?.removeEventListener("abort", abandoned);
+        question.letGoAt = Date.now();
+        refuse(question, new SearchStopped({ message: `${why} while it ran` }));
+        held = setTimeout(() => this.#unheld(), LET_GO_MS);
+        return;
       }
-    });
+      const at = this.#waiting.indexOf(question);
+      if (at >= 0) {
+        this.#waiting.splice(at, 1);
+        question.done();
+        refuse(
+          question,
+          new SearchStopped({ message: `${why} before it ran` })
+        );
+      }
+    };
+    const timer = setTimeout(
+      () => end(searchWords.pastLimit(READ_LIMIT_MS / 1000), true),
+      READ_LIMIT_MS
+    );
+    const abandoned = () => end(searchWords.letGo, false);
+    signal?.addEventListener("abort", abandoned, { once: true });
+    const question: Question = {
+      id,
+      op,
+      arg,
+      answer: Deferred.makeUnsafe<unknown, unknown>(),
+      done: () => {
+        clearTimeout(timer);
+        clearTimeout(held);
+        signal?.removeEventListener("abort", abandoned);
+      },
+    };
+    this.#waiting.push(question);
+    if (!this.#gated) {
+      this.#process();
+      this.#next();
+      this.#unheld();
+    }
+    return answered<SearchAnswer<K>>(question);
   }
 
   /** `op` run in the process to its end, `tell` hearing how far it has come. */
@@ -434,22 +457,20 @@ export class SearchProcess<R extends SearchRole> {
     arg: SearchArg<K>,
     tell?: (value: unknown) => void
   ): Promise<SearchAnswer<K>> {
-    return new Promise((resolve, reject) => {
-      const running = this.#process();
-      this.#nextId += 1;
-      const ask = { id: this.#nextId, op, arg } satisfies SearchAsk;
-      this.#work.set(ask.id, {
-        ask,
-        sent: running.ready,
-        // Platform gap: as {@link SearchProcess.read}'s.
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        ...(tell ? { tell } : {}),
-      });
-      if (running.ready) {
-        running.child.send(ask);
-      }
-    });
+    const running = this.#process();
+    this.#nextId += 1;
+    const ask = { id: this.#nextId, op, arg } satisfies SearchAsk;
+    const work: Work = {
+      ask,
+      sent: running.ready,
+      answer: Deferred.makeUnsafe<unknown, unknown>(),
+      ...(tell ? { tell } : {}),
+    };
+    this.#work.set(ask.id, work);
+    if (running.ready) {
+      running.child.send(ask);
+    }
+    return answered<SearchAnswer<K>>(work);
   }
 
   close(): void {

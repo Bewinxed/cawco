@@ -1,5 +1,5 @@
-import { readWithin } from "@cawco/core/bounded";
-import { unhandled } from "@cawco/core/unhandled";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
+import { Cache, Effect } from "effect";
 import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
 
@@ -11,10 +11,6 @@ export const proxiedFleetMcpUrl = (name: string): string =>
 const SHARED_MS = 10_000;
 /** How long one reading (its `initialize`, `tools/list` and the session's close) may take: the 30 s each of its two asks had. */
 const READING_MS = 60_000;
-const read = new Map<
-  string,
-  { at: number; tools: Promise<number | undefined> }
->();
 
 const post = (
   url: string,
@@ -129,27 +125,36 @@ const count = async (
  * read, or was not answered within {@link READING_MS} (said in the log):
  * nothing is decided on a list nobody saw, and what was decided before stays.
  */
-export const proxiedToolCount = (name: string): Promise<number | undefined> => {
-  const kept = read.get(name);
-  if (kept && Date.now() - kept.at < SHARED_MS) {
-    return kept.tools;
-  }
-  const tools = readWithin(READING_MS, (signal) => count(name, signal)).then(
-    (reading) => {
-      switch (reading.kind) {
-        case "answered":
-          return reading.value;
-        case "unanswered":
+export const proxiedToolCount = (name: string): Promise<number | undefined> =>
+  Effect.runPromise(Cache.get(readings, name));
+
+/** One reading of `name`'s tools ({@link proxiedToolCount}): what could not be read is undefined. */
+const reading = Effect.fnUntraced(function* (name: string) {
+  return yield* boundedRead(
+    READING_MS,
+    Effect.tryPromise({
+      try: (signal) => count(name, signal),
+      catch: (error) => error,
+    })
+  ).pipe(
+    Effect.catch((error) =>
+      Effect.sync((): number | undefined => {
+        if (error instanceof Unanswered) {
           console.warn(
             `[fleet-mcp] the hub's relay did not list ${name}'s tools within ${READING_MS / 1000} s; nothing is decided on it`
           );
-          return;
-        default:
-          unhandled("read", reading);
-      }
-    },
-    () => undefined
+        }
+        return undefined;
+      })
+    )
   );
-  read.set(name, { at: Date.now(), tools });
-  return tools;
-};
+});
+
+/** Each server's last reading, shared by every session that asks while it runs and {@link SHARED_MS} after. */
+const readings = Effect.runSync(
+  Cache.make({
+    lookup: reading,
+    capacity: Number.POSITIVE_INFINITY,
+    timeToLive: SHARED_MS,
+  })
+);

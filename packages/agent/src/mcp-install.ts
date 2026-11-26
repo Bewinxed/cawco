@@ -28,6 +28,7 @@
 import { readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
@@ -35,6 +36,7 @@ import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import { toolEnv } from "./tools";
 
@@ -299,8 +301,8 @@ const binOf = async (
   return file ? resolve(root, file) : undefined;
 };
 
-/** Installs in flight in this process, by dir: a second row of one package waits on the first. */
-const inFlight = new Map<string, Promise<string | undefined>>();
+/** Installs in flight in this process, by dir: a second row of one package joins the first. */
+const inFlight = makeJoin<string, string | undefined>();
 
 /** `name`@`version` put into `dir` by npm, through a staging dir that takes `dir`'s name only once whole. Answers npm's sentence when it fails. */
 const install = async (
@@ -380,11 +382,9 @@ export const installed = async (
     return { bin: found, dir, version };
   }
   await makeFolder(fleetMcpInstallsDir());
-  const pending =
-    inFlight.get(dir) ??
-    install(npm, run, version, dir, env).finally(() => inFlight.delete(dir));
-  inFlight.set(dir, pending);
-  const failed = await pending;
+  const failed = await inFlight.runPromise(dir, () =>
+    install(npm, run, version, dir, env)
+  );
   if (failed) {
     return { failed };
   }
@@ -496,7 +496,8 @@ const stagingAlive = (name: string): boolean => {
 let named: Set<string> | undefined;
 /** The one queue every install pass and retirement runs on, one at a time. */
 const queue = makeLock();
-let again: ReturnType<typeof setTimeout> | undefined;
+/** The next retirement pass while a dir still waits ({@link RETIRE_AGAIN_MS}), until it begins or another pass begins first. */
+let again: Fiber.Fiber<void> | undefined;
 
 /** `work` after everything before it on the queue, and before everything after. */
 const inTurn = <T>(work: () => Promise<T>): Promise<T> => queue.run(work);
@@ -561,7 +562,10 @@ const sweep = async (live: () => readonly string[]): Promise<void> => {
   if (!fleet) {
     return;
   }
-  clearTimeout(again);
+  if (again) {
+    Effect.runFork(Fiber.interrupt(again));
+    again = undefined;
+  }
   const root = fleetMcpInstallsDir();
   const entries = await entriesOf(root);
   const inUse = await installsInUse(
@@ -574,14 +578,29 @@ const sweep = async (live: () => readonly string[]): Promise<void> => {
     entries.map((entry) => retireOne(entry, inUse, sessions, fleet))
   );
   if (outcomes.includes("waiting")) {
-    again = setTimeout(() => {
-      retireInstalls(live).catch((error: unknown) =>
-        console.warn(
-          `[fleet-mcp] retiring old installs failed: ${String(error)}`
+    again = Effect.runFork(
+      Effect.sleep(RETIRE_AGAIN_MS).pipe(
+        // Begun: the pass it runs is no longer one to let go.
+        Effect.andThen(
+          Effect.sync(() => {
+            again = undefined;
+          })
+        ),
+        Effect.andThen(
+          Effect.tryPromise({
+            try: () => retireInstalls(live),
+            catch: (error) => error,
+          })
+        ),
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            console.warn(
+              `[fleet-mcp] retiring old installs failed: ${String(error)}`
+            )
+          )
         )
-      );
-    }, RETIRE_AGAIN_MS);
-    again.unref();
+      )
+    );
   }
 };
 

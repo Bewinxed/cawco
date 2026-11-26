@@ -21,6 +21,8 @@ bare-run	Effect.runSync	packages/hub/src/intake.ts	1
 error-class	AgentTooOld	packages/hub/src/project-delete.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
+error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
+error-class	CapabilityCallsRefusal	packages/hub/src/capability-calls.ts	1
 error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
@@ -28,12 +30,12 @@ error-class	CommandStopped	packages/hub/src/machine-pause.ts	1
 error-class	ConnectionProblem	packages/hub/src/connections.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
-error-class	FleetDenialsRefused	packages/agent/src/denied-tools.ts	1
 error-class	FramePictureRefusal	packages/agent/src/frame-picture.ts	1
 error-class	GitExited	packages/agent/src/git/run.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
 error-class	HubUnreachable	packages/agent/src/binary-update.ts	1
 error-class	KeeperKept	packages/agent/src/service-manager/keeper-job.ts	1
+error-class	JevFailed	packages/hub/src/jev-placement.ts	1
 error-class	KeeperRefused	packages/agent/src/sessiond-client.ts	1
 error-class	MoveCancelled	packages/agent/src/move.ts	1
 error-class	NotRunning	packages/agent/src/session.ts	1
@@ -43,6 +45,8 @@ error-class	Refused	packages/agent/src/stage-measure.ts	1
 error-class	RelayFailed	packages/agent/src/browser/relay.ts	1
 error-class	SearchStopped	packages/agent/src/search/process.ts	1
 error-class	ServiceError	packages/agent/src/service-manager/install.ts	1
+error-class	RpcError	packages/hub/src/fleet-mcp-relay.ts	1
+error-class	SessionAddressRefused	packages/agent/src/harness.ts	1
 error-class	SessiondRefusal	packages/agent/src/sessiond-client.ts	1
 error-class	SessiondUnavailableError	packages/agent/src/sessiond-client.ts	1
 error-class	StageRefusal	packages/agent/src/stage-refusal.ts	1
@@ -55,6 +59,8 @@ error-class	TreeRefused	packages/agent/src/folder-tree.ts	1
 error-class	Unbound	packages/hub/src/db/trash.ts	1
 error-class	UnreadJson	packages/agent/src/json-file.ts	1
 error-class	UpdateInterrupted	packages/agent/src/binary-update.ts	1
+error-class	Unreachable	packages/hub/src/fleet-mcp.ts	1
+error-class	WouldWait	packages/hub/src/machine-pause.ts	1
 hand-promise	new Promise	packages/agent/src/activity.ts	2
 hand-promise	new Promise	packages/agent/src/auth.ts	1
 hand-promise	new Promise	packages/agent/src/awake-hold.ts	1
@@ -75,10 +81,13 @@ hand-promise	new Promise	packages/agent/src/browser/passkey-inject.ts	4
 hand-promise	new Promise	packages/agent/src/browser/relay-reach.ts	1
 hand-promise	new Promise	packages/agent/src/browser/runtime.ts	1
 hand-promise	new Promise	packages/agent/src/browser/state.ts	2
-hand-promise	new Promise	packages/agent/src/catalog-index.ts	1
 hand-promise	new Promise	packages/agent/src/daemon.ts	2
 hand-promise	new Promise	packages/agent/src/discovery.ts	1
 hand-promise	new Promise	packages/agent/src/fleet-hook-run.ts	1
+hand-promise	new Promise	packages/agent/src/harnesses/claude-transcript.ts	1
+hand-promise	new Promise	packages/agent/src/harnesses/claude.ts	2
+hand-promise	new Promise	packages/agent/src/harnesses/codex-home.ts	3
+hand-promise	new Promise	packages/agent/src/harnesses/codex-rpc.ts	3
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-docs.ts	1
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-plugin-module.ts	2
 hand-promise	new Promise	packages/agent/src/harnesses/opencode.ts	4
@@ -87,7 +96,6 @@ hand-promise	new Promise	packages/agent/src/hub-command.ts	1
 hand-promise	new Promise	packages/agent/src/hub-git.ts	2
 hand-promise	new Promise	packages/agent/src/login.ts	1
 hand-promise	new Promise	packages/agent/src/provider-accounts.ts	3
-hand-promise	new Promise	packages/agent/src/search/process.ts	2
 hand-promise	new Promise	packages/agent/src/session-containers.ts	1
 hand-promise	new Promise	packages/agent/src/session.ts	2
 hand-promise	new Promise	packages/agent/src/sessiond-client.ts	5
@@ -118,10 +126,7 @@ hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/harnesses/opencode.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/machine-agent.ts	1
-hand-promise	Promise.withResolvers	packages/agent/src/search/index.ts	1
-hand-promise	Promise.withResolvers	packages/agent/src/search/process.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/session.ts	2
-hand-promise	Promise.withResolvers	packages/agent/src/tools.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/usage/scans.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/welcome-converge.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/workspaces.ts	1
@@ -133,7 +138,6 @@ promise-chain	state.queue	packages/hub/src/fleet-mcp-relay.ts	1
 promise-chain	sync.running	packages/hub/src/account-probes.ts	1
 promise-chain	this.#healing	packages/agent/src/fleet-converger.ts	1
 promise-map	#clients	packages/agent/src/keepers.ts	1
-promise-map	#fleetDenials	packages/agent/src/fleet-converger.ts	1
 promise-map	#marks	packages/agent/src/browser/gate.ts	1
 promise-map	#migrations	packages/agent/src/harnesses/opencode.ts	1
 promise-map	#moves	packages/agent/src/harnesses/opencode.ts	1
@@ -154,15 +158,14 @@ promise-map	closing	packages/agent/src/boundary/state.ts	1
 promise-map	doors	packages/agent/src/session-containers.ts	1
 promise-map	drawnKept	packages/agent/src/stage-host/host.ts	1
 promise-map	flights	packages/agent/src/move.ts	1
-promise-map	gateReads	packages/agent/src/tools.ts	1
 promise-map	gates	packages/agent/src/boundary/decisions.ts	1
 promise-map	importsKept	packages/agent/src/stage-host/host.ts	1
 promise-map	inFlight	packages/agent/src/mcp-install.ts	1
+promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/provider-usage.ts	1
 promise-map	inFlight	packages/hub/src/place-repo.ts	1
 promise-map	inFlight	packages/hub/src/favicon.ts	1
 promise-map	installing	packages/agent/src/stage-install.ts	1
-promise-map	installing	packages/agent/src/tools.ts	1
 promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
 promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
 promise-map	liveGroups	packages/agent/src/group-run.ts	1
@@ -170,7 +173,6 @@ promise-map	local	packages/agent/src/stage-host/host.ts	1
 promise-map	making	packages/hub/src/git-remote.ts	1
 promise-map	looksQueued	packages/hub/src/at-limit.ts	1
 promise-map	marketplaceReads	packages/hub/src/fleet-sources.ts	1
-promise-map	needAsking	packages/agent/src/tools.ts	1
 promise-map	open	packages/agent/src/browser/dashboard-door.ts	1
 promise-map	owedCarries	packages/hub/src/closure-context.ts	1
 promise-map	owedCarries	packages/hub/src/limit-moves.ts	1
@@ -179,6 +181,8 @@ promise-map	ownKept	packages/agent/src/stage-host/host.ts	1
 promise-map	passes	packages/agent/src/browser/dashboard-door.ts	1
 promise-map	pendingServerAttachments	packages/agent/src/harnesses/opencode.ts	1
 promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
+promise-map	pluginFetches	packages/hub/src/fleet-sources.ts	1
+promise-map	probing	packages/hub/src/accounts.ts	1
 promise-map	reading	packages/agent/src/stores/client.ts	1
 promise-map	rearming	packages/agent/src/boundary/ensure.ts	1
 promise-map	reclosing	packages/hub/src/workspaces.ts	1
@@ -195,7 +199,6 @@ promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1
 promise-map	starting	packages/agent/src/boundary/state.ts	1
 promise-map	viewing	packages/agent/src/layer.ts	1
 promise-map	warming	packages/agent/src/stage.ts	1
-timed-loop	Bun.sleep	packages/agent/src/binary-update.ts	1
 timed-loop	Bun.sleep	packages/agent/src/boundary/work.ts	1
 timed-loop	Bun.sleep	packages/agent/src/browser/bluez-bus.ts	1
 timed-loop	Bun.sleep	packages/agent/src/browser/browsers.ts	1
@@ -219,7 +222,6 @@ timed-loop	Bun.sleep	packages/agent/src/runtime-dir-move.ts	1
 timed-loop	Bun.sleep	packages/agent/src/session.ts	2
 timed-loop	Bun.sleep	packages/agent/src/stage-render.ts	2
 timed-loop	Bun.sleep	packages/agent/src/stage.ts	2
-timed-loop	Bun.sleep	packages/agent/src/tools.ts	1
 timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
 timed-loop	Bun.sleep	packages/hub/src/landing.ts	1
 timed-loop	Bun.sleep	packages/hub/src/fleet-mcp-relay.ts	1

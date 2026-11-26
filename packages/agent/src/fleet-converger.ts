@@ -43,6 +43,7 @@ import {
   CONTROL_MCP_FLEET_HEAL,
 } from "@cawco/core/session/controls";
 import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
+import { Effect, Fiber, Schedule } from "effect";
 import { recordAgentState } from "./agent-state";
 import { rearmMoved, recheckNarrowed } from "./boundary/looks";
 import { userLayerHeld } from "./boundary/plan";
@@ -161,8 +162,8 @@ export class FleetConverger {
   readonly #desired = new FleetDesired();
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
   #lastReport: FleetSyncReport | undefined;
-  /** The machine's probe tick ({@link #healthSoon}), once its agent has taken a delta. */
-  #healthTimer: ReturnType<typeof setInterval> | undefined;
+  /** The machine's probe ticks ({@link #healthSoon}), once its agent has taken a delta: they run for the agent's life. */
+  #healthTicks: Fiber.Fiber<unknown> | undefined;
   /** The items deltas moved or took away since the last converge began. */
   readonly #convergeIds = new Set<string>();
   /** A person's Sync: the next converge takes every item, changed or not. */
@@ -173,8 +174,8 @@ export class FleetConverger {
   #passing: boolean;
   /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
   #harnessFailures = new Map<HarnessKind, string>();
-  /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
-  readonly #fleetDenials = new Map<string, Promise<void>>();
+  /** Each delta's hold ({@link #holdDelta}), its write of the policy among it, run as it arrived and joined by its answer, by its request. */
+  readonly #fleetDenials = new Map<string, Fiber.Fiber<void, unknown>>();
   readonly #mcpLauncherStates = new Map<string, FleetItemState>();
   /**
    * Asks each named live Claude session, one after another, to take again
@@ -625,18 +626,24 @@ export class FleetConverger {
    * converge: every `claude` with its version (the report's `toolchain`)
    * and what the disk holds of the fleet's content (`have`). The first runs
    * as the machine's agent takes its first delta; each that reads something
-   * other than the last report says is sent laid over it.
+   * other than the last report says is sent laid over it. The next waits
+   * {@link HEALTH_MS} from the end of the last, so a tick queued behind a
+   * long converge never stacks another behind it.
    */
   #healthSoon(): void {
-    if (this.#healthTimer) {
+    if (this.#healthTicks) {
       return;
     }
-    this.#healthTimer = setInterval(() => this.#healthTick(), HEALTH_MS);
-    this.#healthTimer.unref();
-    this.#healthTick();
+    this.#healthTicks = Effect.runFork(
+      Effect.repeat(
+        Effect.promise(() => this.#healthTick()),
+        Schedule.spaced(HEALTH_MS)
+      )
+    );
   }
-  #healthTick(): void {
-    this.#fleetTurn(async () => {
+  /** One look of the machine's probes, in the fleet's turn; never rejects: what fails is said. */
+  #healthTick(): Promise<void> {
+    return this.#fleetTurn(async () => {
       const [toolchain, have] = await Promise.all([
         probeToolchain(),
         fleetHoldings(),
@@ -1192,20 +1199,31 @@ export class FleetConverger {
    * request ({@link denialsFor}).
    */
   takeDelta(requestId: string, delta: FleetDelta): void {
-    const held = this.#holdDelta(delta);
-    // Awaited by the delta's answer, which says a failure.
-    held.catch(() => undefined);
-    this.#fleetDenials.set(requestId, held);
+    // Begun now, so its policy write starts as the delta arrives; joined
+    // by the delta's answer, which says its failure.
+    this.#fleetDenials.set(
+      requestId,
+      Effect.runFork(
+        Effect.tryPromise({
+          try: () => this.#holdDelta(delta),
+          catch: (error) => error,
+        })
+      )
+    );
   }
 
-  /** The policy write a delta began as it arrived, by its request, handed once to the delta's answer. */
+  /**
+   * The promise edge of a delta's hold, by its request: the policy write it
+   * began as it arrived, handed once to the delta's answer, which waits on
+   * it and refuses in its words when it failed.
+   */
   denialsFor(requestId: string | undefined): Promise<void> | undefined {
     if (!requestId) {
       return undefined;
     }
-    const denials = this.#fleetDenials.get(requestId);
+    const held = this.#fleetDenials.get(requestId);
     this.#fleetDenials.delete(requestId);
-    return denials;
+    return held && Effect.runPromise(Fiber.join(held));
   }
 
   /**

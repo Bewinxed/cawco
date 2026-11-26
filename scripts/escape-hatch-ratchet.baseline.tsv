@@ -17,7 +17,6 @@ as-cast	(typeof TARGETS)[number]	scripts/build-binary.ts	1
 as-cast	(typeof TARGETS)[number]	scripts/release/steps/promote.ts	2
 as-cast	(typeof was)[0]	scripts/codemods/theme-unify.ts	2
 as-cast	(typeof work)[number]	scripts/lib/import-graph.ts	1
-as-cast	(value: unknown) => void	packages/agent/src/search/process.ts	2
 as-cast	(value: unknown) => void	packages/agent/src/stores/client.ts	1
 as-cast	(Window & typeof globalThis) | null	packages/preview/src/overlay/frames.ts	1
 as-cast	[ (typeof found)[number], (typeof found)[number], (typeof found)[number]	scripts/border-width-check.ts	1
@@ -259,6 +258,7 @@ as-cast	Pointer	scripts/binary/socket-activation.ts	1
 as-cast	PointerEvent	packages/preview/src/overlay/page.ts	2
 as-cast	Prepared	scripts/build-binary.ts	1
 as-cast	PreviewElement["styles"]	packages/preview/src/overlay/page.ts	1
+as-cast	Promise<A>	packages/agent/src/search/process.ts	1
 as-cast	ReadableStream	scripts/binary-tests.ts	1
 as-cast	ReadableStream	scripts/release.ts	1
 as-cast	ReadableStream	scripts/release/steps/shared.ts	1

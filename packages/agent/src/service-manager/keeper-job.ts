@@ -70,6 +70,7 @@ import {
 import { commandLine, processLineage } from "@cawco/core/process-identity";
 import { type Ran, runInC } from "@cawco/core/run-captured";
 import { listedPid, type Pid } from "@cawco/core/signal";
+import { Schema } from "effect";
 import {
   guiDomain,
   KEEPER_LABEL,
@@ -117,14 +118,17 @@ type UnitStop =
   { readonly force: true } | { readonly children: readonly number[] };
 
 /** A keeper's stop refused: its unit holds processes CawCo did not start. Its message names each one. */
-export class KeeperKept extends Error {
-  readonly foreign: readonly KeptProcess[];
-
+export class KeeperKept extends Schema.TaggedError<KeeperKept>()("KeeperKept", {
+  message: Schema.String,
+  foreign: Schema.Array(
+    Schema.Struct({ command: Schema.String, pid: Schema.Number })
+  ),
+}) {
   constructor(unit: string, foreign: readonly KeptProcess[]) {
-    super(
-      `${unit} is kept, not stopped: it holds ${foreign.length === 1 ? "1 process" : `${foreign.length} processes`} that neither the keeper nor one of its sessions runs: ${foreign.map(({ pid, command }) => `pid ${pid} (${command})`).join(", ")}`
-    );
-    this.foreign = foreign;
+    super({
+      message: `${unit} is kept, not stopped: it holds ${foreign.length === 1 ? "1 process" : `${foreign.length} processes`} that neither the keeper nor one of its sessions runs: ${foreign.map(({ pid, command }) => `pid ${pid} (${command})`).join(", ")}`,
+      foreign,
+    });
   }
 }
 

@@ -1,5 +1,6 @@
 import { unhandled } from "@cawco/core/unhandled";
 import { toolWords } from "@cawco/core/words/tools";
+import { Schema } from "effect";
 import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
 
 /**
@@ -10,10 +11,11 @@ import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
 const JSON_FILE_LIMIT = 32 * 1024 * 1024;
 
 /** A JSON file that is there and was not read, and why (json-on-disk.ts). */
-export class UnreadJson extends Error {
+export class UnreadJson extends Schema.TaggedError<UnreadJson>()("UnreadJson", {
+  message: Schema.String,
+}) {
   constructor(path: string, why: string) {
-    super(`${path} is there but couldn't be read: ${why}`);
-    this.name = "UnreadJson";
+    super({ message: `${path} is there but couldn't be read: ${why}` });
   }
 }
 

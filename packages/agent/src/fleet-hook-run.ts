@@ -23,6 +23,7 @@ import {
 } from "@cawco/core/hooks";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { Effect } from "effect";
 import { commandLineOf } from "./fleet-hook-guard";
 import type { SetHook } from "./fleet-set-rows";
 
@@ -47,13 +48,23 @@ export interface HookPlace {
   signal?: AbortSignal;
 }
 
-/** One command hook run with `input` on its stdin. */
+/**
+ * One command hook run with `input` on its stdin, to its close; the promise
+ * edge of a callback the child's close resumes.
+ */
 const runCommand = (
   handler: HookCommandHandler,
   input: string,
   place: HookPlace
-): Promise<Ran> =>
-  new Promise((resolve) => {
+): Promise<Ran> => Effect.runPromise(commandRun(handler, input, place));
+
+/** {@link runCommand}'s run: interrupted, it ends the hook's group as its timeout does. */
+const commandRun = Effect.fnUntraced(function* (
+  handler: HookCommandHandler,
+  input: string,
+  place: HookPlace
+) {
+  return yield* Effect.callback<Ran>((resume) => {
     const line = commandLineOf(handler);
     const [file, args]: [string, string[]] = place.boundary
       ? [place.boundary.prefix, [line]]
@@ -94,13 +105,19 @@ const runCommand = (
     child.on("close", (code) => {
       clearTimeout(timer);
       place.signal?.removeEventListener("abort", stop);
-      resolve({ exit: code, stdout, stderr });
+      resume(Effect.succeed({ exit: code, stdout, stderr }));
     });
     child.stdin.on("error", () => {
       // A hook that reads none of its input closes stdin early.
     });
     child.stdin.end(input);
+    return Effect.sync(() => {
+      clearTimeout(timer);
+      place.signal?.removeEventListener("abort", stop);
+      stop();
+    });
   });
+});
 
 /**
  * Every hook of `event` that `harness` takes, of `hooks`, whose matcher

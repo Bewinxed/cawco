@@ -23,6 +23,7 @@ import { catalogIndexPath } from "@cawco/core/paths/cawco";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
+import { Effect, type Fiber } from "effect";
 import { z } from "zod";
 
 /** One file as the index holds it: what it was when read, and what was read of it (null: nothing to list). */
@@ -107,24 +108,37 @@ const loadIndex = (): Promise<Map<string, Indexed>> => {
 const SAVE_AFTER_MS = 60_000;
 
 /** The index's next write, while one waits. */
-let saving: ReturnType<typeof setTimeout> | undefined;
+let saving: Fiber.Fiber<void> | undefined;
 
 /** Writes `index` as it stands {@link SAVE_AFTER_MS} on, once for every change until then. */
 const saveIndex = (index: Map<string, Indexed>): void => {
   if (saving) {
     return;
   }
-  saving = setTimeout(() => {
-    const text = JSON.stringify(Object.fromEntries(index));
-    writeStateFile(catalogIndexPath(), text)
-      .catch((error: unknown) => {
-        console.warn(`[catalog] the index could not be kept: ${error}`);
-      })
-      .finally(() => {
-        saving = undefined;
-      });
-  }, SAVE_AFTER_MS);
-  saving.unref();
+  saving = Effect.runFork(
+    Effect.sleep(SAVE_AFTER_MS).pipe(
+      Effect.andThen(
+        Effect.tryPromise({
+          try: () =>
+            writeStateFile(
+              catalogIndexPath(),
+              JSON.stringify(Object.fromEntries(index))
+            ),
+          catch: (error) => error,
+        })
+      ),
+      Effect.catch((error) =>
+        Effect.sync(() =>
+          console.warn(`[catalog] the index could not be kept: ${error}`)
+        )
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          saving = undefined;
+        })
+      )
+    )
+  );
 };
 
 /** What one listing found: the sessions, and how many files it read again. */
@@ -404,7 +418,8 @@ const watchFolders = async (
     for (const folder of names.slice(at, at + FOLDER_WATCHES_AT_ONCE)) {
       watchFolder(dir, folder, reader, folders);
     }
-    await new Promise((turn) => setImmediate(turn));
+    // A turn of the event loop (the scheduler's setImmediate) between batches.
+    await Effect.runPromise(Effect.yieldNow);
   }
 };
 

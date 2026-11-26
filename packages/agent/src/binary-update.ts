@@ -65,6 +65,7 @@ import {
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import {
   answers,
@@ -101,6 +102,7 @@ import {
   hubRoutes,
   reached,
 } from "@cawco/hub/client";
+import { Effect, Fiber, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary/control";
 import { provenFetch } from "./hub-proof";
@@ -136,6 +138,8 @@ import { heldSessions } from "./sessiond-client";
 const thisTarget = (): string => `${process.platform}-${process.arch}`;
 
 const POLL_MS = 60_000;
+/** How often the updater watches an install's helper and trial between passes ({@link BinaryUpdater}'s `#watch`). */
+const WATCH_MS = 10_000;
 /**
  * A failure with no sequence that a later install outlived: builds before
  * `failedSequence` wrote `failedVersion` without it and never cleared it, so a
@@ -433,6 +437,41 @@ const logFailure = (error: unknown): void => {
   );
 };
 
+/**
+ * `work`, let go: begun once the caller has returned, as a timer of 0 began
+ * it, its failure said in the log ({@link logFailure}).
+ */
+const letGo = (work: () => Promise<unknown>): void => {
+  Effect.runFork(
+    Effect.yieldNow.pipe(
+      Effect.andThen(Effect.tryPromise({ try: work, catch: (error) => error })),
+      Effect.catch((error) => Effect.sync(() => logFailure(error)))
+    )
+  );
+};
+
+/**
+ * `work` every `ms`, the first `ms` from now, at a fixed rate: a run that
+ * takes longer than `ms` is followed at once, and runs never pile up. Its
+ * failure is said in the log and the next runs at its time.
+ */
+const everyFixed = (
+  ms: number,
+  work: () => Promise<unknown>
+): Fiber.Fiber<unknown> =>
+  Effect.runFork(
+    Effect.sleep(ms).pipe(
+      Effect.andThen(
+        Effect.repeat(
+          Effect.tryPromise({ try: work, catch: (error) => error }).pipe(
+            Effect.catch((error) => Effect.sync(() => logFailure(error)))
+          ),
+          Schedule.fixed(ms)
+        )
+      )
+    )
+  );
+
 /** Deletes the builds nothing keeps (core binary-installation.ts `prune`), and says in the journal what went and what stayed, and `when`; never rejects. */
 const pruneAndSay = (when: string): Promise<void> =>
   prune()
@@ -441,12 +480,31 @@ const pruneAndSay = (when: string): Promise<void> =>
     )
     .catch(logFailure);
 
+/** An updater failure's fields: its words, and the failure it came of. */
+const updateFailure = {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+};
+
+/** An updater failure's fields from an `Error`'s arguments, so it is thrown as one is. */
+const updateFailureOf = (message: string, options?: ErrorOptions) => ({
+  message,
+  ...(options?.cause === undefined ? {} : { cause: options.cause }),
+});
+
 /**
  * The hub could not be reached at all: no answer, not an answer that refused.
  * Nothing is tried or written on it; the command stands, and the next tick
  * asks again.
  */
-class HubUnreachable extends Error {}
+class HubUnreachable extends Schema.TaggedError<HubUnreachable>()(
+  "HubUnreachable",
+  updateFailure
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(updateFailureOf(message, options));
+  }
+}
 
 /**
  * Of the cut codes ({@link CUT_CODES}), the ones that say no hub is there at
@@ -530,7 +588,14 @@ const readUpdateSettings = (
  * drain, or its helper's start): recorded with its retry time, and the command
  * that asked for it stands, so the build is tried again on the retry schedule.
  */
-class AttemptFailed extends Error {}
+class AttemptFailed extends Schema.TaggedError<AttemptFailed>()(
+  "AttemptFailed",
+  updateFailure
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(updateFailureOf(message, options));
+  }
+}
 
 /**
  * THE MACHINE SLEPT UNDER AN ATTEMPT: an interruption, never a failure. A
@@ -541,7 +606,14 @@ class AttemptFailed extends Error {}
  * build is tried again once the machine has been awake
  * {@link MIN_AWAKE_MS} since it woke ({@link BinaryUpdater}'s `#awakeLongEnough`).
  */
-class UpdateInterrupted extends Error {}
+class UpdateInterrupted extends Schema.TaggedError<UpdateInterrupted>()(
+  "UpdateInterrupted",
+  updateFailure
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(updateFailureOf(message, options));
+  }
+}
 
 /**
  * How long a machine is awake since it last woke before an install starts
@@ -688,8 +760,8 @@ export class BinaryUpdater {
   #running: Promise<void> | undefined;
   /** The build an attempt last waited on and what still runs from it ({@link runsFrom}), said once. */
   #deferredFor: string | undefined;
-  #timer: ReturnType<typeof setInterval> | undefined;
-  #trialTimer: ReturnType<typeof setInterval> | undefined;
+  /** The pass every {@link POLL_MS}, and the watch every {@link WATCH_MS}, once started: interrupted at {@link stop}. */
+  #ticks: Fiber.Fiber<unknown>[] = [];
   /** When this updater was made: no helper an agent before this one launched is younger. */
   readonly #startedAt = Date.now();
   /** When this agent last launched a helper to resume an open trial. */
@@ -764,13 +836,10 @@ export class BinaryUpdater {
     this.#power = watchPower();
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
     startedUpdater = this;
-    this.#timer = setInterval(() => this.tick(), POLL_MS);
-    this.#timer.unref();
-    this.#trialTimer = setInterval(
-      () => this.#watch().catch(logFailure),
-      10_000
-    );
-    this.#trialTimer.unref();
+    this.#ticks = [
+      everyFixed(POLL_MS, () => this.tick()),
+      everyFixed(WATCH_MS, () => this.#watch()),
+    ];
     // The first pass reads the state file and reports it: one that does not
     // read is that pass's failure, reported and written whole again, never
     // an updater that stopped before it said anything.
@@ -791,24 +860,21 @@ export class BinaryUpdater {
   }
 
   stop(): void {
-    if (this.#timer) {
-      clearInterval(this.#timer);
-    }
-    if (this.#trialTimer) {
-      clearInterval(this.#trialTimer);
+    for (const ticks of this.#ticks.splice(0)) {
+      Effect.runFork(Fiber.interrupt(ticks));
     }
   }
 
   /** The hub's push: act on the changed policy without holding the hub's call. */
   configure(): BinaryUpdateState {
-    setTimeout(() => this.tick(), 0);
+    letGo(() => this.tick());
     return this.#state;
   }
 
   /** The agent registered with its hub ({@link hubRegistered}): a machine waiting for its hub looks again now. */
   hubRegistered(): void {
     if (this.#state.phase === "waiting-for-hub") {
-      setTimeout(() => this.tick(), 0);
+      letGo(() => this.tick());
     }
   }
 
@@ -2146,15 +2212,15 @@ export class BinaryUpdater {
     hub: string | undefined,
     work: () => Promise<T>
   ): Promise<T> {
-    const renew = setInterval(() => {
+    const renew = everyFixed(FENCE_RENEW_MS, async () => {
       if (this.#fence) {
-        this.#raiseFence(hub, INSTALL_FENCE_MS).catch(logFailure);
+        await this.#raiseFence(hub, INSTALL_FENCE_MS);
       }
-    }, FENCE_RENEW_MS);
+    });
     try {
       return await work();
     } finally {
-      clearInterval(renew);
+      Effect.runFork(Fiber.interrupt(renew));
     }
   }
 
@@ -2269,12 +2335,22 @@ export class BinaryUpdater {
       // Never written: an agent that dies mid-drain comes back `ready`, not
       // `installing` with no helper.
       await this.#tellHubUnwritten({ phase: "installing" });
-      let reading = await readReadiness(hub, this.#supervisorHolds);
-      const deadline = Date.now() + DRAIN_MS;
-      while (!reading.ready && Date.now() < deadline) {
-        await Bun.sleep(DRAIN_POLL_MS);
-        reading = await readReadiness(hub, this.#supervisorHolds);
-      }
+      // The work in flight looked at now, and every DRAIN_POLL_MS after
+      // until it is gone or DRAIN_MS has passed: the last look's holds.
+      const looked = await Effect.runPromise(
+        lookUntil(
+          {
+            every: DRAIN_POLL_MS,
+            deadlineMs: DRAIN_MS,
+            until: (now: RestartReadiness) => now.ready,
+          },
+          Effect.tryPromise({
+            try: () => readReadiness(hub, this.#supervisorHolds),
+            catch: (error) => error,
+          })
+        )
+      );
+      const reading = looked.kind === "found" ? looked.value : looked.last;
       if (await this.#cancelled(before)) {
         return undefined;
       }
