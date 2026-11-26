@@ -1,9 +1,10 @@
 language js
 
 // Every timer of the hub's control loop runs on its lifetime, by a name
-// (packages/hub/src/lifetime.ts `after`, `every`, `sleep`): a hold inside a
-// timer's run names that timer in the loop's lines, never the request
-// before it, and the lifetime stops it at close. A bare `setTimeout`,
+// (packages/hub/src/lifetime.ts `after`, `every`, `sleep`, and `fork` for
+// an Effect's fiber): a hold inside a timer's run names that timer in the
+// loop's lines, never the request before it, and the lifetime stops it at
+// close. A bare `setTimeout`,
 // `setInterval` or `setImmediate` there is a timer no line can name, and an
 // empty name names nothing. The views thread and the preview server are
 // processes of their own with their own schedules; `lifetime.ts` itself
@@ -17,9 +18,9 @@ or {
     $filename <: not includes "packages/hub/src/host-build-worker.ts",
     register_diagnostic(span=$hit, message="A hub timer runs on its lifetime, named (lifetime.after / every / sleep in packages/hub/src/lifetime.ts), so a hold in it is named and close stops it.")
   },
-  or { `$_.after($name, $_, $_)`, `$_.every($name, $_, $_)` } as $hit where {
+  or { `$_.after($name, $_, $_)`, `$_.every($name, $_, $_)`, `$_.fork($name, $_)` } as $hit where {
     $filename <: includes "packages/hub/src/",
     $name <: or { `""`, `''` },
-    register_diagnostic(span=$hit, message="A hub timer's name is what the loop's lines call its runs: give it one.")
+    register_diagnostic(span=$hit, message="A hub timer's or fork's name is what the loop's lines call its runs: give it one.")
   }
 }

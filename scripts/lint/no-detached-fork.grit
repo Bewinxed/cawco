@@ -1,0 +1,18 @@
+language js
+
+// Every fiber the hub or the agent starts is stopped when what owns it
+// closes. A detached fork (`Effect.forkDetach`) belongs to no parent and no
+// scope: started inside a hub lifetime fiber it is outside the lifetime's
+// set, so the hub's close never interrupts it, and a hub built in process
+// stays alive. The hub's named work let go is `lifetime.fork(name, effect)`
+// (packages/hub/src/lifetime.ts), which close interrupts; the agent's is
+// `Effect.forkScoped` in the daemon's scope (or `Effect.forkIn` its scope).
+//
+// To move, each by its file, never by an inline suppression:
+// - packages/hub/src/intake.ts: a project's events run on a fiber of their
+//   own (slice H9 moves it onto lifetime.fork).
+`$_.forkDetach` as $hit where {
+  $filename <: r".*packages/(?:hub|agent)/src/.*",
+  $filename <: not includes "packages/hub/src/intake.ts",
+  register_diagnostic(span=$hit, message="A detached fork is stopped by nothing: in the hub, work let go is lifetime.fork(name, effect) (packages/hub/src/lifetime.ts), which close interrupts; in the agent, Effect.forkScoped in the daemon's scope (scripts/lint/no-detached-fork.grit).")
+}

@@ -1,0 +1,22 @@
+language js
+
+// Effect is the hub's and the agent's internals, and stays out of the
+// SvelteKit app (the owner's line, NEW.md 2026-07-31: "Effect v4 scope: hub
+// and agent-service internals … Don't force Effect into the SvelteKit
+// app"). So no file under apps/dashboard/ imports `effect`, a subpath of it,
+// the house Effect kit (`@cawco/core/effect/*`) or the keyed lock built on
+// it (`@cawco/core/keyed-lock`). The dashboard's retries take their waits
+// from `@cawco/core/backoff`, as they did.
+or {
+  `import $clause from $source` as $hit,
+  `import $source` as $hit,
+  `export { $names } from $source` as $hit,
+  `export * from $source` as $hit,
+  `export * as $_ from $source` as $hit,
+  `import($source)` as $hit,
+  `require($source)` as $hit
+} where {
+  $filename <: includes "apps/dashboard/",
+  $source <: r"[\"'](?:effect(?:/[^\"']*)?|@cawco/core/effect/[^\"']+|@cawco/core/keyed-lock)[\"']",
+  register_diagnostic(span=$hit, message="Effect stays in the hub's and the agent's internals, out of the dashboard (the owner's line: Effect v4 for hub and agent-service internals, not the SvelteKit app): no import of effect, @cawco/core/effect/* or @cawco/core/keyed-lock under apps/dashboard/ (scripts/lint/effect-backend-only.grit).")
+}

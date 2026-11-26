@@ -94,6 +94,12 @@
     // Every timer of the hub's control loop runs on its lifetime, named
     // (packages/hub/src/lifetime.ts).
     "./scripts/lint/hub-timers-named.grit",
+    // Effect is the hub's and the agent's internals: the dashboard imports
+    // none of it, nor the house Effect kit (packages/core/src/effect/).
+    "./scripts/lint/effect-backend-only.grit",
+    // A fiber the hub or the agent starts is stopped by what owns it:
+    // lifetime.fork in the hub, the daemon's scope in the agent.
+    "./scripts/lint/no-detached-fork.grit",
     // The hub's control loop reads its large tables by key; whole-table
     // reads are the views thread's (packages/hub/src/views/).
     "./scripts/lint/control-loop-keyed-reads.grit",

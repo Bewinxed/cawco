@@ -24,10 +24,31 @@
  *   run calls its own function again after a retry's delay is the same loop
  *   by timer, counted as `setTimeout → name`.
  *
+ * - **async-lock**: an import of `async-lock`.
+ * - **promise-map**: a `Map` (or `WeakMap`) whose values hold a `Promise` (a
+ *   variable, field or interface member typed `Map<…, Promise<…>>`, or set
+ *   to `new Map<…, Promise<…>>()`; the promise may be a union's arm, an
+ *   object's field, or a nested map's value): a join, a lock or a cache by
+ *   hand. Counted by the declared name.
+ * - **backoff-loop**: a `new Backoff(…)`: a retry that holds the house
+ *   backoff's state by hand. `backoffWait` and `backoffStep` on a count kept
+ *   in a row outlive the process and are not counted. Counted by the policy.
+ * - **bare-run**: `Effect.runPromise`, `runFork`, `runSync`, their `…With`
+ *   and `…Exit` forms, in packages/hub/src outside lifetime.ts: the hub's
+ *   edge is its lifetime. The agent's edge is `Effect.runPromise`
+ *   (CLAUDE.md, "Backend internals"), so the agent is not counted.
+ * - **hand-promise**: `new Promise(…)` or `Promise.withResolvers()`: a wait
+ *   for something to happen, settled by hand.
+ * - **error-class**: a class that extends `Error` itself: an expected
+ *   failure thrown, where Effect gives it a type in the error channel.
+ *   Counted by the class's name.
+ *
+ * Each kind's message names what replaces it, the house Effect kit
+ * (packages/core/src/effect/) among them.
+ *
  * Code a page runs (a directory under src whose tsconfig extends
  * tsconfig.browser.json: the stage's canvas, the file viewer, in-page) is
  * no part of the daemon's internals and is left out.
- * - **async-lock**: an import of `async-lock`.
  *
  *   bun scripts/effect-ratchet.ts                   exits 1 on a rise
  *   bun scripts/effect-ratchet.ts --write-baseline  starts a kind the baseline does not hold
@@ -56,10 +77,25 @@ const KINDS = {
     "a retry, a backoff or a poll is Effect.retry or Effect.repeat with a Schedule",
   "async-lock":
     "a lock is a Semaphore (per key, in an RcMap); a gate is a Latch",
+  "promise-map":
+    "callers sharing one run in flight are a join (@cawco/core/effect/join); work one at a time per key is @cawco/core/keyed-lock; a value kept after its run is a Cache",
+  "backoff-loop":
+    "a retry is Effect.retry with backoffSchedule(policy) (@cawco/core/effect/backoff-schedule)",
+  "bare-run":
+    "the hub's edge is its lifetime: lifetime.run and lifetime.fork (packages/hub/src/lifetime.ts)",
+  "hand-promise":
+    "a wait for something to happen is a Deferred, a Latch or Effect.callback; a poll is lookUntil (@cawco/core/effect/poll); a read with a deadline is @cawco/core/effect/bounded",
+  "error-class":
+    "an expected failure is a Schema.TaggedError in the error channel",
 };
 type Kind = keyof typeof KINDS;
 
 const SCOPE = /^packages\/(?:hub|agent)\/src\/.*\.[cm]?tsx?$/u;
+/** Where `bare-run` counts: the hub, whose lifetime is its one edge. */
+const HUB = /^packages\/hub\/src\//u;
+const LIFETIME_FILE = "packages/hub/src/lifetime.ts";
+/** Effect's ways to run an effect outside one: `run{Promise,Fork,Sync}`, with `Exit` and `With` (`runPromiseExitWith`). */
+const RUN = /^run(?:Promise|Fork|Sync)(?:Exit)?(?:With)?$/u;
 /** Planted mistakes and generated modules. */
 const SKIPPED = /\/fixtures\/|\.gen\.ts$|\.d\.ts$/u;
 const CHAIN_METHODS = new Set(["then", "catch", "finally"]);
@@ -485,6 +521,125 @@ const timerRetry = (node: ts.CallExpression): string | undefined => {
   return calls ? `${callee.getText()} → ${name}` : undefined;
 };
 
+const MAPS = new Set(["Map", "WeakMap"]);
+
+/**
+ * Whether a map's value type holds a promise: `Promise<…>` itself, an arm
+ * of a union or an intersection, a field of an object type
+ * (`{ at: number; listed: Promise<Listed> }`), or the values of a map in it.
+ */
+const holdsPromise = (type: ts.TypeNode): boolean => {
+  if (ts.isParenthesizedTypeNode(type)) {
+    return holdsPromise(type.type);
+  }
+  if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)) {
+    return type.types.some(holdsPromise);
+  }
+  if (ts.isTypeLiteralNode(type)) {
+    return type.members.some(
+      (member) =>
+        ts.isPropertySignature(member) &&
+        member.type !== undefined &&
+        holdsPromise(member.type)
+    );
+  }
+  return (
+    ts.isTypeReferenceNode(type) &&
+    ts.isIdentifier(type.typeName) &&
+    (type.typeName.text === "Promise" || isPromiseMap(type))
+  );
+};
+
+/** Whether `Map<K, V>` or `WeakMap<K, V>` (a type or a `new`'s type arguments) has values that hold a promise. */
+const isPromiseMap = (at: ts.TypeReferenceNode | ts.NewExpression): boolean => {
+  const name = ts.isTypeReferenceNode(at) ? at.typeName : at.expression;
+  const value = at.typeArguments?.[1];
+  return (
+    ts.isIdentifier(name) &&
+    MAPS.has(name.text) &&
+    value !== undefined &&
+    holdsPromise(value)
+  );
+};
+
+/** Whether a declared type is a map of promises, or a mapped type of them (`{ [K in Op]: Map<string, Promise<…>> }`). */
+const isMapOfPromises = (type: ts.TypeNode): boolean =>
+  ts.isMappedTypeNode(type)
+    ? type.type !== undefined && isMapOfPromises(type.type)
+    : ts.isTypeReferenceNode(type) && isPromiseMap(type);
+
+/**
+ * A variable, a field or a field's type (an interface's, a type literal's)
+ * that is a map of promises (`Map<…, Promise<…>>`, `new Map<…,
+ * Promise<…>>()`, a `WeakMap` alike): its name.
+ */
+const promiseMap = (node: ts.Node): string | undefined => {
+  if (!(
+    ts.isVariableDeclaration(node) ||
+    ts.isPropertyDeclaration(node) ||
+    ts.isPropertySignature(node)
+  )) {
+    return;
+  }
+  const initializer =
+    ts.isPropertySignature(node) || node.initializer === undefined
+      ? undefined
+      : bare(node.initializer);
+  const made =
+    initializer !== undefined &&
+    ts.isNewExpression(initializer) &&
+    isPromiseMap(initializer);
+  const typed = node.type !== undefined && isMapOfPromises(node.type);
+  return made || typed ? node.name.getText() : undefined;
+};
+
+/** `new Backoff(policy)`: the policy's text. */
+const backoffLoop = (node: ts.Node): string | undefined =>
+  ts.isNewExpression(node) &&
+  ts.isIdentifier(node.expression) &&
+  node.expression.text === "Backoff"
+    ? `new Backoff(${node.arguments?.map((one) => one.getText()).join(", ") ?? ""})`
+    : undefined;
+
+/** `Effect.runPromise` and its kin, called or handed on: its text. */
+const bareRun = (node: ts.Node, file: string): string | undefined =>
+  HUB.test(file) &&
+  file !== LIFETIME_FILE &&
+  ts.isPropertyAccessExpression(node) &&
+  ts.isIdentifier(node.expression) &&
+  node.expression.text === "Effect" &&
+  RUN.test(node.name.text)
+    ? node.getText()
+    : undefined;
+
+/** `new Promise(…)` or `Promise.withResolvers()`: which. */
+const handPromise = (node: ts.Node): string | undefined => {
+  if (
+    ts.isNewExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "Promise"
+  ) {
+    return "new Promise";
+  }
+  return ts.isCallExpression(node) &&
+    node.expression.getText() === "Promise.withResolvers"
+    ? "Promise.withResolvers"
+    : undefined;
+};
+
+/** A class that extends `Error` itself: its name. */
+const errorClass = (node: ts.Node): string | undefined => {
+  if (!(ts.isClassDeclaration(node) || ts.isClassExpression(node))) {
+    return;
+  }
+  const extended = node.heritageClauses
+    ?.find((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)
+    ?.types.at(0)?.expression;
+  return extended && ts.isIdentifier(extended) && extended.text === "Error"
+    ? (node.name?.text ?? "(anonymous)")
+    : undefined;
+};
+
 const asyncLock = (node: ts.Node): string | undefined =>
   ts.isImportDeclaration(node) &&
   ts.isStringLiteral(node.moduleSpecifier) &&
@@ -492,32 +647,38 @@ const asyncLock = (node: ts.Node): string | undefined =>
     ? "async-lock"
     : undefined;
 
+/** Every kind `node` is, with its shape: one node may be two (a `new Promise` resolved by a timer in a loop is a timed loop and a hand-settled promise). */
 const kindsOf = (
   node: ts.Node,
-  names: ReadonlySet<string>
-): { kind: Kind; shape: string } | undefined => {
-  if (ts.isCallExpression(node)) {
-    const map = perKeyChain(node);
-    if (map) {
-      return { kind: "per-key-chain", shape: map };
-    }
-  }
-  if (ts.isBinaryExpression(node)) {
-    const target = promiseChain(node);
-    if (target) {
-      return { kind: "promise-chain", shape: target };
-    }
-  }
-  if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-    const wait =
-      timedLoop(node, names) ??
-      (ts.isCallExpression(node) ? timerRetry(node) : undefined);
-    if (wait) {
-      return { kind: "timed-loop", shape: wait };
-    }
-  }
-  const lock = asyncLock(node);
-  return lock ? { kind: "async-lock", shape: lock } : undefined;
+  names: ReadonlySet<string>,
+  file: string
+): { kind: Kind; shape: string }[] => {
+  const shapes: [Kind, string | undefined][] = [
+    [
+      "per-key-chain",
+      ts.isCallExpression(node) ? perKeyChain(node) : undefined,
+    ],
+    [
+      "promise-chain",
+      ts.isBinaryExpression(node) ? promiseChain(node) : undefined,
+    ],
+    [
+      "timed-loop",
+      ts.isCallExpression(node) || ts.isNewExpression(node)
+        ? (timedLoop(node, names) ??
+          (ts.isCallExpression(node) ? timerRetry(node) : undefined))
+        : undefined,
+    ],
+    ["async-lock", asyncLock(node)],
+    ["promise-map", promiseMap(node)],
+    ["backoff-loop", backoffLoop(node)],
+    ["bare-run", bareRun(node, file)],
+    ["hand-promise", handPromise(node)],
+    ["error-class", errorClass(node)],
+  ];
+  return shapes.flatMap(([kind, shape]) =>
+    shape === undefined ? [] : [{ kind, shape }]
+  );
 };
 
 const found: Found[] = [];
@@ -553,8 +714,7 @@ for (const file of repoFiles(["packages/hub/src", "packages/agent/src"])) {
   const source = parsed(file, readFileSync(join(ROOT, file), "utf8"));
   const names = waitNames(source);
   const visit = (node: ts.Node): void => {
-    const hit = kindsOf(node, names);
-    if (hit) {
+    for (const hit of kindsOf(node, names, file)) {
       found.push({
         file,
         line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
