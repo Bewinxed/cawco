@@ -28,7 +28,16 @@ import { HARNESS_PLUGINS } from "./harness/kinds";
 const CloneDenyEmptySchema = z.discriminatedUnion("kind", [
   /** `readOnly`: made with no write bits, so no host tool fills it. */
   z.object({ kind: z.literal("dir"), readOnly: z.literal(true).optional() }),
-  z.object({ kind: z.literal("file"), text: z.string() }),
+  /**
+   * `readOnly`: made with no write bits, and so given text: an empty file
+   * with none is what a host takes for a mount point a sandbox left
+   * (agent boundary-host.ts `leftMountPoint`).
+   */
+  z.object({
+    kind: z.literal("file"),
+    text: z.string(),
+    readOnly: z.literal(true).optional(),
+  }),
   z.object({ kind: z.literal("none") }),
 ]);
 type CloneDenyEmpty = z.infer<typeof CloneDenyEmptySchema>;
@@ -80,7 +89,7 @@ const SRT_DIRS = [".vscode", ".idea"];
  * the owner picked "Admin tools only" (2026-10-23).
  */
 
-/** The one stand-in for a path two harnesses name: a dir read-only when either holds it so; any other two that differ are a descriptor's mistake, refused. */
+/** The one stand-in for a path two harnesses name: a dir, or a file of one text, read-only when either holds it so; any other two that differ are a descriptor's mistake, refused. */
 const oneStandIn = (
   path: string,
   held: CloneDenyEmpty,
@@ -92,9 +101,15 @@ const oneStandIn = (
       : DIR;
   }
   if (
-    (held.kind === "none" && named.kind === "none") ||
-    (held.kind === "file" && named.kind === "file" && held.text === named.text)
+    held.kind === "file" &&
+    named.kind === "file" &&
+    held.text === named.text
   ) {
+    return held.readOnly || named.readOnly
+      ? { kind: "file", text: held.text, readOnly: true }
+      : held;
+  }
+  if (held.kind === "none" && named.kind === "none") {
     return held;
   }
   throw new Error(

@@ -416,6 +416,9 @@ const makeStandIn = (
     // In place, never renamed over: this inode is the mount point a sandbox
     // left, and a rename would put another file where the mount is.
     writeFileSync(path, empty.text, { flag: "r+" });
+    if (empty.readOnly) {
+      chmodSync(path, 0o444);
+    }
     return;
   }
   if (left) {
@@ -432,15 +435,16 @@ const makeStandIn = (
       chmodSync(path, 0o555);
     }
   } else {
-    // Writable whatever the umask: an empty file with no write bits is what
-    // this host takes for a mount point an earlier sandbox left
-    // (leftMountPoint), and would replace at the next start.
+    // Writable whatever the umask unless it is read-only, which holds text:
+    // an empty file with no write bits is what this host takes for a mount
+    // point an earlier sandbox left (leftMountPoint), and would replace at
+    // the next start.
     // In place: its folder is the clone's own, made above or there already,
     // and a clone deleted since is never made again by this write.
     writeStateFileSync(path, empty.text, {
       exclusive: true,
       inPlace: true,
-      mode: 0o644,
+      mode: empty.readOnly ? 0o444 : 0o644,
     });
   }
 };

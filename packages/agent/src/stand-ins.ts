@@ -142,6 +142,9 @@ export const rewriteLeftFiles = async (ref: WorkspaceRef): Promise<boolean> => {
       // In place, never renamed over: this inode is the mount point a
       // sandbox left, and a rename would put another file where it is.
       await writeFile(path, empty.text, { flag: "r+" });
+      if (empty.readOnly) {
+        await chmod(path, 0o444);
+      }
     } else {
       dirs = true;
     }

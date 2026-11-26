@@ -12,6 +12,13 @@ import type { DeniedToolNames, HarnessDescriptor } from "./descriptor";
 /** An empty dir with no write bits, so agy's own writes on the host never fill it. */
 const HELD = { kind: "dir", readOnly: true } as const;
 
+/** A regular file with no write bits holding the least config agy accepts. */
+const CODEIUM = {
+  kind: "file",
+  text: "version: v1\n",
+  readOnly: true,
+} as const;
+
 /**
  * Every customization dir agy 1.5.5 loads from a project root and runs on
  * the host, each held whole: the dirs hold more loadable names than a list
@@ -32,6 +39,11 @@ export const AGY_CLONE_CONFIG = {
   _agents: HELD,
   _agent: HELD,
   ".gemini": HELD,
+  // agy reads the first of these in its folder or any above it, strictly; a FIFO there hangs it, a link is followed, and `version: v1` is taken as nothing set and ends the search (host probe, the project's `assets/4bb96385/REPORT.md`).
+  "codeium.yml": CODEIUM,
+  "codeium.yaml": CODEIUM,
+  ".codeium.yml": CODEIUM,
+  ".codeium.yaml": CODEIUM,
 } as const satisfies HarnessDescriptor["cloneConfig"];
 
 /**

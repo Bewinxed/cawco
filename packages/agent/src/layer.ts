@@ -588,7 +588,8 @@ const standInsOf = async (id: string, layer: Layer): Promise<StandIn[][]> => {
           }
         : {
             kind: "file",
-            mode: 0o644,
+            mode:
+              deny.empty.kind === "file" && deny.empty.readOnly ? 0o444 : 0o644,
             path: rel,
             text: deny.empty.kind === "file" ? deny.empty.text : "",
           }
