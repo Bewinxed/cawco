@@ -85,6 +85,9 @@
     return () => cancelAnimationFrame(frame);
   };
 
+  /** Multi-shelf wide groups flow across two columns when roomy. */
+  const flowing = $derived(foundation.shelves.length >= 4 && foundation.wide);
+
   /** A token's name past its kind prefix: `--color-bg-2` -> "bg-2". */
   const short = (name: string) => name.replace(KIND_PREFIX, "");
 
@@ -180,9 +183,17 @@
 {:else if foundation.inUse === "layout"}
   <Layout />
 {:else}
-  <div class="flex flex-col gap-space-4" {@attach readAll(pair)}>
+  <div
+    class={flowing ? "columns-2 gap-space-4" : "flex flex-col gap-space-4"}
+    {@attach readAll(pair)}
+  >
     {#each foundation.shelves.filter((one) => one.names.length > 0) as shelf (shelf.title)}
-      <div class="flex flex-col gap-space-2">
+      <div
+        class={[
+          "flex flex-col gap-space-2",
+          flowing && "mb-space-4 break-inside-avoid",
+        ]}
+      >
         {#if foundation.shelves.length > 1}
           <h4 class="text-tx-2 type-meta">{shelf.title}</h4>
         {/if}
