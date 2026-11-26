@@ -14,7 +14,6 @@
  * (`window is not defined` as its module loads), and Mermaid renders SVG.
  */
 
-import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
   type CanvasEntry,
@@ -25,10 +24,11 @@ import {
   NO_SCREEN,
 } from "@cawco/core/canvas";
 import { docMeta, setMeta } from "@cawco/core/doc-meta";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
-import { until } from "@cawco/core/until";
 import { injectOverlay } from "@cawco/preview/proxy";
+import { DateTime, Deferred, Duration, Effect } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
@@ -136,15 +136,15 @@ export const canvasEntries = (
     });
 
 /** Waits until a screen has joined the canvas, at most `ms`; whether one has. */
-export const screenJoined = async (
+export const screenJoined = (
   docs: ArtifactDocs,
   artifactId: string,
   ms: number
-): Promise<boolean> =>
-  until(() => docs.screens(artifactId) > 0, {
-    deadline: Date.now() + ms,
-    every: 100,
-  });
+): Effect.Effect<boolean> =>
+  lookUntil(
+    { every: 100, deadlineMs: ms, until: (joined: boolean) => joined },
+    Effect.sync(() => docs.screens(artifactId) > 0)
+  ).pipe(Effect.map((looked) => looked.kind === "found"));
 
 /**
  * The agent's write changed the scene now (`meta.wroteAt`): the
@@ -178,16 +178,45 @@ export const pictureShowsWrite = (
     : canvasEntries(docs, artifactId).every((entry) => entry.el.isDeleted);
 };
 
+/** What can be watched for a change: a Yjs type. */
+interface Observed {
+  observe: (listener: () => void) => void;
+  unobserve: (listener: () => void) => void;
+}
+
+/**
+ * What `answer` reads once `target` changes and it reads something: the
+ * first answer after the wait starts. Its observer is removed however the
+ * wait ends: answered, or let go.
+ */
+const heardOn = Effect.fnUntraced(function* <A>(
+  target: Observed,
+  answer: () => A | undefined
+): Effect.fn.Return<A> {
+  const answered = yield* Deferred.make<A>();
+  const listener = () => {
+    const value = answer();
+    if (value !== undefined) {
+      Deferred.doneUnsafe(answered, Effect.succeed(value));
+    }
+  };
+  return yield* Effect.acquireUseRelease(
+    Effect.sync(() => target.observe(listener)),
+    () => Deferred.await(answered),
+    () => Effect.sync(() => target.unobserve(listener))
+  );
+});
+
 /**
  * Waits for the picture owed after the agent's last write, from whichever
  * screen draws it (a person's, or the hub machine's headless one), until
  * `screenHoldMs` after that write: the hold the headless screen keeps for
  * the same picture. Whether the picture shows the write once it returns.
  */
-export const pictureOfWrite = async (
+export const pictureOfWrite = Effect.fnUntraced(function* (
   docs: ArtifactDocs,
   artifactId: string
-): Promise<boolean> => {
+): Effect.fn.Return<boolean> {
   if (pictureShowsWrite(docs, artifactId)) {
     return true;
   }
@@ -197,32 +226,20 @@ export const pictureOfWrite = async (
   if (!wroteAt) {
     return true;
   }
-  const wrote = Date.parse(wroteAt);
-  const left = wrote + CANVAS_LIMITS.screenHoldMs - Date.now();
+  const held = DateTime.add(DateTime.makeUnsafe(wroteAt), {
+    milliseconds: CANVAS_LIMITS.screenHoldMs,
+  });
+  const left = Duration.toMillis(DateTime.distance(yield* DateTime.now, held));
   if (left <= 0) {
     return false;
   }
-  let observer: (() => void) | undefined;
-  try {
-    const waited = await readWithin(
-      left,
-      () =>
-        new Promise<true>((resolve) => {
-          observer = () => {
-            if (pictureShowsWrite(docs, artifactId)) {
-              resolve(true);
-            }
-          };
-          meta.observe(observer);
-        })
-    );
-    return waited.kind === "answered";
-  } finally {
-    if (observer) {
-      meta.unobserve(observer);
-    }
-  }
-};
+  return yield* boundedRead(
+    left,
+    heardOn(meta, () =>
+      pictureShowsWrite(docs, artifactId) ? true : undefined
+    )
+  ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(false)));
+});
 
 /** The refusal of a write no screen could convert, or that the hub refused before any did: why, in words a session acts on. */
 export const unconverted = (why: string) =>
@@ -235,14 +252,14 @@ export const unconverted = (why: string) =>
  * Hands the agent's write to a screen and waits for it: the ids it wrote.
  * Refused with {@link NO_SCREEN} when the screen it was handed to has left,
  * when none takes it in time, or with the screen's own word when it could
- * not convert.
+ * not convert. The request leaves the doc however the wait ends.
  */
-export const convertOnScreen = async (
+export const convertOnScreen = Effect.fnUntraced(function* (
   docs: ArtifactDocs,
   artifactId: string,
   kind: CanvasRequestKind,
   payload: CanvasRequestPayload
-) => {
+) {
   if (docs.screens(artifactId) === 0) {
     return problem(503, {
       code: "artifact-canvas-no-screen",
@@ -261,46 +278,31 @@ export const convertOnScreen = async (
     request.set("at", new Date().toISOString());
     requests.set(id, request);
   });
-  let observer: (() => void) | undefined;
-  try {
-    const drawn = await readWithin(
-      CANVAS_LIMITS.convertMs,
-      () =>
-        new Promise<CanvasRequestResult>((resolve) => {
-          const answered = () => {
-            const value = REQUEST_RESULT.safeParse(request.get("result"));
-            if (value.success) {
-              resolve(value.data);
-            }
-          };
-          observer = answered;
-          request.observe(answered);
-        })
-    );
-    let result: CanvasRequestResult;
-    switch (drawn.kind) {
-      case "answered":
-        result = drawn.value;
-        break;
-      case "unanswered":
-        return problem(504, {
+  return yield* boundedRead(
+    CANVAS_LIMITS.convertMs,
+    heardOn(request, () => {
+      const value = REQUEST_RESULT.safeParse(request.get("result"));
+      return value.success ? value.data : undefined;
+    })
+  ).pipe(
+    Effect.map((result) =>
+      "error" in result ? unconverted(result.error) : result.ids
+    ),
+    Effect.catchTag("Unanswered", (unanswered) =>
+      Effect.succeed(
+        problem(504, {
           code: "artifact-canvas-undrawn",
-          detail: `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`,
-        });
-      default:
-        unhandled("read", drawn);
-    }
-    if ("error" in result) {
-      return unconverted(result.error);
-    }
-    return result.ids;
-  } finally {
-    if (observer) {
-      request.unobserve(observer);
-    }
-    docs.transact(artifactId, "hub", () => requests.delete(id));
-  }
-};
+          detail: `The canvas wasn't changed: no screen drew it within ${secondsOf(unanswered.after)} s. Try again.`,
+        })
+      )
+    ),
+    Effect.ensuring(
+      Effect.sync(() => {
+        docs.transact(artifactId, "hub", () => requests.delete(id));
+      })
+    )
+  );
+});
 
 /**
  * Deletes elements by id on the hub, with the labels bound inside them (no

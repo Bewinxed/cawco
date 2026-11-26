@@ -21,9 +21,10 @@ import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import type { PictureSize } from "@cawco/core/decisions-library";
-import { detach } from "@cawco/core/detach";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import { folderKey } from "@cawco/preview/proxy";
+import { Effect } from "effect";
 import type { ServedMedia } from "./artifacts/shapes";
 import { ARTIFACTS_ROOT } from "./config";
 import type {
@@ -31,6 +32,7 @@ import type {
   ArtifactDocumentsDb,
 } from "./db/artifact-documents";
 import type { ArtifactRow } from "./db/artifacts";
+import type { HubLifetimeShape } from "./lifetime";
 import type { StoredPiece } from "./preview-server/document";
 
 /** How long marks gather before they are built together. Our call: a burst of picks or a page's files written one by one is one build. */
@@ -50,6 +52,8 @@ export interface ArtifactDocumentsDeps {
   embedOf: (
     row: ArtifactRow
   ) => { key: string } | { unopened: string } | undefined;
+  /** The hub's lifetime: the gathered builds run on it as named work let go. */
+  lifetime: HubLifetimeShape;
   /** The origin key that serves a page (artifact-pages.ts `originKeyOf`). */
   originOf: (id: string) => string | undefined;
   /** A decision page's program as the hub serves it (artifacts service `programServed`). */
@@ -73,8 +77,11 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
   /** Ids marked and not built yet. */
   const marked = new Set<string>();
   let gathering = false;
-  /** The build running now, which the next waits on: two never interleave their writes. */
-  let building: Promise<void> = Promise.resolve();
+  /**
+   * One build at a time per artifact: the document kept last for an id is
+   * from its newest read. Builds of different ids run beside each other.
+   */
+  const builds = makeKeyedLock<string>();
 
   /** One piece of a page's media as its document keeps it ({@link storedMedia}); `owner` the origin that serves the page. */
   const storedPiece = (
@@ -201,21 +208,30 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
     deps.documents.keep(kept);
   };
 
-  /** Every mark built, each once, then told. */
+  /** Artifact `id`'s document built in its turn. */
+  const buildInTurn = (id: string): Effect.Effect<void, unknown> =>
+    builds.withLock(
+      id,
+      Effect.tryPromise({ try: () => buildOne(id), catch: (error) => error })
+    );
+
+  /** Every mark built, each once, each in its own artifact's turn. */
   const flush = (): void => {
     gathering = false;
     const ids = [...marked];
     marked.clear();
-    building = building.then(async () => {
-      for (const id of ids) {
-        try {
-          await buildOne(id);
-        } catch (error) {
-          console.error(`[documents] ${id} wasn't built`, error);
-        }
-      }
-    });
-    detach(building, "artifact documents built");
+    for (const id of ids) {
+      deps.lifetime.fork(
+        "artifact document built",
+        buildInTurn(id).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              console.error(`[documents] ${id} wasn't built`, error);
+            })
+          )
+        )
+      );
+    }
   };
 
   return {
@@ -236,13 +252,15 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
       }
     },
 
-    /** Artifact `id`'s document built now, after any build running: what the preview server asks for when it finds none, or one read from a doc that moved since. */
-    async build(id: string): Promise<ArtifactDocumentRow | undefined> {
-      const run = building.then(() => buildOne(id));
-      building = run.catch(() => undefined);
-      await run;
-      return deps.documents.get(id);
-    },
+    /**
+     * The promise edge of artifact `id`'s document built now, after any
+     * build of it running: what the preview server asks for when it finds
+     * none, or one read from a doc that moved since.
+     */
+    build: (id: string): Promise<ArtifactDocumentRow | undefined> =>
+      deps.lifetime.run(
+        buildInTurn(id).pipe(Effect.map(() => deps.documents.get(id)))
+      ),
   };
 };
 

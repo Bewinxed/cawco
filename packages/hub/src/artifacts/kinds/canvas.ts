@@ -195,7 +195,11 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     if (one instanceof ElysiaStatus) {
       return one;
     }
-    if (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)) {
+    if (
+      await ctx.deps.lifetime.run(
+        screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)
+      )
+    ) {
       return one;
     }
     one.release();
@@ -317,15 +321,17 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     }
     const replacing = replace ? { replace: true as const } : {};
     const convert = () =>
-      "elements" in change
-        ? convertOnScreen(docs, row.id, "elements", {
-            elements: change.elements,
-            ...replacing,
-          })
-        : convertOnScreen(docs, row.id, "mermaid", {
-            mermaid: change.mermaid,
-            ...replacing,
-          });
+      ctx.deps.lifetime.run(
+        "elements" in change
+          ? convertOnScreen(docs, row.id, "elements", {
+              elements: change.elements,
+              ...replacing,
+            })
+          : convertOnScreen(docs, row.id, "mermaid", {
+              mermaid: change.mermaid,
+              ...replacing,
+            })
+      );
     if (docs.screens(row.id) > 0 && !headless.has(row.id)) {
       return await convert();
     }
@@ -635,7 +641,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   ): Promise<ArtifactRead> => {
     if (drawn) {
       // The picture owed after the last write, so it shows that write.
-      await pictureOfWrite(docs, now.id);
+      await ctx.deps.lifetime.run(pictureOfWrite(docs, now.id));
     }
     const theirs = readCanvas(row, since, drawn && now === row, ownersRead);
     if (now === row) {

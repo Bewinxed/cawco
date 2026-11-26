@@ -65,7 +65,6 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
-import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -81,11 +80,13 @@ import {
 } from "@cawco/design-tokens/design-tokens";
 import { resolverFiles, tokensIn } from "@cawco/design-tokens/dtcg-resolver";
 import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
 import { boardTitle } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import { awayProblem } from "./machine-answers";
 import { machineName } from "./machine-name";
 import {
@@ -1618,6 +1619,8 @@ interface ProposalPlace {
 
 export const createDesignSystem = (deps: {
   run: Run;
+  /** The hub's lifetime: the proposals read again at start run on it as named work let go. */
+  lifetime: HubLifetimeShape;
   ownMachineId: Promise<string>;
   folderChanged: (projectId: string) => void;
   db: Pick<
@@ -2349,9 +2352,9 @@ export const createDesignSystem = (deps: {
         }
       }
       // design/ may have changed while no hub watched it.
-      detach(
-        recheck(() => true),
-        "design proposals read again as the hub starts"
+      deps.lifetime.fork(
+        "design proposals read again as the hub starts",
+        Effect.tryPromise(() => recheck(() => true))
       );
     },
   };

@@ -5732,6 +5732,7 @@ export const createServer = (
   const artifactDocuments = createArtifactDocuments({
     after: lifetime.after,
     documents: db.documents,
+    lifetime,
     embedOf: (row) => {
       if (!hasOwnOrigin(row)) {
         return;
@@ -11320,6 +11321,7 @@ export const createServer = (
   // The hub's own session tools (hub-tools.ts): what sessions once did on
   // the person's routes.
   const designSystem = createDesignSystem({
+    lifetime,
     // Inside a live workspace's boundary when one is named (core safe-git.ts).
     run: (machineId, cwd, cmd, timeoutMs, workspace) =>
       runOnMachine(machineId, cwd, cmd, timeoutMs, workspace),

@@ -1,4 +1,3 @@
-import { detach } from "@cawco/core/detach";
 import { machineLabel } from "@cawco/core/machine-names";
 import { localDashboardPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
@@ -6,6 +5,7 @@ import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { DASHBOARD_PORT, HUB_PORT } from "../../config";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
@@ -326,15 +326,17 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       return;
     }
     const tree = `${workspaceIdKindOf(server.workspace) === "place" ? "place" : "workspace"} ${server.workspace.slice(0, 8)}`;
-    detach(
-      deps.stopServed(machineId, server).then((ran) => {
-        console.info(
-          ran === undefined
-            ? `[artifacts] ${what}: its server on port ${server.port} in ${tree} was not stopped, as its machine did not answer; it sleeps once unused`
-            : `[artifacts] ${what}: its server on port ${server.port} in ${tree} ${ran ? "stopped" : "was not running"}, as no artifact is served from it; its copy retires by the workspace sweep once nothing runs in it`
-        );
-      }),
-      "preview server stop"
+    deps.lifetime.fork(
+      "preview server stop",
+      Effect.tryPromise(() =>
+        deps.stopServed(machineId, server).then((ran) => {
+          console.info(
+            ran === undefined
+              ? `[artifacts] ${what}: its server on port ${server.port} in ${tree} was not stopped, as its machine did not answer; it sleeps once unused`
+              : `[artifacts] ${what}: its server on port ${server.port} in ${tree} ${ran ? "stopped" : "was not running"}, as no artifact is served from it; its copy retires by the workspace sweep once nothing runs in it`
+          );
+        })
+      )
     );
   };
   /**
@@ -392,10 +394,16 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       }
     };
     for (const { at, warm } of sheets.values()) {
-      detach(deps.warmStage(at, warm).then(warmed), "stage warm-up");
+      deps.lifetime.fork(
+        "stage warm-up",
+        Effect.tryPromise(() => deps.warmStage(at, warm).then(warmed))
+      );
     }
     for (const media of servers.values()) {
-      detach(serveFirst(media.source).then(warmed), "stage warm-up");
+      deps.lifetime.fork(
+        "stage warm-up",
+        Effect.tryPromise(() => serveFirst(media.source).then(warmed))
+      );
     }
   };
   /**

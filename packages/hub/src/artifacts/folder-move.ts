@@ -15,12 +15,14 @@
  * machine away, silent or with no home folder recorded leaves its rows as
  * they stand, for its next register.
  */
+
 import { join } from "node:path";
-import { detach } from "@cawco/core/detach";
 import { workspacesDirUnder } from "@cawco/core/paths/workspace";
 import { previewWords } from "@cawco/core/words/preview";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import type { ArtifactsDb } from "../db/artifacts";
+import type { HubLifetimeShape } from "../lifetime";
 import type { createDesignFiles } from "./design-files";
 import type { DesignFile } from "./design-folder";
 import { FOLDER_LIMITS } from "./preview-folder";
@@ -40,6 +42,8 @@ export interface FolderMoveDeps {
   keepPins: (machineId: string, pins: string[]) => void;
   /** Whether folder preview `id` has its files where the hub serves them (page-store.ts `hasFolder`). */
   kept: (id: string) => boolean;
+  /** The hub's lifetime: a machine's move runs on it as named work let go. */
+  lifetime: Pick<HubLifetimeShape, "fork">;
   machineHome: (machineId: string) => string | null;
   /** Machine `machineId`'s name as the person reads it. */
   machineName: (machineId: string) => string;
@@ -130,9 +134,11 @@ export const createFolderMove = (deps: FolderMoveDeps) => {
         return;
       }
       moving.add(machineId);
-      detach(
-        moveOn(machineId).finally(() => moving.delete(machineId)),
-        "folder previews moved in"
+      deps.lifetime.fork(
+        "folder previews moved in",
+        Effect.tryPromise(() =>
+          moveOn(machineId).finally(() => moving.delete(machineId))
+        )
       );
     },
   };

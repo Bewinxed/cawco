@@ -45,6 +45,7 @@ import {
   notedLine,
   wroteLine,
 } from "@cawco/core/words/comment-lines";
+import { Effect } from "effect";
 import { problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
@@ -56,6 +57,7 @@ import { heldPictures } from "./held-pictures";
 import type { createPageStore } from "./page-store";
 import { sheetOf } from "./served";
 import type { MarksOutcome } from "./shapes";
+import { warned } from "./warned";
 
 /**
  * Pin `pin`'s link on artifact `artifact`, labelled by what it stands on
@@ -272,19 +274,21 @@ export const createMarks = (ctx: MarksContext) => {
           return;
         }
         delivering.add(id);
-        deliverMarks(id)
-          .catch((error: unknown) => {
-            console.warn(
-              `[artifacts] ${id}: the person's marks and the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
-            );
-          })
-          .then(() => ctx.sendAnswered(id))
-          .catch((error: unknown) => {
-            console.warn(
-              `[artifacts] ${id}: the person's answers did not go by themselves: ${error instanceof Error ? error.message : String(error)}`
-            );
-          })
-          .finally(() => delivering.delete(id));
+        deps.lifetime.fork(
+          "artifact marks delivered",
+          warned(
+            () => deliverMarks(id),
+            `[artifacts] ${id}: the person's marks and the sheet's saves and errors were not delivered`
+          ).pipe(
+            Effect.andThen(
+              warned(
+                () => ctx.sendAnswered(id),
+                `[artifacts] ${id}: the person's answers did not go by themselves`
+              )
+            ),
+            Effect.ensuring(Effect.sync(() => delivering.delete(id)))
+          )
+        );
       }),
     });
   };

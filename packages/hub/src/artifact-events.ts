@@ -9,7 +9,6 @@ import {
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { byPerson } from "@cawco/core/harness";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
@@ -45,6 +44,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import { designFolderOf } from "./artifacts/design-folder";
@@ -655,15 +655,17 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
                 )
               )
           ) {
-            detach(
-              ctx.tasks.waitsMoved(project.id).then((refused) => {
-                if (refused) {
-                  console.warn(
-                    `[task waits moved] failed: ${refused.response.detail}`
-                  );
-                }
-              }),
-              "task waits moved"
+            ctx.lifetime.fork(
+              "task waits moved",
+              Effect.tryPromise(() =>
+                ctx.tasks.waitsMoved(project.id).then((refused) => {
+                  if (refused) {
+                    console.warn(
+                      `[task waits moved] failed: ${refused.response.detail}`
+                    );
+                  }
+                })
+              )
             );
           }
         }

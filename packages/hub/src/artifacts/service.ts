@@ -34,7 +34,6 @@ import {
 } from "@cawco/core/artifact-needs";
 import { PICTURE_VIEW } from "@cawco/core/artifact-picture";
 import type { QuestionInput } from "@cawco/core/asks";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { type CanvasAuthor, canvasOutline } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
@@ -76,7 +75,6 @@ import {
   type SetupDrawn,
 } from "@cawco/core/decisions";
 import type { PictureSize } from "@cawco/core/decisions-library";
-import { detach } from "@cawco/core/detach";
 import {
   type ArtifactAsked,
   type ChangedItem,
@@ -86,6 +84,7 @@ import {
   type SentBy,
   setMeta,
 } from "@cawco/core/doc-meta";
+import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import {
   excerptOf,
   field,
@@ -141,12 +140,12 @@ import {
 } from "@cawco/core/stage";
 import { measureAskRefusal } from "@cawco/core/stage-measure-faults";
 import { DAY_MS } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { commentsFull } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
 import { designArtifactOf, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { pageHash } from "@cawco/preview/proxy";
+import { Effect, Option } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow, GoneArtifact } from "../db/artifacts";
@@ -255,6 +254,7 @@ import {
 import { routeOf } from "./sync";
 import { LIST_PAGE } from "./tools";
 import { createVersions } from "./versions";
+import { warned } from "./warned";
 
 /** `statements` merged into `existing` (decision-program.ts `mergeProgram`), or its refusal; what lang-core could not merge (it throws) is refused, nothing changed. */
 const merging = (existing: string, statements: string) => {
@@ -1297,6 +1297,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
   const folderMove = createFolderMove({
     db,
+    lifetime: deps.lifetime,
     folderFiles: deps.folderFiles,
     gone: sourceSeen,
     keepPins: deps.keepPins,
@@ -2027,31 +2028,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const waiting = new Map<string, (ack: ShownAck) => void>();
   const shownKey = (id: string, revision: string) => `${id}:${revision}`;
 
-  /** The first view's word on `revision` of artifact `id`, within {@link SHOWN_WAIT_MS}. */
-  const shownBy = (
+  /**
+   * The first view's word on `revision` of artifact `id`, within
+   * {@link SHOWN_WAIT_MS}; failing with `Unanswered` when none came. A
+   * word heard already is taken as it starts, before anything else runs.
+   */
+  const shownBy = Effect.fnUntraced(function* (
     id: string,
     revision: string
-  ): Promise<Bounded<ShownAck>> => {
+  ): Effect.fn.Return<ShownAck, Unanswered> {
     const key = shownKey(id, revision);
     const early = heard.get(key);
     if (early) {
       heard.delete(key);
-      return Promise.resolve({ kind: "answered", value: early });
+      return early;
     }
-    return readWithin(
+    return yield* boundedRead(
       SHOWN_WAIT_MS,
-      (signal) =>
-        new Promise<ShownAck>((done) => {
-          waiting.set(key, (ack) => {
+      Effect.callback<ShownAck>((resume) => {
+        const waiter = (ack: ShownAck) => {
+          waiting.delete(key);
+          resume(Effect.succeed(ack));
+        };
+        waiting.set(key, waiter);
+        // Let go unanswered: a later show's wait on the key stays.
+        return Effect.sync(() => {
+          if (waiting.get(key) === waiter) {
             waiting.delete(key);
-            done(ack);
-          });
-          signal.addEventListener("abort", () => waiting.delete(key), {
-            once: true,
-          });
-        })
+          }
+        });
+      })
     );
-  };
+  });
 
   /** Why a view could not load the artifact, in DESIGN.md's error formula: what failed, and why. */
   const notLoaded = (row: Placed, failure: ShownFailure): string => {
@@ -2161,25 +2169,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "shown wait",
       row,
       panel,
-      () => shownBy(row.id, published.revision),
-      (waited) => waited.kind === "answered"
+      () =>
+        deps.lifetime.run(Effect.option(shownBy(row.id, published.revision))),
+      Option.isSome
     );
-    let ack: ShownAck;
-    switch (shown.kind) {
-      case "answered":
-        ack = shown.value;
-        break;
-      case "unanswered":
-        // Not known yet, not failed: it is in the panel. Said as it stands:
-        // no view follows the session, or one does and drew nothing of it.
-        return {
-          opened: false,
-          why: deps.followed(panel ?? "") ? NOT_PUT_ON_SCREEN : NO_VIEW,
-          started: true,
-        };
-      default:
-        unhandled("read", shown);
+    if (Option.isNone(shown)) {
+      // Not known yet, not failed: it is in the panel. Said as it stands:
+      // no view follows the session, or one does and drew nothing of it.
+      return {
+        opened: false,
+        why: deps.followed(panel ?? "") ? NOT_PUT_ON_SCREEN : NO_VIEW,
+        started: true,
+      };
     }
+    const ack = shown.value;
     if (!ack.ok) {
       return {
         opened: false,
@@ -2688,13 +2691,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * `versionMoved`).
    */
   const folderStamped = (id: string): void => {
-    detach(
-      store.folderKey(id).then((key) => {
-        if (key !== null && getMeta(docs.doc(id), "folderKey") !== key) {
-          docs.transact(id, "hub", (doc) => docMeta(doc).set("folderKey", key));
-        }
-      }),
-      "telling a folder preview's pages its files moved"
+    deps.lifetime.fork(
+      "telling a folder preview's pages its files moved",
+      Effect.tryPromise(() =>
+        store.folderKey(id).then((key) => {
+          if (key !== null && getMeta(docs.doc(id), "folderKey") !== key) {
+            docs.transact(id, "hub", (doc) =>
+              docMeta(doc).set("folderKey", key)
+            );
+          }
+        })
+      )
     );
   };
 
@@ -3404,13 +3411,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     delivering.add(row.id);
-    sendAnswered(row.id)
-      .catch((error: unknown) => {
-        console.warn(
-          `[artifacts] ${row.id}: the person's answers did not go by themselves: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => delivering.delete(row.id));
+    deps.lifetime.fork(
+      "artifact answers sent",
+      warned(
+        () => sendAnswered(row.id),
+        `[artifacts] ${row.id}: the person's answers did not go by themselves`
+      ).pipe(Effect.ensuring(Effect.sync(() => delivering.delete(row.id))))
+    );
   };
 
   /**
@@ -4624,7 +4631,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       for (const [key, keep] of up) {
         if (now - (keptUpAt.get(key) ?? 0) >= KEEP_UP_MS) {
           keptUpAt.set(key, now);
-          detach(keep(), "keeping a waiting stage up");
+          deps.lifetime.fork(
+            "keeping a waiting stage up",
+            Effect.tryPromise(() => keep())
+          );
         }
       }
     },
