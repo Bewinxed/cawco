@@ -14,6 +14,7 @@ import type { CoverWaiting } from "./CoverState.svelte";
 import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
+import type { PreviewReach } from "./preview-reach.svelte";
 
 export interface StageCoverDeps {
   readonly instanceId: () => string;
@@ -21,6 +22,7 @@ export interface StageCoverDeps {
   readonly paneId: () => string;
   readonly paneSubject: PaneSubject;
   readonly previewFrame: PreviewFrame;
+  readonly previewReach: PreviewReach;
 }
 export class StageCover {
   readonly #deps: StageCoverDeps;
@@ -53,10 +55,14 @@ export class StageCover {
    * stage (a frame missed, a version opened over another's); a page that
    * answered is the stage serving. One that answered and then went silent is
    * the proxy's `down`, never a wait again. Nor while the hub says the page
-   * can't be shown: no frame is asked for.
+   * can't be shown, or this tab can't reach the page's origin: no frame
+   * stands, and the pane says that cause in the frame's place; the stage's
+   * time starts again once a frame is made.
    */
   readonly awaited = $derived.by(() =>
-    this.#deps.previewFrame.connected || this.#deps.previewFrame.hubHeld
+    this.#deps.previewFrame.connected ||
+    this.#deps.previewFrame.hubHeld ||
+    this.#deps.previewReach.unreached
       ? null
       : this.staged
   );

@@ -197,16 +197,16 @@ export class PreviewReach {
    * time, answered without its CORS header, the hub's word that it is down,
    * another answerer's status, and whether the hub itself reaches the
    * origin), the fix, and probes again by itself ({@link PROBES}, and at
-   * once when its tab is back in view) until one answers, when the frame loads again ({@link recovered}).
+   * once when its tab is back in view) until one answers. No frame stands
+   * meanwhile (the pane draws what failed in its place), so the one made
+   * once it answers is the page's load (PreviewFrame takes the old one down
+   * as the origin goes unreached).
    */
   reached = $state<
     | { origin: string; ok: true }
     | { origin: string; ok: false; said: string; tries: number }
     | null
   >(null);
-
-  /** Each one is an origin probed unreached that answers now: the frame holding the browser's own error page loads again. */
-  recovered = $state(0);
 
   /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
   probe = $state(0);
@@ -276,9 +276,6 @@ export class PreviewReach {
                   tries: failedBefore ? was.tries + 1 : 1,
                 }
               : { origin, ok: true };
-            if (!said && failedBefore) {
-              this.recovered += 1;
-            }
           });
         },
         again ? 0 : PROBE_AFTER_MS

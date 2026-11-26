@@ -281,6 +281,9 @@ export class PreviewFrame {
   /** The frame whose page last said anything at all to the pane (its overlay, the proxy's down page, the lock's turn-away). */
   heardKey = $state<string | null>(null);
 
+  /** The current frame's page has said something: its origin answered. A new frame's key alone leaves it as it was, so the reach probe waiting on it isn't asked again. */
+  readonly arrived = $derived(this.heardKey === this.frameKey);
+
   /**
    * The frame finished loading and its page never said a word: no overlay
    * answered in PAGE_SILENT_MS and no proxy's page named a hop, though the
@@ -431,11 +434,16 @@ export class PreviewFrame {
         });
       }
     });
-    // The origin answers again after a probe found it unreached: the frame
-    // holds the browser's own error page, so it loads again.
+    // This tab not reaching the origin takes the frame down (the pane says
+    // what failed in its place), as the hub's word does: the frame made once
+    // the origin answers is a new load, and the one it replaced holds no
+    // paint to stand on. Bumped as it goes, not as it comes back: a bump on
+    // the way back first made the old key's frame afresh, then the new one
+    // beside it, two loads of the page at once.
     $effect(() => {
-      if (this.#deps.previewReach.recovered > 0) {
+      if (this.#deps.previewReach.unreached) {
         untrack(() => {
+          this.standing = null;
           this.reload += 1;
         });
       }

@@ -156,7 +156,7 @@
   });
   const previewReach = new PreviewReach({
     // Read once the pane runs: the frame's state is made beside it.
-    arrived: () => previewFrame.heardKey === previewFrame.frameKey,
+    arrived: () => previewFrame.arrived,
     instanceId: () => instanceId,
     onScreen: () => onScreen,
     paneSubject,
@@ -207,6 +207,7 @@
     paneId: () => paneId,
     paneSubject,
     previewFrame,
+    previewReach,
     paneDoc,
   });
   const paneSheet = new PaneSheet({
