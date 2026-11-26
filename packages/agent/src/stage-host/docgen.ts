@@ -46,6 +46,7 @@ import {
   type TailwindTheme,
   TOKEN_NAMESPACES,
 } from "@cawco/design-tokens/tailwind-theme";
+import { Cache, Duration, Effect, Equal, Hash } from "effect";
 import type TS from "typescript";
 
 /** svelte2tsx's shims for the code it writes, read beside it at build time (build.ts). */
@@ -1032,12 +1033,59 @@ async function withTokenNames(doc: ComponentDoc): Promise<ComponentDoc> {
 /* --- The one door ---------------------------------------------------- */
 
 /**
+ * One ask for a component's props: its key (`file#name`) and its content's
+ * hash, which it is equal and hashed by, with what its read needs.
+ */
+class PropsAsk implements Equal.Equal {
+  readonly key: string;
+  readonly hash: string;
+  readonly file: string;
+  readonly name: string;
+  readonly text: string;
+
+  constructor(
+    key: string,
+    hash: string,
+    read: { file: string; name: string; text: string }
+  ) {
+    this.key = key;
+    this.hash = hash;
+    this.file = read.file;
+    this.name = read.name;
+    this.text = read.text;
+  }
+
+  [Equal.symbol](that: Equal.Equal): boolean {
+    return (
+      that instanceof PropsAsk &&
+      that.key === this.key &&
+      that.hash === this.hash
+    );
+  }
+
+  [Hash.symbol](): number {
+    return Hash.string(`${this.key}\0${this.hash}`);
+  }
+}
+
+/**
  * Each component's props by its content's hash, kept from the moment they
  * are asked for: the reads that arrive while its checker runs (a page's
  * sheet, the daemon's stories, an agent's) share that one run. Kept only
- * once read, four reads after an edit built four programs and checkers.
+ * once read, four reads after an edit built four programs and checkers. A
+ * read never fails (its failure is its `note`); one key's read of an older
+ * content is let go once another is asked for ({@link keptHash}).
  */
-const kept = new Map<string, { doc: Promise<ComponentDoc>; hash: string }>();
+const kept = Effect.runSync(
+  Cache.makeWith(
+    (ask: PropsAsk) =>
+      Effect.promise(() => docOf(ask.file, ask.name, ask.text)),
+    { capacity: Number.POSITIVE_INFINITY, timeToLive: () => Duration.infinity }
+  )
+);
+
+/** The content hash each component's kept props were read from, by its key. */
+const keptHash = new Map<string, string>();
 
 const SVELTE = /\.svelte$/u;
 const VUE = /\.vue$/u;
@@ -1070,13 +1118,17 @@ export function propsOf(
   }
   const hash = createHash("sha1").update(text).digest("hex");
   const key = `${file}#${name}`;
-  const hit = kept.get(key);
-  if (hit?.hash === hash) {
-    return hit.doc.then(withTokenNames);
+  const was = keptHash.get(key);
+  if (was !== undefined && was !== hash) {
+    Effect.runSync(
+      Cache.invalidate(kept, new PropsAsk(key, was, { file, name, text }))
+    );
   }
-  const doc = docOf(file, name, text);
-  kept.set(key, { doc, hash });
-  return doc.then(withTokenNames);
+  keptHash.set(key, hash);
+  // The promise edge of the kept read.
+  return Effect.runPromise(
+    Cache.get(kept, new PropsAsk(key, hash, { file, name, text }))
+  ).then(withTokenNames);
 }
 
 /** Component `file`'s props read by its framework's docgen; a read that fails says why in `note`. */

@@ -54,6 +54,7 @@ import {
 } from "@cawco/core/stage-measure";
 import { faultsOf } from "@cawco/core/stage-measure-faults";
 import { measureWords as words } from "@cawco/core/words/stage-measure";
+import { Schema } from "effect";
 import type { Browser, CDPSession, Page } from "playwright-core";
 import { forcedAllNow, measureNow, namedNow } from "./in-page/page";
 import {
@@ -122,7 +123,9 @@ interface Counters {
 }
 
 /** A refusal in words: the read answers it as its error. */
-class Refused extends Error {}
+class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  message: Schema.String,
+}) {}
 
 /**
  * One step of the page's real input (core `MEASURE_INPUT`), delivered by
@@ -158,12 +161,13 @@ async function repeat(
 ): Promise<Exclude<MeasureRun, { refused: string }>> {
   const run = await page.evaluate(measureNow, { key, move, pass, wait });
   if (!run) {
-    throw new Refused(
-      "The stage's page has no measuring: it predates it. Update the daemon on the workspace's machine, then read again."
-    );
+    throw new Refused({
+      message:
+        "The stage's page has no measuring: it predates it. Update the daemon on the workspace's machine, then read again.",
+    });
   }
   if ("refused" in run) {
-    throw new Refused(run.refused);
+    throw new Refused({ message: run.refused });
   }
   return run;
 }
@@ -234,7 +238,8 @@ export async function measureMove(
   const speed = ask.speed ?? "slowed";
   const asked = ask.repeats ?? MEASURE_REPEATS;
   const move = moveOf(ask);
-  const tooLong = () => new Refused(words.tooLong(STAGE_RENDER_MS / 1000));
+  const tooLong = () =>
+    new Refused({ message: words.tooLong(STAGE_RENDER_MS / 1000) });
   const cdp = await page.context().newCDPSession(page);
   // The page's plays and presses arrive as real input, so the trace holds none of a script's stand-in for them (canvas real-input.ts).
   await page.exposeBinding(MEASURE_INPUT, (_source, step: MeasureInput) =>
@@ -291,7 +296,7 @@ export async function measureMove(
     const counted = async (): Promise<Counters> => {
       const run = await repeat(page, key, move, "repeat", memoryWait);
       if (run.edits !== scan.edits) {
-        throw new Refused(words.changed);
+        throw new Refused({ message: words.changed });
       }
       return await countersOf(cdp);
     };
@@ -477,7 +482,7 @@ function refusedIn(
     for (const failure of failures) {
       const reasons = failure.failureReasons.map(String);
       if (reasons.includes(COMPOSITING_OFF)) {
-        throw new Refused(words.compositingOff);
+        throw new Refused({ message: words.compositingOff });
       }
       const kept = reasons.filter((one) => one !== NO_VISIBLE_CHANGE);
       const begin = animation.args.data.beginEvent.args.data;

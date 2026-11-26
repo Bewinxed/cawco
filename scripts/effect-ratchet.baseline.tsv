@@ -30,7 +30,6 @@ error-class	AgentTooOld	packages/hub/src/project-delete.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
 error-class	CapabilityCallsRefusal	packages/hub/src/capability-calls.ts	1
-error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
 error-class	CommandStopped	packages/hub/src/machine-pause.ts	1
@@ -38,6 +37,7 @@ error-class	ConnectionProblem	packages/hub/src/connections.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	FramePictureRefusal	packages/agent/src/frame-picture.ts	1
+error-class	FleetDenialsRefused	packages/agent/src/denied-tools.ts	1
 error-class	GitExited	packages/agent/src/git/run.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
 error-class	HubUnreachable	packages/agent/src/binary-update.ts	1
@@ -52,6 +52,7 @@ error-class	NotTaken	packages/hub/src/db/forget.ts	1
 error-class	ReattachUnanswered	packages/agent/src/harnesses/opencode.ts	1
 error-class	ReattachFailed	packages/agent/src/harness.ts	1
 error-class	Refused	packages/agent/src/stage-measure.ts	1
+error-class	Refused	packages/hub/src/fleet-mcp-relay.ts	1
 error-class	RelayFailed	packages/agent/src/browser/relay.ts	1
 error-class	Refused	packages/hub/src/fleet-mcp-relay.ts	1
 error-class	RpcError	packages/hub/src/fleet-mcp-relay.ts	1
@@ -64,10 +65,13 @@ error-class	SessiondUnavailableError	packages/agent/src/sessiond-client.ts	1
 error-class	SignedOut	packages/hub/src/fleet-mcp.ts	1
 error-class	StageRefusal	packages/agent/src/stage-refusal.ts	1
 error-class	StageUnanswered	packages/agent/src/stage.ts	1
+error-class	StartsHeld	packages/hub/src/start-holds.ts	1
 error-class	StepFailed	packages/agent/src/move.ts	1
 error-class	StartsHeld	packages/hub/src/start-holds.ts	1
 error-class	StoredShapeError	packages/hub/src/stored-json.ts	1
 error-class	StoryRefusal	packages/agent/src/stage-host/story-file.ts	1
+error-class	TreeBlocked	packages/agent/src/folder-tree.ts	1
+error-class	TreeRefused	packages/agent/src/folder-tree.ts	1
 error-class	Unbound	packages/hub/src/db/trash.ts	1
 error-class	UnreadJson	packages/agent/src/json-file.ts	1
 error-class	UpdateInterrupted	packages/agent/src/binary-update.ts	1
@@ -114,6 +118,7 @@ hand-promise	new Promise	packages/agent/src/sessiond-custody.ts	1
 hand-promise	new Promise	packages/agent/src/search/process.ts	2
 hand-promise	new Promise	packages/agent/src/stage-host/host.ts	1
 hand-promise	new Promise	packages/agent/src/stage.ts	2
+hand-promise	new Promise	packages/agent/src/stores/client.ts	1
 hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
 hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/canvas.ts	2
@@ -187,6 +192,7 @@ promise-map	flights	packages/agent/src/move.ts	1
 promise-map	gates	packages/agent/src/boundary/decisions.ts	1
 promise-map	gateReads	packages/agent/src/tools.ts	1
 promise-map	importsKept	packages/agent/src/stage-host/host.ts	1
+promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/mcp-install.ts	1
 promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/provider-usage.ts	1
@@ -201,6 +207,12 @@ promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
 promise-map	lists	packages/hub/src/fleet-mcp-relay.ts	1
 promise-map	live	packages/hub/src/call-keys.ts	1
 promise-map	local	packages/agent/src/stage-host/host.ts	1
+promise-map	installing	packages/agent/src/tools.ts	1
+promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
+promise-map	lists	packages/hub/src/fleet-mcp-relay.ts	1
+promise-map	live	packages/hub/src/call-keys.ts	1
+promise-map	liveGroups	packages/agent/src/group-run.ts	1
+promise-map	looksQueued	packages/hub/src/at-limit.ts	1
 promise-map	making	packages/hub/src/git-remote.ts	1
 promise-map	looksQueued	packages/hub/src/at-limit.ts	1
 promise-map	marketplaceReads	packages/hub/src/fleet-sources.ts	1
@@ -210,6 +222,8 @@ promise-map	opening	packages/agent/src/preview-bridge.ts	1
 promise-map	owedCarries	packages/hub/src/closure-context.ts	1
 promise-map	owedCarries	packages/hub/src/limit-moves.ts	1
 promise-map	ownKept	packages/agent/src/stage-host/host.ts	1
+promise-map	owning	packages/agent/src/layer.ts	1
+promise-map	passes	packages/agent/src/browser/dashboard-door.ts	1
 promise-map	pendingServerAttachments	packages/agent/src/harnesses/opencode.ts	1
 promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
 promise-map	pluginFetches	packages/hub/src/fleet-sources.ts	1
@@ -229,7 +243,6 @@ promise-map	refusalChecks	packages/hub/src/account-probes.ts	1
 promise-map	reviving	packages/agent/src/browser/browsers.ts	1
 promise-map	remotes	packages/hub/src/project-offers.ts	1
 promise-map	reviving	packages/hub/src/preview-server/serve.ts	1
-promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
 promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
 promise-map	settleReads	packages/hub/src/sends.ts	1
@@ -237,6 +250,7 @@ promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1
 promise-map	starting	packages/agent/src/boundary/state.ts	1
 promise-map	viewing	packages/agent/src/layer.ts	1
 promise-map	warming	packages/agent/src/stage.ts	1
+timed-loop	Bun.sleep	packages/agent/src/binary-update.ts	1
 timed-loop	Bun.sleep	packages/agent/src/boundary/work.ts	1
 timed-loop	Bun.sleep	packages/agent/src/daemon.ts	1
 promise-map	starting	packages/hub/src/triggers.ts	1
@@ -266,8 +280,6 @@ timed-loop	Bun.sleep	packages/agent/src/stage-render.ts	2
 timed-loop	Bun.sleep	packages/agent/src/stage.ts	2
 timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
 timed-loop	Bun.sleep	packages/agent/src/session.ts	2
-timed-loop	Bun.sleep	packages/agent/src/stage-render.ts	2
-timed-loop	Bun.sleep	packages/agent/src/stage.ts	2
 timed-loop	Bun.sleep	packages/agent/src/tools.ts	1
 timed-loop	Bun.sleep	packages/hub/src/fleet-mcp-relay.ts	1
 timed-loop	Bun.sleep	packages/hub/src/landing.ts	1

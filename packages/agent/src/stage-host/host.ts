@@ -51,6 +51,7 @@ import {
 } from "node:fs";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { json as streamJson } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import {
@@ -128,6 +129,7 @@ import { lastLines } from "@cawco/core/words/helpers";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { transformCode } from "@code-inspector/core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
+import { Cache, Duration, Effect, Exit } from "effect";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
 import type {
   Connect,
@@ -654,29 +656,31 @@ async function sheetOf(
 }> {
   const abs = resolve(root, file);
   const read = readStoryFile(abs, text ?? readFileSync(abs, "utf8"));
-  const local = new Map<string, Promise<string | null>>();
-  const fileOf = (name: string | null): Promise<string | null> => {
-    const source = name ? read.imports.get(name) : undefined;
-    if (!(name && source)) {
-      return Promise.resolve(null);
-    }
-    let pending = local.get(name);
-    if (!pending) {
-      pending = resolved(source, abs);
-      local.set(name, pending);
-    }
-    return pending;
-  };
-  const metaFile = await fileOf(read.meta.component);
-  const owns = await Promise.all(
-    read.stories.map((story) => fileOf(story.component))
+  // Each name a story or the meta mounts, resolved once however many name it.
+  const named = [
+    ...new Set([
+      read.meta.component,
+      ...read.stories.map((story) => story.component),
+    ]),
+  ];
+  const files = new Map(
+    await Promise.all(
+      named.map(async (name) => {
+        const source = name ? read.imports.get(name) : undefined;
+        return [name, source ? await resolved(source, abs) : null] as const;
+      })
+    )
   );
+  const fileOf = (name: string | null): string | null =>
+    files.get(name) ?? null;
+  const metaFile = fileOf(read.meta.component);
+  const owns = read.stories.map((story) => fileOf(story.component));
   // An Astro component renders on the server only: no mount adapter puts one in a frame.
   const astro = [metaFile, ...owns].find((one) => one && ASTRO_FILE.test(one));
   if (astro) {
-    throw new StoryRefusal(
-      `${relative(root, astro)} is an Astro component, which renders only on the server, so no sheet mounts it; a sheet mounts the project's Svelte, Vue, React, Solid or Preact components. ${AS_PAGE}`
-    );
+    throw new StoryRefusal({
+      message: `${relative(root, astro)} is an Astro component, which renders only on the server, so no sheet mounts it; a sheet mounts the project's Svelte, Vue, React, Solid or Preact components. ${AS_PAGE}`,
+    });
   }
   const stories = read.stories.map((story, at) => {
     const own = owns[at];
@@ -743,8 +747,8 @@ interface Imported {
   url: string;
 }
 
-/** Each served module's imports, by the transform that wrote them: read again once Vite transforms the module again. */
-const importsKept = new WeakMap<object, Promise<Imported[]>>();
+/** Each served module's imports, by the transform that wrote them, read once (`Effect.cached`) and kept while the transform lives: read again once Vite transforms the module again. */
+const importsKept = new WeakMap<object, Effect.Effect<Imported[]>>();
 
 /**
  * What module `url` (an address of Vite's graph, no base) imports, as Vite
@@ -766,10 +770,13 @@ async function importsOf(url: string): Promise<Imported[]> {
   }
   let kept = importsKept.get(result);
   if (!kept) {
-    kept = importedBy(result.code);
+    const { code } = result;
+    kept = Effect.runSync(
+      Effect.cached(Effect.promise(() => importedBy(code)))
+    );
     importsKept.set(result, kept);
   }
-  return kept;
+  return Effect.runPromise(kept);
 }
 
 /** The modules `code` (as Vite serves it) imports, each found in Vite's graph, which its import analysis filled as it wrote them. */
@@ -932,11 +939,19 @@ function releasePage(page: object): void {
       continue;
     }
     heldSections.delete(file);
-    drawnKept.delete(file);
+    Effect.runSync(Cache.invalidate(drawnKept, file));
     reports.delete(file);
   }
   pageSections.delete(page);
 }
+
+/** A rejection as the `Error` the host's Effect code carries: the error itself, or its words in one. */
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
+
+/** A kept read's time to live in its {@link Cache}: a read that answered is kept until it is let go; a failed one is read again on the next ask. */
+const keptOnceRead = (exit: Exit.Exit<unknown, unknown>): Duration.Duration =>
+  Exit.isSuccess(exit) ? Duration.infinity : Duration.zero;
 
 /**
  * Each held section's files ({@link drawnFrom}), read once and kept until
@@ -948,7 +963,23 @@ function releasePage(page: object): void {
  * with the dashboard's 52 states files loaded spent 2 to 9 s in Vite's
  * resolver. Sorted, as {@link drawnFrom} answers them.
  */
-const drawnKept = new Map<string, Promise<DrawnSet>>();
+const drawnKept = Effect.runSync(
+  Cache.makeWith(
+    (sheet: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const abs = resolve(root, sheet);
+          const { files, reloads } = await drawnFrom(
+            abs,
+            readFileSync(abs, "utf8")
+          );
+          return { files: new Set(files), reloads };
+        },
+        catch: asError,
+      }),
+    { capacity: Number.POSITIVE_INFINITY, timeToLive: keptOnceRead }
+  )
+);
 
 /** A held section's {@link Drawn}, its files as a set. */
 interface DrawnSet {
@@ -956,23 +987,9 @@ interface DrawnSet {
   reloads: Set<string>;
 }
 
-/** What held section `sheet` is drawn from, kept ({@link drawnKept}). */
+/** The promise edge of {@link drawnKept}: what held section `sheet` is drawn from, kept. */
 function drawnSet(sheet: string): Promise<DrawnSet> {
-  const kept = drawnKept.get(sheet);
-  if (kept) {
-    return kept;
-  }
-  const abs = resolve(root, sheet);
-  const read = drawnFrom(abs, readFileSync(abs, "utf8")).then(
-    ({ files, reloads }) => ({ files: new Set(files), reloads })
-  );
-  drawnKept.set(sheet, read);
-  read.catch(() => {
-    if (drawnKept.get(sheet) === read) {
-      drawnKept.delete(sheet);
-    }
-  });
-  return read;
+  return Effect.runPromise(Cache.get(drawnKept, sheet));
 }
 
 /**
@@ -1029,14 +1046,11 @@ async function heldReached(
       if (!(mod && existsSync(resolve(root, sheet)))) {
         return;
       }
-      const set = drawnSet(sheet);
-      const { files, reloads } = await set;
+      const { files, reloads } = await drawnSet(sheet);
       if (!files.has(file)) {
         return;
       }
-      if (drawnKept.get(sheet) === set) {
-        drawnKept.delete(sheet);
-      }
+      Effect.runSync(Cache.invalidate(drawnKept, sheet));
       if (reloads.has(file) || !inGraph) {
         reloaded.push(mod);
       } else {
@@ -2494,20 +2508,8 @@ function planOf(files: string[]): Record<string, SectionPlan> {
   );
 }
 
-/** A request's body, read whole as JSON. */
-const bodyOf = (req: IncomingMessage): Promise<unknown> =>
-  new Promise((done, fail) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      try {
-        done(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-      } catch (error) {
-        fail(error);
-      }
-    });
-    req.on("error", fail);
-  });
+/** A request's body, read whole as JSON (Node's `stream/consumers`). */
+const bodyOf = (req: IncomingMessage): Promise<unknown> => streamJson(req);
 
 /** Why value `value` does not fit prop `name` of the component, by its schema; null when it fits or the schema can't say. */
 function misfit(
@@ -2617,7 +2619,9 @@ function writeTarget(asked: SheetWrite): { file: string; write: FileWrite } {
   const files = asked.files.map((given) => {
     const file = storyFile(given);
     if (!file) {
-      throw new StoryRefusal(`${given} is no story file in ${root}.`);
+      throw new StoryRefusal({
+        message: `${given} is no story file in ${root}.`,
+      });
     }
     return file;
   });
@@ -2626,18 +2630,18 @@ function writeTarget(asked: SheetWrite): { file: string; write: FileWrite } {
   if (named !== undefined) {
     const file = storyFile(named);
     if (!(file && files.includes(file))) {
-      throw new StoryRefusal(
-        `${named} is no states file of this design graph; its states files are ${files.join(", ")}.`
-      );
+      throw new StoryRefusal({
+        message: `${named} is no states file of this design graph; its states files are ${files.join(", ")}.`,
+      });
     }
     return { file, write: withStory(asked, story, file) };
   }
   if (adding) {
     const [only] = files;
     if (only === undefined || files.length > 1) {
-      throw new StoryRefusal(
-        `This design graph has ${files.length} states files: name the one ${story} is added to as file:Story, one of ${files.map((file) => `${file}:${story}`).join(", ")}.`
-      );
+      throw new StoryRefusal({
+        message: `This design graph has ${files.length} states files: name the one ${story} is added to as file:Story, one of ${files.map((file) => `${file}:${story}`).join(", ")}.`,
+      });
     }
     return { file: only, write: withStory(asked, story, only) };
   }
@@ -2651,14 +2655,14 @@ function writeTarget(asked: SheetWrite): { file: string; write: FileWrite } {
   const holders = stories.filter((one) => one.names.includes(story));
   const [holder] = holders;
   if (holder === undefined) {
-    throw new StoryRefusal(
-      `No states file of this design graph has a story ${story}; its stories are ${stories.map((one) => `${one.names.join(", ") || "none"} (${one.file})`).join("; ")}.`
-    );
+    throw new StoryRefusal({
+      message: `No states file of this design graph has a story ${story}; its stories are ${stories.map((one) => `${one.names.join(", ") || "none"} (${one.file})`).join("; ")}.`,
+    });
   }
   if (holders.length > 1) {
-    throw new StoryRefusal(
-      `${story} is a story of ${holders.length} states files on this design graph: name the one to write as file:Story, one of ${holders.map((one) => `${one.file}:${story}`).join(", ")}.`
-    );
+    throw new StoryRefusal({
+      message: `${story} is a story of ${holders.length} states files on this design graph: name the one to write as file:Story, one of ${holders.map((one) => `${one.file}:${story}`).join(", ")}.`,
+    });
   }
   return { file: holder.file, write: withStory(asked, story, holder.file) };
 }
@@ -2681,7 +2685,7 @@ async function written(asked: SheetWrite): Promise<SheetWritten> {
     for (const [name, value] of Object.entries(write.args.values)) {
       const problem = misfit(doc, name, value);
       if (problem) {
-        throw new StoryRefusal(`${problem} Nothing was written.`);
+        throw new StoryRefusal({ message: `${problem} Nothing was written.` });
       }
     }
     out = writeArgs(
@@ -2701,7 +2705,9 @@ async function written(asked: SheetWrite): Promise<SheetWritten> {
       for (const [name, value] of Object.entries(op.args ?? {})) {
         const problem = misfit(doc, name, value);
         if (problem) {
-          throw new StoryRefusal(`${problem} Nothing was written.`);
+          throw new StoryRefusal({
+            message: `${problem} Nothing was written.`,
+          });
         }
       }
     }
@@ -2834,19 +2840,19 @@ async function formatted(
       encoding: "utf8",
     });
     if (ran.status !== 0) {
-      throw new StoryRefusal(
-        `The project's Biome could not format the story it wrote, so nothing was written: ${lastLines(
+      throw new StoryRefusal({
+        message: `The project's Biome could not format the story it wrote, so nothing was written: ${lastLines(
           (ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n"),
           3,
           " "
-        )}`
-      );
+        )}`,
+      });
     }
     return { by: "biome", code: ran.stdout };
   }
-  throw new StoryRefusal(
-    `Neither Prettier nor Biome resolves from ${root}, so the sheet can't write ${relative(root, abs)} in the project's own style, and nothing was written: add the project's formatter, or edit the story file by hand.`
-  );
+  throw new StoryRefusal({
+    message: `Neither Prettier nor Biome resolves from ${root}, so the sheet can't write ${relative(root, abs)} in the project's own style, and nothing was written: add the project's formatter, or edit the story file by hand.`,
+  });
 }
 
 /** Folders whose components are a framework's routes, never a component a sheet shows (spec §6), and package and build trees; a dot-dir (`.cawco`) is passed over too. */
@@ -2993,9 +2999,9 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
   const top = ask.dir ? resolve(root, ask.dir) : sourceTop();
   const inside = relative(root, top);
   if (inside.startsWith("..") || !existsSync(top)) {
-    throw new StoryRefusal(
-      `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`
-    );
+    throw new StoryRefusal({
+      message: `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`,
+    });
   }
   const library = await discovered(top);
   let found = library;
@@ -3007,9 +3013,9 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
     const wanted = relative(root, resolve(root, ask.component));
     found = found.filter((one) => one.file === wanted);
     if (found.length === 0) {
-      throw new StoryRefusal(
-        `${ask.component} is no component under ${inside || "."}: name its file from the toolchain root, like src/lib/Card.svelte, or call without component for the list.`
-      );
+      throw new StoryRefusal({
+        message: `${ask.component} is no component under ${inside || "."}: name its file from the toolchain root, like src/lib/Card.svelte, or call without component for the list.`,
+      });
     }
   }
   const total = found.length;
@@ -3647,7 +3653,9 @@ async function serveStage(
     (error) =>
       refusedWith(
         res,
-        new StoryRefusal(error instanceof Error ? error.message : String(error))
+        new StoryRefusal({
+          message: error instanceof Error ? error.message : String(error),
+        })
       )
   );
 }
@@ -4193,10 +4201,10 @@ function cawcoStage() {
         return;
       }
       if (type !== "update" || isManifest(file)) {
-        drawnKept.clear();
+        Effect.runSync(Cache.invalidateAll(drawnKept));
       }
       // An edit may add or drop an import a story's private modules run through.
-      ownKept.clear();
+      Effect.runSync(Cache.invalidateAll(ownKept));
       if (isManifest(file)) {
         if (type !== "create") {
           return;
@@ -4459,23 +4467,17 @@ interface OwnSet {
 }
 
 /** Each states file's own set, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
-const ownKept = new Map<string, Promise<OwnSet>>();
+const ownKept = Effect.runSync(
+  Cache.makeWith(
+    (file: string) =>
+      Effect.tryPromise({ try: () => ownSet(file), catch: asError }),
+    { capacity: Number.POSITIVE_INFINITY, timeToLive: keptOnceRead }
+  )
+);
 
-/** States file `file`'s (from the root) own set, kept ({@link ownKept}). */
+/** The promise edge of {@link ownKept}: states file `file`'s (from the root) own set, kept. A walk that failed (a file gone mid-read) is walked again on the next ask. */
 function ownSetOf(file: string): Promise<OwnSet> {
-  const kept = ownKept.get(file);
-  if (kept) {
-    return kept;
-  }
-  const walk = ownSet(file);
-  ownKept.set(file, walk);
-  // A walk that failed (a file gone mid-read) is walked again on the next ask.
-  walk.catch(() => {
-    if (ownKept.get(file) === walk) {
-      ownKept.delete(file);
-    }
-  });
-  return walk;
+  return Effect.runPromise(Cache.get(ownKept, file));
 }
 
 /**
@@ -4561,7 +4563,7 @@ async function ownSet(file: string): Promise<OwnSet> {
 }
 
 /** Each module's code as a runner evaluates it, by the transform it was made from: converted once however many runners ask. */
-const runnerKept = new WeakMap<object, Promise<OwnCode>>();
+const runnerKept = new WeakMap<object, Effect.Effect<OwnCode, Error>>();
 
 /** The line Vite's import analysis gives a module the page's hot context with: in a runner, the runner's own HMR client gives it one. */
 const HOT_CONTEXT = /import\.meta\.hot = __vite__createHotContext\("[^"]*"\);/u;
@@ -4589,7 +4591,7 @@ async function runnerCode(dev: DevServer, url: string): Promise<OwnCode> {
   const served = result;
   let kept = runnerKept.get(served);
   if (!kept) {
-    kept = (async (): Promise<OwnCode> => {
+    const converted = async (): Promise<OwnCode> => {
       // Blanked, never cut: every other place in the code stays where the client's map has it.
       const code = served.code.replace(HOT_CONTEXT, (line) =>
         " ".repeat(line.length)
@@ -4603,10 +4605,13 @@ async function runnerCode(dev: DevServer, url: string): Promise<OwnCode> {
               served.etag ?? createHash("sha256").update(code).digest("hex"),
           }
         : { error: `Vite gave no runner code for ${url}.` };
-    })();
+    };
+    kept = Effect.runSync(
+      Effect.cached(Effect.tryPromise({ try: converted, catch: asError }))
+    );
     runnerKept.set(served, kept);
   }
-  return kept;
+  return Effect.runPromise(kept);
 }
 
 /** States file `file`'s own set with every private module's code ({@link runnerCode}): one answer for every runner of its section. */

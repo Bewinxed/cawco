@@ -14,12 +14,18 @@
 
 import type { HelloArtifact } from "@cawco/core/artifact-picture";
 import type { FrameInset, FrameSays } from "@cawco/core/page-wire";
+import { Schema } from "effect";
 import type { Browser, Frame, Page } from "playwright-core";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
 import { deliverHello, holdAnimations } from "./in-page/page";
 
 /** Why this machine can't launch its browser, in the words a tool answers. */
-class ChromiumMissing extends Error {}
+class ChromiumMissing extends Schema.TaggedError<ChromiumMissing>()(
+  "ChromiumMissing",
+  {
+    message: Schema.String,
+  }
+) {}
 
 /**
  * The machine's Chromium, headless; `missing` is the refusal when it has
@@ -32,7 +38,7 @@ export async function launchChromium(
 ): Promise<Browser> {
   const executable = browserExecutable();
   if (!executable) {
-    throw new ChromiumMissing(missing);
+    throw new ChromiumMissing({ message: missing });
   }
   const { chromium } = await import("playwright-core");
   return chromium.launch({

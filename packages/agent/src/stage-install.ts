@@ -37,6 +37,7 @@ import {
   PACKAGE_MANAGERS,
   type PackageManager,
 } from "@cawco/core/deps";
+import { makeJoin } from "@cawco/core/effect/join";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -273,7 +274,7 @@ export const installMoved = async (at: ProjectAt): Promise<boolean> => {
 };
 
 /** Each install under way, by boundary and folder: a second ask joins it. */
-const installing = new Map<string, Promise<void>>();
+const installing = makeJoin<string, void>();
 
 /**
  * The project at `at` installed inside its boundary by its manager's frozen
@@ -299,14 +300,9 @@ export const installProject = async (
   if (look.current) {
     return;
   }
-  const turn = `${at.boundary.id}:${look.key}`;
-  const under = installing.get(turn);
-  if (under) {
-    return under;
-  }
-  const run = runInstall(at, look).finally(() => installing.delete(turn));
-  installing.set(turn, run);
-  return run;
+  return installing.runPromise(`${at.boundary.id}:${look.key}`, () =>
+    runInstall(at, look)
+  );
 };
 
 const runInstall = async (

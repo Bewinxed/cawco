@@ -77,9 +77,9 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
-import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
-import { detach, failureOf } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
@@ -99,10 +99,10 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { STAGE_CLONE_GIT_MS, STAGE_COPY_LIMIT } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { unhandled } from "@cawco/core/unhandled";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { type FSWatcher, watch } from "chokidar";
+import { Effect, Exit, type Fiber, Scope } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { stopWorkspaceBoundary } from "./boundary/control";
@@ -189,37 +189,41 @@ const copied = new Map<string, Map<string, string>>();
  * its whole stdout, or git's stderr thrown. Never takes optional locks, so a
  * status in a person's checkout writes nothing there.
  */
-const gitRaw = async (
-  dir: string,
-  args: readonly string[]
-): Promise<string> => {
-  const ran = await readWithin(STAGE_CLONE_GIT_MS, async (signal) => {
-    const { code, stdout, stderr } = await runCaptured(
-      safeGitArgv(["--no-optional-locks", "-C", dir, ...args]),
-      {
-        env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-        signal,
-        killSignal: "SIGKILL",
-      }
-    );
-    if (code !== 0) {
-      throw new Error(
-        `git ${args[0]} failed in ${dir}: ${stderr.trim() || `exit ${code}`}`
-      );
-    }
-    return stdout;
-  });
-  switch (ran.kind) {
-    case "answered":
-      return ran.value;
-    case "unanswered":
-      throw new Error(
-        `git ${args[0]} in ${dir} did not finish within ${STAGE_CLONE_GIT_MS / 1000}s`
-      );
-    default:
-      unhandled("read", ran);
-  }
-};
+const gitRaw = (dir: string, args: readonly string[]): Promise<string> =>
+  // The promise edge of git's bounded run.
+  Effect.runPromise(
+    boundedRead(
+      STAGE_CLONE_GIT_MS,
+      Effect.tryPromise({
+        try: async (signal) => {
+          const { code, stdout, stderr } = await runCaptured(
+            safeGitArgv(["--no-optional-locks", "-C", dir, ...args]),
+            {
+              env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+              signal,
+              killSignal: "SIGKILL",
+            }
+          );
+          if (code !== 0) {
+            throw new Error(
+              `git ${args[0]} failed in ${dir}: ${stderr.trim() || `exit ${code}`}`
+            );
+          }
+          return stdout;
+        },
+        catch: (error) =>
+          error instanceof Error ? error : new Error(String(error)),
+      })
+    ).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.fail(
+          new Error(
+            `git ${args[0]} in ${dir} did not finish within ${STAGE_CLONE_GIT_MS / 1000}s`
+          )
+        )
+      )
+    )
+  );
 
 /** A porcelain v2 entry's path: what follows its `fields` space-separated fields. */
 const pathAfter = (entry: string, fields: number): string => {
@@ -1081,13 +1085,18 @@ interface Following {
   gone: Set<string>;
   /** Every path heard to change since the last step, from the source's root. */
   named: Set<string>;
-  rewatch?: ReturnType<typeof setTimeout>;
-  settle?: ReturnType<typeof setTimeout>;
+  /** The gathering of what was heard into one step, from its first hearing until its step begins ({@link heard}). */
+  settle?: Fiber.Fiber<void>;
   /** The folder watched: the clone's source when its watch started. */
   source?: string;
   /** The live stages that follow it. */
   users: number;
-  watcher?: FSWatcher;
+  /**
+   * The watch under way ({@link watchSource}): the scope that holds its
+   * start, its watcher and its gathering, closed together when it ends
+   * ({@link unwatch}).
+   */
+  watching?: Scope.Closeable;
   /** Whether the next step reconciles whole: the watch started, or failed, or events were lost. */
   whole: boolean;
 }
@@ -1151,7 +1160,7 @@ const settled = (id: string, follow: Following): Promise<void> =>
     }
   });
 
-/** What stage clone `id`'s watch heard, gathered for {@link SETTLE_MS} into one step ({@link settled}). */
+/** What stage clone `id`'s watch heard, gathered for {@link SETTLE_MS} into one step ({@link settled}), in the watch's scope; a failed step is said. */
 const heard = (
   id: string,
   follow: Following,
@@ -1164,94 +1173,155 @@ const heard = (
   } else {
     follow.named.add(what.path);
   }
-  follow.settle ??= setTimeout(() => {
-    detach(settled(id, follow), `stage ${id.slice(0, 8)} follow`);
-  }, SETTLE_MS);
+  const { watching } = follow;
+  if (follow.settle || !watching) {
+    return;
+  }
+  follow.settle = Effect.runSync(
+    Effect.forkIn(
+      Effect.sleep(SETTLE_MS).pipe(
+        Effect.andThen(
+          Effect.tryPromise({
+            try: () => settled(id, follow),
+            catch: (error) => error,
+          })
+        ),
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            console.warn(
+              `[stage ${id.slice(0, 8)} follow] failed: ${failureOf(error)}`
+            )
+          )
+        )
+      ),
+      watching
+    )
+  );
 };
 
-/** Stage clone `id`'s watch ended: its timers cleared, its watcher closed. */
+/** Stage clone `id`'s watch ended: its scope closed, which ends its start, its gathering and its watcher. */
 const unwatch = (follow: Following): void => {
-  clearTimeout(follow.settle);
-  clearTimeout(follow.rewatch);
+  const { watching } = follow;
+  follow.watching = undefined;
   follow.settle = undefined;
-  follow.rewatch = undefined;
-  const { watcher } = follow;
-  follow.watcher = undefined;
-  if (watcher) {
-    detach(watcher.close(), "stage watch close");
+  if (watching) {
+    Effect.runFork(Scope.close(watching, Exit.void));
   }
 };
 
 /** Stage clone `id`'s watch closed and started again after `after` ms ({@link watchSource}). */
 const rewatch = (id: string, follow: Following, after: number): void => {
   unwatch(follow);
-  follow.rewatch = setTimeout(() => {
-    follow.rewatch = undefined;
-    detach(watchSource(id, follow), `stage ${id.slice(0, 8)} watch`);
-  }, after);
+  const watching = Effect.runSync(Scope.make());
+  follow.watching = watching;
+  Effect.runSync(
+    Effect.forkIn(
+      (after > 0 ? Effect.sleep(after) : Effect.void).pipe(
+        Effect.andThen(watchSource(id, follow, watching)),
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            console.warn(
+              `[stage ${id.slice(0, 8)} watch] failed: ${failureOf(error)}`
+            )
+          )
+        )
+      ),
+      watching
+    )
+  );
 };
 
 /**
- * Starts stage clone `id`'s watch of its source (its checkout's repository
- * root, or the folder it copies) with chokidar: on Linux one inotify watch
- * per folder, never one in {@link LEFT_OUT} or a folder git ignores
- * ({@link ignoredBy}); on macOS one recursive FSEvents stream. Once its
- * first scan is done it reconciles whole, and each change it hears after is
- * gathered into a step ({@link heard}). Events the kernel dropped (inotify's
- * queue overflowed: Bun hands each watch a change with no name, chokidar's
- * `raw`) bring a whole reconcile; an error brings one, and the watch starts
- * again after {@link REWATCH_MS}.
+ * Stage clone `id`'s source (its checkout's repository root, or the
+ * folder it copies) watched with chokidar, held by the watch's scope
+ * `watching`: on Linux one inotify watch per folder, never one in
+ * {@link LEFT_OUT} or a folder git ignores ({@link ignoredBy}); on macOS
+ * one recursive FSEvents stream. Once its first scan is done it reconciles
+ * whole, and each change it hears after is gathered into a step
+ * ({@link heard}). Events the kernel dropped (inotify's queue overflowed:
+ * Bun hands each watch a change with no name, chokidar's `raw`) bring a
+ * whole reconcile; an error brings one, and the watch starts again after
+ * {@link REWATCH_MS}. Its listeners come off and it closes as the scope
+ * closes, so nothing an ended watch hears reaches the clone.
  */
-const watchSource = async (id: string, follow: Following): Promise<void> => {
-  const kept = await keptOf(id);
+const watchSource = Effect.fnUntraced(function* (
+  id: string,
+  follow: Following,
+  watching: Scope.Scope
+) {
+  const kept = yield* Effect.tryPromise({
+    try: () => keptOf(id),
+    catch: (error) => error,
+  });
   if (!kept || following.get(id) !== follow) {
     return;
   }
   const source = sourceOf(kept);
-  const ignored = await ignoredBy(kept).catch((error: unknown) => {
-    console.warn(
-      `[stage] ${id.slice(0, 8)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
-    );
-    return [];
-  });
+  const ignored = yield* Effect.promise(() =>
+    ignoredBy(kept).catch((error: unknown) => {
+      console.warn(
+        `[stage] ${id.slice(0, 8)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
+      );
+      return [];
+    })
+  );
   if (following.get(id) !== follow) {
     return;
   }
-  const watcher = watch(source, {
-    ignored: [
-      (path: string) => path !== source && LEFT_OUT.has(basename(path)),
-      ...ignored.map((path) => ({ path, recursive: true })),
-    ],
-    ignoreInitial: true,
-    followSymlinks: false,
-    atomic: false,
-    ignorePermissionErrors: true,
-    persistent: false,
-  });
-  follow.source = source;
-  follow.watcher = watcher;
-  const from = (path: string) => relative(source, path);
-  watcher
-    .on("add", (path) => heard(id, follow, { path: from(path) }))
-    .on("change", (path) => heard(id, follow, { path: from(path) }))
-    .on("unlink", (path) => heard(id, follow, { path: from(path) }))
-    .on("unlinkDir", (path) => heard(id, follow, { gone: from(path) }))
-    .on("raw", (_event, path) => {
-      if (!path) {
-        heard(id, follow, "whole");
-      }
-    })
-    .on("ready", () => heard(id, follow, "whole"))
-    .on("error", (error) => {
-      console.warn(
-        `[stage] ${id.slice(0, 8)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
-      );
-      if (follow.watcher === watcher) {
-        rewatch(id, follow, REWATCH_MS);
-      }
-      heard(id, follow, "whole");
-    });
-};
+  yield* Scope.provide(
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const watcher = watch(source, {
+          ignored: [
+            (path: string) => path !== source && LEFT_OUT.has(basename(path)),
+            ...ignored.map((path) => ({ path, recursive: true })),
+          ],
+          ignoreInitial: true,
+          followSymlinks: false,
+          atomic: false,
+          ignorePermissionErrors: true,
+          persistent: false,
+        });
+        follow.source = source;
+        const from = (path: string) => relative(source, path);
+        watcher
+          .on("add", (path) => heard(id, follow, { path: from(path) }))
+          .on("change", (path) => heard(id, follow, { path: from(path) }))
+          .on("unlink", (path) => heard(id, follow, { path: from(path) }))
+          .on("unlinkDir", (path) => heard(id, follow, { gone: from(path) }))
+          .on("raw", (_event, path) => {
+            if (!path) {
+              heard(id, follow, "whole");
+            }
+          })
+          .on("ready", () => heard(id, follow, "whole"))
+          .on("error", (error) => {
+            console.warn(
+              `[stage] ${id.slice(0, 8)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
+            );
+            rewatch(id, follow, REWATCH_MS);
+            heard(id, follow, "whole");
+          });
+        return watcher;
+      }),
+      (watcher: FSWatcher) =>
+        Effect.sync(() => watcher.removeAllListeners()).pipe(
+          Effect.andThen(
+            Effect.tryPromise({
+              try: () => watcher.close(),
+              catch: (error) => error,
+            })
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              console.warn(`[stage watch close] failed: ${failureOf(error)}`)
+            )
+          )
+        )
+    ),
+    watching
+  );
+});
 
 /**
  * Place `place`'s stage clone kept in step with its source while a live
@@ -1266,7 +1336,7 @@ export const followCheckout = (place: WorkspaceRef): (() => void) => {
   if (!follow) {
     follow = { users: 0, named: new Set(), gone: new Set(), whole: false };
     following.set(id, follow);
-    detach(watchSource(id, follow), `stage ${id.slice(0, 8)} watch`);
+    rewatch(id, follow, 0);
   }
   follow.users += 1;
   const mine = follow;

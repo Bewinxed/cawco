@@ -66,10 +66,21 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PictureCut } from "@cawco/core/artifact-picture";
-import { backoffWait } from "@cawco/core/backoff";
-import { type Bounded, readWhileMoving, readWithin } from "@cawco/core/bounded";
+import type { BackoffPolicy } from "@cawco/core/backoff";
+import type { Bounded } from "@cawco/core/bounded";
 import { BROWSER_PORTS } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import {
+  type BackoffTries,
+  backoffSchedule,
+} from "@cawco/core/effect/backoff-schedule";
+import {
+  boundedRead,
+  boundedWhileMoving,
+  Unanswered,
+} from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
 import { mcpGatewayPort } from "@cawco/core/ports";
@@ -140,6 +151,19 @@ import type {
 import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { causeOf } from "@cawco/preview/proxy";
+import {
+  Cause,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Predicate,
+  Pull,
+  Schedule,
+  Schema,
+  Scope,
+} from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { drawPage } from "./artifact-picture";
@@ -287,9 +311,15 @@ const serveScript = (command: string): string =>
  * The waits before each start again: from 5 s, doubling, drawn between half
  * and the whole (core backoff.ts), so the three together pass a host's beat
  * (15 s) and a stage its last daemon left has let go of its port. Ours.
- * They end after {@link STAGE_RESTARTS}.
+ * It gives up at the crash after {@link STAGE_RESTARTS} starts again.
  */
-const RESTARTS = { firstMs: 5000, mostMs: 20_000 };
+const RESTARTS: BackoffPolicy = {
+  firstMs: 5000,
+  mostMs: 20_000,
+  giveUp: { afterTries: STAGE_RESTARTS + 1 },
+};
+/** How often a start asks whether its port is free yet ({@link letGo}). Ours. */
+const LET_GO_POLL_MS = 500;
 /** How long a stopped stage's group has between TERM and KILL. */
 const KILL_GRACE_MS = 5000;
 /** How much of a host's stderr is kept to say why it ended. Ours. */
@@ -338,18 +368,33 @@ type Runs =
 /** Where a stage's changes go (its own, and its clone's when a place has one): the hub, through the daemon. */
 type StagePorts = Pick<AgentPorts, "stage" | "stageClone">;
 
+/**
+ * A restart series's next step (`Schedule.toStep` of {@link RESTARTS}'s
+ * `backoffSchedule`): the wait before the next start, or that it gave up.
+ */
+type RestartStep = (
+  now: number,
+  input: unknown
+) => Pull.Pull<[BackoffTries, Duration.Duration], never, BackoffTries>;
+
 interface Stage {
   /** The boundary it runs in: its workspace's own, or its place's stage clone's (`stage-clone.ts`). */
   readonly boundary: WorkspaceRef;
+  /** Its process, while its life holds one ({@link spawned}). */
   child?: ChildProcess;
   /** Where it runs from the clone's root: a sheet's toolchain root, a server's `cwd`. */
   readonly dir: string;
   errors: StageError[];
-  /** Its health look's timer, while it runs. */
-  health?: ReturnType<typeof setInterval>;
   readonly key: string;
   /** The last request, viewer, agent read or warm-up: its idle time counts from here. */
   lastUse: number;
+  /**
+   * Its life since its last start or wait to start again ({@link begin}):
+   * the scope that holds its start, its process group, the readers of its
+   * output, its kept canvas readers, its health look and its mirror, all
+   * ended together when {@link kill} closes it.
+   */
+  life?: Scope.Closeable;
   /**
    * The last look at it: a preview's request or a viewer, never a warm-up
    * (the hub's keep-up or a page going out) or an agent's read; its start
@@ -359,8 +404,6 @@ interface Stage {
    */
   lookedAt: number;
   message?: string;
-  /** What ends a place's stage's following of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
-  mirror?: () => void;
   /** When it last said it moved (`moved`, a module compiled; or it began to serve), `Date.now()`: a read waits on it while it moves ({@link READ_QUIET_MS}). */
   movedAt: number;
   readonly port: number;
@@ -368,7 +411,8 @@ interface Stage {
   readonly ports: StagePorts;
   /** Settles once it is `live`, or rejects with why it is not. */
   ready?: Promise<void>;
-  restarts: number;
+  /** The restart series under way since its last crash, until a whole look's time live ends it ({@link crashed}). */
+  restarts?: RestartStep;
   /**
    * The files, from its root, whose move its toolchain answers by starting
    * its server again, as its host said when it began to serve (stage-host
@@ -383,8 +427,6 @@ interface Stage {
   /** When its toolchain was last spawned (`Date.now()`), 0 before its first start: it read its folder as it stood then. */
   startedAt: number;
   status: StageStatus;
-  /** Set while the daemon itself stops it: its end is no crash. */
-  stopping: boolean;
   /** Open sockets through a preview of it. */
   viewers: number;
   /** The workspace or place the hub names it by. */
@@ -789,14 +831,12 @@ type StagePlace = Omit<
   Stage,
   | "status"
   | "errors"
-  | "restarts"
   | "lastUse"
   | "lookedAt"
   | "movedAt"
   | "restartsOn"
   | "slept"
   | "startedAt"
-  | "stopping"
   | "viewers"
 >;
 
@@ -811,14 +851,12 @@ function newStage(found: StagePlace): Stage {
     ...found,
     status: "starting",
     errors: [],
-    restarts: 0,
     lastUse: Date.now(),
     lookedAt: Date.now(),
     movedAt: 0,
     restartsOn: [],
     slept: false,
     startedAt: 0,
-    stopping: false,
     viewers: 0,
   };
   stages.set(found.key, stage);
@@ -961,24 +999,34 @@ const bridgeName = (stage: Stage) =>
  * A stage's request that got no answer at all: its connection refused, or
  * cut before its answer was whole (Bun's fetch: "ECONNRESET: The socket
  * connection was closed unexpectedly"). Its message names the address it
- * went to, the way there, and the connection's own error.
+ * went to (`at`), the way there, and the connection's own error (`words`).
  */
-class StageUnanswered extends Error {
-  constructor(what: string, at: string, error: unknown) {
-    super(stageRenderWords.unanswered(what, at, causeOf(error)), {
-      cause: error,
-    });
-    this.name = "StageUnanswered";
+class StageUnanswered extends Schema.TaggedError<StageUnanswered>()(
+  "StageUnanswered",
+  { what: Schema.String, at: Schema.String, words: Schema.String }
+) {
+  override get message(): string {
+    return stageRenderWords.unanswered(this.what, this.at, this.words);
   }
 }
+
+/** A rejection as the `Error` the stage's Effect code carries in its error channel: the error itself, or its words in one. */
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
+
+/** A step of another module's promise code, its rejection in the error channel as the error it was. */
+const attempt = <A>(
+  run: (signal: AbortSignal) => Promise<A>
+): Effect.Effect<A, Error> => Effect.tryPromise({ try: run, catch: asError });
 
 /**
  * A request to the stage itself, next to it: through the bridge into its
  * boundary's network, or the host's loopback on macOS. `take` reads its
- * answer; a request that got none, or whose answer was cut, throws
- * {@link StageUnanswered}, `what` naming what it was to do.
+ * answer; a request that got none, or whose answer was cut, fails with
+ * {@link StageUnanswered}, `what` naming what it was to do; no answer
+ * within its bound fails with {@link Unanswered}.
  */
-async function askStage<T>(
+const askStage = Effect.fnUntraced(function* <T>(
   stage: Stage,
   path: string,
   /** A fixed time to answer, or `"moving"`: for as long as the stage moves ({@link READ_QUIET_MS}). */
@@ -986,20 +1034,20 @@ async function askStage<T>(
   what: string,
   take: (response: Response, cut: (error: unknown) => never) => Promise<T>,
   body?: object
-): Promise<Bounded<T>> {
-  const reached = await reachWorkspace(
-    bridgeName(stage),
-    stage.boundary.id,
-    stage.port
+): Effect.fn.Return<T, Error | Unanswered> {
+  const reached = yield* attempt(() =>
+    reachWorkspace(bridgeName(stage), stage.boundary.id, stage.port)
   );
   const at =
     reached === "host"
       ? stageRenderWords.loopback(stage.port)
       : stageRenderWords.bridged(stage.port, stage.boundary.id.slice(0, 8));
-  const asked = async (signal: AbortSignal) => {
+  const asked = attempt(async (signal) => {
     // An abort is the read's own deadline, which its bound answers.
     const cut = (error: unknown): never => {
-      throw signal.aborted ? error : new StageUnanswered(what, at, error);
+      throw signal.aborted
+        ? error
+        : new StageUnanswered({ what, at, words: causeOf(error) });
     };
     const response = await fetch(
       reached === "host"
@@ -1018,11 +1066,11 @@ async function askStage<T>(
       }
     ).catch(cut);
     return take(response, cut);
-  };
-  return bound === "moving"
-    ? readWhileMoving(READ_QUIET_MS, () => stage.movedAt, asked)
-    : readWithin(bound, asked);
-}
+  });
+  return yield* bound === "moving"
+    ? boundedWhileMoving(READ_QUIET_MS, () => stage.movedAt, asked)
+    : boundedRead(bound, asked);
+});
 
 /**
  * How long a sheet's read or write waits on a stage that has stopped
@@ -1041,26 +1089,23 @@ const MAP_WAIT_MS = READ_QUIET_MS * 4;
 
 /** The refusal in words a stage's failed answer carries (`{ error }`); none when it carries none. */
 const refusalIn = (answer: unknown): string | undefined =>
-  typeof answer === "object" &&
-  answer !== null &&
-  "error" in answer &&
-  typeof answer.error === "string"
+  Predicate.hasProperty(answer, "error") && Predicate.isString(answer.error)
     ? answer.error
     : undefined;
 
 /**
  * The stage's JSON answer to `path`, a refusal in its own words, or that it
- * did not answer within `waitMs`.
+ * did not answer within its bound.
  */
-async function answerOf<T>(
+const answerOf = <T>(
   stage: Stage,
   path: string,
   bound: number | "moving",
   what: string,
   shape: z.ZodType<T>,
   body?: object
-): Promise<T> {
-  const read = await askStage(
+): Effect.Effect<T, Error> =>
+  askStage(
     stage,
     path,
     bound,
@@ -1077,24 +1122,32 @@ async function answerOf<T>(
       return shape.parse(answer);
     },
     body
+  ).pipe(
+    Effect.catchTag("Unanswered", (read) =>
+      Effect.fail(
+        new Error(
+          bound === "moving"
+            ? stageRenderWords.stoppedMoving(
+                what,
+                READ_QUIET_MS / 1000,
+                read.after / 1000
+              )
+            : `The stage did not ${what} within ${bound / 1000} s.`
+        )
+      )
+    )
   );
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      throw new Error(
-        bound === "moving"
-          ? stageRenderWords.stoppedMoving(
-              what,
-              READ_QUIET_MS / 1000,
-              read.after / 1000
-            )
-          : `The stage did not ${what} within ${bound / 1000} s.`
-      );
-    default:
-      unhandled("read", read);
-  }
-}
+
+/** The promise edge of {@link answerOf}, for the stage's exported reads and writes. */
+const answered = <T>(
+  stage: Stage,
+  path: string,
+  bound: number | "moving",
+  what: string,
+  shape: z.ZodType<T>,
+  body?: object
+): Promise<T> =>
+  Effect.runPromise(answerOf(stage, path, bound, what, shape, body));
 
 /** Writes the host into the toolchain root when it is not there as this build has it, git-excluded. */
 async function writeHost(stage: Stage): Promise<void> {
@@ -1108,17 +1161,31 @@ async function writeHost(stage: Stage): Promise<void> {
   await excludeFromCheckout(join(stage.root, ".cawco"));
 }
 
-/** Ends a stage's process group: TERM to its executor, which hands it to the command inside the boundary; KILL after {@link KILL_GRACE_MS}. */
+/**
+ * Ends a stage's life ({@link Stage.life}): its scope closed, which ends
+ * its start under way, its health look, its mirror, its readers and its
+ * process group together, the group by {@link endGroup}. Its process is no
+ * longer its own from here, so nothing it says or does after reaches the
+ * stage.
+ */
 function kill(stage: Stage): void {
-  const leader = stage.child ? spawnedPid(stage.child) : undefined;
+  const { life } = stage;
+  stage.life = undefined;
   stage.child = undefined;
-  // Its kept readers end with it: the next read opens another on the stage that runs then.
-  closeReaders(stage.key);
-  clearInterval(stage.health);
-  stage.health = undefined;
-  stage.mirror?.();
-  stage.mirror = undefined;
-  // No child, or one whose spawn made no process: nothing to signal.
+  if (life) {
+    Effect.runFork(Scope.close(life, Exit.void));
+  }
+}
+
+/**
+ * A stage's process group ended: TERM to its executor, which hands it to
+ * the command inside the boundary; KILL after {@link KILL_GRACE_MS}. The
+ * KILL is a synchronous step on a timer of its own, unref'd: it outlives
+ * the life whose close sent the TERM, and keeps no daemon from exiting.
+ */
+function endGroup(stage: Stage, child: ChildProcess): void {
+  const leader = spawnedPid(child);
+  // A spawn that made no process: nothing to signal.
   if (leader === undefined) {
     return;
   }
@@ -1137,34 +1204,65 @@ function killLeft(stage: Stage, leader: Pid): void {
   }
 }
 
-/** The stage ended, or stopped answering, on its own after it served: started again after its wait, or in `error` once its restarts are spent. */
-function crashed(stage: Stage, why: string): void {
-  if (stage.stopping) {
-    return;
-  }
+/**
+ * A new life for `stage` ({@link Stage.life}), the one before it ended,
+ * and `work` run in it: settles once `work` does; rejects with why when it
+ * fails, or when the life was ended first ({@link kill}). Its readers close
+ * with it.
+ */
+function begin(
+  stage: Stage,
+  work: (life: Scope.Scope) => Effect.Effect<void, Error>
+): Promise<void> {
   kill(stage);
-  if (stage.restarts >= STAGE_RESTARTS) {
+  const life = Effect.runSync(Scope.make());
+  stage.life = life;
+  Effect.runSync(
+    Scope.addFinalizer(
+      life,
+      Effect.sync(() => closeReaders(stage.key))
+    )
+  );
+  const run = Effect.runSync(Effect.forkIn(work(life), life));
+  // The promise edge of a stage's start: `ready`, which wake awaits.
+  const ready = Effect.runPromise(
+    Fiber.await(run).pipe(
+      Effect.flatMap((exit) =>
+        Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+          ? Effect.fail(new Error(stage.message ?? "The stage stopped."))
+          : exit
+      )
+    )
+  );
+  ready.catch(() => undefined);
+  return ready;
+}
+
+/** The stage ended, or stopped answering, on its own after it served: started again after its restart series's next wait, or in `error` once the series gives up. */
+function crashed(stage: Stage, why: string): void {
+  kill(stage);
+  stage.restarts ??= Effect.runSync(Schedule.toStep(backoffSchedule(RESTARTS)));
+  const series = stage.restarts;
+  const next = Effect.runSync(
+    series(Date.now(), undefined).pipe(
+      Effect.map(([tries, wait]) => ({ tries, wait })),
+      Pull.catchDone(() => Effect.succeed(undefined))
+    )
+  );
+  if (!next) {
+    stage.restarts = undefined;
     inError(stage, why);
     return;
   }
-  stage.restarts += 1;
-  const wait = backoffWait(RESTARTS, stage.restarts);
   console.warn(
-    `[stage] ${stage.key}: ${why}; starting it again in ${Math.round(wait / 1000)}s (${stage.restarts} of ${STAGE_RESTARTS})`
+    `[stage] ${stage.key}: ${why}; starting it again in ${Math.round(Duration.toMillis(next.wait) / 1000)}s (${next.tries.tries} of ${STAGE_RESTARTS})`
   );
   stage.status = "starting";
   stage.message = why;
   tell(stage);
-  stage.ready = new Promise((done, fail) => {
-    setTimeout(() => {
-      if (stage.stopping || stage.status !== "starting") {
-        fail(new Error(stage.message ?? "The stage stopped."));
-        return;
-      }
-      start(stage).then(done, fail);
-    }, wait).unref();
-  });
-  stage.ready.catch(() => undefined);
+  stage.ready = begin(stage, (life) =>
+    Effect.sleep(next.wait).pipe(Effect.andThen(starting(stage, life)))
+  );
 }
 
 /** Whether something on the host's loopback accepts a connection on `port`: opened and closed, nothing sent. */
@@ -1212,9 +1310,15 @@ async function listens(stage: Stage): Promise<boolean> {
  * long its pages take. Answered false when nothing listens or the host
  * answered otherwise; unanswered when nothing answered within `waitMs`.
  */
-const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
+const healthy = (
+  stage: Stage,
+  waitMs: number
+): Effect.Effect<Bounded<boolean>> =>
   (stage.runs.kind === "serve"
-    ? readWithin(waitMs, () => listens(stage))
+    ? boundedRead(
+        waitMs,
+        attempt(() => listens(stage))
+      )
     : askStage(
         stage,
         HEALTH_PATH,
@@ -1225,7 +1329,16 @@ const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
           return response.ok;
         }
       )
-  ).catch(() => ({ kind: "answered", value: false }) as const);
+  ).pipe(
+    Effect.map((value): Bounded<boolean> => ({ kind: "answered", value })),
+    Effect.catch((error) =>
+      Effect.succeed<Bounded<boolean>>(
+        error instanceof Unanswered
+          ? { kind: "unanswered", after: error.after, reason: error.reason }
+          : { kind: "answered", value: false }
+      )
+    )
+  );
 
 /**
  * How long a stage runs with no viewer and no use before it sleeps: core's
@@ -1241,16 +1354,16 @@ const IDLE_MS = process.env.CAWCO_STAGE_IDLE_MS
 function looked(stage: Stage, look: Bounded<boolean>): void {
   switch (look.kind) {
     case "answered":
-      if (!look.value) {
+      if (look.value) {
+        // A whole look's time live: its next crash starts its restarts afresh.
+        stage.restarts = undefined;
+      } else {
         crashed(
           stage,
           stage.runs.kind === "sheet"
             ? `it stopped answering ${HEALTH_PATH}`
             : `nothing listens on port ${stage.port} any more`
         );
-      } else if (stage.restarts > 0) {
-        // A whole look's time live: its next crash starts its restarts afresh.
-        stage.restarts = 0;
       }
       break;
     case "unanswered":
@@ -1269,45 +1382,57 @@ function looked(stage: Stage, look: Bounded<boolean>): void {
   }
 }
 
-/** Its health look, its lockfile's look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
-function watch(stage: Stage): void {
-  clearInterval(stage.health);
-  stage.health = setInterval(async () => {
-    if (stage.status !== "live") {
-      return;
+/** One health look of a live stage: its sleep when idle, its lockfile's look, then its health ({@link looked}). */
+const healthLook = Effect.fnUntraced(function* (stage: Stage) {
+  if (stage.status !== "live") {
+    return;
+  }
+  if (stage.viewers === 0 && Date.now() - stage.lastUse > IDLE_MS) {
+    sleep(stage);
+    return;
+  }
+  // A canvas no read has asked for in the stage's idle time is no longer in use: its kept reader closes.
+  idleReaders(stage.key, IDLE_MS);
+  if (yield* Effect.promise(() => depsMoved(stage))) {
+    if (stage.status === "live") {
+      startAgain(stage, REINSTALLING);
     }
-    if (stage.viewers === 0 && Date.now() - stage.lastUse > IDLE_MS) {
-      sleep(stage);
-      return;
-    }
-    // A canvas no read has asked for in the stage's idle time is no longer in use: its kept reader closes.
-    idleReaders(stage.key, IDLE_MS);
-    if (await depsMoved(stage)) {
-      if (stage.status === "live") {
-        startAgain(stage, REINSTALLING);
-      }
-      return;
-    }
-    looked(stage, await healthy(stage, HEALTH_WAIT_MS));
-  }, STAGE_HEALTH_MS);
-}
+    return;
+  }
+  looked(stage, yield* healthy(stage, HEALTH_WAIT_MS));
+});
 
 /**
- * A live stage ended, then started again ({@link start}), `why` its status's
+ * Its health look, its lockfile's look and its sleep, every
+ * {@link STAGE_HEALTH_MS} while it is live: the first a whole spell after
+ * it began to serve, each next one a spell after the one before ended. It
+ * runs in the stage's life, which ends it.
+ */
+const watch = (stage: Stage): Effect.Effect<void> =>
+  Effect.sleep(Duration.millis(STAGE_HEALTH_MS)).pipe(
+    Effect.andThen(
+      Effect.repeat(
+        healthLook(stage),
+        Schedule.spaced(Duration.millis(STAGE_HEALTH_MS))
+      )
+    ),
+    Effect.asVoid
+  );
+
+/**
+ * A live stage ended, then started again ({@link starting}), `why` its status's
  * message meanwhile: its project moved past its install (a fast-forward or a
  * rebase brought a new lockfile), and the start installs first, so it never
  * serves on the dependencies it had; or its boundary was handed over
  * ({@link moveStages}), and the start runs it in the boundary that runs now.
  */
 function startAgain(stage: Stage, why: string): void {
-  stage.stopping = true;
   kill(stage);
   stage.status = "starting";
-  stage.restarts = 0;
+  stage.restarts = undefined;
   stage.message = why;
   tell(stage);
-  stage.ready = start(stage);
-  stage.ready.catch(() => undefined);
+  stage.ready = begin(stage, (life) => starting(stage, life));
 }
 
 /** {@link startAgain}'s message for a stage whose lockfile moved. */
@@ -1344,11 +1469,25 @@ export function moveStages(executors: readonly number[]): number {
   return found;
 }
 
+/** The bridge into a stopped stage's network closed, let go: a close that fails is said, and the next look at the stage opens its own. */
+function bridgeLetGo(stage: Stage): void {
+  Effect.runFork(
+    attempt(() => closeBridge(bridgeName(stage))).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() =>
+          console.warn(
+            `[stage] ${stage.key}: its bridge was not closed: ${error.message}`
+          )
+        )
+      )
+    )
+  );
+}
+
 /** Asleep: stopped for want of a viewer, started again on the next use. */
 function sleep(stage: Stage): void {
-  stage.stopping = true;
   kill(stage);
-  closeBridge(bridgeName(stage)).catch(() => undefined);
+  bridgeLetGo(stage);
   stage.status = "asleep";
   stage.slept = true;
   stage.ready = undefined;
@@ -1378,33 +1517,33 @@ const hostWord = (line: string): HostWord | null => {
  * are served), while it is live: its clone kept in step with its checkout
  * on each change a watch of the checkout hears (stage-clone.ts
  * `followCheckout`), so the session's edits reach the stage's watcher and an
- * open sheet or page redraws. Ended with the stage ({@link kill}).
+ * open sheet or page redraws. Ended with the life it is opened in.
  */
-function mirrorWhileLive(stage: Stage): void {
-  stage.mirror?.();
-  stage.mirror = undefined;
-  if (workspaceIdKind(stage.workspace.id) !== "place") {
-    return;
-  }
-  stage.mirror = followCheckout(stage.workspace);
-}
+const mirrorWhileLive = (
+  stage: Stage
+): Effect.Effect<void, never, Scope.Scope> =>
+  workspaceIdKind(stage.workspace.id) === "place"
+    ? Effect.acquireRelease(
+        Effect.sync(() => followCheckout(stage.workspace)),
+        (unfollow) => Effect.sync(unfollow)
+      ).pipe(Effect.asVoid)
+    : Effect.void;
 
-/** It serves: `live`, its health look and its mirror started, the hub told. */
-const up = (stage: Stage) => {
+/** It serves: `live`, its health look and its mirror started in its life, the hub told. */
+const up = Effect.fnUntraced(function* (stage: Stage, life: Scope.Scope) {
   stage.status = "live";
   stage.message = undefined;
   stage.lastUse = Date.now();
   stage.movedAt = Date.now();
-  watch(stage);
-  mirrorWhileLive(stage);
+  yield* Effect.forkIn(watch(stage), life);
+  yield* Scope.provide(mirrorWhileLive(stage), life);
   tell(stage);
-};
+});
 
 /** What the host said, kept and told to the hub; whether it said it serves. */
 const heard = (stage: Stage, word: HostWord): boolean => {
   if (word.cawco === "ready") {
     stage.restartsOn = word.restartsOn ?? [];
-    up(stage);
     return true;
   }
   if (word.cawco === "errors") {
@@ -1434,29 +1573,17 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
       ]
     : [serveScript(stage.runs.command), { PORT: String(stage.port) }];
 
-/** Whether the stage's port is free within `waitMs`: a server an earlier daemon left lets go of it at its next beat. */
-const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
-  const deadline = Date.now() + waitMs;
-  for (;;) {
-    const look = await healthy(stage, SERVE_ASK_MS);
-    switch (look.kind) {
-      case "answered":
-        if (!look.value) {
-          return true;
-        }
-        break;
-      case "unanswered":
-        // Something holds the port and has not answered: not free.
-        break;
-      default:
-        unhandled("read", look);
-    }
-    if (Date.now() > deadline) {
-      return false;
-    }
-    await Bun.sleep(500);
-  }
-};
+/** Whether the stage's port is free within `waitMs`, asked every {@link LET_GO_POLL_MS}: a server an earlier daemon left lets go of it at its next beat. Something that holds the port and does not answer holds it. */
+const letGo = (stage: Stage, waitMs: number): Effect.Effect<boolean> =>
+  lookUntil(
+    {
+      every: Duration.millis(LET_GO_POLL_MS),
+      deadlineMs: waitMs,
+      until: (look: Bounded<boolean>) =>
+        look.kind === "answered" && !look.value,
+    },
+    healthy(stage, SERVE_ASK_MS)
+  ).pipe(Effect.map((poll) => poll.kind === "found"));
 
 /** The stage in `error` with why, started again only when someone asks for it ({@link wake}); the hub told. */
 function inError(stage: Stage, why: string): void {
@@ -1474,43 +1601,27 @@ function inError(stage: Stage, why: string): void {
  * starts it ({@link wake}).
  */
 function failedStart(stage: Stage, why: string): void {
-  if (stage.stopping) {
-    return;
-  }
   kill(stage);
   inError(stage, why);
 }
 
-/** A start found its port held: in `error` with why, and the hub told. */
-function refusedStart(stage: Stage, why: string): never {
-  inError(stage, why);
-  throw new StageRefusal(why);
-}
+/** A start found its port held, or its install failed: in `error` with why, the hub told, and the start fails with a {@link StageRefusal}. */
+const refusedStart = (stage: Stage, why: string): Effect.Effect<never, Error> =>
+  Effect.suspend(() => {
+    inError(stage, why);
+    return Effect.fail(new StageRefusal(why));
+  });
 
-/**
- * Whether a server's port listens, asked one try at a time while `waiting`
- * holds and `child` is still the stage's; false once either ends first.
- */
-const servesBy = async (
-  stage: Stage,
-  child: Stage["child"],
-  waiting: () => boolean
-): Promise<boolean> => {
-  while (waiting() && stage.child === child) {
-    const look = await healthy(stage, SERVE_ASK_MS);
-    if (look.kind === "answered" && look.value) {
-      return true;
-    }
-    await Bun.sleep(SERVE_POLL_MS);
-  }
-  return false;
-};
+/** A server's start until its port listens, asked one look at a time, each {@link SERVE_POLL_MS} after the last; its life's end or its start's deadline ends it first. */
+const servesBy = (stage: Stage): Effect.Effect<void> =>
+  lookUntil(
+    {
+      every: Duration.millis(SERVE_POLL_MS),
+      until: (look: Bounded<boolean>) => look.kind === "answered" && look.value,
+    },
+    healthy(stage, SERVE_ASK_MS)
+  ).pipe(Effect.asVoid);
 
-/**
- * Starts the stage in its boundary; settles once it serves (the host says
- * so, or a server's port listens), rejects with why it did not. A server
- * whose port already listens is never started: something else serves it.
- */
 /** Whether a stage holds, or is about to hold, its memory: live, or on its way there. */
 const holdsMemory = (stage: Stage): boolean =>
   stage.status === "live" ||
@@ -1526,32 +1637,56 @@ let freeing: { bytes: number; until: number }[] = [];
 /** How often the live previews are measured ({@link measure}) while any is live. Ours: a minute keeps a figure fresh at one read of the process table. */
 const MEASURE_MS = 60_000;
 
-let measuring: ReturnType<typeof setInterval> | undefined;
+/** The live previews measured ({@link keepMeasuring}), while any is live. */
+let measuring = false;
 
-/** Measures every live stage each {@link MEASURE_MS}, from now until none is live. */
-function keepMeasuring(): void {
-  measuring ??= setInterval(() => {
-    const live = [...stages.values()].filter(
-      (stage) => stage.status === "live"
-    );
-    if (live.length === 0) {
-      clearInterval(measuring);
-      measuring = undefined;
-      return;
-    }
+/** The live stages measured once (preview-room.ts `measure`); whether any was live, a failure said. */
+const measureLive = Effect.suspend(() => {
+  const live = [...stages.values()].filter((stage) => stage.status === "live");
+  if (live.length === 0) {
+    return Effect.succeed(false);
+  }
+  return attempt(() =>
     measure(
       live.map((stage) => ({
         boundary: stage.boundary.id,
         key: stage.key,
         kind: stage.runs.kind,
       }))
-    ).catch((error) => {
-      console.warn(
-        `[stage] the live previews' memory was not measured: ${error instanceof Error ? error.message : String(error)}`
-      );
-    });
-  }, MEASURE_MS);
-  measuring.unref();
+    )
+  ).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() =>
+        console.warn(
+          `[stage] the live previews' memory was not measured: ${error.message}`
+        )
+      )
+    ),
+    Effect.as(true)
+  );
+});
+
+/** Measures every live stage each {@link MEASURE_MS}, the first a whole spell from now, until a look finds none live. */
+function keepMeasuring(): void {
+  if (measuring) {
+    return;
+  }
+  measuring = true;
+  Effect.runFork(
+    Effect.sleep(Duration.millis(MEASURE_MS)).pipe(
+      Effect.andThen(
+        Effect.repeat(measureLive, {
+          schedule: Schedule.spaced(Duration.millis(MEASURE_MS)),
+          while: (anyLive) => anyLive,
+        })
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          measuring = false;
+        })
+      )
+    )
+  );
 }
 
 /**
@@ -1621,174 +1756,204 @@ function weigh(stage: Stage): void {
   }
 }
 
-async function start(stage: Stage): Promise<void> {
-  stage.stopping = false;
+/**
+ * A stage's process, spawned in its boundary and held by the scope it is
+ * opened in (the stage's life): kept as the stage's own while it lasts, its
+ * process group ended as the scope closes ({@link endGroup}).
+ */
+const spawned = (
+  stage: Stage,
+  exec: string
+): Effect.Effect<ChildProcess, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const [command, env] = commandOf(stage);
+      stage.startedAt = Date.now();
+      const child = spawn(exec, [command], {
+        cwd: stage.root,
+        detached: true,
+        // The executor enters the boundary in `$PWD`. Its mark goes with it to
+        // everything the server starts in there: what of the boundary's work is
+        // this server's, which moves with a handover (boundary/servers.ts
+        // `serversIn`).
+        env: {
+          ...hostEnvironment(),
+          PWD: stage.root,
+          ...env,
+          [CAWCO_ENV.stageServer]: stage.key,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      stage.child = child;
+      // The agent's own, as its landing's commands are: a session's sweep of
+      // the workspace (an interrupt, a stop, its items' end) leaves it serving
+      // (boundary/work.ts `agentServerStarted`). On Linux its environment names no
+      // session; on the Mac, where the sweep reads the workspace's whole work,
+      // only this mark spares it. It is the agent's until the process ends.
+      const executor = spawnedPid(child);
+      if (executor !== undefined) {
+        const release = agentServerStarted(stage.boundary.id, executor);
+        child.once("exit", release);
+        child.once("error", release);
+      }
+      return child;
+    }),
+    (child) => Effect.sync(() => endGroup(stage, child))
+  );
+
+/** What a stage's process says while its life lasts: that it serves (a sheet's host's `ready`), and why it ended, once it has. */
+interface Said {
+  /** Why it ended: its host's `fatal`, its last words, or its status. */
+  readonly ended: Deferred.Deferred<string>;
+  /** Its host said `ready`. */
+  readonly ready: Deferred.Deferred<void>;
+}
+
+/**
+ * The stage's process heard while the scope it is opened in lasts: its
+ * words kept to say why it ended, its host's words read ({@link heard}),
+ * its end. Its listeners come off as the scope closes, so a process the
+ * stage let go of (a restart, a sleep, a stop) is no longer heard: its end
+ * is no crash of the one that replaced it.
+ */
+const hearing = (
+  stage: Stage,
+  child: ChildProcess
+): Effect.Effect<Said, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const said: Said = {
+        ended: Deferred.makeUnsafe<string>(),
+        ready: Deferred.makeUnsafe<void>(),
+      };
+      const tail = newTail();
+      let fatal: string | undefined;
+      const keep = (chunk: Buffer) => {
+        writeTail(tail, chunk.toString("utf8"), STDERR_KEPT);
+      };
+      let partial = "";
+      // A server says nothing CawCo reads: its words are kept to say why it
+      // ended, and it serves once its port listens.
+      const out =
+        stage.runs.kind === "serve"
+          ? keep
+          : (chunk: Buffer) => {
+              const lines = (partial + chunk.toString("utf8")).split("\n");
+              partial = lines.pop() ?? "";
+              for (const line of lines) {
+                const word = hostWord(line);
+                if (word?.cawco === "fatal") {
+                  fatal = word.message;
+                } else if (word && heard(stage, word)) {
+                  Deferred.doneUnsafe(said.ready, Effect.void);
+                }
+              }
+            };
+      const failed = (error: Error) => {
+        Deferred.doneUnsafe(said.ended, Effect.succeed(error.message));
+      };
+      const exited = (code: number | null, ended: NodeJS.Signals | null) => {
+        const why =
+          fatal ??
+          (cutShort(
+            lastLines(
+              saidTail(tail)
+                .split("\n")
+                .filter((line) => line.trim()),
+              3,
+              " "
+            ),
+            400
+          ) ||
+            `it ended (${ended ?? `status ${code}`})`);
+        Deferred.doneUnsafe(said.ended, Effect.succeed(why));
+      };
+      child.stderr?.on("data", keep);
+      child.stdout?.on("data", out);
+      child.on("error", failed);
+      child.on("exit", exited);
+      return {
+        said,
+        off: () => {
+          child.stderr?.off("data", keep);
+          child.stdout?.off("data", out);
+          child.off("error", failed);
+          child.off("exit", exited);
+        },
+      };
+    }),
+    ({ off }) => Effect.sync(off)
+  ).pipe(Effect.map(({ said }) => said));
+
+/**
+ * Starts the stage in its life ({@link begin}): its project installed, its
+ * port free, its process spawned; done once it serves (the host says so,
+ * or a server's port listens), failed with why it did not. A server whose
+ * port already listens is never started: something else serves it. Once it
+ * serves, its end is a crash ({@link crashed}); before, a failed start
+ * ({@link failedStart}).
+ */
+const starting = Effect.fnUntraced(function* (
+  stage: Stage,
+  life: Scope.Scope
+): Effect.fn.Return<void, Error> {
   // Every stage starts on its project as its lockfile names it: one whose
   // workspace was fast-forwarded past its install served a 500 on every
   // page (2026-10-29). A place's starts on its checkout as it is now: one
   // woken after its sleep has missed every edit since, and its clone may
   // have retired meanwhile (stage-clone.ts), which this cuts again. An
   // install that fails is the stage's error, in the installer's words.
-  try {
-    await installFor(stage);
-  } catch (error) {
-    refusedStart(stage, error instanceof Error ? error.message : String(error));
-  }
+  yield* attempt(() => installFor(stage)).pipe(
+    Effect.catch((error) => refusedStart(stage, error.message))
+  );
   if (stage.runs.kind === "sheet") {
-    await writeHost(stage);
+    yield* attempt(() => writeHost(stage));
     // The host a failed health look ended (`crashed` → `kill`: its
     // executor's TERM has the boundary's runner TERM the host's group, then
     // KILL it 4 s on, boundary/runner.ts `runnerText` `cancel`) lets go of the port
     // first: one hung there holds it, and a replacement started beside it
     // only says "Port … is already in use" until its restarts are spent.
-    if (!(await letGo(stage, HOST_LET_GO_MS))) {
-      refusedStart(
+    if (!(yield* letGo(stage, HOST_LET_GO_MS))) {
+      return yield* refusedStart(
         stage,
         `port ${stage.port} in this workspace is still held ${HOST_LET_GO_MS / 1000}s after its stage was ended, so its host wasn't started again. Stop what holds it, then show the canvas again.`
       );
     }
-  } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
-    refusedStart(
+  } else if (!(yield* letGo(stage, SERVE_LET_GO_MS))) {
+    return yield* refusedStart(
       stage,
       `port ${stage.port} in this workspace is already in use, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
   roomFor(stage);
-  const boundary = await ensureBoundary(stage.boundary);
-  const [command, env] = commandOf(stage);
-  stage.startedAt = Date.now();
-  const child = spawn(boundary.exec, [command], {
-    cwd: stage.root,
-    detached: true,
-    // The executor enters the boundary in `$PWD`. Its mark goes with it to
-    // everything the server starts in there: what of the boundary's work is
-    // this server's, which moves with a handover (boundary/servers.ts
-    // `serversIn`).
-    env: {
-      ...hostEnvironment(),
-      PWD: stage.root,
-      ...env,
-      [CAWCO_ENV.stageServer]: stage.key,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  stage.child = child;
-  // The agent's own, as its landing's commands are: a session's sweep of
-  // the workspace (an interrupt, a stop, its items' end) leaves it serving
-  // (boundary/work.ts `agentServerStarted`). On Linux its environment names no
-  // session; on the Mac, where the sweep reads the workspace's whole work,
-  // only this mark spares it.
-  const executor = spawnedPid(child);
-  if (executor !== undefined) {
-    const release = agentServerStarted(stage.boundary.id, executor);
-    child.once("exit", release);
-    child.once("error", release);
-  }
-  const said = newTail();
-  let fatal: string | undefined;
-  // Whether this start served: only a stage that served and then ended is
-  // started again; one that never served fails the same way again.
-  let served = false;
-  const keep = (chunk: Buffer) => {
-    writeTail(said, chunk.toString("utf8"), STDERR_KEPT);
-  };
-  child.stderr?.on("data", keep);
-  const ready = await readWithin(
+  const boundary = yield* attempt(() => ensureBoundary(stage.boundary));
+  const child = yield* Scope.provide(spawned(stage, boundary.exec), life);
+  const said = yield* Scope.provide(hearing(stage, child), life);
+  const ended = Deferred.await(said.ended);
+  const serves =
+    stage.runs.kind === "serve" ? servesBy(stage) : Deferred.await(said.ready);
+  // Why it did not serve: it ended first, or no answer in time; none once it serves.
+  const unserved = yield* boundedRead(
     STAGE_READY_MS,
-    (signal) =>
-      new Promise<void>((done, fail) => {
-        let settled = false;
-        const settle = (error?: Error) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          if (error) {
-            fail(error);
-          } else {
-            served = true;
-            done();
-          }
-        };
-        // Let go at the deadline: what comes after is no longer this start's.
-        signal.addEventListener(
-          "abort",
-          () => {
-            settled = true;
-          },
-          { once: true }
-        );
-        if (stage.runs.kind === "serve") {
-          // A server says nothing CawCo reads: its words are kept to say why it
-          // ended, and it serves once its port listens.
-          child.stdout?.on("data", keep);
-          servesBy(stage, child, () => !settled).then(
-            (serves) => {
-              if (serves && !settled && stage.child === child) {
-                up(stage);
-                settle();
-              }
-            },
-            () => undefined
-          );
-        } else {
-          let partial = "";
-          child.stdout?.on("data", (chunk: Buffer) => {
-            const lines = (partial + chunk.toString("utf8")).split("\n");
-            partial = lines.pop() ?? "";
-            for (const line of lines) {
-              const word = hostWord(line);
-              if (word?.cawco === "fatal") {
-                fatal = word.message;
-              } else if (word && heard(stage, word)) {
-                settle();
-              }
-            }
-          });
-        }
-        // Only the stage's own child: one the daemon took down (a restart, a
-        // sleep, a stop) is no crash of the one that replaced it.
-        child.on("error", (error) => {
-          if (stage.child !== child) {
-            return;
-          }
-          settle(error);
-          (served ? crashed : failedStart)(stage, error.message);
-        });
-        child.on("exit", (code, ended) => {
-          if (stage.child !== child) {
-            return;
-          }
-          const why =
-            fatal ??
-            (cutShort(
-              lastLines(
-                saidTail(said)
-                  .split("\n")
-                  .filter((line) => line.trim()),
-                3,
-                " "
-              ),
-              400
-            ) ||
-              `it ended (${ended ?? `status ${code}`})`);
-          settle(new Error(why));
-          (served ? crashed : failedStart)(stage, why);
-        });
-      })
+    Effect.raceFirst(Effect.as(serves, undefined), ended)
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.succeed(
+        `${stage.runs.kind === "sheet" ? sheetWords.toolchains[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`
+      )
+    )
   );
-  switch (ready.kind) {
-    case "answered":
-      return;
-    case "unanswered": {
-      const why = `${stage.runs.kind === "sheet" ? sheetWords.toolchains[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
-      failedStart(stage, why);
-      throw new Error(why);
-    }
-    default:
-      unhandled("read", ready);
+  if (unserved !== undefined) {
+    failedStart(stage, unserved);
+    return yield* Effect.fail(new Error(unserved));
   }
-}
+  yield* up(stage, life);
+  // Only a stage that served and then ended is started again; one that never served fails the same way again.
+  yield* Effect.forkIn(
+    ended.pipe(Effect.flatMap((why) => Effect.sync(() => crashed(stage, why)))),
+    life
+  );
+});
 
 /** The stage at `found`'s toolchain root, kept from before or made now; started or woken by `by`, and waited on. */
 async function stageAtRoot(found: StagePlace, by: string): Promise<Stage> {
@@ -1846,7 +2011,7 @@ export async function ensureStage(
   const rel = relative(stage.root, story);
   const all = stories.map((one) => relative(stage.root, one));
   const [sheet, weight, { errors, ...report }] = await Promise.all([
-    answerOf(
+    answered(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
       "moving",
@@ -1854,7 +2019,7 @@ export async function ensureStage(
       SheetReadSchema
     ),
     sheetWeight(stage, rel),
-    answerOf(
+    answered(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
       "moving",
@@ -1898,7 +2063,7 @@ async function pagesLooked(
       (moved?.[kind] ?? []).map((one): [string, string] => [kind, one])
     ),
   ];
-  const { errors } = await answerOf(
+  const { errors } = await answered(
     stage,
     `${PAGES_PATH}?${new URLSearchParams(asked)}`,
     "moving",
@@ -1981,7 +2146,7 @@ async function sheetWeight(
   stage: Stage,
   rel: string
 ): Promise<SheetWeight | null> {
-  const { weight } = await answerOf(
+  const { weight } = await answered(
     stage,
     `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
     "moving",
@@ -2017,7 +2182,7 @@ export async function writeSheet(
   const stage = await storyStage(tree, first, "a write");
   const files = stories.map((story) => relative(stage.root, story));
   const written = () =>
-    answerOf(
+    answered(
       stage,
       WRITE_PATH,
       "moving",
@@ -2125,7 +2290,7 @@ export async function drawServed(
 const WARM_WAIT_MS = 60_000;
 
 /** Each canvas's Preview page asked of its stage and not answered yet, by stage and address: a warm-up of it asked meanwhile joins the one walk. */
-const warming = new Map<string, Promise<void>>();
+const warming = makeJoin<string, void, Error>();
 
 /**
  * Canvas `files` (from the stage's root) asked of its stage as a decision
@@ -2134,40 +2299,39 @@ const warming = new Map<string, Promise<void>>();
  * own `warmupRequest`), so the Preview's first open finds every module
  * transformed. One walk per stage and canvas at a time.
  */
-function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
+const walkedAsEmbed = (
+  stage: Stage,
+  files: string[]
+): Effect.Effect<void, Error> => {
   const path = `${canvasPath(files, {})}&by=embed`;
-  const key = `${stage.key} ${path}`;
-  const under = warming.get(key);
-  if (under) {
-    return under;
-  }
-  const walk = askStage(
-    stage,
-    path,
-    WARM_WAIT_MS,
-    "serve its canvas page",
-    async (response, cut) => {
-      try {
-        await response.text();
-      } catch (error) {
-        cut(error);
+  return warming.run(
+    `${stage.key} ${path}`,
+    askStage(
+      stage,
+      path,
+      WARM_WAIT_MS,
+      "serve its canvas page",
+      async (response, cut) => {
+        try {
+          await response.text();
+        } catch (error) {
+          cut(error);
+        }
+        if (!response.ok) {
+          throw new Error(`its canvas page answered ${response.status}`);
+        }
       }
-      if (!response.ok) {
-        throw new Error(`its canvas page answered ${response.status}`);
-      }
-    }
-  )
-    .then((asked) => {
-      if (asked.kind === "unanswered") {
-        throw new Error(
-          `its canvas page did not answer within ${WARM_WAIT_MS / 1000} s`
-        );
-      }
-    })
-    .finally(() => warming.delete(key));
-  warming.set(key, walk);
-  return walk;
-}
+    ).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.fail(
+          new Error(
+            `its canvas page did not answer within ${WARM_WAIT_MS / 1000} s`
+          )
+        )
+      )
+    )
+  );
+};
 
 /**
  * A stage warmed for a decision page as it goes out (core `StageWarm`):
@@ -2205,12 +2369,15 @@ export async function warmStage(
       return;
     }
     const stage = await storyStage(tree, first, warm.by);
-    await Promise.all(
-      canvases.map((stories) =>
-        walkedAsEmbed(
-          stage,
-          stories.map((story) => relative(stage.root, story))
-        )
+    await Effect.runPromise(
+      Effect.all(
+        canvases.map((stories) =>
+          walkedAsEmbed(
+            stage,
+            stories.map((story) => relative(stage.root, story))
+          )
+        ),
+        { concurrency: "unbounded", discard: true }
       )
     );
   } catch (error) {
@@ -2269,7 +2436,7 @@ export async function stageComponents(
       query.set(key, value);
     }
   }
-  const map = await answerOf(
+  const map = await answered(
     stage,
     `${COMPONENTS_PATH}?${query}`,
     MAP_WAIT_MS,
@@ -2370,11 +2537,10 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
   if (!stage.ready || stage.status === "error" || stage.status === "asleep") {
     stage.status = stage.slept ? "waking" : "starting";
     stage.slept = false;
-    stage.restarts = 0;
+    stage.restarts = undefined;
     stage.message = undefined;
     tell(stage);
-    stage.ready = start(stage);
-    stage.ready.catch(() => undefined);
+    stage.ready = begin(stage, (life) => starting(stage, life));
   }
   try {
     await stage.ready;
@@ -2546,7 +2712,7 @@ export async function sourceEnded(source: PreviewSource): Promise<boolean> {
     return false;
   }
   if (stage.status === "live") {
-    const look = await healthy(stage, HEALTH_WAIT_MS);
+    const look = await Effect.runPromise(healthy(stage, HEALTH_WAIT_MS));
     // One that serves keeps its restarts' count: only a whole look's time
     // live starts it afresh.
     if (stage.status === "live" && !(look.kind === "answered" && look.value)) {
@@ -2587,9 +2753,8 @@ function viewing(stage: Stage): () => void {
 
 /** Ends one stage and forgets it: its process group, its bridge. */
 function stopOne(stage: Stage): void {
-  stage.stopping = true;
   kill(stage);
-  closeBridge(bridgeName(stage)).catch(() => undefined);
+  bridgeLetGo(stage);
   if (stages.get(stage.key) === stage) {
     stages.delete(stage.key);
   }

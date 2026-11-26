@@ -31,6 +31,7 @@ import {
 import { type NamedStory, shownName } from "@cawco/core/stage-graph";
 import { cutShort } from "@cawco/core/words/helpers";
 import { storyReadWords as reasons } from "@cawco/core/words/story-read";
+import { Schema } from "effect";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {
@@ -66,7 +67,12 @@ export interface StaticSheet {
 }
 
 /** Why a write was not made, in one sentence the person and the agent read. */
-export class StoryRefusal extends Error {}
+export class StoryRefusal extends Schema.TaggedError<StoryRefusal>()(
+  "StoryRefusal",
+  {
+    message: Schema.String,
+  }
+) {}
 
 const TSX = /\.tsx$/u;
 const TS = /\.[cm]?ts$/u;
@@ -1417,9 +1423,9 @@ function printed(value: unknown, style: Style): string {
       ? "{}"
       : `{ ${entries.map(([key, one]) => `${keyText(key, style)}: ${printed(one, style)}`).join(", ")} }`;
   }
-  throw new StoryRefusal(
-    `${String(value)} is no JSON value, so it can't be written as an arg.`
-  );
+  throw new StoryRefusal({
+    message: `${String(value)} is no JSON value, so it can't be written as an arg.`,
+  });
 }
 
 /** One replacement of `[from, to)` in the file's text. */
@@ -1545,12 +1551,12 @@ function storyNamed(
 ): Export & { object: Node } {
   const story = exports.find((one) => one.name === name);
   if (!story) {
-    throw new StoryRefusal(
-      `${file} has no story ${name}; its stories are ${exports.map((one) => one.name).join(", ") || "none"}.`
-    );
+    throw new StoryRefusal({
+      message: `${file} has no story ${name}; its stories are ${exports.map((one) => one.name).join(", ") || "none"}.`,
+    });
   }
   if (!story.object) {
-    throw new StoryRefusal(reasons.notWritable(name, file));
+    throw new StoryRefusal({ message: reasons.notWritable(name, file) });
   }
   return { ...story, object: story.object };
 }
@@ -1575,23 +1581,25 @@ export function writeArgs(
   const reading = { imports: importsOf(body), scope: scopeOf(body), text };
   const { readOnly } = storyRead(reading, named, namedOf(reading, exports));
   if (readOnly) {
-    throw new StoryRefusal(readOnly.reason);
+    throw new StoryRefusal({ message: readOnly.reason });
   }
   const { object } = named;
   const argsProperty = propertyOf(object, "args");
   const args = bare(argsProperty ? child(argsProperty, "value") : null);
   const keys = Object.keys(values);
   if (keys.length === 0 && unset.length === 0) {
-    throw new StoryRefusal(
-      "Nothing to write: give values to set or args to unset."
-    );
+    throw new StoryRefusal({
+      message: "Nothing to write: give values to set or args to unset.",
+    });
   }
   if (!args) {
     const entries = keys.map(
       (key) => `${keyText(key, style)}: ${printed(values[key], style)}`
     );
     if (entries.length === 0) {
-      throw new StoryRefusal(`${story} has no args of its own to unset.`);
+      throw new StoryRefusal({
+        message: `${story} has no args of its own to unset.`,
+      });
     }
     return applied(
       text,
@@ -1600,9 +1608,9 @@ export function writeArgs(
   }
   const splices = argsSplices(text, args, story, values, unset, style);
   if (splices.length === 0) {
-    throw new StoryRefusal(
-      `${story} has none of ${unset.join(", ")} to unset.`
-    );
+    throw new StoryRefusal({
+      message: `${story} has none of ${unset.join(", ")} to unset.`,
+    });
   }
   return applied(text, splices);
 }
@@ -1626,9 +1634,9 @@ function argsSplices(
       continue;
     }
     if (!literal(value)) {
-      throw new StoryRefusal(
-        `${story}'s ${key} is code (\`${text.slice(value.start ?? 0, value.end ?? 0)}\`), which CawCo leaves to the agent: edit it in the file.`
-      );
+      throw new StoryRefusal({
+        message: `${story}'s ${key} is code (\`${text.slice(value.start ?? 0, value.end ?? 0)}\`), which CawCo leaves to the agent: edit it in the file.`,
+      });
     }
     splices.push({
       from: value.start ?? 0,
@@ -1689,12 +1697,12 @@ function storyLike(
 /** A story's name the file can take: an identifier starting with a capital, and no other story's. */
 function freshName(file: string, exports: Export[], name: string): void {
   if (!STORY_NAME.test(name)) {
-    throw new StoryRefusal(
-      `${name} can't name a story: a story's export is a name like Roomy, starting with a capital, letters, digits and _ only.`
-    );
+    throw new StoryRefusal({
+      message: `${name} can't name a story: a story's export is a name like Roomy, starting with a capital, letters, digits and _ only.`,
+    });
   }
   if (exports.some((one) => one.name === name)) {
-    throw new StoryRefusal(`${file} has a story ${name} already.`);
+    throw new StoryRefusal({ message: `${file} has a story ${name} already.` });
   }
 }
 
@@ -1715,7 +1723,7 @@ export function storyStatement(
 ): { from: number; to: number } {
   const story = exportsOf(parsed(file, text)).find((one) => one.name === name);
   if (!story) {
-    throw new StoryRefusal(`${file} has no story ${name}.`);
+    throw new StoryRefusal({ message: `${file} has no story ${name}.` });
   }
   return { from: story.statement.start ?? 0, to: story.statement.end ?? 0 };
 }
@@ -1749,7 +1757,7 @@ export function writeStoryOp(
   if ("remove" in op) {
     const story = exports.find((one) => one.name === op.remove);
     if (!story) {
-      throw new StoryRefusal(`${file} has no story ${op.remove}.`);
+      throw new StoryRefusal({ message: `${file} has no story ${op.remove}.` });
     }
     return applied(text, [{ ...cutOf(text, story.statement), text: "" }]);
   }
@@ -1791,14 +1799,14 @@ function moveStory(
   const last = exports.at(-1);
   const moving = exports.find((one) => one.name === op.move);
   if (!moving) {
-    throw new StoryRefusal(`${file} has no story ${op.move}.`);
+    throw new StoryRefusal({ message: `${file} has no story ${op.move}.` });
   }
   const target =
     op.before === null ? null : exports.find((one) => one.name === op.before);
   if (op.before !== null && !target) {
-    throw new StoryRefusal(
-      `${file} has no story ${op.before} to move ${op.move} before.`
-    );
+    throw new StoryRefusal({
+      message: `${file} has no story ${op.before} to move ${op.move} before.`,
+    });
   }
   const index = exports.indexOf(moving);
   if (
@@ -1807,7 +1815,7 @@ function moveStory(
       ? exports.indexOf(target) === index + 1
       : index === exports.length - 1)
   ) {
-    throw new StoryRefusal(`${op.move} stands there already.`);
+    throw new StoryRefusal({ message: `${op.move} stands there already.` });
   }
   const own = block(text, moving.statement);
   const piece = text.slice(own.from, own.to);

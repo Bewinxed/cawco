@@ -20,20 +20,26 @@ import {
   type CanvasScreenClose,
   type CanvasScreenOpen,
 } from "@cawco/core/canvas";
+import { Duration, Effect, Fiber } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 
 /** Each held page's browser, and the guard that closes it once the hub goes quiet on it, by the hub's token. */
-const held = new Map<
-  string,
-  { browser: Browser; guard: ReturnType<typeof setTimeout> }
->();
+const held = new Map<string, { browser: Browser; guard: Fiber.Fiber<void> }>();
 
-/** The guard on `token`: it closes the page twice `screenHoldMs` from now, unless the hub holds it on first. */
-const guardOf = (token: string) =>
-  setTimeout(() => {
-    closeCanvasScreen({ token }).catch(() => undefined);
-  }, 2 * CANVAS_LIMITS.screenHoldMs);
+/** The guard on `token`: it closes the page twice `screenHoldMs` from now, unless the hub holds it on first ({@link unguard}). */
+const guardOf = (token: string): Fiber.Fiber<void> =>
+  Effect.runFork(
+    Effect.sleep(Duration.millis(2 * CANVAS_LIMITS.screenHoldMs)).pipe(
+      Effect.andThen(Effect.promise(() => closeCanvasScreen({ token }))),
+      Effect.asVoid
+    )
+  );
+
+/** A guard let go: the page is held on, or closed. */
+const unguard = (guard: Fiber.Fiber<void>): void => {
+  Effect.runFork(Fiber.interrupt(guard));
+};
 
 /**
  * The canvas page at `url` open, loaded and told which canvas it is, held
@@ -45,7 +51,7 @@ export async function openCanvasScreen(
   const { canvas, token, url } = options;
   const open = held.get(token);
   if (open) {
-    clearTimeout(open.guard);
+    unguard(open.guard);
     open.guard = guardOf(token);
     return { opened: true };
   }
@@ -91,7 +97,7 @@ export async function closeCanvasScreen(
     return { closed: false };
   }
   held.delete(options.token);
-  clearTimeout(one.guard);
+  unguard(one.guard);
   await one.browser.close().catch(() => undefined);
   return { closed: true };
 }

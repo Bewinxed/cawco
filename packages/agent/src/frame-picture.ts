@@ -18,6 +18,7 @@
  */
 import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
+import { Schema } from "effect";
 import type { Page } from "playwright-core";
 import { holdTimeAnimations } from "./chromium";
 import {
@@ -29,7 +30,12 @@ import {
 } from "./in-page/page";
 
 /** Why a state's picture can't be taken as it is, in words a tool answers. */
-class FramePictureRefusal extends Error {}
+class FramePictureRefusal extends Schema.TaggedError<FramePictureRefusal>()(
+  "FramePictureRefusal",
+  {
+    message: Schema.String,
+  }
+) {}
 
 /**
  * The key of the state story `name` (`Story`, or `file:Story` where two
@@ -45,10 +51,10 @@ export async function findState(
     interaction,
   ] as const);
   if (!found) {
-    throw new FramePictureRefusal("The page holds no stage.");
+    throw new FramePictureRefusal({ message: "The page holds no stage." });
   }
   if ("refused" in found) {
-    throw new FramePictureRefusal(found.refused);
+    throw new FramePictureRefusal({ message: found.refused });
   }
   return found.key;
 }
@@ -69,7 +75,9 @@ export async function poseState(
   const left = () => Math.max(1, deadline - Date.now());
   const lacks = await page.evaluate(poseNow, key);
   if (!lacks) {
-    throw new FramePictureRefusal(`The stage draws no state ${key}.`);
+    throw new FramePictureRefusal({
+      message: `The stage draws no state ${key}.`,
+    });
   }
   if (lacks.w > 0 || lacks.h > 0) {
     const view = page.viewportSize() ?? { width: 0, height: 0 };
@@ -80,16 +88,16 @@ export async function poseState(
     await page.setViewportSize(grown);
     // The stage lays the drawing out in the window as it stands: it has its room first.
     await page.waitForFunction(roomHeld, key, { timeout: left() }).catch(() => {
-      throw new FramePictureRefusal(
-        `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`
-      );
+      throw new FramePictureRefusal({
+        message: `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`,
+      });
     });
     await page.evaluate(poseNow, key);
   }
   await page.waitForFunction(settledNow, key, { timeout: left() }).catch(() => {
-    throw new FramePictureRefusal(
-      `State ${key} did not settle within the render's time: its fonts or animations are still going.`
-    );
+    throw new FramePictureRefusal({
+      message: `State ${key} did not settle within the render's time: its fonts or animations are still going.`,
+    });
   });
 }
 
@@ -121,20 +129,22 @@ export async function statePicture(
 }> {
   const read = await page.evaluate(pictureNow, key);
   if (!read) {
-    throw new FramePictureRefusal(`The stage draws no state ${key}.`);
+    throw new FramePictureRefusal({
+      message: `The stage draws no state ${key}.`,
+    });
   }
   const { rect, own, scale } = read;
   // At its own size the box on the page is its layout box; anything else is
   // a zoom or a transform still running over it.
   if (Math.abs(rect.w - own.w) > SAME || Math.abs(rect.h - own.h) > SAME) {
-    throw new FramePictureRefusal(
-      `State ${key} stands ${rect.w.toFixed(2)}×${rect.h.toFixed(2)} px on the page for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)}, ${read.view}: its picture would be scaled.`
-    );
+    throw new FramePictureRefusal({
+      message: `State ${key} stands ${rect.w.toFixed(2)}×${rect.h.toFixed(2)} px on the page for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)}, ${read.view}: its picture would be scaled.`,
+    });
   }
   if (!read.whole) {
-    throw new FramePictureRefusal(
-      `State ${key} does not stand whole in the window (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`
-    );
+    throw new FramePictureRefusal({
+      message: `State ${key} does not stand whole in the window (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`,
+    });
   }
   // The clip as the screenshot takes it, so it rounds nothing: its corner on
   // a whole device pixel at or before the box's, and its size in whole CSS
@@ -161,9 +171,9 @@ export async function statePicture(
     size.w < own.w * scale - SAME ||
     size.h < own.h * scale - SAME
   ) {
-    throw new FramePictureRefusal(
-      `State ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
-    );
+    throw new FramePictureRefusal({
+      message: `State ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`,
+    });
   }
   // The png records the scale it was taken at (core picture-scale.ts), so a
   // page that shows it draws it at the drawing's own size.
