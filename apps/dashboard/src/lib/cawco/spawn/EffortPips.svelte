@@ -56,12 +56,19 @@
   const kw = $derived(knobWidth + 4);
 
   const n = $derived(efforts.length);
+  /**
+   * The level's step, or -1 while none is chosen: the start then sends no
+   * effort, so no step is lit and the chip says "Default" at the track's start.
+   */
   const effortIdx = $derived(
-    Math.max(0, displayed === null ? -1 : efforts.indexOf(displayed))
+    displayed === null ? -1 : efforts.indexOf(displayed)
   );
+  const unset = $derived(effortIdx < 0);
+  /** Where the chip stands: on its level, or at the start while unset. */
+  const knobIdx = $derived(Math.max(0, effortIdx));
   const frac = (i: number) => (n > 1 ? i / (n - 1) : 0);
-  /** The chip always sits on a level; the pointer picks the nearest one. */
-  const p = $derived(frac(effortIdx));
+  /** The chip sits on a level (or the start, unset); the pointer picks the nearest one. */
+  const p = $derived(frac(knobIdx));
   let hover = $state(false);
   let drag = $state(false);
   /** Keyboard focus only; a pointer or an opening popover focusing the input is not shown. */
@@ -74,8 +81,8 @@
    * and the new level in order (or drains them from the top down), rather than
    * every bar switching at once.
    */
-  let restedOn = $state(0);
-  let cameFrom = $state(0);
+  let restedOn = $state(-1);
+  let cameFrom = $state(-1);
   $effect.pre(() => {
     const next = effortIdx;
     untrack(() => {
@@ -102,12 +109,12 @@
   /** A stop shows only where it lands in the empty track, clear of the chip. */
   const pips = $derived(
     efforts.map((_, i) => {
-      const dist = (i - effortIdx) * (Math.max(1, trackWidth - kw) * frac(1));
+      const dist = (i - knobIdx) * (Math.max(1, trackWidth - kw) * frac(1));
       return { frac: frac(i), on: dist >= kw / 2 + PIP_CLEARANCE };
     })
   );
   const label = $derived(
-    n ? (efforts[effortIdx] ?? "") : spawnWords.effort.default
+    unset ? spawnWords.effort.default : efforts[effortIdx]
   );
   function change(level: EffortLevel) {
     if (oncommit) {
@@ -115,6 +122,26 @@
     } else {
       onchange(level);
     }
+  }
+  /** Keys that step a range; from unset, End takes the top level and any other the first. */
+  const STEP_KEYS = new Set([
+    "ArrowRight",
+    "ArrowLeft",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+  ]);
+  /** From unset, a step key picks a level: the range alone would skip Low or not move. */
+  function stepFromUnset(event: KeyboardEvent) {
+    if (!(unset && n && STEP_KEYS.has(event.key))) {
+      return;
+    }
+    event.preventDefault();
+    change(event.key === "End" ? efforts[n - 1] : efforts[0]);
+    commit();
   }
   function commit() {
     if (draft !== null) {
@@ -238,6 +265,9 @@
               {#each efforts as level (level)}
                 <span class="col-start-1 row-start-1">{level}</span>
               {/each}
+              <span class="col-start-1 row-start-1 normal-case"
+                >{spawnWords.effort.default}</span
+              >
             </span>
             <span
               class="mark-line col-start-1 row-start-1 flex items-center gap-space-1"
@@ -310,10 +340,11 @@
         onfocus={(event) => {
           focused = event.currentTarget.matches(":focus-visible");
         }}
+        onkeydown={stepFromUnset}
         oninput={(event) => change(efforts[Number(event.currentTarget.value)])}
         step="1"
         type="range"
-        value={effortIdx}
+        value={knobIdx}
       />
     </div>
     <!-- Each step's level, named under it, as the ruler names its marks:
