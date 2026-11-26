@@ -15,7 +15,7 @@ import type {
   HarnessUnanswered,
 } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-
+import type { Effect } from "effect";
 import { HTTPError, problem } from "elysia";
 import type { z } from "zod";
 import { received } from "./stored-json";
@@ -157,8 +157,21 @@ export type CallAnswer<T> =
 export type ControlAnswer<K extends ControlName> = CallAnswer<ControlReply<K>>;
 
 /**
- * A call to a machine's agent (machine-calls.ts `callAgent`): control
+ * An ask of a machine's agent (machine-calls.ts `askMachine`): control
  * `method`'s answer, parsed as its reply's type, or unanswered.
+ */
+export type AgentAsk = <K extends ControlName>(
+  machineId: string,
+  method: K,
+  args: ControlArgs<K>,
+  timeoutMs: number,
+  harness?: HarnessKind,
+  instanceId?: string
+) => Effect.Effect<Bounded<ControlAnswer<K>>>;
+
+/**
+ * The promise edge of an {@link AgentAsk} (machine-calls.ts `callAgent`),
+ * for a caller that is promise code.
  */
 export type AgentCall = <K extends ControlName>(
   machineId: string,

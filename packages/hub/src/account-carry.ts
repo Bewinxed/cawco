@@ -48,6 +48,7 @@ export type AccountCarryContext = Pick<
   | "MOVE_TICK_MS"
   | "SLEEP_TIMEOUT_MS"
   | "awayWords"
+  | "askMachine"
   | "callAgent"
   | "db"
   | "keepCodexLeave"
@@ -811,15 +812,13 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       }
       ctx.lifetime.fork(
         "sleep request",
-        Effect.tryPromise(() =>
-          ctx.callAgent(
-            machineId,
-            CONTROL_SLEEP,
-            [],
-            ctx.SLEEP_TIMEOUT_MS,
-            undefined,
-            row.id
-          )
+        ctx.askMachine(
+          machineId,
+          CONTROL_SLEEP,
+          [],
+          ctx.SLEEP_TIMEOUT_MS,
+          undefined,
+          row.id
         )
       );
     }

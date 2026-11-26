@@ -1447,6 +1447,7 @@ export const createServer = (
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
     cacheWarm: () => cacheWarm,
+    askMachine: () => askMachine,
     callAgent: () => callAgent,
     caw: () => caw,
     offersWaiting: () => offersWaiting,
@@ -2276,6 +2277,7 @@ export const createServer = (
     awaitFs,
     awaitReply,
     awaitStart,
+    askMachine,
     bindFolderInstall,
     callAgent,
     commandQueues,
@@ -3035,7 +3037,7 @@ export const createServer = (
   // Passkey relay: the cascade that picks which machines scan for BLE
   // passkey adverts when a browser needs one (passkey-relay.ts).
   const passkeyRelay = createPasskeyRelay({
-    call: callAgent,
+    call: askMachine,
     lifetime,
     onlineMachines: () =>
       db

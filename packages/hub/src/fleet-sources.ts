@@ -84,6 +84,7 @@ export type FleetSourcesContext = Pick<
   | "asRead"
   | "awaitFs"
   | "awaitReply"
+  | "askMachine"
   | "callAgent"
   | "connectAsks"
   | "db"
@@ -316,8 +317,8 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       const took = ctx.connectAsks.taking(row.id, changes);
       ctx.lifetime.fork(
         `fleet MCP take in ${row.id}`,
-        Effect.tryPromise(() =>
-          ctx.callAgent(
+        ctx
+          .askMachine(
             machineId,
             CONTROL_MCP_FLEET_CHANGED,
             [changes],
@@ -325,7 +326,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
             undefined,
             row.id
           )
-        ).pipe(Effect.map((answer) => took?.(tookOf(answer))))
+          .pipe(Effect.map((answer) => took?.(tookOf(answer))))
       );
     }
   };

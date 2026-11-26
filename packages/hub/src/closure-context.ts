@@ -174,6 +174,7 @@ import type { Laws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
 import type {
+  AgentAsk,
   AgentCall,
   AsRead,
   AwaitFs,
@@ -390,6 +391,8 @@ export interface ClosureContext {
     park: () => boolean,
     publish: () => void
   ) => boolean;
+  /** A control asked of a machine's agent, as an Effect (machine-calls.ts `askMachine`); {@link callAgent} is its promise edge. */
+  askMachine: AgentAsk;
   asRead: AsRead;
   atLimit: ReturnType<typeof createAtLimit>;
   awaitFs: AwaitFs;

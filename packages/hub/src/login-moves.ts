@@ -15,6 +15,7 @@ import {
 } from "@cawco/core/accounts/controls";
 import type { Bounded } from "@cawco/core/bounded";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
@@ -38,6 +39,7 @@ export const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
 export type LoginMovesContext = Pick<
   ClosureContext,
   | "accountWords"
+  | "askMachine"
   | "callAgent"
   | "db"
   | "keptWarm"
@@ -87,9 +89,8 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     // session is not at rest.
     ctx.lifetime.fork(
       "sleep request",
-      Effect.tryPromise(() =>
-        timed(
-          ctx.callAgent(
+      timedEffect(
+          ctx.askMachine(
             row.machineId,
             CONTROL_SLEEP,
             [],
@@ -98,7 +99,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
             row.id
           ),
           (ms) => recordLimitReading("hub.login-sleep-ms", ms)
-        )
       )
     );
   };
@@ -334,13 +334,11 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   ): void => {
     ctx.lifetime.fork(
       "lent sign-in",
-      Effect.tryPromise(() =>
-        ctx.callAgent(
-          borrower,
-          CONTROL_ACCOUNT_LENT,
-          [requestId, answer, accountId],
-          SIGNIN_TIMEOUT_MS
-        )
+      ctx.askMachine(
+        borrower,
+        CONTROL_ACCOUNT_LENT,
+        [requestId, answer, accountId],
+        SIGNIN_TIMEOUT_MS
       )
     );
   };
@@ -577,9 +575,8 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       // at rest yet, asked again next tick.
       ctx.lifetime.fork(
         "sleep request",
-        Effect.tryPromise(() =>
-          timed(
-            ctx.callAgent(
+        timedEffect(
+            ctx.askMachine(
               machineId,
               CONTROL_SLEEP,
               [],
@@ -588,7 +585,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
               instanceId
             ),
             (ms) => recordLimitReading("hub.login-sleep-ms", ms)
-          )
         )
       );
     }
