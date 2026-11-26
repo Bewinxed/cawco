@@ -4840,8 +4840,9 @@ class OpencodeHarness implements Harness<"opencode"> {
   readonly #listing = new Set<string>();
 
   /**
-   * The providers of the accounts held here, each of whose models no
-   * account's server has listed yet ({@link ACCOUNT_CATALOGS}) asked of one
+   * The providers of the accounts held here that run in OpenCode (core
+   * `providersOpenedBy`: an Antigravity key's opens none, so no server is
+   * started for it), each of whose models no account's server has listed yet ({@link ACCOUNT_CATALOGS}) asked of one
    * of its accounts' servers now: the running one, else one started, which
    * lists them as it starts and retires once idle ({@link SERVER_IDLE_MS}).
    * An account's provider was listed only as a session started its server,

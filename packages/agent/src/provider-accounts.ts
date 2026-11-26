@@ -23,6 +23,7 @@ import {
   type AccountIdentity,
   type AccountJoinedOn,
   type AccountReport,
+  accountRunsIn,
   BORROWED_REFRESH,
   type HomeCredential,
   type HomeLoginMoved,
@@ -36,8 +37,8 @@ import type { Bounded } from "@cawco/core/bounded";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
-import { AGY_PROVIDER } from "@cawco/core/harness/agy-account";
 import { descriptorOf } from "@cawco/core/harness/kinds";
+import { PI } from "@cawco/core/harness/pi";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
@@ -344,6 +345,15 @@ const runtimeOf = (
   provider: string
 ): Promise<ModelRuntime> => Effect.runPromise(runtimeFor(accountId, provider));
 
+/**
+ * Whether pi-ai keeps an account of `provider`: signs it in, refreshes it
+ * and signs it out. pi-ai is pi's provider library, so it keeps exactly the
+ * providers an account of runs in pi (core `accountRunsIn`); one a harness
+ * owns (Antigravity's, agy's) is that harness's alone.
+ */
+const piAiKeeps = (provider: string): boolean =>
+  accountRunsIn(PI.kind, provider);
+
 /** How long before its expiry an OAuth credential is refreshed. */
 const FRESH_FOR_MS = 15 * 60_000;
 
@@ -425,7 +435,7 @@ export const freshened = Effect.fn("freshened")(function* (
   periodic = false
 ): Effect.fn.Return<void, RefreshFailed> {
   const held = readHeld(accountId);
-  if (held?.credential.type !== "oauth") {
+  if (held?.credential.type !== "oauth" || !piAiKeeps(held.provider)) {
     return;
   }
   if (
@@ -1824,9 +1834,9 @@ const dropStore = async (
   await carryOutOpencode(accountId, ports);
   const held = signOut ? readHeld(accountId) : undefined;
   // A borrowed sign-in is its lender's grant: dropped here, never signed out.
-  // An Antigravity key is no pi-ai provider's: there is nothing to sign out,
-  // and its agy home goes with the account's dir.
-  if (held && !lenderOf(held.credential) && held.provider !== AGY_PROVIDER) {
+  // A provider pi-ai does not keep (an Antigravity key, agy's own) has
+  // nothing to sign out there, and its harness's home goes with the dir.
+  if (held && !lenderOf(held.credential) && piAiKeeps(held.provider)) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
   }
   Effect.runSync(

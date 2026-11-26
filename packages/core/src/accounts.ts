@@ -31,8 +31,8 @@ import {
   type AgyMethod,
   agyMethodKind,
 } from "./harness/agy-account";
-import type { HarnessKind } from "./harness/kinds";
-import { traitsOf } from "./harness/traits";
+import { HARNESSES, type HarnessKind } from "./harness/kinds";
+import { harnessesWith, traitsOf } from "./harness/traits";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 
@@ -160,6 +160,37 @@ export const isOpenaiKey = (account: {
 }): boolean => account.provider === "openai" && account.kind === "api_key";
 
 /**
+ * The harness whose own provider `provider` is (its descriptor's
+ * `soleProvider`): Claude Code's Claude, agy's Antigravity. Undefined for a
+ * provider no harness owns.
+ */
+const ownerOf = (provider: AccountProvider): HarnessKind | undefined =>
+  harnessesWith((one) => one.soleProvider === provider)[0];
+
+/**
+ * Whether an account of `provider` runs in `harness`, by what each is: a
+ * provider a harness owns ({@link ownerOf}) in that harness alone, and any
+ * other in every harness that owns none (pi, OpenCode, Codex), each where a
+ * machine lists it. The one rule the picker's rows name their harnesses by
+ * ({@link providerChoices}) and every reader of an account's credential
+ * selects by ({@link providersOpenedBy}): an Antigravity key never reaches
+ * pi or OpenCode.
+ */
+export const accountRunsIn = (
+  harness: string,
+  provider: AccountProvider
+): boolean => {
+  const owner = ownerOf(provider);
+  return owner === undefined
+    ? traitsOf(harness).soleProvider === null
+    : owner === harness;
+};
+
+/** Every harness an account of `provider` runs in ({@link accountRunsIn}), before any machine's list. */
+const harnessesTaking = (provider: AccountProvider): HarnessKind[] =>
+  HARNESSES.filter((harness) => accountRunsIn(harness, provider));
+
+/**
  * One row of the account picker: a provider and one way its accounts sign
  * in. A provider that takes both OAuth and a key is two rows, as Claude is
  * (a subscription, and a Console organization).
@@ -201,7 +232,7 @@ export const providerChoices = (
       kind: "subscription",
       name: "Claude",
       signin: "paste-code",
-      harnesses: ["claude"],
+      harnesses: harnessesTaking(CLAUDE_PROVIDER),
       limits: true,
     },
     {
@@ -209,16 +240,22 @@ export const providerChoices = (
       kind: "console",
       name: "Claude Console",
       signin: "paste-code",
-      harnesses: ["claude"],
+      harnesses: harnessesTaking(CLAUDE_PROVIDER),
       limits: false,
     },
   ];
   const rest = providers.flatMap((one): ProviderChoice[] => {
-    const harnesses: import("./harness/kinds").HarnessKind[] = [
-      ...(one.pi ? (["pi"] as const) : []),
-      ...(one.opencode ? (["opencode"] as const) : []),
-      ...(CODEX_PROVIDERS.includes(one.id) ? (["codex"] as const) : []),
-    ];
+    // Those that list it, of those that take it at all ({@link accountRunsIn}).
+    const harnesses = (
+      [
+        ...(one.pi ? (["pi"] as const) : []),
+        ...(one.opencode ? (["opencode"] as const) : []),
+        ...(CODEX_PROVIDERS.includes(one.id) ? (["codex"] as const) : []),
+      ] satisfies HarnessKind[]
+    ).filter((harness) => accountRunsIn(harness, one.id));
+    if (harnesses.length === 0) {
+      return [];
+    }
     const limits = LIMITED_PROVIDERS.includes(one.id);
     const base = { provider: one.id, name: one.name, harnesses, limits };
     return [
@@ -238,7 +275,7 @@ export const providerChoices = (
     kind: agyMethodKind(method),
     name: accountsWords.agyMethods[method],
     signin: agyMethodKind(method) === "oauth" ? "paste-code" : "api-key",
-    harnesses: ["agy"],
+    harnesses: harnessesTaking(AGY_PROVIDER),
     limits: false,
     agy: method,
   }));
@@ -1263,12 +1300,17 @@ const OPENCODE_IDS: Readonly<Record<AccountProvider, string>> = {
 /**
  * The providers an account of `provider` opens in `harness`, by the
  * harness's own ids ({@link PROVIDERS_OPENED}, and for OpenCode
- * {@link OPENCODE_IDS}): its own id unless the table names more.
+ * {@link OPENCODE_IDS}): its own id unless the table names more, and none
+ * in a harness the account does not run in ({@link accountRunsIn}), so
+ * that harness never reads, lists or serves its credential.
  */
 export const providersOpenedBy = (
   harness: string,
   provider: AccountProvider
 ): readonly string[] => {
+  if (!accountRunsIn(harness, provider)) {
+    return [];
+  }
   const opened = PROVIDERS_OPENED[provider] ?? [provider];
   return traitsOf(harness).ownProviderIds
     ? opened.map((one) => OPENCODE_IDS[one] ?? one)

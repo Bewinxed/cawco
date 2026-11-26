@@ -185,7 +185,7 @@ class AccountCredentials implements CredentialStore {
   }
 }
 
-/** Each provider an account on this machine opens (core `providersOpenedBy`), with the account that opens it (the first, by id). */
+/** Each provider an account on this machine opens in pi (core `providersOpenedBy`: none for an account that does not run in pi, an Antigravity key's), with the account that opens it (the first, by id). */
 const accountProviders = (): Map<string, string> => {
   const found = new Map<string, string>();
   for (const account of credentialAccountIds()) {
