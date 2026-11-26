@@ -139,14 +139,22 @@ conversation dir, `brain/<id>` in its home, which its host names once agy
 opens the conversation).
 
 **CawCo MCP and fleet MCP.** The session reaches CawCo's tools with its own
-credential (`HarnessContext.sessionCredential`), kept off argv. In a
-workspace it starts no fleet server with a command itself: each comes
-through the workspace's MCP gate (`HarnessContext.mcpGate`), which runs it on
-the host, and chrome-devtools through the browser door
-(`HarnessContext.browserDoor`). Antigravity takes them all in `session/new`
-(agent `agy-sessiond.ts` `mcpServersOf`), through its gate, never in
-its agy dir's `mcp_config.json`, which agy would start outside it; a server
-whose transport agy's ACP lacks (remote SSE) is left out. How its calls
+credential (`HarnessContext.sessionCredential`), kept off argv. Every
+session has an MCP gate (`HarnessContext.mcpGate`; agent `mcp-gate.ts`,
+`mcp-host.ts` `gateTarget`): its workspace's, else its own, opened by the
+session's own gate token, which the gate refuses from the moment the
+session's process ends. It starts no fleet server with a command itself:
+each comes through the gate, which runs it on the host, and chrome-devtools
+through the browser door (`HarnessContext.browserDoor`). A streamable HTTP
+fleet server comes through the gate too, which adds its headers (an API key,
+a CF-Access secret) as it relays each request, so no harness is handed
+them. Antigravity takes them all in `session/new` (agent `agy-sessiond.ts`
+`mcpServersOf`), CawCo's own included, which the gate relays with the
+session's credential: agy writes every MCP server's headers into its
+conversation database and keeps them, so it is handed the gate token alone.
+None goes in its agy dir's `mcp_config.json`, which agy would start
+outside the gate; a server whose transport agy's ACP lacks (remote SSE) is
+left out. How its calls
 name a server is descriptor `callNaming` (Antigravity's:
 `mcp_<server>_<tool>`). The few CawCo tools a session loads upfront carry
 every harness's always-load `_meta` key in `tools/list` (descriptor

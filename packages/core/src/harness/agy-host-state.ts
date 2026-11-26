@@ -57,6 +57,14 @@ const AGY_HOST_STATE = object({
    * workspace: one of another form is relaunched at rest onto the agent's.
    */
   gateForm: optional(string()),
+  /**
+   * Every MCP server it handed agy carries the session's gate token alone
+   * (agent mcp-gate.ts `GATE_TOKEN_HEADER`), no server's own header: a host
+   * that does not say so was started before the gate relayed them, holds a
+   * server's key or the session's credential in agy, which writes them to
+   * its store, and is relaunched at rest onto the gate.
+   */
+  gated: optional(literal(true)),
   /** Why the host stopped agy as no longer to be trusted, once it has: an agent taking it back refuses the session in these words. */
   refused: optional(string()),
   /** The sends the host handed agy that agy has not read yet, by uuid. */
@@ -94,9 +102,8 @@ const HEADER = object({ name: string(), value: string() });
 
 /**
  * An MCP server agy is handed in `session/new` (ACP `McpServer`, its HTTP
- * form): CawCo's own, with the session's credential, and each fleet server
- * through the session's MCP gate. A server with a command never reaches agy:
- * the gate runs it on the host.
+ * form): CawCo's own and each fleet server, every one on the session's MCP
+ * gate with the gate's token, which adds each server's own headers itself.
  */
 const MCP_SERVER = object({
   type: literal("http"),

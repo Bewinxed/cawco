@@ -4,11 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import {
-  BOUNDARY_RELAUNCH,
-  CONTROL_REFRESH_CAWCO_TOOLS,
-  GATEWAY_RELAUNCH,
-} from "@cawco/core/harness";
+import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
 import {
   type PiHostCommand,
   type PiHostEvent,
@@ -213,22 +209,21 @@ class PiRemoteSession
    * Asks the hub to relaunch a workspace session whose host runs another
    * gate than this build's ({@link gateForm}) — one started by an earlier
    * build, or before hosts recorded their gate, whose file tools may be
-   * unjudged — onto this build's ({@link BOUNDARY_RELAUNCH}, the rule a
+   * unjudged — onto this build's (core `BOUNDARY_RELAUNCH`, the rule a
    * Claude CLI on a hook that fails open follows). Else any session whose
    * host reaches CawCo's tools on another port than this agent's gateway
-   * ({@link GATEWAY_RELAUNCH}); either relaunch mends both. Called at the
+   * (core `GATEWAY_RELAUNCH`); either relaunch mends both (hosted-session.ts `relaunchIf`). Called at the
    * attach when no turn is running, and as each turn ends; the hub
    * relaunches it only while it is idle, never mid-turn.
    */
   askRelaunch(): void {
-    if (!this.ready || this.exited) {
-      return;
-    }
-    if (this.ctx.boundary && this.#hostForm !== gateForm("pi")) {
+    const asked = this.relaunchIf({
+      boundary:
+        this.ctx.boundary !== undefined && this.#hostForm !== gateForm("pi"),
+      gateway: this.#hostGateway !== mcpGatewayPort(),
+    });
+    if (asked === "boundary") {
       staleHosts.set(this.ctx.instanceId, this.#hostForm ?? "none");
-      this.ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
-    } else if (this.#hostGateway !== mcpGatewayPort()) {
-      this.ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
     }
   }
 

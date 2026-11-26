@@ -12,7 +12,7 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
 import { inStartingSet } from "@cawco/core/delegate-types";
-import { BOUNDARY_RELAUNCH, SESSION_STOPPED } from "@cawco/core/harness";
+import { SESSION_STOPPED } from "@cawco/core/harness";
 import { AGY_TOOLS } from "@cawco/core/harness/agy";
 import {
   type AgyHostCommand,
@@ -37,7 +37,7 @@ import { agyWords } from "@cawco/core/words/agy";
 import { readPolicy } from "@cawco/core/workspace-judge";
 import { Effect } from "effect";
 import { runPromise } from "../daemon-runtime";
-import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
+import { MCP_SERVER_NAME } from "../delegation";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import {
@@ -49,7 +49,7 @@ import {
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
-import { throughMcpGate } from "../mcp-gate";
+import { gatedCawco, throughMcpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { agyHookHeld } from "./agy-canary";
@@ -61,7 +61,9 @@ import {
   agyToStart,
 } from "./agy-launch";
 import { changeAgyPersonNote, readAgyNote } from "./agy-notes";
+import { scrubAgyStoreSoon } from "./agy-scrub";
 import { findAgyConversation } from "./agy-store";
+import { accountStore } from "./agy-store-files";
 import { commandEnv } from "./command-env";
 import { hostSnapshot } from "./host-line";
 import { HostedSession } from "./hosted-session";
@@ -85,6 +87,8 @@ class AgyRemoteSession
   readonly #asks = new Set<string>();
   /** The gate form the host says its judge started on, in a workspace. */
   #hostForm: string | undefined;
+  /** Whether its host handed agy its MCP servers on the gate alone (core agy-host-state.ts `gated`). */
+  #hostGated = true;
   /** Why this session was refused, once it has been: said once. */
   #refusal: string | undefined;
   /** The tool calls agy began that have not ended, by id ({@link beforeFrame}). */
@@ -94,7 +98,13 @@ class AgyRemoteSession
     client: SessiondClient,
     ctx: HarnessContext,
     host: { epoch: string; pid: number },
-    options: { afterSeq: number; installed?: string; recoveryHead?: number }
+    options: {
+      /** The account whose store agy writes (none in agy's own home, which CawCo never writes). */
+      accountId?: string;
+      afterSeq: number;
+      installed?: string;
+      recoveryHead?: number;
+    }
   ) {
     super({
       client,
@@ -109,7 +119,11 @@ class AgyRemoteSession
       read: agyHostEvent,
     });
     this.#installed = options.installed;
+    this.#accountId = options.accountId;
   }
+
+  /** The account whose store agy writes ({@link hostEnded}). */
+  readonly #accountId: string | undefined;
 
   protected override applySnapshot(value: unknown): void {
     this.applyState(agyHostState(value));
@@ -121,6 +135,7 @@ class AgyRemoteSession
     // before its cursor: the host's state says it.
     this.#running = state.version ?? this.#running;
     this.#hostForm = state.gateForm;
+    this.#hostGated = state.gated === true;
     for (const call of state.pending ?? []) {
       this.#pending.set(call.id, { name: call.name, since: call.since });
     }
@@ -156,20 +171,20 @@ class AgyRemoteSession
   }
 
   /**
-   * Asks the hub to relaunch a workspace session whose host judges by
-   * another gate than this build's ({@link gateForm}), as a pi host's is
-   * (pi-sessiond.ts `askRelaunch`): at the attach when no turn runs, and as
-   * each turn ends; the hub relaunches it only while it is idle.
+   * Asks the hub to relaunch a session, at the attach when no turn runs and
+   * as each turn ends (the hub relaunches it only while it is idle): a
+   * workspace session whose host judges by another gate than this build's
+   * ({@link gateForm}), as a pi host's is (pi-sessiond.ts `askRelaunch`);
+   * any session whose host handed agy a server's own headers, started
+   * before the gate relayed them (core agy-host-state.ts `gated`), so agy
+   * stops writing them to its store.
    */
   askRelaunch(): void {
-    if (
-      this.ready &&
-      !this.exited &&
-      this.ctx.boundary &&
-      this.#hostForm !== gateForm("agy")
-    ) {
-      this.ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
-    }
+    this.relaunchIf({
+      boundary:
+        this.ctx.boundary !== undefined && this.#hostForm !== gateForm("agy"),
+      gateway: !this.#hostGated,
+    });
   }
 
   override attached(): void {
@@ -281,9 +296,13 @@ class AgyRemoteSession
     }
   }
 
+  /** Its asks and calls gone with the host, and its account's store scrubbed of any credential agy wrote while it ran (agy-scrub.ts). */
   protected override hostEnded(): void {
     this.#asks.clear();
     this.#pending.clear();
+    if (this.#accountId) {
+      scrubAgyStoreSoon(accountStore(this.#accountId));
+    }
   }
 
   /** Each ask the host still holds, parked again with this agent: what an agent taking the host back owes the person. */
@@ -410,36 +429,39 @@ const agyServer = (
 });
 
 /**
- * The MCP servers a session hands agy: CawCo's own with the session's
- * credential, and every fleet server its folder loads (the fleet's own and
- * its project's placed copies, held to its starting set), each with a
- * command through the session's gate, which runs it on the host
- * (chrome-devtools with its browser door), each remote HTTP one as it is,
- * as Claude Code's sessions take them (claude.ts `fleetMcpFor`). A server
- * agy's ACP takes no form of (a remote SSE one) is left out. A session with
- * no gate (a fenced one) takes the remote servers alone; one in agy's own
- * home (`withFleet` false), whose setup is agy's, CawCo's alone.
+ * The MCP servers a session hands agy, every one through the session's gate
+ * (mcp-gate.ts), since agy writes each server's headers into its
+ * conversation database in plain text and keeps them: CawCo's own, which
+ * the gate relays with the session's credential, and every fleet server its
+ * folder loads (the fleet's own and its project's placed copies, held to
+ * its starting set), one with a command run on the host (chrome-devtools
+ * with its browser door), a remote one relayed with its headers. So agy
+ * holds the session's gate token alone, refused once the session's process
+ * ends. A server agy's ACP takes no form of (a remote SSE one) is left out.
+ * A fenced session takes CawCo's alone, as does one in agy's own home
+ * (`withFleet` false), whose setup is agy's.
  */
 const mcpServersOf = async (
   spec: SpawnPayload,
   ctx: HarnessContext,
   withFleet: boolean
 ): Promise<AgyMcpServer[]> => {
-  const cawco = delegationMcp(ctx.instanceId, ctx.sessionCredential);
-  const own = agyServer(MCP_SERVER_NAME, cawco);
-  if (!withFleet) {
+  const gate = ctx.mcpGate;
+  if (!gate) {
+    throw new Error(
+      "An Antigravity session reaches its MCP servers through its gate, and this one has none."
+    );
+  }
+  const own = agyServer(MCP_SERVER_NAME, gatedCawco(gate));
+  if (!withFleet || spec.fence) {
     return [own];
   }
   const all = inStartingSet(await fleetMcpAt(ctx.cwd), spec.startingSet);
-  const reached = ctx.mcpGate
-    ? throughMcpGate(all, ctx.mcpGate)
-    : Object.fromEntries(
-        Object.entries(all).filter(([, config]) => !("command" in config))
-      );
-  const fleet = Object.entries(reached).flatMap(([name, config]) =>
-    name !== MCP_SERVER_NAME && "url" in config && config.type === "http"
-      ? [agyServer(name, config)]
-      : []
+  const fleet = Object.entries(throughMcpGate(all, gate)).flatMap(
+    ([name, config]) =>
+      name !== MCP_SERVER_NAME && "url" in config && config.type === "http"
+        ? [agyServer(name, config)]
+        : []
   );
   return [own, ...fleet];
 };
@@ -553,6 +575,12 @@ export const spawnAgy = async (
         )
     ).pipe(Effect.mapError((refused) => new Error(refused.message)))
   );
+  // A credential an earlier agy wrote to the account's store goes from it
+  // (agy-scrub.ts), beside the launch: what agy opens of it then waits on
+  // SQLite's own lock.
+  if (!own && accountId) {
+    scrubAgyStoreSoon(accountStore(accountId));
+  }
   // agy's own home runs under its own setup: none of the fleet's.
   const mcpServers = await mcpServersOf(spec, ctx, !own);
   const client = await agyKeepers.current();
@@ -589,7 +617,11 @@ export const spawnAgy = async (
     client,
     ctx,
     { epoch: listed.epoch, pid: proc.pid },
-    { afterSeq: 0, ...(launch.version ? { installed: launch.version } : {}) }
+    {
+      afterSeq: 0,
+      ...(launch.version ? { installed: launch.version } : {}),
+      ...(!own && accountId ? { accountId } : {}),
+    }
   );
   try {
     await session.write({
@@ -641,10 +673,11 @@ export const agySnapshot = (instanceId: string): Promise<AgyHostState> =>
  * again, and the agy it runs read against the machine's as it is now.
  */
 export const adoptAgy = async (
-  instanceId: string,
+  spec: SpawnPayload,
   ctx: HarnessContext,
   options: { afterSeq?: number; head: number }
 ): Promise<HarnessSession> => {
+  const { instanceId } = spec;
   const proc = await agyKeepers.holding(procIdFor("agy", instanceId));
   if (!proc) {
     throw new Error(`Antigravity's host for ${instanceId} is gone`);
@@ -656,7 +689,11 @@ export const adoptAgy = async (
       Effect.orElseSucceed(() => undefined)
     )
   );
+  const accountId = (await continuesOwn(spec, ctx))
+    ? undefined
+    : spec.accountDir?.accountId;
   const session = new AgyRemoteSession(proc.client, ctx, proc, {
+    ...(accountId ? { accountId } : {}),
     afterSeq: options.afterSeq ?? options.head,
     recoveryHead: options.head,
     ...(installed ? { installed } : {}),

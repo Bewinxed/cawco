@@ -97,6 +97,17 @@ export const rememberCredential = (
   saveStore(values);
 };
 
+/** Every credential the store holds: each one this agent installed or verified that may still grant. */
+export const heldCredentials = (): string[] => [...loaded()];
+
+/**
+ * The credential this agent installed or verified for session `instanceId`
+ * that still grants (none once the hub revoked it): what its MCP gate adds
+ * to the calls it relays to CawCo's server (mcp-host.ts `gateTarget`).
+ */
+export const sessionCredentialOf = (instanceId: string): string | undefined =>
+  bySession.get(instanceId);
+
 /** The hub's name for each credential the store holds, for the register to ask about. */
 export const storedHashes = (): string[] => [...loaded()].map(hashOf);
 

@@ -185,7 +185,9 @@ export const COMPACT_RELAUNCH = "compact_relaunch";
  * The `system` subtype an agent says for a session whose process names
  * another MCP gateway port than the agent serves on (core
  * `mcpGatewayPort`): one launched before an update moved the default, which
- * reaches none of CawCo's tools. Said at the attach when no turn is running,
+ * reaches none of CawCo's tools; or an Antigravity session whose host
+ * handed agy its MCP servers off the session's gate, with their own headers
+ * (core harness/agy-host-state.ts `gated`). Said at the attach when no turn is running,
  * and at each of its turns' ends; the hub relaunches it onto its
  * conversation between turns, as for {@link BOUNDARY_RELAUNCH}, and the new
  * process names the gateway's port. It never reaches a screen.

@@ -200,11 +200,13 @@ export interface HarnessContext {
    */
   line?: (srcEpoch: string, srcSeq: number) => void;
   /**
-   * The gate the session reaches every fleet MCP server with a command
-   * through (mcp-gate.ts), on the agent's gateway, which starts each at its
-   * first call: its {@link workspace}'s, else its own (an OpenCode
-   * location's folder's). Absent on a fenced session, which takes no fleet
-   * server.
+   * The gate the session reaches its MCP servers through (mcp-gate.ts), on
+   * the agent's gateway, with its own token: each fleet server with a
+   * command, started at its first call, and each remote one and CawCo's
+   * own, relayed with their headers. Its {@link workspace}'s, else its own
+   * (an OpenCode location's folder's); a fenced session's, its own with no
+   * folder, which reaches CawCo's server alone. Every session the
+   * supervisor runs has one; a context built for anything else has none.
    */
   readonly mcpGate?: import("./mcp-gate").McpGate;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */

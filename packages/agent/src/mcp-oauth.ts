@@ -13,11 +13,12 @@ import { updatesWords } from "@cawco/core/words/updates";
 import { Effect, Layer } from "effect";
 import type { BrowserPorts } from "./browser/browsers";
 import { DaemonLinks } from "./daemon-links";
+import { harnessMcpUrl } from "./delegation";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { fieldOf } from "./json-field";
-import { GATE_PATH } from "./mcp-gate";
-import { HOSTED_PATH, mcpHost } from "./mcp-host";
+import { GATE_PATH, GATE_TOKEN_HEADER } from "./mcp-gate";
+import { type GateTarget, HOSTED_PATH, mcpHost, serve } from "./mcp-host";
 import { freshen as freshenAccount } from "./provider-accounts";
 import { fromPromise } from "./rejected";
 import {
@@ -193,15 +194,7 @@ async function relayMcp(
     }
     response = answer;
   }
-  const outgoing = new Headers(response.headers);
-  // fetch hands the body on decoded, so its encoding and length go, with the connection's own headers.
-  for (const name of [
-    "Content-Encoding",
-    "Content-Length",
-    ...HOP_BY_HOP_HEADERS,
-  ]) {
-    outgoing.delete(name);
-  }
+  const outgoing = answerHeaders(response);
   return new Response(
     keyed && response.body
       ? throughDrops(
@@ -215,6 +208,19 @@ async function relayMcp(
     { status: response.status, headers: outgoing }
   );
 }
+
+/** An answer's headers as the gateway hands them on: fetch hands the body on decoded, so its encoding and length go, with the connection's own headers. */
+const answerHeaders = (response: Response): Headers => {
+  const outgoing = new Headers(response.headers);
+  for (const name of [
+    "Content-Encoding",
+    "Content-Length",
+    ...HOP_BY_HOP_HEADERS,
+  ]) {
+    outgoing.delete(name);
+  }
+  return outgoing;
+};
 
 const parsed = (body: ArrayBuffer): unknown => {
   try {
@@ -470,11 +476,223 @@ async function hostedRoute(
   }
 }
 
-/** A hosted server's request, a shared one's or a workspace gate's; none for any other path. */
+/** The headers a gate's relayed request goes on with: the caller's own, less its gate token and the connection's, with the server's over them. */
+const relayedHeaders = (
+  request: Request,
+  own: Readonly<Record<string, string>>
+): Headers => {
+  const headers = new Headers(request.headers);
+  for (const name of [
+    "Host",
+    "Content-Length",
+    "Accept-Encoding",
+    "Authorization",
+    GATE_TOKEN_HEADER,
+    ...HOP_BY_HOP_HEADERS,
+  ]) {
+    headers.delete(name);
+  }
+  for (const [name, value] of Object.entries(own)) {
+    headers.set(name, value);
+  }
+  return headers;
+};
+
+type Remote = Extract<GateTarget, { remote: unknown }>["remote"];
+
+/** The query key a gate's SSE endpoint carries the server's own endpoint under. */
+const SSE_ENDPOINT = "endpoint";
+
+/**
+ * Where a gate's request to `remote` goes: the server's URL; for an SSE
+ * server's post, the endpoint its stream named ({@link endpointsOnGate}),
+ * on the server's own origin alone, so the server's key goes nowhere else.
+ * None for a post to an SSE server that names no endpoint, which is a
+ * streamable HTTP client's first try: refused 405, it opens the stream
+ * (https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#backwards-compatibility).
+ */
+const upstreamOf = (request: Request, remote: Remote): URL | Response => {
+  const server = new URL(remote.url);
+  if (!remote.sse || request.method === "GET") {
+    return server;
+  }
+  const named = new URL(request.url).searchParams.get(SSE_ENDPOINT);
+  if (named === null) {
+    return new Response(null, { status: 405, headers: { Allow: "GET" } });
+  }
+  const endpoint = new URL(named, server);
+  return endpoint.origin === server.origin
+    ? endpoint
+    : new Response("An SSE server's endpoint is on its own origin.", {
+        status: 400,
+      });
+};
+
+/**
+ * An SSE server's stream with each `endpoint` event moved onto the gate
+ * (`<gate path>?endpoint=<the server's endpoint>`), so the harness posts to
+ * the gate, which adds the server's headers ({@link upstreamOf}). Every
+ * other line passes as it came.
+ */
+const endpointsOnGate = (
+  body: ReadableStream<Uint8Array>,
+  server: URL,
+  gatePath: string
+): ReadableStream<Uint8Array> => {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let held = "";
+  let event = "message";
+  const moved = (line: string): string => {
+    if (line === "") {
+      event = "message";
+    } else if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+    } else if (event === "endpoint" && line.startsWith("data:")) {
+      const named = new URL(line.slice("data:".length).trim(), server);
+      return `data: ${gatePath}?${SSE_ENDPOINT}=${encodeURIComponent(named.href)}`;
+    }
+    return line;
+  };
+  /** Lines as they go on, each with its ending (`\n`, its `\r` kept), the last with none when `ended` is false. */
+  const passed = (lines: string[], ended: boolean): Uint8Array =>
+    encoder.encode(
+      lines
+        .map((line, at) => {
+          const out = line.endsWith("\r")
+            ? `${moved(line.slice(0, -1))}\r`
+            : moved(line);
+          return ended || at < lines.length - 1 ? `${out}\n` : out;
+        })
+        .join("")
+    );
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const lines = (held + decoder.decode(chunk, { stream: true })).split(
+          "\n"
+        );
+        held = lines.pop() ?? "";
+        if (lines.length > 0) {
+          controller.enqueue(passed(lines, true));
+        }
+      },
+      flush(controller) {
+        held += decoder.decode();
+        if (held) {
+          controller.enqueue(passed([held], false));
+        }
+      },
+    })
+  );
+};
+
+/**
+ * A gate's request to a remote server, sent on with the server's own
+ * headers, its answer streamed back as it comes: an SSE server's stream
+ * with its endpoint on the gate. A redirect is refused: followed, it would
+ * carry the server's key to wherever it points.
+ */
+async function passOn(
+  name: string,
+  request: Request,
+  remote: Remote
+): Promise<Response> {
+  const upstream = upstreamOf(request, remote);
+  if (upstream instanceof Response) {
+    return upstream;
+  }
+  let response: Response;
+  try {
+    response = await fetch(upstream, {
+      method: request.method,
+      headers: relayedHeaders(request, remote.headers),
+      body: await bodyOf(request),
+      signal: request.signal,
+      redirect: "error",
+      timeout: false,
+    });
+  } catch (error) {
+    return new Response(
+      `The ${decodeURIComponent(name)} MCP server could not be reached: ${error instanceof Error ? error.message : String(error)}`,
+      { status: 502 }
+    );
+  }
+  const sseStream =
+    remote.sse &&
+    request.method === "GET" &&
+    response.ok &&
+    response.body !== null;
+  return new Response(
+    sseStream && response.body
+      ? endpointsOnGate(response.body, upstream, new URL(request.url).pathname)
+      : response.body,
+    { status: response.status, headers: answerHeaders(response) }
+  );
+}
+
+/** A request's body, read whole; none for a read. */
+const bodyOf = async (request: Request): Promise<ArrayBuffer | undefined> =>
+  ["GET", "HEAD"].includes(request.method)
+    ? undefined
+    : await request.arrayBuffer();
+
+/** Whether `url` is this gateway's own: CawCo's server, a shared one's or a signed-in one's route. */
+const onGateway = (url: string): boolean =>
+  new URL(url).origin === new URL(harnessMcpUrl("")).origin;
+
+/**
+ * A session gate's request (mcp-gate.ts), from loopback only and never from
+ * a page. A server with a command is answered by its process here; a route
+ * of this gateway's own (CawCo's server, a shared server, a signed-in one)
+ * is answered by that route, which holds a restart as its calls need; any
+ * other remote server, SSE ones too, is relayed, a tool call on it holding
+ * a restart as a call on any fleet server does.
+ */
+async function gateRoute(
+  gateId: string,
+  name: string,
+  request: Request,
+  ports: BrowserPorts,
+  route: (request: Request) => Promise<Response>
+): Promise<Response> {
+  const incoming = new URL(request.url);
+  if (incoming.hostname !== "127.0.0.1" || request.headers.has("Origin")) {
+    return new Response("A session's MCP gate answers its harness only.", {
+      status: 403,
+    });
+  }
+  const target = await mcpHost.gateTarget(ports, gateId, name, request);
+  if ("refused" in target) {
+    return target.refused;
+  }
+  if ("hosted" in target) {
+    return hostedRoute(name, request, (forward) =>
+      serve(target.hosted, forward)
+    );
+  }
+  const { remote } = target;
+  if (remote.sse || !onGateway(remote.url)) {
+    return hostedRoute(name, request, (forward) =>
+      passOn(name, forward, remote)
+    );
+  }
+  return route(
+    new Request(remote.url, {
+      method: request.method,
+      headers: relayedHeaders(request, remote.headers),
+      body: await bodyOf(request),
+      signal: request.signal,
+    })
+  );
+}
+
+/** A hosted server's request, a shared one's or a session gate's; none for any other path. */
 const hostedRoutes = (
   url: URL,
   request: Request,
-  ports: BrowserPorts
+  ports: BrowserPorts,
+  route: (request: Request) => Promise<Response>
 ): Promise<Response> | undefined => {
   const shared = url.pathname.match(HOSTED_PATH)?.[1];
   if (shared) {
@@ -484,9 +702,7 @@ const hostedRoutes = (
   }
   const [, gate, gated] = url.pathname.match(GATE_PATH) ?? [];
   return gate && gated
-    ? hostedRoute(gated, request, (forward) =>
-        mcpHost.fetchGate(ports, gate, gated, forward)
-      )
+    ? gateRoute(gate, gated, request, ports, route)
     : undefined;
 };
 
@@ -507,54 +723,53 @@ const startMcpGateway = async (hubUrl: () => string, gateway: Gateway) => {
   // live machine leaves its running sessions dialling the old one.
   const port = mcpGatewayPort();
   try {
+    /** One request on the gateway; a gate's relay to the gateway's own routes comes back through it. */
+    const route = async (request: Request): Promise<Response> => {
+      const url = new URL(request.url);
+      if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
+        return await restartRoute(request, gateway.supervisorHolds);
+      }
+      const accounts = accountRoute(url, request, gateway.freshen);
+      if (accounts) {
+        return await accounts;
+      }
+      const hosted = hostedRoutes(url, request, gateway.browsers, route);
+      if (hosted) {
+        return await hosted;
+      }
+      if (!(
+        MCP_RELAY_PATH.test(url.pathname) ||
+        (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
+        (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
+      )) {
+        return new Response("Not found.", { status: 404 });
+      }
+      const body = ["GET", "HEAD"].includes(request.method)
+        ? undefined
+        : await request.arrayBuffer();
+      const call = heldCall(url.pathname, body);
+      if (call === undefined) {
+        return await relayMcp(request, body, hubUrl);
+      }
+      if (fenced()) {
+        return notStarted(body);
+      }
+      const release = holdRestart(
+        "tool-call",
+        `${call}#${shortId(crypto.randomUUID())}`
+      );
+      try {
+        return holdingUntilEnd(await relayMcp(request, body, hubUrl), release);
+      } catch (error) {
+        release();
+        throw error;
+      }
+    };
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port,
       idleTimeout: 0,
-      async fetch(request) {
-        const url = new URL(request.url);
-        if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
-          return await restartRoute(request, gateway.supervisorHolds);
-        }
-        const accounts = accountRoute(url, request, gateway.freshen);
-        if (accounts) {
-          return await accounts;
-        }
-        const hosted = hostedRoutes(url, request, gateway.browsers);
-        if (hosted) {
-          return await hosted;
-        }
-        if (!(
-          MCP_RELAY_PATH.test(url.pathname) ||
-          (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
-          (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
-        )) {
-          return new Response("Not found.", { status: 404 });
-        }
-        const body = ["GET", "HEAD"].includes(request.method)
-          ? undefined
-          : await request.arrayBuffer();
-        const call = heldCall(url.pathname, body);
-        if (call === undefined) {
-          return await relayMcp(request, body, hubUrl);
-        }
-        if (fenced()) {
-          return notStarted(body);
-        }
-        const release = holdRestart(
-          "tool-call",
-          `${call}#${shortId(crypto.randomUUID())}`
-        );
-        try {
-          return holdingUntilEnd(
-            await relayMcp(request, body, hubUrl),
-            release
-          );
-        } catch (error) {
-          release();
-          throw error;
-        }
-      },
+      fetch: route,
     });
     console.info(`[gateway] MCP gateway serving on 127.0.0.1:${port}`);
     return server;

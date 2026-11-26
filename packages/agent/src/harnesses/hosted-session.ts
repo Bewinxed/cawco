@@ -12,6 +12,8 @@
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
 import type { Control } from "@cawco/core/control-table";
 import {
+  BOUNDARY_RELAUNCH,
+  GATEWAY_RELAUNCH,
   INSTALL_SESSION_CREDENTIAL,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
@@ -248,6 +250,32 @@ export abstract class HostedSession<E extends { type: string }> {
       whole: true,
       ...(state.sessionId ? { session_id: state.sessionId } : {}),
     });
+  }
+
+  /**
+   * Asks the hub to relaunch the session at rest, which it does only while
+   * the session is idle, never mid-turn: onto this build's gate when its
+   * host runs another (`boundary`, {@link BOUNDARY_RELAUNCH}), else onto the
+   * agent's MCP gateway as it serves now when its host reaches MCP another
+   * way (`gateway`, {@link GATEWAY_RELAUNCH}); either relaunch mends both.
+   * Asks nothing before the attach or once the host has exited. Says which
+   * it asked.
+   */
+  protected relaunchIf(stale: {
+    boundary: boolean;
+    gateway: boolean;
+  }): "boundary" | "gateway" | undefined {
+    if (!this.ready || this.exited) {
+      return;
+    }
+    if (stale.boundary) {
+      this.ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+      return "boundary";
+    }
+    if (stale.gateway) {
+      this.ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
+      return "gateway";
+    }
   }
 
   attached(): void {

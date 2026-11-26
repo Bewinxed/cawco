@@ -912,19 +912,16 @@ const serverAnnounced = Effect.fnUntraced(function* (
  * `catalog` "Listing tools, prompts, resources…", 30 s each by default): a
  * fleet server slower than that read `Request timed out` on every sync. Both
  * get the fleet's connect window ({@link MCP_CONNECT_MS}), the one Claude
- * Code gets, so a slow server reads the same in either harness.
+ * Code gets, so a slow server reads the same in either harness. A remote
+ * one is written without its headers: CawCo's plugin points every fleet
+ * server at the location's MCP gate, which adds them (opencode-plugin-module.ts
+ * `settleServer`, mcp-host.ts `gateTarget`), so OpenCode holds none.
  */
 const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
   // @limit measured: startup and catalog take the fleet's MCP connect window (mcp-status.ts MCP_CONNECT_MS), the one Claude Code gets
   const timeout = { startup: MCP_CONNECT_MS, catalog: MCP_CONNECT_MS };
   return "url" in config
-    ? {
-        type: "remote",
-        url: config.url,
-        oauth: false,
-        timeout,
-        ...(config.headers ? { headers: config.headers } : {}),
-      }
+    ? { type: "remote", url: config.url, oauth: false, timeout }
     : {
         type: "local",
         command: [config.command, ...(config.args ?? [])],

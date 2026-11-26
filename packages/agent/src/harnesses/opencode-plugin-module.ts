@@ -1317,9 +1317,9 @@ const placeMcp = (
 type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0];
 type McpServer = ReturnType<McpEditor["list"]>[number][1];
 
-/** What a location reaches its local servers by. */
+/** What a location reaches the fleet's servers by. */
 interface McpGate {
-  /** The fleet's servers its gate runs on the host. */
+  /** The fleet's servers its gate runs on the host, or relays with their headers. */
   gated: Set<string>;
   /** Its gate: its workspace's, else its folder's (core `folderGateId`). */
   id: string;
@@ -1327,9 +1327,11 @@ interface McpGate {
   key: string | undefined;
 }
 
-// One local server of a location: through its gate when the gate runs it,
-// off when it is a browser tool, else on the machine's data dir.
-const settleLocal = (
+// One server of a location: through its gate when it is the fleet's (one
+// with a command run on the host, a remote one relayed with its headers, so
+// OpenCode holds no fleet server's key); else, a local one off when it is a
+// browser tool, or on the machine's data dir.
+const settleServer = (
   editor: McpEditor,
   gate: McpGate,
   name: string,
@@ -1380,7 +1382,8 @@ const transformMcp = async (ctx: Context, here: Here): Promise<void> => {
     // process for the location's gate, started at its first call (the
     // agent's mcp-host.ts): the location dials its gate, and starts none of
     // them itself, as OpenCode's own "Servers connect automatically"
-    // (opencode.ai/docs/mcp-servers) would at the location's start. A
+    // (opencode.ai/docs/mcp-servers) would at the location's start. Each
+    // remote fleet server comes through the gate too, which adds its headers. A
     // workspace's gate is the workspace's, chrome-devtools through its
     // browser door. A location in no workspace is its folder's, which every
     // session there shares, so it takes no chrome-devtools, whose one
@@ -1395,8 +1398,8 @@ const transformMcp = async (ctx: Context, here: Here): Promise<void> => {
       key: hostKey(),
     };
     for (const [name, config] of [...editor.list()]) {
-      if (config.type === "local") {
-        settleLocal(editor, gate, name, config.timeout);
+      if (config.type === "local" || gate.gated.has(name)) {
+        settleServer(editor, gate, name, config.timeout);
       }
     }
   });

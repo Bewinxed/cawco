@@ -774,21 +774,23 @@ type SupervisorPorts = Pick<
 >;
 
 /**
- * A session's MCP gate (mcp-gate.ts), which starts each fleet server with a
+ * A session's MCP gate (mcp-gate.ts), which relays CawCo's server and each
+ * remote fleet server with their headers and starts each fleet server with a
  * command at its first call, chrome-devtools through the gate id's browser
  * door: its workspace's when its boundary holds it, else its own, in its
  * folder: its place's, the session's, or the folder's when one server of
  * its harness runs a folder's MCP servers for all its sessions (core
- * `mcpPerFolder`). A fenced session takes no fleet server, so has none.
+ * `mcpPerFolder`). A fenced session takes no fleet server: its gate is its
+ * own, with no folder, which relays CawCo's server alone.
  */
 const gateOf = (
   spec: SpawnPayload,
   workdir: string,
   place: string | undefined,
   bounded: boolean
-): { home?: GateHome; id: string } | undefined => {
+): { home?: GateHome; id: string } => {
   if (spec.fence) {
-    return;
+    return { id: spec.instanceId };
   }
   if (bounded && place) {
     return { id: place };
@@ -3259,10 +3261,10 @@ export class SessionSupervisor {
     adapter: Harness,
     holder: { session: HarnessSession | null },
     processGeneration: string | undefined,
-    bounded?: { boundary: Boundary; workspace: string },
-    sessionCredential?: string,
-    recovery = false,
-    gate?: { home?: GateHome; id: string },
+    bounded: { boundary: Boundary; workspace: string } | undefined,
+    sessionCredential: string | undefined,
+    recovery: boolean,
+    gate: { home?: GateHome; id: string },
     containerEnv?: Readonly<Record<string, string>>,
     hostTmp?: string
   ): HarnessContext {
@@ -3270,13 +3272,14 @@ export class SessionSupervisor {
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
     }
-    // Every session but a fenced one reaches its fleet servers through its
-    // gate (mcp-gate.ts), held while this process runs: the gate's own
-    // processes end with the last one that holds it.
-    const gateMember = `${instanceId}:${processGeneration}`;
-    if (gate) {
-      mcpHost.joinGate(gate.id, gateMember, gate.home);
-    }
+    // Every session reaches its MCP servers through its gate (mcp-gate.ts),
+    // held while this process runs, which its token opens till then: the
+    // gate's own processes end with the last one that holds it.
+    const gateMember = {
+      instanceId,
+      key: `${instanceId}:${processGeneration}`,
+    };
+    mcpHost.joinGate(gate.id, gateMember, gate.home);
     this.#generations.set(instanceId, processGeneration);
     this.#placed.set(instanceId, {
       harness: adapter.kind,
@@ -3342,7 +3345,7 @@ export class SessionSupervisor {
       ...(sessionCredential ? { sessionCredential } : {}),
       ...(containerEnv ? { containerEnv } : {}),
       ...(hostTmp ? { hostTmp } : {}),
-      ...(gate ? { mcpGate: mcpGateOf(gate.id) } : {}),
+      mcpGate: mcpGateOf(gate.id, gateMember),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3517,9 +3520,7 @@ export class SessionSupervisor {
       closed: () => {
         // A session outside any workspace browsed through a door of its own:
         // its pages close with its process, as its browser tool's Chromium did.
-        if (gate) {
-          mcpHost.leaveGate(gate.id, gateMember);
-        }
+        mcpHost.leaveGate(gate.id, gateMember);
         if (!bounded) {
           closeBrowserDoor(instanceId);
         }

@@ -227,7 +227,7 @@ class AgyHarness implements Harness<"agy"> {
   readonly custody: KeeperCustody = {
     kind: "keeper",
     ...keeperCustody("agy", agyKeepers),
-    adopt: (spec, ctx, options) => adoptAgy(spec.instanceId, ctx, options),
+    adopt: (spec, ctx, options) => adoptAgy(spec, ctx, options),
     turnRunning: async (instanceId) => (await agySnapshot(instanceId)).busy,
   };
 
@@ -237,7 +237,7 @@ class AgyHarness implements Harness<"agy"> {
   ): Promise<HarnessSession | undefined> {
     const proc = await liveChild(this.custody, "agy", spec.instanceId);
     return proc
-      ? await adoptAgy(spec.instanceId, ctx, {
+      ? await adoptAgy(spec, ctx, {
           head: proc.head,
           afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
         })

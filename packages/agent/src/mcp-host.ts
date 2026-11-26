@@ -34,7 +34,8 @@
  *
  * The process runs outside every workspace boundary, as a harness's own
  * stdio server does, so only a harness may call it: each request carries this
- * machine's host key ({@link hostKey}), written into the harness configs and
+ * machine's host key ({@link hostKey}), written into the fleet's set (a
+ * session's gate adds it as it relays the call) and OpenCode's config, and
  * kept beside the sessions' credentials, which every boundary hides. A
  * session's shell, which carries its own CawCo credential, has no host key.
  *
@@ -67,9 +68,12 @@
  *   window by `tabIdentifier`, and "Permission dialog appears per-process"
  *   (https://github.com/ndrblinov/xcode-mcp-manager), so one process asks once.
  *
- * Every session reaches every other fleet server with a command through its
- * gate (mcp-gate.ts, `/mcp/gate/<gate id>/<name>`: its workspace's, else its
- * own), answered here the same way: one process per gate and server,
+ * Every session reaches every other fleet server through its gate
+ * (mcp-gate.ts, `/mcp/gate/<gate id>/<name>`: its workspace's, else its
+ * own), with its own token ({@link memberToken}), never the host key; a
+ * remote one, a shared one and CawCo's own are relayed by the gateway with
+ * their headers ({@link McpHost.gateTarget}). One with a command is
+ * answered here the same way as a shared one: one process per gate and server,
  * started at its first call in the gate's folder, chrome-devtools through
  * the gate id's browser door with the folder (and a workspace's scratch) as
  * its roots ({@link gateLaunch}). So the process is the gate's alone, as
@@ -78,7 +82,12 @@
  * ({@link McpHost.leaveGate}).
  */
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -111,10 +120,11 @@ import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
 import { runPromise } from "./daemon-runtime";
-import { harnessMcpUrl } from "./delegation";
+import { delegationMcp, harnessMcpUrl, MCP_SERVER_NAME } from "./delegation";
 import { fleetMcpAt } from "./fleet-mcp-set";
-import { gatePath, type McpGate } from "./mcp-gate";
+import { GATE_TOKEN_HEADER, gatePath, type McpGate } from "./mcp-gate";
 import { MCP_CONNECT_MS } from "./mcp-status";
+import { sessionCredentialOf } from "./redaction";
 import { toolEnv } from "./tools";
 import { workspacePath } from "./workspace-records";
 
@@ -224,13 +234,14 @@ export const hostKeyFile = (): string =>
   join(sessionIdentityDir(), "mcp-host.key");
 
 /**
- * This machine's host key: what a harness's config carries to call a shared
- * server or a gate's, kept owner-only beside the sessions' credentials (core
+ * This machine's host key: what a shared server's entry carries (which a
+ * session's gate relays) and OpenCode's plugin calls a gate's servers with a
+ * command by, kept owner-only beside the sessions' credentials (core
  * paths/cawco.ts `sessionIdentityDir`), hidden from every workspace boundary. Made
  * once per boot of that directory; the next fleet sync writes it into every
  * config.
  */
-const hostKey = (): string => {
+export const hostKey = (): string => {
   if (key) {
     return key;
   }
@@ -276,10 +287,56 @@ export interface GateHome {
   readonly projectId?: string;
 }
 
-/** Gate `gateId` (a workspace's id, a session's own, or a folder's: core `folderGateId`), as its sessions' harnesses dial it ({@link McpHost.fetchGate}). */
-export const mcpGateOf = (gateId: string): McpGate => ({
+/** A session's process holding a gate: its instance, and its key (instance and generation). */
+export interface GateMember {
+  readonly instanceId: string;
+  readonly key: string;
+}
+
+/**
+ * Member `member`'s token for gate `gateId`: an HMAC of the two under the
+ * host key, so the agent that takes the session back after a restart
+ * derives the one its harness still holds, and no token names another
+ * member or gate. It is good only while the member holds the gate
+ * ({@link McpHost.joinGate} to {@link McpHost.leaveGate}): its process's
+ * end refuses it, and a later launch of the session is another member, so
+ * one a harness stored (Antigravity's conversation database keeps every
+ * MCP header) opens nothing again.
+ */
+const memberToken = (gateId: string, member: GateMember): string =>
+  createHmac("sha256", hostKey())
+    .update(`cawco gate member\0${gateId}\0${member.key}`)
+    .digest("base64url");
+
+/** A token's name in the member table: its hash, so a lookup's timing says nothing of a token. */
+const tokenName = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
+
+/** Gate `gateId` (a workspace's id, a session's own, or a folder's: core `folderGateId`), as member `member`'s harness dials it ({@link McpHost.gateTarget}). */
+export const mcpGateOf = (gateId: string, member: GateMember): McpGate => ({
   base: harnessMcpUrl(gatePath(gateId)),
-  headers: { Authorization: `Bearer ${hostKey()}` },
+  headers: { [GATE_TOKEN_HEADER]: memberToken(gateId, member) },
+});
+
+/**
+ * What a gate's request reaches: a server with a command, run here; a remote
+ * one (CawCo's own among them), relayed with its own headers, which only
+ * the gate holds; or a refusal.
+ */
+export type GateTarget =
+  | { readonly hosted: Hosted }
+  | {
+      readonly remote: {
+        readonly headers: Readonly<Record<string, string>>;
+        /** An SSE server's: its stream's `endpoint` events are rewritten onto the gate, and a post goes to the endpoint it names. */
+        readonly sse?: true;
+        readonly url: string;
+      };
+    }
+  | { readonly refused: Response };
+
+const refusal = (status: number, words: string): GateTarget => ({
+  refused: new Response(words, { status }),
 });
 
 const rpcError = (
@@ -558,7 +615,7 @@ const gateLaunch = async (
 };
 
 /** One hosted server: its config, what it said last, and its process once a call needs it. */
-class Hosted {
+export class Hosted {
   readonly name: string;
   readonly key: string;
   readonly #keptFile: string;
@@ -898,14 +955,22 @@ class McpHost {
     return gate;
   }
 
+  /** Each member holding a gate, by its token's name ({@link tokenName}). */
+  readonly #tokens = new Map<string, GateMember & { gateId: string }>();
+
   /**
-   * A session's process (`member`, its instance and generation) holds gate
-   * `gateId` from now; `home` names the folder of a gate that is no
-   * workspace's ({@link GateHome}).
+   * A session's process (`member`) holds gate `gateId` from now, and its
+   * token opens the gate ({@link memberToken}); `home` names the folder of a
+   * gate that is no workspace's ({@link GateHome}). A gate with no folder
+   * (a fenced session's) relays CawCo's server alone.
    */
-  joinGate(gateId: string, member: string, home?: GateHome): void {
+  joinGate(gateId: string, member: GateMember, home?: GateHome): void {
     const gate = this.#gate(gateId);
-    gate.members.add(member);
+    gate.members.add(member.key);
+    this.#tokens.set(tokenName(memberToken(gateId, member)), {
+      ...member,
+      gateId,
+    });
     if (home) {
       gate.home = home;
     }
@@ -915,9 +980,10 @@ class McpHost {
    * A session's process no longer holds gate `gateId`: with the last one, the
    * gate's processes end. A later call starts them again.
    */
-  leaveGate(gateId: string, member: string): void {
+  leaveGate(gateId: string, member: GateMember): void {
+    this.#tokens.delete(tokenName(memberToken(gateId, member)));
     const gate = this.#gates.get(gateId);
-    if (!gate?.members.delete(member) || gate.members.size > 0) {
+    if (!gate?.members.delete(member.key) || gate.members.size > 0) {
       return;
     }
     for (const hosted of gate.servers.values()) {
@@ -994,59 +1060,110 @@ class McpHost {
   }
 
   /**
-   * One harness request on `/mcp/gate/<gate id>/<name>` (mcp-gate.ts): the
-   * fleet's server `name` with a command, as the fleet's latest sync names it
-   * for the gate's folder (placed copies too: its workspace's, or the home
-   * its sessions named as they joined), served as a shared one is, by its
-   * own process for this gate. A config that changed since its process
-   * started ends it; the next call starts the new one. A gate no session
-   * holds and no workspace names has no folder, and starts nothing.
+   * Who calls gate `gateId`: a member, by the token its harness carries
+   * ({@link GATE_TOKEN_HEADER}) while it holds that gate; OpenCode's plugin,
+   * by the host key, which it reads from its file and which reaches the
+   * fleet's servers but not CawCo's (an OpenCode server holds many
+   * sessions, so no one session's credential); else nobody.
    */
-  async fetchGate(
+  #caller(
+    gateId: string,
+    request: Request
+  ): GateMember | "host key" | undefined {
+    const token = request.headers.get(GATE_TOKEN_HEADER);
+    if (token !== null) {
+      const member = this.#tokens.get(tokenName(token));
+      return member?.gateId === gateId ? member : undefined;
+    }
+    return carriesKey(request.headers.get("Authorization"))
+      ? "host key"
+      : undefined;
+  }
+
+  /**
+   * What one harness request on `/mcp/gate/<gate id>/<name>` (mcp-gate.ts)
+   * reaches. CawCo's own server (`cawco`) is relayed for the member that
+   * asks, with its session's credential. Any other `name` is the fleet's
+   * server as the fleet's latest sync names it for the gate's folder
+   * (placed copies too: its workspace's, or the home its sessions named as
+   * they joined): one with a command served as a shared one is, by its own
+   * process for this gate, a config that changed since its process started
+   * ending it so the next call starts the new one; a remote one (streamable
+   * HTTP or SSE) relayed with its own headers. A gate no session holds and no workspace
+   * names has no folder, and reaches no fleet server.
+   */
+  async gateTarget(
     ports: BrowserPorts,
     gateId: string,
     name: string,
     request: Request
-  ): Promise<Response> {
-    if (!carriesKey(request.headers.get("Authorization"))) {
-      return new Response(
-        "This workspace's MCP gate answers only a harness this agent configured.",
-        { status: 401 }
-      );
-    }
+  ): Promise<GateTarget> {
     const id = decodeURIComponent(gateId);
     const server = decodeURIComponent(name);
+    const caller = this.#caller(id, request);
+    if (!caller) {
+      return refusal(
+        401,
+        "This MCP gate answers only a session it was opened for, while that session runs."
+      );
+    }
+    if (server === MCP_SERVER_NAME) {
+      if (caller === "host key") {
+        return refusal(403, "CawCo's server answers a session's gate token.");
+      }
+      const credential = sessionCredentialOf(caller.instanceId);
+      if (!credential) {
+        return refusal(
+          503,
+          `${caller.instanceId}'s CawCo credential is not proved on this machine yet.`
+        );
+      }
+      const own = delegationMcp(caller.instanceId, credential);
+      return { remote: { url: own.url, headers: own.headers ?? {} } };
+    }
     const home = this.#gates.get(id)?.home;
     const path =
       home?.path ?? (GATE_ID.test(id) ? await workspacePath(id) : undefined);
     if (!path) {
-      return new Response(
-        `${id} is not a workspace on this machine, nor a session's gate that one holds.`,
-        { status: 404 }
+      return refusal(
+        404,
+        `${id} is not a workspace on this machine, nor a session's gate that one holds.`
       );
     }
     const config = (await fleetMcpAt(path))[server];
-    if (!(config && "command" in config)) {
-      return new Response(
-        `${server} is not a fleet MCP server this machine runs for ${id}.`,
-        { status: 404 }
-      );
+    if (config && "command" in config) {
+      const gate = this.#gate(id);
+      let hosted = gate.servers.get(server);
+      if (hosted?.key !== keyOf(config)) {
+        hosted?.stop();
+        hosted = new Hosted(server, config, gateKeptFile(keyOf(config)), () =>
+          gateLaunch(ports, id, server, config, path, home)
+        );
+        gate.servers.set(server, hosted);
+      }
+      return { hosted };
     }
-    const gate = this.#gate(id);
-    let hosted = gate.servers.get(server);
-    if (hosted?.key !== keyOf(config)) {
-      hosted?.stop();
-      hosted = new Hosted(server, config, gateKeptFile(keyOf(config)), () =>
-        gateLaunch(ports, id, server, config, path, home)
-      );
-      gate.servers.set(server, hosted);
+    if (config && "url" in config) {
+      return {
+        remote: {
+          url: config.url,
+          headers: config.headers ?? {},
+          ...(config.type === "sse" ? { sse: true as const } : {}),
+        },
+      };
     }
-    return await serve(hosted, request);
+    return refusal(
+      404,
+      `${server} is not a fleet MCP server this machine runs for ${id}.`
+    );
   }
 }
 
 /** One harness request to `hosted` (Streamable HTTP, answered as JSON with no session). */
-const serve = async (hosted: Hosted, request: Request): Promise<Response> => {
+export const serve = async (
+  hosted: Hosted,
+  request: Request
+): Promise<Response> => {
   if (request.method !== "POST") {
     // No stream to hold open, and no session to end.
     return new Response(null, { status: 405, headers: { Allow: "POST" } });

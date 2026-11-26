@@ -2388,17 +2388,18 @@ const fleetLaunchOptions = (
  * The fleet's MCP servers a session in `workdir` loads, from the set the
  * machine's fleet sync wrote (fleet-mcp-set.ts; in no file the person's own
  * `claude` reads): the fleet's own and a project's placed copies over them.
- * Every one with a command comes through the session's gate on the agent's
- * gateway (`ctx.mcpGate`, mcp-gate.ts), which answers its handshake and
- * lists from the server's last listing and starts its process at the first
- * call, chrome-devtools through the gate's browser door. Claude Code starts
+ * Every one with a command or a streamable HTTP URL comes through the
+ * session's gate on the agent's gateway (`ctx.mcpGate`, mcp-gate.ts): a
+ * remote one relayed with its headers, which the gate alone holds; one with
+ * a command answered from the server's last listing, its process started
+ * at the first call, chrome-devtools through the gate's browser door. Claude Code starts
  * a stdio server with the session and defers only "a remote server with a
  * cached tool list" ("connects on its first tool call",
  * https://code.claude.com/docs/en/agent-sdk/mcp, "Connection timing"), and a
  * workspace session's CLI would start one inside its boundary, where no
  * fleet server reaches its install, its door or the owner's machines. A
  * project's own `.mcp.json` servers still start with the session. A
- * session with no gate (a fenced one) takes the remote servers alone.
+ * context with no gate (none the supervisor runs) takes none.
  */
 const fleetMcpFor = async (
   ctx: HarnessContext,
@@ -2406,11 +2407,7 @@ const fleetMcpFor = async (
   set: StartingSet | undefined
 ): Promise<Record<string, McpServerConfig>> => {
   const all = inStartingSet(await fleetMcpAt(workdir), set);
-  return ctx.mcpGate
-    ? throughMcpGate(all, ctx.mcpGate)
-    : Object.fromEntries(
-        Object.entries(all).filter(([, config]) => !("command" in config))
-      );
+  return ctx.mcpGate ? throughMcpGate(all, ctx.mcpGate) : {};
 };
 
 /**

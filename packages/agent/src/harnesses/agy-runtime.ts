@@ -99,6 +99,7 @@ import {
 } from "effect";
 import { runPromise, runSync } from "../daemon-runtime";
 import type { SessionControls, TurnExtras } from "../harness";
+import { GATE_TOKEN_HEADER } from "../mcp-gate";
 import { fromPromise } from "../rejected";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
@@ -1570,6 +1571,11 @@ class AgySession {
       asks: [...this.#asks.values()].map((ask) => ask.asked),
       ...(this.#version ? { version: this.#version } : {}),
       ...(this.#start.gateForm ? { gateForm: this.#start.gateForm } : {}),
+      ...(this.#start.mcpServers.every((server) =>
+        server.headers.every((header) => header.name === GATE_TOKEN_HEADER)
+      )
+        ? { gated: true as const }
+        : {}),
       ...(this.#refused === undefined ? {} : { refused: this.#refused }),
     };
   }
@@ -1614,7 +1620,7 @@ class AgySession {
     });
   }
 
-  /** The launch's own credential, its header in CawCo's server already: acknowledged to the hub. */
+  /** The launch's own credential, which the session's gate adds to its calls to CawCo's server already: acknowledged to the hub. */
   async #installCredential(
     credential: string,
     initial: boolean
