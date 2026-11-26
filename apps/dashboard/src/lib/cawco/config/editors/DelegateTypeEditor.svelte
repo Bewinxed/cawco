@@ -19,7 +19,9 @@
     type DelegateType,
     saveDelegateType,
   } from "../../delegate-types";
+  import { offeredOnAny } from "../../harness-offer.svelte";
   import ModelCombobox from "../../ModelCombobox.svelte";
+  import { boardStore } from "../../stores/board.svelte";
   import Choice from "../Choice.svelte";
   import { deleteDelegateType } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -76,6 +78,15 @@
     return fields;
   });
   let skillsText = $derived(baseline.skillsText);
+  /**
+   * The harnesses a start can run on on some machine of the fleet
+   * (harness-offer.svelte.ts); every one until a machine is known.
+   */
+  const runnable = $derived(
+    boardStore.machines.length > 0
+      ? offeredOnAny(boardStore.machines)
+      : [...HARNESSES]
+  );
   let denyToolsText = $derived(baseline.denyToolsText);
   let mayStartText = $derived(baseline.mayStartText);
   let startSkillsText = $derived(baseline.startSkillsText);
@@ -297,6 +308,9 @@
       options={HARNESSES.map((harness) => ({
         value: harness,
         label: harness,
+        // A harness a start can run on on no machine is no choice;
+        // the type's own stays, so it reads as it was saved.
+        disabled: harness !== draft.harness && !runnable.includes(harness),
       }))}
       value={draft.harness}
     />

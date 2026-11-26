@@ -92,6 +92,7 @@ export const placementPreview =
     resolvedModel,
     startModelOf,
     taskAccounts,
+    unsignedHarness,
   }: Pick<
     HubContext,
     | "askedStart"
@@ -102,6 +103,7 @@ export const placementPreview =
     | "resolvedModel"
     | "startModelOf"
     | "taskAccounts"
+    | "unsignedHarness"
   >) =>
   async (query: PlacementQuery) => {
     /**
@@ -115,6 +117,12 @@ export const placementPreview =
       const refused = refusedHarness(start.machineId, harness);
       if (refused) {
         return problem(400, { code: "harness-refused", detail: refused });
+      }
+      // No account signed in for a harness each account signs in itself:
+      // its fix is an account's sign-in, on Accounts.
+      const unsigned = unsignedHarness(start.machineId, harness);
+      if (unsigned) {
+        return problem(400, { code: "not-placed", detail: unsigned });
       }
       const listed = taskAccounts(start.projectId, start.taskId);
       return "unread" in listed
@@ -191,6 +199,7 @@ export const accountPlacementRoutes = ({
   resolvedModel,
   startModelOf,
   taskAccounts,
+  unsignedHarness,
 }: Pick<
   HubContext,
   | "askedStart"
@@ -202,6 +211,7 @@ export const accountPlacementRoutes = ({
   | "resolvedModel"
   | "startModelOf"
   | "taskAccounts"
+  | "unsignedHarness"
 >) => {
   const preview = placementPreview({
     askedStart,
@@ -212,6 +222,7 @@ export const accountPlacementRoutes = ({
     resolvedModel,
     startModelOf,
     taskAccounts,
+    unsignedHarness,
   });
   /**
    * Why a routing save can't route `provider` by `choice`, or undefined when

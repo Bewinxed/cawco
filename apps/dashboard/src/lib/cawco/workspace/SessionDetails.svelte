@@ -60,6 +60,7 @@
   } from "../accounts/switch.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
+  import { signedInOn } from "../harness-offer.svelte";
   import { answeredOr } from "../hub/control";
   import { connectionStore } from "../hub/socket.svelte";
   import { describingRow, modelLabel } from "../models.svelte";
@@ -1082,6 +1083,11 @@
                   harness={shownHarness}
                   installed={kept ? keptHarnesses : [harness]}
                   machineIds={machineId ? [machineId] : []}
+                  unsigned={kept && machineId
+                    ? keptHarnesses.filter(
+                        (kind) => !signedInOn(kind, machineId)
+                      )
+                    : []}
                   machineName={machine?.hostname ?? ""}
                   model={shownHarness === harness ? (shownModel ?? "") : ""}
                   onharness={(next) => {

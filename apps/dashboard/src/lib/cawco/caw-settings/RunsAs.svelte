@@ -49,6 +49,7 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
+  import { signedInOn } from "../harness-offer.svelte";
   import { modelLabel } from "../models.svelte";
   import { permissionModesFor } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
@@ -332,6 +333,9 @@
                   harness={listed}
                   {installed}
                   machineIds={[machineId]}
+                  unsigned={installed.filter(
+                    (kind) => !signedInOn(kind, machineId)
+                  )}
                   {machineName}
                   model={model ?? ""}
                   onharness={(next) => {

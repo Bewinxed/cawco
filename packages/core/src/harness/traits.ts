@@ -167,7 +167,7 @@ const SELF_SIGNED_HARNESSES: readonly KindsWhere<"homeLogin", "none">[] =
 export type SelfSignedKind = (typeof SELF_SIGNED_HARNESSES)[number];
 
 /** Whether `harness`, a kind or whatever a row or a frame says one is, is signed in by each account in its own home. */
-const signsInItself = (harness: unknown): harness is SelfSignedKind => {
+export const signsInItself = (harness: unknown): harness is SelfSignedKind => {
   const named = harnessNamed(harness);
   return named !== undefined && isSelfSigned(named);
 };

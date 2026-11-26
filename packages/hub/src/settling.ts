@@ -91,7 +91,7 @@ export interface SettlingDeps {
   ) => ReturnType<HandoffActions["handoff"]>;
   /** A harness's name: "Claude Code". */
   readonly harnessName: (harness: string) => string;
-  /** Whether `harness` runs on a machine that is online now. */
+  /** Whether a start of `harness` can run on a machine that is online now: installed there, and signed in where each account signs it in itself. */
   readonly harnessOnline: (harness: string) => boolean;
   /** A member answered with `hear: "each"`: one push (push.ts). */
   readonly heard: (decided: Decided) => void;

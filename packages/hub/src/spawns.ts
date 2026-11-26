@@ -252,6 +252,7 @@ export type SpawnsContext = Pick<
   | "signinsFor"
   | "startHold"
   | "typeSettingsOf"
+  | "unsignedHarness"
   | "workItems"
   | "startingSetOf"
   | "startsOnHomeLogin"
@@ -784,6 +785,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
     const refused = ctx.refusedHarness(machineId, harness);
     if (refused) {
       return { refusal: refused };
+    }
+    // A harness each account signs in itself has nothing to run on where
+    // no account is signed in for it: refused for that, before its models
+    // are asked of, which such a harness lists only for a signed-in account.
+    const unsigned = ctx.unsignedHarness(machineId, harness);
+    if (unsigned) {
+      return { refusal: unsigned };
     }
     const held = accountHeld(payload);
     const model = pickedModel(payload.model) ?? conversationModel(payload);

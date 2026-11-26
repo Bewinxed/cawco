@@ -2510,7 +2510,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * sessions there are left as they are while its Codex home there stays
    * signed in: the machine keeps that home through this sign-out (agent
    * provider-accounts.ts `removeAccount`), and Codex runs on it alone
-   * (placement.ts `harnessSignins`).
+   * (core accounts/harness-signins.ts `harnessSignins`).
    */
   const signOutMachine = (
     account: Account,

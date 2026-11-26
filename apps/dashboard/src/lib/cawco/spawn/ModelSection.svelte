@@ -10,6 +10,7 @@
    * list with the slide-swap on harness change; the list is the app's
    * catalogue, canonical names only.
    */
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
@@ -59,6 +60,7 @@
     harness,
     onharness,
     installed,
+    unsigned = [],
     machineName,
     machineIds,
     model,
@@ -74,6 +76,12 @@
     harness: HarnessKind;
     onharness: (harness: HarnessKind) => void;
     installed: HarnessKind[];
+    /**
+     * Of `installed`, those no account is signed in for where the session
+     * would run (harness-offer.svelte.ts): no choice, said so on the rail as
+     * one not installed is.
+     */
+    unsigned?: readonly HarnessKind[];
     machineName: string;
     /** The machines the model will run on: only what they can resolve is listed. */
     machineIds: string[];
@@ -136,7 +144,10 @@
     TABS.map((tab) => ({
       id: tab.id,
       label: tab.name,
-      disabled: !installed.some((kind) => kind === tab.id),
+      disabled:
+        !installed.some((kind) => kind === tab.id) ||
+        unsigned.some((kind) => kind === tab.id),
+      unsigned: unsigned.some((kind) => kind === tab.id),
     }))
   );
   let accountOpen = $state(false);
@@ -322,7 +333,11 @@
       >
         {#snippet item(tab: (typeof railItems)[number])}
           <HarnessLogo harness={tab.id} />
-          {#if tab.disabled}
+          {#if tab.unsigned}
+            <span class="sr-only"
+              >{accountsWords.problem.missingOn(machineName, 0)}</span
+            >
+          {:else if tab.disabled}
             <span class="sr-only"
               >{spawnWords.model.notInstalledOn(machineName)}</span
             >
@@ -332,7 +347,9 @@
           {#if tab.disabled}
             <span
               class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
-              >{spawnWords.model.notInstalled}</span
+              >{tab.unsigned
+                ? accountsWords.machines.state["signed-out"]
+                : spawnWords.model.notInstalled}</span
             >
           {/if}
         {/snippet}

@@ -1379,6 +1379,7 @@ export const createServer = (
     keepCodexLeave: () => keepCodexLeave,
     pendingCodexLeaves: () => pendingCodexLeaves,
     signinsFor: () => signinsFor,
+    unsignedHarness: () => unsignedHarness,
     noteCodexSignin: () => noteCodexSignin,
     forgetCodexEverywhere: () => forgetCodexEverywhere,
     hubGitOrigins: () => hubGitOrigins,
@@ -2015,6 +2016,7 @@ export const createServer = (
     noteCodexSignin,
     pendingCodexLeaves,
     signinsFor,
+    unsignedHarness,
     forgetCodexEverywhere,
     completeOn,
     finishJoined,
@@ -4692,7 +4694,7 @@ export const createServer = (
       .filter((catalog) => signedIn.has(catalog.accountId))
       .flatMap((catalog) => catalog.models);
   };
-  /** Each harness on an online machine, with the models it offers there (Who decides' setup). */
+  /** Each harness on an online machine where a start of it can run (installed, and signed in where each account signs it in itself), with the models it offers there (Who decides' setup). */
   const harnessOffers = (): HarnessOffer[] => {
     const fleet = db.namedMachines();
     const online = machinesOnline();
@@ -4700,7 +4702,12 @@ export const createServer = (
     return HARNESSES.map((harness) => {
       const reports = online.flatMap((machine) =>
         (reported.get(machine.machineId) ?? [])
-          .filter((report) => report.harness === harness && report.installed)
+          .filter(
+            (report) =>
+              report.harness === harness &&
+              report.installed &&
+              !unsignedHarness(machine.machineId, harness)
+          )
           .map((report) => ({ machine, report }))
       );
       const models = namedModels(
@@ -4759,10 +4766,15 @@ export const createServer = (
       [
         ...db
           .harnessesOn(machinesOnline().map((machine) => machine.machineId))
-          .values(),
-      ]
-        .flat()
-        .some((report) => report.harness === harness && report.installed),
+          .entries(),
+      ].some(([machineId, reports]) =>
+        reports.some(
+          (report) =>
+            report.harness === harness &&
+            report.installed &&
+            !unsignedHarness(machineId, harness)
+        )
+      ),
     modelName: modelNamed,
     handoff: (from, to, message) => delegationMcp.handoffAs(from, to, message),
     warm: (id) => {

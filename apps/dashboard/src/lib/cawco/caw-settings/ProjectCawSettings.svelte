@@ -8,11 +8,12 @@
    */
   import { machineLabel } from "@cawco/core/machine-names";
   import { untrack } from "svelte";
+  import { installedOn } from "../harness-offer.svelte";
   import type { CawLead } from "../project/caw-lead.svelte";
   import type { ProjectRow } from "../projects";
   import { boardStore, type Machine } from "../stores/board.svelte";
   import CawSettings from "./CawSettings.svelte";
-  import { CawSettingsHub, installedOn } from "./caw-settings-hub.svelte";
+  import { CawSettingsHub } from "./caw-settings-hub.svelte";
 
   let {
     lead,

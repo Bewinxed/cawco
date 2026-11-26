@@ -238,7 +238,7 @@ export const accountsRead = (
     machineName: string;
     owed: ReadonlyMap<string, string>;
     provenSince: number;
-    /** The sign-ins `row`'s harness can run on (placement.ts `harnessSignins`). */
+    /** The sign-ins `row`'s harness can run on (core accounts/harness-signins.ts `harnessSignins`). */
     signins: AccountSignin[];
     window: number | null;
   }

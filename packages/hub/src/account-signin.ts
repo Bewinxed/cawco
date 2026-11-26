@@ -18,6 +18,7 @@ import {
   CLAUDE_PROVIDER,
   joinProviders,
   PROVIDER_ACCOUNT_KINDS,
+  providerChoices,
   sameIdentity,
 } from "@cawco/core/accounts";
 import {
@@ -29,6 +30,11 @@ import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
+import {
+  type ApartSignins,
+  harnessSignins,
+  hasHarnessSignin,
+} from "@cawco/core/accounts/harness-signins";
 import type { Bounded } from "@cawco/core/bounded";
 import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -54,7 +60,7 @@ import {
   silentProblem,
   type Unanswered,
 } from "./machine-answers";
-import { type ApartSignins, harnessSignins } from "./placement";
+import { noHarnessSigninRefusal } from "./placement";
 import { unreachable } from "./unreachable";
 
 /** Why an account's marks end as it signs in (account-marks.ts `marksRenewed`). */
@@ -243,7 +249,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
 
   /**
    * Where each account is signed in for each harness whose sign-in is a
-   * home of its own beside the account's (placement.ts `ApartSignins`).
+   * home of its own beside the account's (core accounts/harness-signins.ts `ApartSignins`).
    */
   const apartSignins = (): ApartSignins => ({ codex: codexSignins() });
 
@@ -271,6 +277,25 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     }
     return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
   };
+
+  /**
+   * Why no start of `harness` can run on `machineId`: a harness each account
+   * signs in itself with no account signed in for it there (core
+   * accounts/harness-signins.ts `hasHarnessSignin`); undefined when one is,
+   * and for any other harness.
+   */
+  const unsignedHarness = (
+    machineId: string,
+    harness: string
+  ): string | undefined =>
+    hasHarnessSignin(harness, machineId, {
+      accounts: ctx.db.accounts.list(),
+      apart: apartSignins(),
+      choices: providerChoices(knownProviders()),
+      signins: ctx.db.accounts.signins(),
+    })
+      ? undefined
+      : noHarnessSigninRefusal(harness, ctx.machineName(machineId));
 
   /** Why an account of `provider` cannot be of `kind`; undefined when it can. */
   const accountKindRefusal = (
@@ -860,6 +885,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     keepCodexLeave,
     pendingCodexLeaves,
     signinsFor,
+    unsignedHarness,
     noteCodexSignin,
     forgetCodexEverywhere,
     machineProviders,

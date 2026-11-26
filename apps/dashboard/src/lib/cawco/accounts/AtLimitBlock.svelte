@@ -29,6 +29,10 @@
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
 
+  import {
+    installedOn,
+    offeredOnAny,
+  } from "#lib/cawco/harness-offer.svelte.js";
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
@@ -78,13 +82,14 @@
   );
   const installed = $derived(
     HARNESSES.filter((kind) =>
-      online.some((machine) =>
-        machine.harnesses?.some(
-          (entry) => entry.harness === kind && entry.installed
-        )
-      )
+      online.some((machine) => installedOn(machine).includes(kind))
     )
   );
+  /** Installed, with no account signed in for it on any of them (harness-offer.svelte.ts). */
+  const unsigned = $derived.by(() => {
+    const offered = offeredOnAny(online);
+    return installed.filter((kind) => !offered.includes(kind));
+  });
 
   /** A field's number: whole, at least 0; empty reads as 0. */
   function whole(value: string): number {
@@ -218,6 +223,7 @@
           <ModelSection
             harness={atLimit.compaction.summarizer.harness}
             {installed}
+            {unsigned}
             label={words.summarizer}
             machineIds={online.map((machine) => machine.machineId)}
             machineName={online[0]?.hostname ?? ""}

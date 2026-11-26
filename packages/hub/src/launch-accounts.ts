@@ -83,7 +83,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       return named.provider;
     }
     // Signed in for its harness: a Codex session's providers by Codex's
-    // own sign-ins (placement.ts `harnessSignins`).
+    // own sign-ins (core accounts/harness-signins.ts `harnessSignins`).
     const signedIn = new Set(
       ctx
         .signinsFor(harness)

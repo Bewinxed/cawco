@@ -8,11 +8,9 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
   import { untrack } from "svelte";
-  import {
-    FleetTriggersHub,
-    installedOn,
-  } from "#lib/cawco/caw-settings/caw-settings-hub.svelte.js";
+  import { FleetTriggersHub } from "#lib/cawco/caw-settings/caw-settings-hub.svelte.js";
   import FleetTriggers from "#lib/cawco/caw-settings/FleetTriggers.svelte";
+  import { installedOn } from "#lib/cawco/harness-offer.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
 

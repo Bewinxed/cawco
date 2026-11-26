@@ -18,7 +18,6 @@
   import {
     descriptorOf,
     type EffortLevel,
-    HARNESSES,
     type HarnessKind,
   } from "@cawco/core/harness/kinds";
   import { modeOn, type PermissionMode } from "@cawco/core/harness/modes";
@@ -33,6 +32,10 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import { tick, untrack } from "svelte";
   import { z } from "zod";
+  import {
+    harnessOffer,
+    installedOn,
+  } from "#lib/cawco/harness-offer.svelte.js";
   import { SessionDraftSchema } from "#lib/cawco/stored-shapes.js";
   import {
     Alert,
@@ -469,13 +472,9 @@
   const fullSendCarried = $derived(
     permissionMode === "fullSend" && !pickedHere
   );
-  const installedHarnesses = $derived(
-    HARNESSES.filter((kind) =>
-      machine?.harnesses?.some(
-        (entry) => entry.harness === kind && entry.installed
-      )
-    )
-  );
+  const installedHarnesses = $derived(installedOn(machine));
+  /** What the harness switch offers on the first machine: a start can run on it there (harness-offer.svelte.ts). */
+  const offer = $derived(harnessOffer(machine));
   /**
    * Where a session here would start, as the hub's placement preview says
    * (`/api/accounts/placement`): the account it would run on (a Claude
@@ -1283,14 +1282,14 @@
   let lastMachine = "";
   $effect(() => {
     const id = machineId;
-    const installed = installedHarnesses;
+    const runnable = offer.offered;
     if (id === lastMachine) {
       return;
     }
     lastMachine = id;
     untrack(() => {
-      const [first] = installed;
-      if (first && !installed.includes(harness)) {
+      const [first] = runnable;
+      if (first && !runnable.includes(harness)) {
         chooseHarness(first);
       }
     });
@@ -2678,6 +2677,7 @@
               harness={summarizerHarness}
               installed={installedHarnesses}
               label={spawnWords.form.summariseWith}
+              unsigned={offer.unsigned}
               {machineIds}
               machineName={machine?.hostname ?? machineId}
               model={summarizerModel}
@@ -2700,6 +2700,7 @@
             account={accountTool}
             {harness}
             installed={installedHarnesses}
+            unsigned={offer.unsigned}
             label={continueFrom
               ? spawnWords.form.continueOn
               : spawnWords.form.model}

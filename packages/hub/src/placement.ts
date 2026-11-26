@@ -17,7 +17,7 @@ import {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
 import { harnessLabel } from "@cawco/core/harness/kinds";
-import { type ApartSigninKind, signsInApart } from "@cawco/core/harness/traits";
+import { signsInApart } from "@cawco/core/harness/traits";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
@@ -93,7 +93,7 @@ export interface PlacementInput {
   fork?: { accountId: string | null };
   /**
    * The session's harness, which {@link signins} were read for
-   * ({@link harnessSignins}): its refusals say "signed in for Codex" of a
+   * (core accounts/harness-signins.ts `harnessSignins`): its refusals say "signed in for Codex" of a
    * Codex session. Absent: a sign-in reads as any harness's.
    */
   harness?: string;
@@ -141,7 +141,7 @@ export interface PlacementInput {
   routing: ProviderRouting;
   /**
    * The sign-ins the session can run on, read for its harness
-   * ({@link harnessSignins}): a Codex session's are Codex's own.
+   * (core accounts/harness-signins.ts `harnessSignins`): a Codex session's are Codex's own.
    */
   signins: AccountSignin[];
   /** The task's allow-list (`accounts:`); null or absent: every account. Held to its providers as the project's is. */
@@ -1624,11 +1624,10 @@ export const place = (asked: PlacementInput): Placement => {
         ),
       };
     }
-    const forWhat = signedInForWords(input.harness);
     return {
       ok: false,
-      refusal: forWhat
-        ? `No account is signed in${forWhat} on ${machine}. Sign one in${forWhat} there in ${configurePage("accounts")}.`
+      refusal: signsInApart(input.harness)
+        ? noHarnessSigninRefusal(input.harness, machine)
         : noAccountRefusal(machine),
     };
   }
@@ -1664,7 +1663,7 @@ export const place = (asked: PlacementInput): Placement => {
 
 /**
  * What placing a session reads of `provider`'s accounts: its accounts, the
- * sign-ins its harness can run on (`signins`, {@link harnessSignins}),
+ * sign-ins its harness can run on (`signins`, core accounts/harness-signins.ts `harnessSignins`),
  * readings and the bench.
  */
 export const accountFacts = (
@@ -1680,44 +1679,20 @@ export const accountFacts = (
   bench: db.accounts.bench(),
 });
 
-/** Where each account is signed in for each harness whose sign-in is a home of its own (core traits.ts `signsInApart`), by its kind: one row per account and machine whose home for it holds a sign-in. */
-export type ApartSignins = Readonly<
-  Record<ApartSigninKind, readonly { accountId: string; machineId: string }[]>
->;
-
 /**
- * The sign-ins a session in `harness` can run on. A harness whose sign-in is
- * a home of its own beside the account's (core traits.ts `signsInApart`:
- * Codex) runs in the account's home for it on a machine, signed in there by
- * the harness itself (a ChatGPT account's device code, or an OpenAI key
- * handed to it), so its session's are those homes alone (`apart`: hub
- * account-signin.ts `apartSignins`), each read as signed in; the account's
- * own sign-in there says nothing of that harness. Any other harness runs on
- * the account's own sign-ins (`signins`).
+ * Why nothing of `harness` starts on `machine` (its name): no account is
+ * signed in for it there. Said of a harness each account signs in itself
+ * (harness traits.ts `signsInItself`), which has no other sign-in to run on
+ * (core accounts/harness-signins.ts `hasHarnessSignin`).
  */
-export const harnessSignins = (
+export const noHarnessSigninRefusal = (
   harness: string,
-  signins: readonly AccountSignin[],
-  apart: ApartSignins
-): AccountSignin[] => {
-  if (!signsInApart(harness)) {
-    return [...signins];
-  }
-  return apart[harness].map(({ accountId, machineId }) => ({
-    accountId,
-    machineId,
-    checkedAt:
-      signins.find(
-        (one) => one.accountId === accountId && one.machineId === machineId
-      )?.checkedAt ?? 0,
-    movedAt: null,
-    movedFrom: null,
-    reason: null,
-    refusalReach: null,
-    state: "signed-in",
-  }));
+  machine: string
+): string => {
+  const forWhat = ` for ${harnessLabel(harness)}`;
+  return `No account is signed in${forWhat} on ${machine}. Sign one in${forWhat} there in ${configurePage("accounts")}.`;
 };
 
-/** " for Codex" of the sign-in of a session in a harness whose sign-in is a home of its own ({@link harnessSignins}), else nothing. */
+/** " for Codex" of the sign-in of a session in a harness whose sign-in is a home of its own (core accounts/harness-signins.ts `harnessSignins`), else nothing. */
 export const signedInForWords = (harness: string | undefined): string =>
   signsInApart(harness) ? ` for ${harnessLabel(harness)}` : "";

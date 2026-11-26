@@ -1431,6 +1431,8 @@ export interface ClosureContext {
   unlocatedWords: (id: string, machines: string[]) => string;
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
+  /** Why no start of `harness` can run on `machineId` for want of a sign-in (account-signin.ts `unsignedHarness`); undefined when one can. */
+  unsignedHarness: (machineId: string, harness: string) => string | undefined;
   unstrand: (instanceId: string) => void;
   /** Update all of a tool: CawCo's copies on connected, unpaused machines; the rest left, with why (tool-installs.ts `updateAll`). */
   updateAll: (toolId: string) => {

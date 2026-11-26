@@ -21,7 +21,6 @@
  * takes the change back, reads the hub again and says why on the row it was
  * made in (the panel's `refused…` lines).
  */
-import { HARNESSES } from "@cawco/core/harness/kinds";
 import {
   byTriggerKind,
   type ProjectTriggerSettings,
@@ -37,7 +36,6 @@ import { failureClause } from "#lib/platform/hub-read.js";
 import { connectionStore } from "../hub/socket.svelte";
 import type { CawLead } from "../project/caw-lead.svelte";
 import type { ProjectRow } from "../projects";
-import type { Machine } from "../stores/board.svelte";
 import {
   configureCaw,
   editProject,
@@ -50,14 +48,6 @@ import type { CawRunsAs, TriggerSettingsView } from "./caw-settings";
 
 /** What the panel holds of his chat and his switch: the lead's view, which his answers replace. */
 type SettingsLead = Pick<CawLead, "view">;
-
-/** The harnesses installed on `machine`, in the house's order. */
-export const installedOn = (machine: Machine | null) =>
-  HARNESSES.filter((kind) =>
-    machine?.harnesses?.some(
-      (entry) => entry.harness === kind && entry.installed
-    )
-  );
 
 /**
  * The kinds' changes not answered yet, over what the hub last said, and the
