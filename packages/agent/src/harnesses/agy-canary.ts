@@ -44,7 +44,7 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { resolveRates } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
-import { Effect, Exit, Option, Scope } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
 import { fromPromise, type Rejected } from "../rejected";
 import { carriesHookNotice, levelsOffered, modelsOf } from "./agy-frames";
@@ -52,7 +52,9 @@ import { agyJudgeEnv, serveAgyJudge } from "./agy-hook";
 import {
   type AgyAfterAnswer,
   type AgyAnswer,
-  decodeAgyHookInput,
+  agyHookEventOf,
+  NO_DECISION,
+  UNREAD_EVENT,
 } from "./agy-judge";
 import {
   AgyStartRefused,
@@ -183,18 +185,14 @@ const scratchOf = (dir: string) => ({
 const checkAnswer =
   (scratch: ReturnType<typeof scratchOf>, token: string, seen: Seen) =>
   (line: string): Promise<AgyAnswer | AgyAfterAnswer> => {
-    const read = decodeAgyHookInput(line);
-    if (Option.isNone(read)) {
-      return Promise.resolve({
-        decision: "deny",
-        reason: "cawco: the hook check could not read this call.",
-      });
+    const event = agyHookEventOf(line);
+    if (event === undefined) {
+      return Promise.resolve(UNREAD_EVENT);
     }
-    const call = read.value;
-    if (call.hookEventName !== "PreToolUse") {
-      return Promise.resolve({});
+    if (event.kind !== "before") {
+      return Promise.resolve(NO_DECISION);
     }
-    const tool = call.toolCall.name;
+    const tool = event.call.toolCall.name;
     seen.judged.add(tool);
     if (tool === "run_command") {
       return Promise.resolve({

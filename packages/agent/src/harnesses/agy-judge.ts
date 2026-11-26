@@ -48,9 +48,9 @@ import {
 } from "@cawco/core/workspace-judge";
 import { Option, Schema } from "effect";
 
-/** What agy hands its `PreToolUse` hook on stdin (its hooks doc, "Input/Output Contract"). */
+/** What agy hands its `PreToolUse` and `PostToolUse` hooks on stdin (its hooks doc, "Input/Output Contract"). */
 const HookInput = Schema.Struct({
-  hookEventName: Schema.String,
+  hookEventName: Schema.Literals(["PreToolUse", "PostToolUse"]),
   cwd: Schema.String,
   /** The conversation making the call: a session's own, or its subagent's (agy 1.5.18, `assets/338276e4/p0a.calls.jsonl`). */
   conversationId: Schema.optional(Schema.String),
@@ -64,8 +64,7 @@ const HookInput = Schema.Struct({
 /** A call as agy handed its hook, as the judge reads it. */
 export type AgyHookInput = typeof HookInput.Type;
 
-/** One line the hook sent, read as the call agy handed it; none for a line that is not one. */
-export const decodeAgyHookInput = Schema.decodeUnknownOption(
+const decodeToolEvent = Schema.decodeUnknownOption(
   Schema.fromJsonString(HookInput)
 );
 
@@ -82,12 +81,16 @@ export type AgyAnswer =
     };
 
 /**
- * The answer to agy's `PostToolUse`, which takes no decision: an empty
- * object. agy 1.5.18 logs `{"decision":"allow"}` there as a hook that
- * failed ("unknown field \"decision\"", the project's
- * `assets/8c459ba3/q2-agy-log-excerpt.txt`) and takes `{}` quietly.
+ * The answer to every event of agy's that takes no decision (`PostToolUse`,
+ * `PreInvocation`, `Stop`): an empty object. agy 1.5.18 logs a `decision`
+ * there as a hook that failed ("unknown field \"decision\"": after a call,
+ * the project's `assets/8c459ba3/q2-agy-log-excerpt.txt`; at a model call's
+ * start, `assets/8a34ae57/run-acp.log`) and takes `{}` quietly.
  */
 export type AgyAfterAnswer = Readonly<Record<never, never>>;
+
+/** The one answer to an event that takes no decision ({@link AgyAfterAnswer}). */
+export const NO_DECISION: AgyAfterAnswer = {};
 
 /** A workspace session's boundary, as the judge holds it to it. */
 interface AgyWorkspace {
@@ -144,9 +147,10 @@ export const agyDeniedTools = (names: readonly string[]): ReadonlySet<string> =>
 
 const deny = (reason: string): AgyAnswer => ({ decision: "deny", reason });
 
-/** Why a line the hook sent that is no call is denied. */
-const UNREAD_CALL =
-  "cawco: this call did not run, because the judge could not read what agy handed its hook.";
+/** The answer to a line the hook sent that is no event agy sends ({@link agyHookEventOf}): a denial, so a call the judge could not read never runs. */
+export const UNREAD_EVENT = deny(
+  "cawco: this call did not run, because the judge could not read what agy handed its hook."
+);
 
 const ALLOW: AgyAnswer = { decision: "allow" };
 
@@ -395,16 +399,11 @@ const heldFile = (
     : undefined;
 };
 
-/** The judge's answer to one call, read from what agy handed the hook, for `session`. */
+/** The judge's answer to one call agy is about to make (a {@link AgyHookEvent} of kind `before`), for `session`. */
 export const agyAnswer = (
   call: AgyHookInput,
   session: AgySession
 ): AgyAnswer => {
-  if (call.hookEventName !== "PreToolUse") {
-    return deny(
-      `cawco: the judge answers PreToolUse alone, and was handed ${call.hookEventName}.`
-    );
-  }
   const { name, args } = call.toolCall;
   const reach = reached(name, args ?? {});
   const kind = classOf(reach.tool, reach.input);
@@ -477,18 +476,7 @@ const inside = (folder: string, cwd: string, path: unknown): boolean => {
  * the end of a turn run; everything else is denied, so the run makes one
  * image and reads nothing of the machine's.
  */
-const imageRunAnswer = (
-  call: AgyHookInput,
-  folder: string
-): AgyAnswer | AgyAfterAnswer => {
-  if (call.hookEventName === "PostToolUse") {
-    return {};
-  }
-  if (call.hookEventName !== "PreToolUse") {
-    return deny(
-      `cawco: the judge answers PreToolUse alone, and was handed ${call.hookEventName}.`
-    );
-  }
+const imageRunAnswer = (call: AgyHookInput, folder: string): AgyAnswer => {
   const { name, args = {} } = call.toolCall;
   const kind = AGY_TOOLS[name];
   if (name === IMAGE_TOOL) {
@@ -519,28 +507,6 @@ const imageRunAnswer = (
     `cawco: ${name} did not run. This run makes one image with ${IMAGE_TOOL} and nothing else.`
   );
 };
-
-/**
- * An image run's answer to one line its hook sent (agy-fleet-hooks.ts
- * `answer`'s reading, the run's own policy; after a call, `{}`): a line that is no call is denied. Each
- * conversation a call comes from is handed to `seen`: the run's own and its
- * subagent's, whose folders hold the image and whose stores the run
- * removes as it ends.
- */
-export const agyImageRunAnswerTo = (
-  line: string,
-  folder: string,
-  seen: (conversationId: string) => void
-): AgyAnswer | AgyAfterAnswer =>
-  Option.match(decodeAgyHookInput(line), {
-    onNone: () => deny(UNREAD_CALL),
-    onSome: (call) => {
-      if (call.conversationId) {
-        seen(call.conversationId);
-      }
-      return imageRunAnswer(call, folder);
-    },
-  });
 
 /**
  * What agy hands the hook at a model call's start (`PreInvocation`) and at
@@ -574,9 +540,28 @@ export type AgyTurnEvent =
       readonly fullyIdle: boolean;
     };
 
-/** The line the hook sent as a turn's start or end; none for a tool call or a line of no such shape. */
-export const agyTurnEventOf = (line: string): AgyTurnEvent | undefined =>
-  Option.getOrUndefined(
+/**
+ * One event agy handed CawCo's hook (agy-hook.ts `agyHooksFile` registers
+ * these four): a call it is about to make (`PreToolUse`), answered with a
+ * decision; or a call that ended (`PostToolUse`), a model call's start
+ * (`PreInvocation`) or a turn's end (`Stop`), each answered with
+ * {@link NO_DECISION}.
+ */
+export type AgyHookEvent =
+  | { readonly kind: "before"; readonly call: AgyHookInput }
+  | { readonly kind: "after"; readonly call: AgyHookInput }
+  | AgyTurnEvent;
+
+/** The one line the hook sent, read as the event agy handed it; none for a line of no shape agy sends. */
+export const agyHookEventOf = (line: string): AgyHookEvent | undefined => {
+  const tool = decodeToolEvent(line);
+  if (Option.isSome(tool)) {
+    const call = tool.value;
+    return call.hookEventName === "PreToolUse"
+      ? { kind: "before", call }
+      : { kind: "after", call };
+  }
+  return Option.getOrUndefined(
     Option.map(decodeTurnEvent(line), (event): AgyTurnEvent =>
       event.hookEventName === "Stop"
         ? {
@@ -593,3 +578,37 @@ export const agyTurnEventOf = (line: string): AgyTurnEvent | undefined =>
           }
     )
   );
+};
+
+/** The conversation an event came from, when agy named it. */
+const conversationOf = (event: AgyHookEvent): string | undefined =>
+  event.kind === "before" || event.kind === "after"
+    ? event.call.conversationId
+    : event.conversationId;
+
+/**
+ * An image run's answer to one line its hook sent (agy-fleet-hooks.ts
+ * `answer`'s reading, the run's own policy): a call about to run is judged
+ * by the run's allowlist, every other event agy sends is answered with
+ * {@link NO_DECISION}, and a line of no shape agy sends is denied. Each
+ * conversation an event comes from is handed to `seen`: the run's own and
+ * its subagent's, whose folders hold the image and whose stores the run
+ * removes as it ends.
+ */
+export const agyImageRunAnswerTo = (
+  line: string,
+  folder: string,
+  seen: (conversationId: string) => void
+): AgyAnswer | AgyAfterAnswer => {
+  const event = agyHookEventOf(line);
+  if (event === undefined) {
+    return UNREAD_EVENT;
+  }
+  const conversationId = conversationOf(event);
+  if (conversationId) {
+    seen(conversationId);
+  }
+  return event.kind === "before"
+    ? imageRunAnswer(event.call, folder)
+    : NO_DECISION;
+};

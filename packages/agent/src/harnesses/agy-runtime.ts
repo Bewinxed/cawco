@@ -120,8 +120,10 @@ import { serveAgyJudge } from "./agy-hook";
 import {
   type AgyAnswer,
   type AgyTurnEvent,
-  agyTurnEventOf,
+  agyHookEventOf,
   type AgySession as Judged,
+  NO_DECISION,
+  UNREAD_EVENT,
 } from "./agy-judge";
 import {
   type AgyChild,
@@ -472,18 +474,21 @@ class AgySession {
       const judged = this.#judged();
       await runPromise(
         serveAgyJudge(launch.judgeSocket, (line) => {
-          const turn = agyTurnEventOf(line);
-          if (turn) {
-            if (turn.conversationId === this.sessionId) {
-              Queue.offerUnsafe(this.#updates, { turn });
+          const event = agyHookEventOf(line);
+          if (event === undefined) {
+            return Promise.resolve(UNREAD_EVENT);
+          }
+          if (event.kind === "invocation" || event.kind === "stop") {
+            if (event.conversationId === this.sessionId) {
+              Queue.offerUnsafe(this.#updates, { turn: event });
             }
-            return Promise.resolve({});
+            return Promise.resolve(NO_DECISION);
           }
           const ended = writtenAt(line);
           if (Option.isSome(ended)) {
             this.#writtenAt.set(ended.value.id, ended.value.at);
           }
-          return this.#fleet.answer(line, judged);
+          return this.#fleet.answer(event, line, judged);
         }).pipe(Scope.provide(this.#judge))
       );
     }

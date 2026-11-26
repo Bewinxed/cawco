@@ -36,10 +36,11 @@ import { placeSetAt } from "../fleet-place-set";
 import {
   type AgyAfterAnswer,
   type AgyAnswer,
+  type AgyHookEvent,
   type AgyHookInput,
   type AgySession,
   agyAnswer,
-  decodeAgyHookInput,
+  NO_DECISION,
 } from "./agy-judge";
 
 /** How agy names an MCP tool it calls by its own name (`mcp_<server>_<tool>`, core harness/agy.ts). */
@@ -171,27 +172,22 @@ export class AgyFleetHooks {
   }
 
   /**
-   * The answer to one line CawCo's hook sent: before a call, the judge's,
-   * then the fleet's `PreToolUse` hooks' on a call the judge lets run;
-   * after one, `{}` once the fleet's `PostToolUse` hooks have run. The
+   * The answer to one call CawCo's hook was handed (agy-judge.ts
+   * `agyHookEventOf`, from `line`): before it, the judge's, then the
+   * fleet's `PreToolUse` hooks' on a call the judge lets run; after it,
+   * {@link NO_DECISION} once the fleet's `PostToolUse` hooks have run. The
    * answer before a call is noted for the session by the call's id (its
-   * proof of each command, agy-runtime.ts). A line that is no call agy
-   * hands a hook is denied.
+   * proof of each command, agy-runtime.ts).
    */
   async answer(
+    event: Extract<AgyHookEvent, { kind: "before" | "after" }>,
     line: string,
     session: AgySession
   ): Promise<AgyAnswer | AgyAfterAnswer> {
-    const read = decodeAgyHookInput(line);
-    if (Option.isNone(read)) {
-      return deny(
-        "cawco: this call did not run, because the judge could not read what agy handed its hook."
-      );
-    }
-    const call = read.value;
-    if (call.hookEventName === "PostToolUse") {
+    const { call } = event;
+    if (event.kind === "after") {
       await this.#after(call, line);
-      return {};
+      return NO_DECISION;
     }
     const answer = await this.#before(call, session);
     session.noted(call.toolCall.id, call.toolCall.name, answer);
