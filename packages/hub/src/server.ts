@@ -3187,6 +3187,7 @@ export const createServer = (
   // An agent's usability feedback on a CawCo tool (usability-feedback.ts),
   // filed through a machine's GitHub sign-in while the person allows it.
   const usabilityFeedback = createUsabilityFeedback({
+    lifetime,
     repo: FEEDBACK_REPO_AT,
     consent: () => db.usabilityFeedback(),
     keepConsent: (on) => db.setUsabilityFeedback(on),
@@ -11074,6 +11075,7 @@ export const createServer = (
   // project's turn.
   const intake = createIntake({
     db,
+    lifetime,
     // An event from outside changes what the project's routines could take
     // (project-starters.ts).
     eventLanded: (projectId) => projectStarters.eventLanded(projectId),

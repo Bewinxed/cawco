@@ -1,6 +1,6 @@
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
@@ -49,6 +49,7 @@ import {
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
 } from "@cawco/core/workspace/controls";
+import { Cause, Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
@@ -166,6 +167,7 @@ export type RelayControlContext = Pick<
   | "forward"
   | "hubAsks"
   | "installArgs"
+  | "lifetime"
   | "installAsk"
   | "machineFault"
   | "moves"
@@ -674,33 +676,37 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     }
     // The receipt is sent when the pick is decided, or when deciding it
     // threw: a pick that failed says so on the command that asked for it.
-    const decided = pick.then(
-      (taken) => {
-        receipt(
-          typeof taken === "string"
-            ? { kind: "control_result", requestId, ok: true }
-            : {
-                kind: "control_result",
-                requestId,
-                ok: false,
-                error: taken.refusal,
-              }
-        );
-      },
-      (error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[hub] dashboard ${payload.method} for ${instanceId} failed: ${reason}`
-        );
-        receipt({
-          kind: "control_result",
-          requestId,
-          ok: false,
-          error: reason,
-        });
-      }
+    ctx.lifetime.fork(
+      "setting pick",
+      Effect.tryPromise({ try: () => pick, catch: (error) => error }).pipe(
+        Effect.match({
+          onSuccess: (taken) =>
+            receipt(
+              typeof taken === "string"
+                ? { kind: "control_result", requestId, ok: true }
+                : {
+                    kind: "control_result",
+                    requestId,
+                    ok: false,
+                    error: taken.refusal,
+                  }
+            ),
+          onFailure: (error) => {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            console.error(
+              `[hub] dashboard ${payload.method} for ${instanceId} failed: ${reason}`
+            );
+            receipt({
+              kind: "control_result",
+              requestId,
+              ok: false,
+              error: reason,
+            });
+          },
+        })
+      )
     );
-    detach(decided, "setting pick");
     return true;
   };
 
@@ -772,13 +778,30 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       for (const row of rows) {
         if (row.projectId) {
           const what = `memory: notes of purged session ${row.id}`;
-          detach(
-            ctx.memoryRun.purged(row.projectId, row.id).then((purged) => {
-              if (purged instanceof ElysiaStatus) {
-                console.warn(`[${what}] failed: ${purged.response.detail}`);
-              }
-            }),
-            what
+          const { projectId } = row;
+          ctx.lifetime.fork(
+            "memory purge",
+            Effect.tryPromise({
+              try: () => ctx.memoryRun.purged(projectId, row.id),
+              catch: (error) => error,
+            }).pipe(
+              Effect.flatMap((purged) =>
+                purged instanceof ElysiaStatus
+                  ? Effect.sync(() =>
+                      console.warn(
+                        `[${what}] failed: ${purged.response.detail}`
+                      )
+                    )
+                  : Effect.void
+              ),
+              Effect.catchCause((cause) =>
+                Effect.sync(() =>
+                  console.warn(
+                    `[${what}] failed: ${failureOf(Cause.squash(cause))}`
+                  )
+                )
+              )
+            )
           );
         }
       }

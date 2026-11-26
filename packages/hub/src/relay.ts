@@ -8,8 +8,9 @@
  * - **One path, its own listener.** The receiver is a listener of its own in
  *   the hub process, on 127.0.0.1 and a port of its own (never the hub API's,
  *   never the hub's router): `CAWCO_RELAY_PORT`, else one the OS picks free.
- *   It listens only while a relay is active and closes with the last one, and
- *   Funnel always points at the port it bound (re-pointed in place at each
+ *   It listens only while a relay is active and closes with the last one
+ *   (held open by a fork of the hub's lifetime, so the hub's close stops it
+ *   too), and Funnel always points at the port it bound (re-pointed in place at each
  *   start). It answers `POST /hooks/<id>` and nothing else:
  *   any other method or path, an unknown id and a relay that is off all get
  *   the same empty 404. It is write-only: a delivery that lands gets 202 and
@@ -52,9 +53,10 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { detach } from "@cawco/core/detach";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { machineId } from "@cawco/core/machine-id";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -85,7 +87,7 @@ import type {
   Webhook,
 } from "@cawco/providers/provider";
 import { type ProviderFailure, refusedWith } from "@cawco/providers/read-stop";
-import { Effect, Schedule } from "effect";
+import { Effect, Fiber, Result, Schedule, Schema } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -96,7 +98,7 @@ import { GITHUB_HOST, githubReposOf, type WatchRow } from "./db/watches";
 import { createFunnel, type Funnel, type FunnelState } from "./funnel";
 import { byHandle } from "./handles";
 import type { Intake } from "./intake";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import {
   relayCreatedWords,
@@ -383,6 +385,9 @@ const readCapped = async (
 
 const empty = (code: number) => new Response(null, { status: code });
 
+/** A look found an active relay that is not live: the relook's series goes on. */
+class NotLive extends Schema.TaggedError<NotLive>()("NotLive", {}) {}
+
 export const createRelay = ({
   askPerson,
   connections,
@@ -442,11 +447,18 @@ export const createRelay = ({
   };
   /** When the service last refused to register a relay's webhook. */
   const refusedAt = new Map<string, number>();
-  /** The receiver, while at least one relay is active; nothing listens otherwise. */
-  let listening: ReturnType<typeof Bun.serve> | undefined;
+  /**
+   * The receiver, while at least one relay is active (nothing listens
+   * otherwise): the port it bound, and the fork of the lifetime that holds
+   * it open, whose end stops it.
+   */
+  let listening:
+    | { readonly held: Fiber.Fiber<void>; readonly port: number | undefined }
+    | undefined;
   /** Why the receiver couldn't listen, when its last try failed. */
   let receiverProblem: string | null = null;
-  let timer: HubTimer | undefined;
+  /** The relook's fork ({@link relook}), while the hub runs. */
+  let relooking: Fiber.Fiber<unknown, unknown> | undefined;
   /** The pass under way, and the one asked for while it runs. */
   let applying: Promise<void> | undefined;
   let next: Promise<void> | undefined;
@@ -596,44 +608,77 @@ export const createRelay = ({
     );
   });
 
-  /** The receiver opened when it isn't: the port it bound, or undefined with `receiverProblem` saying why. */
+  /**
+   * The receiver opened when it isn't: the port it bound, or undefined with
+   * `receiverProblem` saying why. Its server is held in a scope on a fork of
+   * the lifetime, opened before the fork returns and stopped when the fork
+   * ends: {@link close}, or the hub's close.
+   */
   const listen = (): number | undefined => {
     if (listening) {
       return listening.port;
     }
     const asked = wantedPort();
-    try {
-      listening = Bun.serve({
-        hostname: "127.0.0.1",
-        port: asked,
-        // Bun refuses a body past this itself; readCapped is the cap that counts.
-        maxRequestBodySize: RELAY_BODY_MAX,
-        fetch: (request) => Effect.runPromise(receive(request)),
-        error: () => empty(500),
-      });
-      receiverProblem = null;
-      console.log(`[relay] receiver listening on 127.0.0.1:${listening.port}`);
-      return listening.port;
-    } catch (error) {
-      receiverProblem = asked
-        ? `The relay's receiver couldn't listen on 127.0.0.1:${asked} (${wordsOf(error)}); set ${CAWCO_ENV.relayPort} to a free port, or unset it to let the system pick one, and restart the hub.`
-        : `The relay's receiver couldn't listen on 127.0.0.1 (${wordsOf(error)}); the hub tries again within a minute.`;
-      console.error(`[relay] ${receiverProblem}`);
+    let opened: Result.Result<number | undefined, unknown> | undefined;
+    const held = lifetime.fork(
+      "relay receiver",
+      Effect.acquireRelease(
+        Effect.try({
+          try: () =>
+            Bun.serve({
+              hostname: "127.0.0.1",
+              port: asked,
+              // Bun refuses a body past this itself; readCapped is the cap that counts.
+              maxRequestBodySize: RELAY_BODY_MAX,
+              fetch: (request) => lifetime.run(receive(request)),
+              error: () => empty(500),
+            }),
+          catch: (error) => error,
+        }),
+        (server) => Effect.promise(() => server.stop(true))
+      ).pipe(
+        Effect.flatMap((server) => {
+          opened = Result.succeed(server.port);
+          return Effect.never;
+        }),
+        Effect.scoped,
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            opened = Result.fail(error);
+          })
+        )
+      )
+    );
+    if (opened === undefined) {
+      // The hub closed: the fork ran nothing.
+      return;
     }
+    if (Result.isFailure(opened)) {
+      receiverProblem = asked
+        ? `The relay's receiver couldn't listen on 127.0.0.1:${asked} (${wordsOf(opened.failure)}); set ${CAWCO_ENV.relayPort} to a free port, or unset it to let the system pick one, and restart the hub.`
+        : `The relay's receiver couldn't listen on 127.0.0.1 (${wordsOf(opened.failure)}); the hub tries again within a minute.`;
+      console.error(`[relay] ${receiverProblem}`);
+      return;
+    }
+    listening = { held, port: opened.success };
+    receiverProblem = null;
+    console.log(`[relay] receiver listening on 127.0.0.1:${listening.port}`);
+    return listening.port;
   };
 
   /** The receiver closed once no relay is active: a hub with no relay holds no extra port. */
   const close = async (): Promise<void> => {
-    const server = listening;
-    if (!server) {
+    const receiver = listening;
+    if (!receiver) {
       return;
     }
     // Forgotten first, so a pass that runs while it stops finds no receiver.
     listening = undefined;
     receiverProblem = null;
-    await server.stop(true);
+    // Ends once its server has stopped.
+    await lifetime.run(Fiber.interrupt(receiver.held));
     console.log(
-      `[relay] receiver on 127.0.0.1:${server.port} closed: no relay is on`
+      `[relay] receiver on 127.0.0.1:${receiver.port} closed: no relay is on`
     );
   };
 
@@ -698,7 +743,7 @@ export const createRelay = ({
         ),
       };
     }
-    const made = await Effect.runPromise(
+    const made = await lifetime.run(
       Effect.result(
         hook.lifecycle.register(viewOf(watch), { url, secret: relay.secret })
       )
@@ -723,7 +768,7 @@ export const createRelay = ({
     if (!(hook?.lifecycle && relay.hookId)) {
       return true;
     }
-    const there = await Effect.runPromise(
+    const there = await lifetime.run(
       Effect.result(hook.lifecycle.exists(viewOf(watch), relay.hookId))
     );
     if (there._tag === "Failure" || there.success) {
@@ -754,7 +799,7 @@ export const createRelay = ({
     };
     const page = hooksAt[watch.provider];
     const where = page ? `; delete it at ${page}` : "";
-    const gone = await Effect.runPromise(
+    const gone = await lifetime.run(
       Effect.result(hook.lifecycle.unregister(viewOf(watch), relay.hookId))
     );
     if (gone._tag === "Failure") {
@@ -912,41 +957,62 @@ export const createRelay = ({
     return next;
   };
 
-  const relooks = new Backoff(RELOOKS);
-  let saidGaveUp = false;
-  const tickAgain = (wait: number = RELOOKS.firstMs): void => {
-    if (lifetime.closed()) {
-      return;
-    }
-    timer = lifetime.after("relay look again", wait, () => {
-      if (!store.active().some(({ relay }) => relay.state !== "live")) {
-        relooks.succeeded();
-        saidGaveUp = false;
-        tickAgain();
-        return;
-      }
-      const step = relooks.failed();
-      if (step.kind === "gave-up") {
-        if (!saidGaveUp) {
-          saidGaveUp = true;
+  /** Every active relay is live: fails with {@link NotLive} while one is not. */
+  const allLive = Effect.suspend(() =>
+    store.active().some(({ relay }) => relay.state !== "live")
+      ? Effect.fail(new NotLive())
+      : Effect.void
+  );
+
+  /**
+   * One series while a relay is not live: the wanted state applied again
+   * after each look that finds one not live, on {@link RELOOKS}'s waits,
+   * until every relay is live. Once it gives up, said once, the look goes
+   * on at its longest wait without applying, until every relay is live.
+   */
+  const series = allLive.pipe(
+    Effect.retryOrElse(
+      backoffSchedule(RELOOKS).pipe(
+        Schedule.tap(() =>
+          Effect.sync(() => {
+            lifetime.fork(
+              "relay apply",
+              Effect.promise(() => apply())
+            );
+          })
+        )
+      ),
+      (_notLive, given) =>
+        Effect.sync(() =>
           console.warn(
-            `[relay] a relay has not been live for ${Math.round(step.failingMs / HOUR_MS)} h; the hub stops applying it on its own until a change applies it`
-          );
-        }
-        tickAgain(RELOOKS.mostMs);
-        return;
-      }
-      saidGaveUp = false;
-      detach(apply(), "relay apply");
-      tickAgain(step.ms);
-    });
-  };
+            `[relay] a relay has not been live for ${Math.round(given.failingMs / HOUR_MS)} h; the hub stops applying it on its own until a change applies it`
+          )
+        ).pipe(
+          Effect.andThen(
+            allLive.pipe(Effect.retry(Schedule.spaced(RELOOKS.mostMs)))
+          )
+        )
+    )
+  );
+
+  /**
+   * The look again, for as long as the hub runs: every {@link RELOOKS}'s
+   * first wait, waited first, and while a relay is not live a {@link series}
+   * of its own, which starts over at the first wait each time.
+   */
+  const relook = Effect.sleep(RELOOKS.firstMs).pipe(
+    Effect.andThen(series),
+    Effect.forever
+  );
 
   /** Hub start: the wanted state applied, which opens the receiver only when a relay is active. */
   const start = (): void => {
-    detach(apply(true), "relay apply at start");
-    lifetime.cancel(timer);
-    tickAgain();
+    lifetime.fork(
+      "relay apply at start",
+      Effect.promise(() => apply(true))
+    );
+    relooking?.interruptUnsafe();
+    relooking = lifetime.fork("relay look again", relook);
   };
 
   // --- views ------------------------------------------------------------------------
@@ -1415,17 +1481,15 @@ export const createRelay = ({
 
   /** Whether the service's test delivery arrived, looked for every {@link PING_LOOK_MS} up to {@link PING_WAIT_MS}. */
   const pinged = (id: string): Promise<boolean> =>
-    Effect.runPromise(
-      Effect.sync(
-        () => Boolean(store.get(id)?.relay.testedAt) || lifetime.closed()
-      ).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced(PING_LOOK_MS),
-          until: (seen) => seen,
-        }),
-        Effect.timeoutOption(PING_WAIT_MS),
-        Effect.map(() => Boolean(store.get(id)?.relay.testedAt))
-      )
+    lifetime.run(
+      lookUntil(
+        {
+          every: PING_LOOK_MS,
+          deadlineMs: PING_WAIT_MS,
+          until: (seen: boolean) => seen,
+        },
+        Effect.sync(() => Boolean(store.get(id)?.relay.testedAt))
+      ).pipe(Effect.map((looked) => looked.kind === "found"))
     );
 
   /** What an event route's source pattern matches of what the relay brings. */
@@ -1725,14 +1789,6 @@ export const createRelay = ({
       }),
     ];
   };
-
-  // A release is synchronous (lifetime.ts): the stop finishes on its own.
-  lifetime.onClose(() => {
-    lifetime.cancel(timer);
-    if (listening) {
-      detach(listening.stop(true), "relay receiver stop");
-    }
-  });
 
   return {
     checked,

@@ -537,9 +537,9 @@ export const createWrites = (deps: WritesDeps) => {
     return recorded;
   };
 
-  /** Resolves once every write to `host`'s `container` asked before it has been recorded. */
-  const settled = (host: string, container: string): Promise<void> =>
-    Effect.runPromise(containers.withLock(keyOf(host, container), Effect.void));
+  /** Done once every write to `host`'s `container` asked before it has been recorded. */
+  const settled = (host: string, container: string): Effect.Effect<void> =>
+    containers.withLock(keyOf(host, container), Effect.void);
 
   return { issueOnce, post, recordAnswer, settled };
 };

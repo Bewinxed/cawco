@@ -49,6 +49,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { Effect, Result } from "effect";
 import { problem } from "elysia";
 import { z } from "zod";
+import type { HubLifetimeShape } from "./lifetime";
 import { awayProblem } from "./machine-answers";
 import { defineTool, refusalCode, withoutRefusalCode } from "./mcp-tool";
 import type { Writes } from "./writes";
@@ -70,6 +71,8 @@ export interface UsabilityFeedbackDeps {
   ) => Promise<readonly string[] | undefined>;
   /** Keeps the person's answer. */
   readonly keepConsent: (on: boolean) => void;
+  /** The hub's lifetime: a report is filed on it. */
+  readonly lifetime: HubLifetimeShape;
   /** The machines connected now. */
   readonly online: () => readonly string[];
   /** What the hub knows to be private, for a report `actor` files. */
@@ -231,8 +234,9 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       report.tool,
       refusalIdentity(report.got, heard)
     );
-    const outcome = await byFingerprint.run(fingerprint, () =>
-      Effect.runPromise(
+    const outcome = await deps.lifetime.run(
+      byFingerprint.withLock(
+        fingerprint,
         Effect.result(
           deps.writes.issueOnce({
             by: "hub",

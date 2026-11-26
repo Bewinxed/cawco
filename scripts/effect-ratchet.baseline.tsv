@@ -8,23 +8,21 @@ backoff-loop	new Backoff(GATE_SNAPSHOTS)	packages/agent/src/harnesses/opencode-s
 backoff-loop	new Backoff(HAND_BACK)	packages/agent/src/browser/shield.ts	1
 backoff-loop	new Backoff(RECOVERY_TRIES)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(RELINK)	packages/agent/src/browser/front-origin.ts	1
-backoff-loop	new Backoff(RELOOKS)	packages/hub/src/relay.ts	1
 backoff-loop	new Backoff(RENEW_COOLING)	packages/hub/src/fleet-mcp.ts	1
 backoff-loop	new Backoff(RENEW_TRIES)	packages/hub/src/fleet-mcp.ts	1
 backoff-loop	new Backoff(REOPENS)	packages/hub/src/preview-server/link.ts	1
 backoff-loop	new Backoff(REPROBES)	packages/hub/src/fleet-mcp.ts	1
-bare-run	Effect.runFork	packages/hub/src/clock.ts	8
-bare-run	Effect.runPromise	packages/hub/src/clock.ts	3
 bare-run	Effect.runPromise	packages/hub/src/index.ts	1
 bare-run	Effect.runPromise	packages/hub/src/landing-run.ts	1
 bare-run	Effect.runPromise	packages/hub/src/links.ts	1
-bare-run	Effect.runPromise	packages/hub/src/relay.ts	5
 bare-run	Effect.runPromise	packages/hub/src/repo-publish.ts	1
 bare-run	Effect.runPromise	packages/hub/src/sync.ts	1
 bare-run	Effect.runPromise	packages/hub/src/usability-feedback.ts	1
 bare-run	Effect.runPromise	packages/hub/src/writes.ts	1
 bare-run	Effect.runSync	packages/hub/src/clock.ts	1
 bare-run	Effect.runSync	packages/hub/src/intake.ts	1
+bare-run	Effect.runPromise	packages/hub/src/session-calls.ts	1
+error-class	AgentTooOld	packages/hub/src/project-delete.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1

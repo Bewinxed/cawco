@@ -35,7 +35,6 @@ import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
 } from "@cawco/core/harness/modes";
-import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
 import type { WaitTarget } from "@cawco/core/wait-targets";
@@ -845,21 +844,15 @@ export const createEventRoutes = ({
     return made;
   };
 
-  /** Edits of one poll under way, by its id: one at a time each. */
-  const editing = makeKeyedLock();
-
   /**
-   * An edit of a poll, made from the row as the edit before it left it: its
-   * check awaits the connection's tools, and an edit that read the row
-   * before another's write would put that one's fields back.
+   * An edit of a poll: checked as the row stands with the patch on it, then
+   * only the fields it changes written (db/ingress.ts `updateConnectorPoll`
+   * takes a patch), so two edits of different fields both stand, whatever
+   * order their checks end in. The check holds each field on its own and
+   * the poll's connection and tool, which no edit changes, so no two edits
+   * that each passed make a row neither would.
    */
-  const updatePoll = (
-    id: string,
-    patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
-    by: IngressActor
-  ) => editing.run(id, () => editPoll(id, patch, by));
-
-  const editPoll = async (
+  const updatePoll = async (
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
@@ -868,15 +861,24 @@ export const createEventRoutes = ({
     if (row instanceof ElysiaStatus) {
       return row;
     }
+    const changes = withoutUndefined({
+      args: patch.args,
+      intervalS: patch.intervalS,
+      itemsPath: patch.itemsPath?.trim(),
+      idPath: patch.idPath?.trim(),
+      versionPath: patch.versionPath?.trim(),
+      enabled: patch.enabled,
+    });
     const next = {
       connection: row.connection,
       tool: row.tool,
-      args: patch.args ?? row.args,
-      intervalS: patch.intervalS ?? row.intervalS,
-      itemsPath: patch.itemsPath?.trim() ?? row.itemsPath,
-      idPath: patch.idPath?.trim() ?? row.idPath,
-      versionPath: patch.versionPath?.trim() ?? row.versionPath,
-      enabled: patch.enabled ?? row.enabled,
+      args: row.args,
+      intervalS: row.intervalS,
+      itemsPath: row.itemsPath,
+      idPath: row.idPath,
+      versionPath: row.versionPath,
+      enabled: row.enabled,
+      ...changes,
     };
     const unfit = await checkedPoll(row.projectId, next, by);
     if (unfit) {
@@ -889,7 +891,7 @@ export const createEventRoutes = ({
     );
     const edited: ConnectorPollView = pollView(
       store.updateConnectorPoll(id, {
-        ...next,
+        ...changes,
         ...(relook ? { seenAt: null } : {}),
       }) ?? row
     );

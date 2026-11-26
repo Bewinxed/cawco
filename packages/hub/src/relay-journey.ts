@@ -58,6 +58,7 @@ import {
   zoneOf,
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
+import { Cause, Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, type Server, t } from "elysia";
 import {
   addRecord,
@@ -178,7 +179,7 @@ export interface RelayJourney {
         typeof problem<409, { code: "stream-relay-not-live"; detail: string }>
       >;
   view: () => RelayJourneyView;
-  /** The tick, on the hub's lifetime (lifetime.ts); the returned function ends it. */
+  /** The tick, on the hub's lifetime (lifetime.ts); the returned function ends it. The work a tick begins runs on forks of the lifetime, stopped at the hub's close. */
   watch: () => () => void;
 }
 
@@ -708,10 +709,46 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   /* What the journey does by itself                                  */
   /* -------------------------------------------------------------- */
 
-  const checkName = async (name: string, address: string): Promise<void> => {
-    nameAsking = true;
-    try {
-      const answers = await resolve4(name);
+  /**
+   * Another module's promise, in a step of the journey's own work: its
+   * rejection a failure carrying the very error.
+   */
+  const awaited = <A>(run: () => Promise<A>): Effect.Effect<A, unknown> =>
+    Effect.tryPromise({ try: run, catch: (error) => error });
+
+  /**
+   * A step's own work, let go on a fork of the lifetime: its flag is set
+   * before the fork returns (the fork runs at once up to its first wait),
+   * and cleared, the view sent, when the work ends however it ends; a
+   * failure is said by the fork in its name.
+   */
+  const begin = (
+    name: string,
+    claim: () => void,
+    work: Effect.Effect<void, unknown>,
+    release: () => void
+  ): void => {
+    deps.lifetime.fork(
+      name,
+      Effect.sync(claim).pipe(
+        Effect.andThen(work),
+        Effect.ensuring(
+          Effect.sync(() => {
+            release();
+            publish();
+          })
+        )
+      )
+    );
+  };
+
+  /** The name asked of DNS: pointed at the machine, unresolved, behind Cloudflare's proxy, or elsewhere. */
+  const checkName = (
+    name: string,
+    address: string
+  ): Effect.Effect<void, unknown> =>
+    Effect.gen(function* () {
+      const answers = yield* Effect.promise(() => resolve4(name));
       const askedAt = Date.now();
       if (answers.includes(address)) {
         db.journeyUpdate({ nameState: "pointed" });
@@ -722,22 +759,20 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         nameCheck = { name, askedAt, finding: "unresolved" };
         return;
       }
-      const proxied = (
-        await Promise.all(answers.map((one) => isCloudflareAddress(one)))
-      ).some(Boolean);
+      const proxied = (yield* awaited(() =>
+        Promise.all(answers.map((one) => isCloudflareAddress(one)))
+      )).some(Boolean);
       nameCheck = proxied
         ? { name, askedAt, finding: "proxied" }
         : { name, askedAt, finding: "elsewhere", answers: answers[0] };
-    } finally {
-      nameAsking = false;
-      publish();
-    }
-  };
+    });
 
-  const readRuntime = async (machineId: string): Promise<void> => {
-    runtimeAsking = true;
-    try {
-      const read = await call(machineId, RELAY_RUNTIME, [], READ_MS);
+  /** The machine's runtime read: whether it holds what the relay needs. */
+  const readRuntime = (machineId: string): Effect.Effect<void, unknown> =>
+    Effect.gen(function* () {
+      const read = yield* awaited(() =>
+        call(machineId, RELAY_RUNTIME, [], READ_MS)
+      );
       if (read.kind === "unanswered") {
         return;
       }
@@ -754,80 +789,100 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       if (journey && journey.runtimeHolds !== holds) {
         db.journeyUpdate({ runtimeHolds: holds });
       }
-    } finally {
-      runtimeAsking = false;
-      publish();
-    }
-  };
+    });
 
-  const certify = async (journey: StoredJourney): Promise<void> => {
+  /** The certificate issued on the relay's machine, by DNS at Cloudflare, begun on a fork; its refusal kept on the step. */
+  const certify = (journey: StoredJourney): void => {
     const { machineId, name, cloudflareToken } = journey;
     if (!(machineId && name && cloudflareToken)) {
       return;
     }
-    certifying = true;
-    publish();
-    try {
-      const endsAt = await relay.certify(machineId, {
-        hostname: name,
-        cloudflareToken,
-      });
-      if (!(endsAt instanceof ElysiaStatus)) {
-        db.journeyUpdate({
-          certificateName: name,
-          certificateEndsAt: endsAt,
-          certificateWhy: null,
-        });
-      } else if (endsAt.status === 503) {
-        // Its machine is away or slow: tried again once it is back.
-        certAwayAt = Date.now();
-      } else {
-        db.journeyUpdate({ certificateWhy: endsAt.response.detail });
+    begin(
+      "relay journey certificate",
+      () => {
+        certifying = true;
+        publish();
+      },
+      Effect.gen(function* () {
+        const endsAt = yield* awaited(() =>
+          relay.certify(machineId, { hostname: name, cloudflareToken })
+        );
+        if (!(endsAt instanceof ElysiaStatus)) {
+          db.journeyUpdate({
+            certificateName: name,
+            certificateEndsAt: endsAt,
+            certificateWhy: null,
+          });
+        } else if (endsAt.status === 503) {
+          // Its machine is away or slow: tried again once it is back.
+          certAwayAt = Date.now();
+        } else {
+          db.journeyUpdate({ certificateWhy: endsAt.response.detail });
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            db.journeyUpdate({ certificateWhy: said(Cause.squash(cause)) });
+          })
+        )
+      ),
+      () => {
+        certifying = false;
       }
-    } catch (error) {
-      db.journeyUpdate({ certificateWhy: said(error) });
-    } finally {
-      certifying = false;
-      publish();
-    }
+    );
   };
 
-  const start = async (
+  /** The relay set up on its machine as the journey's settings make it, begun on a fork. */
+  const start = (
     journey: StoredJourney,
     machine: RelayMachine,
     named: boolean
-  ): Promise<void> => {
-    if (!journey.machineId) {
+  ): void => {
+    const { machineId } = journey;
+    if (!machineId) {
       return;
     }
-    starting = true;
-    db.proofsForget();
-    publish();
-    try {
-      const set = await relay.setup({
-        machineId: journey.machineId,
-        address: machine.address,
-        hostname: named ? journey.name : null,
-      });
-      if (set instanceof ElysiaStatus) {
-        console.warn(
-          `[relay-journey] the relay did not start: ${set.response.detail}`
+    begin(
+      "relay journey start",
+      () => {
+        starting = true;
+        db.proofsForget();
+        publish();
+      },
+      Effect.gen(function* () {
+        const set = yield* awaited(() =>
+          relay.setup({
+            machineId,
+            address: machine.address,
+            hostname: named ? journey.name : null,
+          })
         );
+        if (set instanceof ElysiaStatus) {
+          console.warn(
+            `[relay-journey] the relay did not start: ${set.response.detail}`
+          );
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            console.warn(
+              `[relay-journey] the relay did not start: ${said(Cause.squash(cause))}`
+            )
+          )
+        )
+      ),
+      () => {
+        starting = false;
       }
-    } catch (error) {
-      console.warn(`[relay-journey] the relay did not start: ${said(error)}`);
-    } finally {
-      starting = false;
-      publish();
-    }
+    );
   };
 
-  /** A fleet machine on another network than the relay's proves it, without the person. */
-  const fleetProve = async (
+  /** A fleet machine on another network than the relay's proves it, without the person, begun on a fork. */
+  const fleetProve = (
     relayAddress: string,
     relayMachine: string,
     urls: string[]
-  ): Promise<void> => {
+  ): void => {
     const away = deps.machines().find((one) => {
       if (!one.online || one.machineId === relayMachine) {
         return false;
@@ -842,10 +897,18 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     if (!away) {
       return;
     }
-    fleetProving = true;
-    try {
-      const read = await call(away.machineId, RELAY_PROVE, [{ urls }], READ_MS);
-      if (read.kind === "answered" && read.value.ok) {
+    begin(
+      "relay journey fleet proof",
+      () => {
+        fleetProving = true;
+      },
+      Effect.gen(function* () {
+        const read = yield* awaited(() =>
+          call(away.machineId, RELAY_PROVE, [{ urls }], READ_MS)
+        );
+        if (!(read.kind === "answered" && read.value.ok)) {
+          return;
+        }
         const answered = read.value.result;
         if (answered.length > 0) {
           db.proved({
@@ -858,12 +921,12 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
             at: Date.now(),
           });
         }
+      }),
+      () => {
+        fleetProving = false;
+        fleetProvedAt = Date.now();
       }
-    } finally {
-      fleetProving = false;
-      fleetProvedAt = Date.now();
-      publish();
-    }
+    );
   };
 
   type Computed = ReturnType<typeof compute>;
@@ -881,8 +944,24 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     ) {
       return;
     }
-    checkName(name, computed.machine.address).catch((error: unknown) =>
-      console.warn(`[relay-journey] ${name} not asked: ${said(error)}`)
+    const { address } = computed.machine;
+    begin(
+      "relay journey name check",
+      () => {
+        nameAsking = true;
+      },
+      checkName(name, address).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            console.warn(
+              `[relay-journey] ${name} not asked: ${said(Cause.squash(cause))}`
+            )
+          )
+        )
+      ),
+      () => {
+        nameAsking = false;
+      }
     );
   };
 
@@ -895,7 +974,16 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         ? runtimeRead?.machineId !== machineId
         : step.state !== "done";
     if (machineId && !runtimeAsking && due) {
-      readRuntime(machineId).catch(() => undefined);
+      begin(
+        "relay journey runtime read",
+        () => {
+          runtimeAsking = true;
+        },
+        readRuntime(machineId),
+        () => {
+          runtimeAsking = false;
+        }
+      );
     }
   };
 
@@ -908,7 +996,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       !(certifying || journey.certificateWhy) &&
       now - certAwayAt >= AWAY_MS
     ) {
-      certify(journey).catch(() => undefined);
+      certify(journey);
     }
     if (
       machine &&
@@ -916,7 +1004,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       !starting &&
       !relayFor(journey, computed.named)
     ) {
-      start(journey, machine, computed.named).catch(() => undefined);
+      start(journey, machine, computed.named);
     }
     if (computed.startDone && journey.liveAt === null) {
       db.journeyUpdate({ liveAt: now });
@@ -932,7 +1020,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         stored.address,
         stored.machineId,
         streamRelayUrls(stored.address, stored.hostname)
-      ).catch(() => undefined);
+      );
     }
   };
 

@@ -31,14 +31,16 @@
  *   watch's read there, its words the watch's reason and its rate limit the
  *   watch's resume time; a request not answered in time leaves the watch as
  *   it was and says so in the log.
- * - **Written in Effect.** The loop is one fiber repeating its look on
- *   `Schedule.spaced`, interrupted when the hub closes; each poll runs on a
- *   fiber of its own, one per project's GitHub or per watch, a second ask
- *   joining the first; providers' reads and the door are Effects, and the
- *   link reads (links.ts) stay promise code. The routes and the sync reach
- *   it through its promise edges.
+ * - **Written in Effect.** The loop is one fork of the hub's lifetime
+ *   repeating its look on `Schedule.spaced`, and each due poll a fork of
+ *   its own, one per project's GitHub or per watch, a second ask joining
+ *   the first (core effect/join.ts); the hub's close interrupts them all.
+ *   Providers' reads and the door are Effects, and the link reads
+ *   (links.ts) stay promise code. The routes and the sync reach it through
+ *   its promise edges, run on the lifetime.
  */
 
+import { makeJoin } from "@cawco/core/effect/join";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import { externalItemWords } from "@cawco/core/words/external-items";
@@ -77,7 +79,7 @@ import type {
   Items,
   WatchView,
 } from "@cawco/providers/provider";
-import { Cause, Effect, Fiber, Result, Schedule } from "effect";
+import { Cause, Effect, type Fiber, Result, Schedule } from "effect";
 import { problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -315,7 +317,7 @@ export const createClock = ({
 }: ClockDeps) => {
   const store = db.ingress;
   /** Polls under way, by `github:<project>` or `conn:<watch id>`: one at a time each, a second ask joining the first. */
-  const running = new Map<string, Fiber.Fiber<void>>();
+  const running = makeJoin<string, void>();
   /** The loop's fiber, while the hub runs. */
   let looping: Fiber.Fiber<void> | undefined;
 
@@ -484,8 +486,10 @@ export const createClock = ({
     }
     for (const [repo, group] of groups) {
       // Called back from inside the link reads (promise code): the door's
-      // store is synchronous, and its subscribers run on a fiber of their own.
-      Effect.runSync(
+      // store is synchronous, so the fork has stored it before it returns,
+      // and its subscribers run on a fiber of their own.
+      lifetime.fork(
+        "clock link reads",
         intake.take(
           {
             projectId,
@@ -685,32 +689,24 @@ export const createClock = ({
   });
 
   /**
-   * Runs one poll at a time per key, on a fiber of its own; asked while it
-   * runs, the ask joins it. A failure is logged, never lost.
+   * Runs one poll at a time per key; asked while it runs, the ask joins it.
+   * The poll yields first, so the look that let it go goes on before it
+   * runs. A failure is logged, never lost.
    */
   const once = (key: string, poll: Effect.Effect<void>): Effect.Effect<void> =>
-    Effect.suspend(() => {
-      const live = running.get(key);
-      if (live !== undefined) {
-        return Fiber.join(live);
-      }
-      const going = Effect.runFork(
-        // Yielded first, so the fiber is kept before it can end.
-        Effect.yieldNow.pipe(
-          Effect.andThen(poll),
-          Effect.catchCause((cause) =>
-            Effect.sync(() =>
-              console.warn(
-                `[clock] ${key} poll failed: ${wordsOf(Cause.squash(cause))}`
-              )
+    running.run(
+      key,
+      Effect.yieldNow.pipe(
+        Effect.andThen(poll),
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            console.warn(
+              `[clock] ${key} poll failed: ${wordsOf(Cause.squash(cause))}`
             )
-          ),
-          Effect.ensuring(Effect.sync(() => running.delete(key)))
+          )
         )
-      );
-      running.set(key, going);
-      return Fiber.join(going);
-    });
+      )
+    );
 
   /** A Linear team's watch or a connector poll, read on its own when it is due. */
   const lookAlone = (watch: PolledWatch, now: number): void => {
@@ -724,7 +720,8 @@ export const createClock = ({
     if (!due) {
       return;
     }
-    Effect.runFork(
+    lifetime.fork(
+      "clock poll",
       linearWatch
         ? once(`linear:${watch.id}`, pollLinear(watch.id))
         : once(`conn:${watch.id}`, pollConnector(watch.id))
@@ -779,7 +776,10 @@ export const createClock = ({
         ...followed.map((watch) => github.ingest.everyMs(viewOf(watch)))
       );
       if (due(followed, every)) {
-        Effect.runFork(once(`github:${projectId}`, pollGitHub(projectId)));
+        lifetime.fork(
+          "clock poll",
+          once(`github:${projectId}`, pollGitHub(projectId))
+        );
       }
     }
     for (const [key, { forge, followed, projectId }] of byForge) {
@@ -788,7 +788,7 @@ export const createClock = ({
         ...followed.map((watch) => ingest.everyMs(viewOf(watch)))
       );
       if (due(followed, every)) {
-        Effect.runFork(once(key, pollForge(projectId, forge)));
+        lifetime.fork("clock poll", once(key, pollForge(projectId, forge)));
       }
     }
   };
@@ -816,10 +816,8 @@ export const createClock = ({
       followConnection(one.name, []);
     }
     const was = looping;
-    looping = Effect.runFork(loop);
-    if (was) {
-      Effect.runFork(Fiber.interrupt(was));
-    }
+    looping = lifetime.fork("clock look", loop);
+    was?.interruptUnsafe();
   };
 
   /** A project's GitHub poll as its ingress view says it. */
@@ -946,9 +944,9 @@ export const createClock = ({
     yield* intake.settled(projectId);
   });
 
-  /** Calls a connector poll now. */
+  /** The promise edge of a connector poll now. */
   const pollConnectorNow = (id: string): Promise<void> =>
-    Effect.runPromise(once(`conn:${id}`, pollConnector(id)));
+    lifetime.run(once(`conn:${id}`, pollConnector(id)));
 
   /** What moving watches off a connection did, one log line each. */
   const sayRehomed = (gone: string, moved: readonly Rehomed[]): void => {
@@ -980,7 +978,8 @@ export const createClock = ({
   ): void => {
     const found = connections.get(connection);
     if (unlearned(found)) {
-      Effect.runFork(
+      lifetime.fork(
+        "clock learn gitea",
         learn(connection).pipe(
           Effect.andThen(
             Effect.sync(() => {
@@ -1055,13 +1054,6 @@ export const createClock = ({
       )
     );
 
-  lifetime.onClose(() => {
-    if (looping) {
-      Effect.runFork(Fiber.interrupt(looping));
-      looping = undefined;
-    }
-  });
-
   return {
     followConnection,
     nameHosts,
@@ -1070,10 +1062,9 @@ export const createClock = ({
     pollConnectorNow,
     /** The promise edge of a project's GitHub poll now: what its route answers. */
     pollGitHubNow: (projectId: string) =>
-      Effect.runPromise(pollGitHubNow(projectId)),
+      lifetime.run(pollGitHubNow(projectId)),
     /** The promise edge of the tracker's Sync now (sync.ts). */
-    pollSyncNow: (projectId: string) =>
-      Effect.runPromise(pollSyncNow(projectId)),
+    pollSyncNow: (projectId: string) => lifetime.run(pollSyncNow(projectId)),
     start,
   };
 };
