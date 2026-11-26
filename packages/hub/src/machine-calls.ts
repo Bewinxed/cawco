@@ -681,42 +681,40 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * is the kit's bounded read over it; past the deadline the Deferred is
    * still the answer when it came while the hub caught up with the socket.
    */
-  const awaitFrame = <E = never>(
+  const awaitFrame = Effect.fnUntraced(function* <E = never>(
     machineId: string,
     requestId: string,
     timeoutMs: number,
     send: () => HubEnvelope | undefined,
-    /** Fails once its asker stops waiting: the wait ends there, with that failure. */
     letGo?: Effect.Effect<never, E>
-  ): Effect.Effect<Bounded<ControlResult>, E> =>
-    Effect.gen(function* () {
-      const sentAt = Date.now();
-      const { answer, forget } = park(machineId, requestId, send);
-      const read = answeredWithin(timeoutMs, answer);
-      const reply = yield* (letGo ? Effect.raceFirst(read, letGo) : read).pipe(
-        Effect.tapError(() => Effect.sync(forget))
-      );
-      // How long a machine took to answer a read held to one of the shared
-      // read deadlines (machine-read-timeouts.ts).
-      if (timeoutMs === READ_TIMEOUT_MS) {
-        recordLimitReading("hub.machine-read-ms", Date.now() - sentAt);
-      } else if (timeoutMs === BUSY_TIMEOUT_MS) {
-        recordLimitReading("hub.machine-busy-read-ms", Date.now() - sentAt);
-      }
-      if (reply.kind === "answered") {
-        return reply;
-      }
-      if (reply.reason !== "timeout") {
-        forget();
-        return reply;
-      }
-      return yield* pastDeadline(
-        { machineId, requestId, sentAt, timeoutMs },
-        answer,
-        forget,
-        reply
-      );
-    });
+  ): Effect.fn.Return<Bounded<ControlResult>, E> {
+    const sentAt = Date.now();
+    const { answer, forget } = park(machineId, requestId, send);
+    const read = answeredWithin(timeoutMs, answer);
+    const reply = yield* (letGo ? Effect.raceFirst(read, letGo) : read).pipe(
+      Effect.tapError(() => Effect.sync(forget))
+    );
+    // How long a machine took to answer a read held to one of the shared
+    // read deadlines (machine-read-timeouts.ts).
+    if (timeoutMs === READ_TIMEOUT_MS) {
+      recordLimitReading("hub.machine-read-ms", Date.now() - sentAt);
+    } else if (timeoutMs === BUSY_TIMEOUT_MS) {
+      recordLimitReading("hub.machine-busy-read-ms", Date.now() - sentAt);
+    }
+    if (reply.kind === "answered") {
+      return reply;
+    }
+    if (reply.reason !== "timeout") {
+      forget();
+      return reply;
+    }
+    return yield* pastDeadline(
+      { machineId, requestId, sentAt, timeoutMs },
+      answer,
+      forget,
+      reply
+    );
+  });
 
   /**
    * Parks the answer to `requestId` in {@link waiting} and sends the call
@@ -763,7 +761,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * transcript reads came in). One that came meanwhile is the answer; else
    * the call lapses, MACHINE_DISCONNECTED when its machine is away.
    */
-  const pastDeadline = (
+  const pastDeadline = Effect.fnUntraced(function* (
     call: {
       machineId: string;
       requestId: string;
@@ -773,43 +771,42 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     answer: Deferred.Deferred<ControlResult>,
     forget: () => void,
     reply: Bounded<ControlResult>
-  ): Effect.Effect<Bounded<ControlResult>> =>
-    Effect.gen(function* () {
-      const { requestId } = call;
-      const held = waitingMachines.get(requestId);
-      if (held?.socketId) {
-        yield* caughtUp(held.socketId);
-      }
-      if (Deferred.isDoneUnsafe(answer)) {
-        return {
-          kind: "answered",
-          value: yield* Deferred.await(answer),
-        } satisfies Bounded<ControlResult>;
-      }
-      const awayAtDeadline =
-        waitingMachines.get(requestId)?.socketId === undefined;
-      forget();
-      noteLapsed(requestId, {
-        machineId: call.machineId,
-        what:
-          held?.again?.verb === "control"
-            ? held.again.payload.method
-            : held?.again?.verb,
-        sentAt: call.sentAt,
-        timeoutMs: call.timeoutMs,
-      });
-      return awayAtDeadline
-        ? ({
-            kind: "answered",
-            value: {
-              kind: "control_result",
-              requestId,
-              ok: false,
-              error: MACHINE_DISCONNECTED,
-            },
-          } satisfies Bounded<ControlResult>)
-        : reply;
+  ): Effect.fn.Return<Bounded<ControlResult>> {
+    const { requestId } = call;
+    const held = waitingMachines.get(requestId);
+    if (held?.socketId) {
+      yield* caughtUp(held.socketId);
+    }
+    if (Deferred.isDoneUnsafe(answer)) {
+      return {
+        kind: "answered",
+        value: yield* Deferred.await(answer),
+      } satisfies Bounded<ControlResult>;
+    }
+    const awayAtDeadline =
+      waitingMachines.get(requestId)?.socketId === undefined;
+    forget();
+    noteLapsed(requestId, {
+      machineId: call.machineId,
+      what:
+        held?.again?.verb === "control"
+          ? held.again.payload.method
+          : held?.again?.verb,
+      sentAt: call.sentAt,
+      timeoutMs: call.timeoutMs,
     });
+    return awayAtDeadline
+      ? ({
+          kind: "answered",
+          value: {
+            kind: "control_result",
+            requestId,
+            ok: false,
+            error: MACHINE_DISCONNECTED,
+          },
+        } satisfies Bounded<ControlResult>)
+      : reply;
+  });
 
   /** `reply`'s frame read by `read` (machine-answers.ts `answerOf`), once it came. */
   const parsedReply = <T>(

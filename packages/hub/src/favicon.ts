@@ -189,29 +189,28 @@ const fetchOnce = (
  * {@link fetchable}. Answered undefined for anything but a 200 within `cap`;
  * unanswered when a hop did not answer in time.
  */
-const fetchCapped = (
+const fetchCapped = Effect.fnUntraced(function* (
   url: URL,
   cap: number,
   accept: string,
   hops = MAX_HOPS
-): Effect.Effect<
+): Effect.fn.Return<
   { bytes: Buffer; type: string; url: URL } | undefined,
   Unanswered
-> =>
-  Effect.gen(function* () {
-    if (!fetchable(url)) {
-      return;
-    }
-    const answer = yield* getOnce(url, cap, accept);
-    if (answer?.kind === "body") {
-      return { bytes: answer.bytes, type: answer.type, url };
-    }
-    if (answer?.kind !== "redirect" || hops === 0) {
-      return;
-    }
-    const next = URL.parse(answer.location, url);
-    return next ? yield* fetchCapped(next, cap, accept, hops - 1) : undefined;
-  });
+> {
+  if (!fetchable(url)) {
+    return;
+  }
+  const answer = yield* getOnce(url, cap, accept);
+  if (answer?.kind === "body") {
+    return { bytes: answer.bytes, type: answer.type, url };
+  }
+  if (answer?.kind !== "redirect" || hops === 0) {
+    return;
+  }
+  const next = URL.parse(answer.location, url);
+  return next ? yield* fetchCapped(next, cap, accept, hops - 1) : undefined;
+});
 
 /** The raster type `bytes` begin with; never SVG or anything a browser could run. */
 const sniff = (bytes: Uint8Array): string | undefined => {
@@ -279,47 +278,48 @@ interface Icon {
  * unanswered when no icon was found and a read did not answer in time, as
  * the site's icon is then not known.
  */
-const fetchIcon = (host: string): Effect.Effect<Icon | undefined, Unanswered> =>
-  Effect.gen(function* () {
-    const home = new URL(`https://${host}/`);
-    /** The first read that went unanswered, if one did. */
-    let silent: Unanswered | undefined;
-    const pageRead = yield* Effect.result(
-      fetchCapped(home, PAGE_CAP, "text/html")
+const fetchIcon = Effect.fnUntraced(function* (
+  host: string
+): Effect.fn.Return<Icon | undefined, Unanswered> {
+  const home = new URL(`https://${host}/`);
+  /** The first read that went unanswered, if one did. */
+  let silent: Unanswered | undefined;
+  const pageRead = yield* Effect.result(
+    fetchCapped(home, PAGE_CAP, "text/html")
+  );
+  let page: { bytes: Buffer; type: string; url: URL } | undefined;
+  if (Result.isSuccess(pageRead)) {
+    page = pageRead.success;
+  } else {
+    silent = pageRead.failure;
+  }
+  const candidates = page?.type.includes("html")
+    ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
+    : [];
+  candidates.push(new URL("/favicon.ico", page?.url ?? home));
+  const tried = new Set<string>();
+  recordLimitReading("hub.favicon-candidates", candidates.length);
+  // @limit recording: hub.favicon-candidates until 2026-12-10
+  for (const candidate of candidates.slice(0, 4)) {
+    if (tried.has(candidate.href)) {
+      continue;
+    }
+    tried.add(candidate.href);
+    const iconRead = yield* Effect.result(
+      fetchCapped(candidate, ICON_CAP, "image/*")
     );
-    let page: { bytes: Buffer; type: string; url: URL } | undefined;
-    if (Result.isSuccess(pageRead)) {
-      page = pageRead.success;
-    } else {
-      silent = pageRead.failure;
+    if (Result.isFailure(iconRead)) {
+      silent ??= iconRead.failure;
+      continue;
     }
-    const candidates = page?.type.includes("html")
-      ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
-      : [];
-    candidates.push(new URL("/favicon.ico", page?.url ?? home));
-    const tried = new Set<string>();
-    recordLimitReading("hub.favicon-candidates", candidates.length);
-    // @limit recording: hub.favicon-candidates until 2026-12-10
-    for (const candidate of candidates.slice(0, 4)) {
-      if (tried.has(candidate.href)) {
-        continue;
-      }
-      tried.add(candidate.href);
-      const iconRead = yield* Effect.result(
-        fetchCapped(candidate, ICON_CAP, "image/*")
-      );
-      if (Result.isFailure(iconRead)) {
-        silent ??= iconRead.failure;
-        continue;
-      }
-      const icon = iconRead.success;
-      const type = icon ? sniff(icon.bytes) : undefined;
-      if (icon && type) {
-        return { bytes: icon.bytes, type };
-      }
+    const icon = iconRead.success;
+    const type = icon ? sniff(icon.bytes) : undefined;
+    if (icon && type) {
+      return { bytes: icon.bytes, type };
     }
-    return silent ? yield* silent : undefined;
-  });
+  }
+  return silent ? yield* silent : undefined;
+});
 
 const MetaSchema = z.object({
   at: z.number(),

@@ -83,7 +83,7 @@ import {
 import { resolverFiles, tokensIn } from "@cawco/design-tokens/dtcg-resolver";
 import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
 import { namedAndMore } from "@cawco/providers/names";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
@@ -235,12 +235,12 @@ const manifestOf = (
     );
     return;
   }
-  const manifest = isRecord(parsed) ? parsed : {};
+  const manifest = Predicate.isObject(parsed) ? parsed : {};
   const { sources, files, tailwind } = manifest;
   if (tailwind !== undefined) {
     return themeManifestOf(tailwind, sources, files, problems);
   }
-  if (!isRecord(sources)) {
+  if (!Predicate.isObject(sources)) {
     problems.push(
       'manifest.json needs "sources": an object from each token\'s path to where its value came from.'
     );
@@ -263,7 +263,7 @@ const manifestOf = (
   }
   return {
     sources: sourced,
-    files: isRecord(files) ? stringsOf(files) : {},
+    files: Predicate.isObject(files) ? stringsOf(files) : {},
   };
 };
 
@@ -294,7 +294,7 @@ const themeManifestOf = (
     );
     return;
   }
-  if (isRecord(sources) && Object.keys(sources).length > 0) {
+  if (Predicate.isObject(sources) && Object.keys(sources).length > 0) {
     problems.push(
       `manifest.json names a Tailwind theme, so it has no "sources": each token's declaration in ${path} is its source. Leave "sources" out.`
     );
@@ -303,13 +303,9 @@ const themeManifestOf = (
   return {
     tailwind: path,
     sources: {},
-    files: isRecord(files) ? stringsOf(files) : {},
+    files: Predicate.isObject(files) ? stringsOf(files) : {},
   };
 };
-
-/** A JSON object, as a manifest holds one. */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** `record`'s string values, by key; any other is left out. */
 const stringsOf = (record: Record<string, unknown>): Record<string, string> =>

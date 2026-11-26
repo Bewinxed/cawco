@@ -14,6 +14,7 @@ import {
   type SendBody,
 } from "@cawco/core/comments/model";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { Predicate } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import type { AnyProblem } from "../refusal";
@@ -33,9 +34,6 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
 
 const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 
-const isRecord = (body: unknown): body is Record<string, unknown> =>
-  !!body && typeof body === "object" && !Array.isArray(body);
-
 /** Whether a post's pin list is one: absent, or one or more pins, each a pin's id. */
 const isPinIds = (value: unknown): value is string[] | undefined =>
   value === undefined ||
@@ -52,7 +50,7 @@ const isSentWrites = (writes: unknown): writes is string | undefined =>
 
 /** A send's body as it reads, only the fields it holds; why it is not one, or its fields. */
 const sendBodyRead = (body: unknown): SendBody | string => {
-  if (!isRecord(body)) {
+  if (!Predicate.isObject(body)) {
     return SEND_SHAPE;
   }
   const { text, control, pins, again, writes } = body;
@@ -82,7 +80,7 @@ const sendBodyRead = (body: unknown): SendBody | string => {
 
 /** A picture a pictures post carries, when it is one: a mark's id and a base64 PNG. */
 const pictureOf = (picture: unknown): MarkPicture | undefined =>
-  isRecord(picture) &&
+  Predicate.isObject(picture) &&
   typeof picture.mark === "string" &&
   typeof picture.png === "string" &&
   PNG_BASE64.test(picture.png)
@@ -91,7 +89,7 @@ const pictureOf = (picture: unknown): MarkPicture | undefined =>
 
 /** A pictures post's body as it reads, only the fields it holds; why it is not one, or its fields. */
 const picturesBodyRead = (body: unknown): MarkPictures | string => {
-  if (!isRecord(body)) {
+  if (!Predicate.isObject(body)) {
     return PICTURES_SHAPE;
   }
   const { url, pictures } = body;

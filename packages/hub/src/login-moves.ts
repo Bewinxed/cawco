@@ -14,8 +14,8 @@ import {
   CONTROL_MOVE_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import type { Bounded } from "@cawco/core/bounded";
-import { traitsOf } from "@cawco/core/harness/traits";
 import { timedEffect } from "@cawco/core/effect/timed";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
@@ -90,15 +90,15 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     ctx.lifetime.fork(
       "sleep request",
       timedEffect(
-          ctx.askMachine(
-            row.machineId,
-            CONTROL_SLEEP,
-            [],
-            SLEEP_TIMEOUT_MS,
-            undefined,
-            row.id
-          ),
-          (ms) => recordLimitReading("hub.login-sleep-ms", ms)
+        ctx.askMachine(
+          row.machineId,
+          CONTROL_SLEEP,
+          [],
+          SLEEP_TIMEOUT_MS,
+          undefined,
+          row.id
+        ),
+        (ms) => recordLimitReading("hub.login-sleep-ms", ms)
       )
     );
   };
@@ -576,15 +576,15 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       ctx.lifetime.fork(
         "sleep request",
         timedEffect(
-            ctx.askMachine(
-              machineId,
-              CONTROL_SLEEP,
-              [],
-              SLEEP_TIMEOUT_MS,
-              undefined,
-              instanceId
-            ),
-            (ms) => recordLimitReading("hub.login-sleep-ms", ms)
+          ctx.askMachine(
+            machineId,
+            CONTROL_SLEEP,
+            [],
+            SLEEP_TIMEOUT_MS,
+            undefined,
+            instanceId
+          ),
+          (ms) => recordLimitReading("hub.login-sleep-ms", ms)
         )
       );
     }

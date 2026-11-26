@@ -58,89 +58,88 @@ class NotOpened extends Schema.TaggedError<NotOpened>()("NotOpened", {}) {}
  * The link, held open for as long as the scope it is opened in, and closed
  * with it.
  */
-export const openHubLink = (
+export const openHubLink = Effect.fnUntraced(function* (
   heard: (said: HubSays) => void
-): Effect.Effect<HubLink, never, Scope.Scope> =>
-  Effect.gen(function* () {
-    let socket: WebSocket | null = null;
-    const token = previewServerToken();
-    const listeners: (() => void)[] = [];
+): Effect.fn.Return<HubLink, never, Scope.Scope> {
+  let socket: WebSocket | null = null;
+  const token = previewServerToken();
+  const listeners: (() => void)[] = [];
 
-    /**
-     * One socket to the hub, followed until it closes: done when one that
-     * opened closes, {@link NotOpened} when it closed first. Interrupted, it
-     * closes the socket.
-     */
-    const connection = Effect.callback<void, NotOpened>((resume) => {
-      const ws = openWebSocket(`ws${hubOrigin().slice(4)}${CONTROL_PATH}`, {
-        headers: { [TOKEN_HEADER]: token },
-      });
-      socket = ws;
-      let opened = false;
-      ws.addEventListener("open", () => {
-        opened = true;
-        console.log("[preview] the hub's link is open");
-        for (const listener of listeners) {
-          listener();
-        }
-      });
-      ws.addEventListener("message", (event) => {
-        if (typeof event.data !== "string") {
-          return;
-        }
-        let said: unknown;
-        try {
-          said = JSON.parse(event.data);
-        } catch {
-          return;
-        }
-        if (isHubSays(said)) {
-          heard(said);
-        }
-      });
-      ws.addEventListener("close", () => {
-        if (socket === ws) {
-          socket = null;
-        }
-        resume(opened ? Effect.void : Effect.fail(new NotOpened()));
-      });
-      return Effect.sync(() => ws.close());
+  /**
+   * One socket to the hub, followed until it closes: done when one that
+   * opened closes, {@link NotOpened} when it closed first. Interrupted, it
+   * closes the socket.
+   */
+  const connection = Effect.callback<void, NotOpened>((resume) => {
+    const ws = openWebSocket(`ws${hubOrigin().slice(4)}${CONTROL_PATH}`, {
+      headers: { [TOKEN_HEADER]: token },
     });
+    socket = ws;
+    let opened = false;
+    ws.addEventListener("open", () => {
+      opened = true;
+      console.log("[preview] the hub's link is open");
+      for (const listener of listeners) {
+        listener();
+      }
+    });
+    ws.addEventListener("message", (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+      let said: unknown;
+      try {
+        said = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (isHubSays(said)) {
+        heard(said);
+      }
+    });
+    ws.addEventListener("close", () => {
+      if (socket === ws) {
+        socket = null;
+      }
+      resume(opened ? Effect.void : Effect.fail(new NotOpened()));
+    });
+    return Effect.sync(() => ws.close());
+  });
 
-    /**
-     * Opens until one opens and later closes, each after its wait on
-     * {@link REOPENS}. `afterDrop`: a link that was open just closed, which
-     * counts as the series' first failure, so the open after it waits the
-     * first wait (the house backoff's `succeeded()` at the open, then
-     * `failed()` at the close).
-     */
-    const series = (afterDrop: boolean) =>
-      reopenSeries(
-        connection,
-        backoffSchedule(REOPENS),
-        afterDrop ? Option.some(new NotOpened()) : Option.none()
-      );
-
-    yield* Effect.forkScoped(
-      series(false).pipe(
-        Effect.andThen(Effect.forever(Effect.suspend(() => series(true))))
-      )
+  /**
+   * Opens until one opens and later closes, each after its wait on
+   * {@link REOPENS}. `afterDrop`: a link that was open just closed, which
+   * counts as the series' first failure, so the open after it waits the
+   * first wait (the house backoff's `succeeded()` at the open, then
+   * `failed()` at the close).
+   */
+  const series = (afterDrop: boolean) =>
+    reopenSeries(
+      connection,
+      backoffSchedule(REOPENS),
+      afterDrop ? Option.some(new NotOpened()) : Option.none()
     );
 
-    return {
-      say(said: ServerSays): boolean {
-        if (socket?.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify(said));
-          return true;
-        }
-        return false;
-      },
-      onOpen(listener: () => void): void {
-        listeners.push(listener);
-      },
-      hub: hubClient(hubOrigin(), fetch, {
-        headers: { [TOKEN_HEADER]: token },
-      }),
-      token,
-    };
-  });
+  yield* Effect.forkScoped(
+    series(false).pipe(
+      Effect.andThen(Effect.forever(Effect.suspend(() => series(true))))
+    )
+  );
+
+  return {
+    say(said: ServerSays): boolean {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(said));
+        return true;
+      }
+      return false;
+    },
+    onOpen(listener: () => void): void {
+      listeners.push(listener);
+    },
+    hub: hubClient(hubOrigin(), fetch, {
+      headers: { [TOKEN_HEADER]: token },
+    }),
+    token,
+  };
+});
