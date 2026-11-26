@@ -35,8 +35,13 @@ function begin(
     permissionResolved: (requestId, outcome) =>
       say({ type: "permissionResolved", requestId, outcome }),
     failed: (error) => say({ type: "failed", error: String(error) }),
+    // A refusal's own words, never `Error: ` before them (agy-pictures.ts names the picture).
     rejected: (uuid, error) =>
-      say({ type: "rejected", uuid, error: String(error) }),
+      say({
+        type: "rejected",
+        uuid,
+        error: error instanceof Error ? error.message : String(error),
+      }),
   }).then((made) => {
     session = made;
   });
