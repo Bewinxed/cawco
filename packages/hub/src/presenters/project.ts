@@ -1,6 +1,6 @@
 /**
  * A project's own things as an agent reads them: its folder,
- * its views, memory, routines, inbound routes and polls, approved actions
+ * its views, routines, inbound routes and polls, approved actions
  * and relays. Each by its name and the handle its tools take back
  * (handles.ts), each time as how long ago or how far ahead.
  */
@@ -9,7 +9,6 @@ import type { ApprovedActionView } from "@cawco/core/actions";
 import { taskLink } from "@cawco/core/references";
 import type { RelayView } from "@cawco/core/relays";
 import { shortId, shortSha } from "@cawco/core/short-id";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import type {
   ConnectorPollView,
@@ -17,18 +16,9 @@ import type {
   IngressView,
 } from "../ingress-views";
 import { PAYLOAD_MAX } from "../ingress-views";
-import type { FolderFile, FolderListing, FolderPage } from "../project-folder";
+import type { FolderListing, FolderPage } from "../project-folder";
 import type { RelayCreated } from "../relay-created";
-import {
-  ago,
-  ahead,
-  count,
-  excerpt,
-  lines,
-  listed,
-  quote,
-  valueExcerpt,
-} from "./words";
+import { ago, ahead, count, lines, listed, quote, valueExcerpt } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
 const LIST_MARK = /^- /u;
@@ -86,62 +76,6 @@ export const viewDraftedWords = (drafted: {
 
 /** `view_query`: the data a view's Query reads, as the view would. */
 export const viewQueryWords = (data: unknown): string => JSON.stringify(data);
-
-/**
- * `memory_note`'s answer, by where the note goes: to the nightly run, or
- * nowhere, and why. A union, so no path is answered with another's words.
- */
-export type Noted = { id: string } & (
-  | { reaches: "run" }
-  | { reaches: "nowhere"; verdict: "secret" }
-  | { reaches: "nowhere"; verdict: "duplicate"; lesson: string }
-);
-
-/** `memory_note`. */
-export const memoryNotedWords = (noted: Noted): string => {
-  if (noted.reaches === "run") {
-    return memoryRunWords.notedForRun(noted.id);
-  }
-  return noted.verdict === "secret"
-    ? memoryRunWords.notedSecret(noted.id)
-    : memoryRunWords.notedDuplicate(noted.id, noted.lesson);
-};
-
-/** `memory_withdraw`: the note withdrawn, and what it said. */
-export const memoryWithdrawnWords = (gone: {
-  text: string;
-  withdrawn: string;
-}): string => memoryRunWords.withdrawn(gone.withdrawn, quote(gone.text));
-
-/** `memory_apply`: one line per operation, what it committed or why it was refused. */
-export const memoryAppliedWords = (applied: { lines: string[] }): string =>
-  applied.lines.join("\n");
-
-/** `memory_read`: the inbox and the memory files, or one file. */
-export const memoryReadWords = (
-  read:
-    | {
-        files: string[];
-        inbox: { from: string; id: string; since?: string; text: string }[];
-      }
-    | FolderFile
-): string => {
-  if ("inbox" in read) {
-    return lines(
-      read.inbox.length === 0
-        ? "The inbox is empty."
-        : `${count(read.inbox.length, "note")} waiting:`,
-      read.inbox.map(
-        (note) =>
-          `- ${note.id} from ${note.from}${note.since ? ` (since ${note.since})` : ""}: ${excerpt(note.text, 600)}`
-      ),
-      read.files.length > 0
-        ? `Memory files: ${listed(read.files)}.`
-        : "The project keeps no memory file yet."
-    );
-  }
-  return folderReadWords({ ...read, offset: 0, next: null });
-};
 
 /** `event_route_delete`, `connector_poll_delete`. */
 export const deletedWords =

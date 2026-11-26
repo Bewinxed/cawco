@@ -578,12 +578,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `transcripts`, each upserts and removals), whole only as the socket
  *    opens and after only what moved (core frames.ts `StoredFrame`). A
  *    page built for 115 reads a `stored` list whole, so it reloads first.
+ * 117: a parked delegate type proposal names itself `typeProposal`, no
+ *    longer `memoryProposal`, and no session runs in the `curator` role
+ *    (hub memory.ts, the cut of 2026-11-26). A page built for 116 reads the
+ *    old name, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 116;
+export const WIRE_PROTOCOL = 117;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

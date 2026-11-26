@@ -72,12 +72,7 @@ import type {
 } from "@cawco/core/envelopes";
 import type { ExternalRef } from "@cawco/core/external-items";
 import type { FleetSyncReport } from "@cawco/core/fleet";
-import {
-  FLEET_DELTA,
-  machinePlatform,
-  mcpRunsOn,
-  skillDescription,
-} from "@cawco/core/fleet";
+import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST, type ForgeAsk } from "@cawco/core/forge-post";
 import type {
@@ -244,7 +239,7 @@ import {
   type UsageBucket,
   type UsageSpend,
 } from "@cawco/core/usage/types";
-import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
+import type { StageKind } from "@cawco/core/views";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -363,7 +358,7 @@ import { browserPassRoutes } from "./browser-passes";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
-import { bundledSkills, TEMPLATE_SKILLS } from "./bundled-skills";
+import { TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
 import { type Caw, cawRoutes, createCaw, type PersonsSend } from "./caw";
@@ -560,8 +555,8 @@ import { MachineRuntime } from "./machine-runtime";
 import { MachineWords } from "./machine-words";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
-import { createMemory, inboxNotes } from "./memory";
-import { createMemoryRun } from "./memory-run";
+import { createMemory } from "./memory";
+import { cutProjectMemory } from "./memory-cut";
 import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNeedsRows } from "./needs-rows";
@@ -633,6 +628,7 @@ import {
   folderFilePaths,
   guardFolderFile,
   hasProjectFolder,
+  listFolder,
   onFolderCommits,
   projectFolderRoutes,
   readFolderFile,
@@ -788,7 +784,6 @@ import { createTaskInput } from "./task-input";
 import { approvedRoutineCall } from "./task-tools";
 import {
   createTasks,
-  hubActor,
   isSetUp,
   sessionActor,
   type TaskStore,
@@ -1329,7 +1324,6 @@ export const createServer = (
   const board = Context.get(services, Board);
   const {
     FORGET_CREDENTIALS_TIMEOUT_MS,
-    asRead,
     awaitReply,
     askMachine,
     bindFolderInstall,
@@ -1612,7 +1606,6 @@ export const createServer = (
     owedMoves: () => owedMoves,
     parkForPerson: () => parkForPerson,
     projectMemory: () => projectMemory,
-    memoryRun: () => memoryRun,
     typeProposals: () => typeProposals,
     publishSend: () => publishSend,
     releaseOwed: () => releaseOwed,
@@ -9141,163 +9134,10 @@ export const createServer = (
     }
   };
 
-  /**
-   * The skills the fleet lists for a project's sessions, each with its
-   * SKILL.md's one-line description where the hub holds its files: the ones
-   * CawCo ships, the fleet's, and those bound to the project or its area.
-   */
-  const skillsListedFor = (projectId: string) => {
-    const areaId = db.project(projectId)?.areaId ?? null;
-    const reaches = (skill: { areaId?: string; projectId?: string }) =>
-      !(skill.projectId || skill.areaId) ||
-      skill.projectId === projectId ||
-      (areaId !== null && skill.areaId === areaId);
-    const described = new Map<string, string>();
-    for (const skill of [...bundledSkills(), ...db.fleetConfig().skills]) {
-      if (!reaches(skill)) {
-        continue;
-      }
-      const file = skill.files?.find((each) => each.path === "SKILL.md");
-      const text = file
-        ? Buffer.from(file.contentBase64, "base64").toString("utf8")
-        : "";
-      described.set(skill.name, skillDescription(text) ?? "");
-    }
-    for (const skill of db.listSkills()) {
-      if (skill.enabled && reaches(skill) && !described.has(skill.name)) {
-        described.set(skill.name, "");
-      }
-    }
-    return [...described].map(([name, description]) => ({
-      name,
-      description,
-    }));
-  };
-  // A project's memory (memory.ts): the agents' inbox, the index every
-  // session launches with and a brief's facts.
-  // Its nightly run (memory-run.ts) is the one writer of its lessons.
-  const memoryRun = createMemoryRun({
-    db,
-    lifetime,
-    folderChanged: (projectId) => tasks.touched(projectId),
-    machine: {
-      read: async (machineId, path) => {
-        const agent = registry.agent(machineId);
-        if (!agent) {
-          return { kind: "unread" };
-        }
-        const answer = asRead(
-          await callFs(machineId, agent, { op: "read", path })
-        );
-        if (answer.kind === "unanswered") {
-          return { kind: "unread" };
-        }
-        if (answer.value.ok) {
-          return { kind: "text", text: answer.value.result };
-        }
-        return answer.value.refusal?.kind === "missing"
-          ? { kind: "missing" }
-          : { kind: "unread" };
-      },
-      listed: async (machineId, path) => {
-        const agent = registry.agent(machineId);
-        if (!agent) {
-          return;
-        }
-        const answer = asRead(
-          await callFs(machineId, agent, { op: "list", path })
-        );
-        if (answer.kind === "unanswered") {
-          return;
-        }
-        if (answer.value.ok) {
-          return true;
-        }
-        return answer.value.refusal?.kind === "missing" ? false : undefined;
-      },
-    },
-    skillsFor: (projectId) => skillsListedFor(projectId),
-    tasks: {
-      file: async (projectId, draft) => {
-        const task = await tasks.create(
-          projectId,
-          draft,
-          hubActor("the project's memory run files a task")
-        );
-        return task instanceof ElysiaStatus
-          ? { refused: task.response.detail }
-          : { id: task.id };
-      },
-      withField: async (projectId, field) => {
-        const found: {
-          id: string;
-          kind: "open" | "done" | "dropped";
-          value: string;
-        }[] = [];
-        for (const archived of [false, true]) {
-          const listed = await tasks.list(projectId, { archived });
-          if (listed instanceof ElysiaStatus) {
-            return { refused: listed.response.detail };
-          }
-          for (const task of listed.tasks) {
-            const value = task.fields[field];
-            if (value !== undefined) {
-              found.push({
-                id: task.id,
-                kind:
-                  task.kind === "done" || task.kind === "dropped"
-                    ? task.kind
-                    : "open",
-                value,
-              });
-            }
-          }
-        }
-        return found;
-      },
-      drop: async (projectId, id, { field, value, reason }) => {
-        const task = await tasks.get(projectId, id);
-        if (task instanceof ElysiaStatus) {
-          return task.status === 404
-            ? "kept"
-            : { refused: task.response.detail };
-        }
-        if (
-          task.extra[field] !== value ||
-          (task.kind && isOneOf(CLOSED_STAGE_KINDS, task.kind))
-        ) {
-          return "kept";
-        }
-        const stages = await tasks.stages(projectId);
-        if (stages instanceof ElysiaStatus) {
-          return { refused: stages.response.detail };
-        }
-        const dropped = stages.stages.find((stage) => stage.kind === "dropped");
-        if (!dropped) {
-          return { refused: "the project has no stage of kind dropped" };
-        }
-        const moved = await tasks.move(
-          projectId,
-          id,
-          dropped.name,
-          hubActor("the project's memory run drops a task"),
-          reason
-        );
-        return moved instanceof ElysiaStatus
-          ? { refused: moved.response.detail }
-          : "dropped";
-      },
-    },
-  });
+  // A project's memory (memory.ts): the rules file every session
+  // launches with, changed through memory_rule, and a brief's named files.
   const projectMemory = createMemory({
     db,
-    // The routines are made further down; a note reaches them only once the hub is up.
-    curator: () => ({
-      ensure: (projectId) => routines.ensureCurator(projectId),
-    }),
-    apply: (actor, ops) => memoryRun.apply(actor, ops),
-    unnote: (actor, id) => memoryRun.unnote(actor, id),
-    rule: (actor, ask) => memoryRun.ruleAsked(actor, ask),
     folderChanged: (projectId) => tasks.touched(projectId),
   });
   // A project's delegate type proposals (type-proposals.ts): Caw's
@@ -9314,7 +9154,7 @@ export const createServer = (
   });
   // Open type proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.
-  let memoryParked: Promise<void> = Promise.resolve();
+  let proposalsParked: Promise<void> = Promise.resolve();
   /**
    * The control interrupt_delegate sends: the turn stops, the session keeps
    * its state. `hold`: as {@link noteInterrupt} says.
@@ -10217,7 +10057,6 @@ export const createServer = (
   // and every person's Continue carries (open-items.ts).
   const openItems = createOpenItems({
     db,
-    inbox: inboxNotes,
     plan: plans.read,
     questions: (instanceId) => artifacts.questions(instanceId),
     projectAsks: (row) => openAsks.of(row),
@@ -10798,8 +10637,6 @@ export const createServer = (
     dispatch: dispatcher,
     tasks: () => tasks,
     isSetUp: (project) => isSetUp(project),
-    // The nightly memory run's brief and end (memory-run.ts).
-    memoryRun,
     toRouter: (projectId, event) => triggers.route(projectId, event),
     // A trim run's findings, read before any model is asked (unused-trim.ts).
     trimBrief: (projectId) => trim.brief(projectId),
@@ -10864,6 +10701,24 @@ export const createServer = (
       );
       return changed instanceof ElysiaStatus ? changed : undefined;
     },
+  };
+  /** The memory inbox, the nightly run's records and its routines cut once (memory-cut.ts), over every project's folder. */
+  const memoryCut = {
+    dataMigrated: (name: string) => db.dataMigrated(name),
+    markDataMigrated: (name: string) => db.markDataMigrated(name),
+    projectIds: () => db.listProjects().map((project) => project.id),
+    hasFolder: (projectId: string) => hasProjectFolder(projectId),
+    entries: async (projectId: string, dir: string) => {
+      const listing = await listFolder(projectId, dir);
+      if (listing instanceof ElysiaStatus) {
+        return listing.status === 404 ? [] : listing;
+      }
+      return listing.entries;
+    },
+    names: (projectId: string, dir: string) => folderFileNames(projectId, dir),
+    read: (projectId: string, path: string) => folderText(projectId, path),
+    catchUp: (projectId: string) => tasks.catchUp(projectId),
+    touched: (projectId: string) => tasks.touched(projectId),
   };
   /** Kept blocks filed under decisions/ moved to artifacts/ once (kept-blocks.ts), over every project's folder. */
   const keptBlocks = {
@@ -12848,16 +12703,15 @@ export const createServer = (
         run: () => detach(recordTemplates(), "project templates"),
       },
       {
-        // Each project's memory moved to lessons once (memory-run.ts
-        // `cutover`), then its index read for the sessions it launches, and
-        // the open delegate type proposals parked again.
+        // Each project's memory inbox and nightly run cut once (memory-cut.ts),
+        // then its rules read for the sessions it launches, and the open
+        // delegate type proposals parked again.
         name: "memory and type proposals",
         run: () => {
-          memoryParked = memoryRun
-            .start(db.listProjects())
+          proposalsParked = cutProjectMemory(memoryCut)
             .then(() => projectMemory.start())
             .then(() => typeProposals.start());
-          detach(memoryParked, "memory and type proposals");
+          detach(proposalsParked, "memory and type proposals");
         },
       },
       // Pages sent before a Send decided them are decided once, from their sent picks.
@@ -12948,7 +12802,7 @@ export const createServer = (
         name: "parked ask pushes",
         run: () =>
           detach(
-            memoryParked.then(() => {
+            proposalsParked.then(() => {
               const left = db.askPushes.keepOnly(
                 pending
                   .list()

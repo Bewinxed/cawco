@@ -245,7 +245,7 @@ interface ViewRoutine {
   nextSlot: number;
   /** Newest first. */
   runs: ViewRoutineRun[];
-  /** A fresh delegate each run, a message to Caw, or the project's memory curator. */
+  /** A fresh delegate each run, a fresh orchestrator, a message to Caw, or the unused skills and servers trim. */
   target: RoutineTarget;
   timeZone: string;
 }

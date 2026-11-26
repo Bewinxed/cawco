@@ -103,7 +103,7 @@ export const CODEX = {
   // never starts, so nothing stands for it.
   nativeTools: { subagents: SUBAGENTS, todos: GOALS, questions: QUESTIONS },
   boardOnlyDenied: [...SUBAGENTS, ...SHELL, ...EDIT],
-  curatorDenied: [...SUBAGENTS, ...SHELL, ...EDIT, ...SEARCH],
+  trimmerDenied: [...SUBAGENTS, ...SHELL, ...EDIT, ...SEARCH],
   // Its hook names, by Claude Code's names in order. An MCP tool is
   // `mcp__<server>__<tool>` (C-d). Its adapter holds back its subagents,
   // its goals, its web search and CawCo's own tools, and refuses a spawn that denies

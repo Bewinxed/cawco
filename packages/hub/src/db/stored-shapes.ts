@@ -792,7 +792,6 @@ const ProposalShape = declared(
     by: z.string(),
     files: z.array(ProposalFileShape),
     id: z.string(),
-    notes: z.array(z.string()),
     projectId: z.string(),
     session: z.string(),
     time: z.string(),

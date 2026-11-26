@@ -19,8 +19,7 @@
  *   tasks it filed,
  *   every question its delegation tree put to the person, open or answered
  *   and not yet taken (artifacts/questions.ts, its own first, an ended
- *   delegate's taken up by it), its notes still in the project's memory
- *   inbox, its asks (asks.ts: those open, each question with its options
+ *   delegate's taken up by it), its asks (asks.ts: those open, each question with its options
  *   and what waits on it, then its questions answered most lately, with
  *   his answer), and every question its project holds open for the person
  *   (open-asks.ts). Every harness has it listed after each of its compactions,
@@ -47,7 +46,6 @@ import type { QuestionAnswer } from "./artifacts/questions";
 import type { Artifacts } from "./artifacts/service";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
-import type { inboxNotes, Note } from "./memory";
 import type { OpenAsk } from "./open-asks";
 import type { Plans } from "./plans";
 import { ago } from "./presenters/words";
@@ -76,7 +74,6 @@ export const filingPrompt = (
     "",
     "- Work that must outlive this conversation and every promise made: a task (`task_create`), or a to-do on the task it belongs to (`todo_write` with `task` and `add`). Your task's to-dos you finished: `todo_write` with `tick`.",
     "- A decision taken on a task, with its reason, a constraint the person set (in plain words, never quoting them), an approach ruled out and why, and the files, paths, commands, ids and links to read again: a comment on that task (`task_comment`).",
-    "- A lasting fact (convention, command, decision, place) or the person's correction or preference on how to work: `memory_note`.",
     "- A question still waiting on the person stays where you asked it: it is listed again from its record.",
     "",
     "Write again only what changed or is missing. Then end your turn.",
@@ -99,8 +96,6 @@ const OPEN_ITEMS_HEADING =
 export interface OpenItemRows {
   /** Its asks: those still open (approvals and questions), then its questions answered most lately, the newest answer first. */
   asks: AskRecord[];
-  /** Its notes still in its project's memory inbox. */
-  notes: Note[];
   /** Its plan: the tasks and to-dos it works on, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
   /** Every question its project holds open for the person, newest first (open-asks.ts). */
@@ -359,21 +354,12 @@ function openItemsSection(
       ...rows.projectAsks.map((one) => `${one.line} · ${ago(one.at, now)}`)
     );
   }
-  if (rows.notes.length > 0) {
-    parts.push(
-      "### Your notes still in the project's memory inbox",
-      ...rows.notes.flatMap((note) => [
-        `- ${note.id} (${note.time})`,
-        ...under(note.text),
-      ])
-    );
-  }
   return [
     OPEN_ITEMS_HEADING,
     ...(parts.length > 0
       ? parts
       : [
-          "Nothing open is filed: the records hold no open plan step, to-do, task, question to the person, note or ask.",
+          "Nothing open is filed: the records hold no open plan step, to-do, task, question to the person or ask.",
         ]),
   ].join("\n");
 }
@@ -400,7 +386,6 @@ export const recordsOf = (rows: OpenItemRows): FiledRecords => ({
     ...rows.tasks.flatMap((task) => task.todos.map(todoRecord(task.id))),
   ],
   tasks: rows.tasks.map((task) => task.id),
-  notes: rows.notes.map((note) => note.id),
 });
 
 /**
@@ -425,14 +410,11 @@ export const filingWrote = (
       (todo) => !filed.has(todo.slice(0, todo.indexOf("\t")))
     ).length,
     tasks: filed.size,
-    notes: fresh(before.notes, after.notes).length,
   };
 };
 
 export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
-  /** A project's memory inbox, oldest first (memory.ts `inboxNotes`), or the folder's refusal. */
-  inbox: typeof inboxNotes;
   /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
   plan: Plans["read"];
   /** Every question the project `row`'s records live in holds open for the person (open-asks.ts `of`). */
@@ -501,15 +483,9 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     if (questions instanceof ElysiaStatus) {
       return questions;
     }
-    const [tasks, notes] = await Promise.all([
-      filedTasks(deps, projectId, instanceId),
-      deps.inbox(projectId),
-    ]);
+    const tasks = await filedTasks(deps, projectId, instanceId);
     if (tasks instanceof ElysiaStatus) {
       return tasks;
-    }
-    if (notes instanceof ElysiaStatus) {
-      return notes;
     }
     const held: OpenItemRows = {
       projectId,
@@ -518,7 +494,6 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       plan,
       questions,
       tasks,
-      notes: notes.filter((note) => note.session === instanceId),
     };
     return held;
   };

@@ -1,44 +1,49 @@
 /**
  * `bun scripts/memory-cutover-check.ts` (part of `bun run check`): the rules
- * the project's memory stands on, each read off the source.
+ * the project's memory stands on, each read off the source. A project's
+ * memory is its rules file, AGENTS.md, changed through `memory_rule` at the
+ * person's word (hub memory.ts, the cut of 2026-11-26).
  *
- * C1, no way back. No source under a package's or an app's src/ names a
- * part the memory left behind: the approval path the nightly run replaced
- * (`tainted:`, a note archived unread for its session's web read;
- * `memory_propose`, `memory_classify`, `waitsForPerson`, the old
- * `memory_note` answer's last sentence), or the parts the cut of
- * 2026-11-24 deleted (the ledger's `MemoryLedger` and `parseLedger`, the
- * note labels' `sessionTaints` and `countsTogether`, the reverts'
- * `revertCorrected`, the recovery's `recoveryBrief`, the CawCo tasks'
- * `productTask`, the re-test's `retestIfNew`, and the rebase layer's
+ * C1, no way back. No line of code under a package's or an app's src/
+ * names a part the memory left behind, as a whole word (a comment may, as
+ * history): the inbox and its tools
+ * (`memory_note`, `memory_withdraw`, `inboxNotes`), the nightly run and its
+ * curator (`memory_read`, `memory_apply`, `createMemoryRun`,
+ * `curatorPrompt`, the role and routine target `"curator"`), the brief's
+ * selection of knowledge lines and the run's read of the person's words
+ * (`briefShortlist`, `personSaidIn`), the approval path before the run
+ * (`tainted:`, `memory_propose`, `memory_classify`, `MEMORY_PROPOSAL_TOOL`,
+ * `waitsForPerson`, the old `memory_note` answer's last sentence), the parts
+ * the cut of 2026-11-24 deleted (the ledger's `MemoryLedger` and
+ * `parseLedger`, the note labels' `sessionTaints` and `countsTogether`, the
+ * reverts' `revertCorrected`, the recovery's `recoveryBrief`, the CawCo
+ * tasks' `productTask`, the re-test's `retestIfNew`, and the rebase layer's
  * `againOnConflict` and `readAtHead`), and the limits and gates the owner
- * took off the same day (`changeAuthority`, a rule changed only on his
- * message; `nightAdds`, the night's limits; `unusedArchived` and
- * `MEMORY_ARCHIVE_DAYS`, the archive for disuse; `outsideUrls`, the refusal
- * of an agent's lesson linking an outside page). The one line in {@link C1_KEPT}
- * stays while a shipped build draws the asks parked under it before the
- * cutover.
+ * took off the same day (`changeAuthority`, `nightAdds`, `unusedArchived`,
+ * `MEMORY_ARCHIVE_DAYS`, `outsideUrls`).
  *
- * C2, who may say `human`. The project's nightly memory run reads a send of
- * origin `human` as the person's own words (hub db/sends.ts
- * `personSaidIn`), so a message is given that origin only where his words
- * come in, each place named in {@link SPEAKS} with who the person is there.
- * A literal `{ kind: "human" }` anywhere else under packages/hub/src fails,
- * unless it is the argument of one of the reads in {@link READS}, which
- * write no message. A new place joins {@link SPEAKS} with its reason.
+ * C2, who may say `human`. The hub reads a send of origin `human` as the
+ * person's own words (hub db/sends.ts: what he last said, whether his
+ * message waits on a reply, the message an answer names), so a message is
+ * given that origin only where his words come in, each place named in
+ * {@link SPEAKS} with who the person is there. A literal `{ kind: "human" }`
+ * anywhere else under packages/hub/src fails, unless it is the argument of
+ * one of the reads in {@link READS}, which write no message. A new place
+ * joins {@link SPEAKS} with its reason.
  *
- * C3, one way to write. A memory file (AGENTS.md, `lessons/`,
- * `knowledge/`) is read, changed and committed in one turn of the folder's
- * commit queue (project-folder.ts `changeFolderInTurn`), so no writer
- * writes over another: `changeFolderInTurn` is called only from the places
- * in {@link C3_WRITERS} (memory-run.ts: the nightly run, its upkeep and
- * `memory_rule`), and `writeFolderFile`, `writeFolderFiles` and
- * `changeFolderFiles` are never called with a path under those names (a
- * call's path arguments are read for them).
+ * C3, one way to write. A rules file (AGENTS.md, `lessons/`, `knowledge/`)
+ * is read, changed and committed in one turn of the folder's commit queue
+ * (project-folder.ts `changeFolderInTurn`), so no writer writes over
+ * another: `changeFolderInTurn` is called only from the places in
+ * {@link C3_WRITERS} (memory.ts `ruleAsked`, `memory_rule`; memory-cut.ts
+ * `cutIn`, the once-only cut), and
+ * `writeFolderFile`, `writeFolderFiles` and `changeFolderFiles` are never
+ * called with a path under those names (a call's path arguments are read
+ * for them).
  *
  * C6, one checked change. `applyLineChange` (memory-lessons.ts), the one
- * change to the memory's lines, is called only in memory-run.ts, where
- * every rule of an operation is checked first.
+ * change to the rules' lines, is called only in memory.ts, where every rule
+ * of a change is checked first.
  *
  * Exits 1 naming each place that breaks a rule.
  */
@@ -52,11 +57,22 @@ export const checkReads = ["packages/", "apps/"];
 
 const HUB_SOURCE = "packages/hub/src";
 
-/** The names of the path the nightly run replaced (C1). */
+/** The names of the parts the memory left behind (C1), each matched as a whole word. */
 const C1_GONE: readonly string[] = [
+  "memory_note",
+  "memory_withdraw",
+  "inboxNotes",
+  "memory_read",
+  "memory_apply",
+  "createMemoryRun",
+  "curatorPrompt",
+  '"curator"',
+  "briefShortlist",
+  "personSaidIn",
   "tainted:",
   "memory_propose",
   "memory_classify",
+  "MEMORY_PROPOSAL_TOOL",
   "waitsForPerson",
   "The person decides what is kept.",
   "MemoryLedger",
@@ -76,14 +92,20 @@ const C1_GONE: readonly string[] = [
   "outsideUrls",
 ];
 
-/** Lines that keep one of {@link C1_GONE}, each with why. */
-const C1_KEPT: readonly { file: string; line: string; why: string }[] = [
-  {
-    file: "packages/core/src/permission-presentation.ts",
-    line: 'export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";',
-    why: "the name the asks parked before the cutover carry, which a shipped build still draws",
-  },
-];
+const WORD = /\w/u;
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/gu;
+/** A name as C1 finds it: not inside a longer word (`admin_memory_read` names no `memory_read`). */
+const c1Pattern = (name: string): RegExp =>
+  new RegExp(
+    `${WORD.test(name.at(0) ?? "") ? "(?<![\\w])" : ""}${name.replace(REGEX_SPECIAL, "\\$&")}${WORD.test(name.at(-1) ?? "") ? "(?![\\w])" : ""}`,
+    "u"
+  );
+/** A line of a comment: history and the reasons behind a change may name what left (role-budgets.ts's log). */
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/u;
+const C1_PATTERNS = C1_GONE.map((name) => ({
+  name,
+  pattern: c1Pattern(name),
+}));
 
 /** The writes C3 reads, and the places that may write the memory files. */
 const C3_WRITES = new Set([
@@ -91,13 +113,18 @@ const C3_WRITES = new Set([
   "writeFolderFiles",
   "changeFolderFiles",
 ]);
-/** The one write path of the memory files (C3). */
+/** The one write path of the rules files (C3). */
 const C3_TURN = "changeFolderInTurn";
 const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
   {
-    file: "packages/hub/src/memory-run.ts",
-    fn: "",
-    who: "every memory change: the nightly run's checked operations, its upkeep and mark, memory_rule, a note withdrawn",
+    file: "packages/hub/src/memory.ts",
+    fn: "ruleAsked",
+    who: "memory_rule: a rule added, reworded or removed at the person's word",
+  },
+  {
+    file: "packages/hub/src/memory-cut.ts",
+    fn: "cutIn",
+    who: "the cut of 2026-11-26, once per project: AGENTS.md's old intro said as it is now, read in the same turn",
   },
 ];
 /** A path argument that names a memory file: by its words, or by the names the code gives them. */
@@ -105,7 +132,7 @@ const C3_PATH =
   /AGENTS\.md|\bINDEX_FILE\b|\bAGENTS_FILE\b|["'`]lessons\/|["'`]knowledge\/|\bKNOWLEDGE_DIR\b|\bKNOWLEDGE_ARCHIVE\b|\bLESSONS_DIR\b/u;
 
 /** Where the one change to the memory's lines may be made (C6). */
-const C6_MAKER = "packages/hub/src/memory-run.ts";
+const C6_MAKER = "packages/hub/src/memory.ts";
 const C6_CHANGE = "applyLineChange";
 
 /** Where a message is given the person's origin: the file, the function that does it ("" for any in the file), and who he is there. */
@@ -253,14 +280,14 @@ const c1 = (): Found[] => {
   for (const file of sources()) {
     const lines = readFileSync(join(ROOT, file), "utf8").split("\n");
     lines.forEach((line, at) => {
-      const gone = C1_GONE.find((name) => line.includes(name));
-      if (
-        gone &&
-        !C1_KEPT.some((kept) => kept.file === file && line.trim() === kept.line)
-      ) {
+      if (COMMENT_LINE.test(line)) {
+        return;
+      }
+      const gone = C1_PATTERNS.find(({ pattern }) => pattern.test(line));
+      if (gone) {
         found.push({
           at: `${file}:${at + 1}`,
-          why: `names ${gone}, a part the memory left behind (scripts/memory-cutover-check.ts C1)`,
+          why: `names ${gone.name}, a part the memory left behind (scripts/memory-cutover-check.ts C1)`,
         });
       }
     });
@@ -325,19 +352,19 @@ const c3c6 = (): { c3: Found[]; c6: Found[] } => {
     if (name === C6_CHANGE && file !== C6_MAKER) {
       c6.push({
         at,
-        why: "changes the memory's lines outside memory-run.ts: applyLineChange is called only where every rule of an operation is checked first",
+        why: "changes the rules' lines outside memory.ts: applyLineChange is called only where every rule of a change is checked first",
       });
     }
     if (C3_WRITES.has(name) && namesMemory(call, source)) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "writes a memory file around the one write path: a memory change is read, worked out and committed in one turn of the folder's queue (project-folder.ts changeFolderInTurn), from memory-run.ts",
+        why: "writes a rules file around the one write path: a rule change is read, worked out and committed in one turn of the folder's queue (project-folder.ts changeFolderInTurn), from memory.ts ruleAsked",
       });
     }
     if (name === C3_TURN && !mayWrite(file, fn)) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "commits through changeFolderInTurn outside memory-run.ts: a new writer of the folder in one turn joins C3_WRITERS in scripts/memory-cutover-check.ts with what it writes",
+        why: "commits through changeFolderInTurn outside memory.ts ruleAsked: a new writer of the folder in one turn joins C3_WRITERS in scripts/memory-cutover-check.ts with what it writes",
       });
     }
   }
@@ -358,5 +385,5 @@ if (found.length > 0) {
   process.exit(1);
 }
 console.log(
-  `memory-cutover-check: C1, C2, C3 and C6 hold: no part the memory left behind is named (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts alone; the memory's lines change through applyLineChange in memory-run.ts alone`
+  `memory-cutover-check: C1, C2, C3 and C6 hold: none of the ${C1_GONE.length} parts the memory left behind is named; the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the rules files are written through changeFolderInTurn, from memory.ts ruleAsked and the once-only cut alone; the rules' lines change through applyLineChange in memory.ts alone`
 );

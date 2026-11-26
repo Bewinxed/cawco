@@ -82,14 +82,9 @@ export const CAWCO_ENV = {
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
   /**
-   * Days a project's fact line may go unused (no brief admitted it, no note
-   * corroborated it) before the curator's run proposes moving it to
-   * `knowledge/archive/` (hub memory.ts). Default in hub config.ts.
-   */
-  /**
-   * A knowledge file's budget in characters: what one brief carries of it,
-   * and the size at which the curator's run is asked to fold it (hub
-   * memory.ts). Default in hub config.ts.
+   * A project file's budget in characters: what one brief carries of a
+   * file its task names, and the most AGENTS.md may hold (hub memory.ts).
+   * Default in hub config.ts.
    */
   memoryFileChars: "CAWCO_MEMORY_FILE_CHARS",
   /** Where the hub's SQLite file lives, overriding the default data dir. */

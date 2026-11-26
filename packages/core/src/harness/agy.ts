@@ -305,7 +305,7 @@ export const AGY = {
 
   nativeTools: { questions: QUESTIONS, subagents: SUBAGENTS, todos: STEPS },
   boardOnlyDenied: BOARD_DENIED,
-  curatorDenied: [...BOARD_DENIED, ...WEB],
+  trimmerDenied: [...BOARD_DENIED, ...WEB],
   deniedTools: AGY_DENIED_TOOLS,
   tools: { edit: WRITES, fetch: [], powershell: [], search: WEB, shell: RUNS },
   // CawCo runs them, from its one hook in the home's `config/hooks.json`

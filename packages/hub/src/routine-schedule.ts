@@ -9,7 +9,6 @@ import { DAY_MS } from "@cawco/core/time";
 import { Cron, DateTime, Option, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { TriggerIndex } from "./db/task-index";
-import type { ProblemsOf } from "./refusal";
 import type { ParsedTask } from "./task-file";
 
 /**
@@ -17,22 +16,6 @@ import type { ParsedTask } from "./task-file";
  * id>`, so an event runs a routine once, and its retry reads the same event.
  */
 export const EVENT_SLOT = "event:";
-
-/** A run a full inbox started before the nightly memory run (slot `inbox:<time>`): no run takes it now, and the runs kept with it read so. */
-const INBOX_SLOT = "inbox:";
-
-/** A project's one-time memory recovery run (slot `recovery:<time>`): no run takes it now, and the runs kept with it read so. */
-const RECOVERY_SLOT = "recovery:";
-
-/**
- * Makes a project's nightly memory run when it has none (routines.ts
- * `ensureCurator`, declared with this): nothing, or the problem of its
- * schedule ({@link cronOf}). Said here, below both, so memory.ts types its
- * dep from it without importing routines.ts, which imports memory.ts.
- */
-export type EnsureCurator = (
-  projectId: string
-) => ProblemsOf<ReturnType<typeof cronOf>> | undefined;
 
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
 const parsedCache = new Map<string, Cron.Cron>();
@@ -107,12 +90,6 @@ export const slotLabel = (slot: string, timeZone: string): string => {
   }
   if (slot.startsWith(EVENT_SLOT)) {
     return "event";
-  }
-  if (slot.startsWith(INBOX_SLOT)) {
-    return "inbox";
-  }
-  if (slot.startsWith(RECOVERY_SLOT)) {
-    return "recovery";
   }
   return new Intl.DateTimeFormat("en-GB", {
     timeZone,

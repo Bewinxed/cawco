@@ -330,8 +330,6 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     created: ProjectRow,
     asked: ProjectAsk
   ): Promise<string | undefined> | undefined => {
-    // Its nightly memory run, filed with it once it is set up (routines.ts `ensureCurator`).
-    ctx.routines.ensureCurator(created.id);
     const { setup } = asked;
     if (!setup) {
       return;

@@ -1,6 +1,5 @@
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
-import { failureOf } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import type { ArrivingAsk } from "@cawco/core/frames";
@@ -50,7 +49,7 @@ import {
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
 } from "@cawco/core/workspace/controls";
-import { Cause, Effect } from "effect";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
@@ -179,7 +178,6 @@ export type RelayControlContext = Pick<
   | "pickWithMove"
   | "pending"
   | "pendingInstalls"
-  | "memoryRun"
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
@@ -773,39 +771,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         .sessionOwnership(message.machineId)
         .filter((row) => row.sessionId === deleted);
       // The person purges the session: an agent's find no longer answers
-      // with it, and every note it wrote is proposed withdrawn (memory.ts
-      // `purged`), whether or not the hub held it.
+      // with it.
       ctx.db.find.purge(message.machineId, [deleted]);
-      for (const row of rows) {
-        if (row.projectId) {
-          const what = `memory: notes of purged session ${row.id}`;
-          const { projectId } = row;
-          ctx.lifetime.fork(
-            "memory purge",
-            Effect.tryPromise({
-              try: () => ctx.memoryRun.purged(projectId, row.id),
-              catch: (error) => error,
-            }).pipe(
-              Effect.flatMap((purged) =>
-                purged instanceof ElysiaStatus
-                  ? Effect.sync(() =>
-                      console.warn(
-                        `[${what}] failed: ${purged.response.detail}`
-                      )
-                    )
-                  : Effect.void
-              ),
-              Effect.catchCause((cause) =>
-                Effect.sync(() =>
-                  console.warn(
-                    `[${what}] failed: ${failureOf(Cause.squash(cause))}`
-                  )
-                )
-              )
-            )
-          );
-        }
-      }
       if (rows.length > 0) {
         for (const row of rows) {
           ctx.endSession(row.id, "delete-transcript", { kind: "person" });

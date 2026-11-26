@@ -53,7 +53,7 @@ import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
+import { projectRulesWords } from "@cawco/core/words/project-rules";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
 import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
@@ -132,8 +132,8 @@ const GIT_TIMEOUT_MS = 30_000;
 
 const HUB_NAME = "CawCo hub";
 const NO_REPLY = "noreply@cawco.invalid";
-/** A new project's index, in the shape the nightly memory run keeps it (memory-lessons.ts `indexShape`), which names it at its first run. */
-const AGENTS_STUB = `# AGENTS.md\n\n${memoryRunWords.indexIntro}\n\n## Notes\n\n## Rules\n`;
+/** A new project's index: who it is for, the person's Notes, and the Rules `memory_rule` adds to (memory-lessons.ts). */
+const AGENTS_STUB = `# AGENTS.md\n\n${projectRulesWords.indexIntro}\n\n## Notes\n\n## Rules\n`;
 
 /** Who a commit is by: you, or the session that asked for it. */
 export interface FolderAuthor {
@@ -2277,51 +2277,6 @@ const logRecords = async (projectId: string, args: string[]) => {
     .filter(Boolean);
 };
 
-/** A patch's file header (`--- a/AGENTS.md`, `+++ /dev/null`): no line of the file. */
-const FILE_HEADER = /^(?:---|\+\+\+) (?:[ab]\/|\/dev\/null)/u;
-
-/**
- * Each commit of a project's folder since `since` that changed one of
- * `paths`, newest first: when it was made, and the lines it took out and
- * put in (`git log -p --unified=0`, the files' own lines, no
- * headers).
- */
-export const folderLineChanges = async (
-  projectId: string,
-  paths: readonly string[],
-  since: Date
-) => {
-  const records = await logRecords(projectId, [
-    `--since=${since.toISOString()}`,
-    "--patch",
-    "--unified=0",
-    "--no-renames",
-    "--format=%x1e%H%x1f%ct",
-    "--",
-    ...paths,
-  ]);
-  if (records instanceof ElysiaStatus) {
-    return records;
-  }
-  return records.map((record) => {
-    const [first = "", ...lines] = record.split("\n");
-    const [sha = "", seconds = "0"] = first.split("\x1f");
-    const removed: string[] = [];
-    const added: string[] = [];
-    for (const line of lines) {
-      if (FILE_HEADER.test(line)) {
-        continue;
-      }
-      if (line.startsWith("-")) {
-        removed.push(line.slice(1));
-      } else if (line.startsWith("+")) {
-        added.push(line.slice(1));
-      }
-    }
-    return { sha, at: new Date(Number(seconds) * 1000), removed, added };
-  });
-};
-
 /**
  * The name of every entry in one folder as the disk holds it now, committed
  * or not, uncapped and unsorted; none when the folder is not there. A read of
@@ -2811,7 +2766,7 @@ export const FOLDER_WRITE = t.Object({
  * A write as {@link FOLDER_WRITE} takes it, the operator's, into `folder` (a
  * project's, or an area's: {@link areaFolder}), in the folder's commit
  * queue and only over the file as its writer read it: one that changed
- * since (a nightly memory run's commit, an agent's) is refused
+ * since (a memory_rule commit, an agent's) is refused
  * {@link FILE_CHANGED}, never written over. `changed` hears of it once it
  * lands.
  */

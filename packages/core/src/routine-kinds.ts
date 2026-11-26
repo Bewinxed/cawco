@@ -3,22 +3,20 @@ export const ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
   "conversation",
-  "curator",
   "trim",
 ] as const;
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
- * a message to the project's conversation, Caw, the project's memory curator
- * (memory.ts), a delegate in the `curator` role that only the hub makes, or
- * the unused skills and servers routine (hub unused-trim.ts), a delegate in
- * the `trimmer` role that only the hub makes too. A routine's check (hub
+ * a message to the project's conversation, Caw, or the unused skills and
+ * servers routine (hub unused-trim.ts), a delegate in the `trimmer` role
+ * that only the hub makes. A routine's check (hub
  * routine-check.ts) gates any of the first three: it decides whether a run
  * starts, never what starts.
  */
 export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
 
-/** The targets an agent may make a routine for: every one but the curator and the trim, which only the hub makes. */
+/** The targets an agent may make a routine for: every one but the trim, which only the hub makes. */
 export const MADE_ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
@@ -177,7 +175,7 @@ export interface RoutineRunView {
   id: string;
   /**
    * The session that did the run, where it is read whole (`/session/<id>`):
-   * a delegate, orchestrator, curator or trim run's work item's session, from
+   * a delegate, orchestrator or trim run's work item's session, from
    * its start; a conversation run's, once its harness read the run. Null for
    * a run no session took (skipped, one that ended before any began).
    */

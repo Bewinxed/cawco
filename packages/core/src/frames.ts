@@ -440,8 +440,8 @@ export interface PermissionRequestFrame {
   kind: "permission_request";
   /**
    * The session whose conversation made this ask, when the ask is not
-   * parked on that session's own row (a memory curator run's proposal,
-   * parked under its own id on machine "hub"). The ask is drawn and answered
+   * parked on that session's own row (a delegate type proposal, parked
+   * under its own id on machine "hub"). The ask is drawn and answered
    * in that session's pane, at `toolUseId`, as its own asks are.
    */
   originInstanceId?: string;
@@ -517,14 +517,14 @@ interface ParkedRequest extends PermissionRequestFrame, HubAskFields {}
 interface HubAskFields {
   /** A design-system proposal's id (hub design-system.ts). */
   designProposal?: string;
-  /** A memory or delegate-type proposal's id (hub memory.ts). */
-  memoryProposal?: string;
   /** A project move's approval: its job, and the git terms of what it runs (hub moves.ts). */
   move?: { details: string[]; jobId: string };
   /** The project a proposal is for. */
   projectId?: string;
   /** Who made a proposal, in the card's words. */
   proposer?: string;
+  /** A delegate type proposal's id (hub type-proposals.ts). */
+  typeProposal?: string;
 }
 
 interface PermissionSettledFrame {

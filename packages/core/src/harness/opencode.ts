@@ -68,7 +68,7 @@ export const OPENCODE = {
   // In Claude Code's names, which its denied-tool list maps: its `Agent` is
   // its `subagent`.
   boardOnlyDenied: ["Agent", "Bash", "Edit", "Write"],
-  curatorDenied: ["Agent", "Bash", "Edit", "Write", "WebFetch", "WebSearch"],
+  trimmerDenied: ["Agent", "Bash", "Edit", "Write", "WebFetch", "WebSearch"],
   // Its permission actions. 2.0's file writers (`write`, `patch`) ask as
   // `edit`, so `Write` denies `edit` too. Its to-do list, plan-mode tools
   // and `LS` do not exist in 2.0 (a directory is read by `read`): those

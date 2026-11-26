@@ -1,7 +1,6 @@
 /**
  * The unused skills and servers routine (tsk-329 stories 14–19, 21, 23, 24):
- * a routine of the hub's own, as the memory curator is: a task the hub
- * files with target `trim` (routines.ts), its prompt kept here, that
+ * a routine of the hub's own: a task the hub files with target `trim` (routines.ts), its prompt kept here, that
  * proposes trimmed starting sets and changes none itself.
  *
  * - **Offered.** Caw suggests it at the foot of a project's Routines ledger

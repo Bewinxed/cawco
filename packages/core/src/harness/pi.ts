@@ -66,7 +66,7 @@ export const PI = {
   boardOnlyDenied: [...POWERSHELL, ...SHELL, ...EDIT],
   // It has no web tool of its own, and a fenced pi session has none from
   // anywhere else (agent pi-runtime.ts `cawcosExtensionsAlone`).
-  curatorDenied: [...POWERSHELL, ...SHELL, ...EDIT],
+  trimmerDenied: [...POWERSHELL, ...SHELL, ...EDIT],
   // Its names (or `*` patterns, which its `excludeTools` matches). It has no
   // subagent, monitor, worktree, workflow, to-do, plan-mode, notebook or web
   // tool: those names deny nothing there. An MCP tool is

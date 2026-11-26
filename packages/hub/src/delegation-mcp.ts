@@ -6,10 +6,7 @@ import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import type { InstanceRow } from "@cawco/core/protocol";
-import {
-  USABILITY_FEEDBACK_TOOL,
-  usabilityFeedbackWords,
-} from "@cawco/core/words/usability-feedback";
+import { USABILITY_FEEDBACK_TOOL } from "@cawco/core/words/usability-feedback";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -187,7 +184,6 @@ declare const __CAWCO_RELEASE__: boolean | undefined;
 const upfrontFor = (row: InstanceRow | undefined): UpfrontFor => ({
   searcher: row !== undefined && memoryRoleOf(row) === "orchestrator",
   filesTasks: row !== undefined && allows(row, "task_link"),
-  notes: row !== undefined && !!row.projectId && allows(row, "memory_note"),
 });
 
 /**
@@ -387,27 +383,14 @@ const cawcoToolNames = (
 
 /**
  * `defined` as listed while usability feedback is on (`on`), its tool among
- * them and memory_note saying where a tool's trouble goes, or off, as they
- * are. The tool's `tool` enum is CawCo's own tools ({@link cawcoToolNames}).
+ * them, or off, as they are. The tool's `tool` enum is CawCo's own tools ({@link cawcoToolNames}).
  */
 export const withFeedback = (
   defined: readonly ToolDefinition[],
   on: boolean,
   names: () => readonly string[] = () => cawcoToolNames()
 ): ToolDefinition[] =>
-  on
-    ? [
-        ...defined.map((tool) =>
-          tool.name === "memory_note"
-            ? {
-                ...tool,
-                description: `${tool.description} ${usabilityFeedbackWords.noteLine}`,
-              }
-            : tool
-        ),
-        feedbackDefinition(names()).listed(),
-      ]
-    : [...defined];
+  on ? [...defined, feedbackDefinition(names()).listed()] : [...defined];
 
 /**
  * The tools of `all` a session is listed: its role's and its scope's
@@ -566,8 +549,8 @@ export function createDelegationMcp(options: {
   /** The relay tools (relay.ts): a project's public webhook paths, opening one asks you. */
   relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
   /**
-   * The memory tools (memory.ts): notes into a project's inbox, and the
-   * nightly memory run's reads and writes.
+   * The memory tools (memory.ts): `memory_rule`, a project's rules changed
+   * at the person's word.
    */
   memoryTools?: (actor: InstanceRow | undefined) => MemoryTool[];
   /** Caw's `project_settings` (project-settings.ts): his own project's settings, applied or asked about. */
@@ -634,8 +617,7 @@ export function createDelegationMcp(options: {
   /**
    * Usability feedback (usability-feedback.ts): while it is on, its tool is
    * listed, every refusal of a CawCo tool ends with the line naming it and
-   * is kept for a report of it to be grouped by, and memory_note's
-   * description says where tool trouble goes.
+   * is kept for a report of it to be grouped by.
    */
   feedback?: Pick<UsabilityFeedback, "heard" | "on" | "tool" | "withLine">;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */

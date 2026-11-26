@@ -150,6 +150,21 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0477_offers_in_needs_you",
     why: "the hub no longer notes a routine, a task's wait, a design offer or a made repository in the project's conversation: those notes are deleted, the lines now on the routine's or task's comments and the offers in Needs you",
   },
+  {
+    column: "task_triggers.target",
+    migration: "0497_memory_cut",
+    why: "the nightly memory run is gone: every trigger whose target is curator is deleted with its runs, checks and event routes, and its task file is cut from the project's folder as the hub starts (memory-cut.ts)",
+  },
+  {
+    column: "instances.role",
+    migration: "0497_memory_cut",
+    why: "the curator role is gone: a session whose role is curator is set to null, which roles.ts reads as the delegate it was",
+  },
+  {
+    column: "instances.owed_spawn",
+    migration: "0497_memory_cut",
+    why: "the curator role is gone: a spawn owed to a curator run loses its role, and the session spawns as the delegate it reads as",
+  },
 ];
 
 type Schema = Record<string, unknown>;

@@ -123,7 +123,7 @@ const personsAsk = ({ payload }: ArrivingAsk): boolean =>
     payload.browserAsk,
     payload.connectAsk,
     payload.designProposal,
-    payload.memoryProposal,
+    payload.typeProposal,
     payload.move,
   ].some((one) => one !== undefined);
 

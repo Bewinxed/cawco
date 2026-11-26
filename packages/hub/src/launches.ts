@@ -23,7 +23,7 @@ import { resumedKey } from "@cawco/core/protocol";
 import type { Relaunch } from "@cawco/core/relaunch";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { ModeAsk } from "@cawco/core/session-messages";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
+import { projectRulesWords } from "@cawco/core/words/project-rules";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
@@ -266,7 +266,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
         )
       ),
       ...(index
-        ? [{ path: memoryRunWords.indexInstructionPath, content: index }]
+        ? [{ path: projectRulesWords.indexInstructionPath, content: index }]
         : []),
     ];
   };
@@ -663,7 +663,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     }
     const effort = launchEffort(payload, stored);
     const bound: NamedSpawn = {
-      // A fenced run (triage, a memory curator) is fenced on every spawn of
+      // A fenced run (triage, a trim run) is fenced on every spawn of
       // its row: the first, and each revive, restore and relaunch.
       // A clean session is clean on every spawn of its row: no skills, and
       // CawCo's MCP server alone (`cleanSpawn`).

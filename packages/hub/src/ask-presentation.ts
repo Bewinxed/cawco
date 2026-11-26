@@ -136,8 +136,8 @@ export const createAskPresenter = (
     instanceId: string | undefined,
     payload: { proposer?: unknown }
   ): { asker: string; project?: string } => {
-    // A memory proposal (memory.ts) is no session's: it names who proposed
-    // it and its project ("Memory curator · cawco").
+    // A delegate type proposal (type-proposals.ts) is no session's: it
+    // names who proposed it and its project ("Caw · cawco").
     if (typeof payload.proposer === "string") {
       return { asker: payload.proposer };
     }

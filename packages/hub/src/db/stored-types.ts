@@ -133,31 +133,6 @@ export interface InstallsRecord {
   })[];
 }
 
-/** `memory/state.json`: where a project's nightly memory run stands. */
-export interface MemoryRunState {
-  /** Messages a run was given and named in no operation: read once more, then dropped. */
-  carried: string[];
-  /** What the last run did, said in its line. */
-  lastRun: {
-    added: number;
-    at: string;
-    dropped: number;
-    read: number;
-    replaced: number;
-    /** Checks filed as tasks; none before it was counted. */
-    checks?: number;
-    /** Lessons put back because the person stated them again; none before it was counted. */
-    restored?: number;
-    retired: number;
-    /** Lessons taken back because the person stated the opposite; none before it was counted. */
-    reverted?: number;
-    /** Lessons staged from one note; none since staging was removed. */
-    staged?: number;
-  } | null;
-  /** The newest of the person's messages a run has read (an ISO time). */
-  through: string;
-}
-
 /** One file a proposal changes (proposal-base.ts). */
 export type ProposalFile = ProposedFile;
 
@@ -170,8 +145,6 @@ export interface Proposal {
   /** Every file it changes, in the order the card draws them. */
   files: ProposalFile[];
   id: string;
-  /** Notes it cites: none for a delegate type; kept by proposals from before the nightly memory run. */
-  notes: string[];
   projectId: string;
   /** The proposing session. */
   session: string;

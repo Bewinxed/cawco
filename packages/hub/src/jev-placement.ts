@@ -56,13 +56,6 @@ const ROWS = {
   judged: "Judged checks",
   phone: "Phone requests",
   order: "Dispatch order",
-  // Asked in memory-run.ts: what the person's messages are, whether a
-  // message states a lesson, whether a new lesson says what a kept one
-  // says; and in memory.ts, what an attempt's brief carries.
-  said: "What the person said",
-  support: "Lesson source",
-  kept: "Lesson kept already",
-  context: "Brief context",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",
 } as const;
@@ -98,7 +91,7 @@ export const tailOf = (text: string, max: number): string =>
  * One Jev call for one or more rows asked together (one call, one price:
  * questions over one state are evaluated in parallel), logged as one line.
  */
-export async function askRow<
+async function askRow<
   const Questions extends Readonly<
     Record<string, Experimental_DecisionQuestion>
   >,

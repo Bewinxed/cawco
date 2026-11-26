@@ -1918,8 +1918,8 @@ const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
 const SESSION_DEFAULTS = { autoCompactWindow: 1_000_000 } as const;
 
 /**
- * Flag settings a fenced session (a memory curator or fleet-watch triage
- * run, {@link SpawnPayload.fence}) launches with besides: no claude.ai
+ * Flag settings a fenced session (a trim or fleet-watch triage run,
+ * {@link SpawnPayload.fence}) launches with besides: no claude.ai
  * account connectors. `strictMcpConfig` keeps every other MCP source out
  * ("Only use MCP servers passed via the `mcpServers` option … ignoring all
  * other MCP configurations: project `.mcp.json`, user settings, plugins, and
@@ -2026,8 +2026,8 @@ const compactionHooks = (
       };
 
 /**
- * Every session's environment: no auto memory, so what lasts goes through
- * CawCo's `memory_note`. The env var outranks every settings layer ("Set to
+ * Every session's environment: no auto memory, so a project's memory is its
+ * rules file alone (AGENTS.md, which CawCo loads at launch). The env var outranks every settings layer ("Set to
  * `1` to disable auto memory. Set to `0` to force auto memory on even when
  * `--bare` mode or `autoMemoryEnabled: false` would otherwise disable it",
  * code.claude.com/docs/en/env-vars), so it is set last, over the caller's.

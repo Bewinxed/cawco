@@ -141,8 +141,9 @@ const wholeFrom = (
 };
 
 /**
- * A knowledge file's budget, in characters: what one brief carries of it
- * (memory.ts `contextFor`).
+ * A project file's budget, in characters: what one brief carries of a file
+ * its task names (memory.ts `contextFor`), and the most AGENTS.md holds
+ * (memory-lessons.ts).
  * The default is the replay's pick (the memory-replay probe, cut on 2026-10-26,
  * 2026-10-18, 24 topic files): 8,000 and 12,000 fold the same 5 files, the
  * ones past either; 6,000 adds three that sit just over it (6.4k to 6.9k);

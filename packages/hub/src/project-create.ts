@@ -18,7 +18,7 @@
  *   setup picks one, as New project leaves it.
  * - **One path**: the call is `POST /api/projects`'s own ask, made with Caw
  *   (project-joining.ts `newProject`): the same name rule, the same
- *   project row, nightly memory run and setup conversation, started with the
+ *   project row and setup conversation, started with the
  *   words as the person's own (caw.ts `setup`, the project-setup skill).
  * - **Answer**: the project's link, and its conversation's once it has
  *   started (the call waits for that start, as `start_session` waits for

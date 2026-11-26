@@ -96,7 +96,7 @@ export const CLAUDE = {
     questions: ["AskUserQuestion"],
   },
   boardOnlyDenied: BOARD_ONLY,
-  curatorDenied: [...BOARD_ONLY, ...FETCH, ...SEARCH],
+  trimmerDenied: [...BOARD_ONLY, ...FETCH, ...SEARCH],
   // Denied-tool lists are written in its names: Claude Code refuses a
   // lowercase rule in settings.json.
   deniedTools: { by: "own-settings" },

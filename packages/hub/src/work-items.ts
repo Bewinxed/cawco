@@ -560,7 +560,7 @@ export interface WorkItemRequest extends DelegateCall {
   reuseOn?: string[];
   /**
    * The toolset its session runs in, over its type's: set by the hub alone
-   * (a memory curator run's `curator`, routines.ts), never by a tool call.
+   * (a trim run's `trimmer`, routines.ts), never by a tool call.
    */
   role?: SessionRole;
   /**
@@ -1066,7 +1066,7 @@ const sessionOf = (
     : {}),
   // Its type's toolset (§5.3), kept on its row: a web-facing type's
   // sessions never see posting or admin tools. The hub's own role for it
-  // (a curator run's) stands over the type's.
+  // (a trim run's) stands over the type's.
   ...((role ?? type?.role) ? { role: role ?? type?.role } : {}),
   // Nested under its parent, and kept out of the catalogs as a spin-off
   // is; the workspace, not the session, owns the checkout.

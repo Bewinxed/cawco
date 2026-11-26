@@ -282,7 +282,7 @@ export const QUESTION_TOOL_DENIED: readonly string[] =
  * (opencode.ts `STATIC_POLICY`), and pi raises no permission prompt.
  *
  * A tool that writes anything (an artifact, a title, a task, a wait, a
- * memory note) is not here: it asks as the session's mode says.
+ * rule) is not here: it asks as the session's mode says.
  */
 export const PERSON_AND_READ_TOOLS = [
   // Reach the person: an ask the hub parks, a line or a picture in the
@@ -306,7 +306,6 @@ export const PERSON_AND_READ_TOOLS = [
   "artifact_read",
   "comment_read",
   "design_map",
-  "memory_read",
   // Ends the turn. A prompt in front of it would ask the person about a turn
   // that has nothing for them; refused, Claude Code's nudge comes back.
   NO_REPLY_TOOL,
@@ -317,8 +316,7 @@ export const PERSON_AND_READ_TOOLS = [
  * toolset per role). A session's credential names its row, and the row its
  * role: `web-facing` a session that reads the outside world and so gets no
  * posting or admin tools, `overseer` fleet-watch
- * triage, `curator` a project's memory curator run (the hub starts it, never
- * a type), `trimmer` a run of the unused skills and servers routine (the hub
+ * triage, `trimmer` a run of the unused skills and servers routine (the hub
  * starts it too, never a type). A row with none is a `delegate` when something delegated it, else
  * a `worker` (a session you or another session started).
  */
@@ -327,7 +325,6 @@ export const SESSION_ROLES = [
   "delegate",
   "overseer",
   "web-facing",
-  "curator",
   "trimmer",
 ] as const;
 export type SessionRole = (typeof SESSION_ROLES)[number];

@@ -1289,12 +1289,7 @@ const FilingStageShape = declared(
 export type FilingStageOutput = z.output<typeof FilingStageShape>;
 
 const FilingWroteShape = declared(
-  z.object({
-    notes: z.number(),
-    steps: z.number(),
-    tasks: z.number(),
-    todos: z.number(),
-  }),
+  z.object({ steps: z.number(), tasks: z.number(), todos: z.number() }),
   "FilingWrote",
   "packages/core/src/context-filing.ts"
 );
@@ -2041,7 +2036,6 @@ export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
 
 const FiledRecordsShape = declared(
   z.object({
-    notes: z.array(z.string()),
     steps: z.array(z.string()),
     tasks: z.array(z.string()),
     todos: z.array(z.string()),
@@ -4205,12 +4199,12 @@ export type PermissionRequestFrameOutput = z.output<
 const HubAskFieldsShape = declared(
   z.object({
     designProposal: z.string().optional(),
-    memoryProposal: z.string().optional(),
     move: z
       .object({ details: z.array(z.string()), jobId: z.string() })
       .optional(),
     projectId: z.string().optional(),
     proposer: z.string().optional(),
+    typeProposal: z.string().optional(),
   }),
   "HubAskFields",
   "packages/core/src/frames.ts"

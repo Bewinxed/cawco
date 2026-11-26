@@ -2575,10 +2575,6 @@ export const sentMessages = sqliteTable(
       table.originKind,
       table.acceptedAt
     ),
-    // The person's words over every session in a time window (db/sends.ts
-    // `personSaidIn`, a project's nightly memory run): with only the index
-    // above, SQLite walked every send's entry of it to find his.
-    index("sent_messages_origin_time").on(table.originKind, table.acceptedAt),
     // The sends still pending, oldest first, fleet-wide (db/sends.ts
     // `pendingSends`, `owedSessionsHeld`, `unkeptSends`): a handful of rows,
     // where `state` alone named every send the hub ever kept.

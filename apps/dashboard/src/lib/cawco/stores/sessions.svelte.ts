@@ -53,8 +53,8 @@ export interface PendingPermission {
   input: Record<string, unknown>;
   instanceId: string;
   /**
-   * The session whose pane draws the ask when it is not its own (a memory
-   * curator run's proposal, parked under its own id on machine "hub").
+   * The session whose pane draws the ask when it is not its own (a delegate
+   * type proposal, parked under its own id on machine "hub").
    */
   originInstanceId?: string;
   /** What the ask says, as the hub read it parking it: the same words on every surface. */

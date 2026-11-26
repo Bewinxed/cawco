@@ -181,7 +181,6 @@ import type { createMachineContact } from "./machine-contact";
 import type { MachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
 import type { createMemory } from "./memory";
-import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
 import type { NeedsRows } from "./needs-rows";
 import type { createNotifications } from "./notifications";
@@ -802,8 +801,6 @@ export interface ClosureContext {
   mayRun: (status: string) => boolean;
   mcpChanges: FleetMcpChanges;
   mcpReady: Promise<unknown>;
-  /** A project's nightly memory run and every write to its memory files (memory-run.ts). */
-  memoryRun: MemoryRun;
   merging: MergeDeps;
   /** What `harness` lists on `machineId` (core `modelListingOn`). */
   modelListing: (machineId: string, harness: HarnessKind) => ModelListing;

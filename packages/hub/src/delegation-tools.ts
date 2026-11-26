@@ -24,7 +24,6 @@ import { LANDS_MODES } from "@cawco/core/injected";
 import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { REFERENCE_GUIDANCE } from "@cawco/core/references";
 import { kindsLine } from "@cawco/core/words/decides-lines";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import {
@@ -1125,7 +1124,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "open_items",
-      "Your open items: your plan, task to-dos, filed tasks, inbox notes, your asks, every question your tree put to the person, and your project's open questions to them. Use it first after a compaction, and to see which questions were answered.",
+      "Your open items: your plan, task to-dos, filed tasks, your asks, every question your tree put to the person, and your project's open questions to them. Use it first after a compaction, and to see which questions were answered.",
       {
         cursor: z
           .string()
@@ -1472,8 +1471,6 @@ const ALWAYS_LOAD: ReadonlySet<string> = new Set([
 export interface UpfrontFor {
   /** Its role has task_link (roles.ts). */
   filesTasks: boolean;
-  /** It may call memory_note: its role allows it and it is in a project, the inbox a note goes to (memory.ts `inboxOf`). */
-  notes: boolean;
   /** An orchestrator or a project's Caw (roles.ts `memoryRoleOf`). */
   searcher: boolean;
 }
@@ -1485,17 +1482,11 @@ export interface UpfrontFor {
  * what a session said, with the dashboard's own search a tool away
  * (2026-10-19). Every other session loads it through ToolSearch like any
  * deferred tool.
- *
- * `memory_note` loads upfront for every session that may call it: a session
- * orchestrating the marketing project saved four memories as files in
- * Claude Code's own auto memory and never once called memory_note, which
- * sat deferred and unnamed (2026-11-17).
  */
 export const loadsUpfront = (name: string, upfront: UpfrontFor): boolean =>
   ALWAYS_LOAD.has(name) ||
   (upfront.searcher && name === "find") ||
-  (upfront.filesTasks && CORE_TASK_TOOLS.has(name)) ||
-  (upfront.notes && name === "memory_note");
+  (upfront.filesTasks && CORE_TASK_TOOLS.has(name));
 
 /**
  * The core task tools load upfront together for a session that files tasks
@@ -1553,13 +1544,6 @@ const LEAF_FINISHING =
 const BLOCKS =
   "Blocks: a block is a small UI drawn inline in this chat's transcript, between your reply's paragraphs, and read on a desk and on a phone. When a reply compares options, tracks many items, or shows figures, a chart or a diagram, draw it as a block in place of a markdown table. Prose stays prose, and a choice for the person goes through ask or a decision page. Load the inline-block skill before your first block.";
 
-/**
- * Where a session that may call memory_note ({@link UpfrontFor} `notes`)
- * keeps what should outlast it: said once at its start, beside the tool
- * loaded upfront, so the project's memory is its first reach.
- */
-const NOTES = memoryRunWords.noteLine;
-
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   view: Pick<ToolView, "mayStart">,
@@ -1571,8 +1555,7 @@ export function handoffInstructions(
   // dashboard draws the link as that session's chip.
   // Who decides' kinds are the fleet's rows: the live list, read as the
   // session starts, so a kind added reaches the next session.
-  const notes = listable.upfront.has("memory_note") ? `\n\n${NOTES}` : "";
-  const naming = `${DECIDES_RULE} ${kindsLine(kinds)}${notes}\n\n${REFERENCE_GUIDANCE}\n\n${BLOCKS}\n\n${ANSWERS}`;
+  const naming = `${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${BLOCKS}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")

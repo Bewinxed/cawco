@@ -62,13 +62,10 @@ import { startingSetOfLines } from "./project-starting-set";
 import { listOf, scalarOf } from "./task-file";
 
 /**
- * The toolsets a type may run in (§5.3's roles): every role but `curator`
- * and `trimmer`, the memory curator's and the trim routine's runs alone (the
- * hub starts them, never a type).
+ * The toolsets a type may run in (§5.3's roles): every role but `trimmer`,
+ * the trim routine's runs alone (the hub starts them, never a type).
  */
-const TYPE_ROLES = SESSION_ROLES.filter(
-  (role) => role !== "curator" && role !== "trimmer"
-);
+const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "trimmer");
 
 const BUDGET_PERIODS = ["attempt", "task", "day", "week", "month"] as const;
 
@@ -214,9 +211,6 @@ const projectFieldsOf = (
       "budget" | "lands" | "connections" | "role" | "mayStart" | "startingSet"
     > => {
   const role = fields.scalar("role");
-  if (role === "curator") {
-    return delegateTypesWords.problemCuratorRole;
-  }
   if (role === "trimmer") {
     return delegateTypesWords.problemTrimmerRole;
   }

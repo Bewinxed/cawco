@@ -26,10 +26,6 @@ export const usabilityFeedbackWords = {
   refusalLine:
     "If this refusal is wrong or leaves you no way forward, tell CawCo with usability_feedback.",
 
-  /** memory_note's line while feedback is on: friction with a tool is reported, not remembered. */
-  noteLine:
-    "Trouble with a CawCo tool itself goes to usability_feedback, which reports it to CawCo.",
-
   /** The tool's answers. */
   opened: (url: string) =>
     `Filed a new issue: ${url}. Carry on with your work.`,

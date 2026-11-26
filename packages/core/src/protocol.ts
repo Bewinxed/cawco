@@ -178,8 +178,8 @@ export interface SpawnPayload {
    */
   effort?: import("./harness/kinds").EffortLevel;
   /**
-   * This spawn is a project's memory curator or a fleet-watch triage run (a
-   * `curator` or `overseer` row): the machine gives it CawCo's MCP server
+   * This spawn is a run of the unused skills and servers routine or a
+   * fleet-watch triage run (a `trimmer` or `overseer` row): the machine gives it CawCo's MCP server
    * and no other. Set by the hub alone, on every launch of such a row, and
    * never taken from a caller.
    */

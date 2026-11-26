@@ -91,29 +91,21 @@ const MONDAYS_AT_NINE = {
 const OWN: Routine[] = [
   {
     ...base,
-    id: "curator",
-    name: "Memory curator",
-    cron: "0 6 * * *",
+    ...MONDAYS_AT_NINE,
+    id: "trim",
+    name: "Unused skills and servers",
     enabled: true,
     createdBy: "hub",
-    target: "curator",
-    prompt: "Fold, reshape and archive the project's knowledge files.",
-    nextRuns: weekOf(6, [0, 1, 2, 3, 4, 5, 6]),
-    nextRunsCut: false,
-    nextSlot: weekOf(6, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
-    schedule: {
-      cron: "0 6 * * *",
-      nextAt: weekOf(6, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
-      timeZone: base.timeZone,
-      words: "At 06:00, every day (Europe/London)",
-    },
+    target: "trim",
+    prompt:
+      "Each Monday, proposes unlisting the skills and servers no session called in 30 days; nothing changes until you approve.",
     runs: [
       run(
-        "c1",
+        "t1",
         5 * HOUR_MS,
-        6,
+        9,
         "delivered",
-        "Proposed folding two lines of decisions.md."
+        "Proposed unlisting two skills no session called in 30 days."
       ),
     ],
     runsTotal: 1,

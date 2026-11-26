@@ -2,11 +2,10 @@
  * A project's delegate type proposals (§5.1, "Caw can propose a new type as
  * a file diff you approve"): Caw's `folder_write` of a `delegates/` file,
  * checked to make a type whole (project-delegate-types.ts), kept as
- * `memory/proposals/<id>.json` and parked for the person through the hub's
- * one needs-you path (pending.ts), drawn as a diff on every surface (core
+ * `proposals/<id>.json` and parked for the person through the hub's one
+ * needs-you path (pending.ts), drawn as a diff on every surface (core
  * permission-presentation.ts). A delegate type is fleet configuration, so
- * it waits for him; the project's memory files never pass through here
- * (memory-run.ts writes them with nothing waiting).
+ * it waits for him.
  *
  * - **Approve** commits it as the person; a file changed since is merged
  *   three ways (proposal-base.ts), and refused when it no longer applies.
@@ -14,9 +13,7 @@
  * - **Reject** takes the proposal file out.
  * - **No longer applying**: every commit to a file it changes reads it
  *   again, and one that no longer applies closes then, its session told.
- * - **The hub starting** parks every open one again. A memory proposal from
- *   before the nightly run (its files not under `delegates/`) is closed
- *   then, once, its notes left in the inbox for the run.
+ * - **The hub starting** parks every open one again.
  */
 
 import type { ArrivingAsk } from "@cawco/core/frames";
@@ -27,7 +24,6 @@ import type { PermissionResult } from "@cawco/core/session-messages";
 import { shortSha } from "@cawco/core/short-id";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -47,7 +43,8 @@ import {
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
 
-const PROPOSALS_DIR = "memory/proposals";
+/** Where a project keeps its open proposals, one file each. */
+export const PROPOSALS_DIR = "proposals";
 /** Where a project's delegate types are, one file each (project-delegate-types.ts). */
 const DELEGATES_DIR = "delegates/";
 const PROPOSAL_ID = /^p-\d{8}-\d{6}-[0-9a-f]{6}$/u;
@@ -83,10 +80,6 @@ const wholeProposal = (parsed: Proposal): boolean =>
 /** A proposal's files, by path, as one line: its log's and its commit's. */
 const pathsOf = (proposal: Proposal): string =>
   proposal.files.map((file) => file.path).join(", ");
-
-/** Whether a proposal changes delegate types alone: one from before the nightly run changes memory files, and is closed. */
-const typesOnly = (proposal: Proposal): boolean =>
-  proposal.files.every((file) => file.path.startsWith(DELEGATES_DIR));
 
 /** A file the person edited in a card's diff, as their answer carries it. */
 const EditedFile = z.object({ content: z.string(), path: z.string() });
@@ -212,11 +205,10 @@ export const createTypeProposals = ({
       toolName: DELEGATE_TYPE_PROPOSAL_TOOL,
       input: {
         files: proposal.files,
-        notes: proposal.notes,
         why: proposal.why,
         project: projectName,
       },
-      memoryProposal: proposal.id,
+      typeProposal: proposal.id,
       projectId: proposal.projectId,
       proposer: `${proposal.by} · ${projectName}`,
       raisedAt: new Date(proposal.time).getTime(),
@@ -270,14 +262,14 @@ export const createTypeProposals = ({
     const project = projectId ? db.project(projectId) : undefined;
     if (!project) {
       return problem(409, {
-        code: "memory-session-no-project",
+        code: "type-proposal-no-project",
         detail: "This session is in no project, so it has no delegates/.",
       });
     }
     const misfit = typeFileProblem(path, content);
     if (misfit) {
       return problem(400, {
-        code: "memory-type-unfit",
+        code: "type-proposal-unfit",
         detail: `${path} was not proposed: ${misfit}`,
       });
     }
@@ -287,7 +279,7 @@ export const createTypeProposals = ({
     }
     if (before === content) {
       return problem(409, {
-        code: "memory-change-empty",
+        code: "type-proposal-empty",
         detail: `${path} already says exactly that; nothing to change.`,
       });
     }
@@ -302,7 +294,6 @@ export const createTypeProposals = ({
       projectId: project.id,
       files: [{ path, before, content }],
       base: history.commits[0]?.sha ?? "",
-      notes: [],
       why: before
         ? `a change to the delegate type ${name}`
         : `a new delegate type, ${name}`,
@@ -431,13 +422,13 @@ export const createTypeProposals = ({
       const edited = EditedFile.safeParse(each);
       if (!edited.success) {
         return problem(400, {
-          code: "memory-edit-unshaped",
+          code: "type-proposal-edit-unshaped",
           detail: "Each edited file is `{ path, content }`.",
         });
       }
       if (!proposal.files.some((file) => file.path === edited.data.path)) {
         return problem(400, {
-          code: "memory-edit-not-proposed",
+          code: "type-proposal-edit-not-proposed",
           detail: `${edited.data.path} is not a file this proposal changes.`,
         });
       }
@@ -451,7 +442,7 @@ export const createTypeProposals = ({
       const misfit = typeFileProblem(file.path, file.content);
       if (misfit) {
         return problem(400, {
-          code: "memory-type-unfit",
+          code: "type-proposal-unfit",
           detail: `${file.path} was not approved: ${misfit}`,
         });
       }
@@ -552,52 +543,13 @@ export const createTypeProposals = ({
     settle(requestId);
   };
 
-  /** The memory proposals from before the nightly run closed, in one commit: their notes stay in the inbox for the run. */
-  const closeMemoryProposals = async (
-    project: ProjectRow,
-    memory: Proposal[]
-  ) => {
-    if (memory.length === 0) {
-      return;
-    }
-    const closed = await changeFolderFiles(
-      project.id,
-      {
-        writes: [],
-        deletes: memory.map(
-          (proposal) => `${PROPOSALS_DIR}/${proposal.id}.json`
-        ),
-      },
-      {
-        author: HUB,
-        message: `memory: ${memory.length} open proposal${memory.length === 1 ? "" : "s"} closed. ${memoryRunWords.proposalClosed}`,
-      }
-    );
-    if (closed instanceof ElysiaStatus) {
-      return closed;
-    }
-    folderChanged(project.id);
-  };
-
-  /**
-   * A project's open proposals parked again as the hub starts, each that no
-   * longer applies closed. One from before the nightly run that changes
-   * memory files is closed once, in one commit: its notes stay in the inbox
-   * for the run.
-   */
+  /** A project's open proposals parked again as the hub starts, each that no longer applies closed. */
   const parkAgain = async (project: ProjectRow) => {
     const proposals = await proposalsOf(project.id);
     if (proposals instanceof ElysiaStatus) {
       return proposals;
     }
-    const closed = await closeMemoryProposals(
-      project,
-      proposals.filter((proposal) => !typesOnly(proposal))
-    );
-    if (closed) {
-      return closed;
-    }
-    for (const proposal of proposals.filter(typesOnly)) {
+    for (const proposal of proposals) {
       // The folder may have changed while no hub watched it.
       const merged = await mergedNow(proposal);
       if (merged instanceof ElysiaStatus) {

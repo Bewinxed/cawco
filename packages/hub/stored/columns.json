@@ -7230,7 +7230,6 @@
               "delegate",
               "overseer",
               "web-facing",
-              "curator",
               "trimmer"
             ]
           },
@@ -7363,7 +7362,6 @@
       "delegate",
       "overseer",
       "web-facing",
-      "curator",
       "trimmer"
     ]
   },
@@ -7669,12 +7667,6 @@
   "limit_compactions.records": {
     "type": "object",
     "properties": {
-      "notes": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
       "steps": {
         "type": "array",
         "items": {
@@ -7695,7 +7687,6 @@
       }
     },
     "required": [
-      "notes",
       "steps",
       "tasks",
       "todos"
@@ -11301,9 +11292,6 @@
           "designProposal": {
             "type": "string"
           },
-          "memoryProposal": {
-            "type": "string"
-          },
           "move": {
             "type": "object",
             "properties": {
@@ -11326,6 +11314,9 @@
             "type": "string"
           },
           "proposer": {
+            "type": "string"
+          },
+          "typeProposal": {
             "type": "string"
           }
         },
@@ -14083,7 +14074,6 @@
       "delegate",
       "orchestrator",
       "conversation",
-      "curator",
       "trim"
     ]
   },

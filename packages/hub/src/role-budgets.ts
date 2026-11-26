@@ -321,19 +321,23 @@ import {
  * 2026-11-26: Antigravity joins the harnesses (tsk-340): every tool schema
  * that names a harness lists `agy` beside the others (worker 34,149
  * measured).
+ * 2026-11-26: a project's memory is its rules file (tsk-578): memory_note
+ * and memory_withdraw leave every list, the curator role and its
+ * memory_read and memory_apply go, and memory_rule says it changes a rule
+ * at the person's word (worker 33,360, delegate 13,945 measured); both
+ * budgets are lowered to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 34_149,
-  delegate: 14_631,
+  worker: 33_360,
+  delegate: 13_945,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1550,
   trimmer: 1400,
 };
 
 /**
  * A typical session of each role: a session you started, a leaf work item,
- * triage, a web-facing work item, a memory curator run. The worker and the
+ * triage, a web-facing work item, a trim run. The worker and the
  * delegate are in a project: one in none is listed fewer tools
  * (delegation-mcp.ts `PROJECT_ONLY`, roles.ts `allows`), and the budget holds
  * the most a role is listed.
@@ -357,13 +361,6 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
     role: "trimmer",
     projectId: "project",
     parentInstanceId: "routine:trim",
-    workItemId: "item",
-    mayStart: [],
-  },
-  curator: {
-    role: "curator",
-    projectId: "project",
-    parentInstanceId: "routine:curator",
     workItemId: "item",
     mayStart: [],
   },

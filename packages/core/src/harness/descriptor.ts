@@ -274,8 +274,6 @@ interface HarnessDescriptorFacts<K extends string> {
   readonly costMeaning: "estimated" | "real";
   /** Where it keeps its logins on the host, which no workspace reads. Security, as {@link cloneConfig} is. */
   readonly credentialPlaces: readonly CredentialPlace[];
-  /** What a project's memory curator may never call on it: the board-only list, and the web. */
-  readonly curatorDenied: readonly string[];
 
   /**
    * How a session outlives the agent. `keeper`: its process is the keeper's
@@ -414,6 +412,8 @@ interface HarnessDescriptorFacts<K extends string> {
 
   /** Its tools of the kinds CawCo's permissions read. */
   readonly tools: HarnessToolNames;
+  /** What a run of the unused skills and servers routine may never call on it: the board-only list, and the web. */
+  readonly trimmerDenied: readonly string[];
   /** What it takes as a model no row lists. */
   readonly unlistedModels: UnlistedModels;
   /** Whether CawCo scans its usage and limits. */

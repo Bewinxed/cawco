@@ -262,8 +262,8 @@ const isQuerySend = ({ message }: SendPayload): boolean =>
  * opening, a report): it speaks as that session or the hub, never as the
  * person. The person's words come in at four places only, each stamped by
  * the hub (stream.ts, caw.ts, moves.ts and {@link personsMessage}); the
- * project's memory reads a send of origin `human` as his (db sends.ts
- * `personSaidIn`), so no session's tool may compile one.
+ * hub reads a send of origin `human` as his (db sends.ts `personSaidOf`,
+ * `personSaidLast`), so no session's tool may compile one.
  */
 export type SessionSend = SentMessage & {
   origin: Exclude<NeutralOrigin, { kind: "human" }>;

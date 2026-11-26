@@ -49,9 +49,9 @@ export interface RunStart {
   orchestrator: boolean;
   /** Its work item's parent: the routine, at the place dispatch cut it. */
   parent: { id: string; name: string };
-  /** In place of the task's description: the hub's own prompt (the curator's). */
+  /** In place of the task's description: the hub's own prompt (the trim's). */
   prompt?: string;
-  /** The role it runs in (`curator`, `trimmer`); its type's otherwise. */
+  /** The role it runs in (`trimmer`); its type's otherwise. */
   role?: SessionRole;
   runId: string;
 }

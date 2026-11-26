@@ -13,7 +13,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  lte,
   or,
   type SQL,
   sql,
@@ -205,21 +204,6 @@ export interface SendsDb {
   readonly owedSessionsHeld: (holds: readonly SendHold[]) => string[];
   /** Every send still pending (accepted, not yet read by its session), each session's oldest first. */
   readonly pendingSends: () => SentMessageRow[];
-  /**
-   * What the person typed to sessions of `projectId`, oldest first: sends of
-   * origin `human` (stamped by the hub where his words come in, never by a
-   * session's tools: sends.ts `SessionSend`), pending or read, not replaced
-   * by a retry, accepted after `after` and at or before `through`; a slash
-   * command (a word to the harness, as {@link personUnanswered} skips it)
-   * left out. At most `limit`. Found by each session's origin index
-   * (`sent_messages_origin`), the project's sessions first.
-   */
-  readonly personSaidIn: (
-    projectId: string,
-    after: Date,
-    through: Date,
-    limit: number
-  ) => PersonSaid[];
   /**
    * The person's newest message to any of these sessions: a send of origin
    * `human`, pending or read, not replaced by a retry, not a slash command.
@@ -560,37 +544,6 @@ export const sendsDb = (core: DbCore): SendsDb => {
       }
       return last.state === "read" ? "read" : "pending";
     },
-    personSaidIn: (projectId, after, through, limit) =>
-      db
-        .select({
-          uuid: sentMessages.uuid,
-          instanceId: sentMessages.instanceId,
-          acceptedAt: sentMessages.acceptedAt,
-          body: sentMessageBodies.body,
-        })
-        .from(instances)
-        .innerJoin(sentMessages, eq(sentMessages.instanceId, instances.id))
-        .innerJoin(
-          sentMessageBodies,
-          eq(sentMessageBodies.uuid, sentMessages.uuid)
-        )
-        .where(
-          and(
-            eq(instances.projectId, projectId),
-            eq(sentMessages.originKind, "human"),
-            gt(sentMessages.acceptedAt, after),
-            lte(sentMessages.acceptedAt, through),
-            inArray(sentMessages.state, ["pending", "read"]),
-            isNull(sentMessages.replacedBy)
-          )
-        )
-        .orderBy(asc(sentMessages.acceptedAt))
-        .limit(limit)
-        .all()
-        .flatMap(({ body, ...said }) => {
-          const text = wordsOf(body).trim();
-          return text && !text.startsWith("/") ? [{ ...said, text }] : [];
-        }),
     personSaidOf: (id) => {
       const [said] = sends()
         .where(

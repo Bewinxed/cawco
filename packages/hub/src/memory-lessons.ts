@@ -1,142 +1,66 @@
 /**
- * A project's memory as lines in its files (memory-run.ts writes them,
- * memory.ts reads them): the line format, the files they live in, and the
- * four changes to them, as pure functions over the files' words. Nothing
- * here reads or writes a file.
+ * A project's rules as lines in its files (memory.ts reads and changes
+ * them): the line format, the files they live in, and the three changes to
+ * them, as pure functions over the files' words. Nothing here reads or
+ * writes a file.
  *
- * - **A lesson** is one line, `- <rule or fact, one sentence> (L-7f3a2c)`,
- *   with at most one `  Why: <one line>` under it and, for a fact a file
- *   bears out, one `  Anchor: <path> | <match>`: the file in the project's
- *   checkout and the literal string in it, which the reading agent can use
- *   and upkeep reads again. Its id is `L-` and six hex characters.
+ * - **A rule** is one line, `- <rule, one sentence> (L-7f3a2c)`, with at
+ *   most one `  Why: <one line>` under it (and, on a line kept from before
+ *   2026-11-26, one `  Anchor: <path> | <match>`). Its id is `L-` and six
+ *   hex characters, the name `memory_rule` changes it by.
  * - **Provenance is git's**: each change is one commit, whose author says
- *   who made it, whose date says when, and whose message names its sources
- *   by reference; `git log -S "(L-7f3a2c)"` finds every change of a line.
- * - **Homes**, by how a lesson reaches a session: the index, `AGENTS.md`
- *   (its `## Rules`, loaded into every session of the project at launch);
- *   a skill's lessons, `lessons/<skill>.md` (read when that skill runs: the
- *   index's `## Skills` points to each, a line this module writes); a
- *   knowledge topic, `knowledge/<topic>.md` (carried into an attempt's
- *   brief by the task's words). `knowledge/archive/`, where the archive by
- *   disuse put lines before 2026-11-24, is history, read by no session.
+ *   who made it and whose date says when; `git log -S "(L-7f3a2c)"` finds
+ *   every change of a line.
+ * - **Files**: the index, `AGENTS.md` (its `## Rules`, loaded into every
+ *   session of the project at launch); a skill's lessons,
+ *   `lessons/<skill>.md` (the index's `## Skills` points to each, a line
+ *   this module keeps); and `knowledge/<topic>.md`, lines kept from before
+ *   2026-11-26 that a rule may still be reworded or removed in. A new rule
+ *   goes in the index.
  * - **The person's own lines**: the index's `## Notes` and every section of
- *   it this module does not keep (a setup's) are his, and no change here
- *   edits them.
- * - **Changes**: add, reword, remove and move a line
- *   ({@link applyLineChange}); a change that would take a file
- *   past its character budget is refused ({@link CAPS}), and nothing moves
- *   out on its own.
+ *   it this module does not keep are his, and no change here edits them.
+ * - **Changes**: add, reword and remove a line ({@link applyLineChange});
+ *   a change that would take a file past its character budget is refused.
  */
-import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { memoryRunWords } from "@cawco/core/words/memory-run";
+import { projectRulesWords } from "@cawco/core/words/project-rules";
 import { MEMORY_FILE_CHARS } from "./config";
 
 export const KNOWLEDGE_DIR = "knowledge";
-/** Where knowledge lessons were archived for disuse before 2026-11-24: `knowledge/archive/<topic>.md`, history no brief carries. */
-export const KNOWLEDGE_ARCHIVE = "knowledge/archive";
-export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/u;
-/** The brand kit: `knowledge/brand/…` and `knowledge/brand*.md`; images and voice, not lessons. */
-export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/iu;
-
-/** The day of an ISO time or a date: `2026-10-18`. */
-// @limit external: RFC 3339 section 5.6: full-date is YYYY-MM-DD, a timestamp's first 10 characters
-export const dayOf = (at: string | Date): string =>
-  (typeof at === "string" ? at : at.toISOString()).slice(0, 10);
-
-// --- words, as a grep counts them ------------------------------------------------------
-
-const STOP = new Set(
-  "the and for with from that this are was were has have had not but its into than then when what which who will would can could should a an of to in on at by is it be as or if do does did done our we you they them their there here also only just more most some any all each one now new use used uses using get got via per out off over under about after before".split(
-    " "
-  )
-);
-const NOT_WORD = /[^\p{L}\p{N}]+/u;
-
-/** The words of `text` a grep counts: lower case, three letters or more, the commonest left out. */
-export const wordsOf = (text: string): Set<string> =>
-  new Set(
-    text
-      .toLowerCase()
-      .split(NOT_WORD)
-      .filter((word) => word.length >= 3 && !STOP.has(word))
-  );
-
-/** Whether two words are one: the same, or one the other's stem (deploy, deploys, deployed). */
-const sameWord = (a: string, b: string): boolean => {
-  if (a === b) {
-    return true;
-  }
-  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  return (
-    short.length >= 4 &&
-    long.startsWith(short) &&
-    long.length - short.length <= 3
-  );
-};
-
-/** How many of `query`'s words `text` holds: a grep's score. */
-export const grepScore = (query: Set<string>, text: string): number => {
-  const words = [...wordsOf(text)];
-  let score = 0;
-  for (const word of query) {
-    if (words.some((each) => sameWord(word, each))) {
-      score += 1;
-    }
-  }
-  return score;
-};
+/** The brand kit: `knowledge/brand/…` and `knowledge/brand*.md`; images and voice, not rules. */
+const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/iu;
 
 export const INDEX_FILE = "AGENTS.md";
 export const LESSONS_DIR = "lessons";
-export const RUN_STATE_FILE = "memory/state.json";
 
 const LESSON_LINE = /^- (.*\S) \((L-[0-9a-f]{6})\)\s*$/u;
 const WHY_LINE = /^ {2}Why: (.*\S)\s*$/u;
 /** A fact's file and the literal string in it that bear it out: `  Anchor: <path> | <match>`. */
 const ANCHOR_LINE = /^ {2}Anchor: (.+?) \| (.+\S)\s*$/u;
-const BULLET = /^- (.*\S)\s*$/u;
 const SECTION = /^## (.*\S)\s*$/u;
 const TITLE = /^# (.*\S)\s*$/u;
-const SKILL_NAME = /^[a-z0-9][\w.:-]*$/iu;
-const TOPIC_NAME = /^[a-z0-9][a-z0-9-]*$/u;
 
 /**
- * The project's memory's one limit, with its reason: a change that would
- * take a file past its character budget is refused, naming the budget, and
- * nothing moves out on its own.
- */
-export const CAPS = {
-  /**
-   * The whole index, its Notes counted: the share of AGENTS.md a brief
-   * carries (`MEMORY_FILE_CHARS`, config.ts, the memory replay's pick), so
-   * every session pays what an attempt pays, and no more. His notes count,
-   * so they shrink what the run may keep.
-   */
-  indexChars: MEMORY_FILE_CHARS,
-} as const;
-
-/**
- * The character budget of `path`'s file: the index's ({@link CAPS}
- * `indexChars`), and a knowledge file's, what one brief carries of one
- * file (config.ts `MEMORY_FILE_CHARS`). A skill's lessons have none.
+ * The character budget of `path`'s file: the index's and a knowledge
+ * file's, what one brief carried of one file (config.ts
+ * `MEMORY_FILE_CHARS`), so every session pays for the index what an
+ * attempt pays for a named file. A skill's lessons have none.
  */
 const budgetOf = (path: string): number | undefined => {
   const home = homeOf(path);
-  if (home?.at === "index") {
-    return CAPS.indexChars;
-  }
-  return home?.at === "knowledge" ? MEMORY_FILE_CHARS : undefined;
+  return home?.at === "index" || home?.at === "knowledge"
+    ? MEMORY_FILE_CHARS
+    : undefined;
 };
 
-/** Where a lesson lives: the index, a skill's lessons, or a knowledge topic. */
-export type LessonHome =
+/** Where a rule lives: the index, a skill's lessons, or a knowledge topic. */
+type LessonHome =
   | { at: "index" }
   | { at: "skill"; skill: string }
   | { at: "knowledge"; topic: string };
 
-/** A fact's file in the project's checkout, from its root, and the literal string in it that bears the fact out. */
-export interface Anchor {
+/** A kept line's file in the project's checkout, from its root, and the literal string in it that bore the line out. */
+interface Anchor {
   match: string;
   path: string;
 }
@@ -149,25 +73,11 @@ export interface LessonLine {
   why: string | null;
 }
 
-/** The project's memory files by path: the index, every `lessons/` and `knowledge/` file, the archive's. */
+/** The project's rules files by path: the index, every `lessons/` and `knowledge/` file. */
 export type MemoryFiles = Readonly<Partial<Record<string, string>>>;
 
-/** The path a home's lessons are in. */
-export const pathOf = (home: LessonHome): string => {
-  switch (home.at) {
-    case "index":
-      return INDEX_FILE;
-    case "skill":
-      return `${LESSONS_DIR}/${home.skill}.md`;
-    case "knowledge":
-      return `${KNOWLEDGE_DIR}/${home.topic}.md`;
-    default:
-      return unhandled("lesson home", home);
-  }
-};
-
 /** The home a memory file's lessons have; undefined for a file that holds none (an archive, the brand kit, anything else). */
-export const homeOf = (path: string): LessonHome | undefined => {
+const homeOf = (path: string): LessonHome | undefined => {
   if (path === INDEX_FILE) {
     return { at: "index" };
   }
@@ -181,14 +91,8 @@ export const homeOf = (path: string): LessonHome | undefined => {
   }
 };
 
-/** Whether `name` reads as a knowledge topic: lower case words joined by `-`. */
-export const isTopic = (name: string): boolean => TOPIC_NAME.test(name);
-
-/** Whether `name` reads as a skill's name, as the fleet lists one. */
-export const isSkillName = (name: string): boolean => SKILL_NAME.test(name);
-
 /** A lesson as its file says it: its line, its `Why:`, its anchor. */
-export const renderLesson = (line: LessonLine): string =>
+const renderLesson = (line: LessonLine): string =>
   [
     `- ${line.text} (${line.id})`,
     ...(line.why ? [`  Why: ${line.why}`] : []),
@@ -251,11 +155,6 @@ const trimmed = (lines: string[]): string[] => {
 };
 
 const NOTES = "Notes";
-/** The index's intros the hub wrote: its own now, and the stub a project's folder was made with before (project-folder.ts). */
-const HUB_INTROS: ReadonlySet<string> = new Set([
-  memoryRunWords.indexIntro,
-  "Owned by you; agents propose changes.",
-]);
 const RULES = "Rules";
 const SKILLS = "Skills";
 
@@ -285,33 +184,6 @@ const indexSections = (content: string) => {
     rules: named(RULES),
     skills: named(SKILLS),
   };
-};
-
-/**
- * The index as the hub keeps it (§5.1 of the memory build): the project's
- * name, the line saying who keeps it, his `## Notes`, any section of his
- * own, the `## Rules`, and the `## Skills` pointers. Every line of his,
- * and every rule line, kept as it stands; only the title and the intro are
- * the hub's.
- */
-export const indexShape = (projectName: string, content: string): string => {
-  const sections = indexSections(content);
-  const his = trimmed(
-    indexParts(content).intro.filter((line) => !HUB_INTROS.has(line.trim()))
-  );
-  const block = (name: string, lines: string[]) =>
-    lines.length > 0 ? `## ${name}\n\n${lines.join("\n")}` : `## ${name}`;
-  return `${[
-    `# ${projectName}`,
-    memoryRunWords.indexIntro,
-    ...(his.length > 0 ? [his.join("\n")] : []),
-    block(NOTES, sections.notes),
-    ...sections.others
-      .filter((section) => section.lines.length > 0)
-      .map((section) => block(section.name, section.lines)),
-    block(RULES, sections.rules),
-    ...(sections.skills.length > 0 ? [block(SKILLS, sections.skills)] : []),
-  ].join("\n\n")}\n`;
 };
 
 /** Whether the index says anything a session should load: a note, a rule, a pointer or a section of his. */
@@ -395,35 +267,18 @@ const tailOf = (lines: readonly string[], at: number) => {
   }
 };
 
-/** A memory file's lessons, in order; a bullet in its lesson region with no id is `unmarked`, for {@link withIds} to give one. */
-export const parseLessons = (
-  path: string,
-  content: string
-): { lessons: LessonLine[]; unmarked: string[] } => {
+/** A rules file's lines with an id, in order. */
+const parseLessons = (path: string, content: string): LessonLine[] => {
   const { lines, region } = lessonRegion(path, content);
   const lessons: LessonLine[] = [];
-  const unmarked: string[] = [];
   lines.forEach((line, index) => {
-    if (!region(index)) {
-      return;
-    }
-    const lesson = LESSON_LINE.exec(line);
+    const lesson = region(index) ? LESSON_LINE.exec(line) : null;
     if (lesson?.[1] && lesson[2]) {
       const { anchor, why } = tailOf(lines, index + 1);
       lessons.push({ id: lesson[2], text: lesson[1], why, anchor });
-    } else if (BULLET.test(line)) {
-      unmarked.push(line);
     }
   });
-  return { lessons, unmarked };
-};
-
-/** One line of a memory file read as a lesson's line: its id and words; undefined for any other line. */
-export const lessonLineOf = (
-  line: string
-): { id: string; text: string } | undefined => {
-  const read = LESSON_LINE.exec(line);
-  return read?.[1] && read[2] ? { id: read[2], text: read[1] } : undefined;
+  return lessons;
 };
 
 /** Every lesson line of `files`' homes, with the file it is in (an archive's aside). */
@@ -432,7 +287,7 @@ export const allLessons = (files: MemoryFiles) =>
     .sort()
     .flatMap((path) =>
       homeOf(path)
-        ? parseLessons(path, files[path] ?? "").lessons.map((line) => ({
+        ? parseLessons(path, files[path] ?? "").map((line) => ({
             line,
             path,
           }))
@@ -456,49 +311,12 @@ const spliced = (content: string, id: string, put: string[]): string => {
   );
 };
 
-/** A new knowledge or skill lessons file's first lines: what it holds. */
-const fileHead = (path: string): string => {
-  const home = homeOf(path);
-  if (home?.at === "skill") {
-    return memoryRunWords.skillFileHead(home.skill);
-  }
-  return memoryRunWords.knowledgeFileHead(
-    home?.at === "knowledge" ? home.topic : path
-  );
-};
-
-/** `content` (of `path`; empty for a new file) with `line` added at the end of its lessons. */
-const withLine = (path: string, content: string, line: LessonLine): string => {
-  if (path === INDEX_FILE) {
-    const sections = indexSections(content);
-    return replaceSection(content, RULES, [
-      ...sections.rules,
-      renderLesson(line),
-    ]);
-  }
-  const body = content.trim() === "" ? fileHead(path) : content.trimEnd();
-  return `${body}\n${renderLesson(line)}\n`;
-};
-
-/** `content` of `path` with every bullet in its lesson region that has no id given one (a line the person wrote by hand); as it was when none lacks one. */
-export const withIds = (
-  path: string,
-  content: string,
-  taken: (id: string) => boolean
-): string => {
-  let text = content;
-  const made = new Set<string>();
-  for (const raw of parseLessons(path, content).unmarked) {
-    const id = newLessonId((one) => taken(one) || made.has(one));
-    made.add(id);
-    const words = BULLET.exec(raw)?.[1] ?? raw;
-    text = text.replace(
-      raw,
-      renderLesson({ id, text: words, why: null, anchor: null })
-    );
-  }
-  return text;
-};
+/** The index's words (empty for a new one) with `line` added at the end of its `## Rules`. */
+const withRule = (content: string, line: LessonLine): string =>
+  replaceSection(content, RULES, [
+    ...indexSections(content).rules,
+    renderLesson(line),
+  ]);
 
 /** `content` with section `name` gone. */
 const dropSection = (content: string, name: string): string => {
@@ -522,13 +340,13 @@ const pointerLines = (files: MemoryFiles): string[] =>
     .flatMap((path) => {
       const home = homeOf(path);
       return home?.at === "skill" &&
-        parseLessons(path, files[path] ?? "").lessons.length > 0
+        parseLessons(path, files[path] ?? "").length > 0
         ? [home.skill]
         : [];
     })
     .sort()
     .map((skill) =>
-      memoryRunWords.skillPointer(skill, `${LESSONS_DIR}/${skill}.md`)
+      projectRulesWords.skillPointer(skill, `${LESSONS_DIR}/${skill}.md`)
     );
 
 /** `files` with the index's `## Skills` pointers as the `lessons/` files that hold a lesson say, a pointer each. */
@@ -550,35 +368,16 @@ const withPointers = (files: MemoryFiles): MemoryFiles => {
   };
 };
 
-/** `files` with lesson `id`'s line given `anchor` (the one-time commit of the ledger's end writes each fact's file into its line); as they were when no home holds it. */
-export const withAnchor = (
-  files: MemoryFiles,
-  id: string,
-  anchor: Anchor
-): MemoryFiles => {
-  const held = lessonOf(files, id);
-  return held
-    ? {
-        ...files,
-        [held.path]: spliced(files[held.path] ?? "", id, [
-          renderLesson({ ...held.line, anchor }),
-        ]),
-      }
-    : files;
-};
-
 // --- the changes ---------------------------------------------------------------------
 
 /** One change to the memory's lines. */
 export type Change =
-  /** A new lesson: a line at the end of its home's lessons. */
-  | { home: LessonHome; kind: "add"; line: LessonLine }
+  /** A new rule: a line at the end of the index's `## Rules`. */
+  | { kind: "add"; line: LessonLine }
   /** A lesson's words changed in place, its id kept: its `Why:` as given (none when null), its anchor as it was. */
   | { id: string; kind: "reword"; text: string; why: string | null }
   /** A lesson's line taken out. */
-  | { id: string; kind: "remove" }
-  /** A lesson's line to another home. */
-  | { home: LessonHome; id: string; kind: "move" };
+  | { id: string; kind: "remove" };
 
 /** What {@link applyLineChange} made: the files after it; or the budget the file it grew would pass, the files as they were; or the lesson it names held by no home. */
 export type Applied =
@@ -592,13 +391,12 @@ const made = (
   change: Change
 ): { files: MemoryFiles; grew?: string } | { gone: string } => {
   if (change.kind === "add") {
-    const path = pathOf(change.home);
     return {
       files: {
         ...files,
-        [path]: withLine(path, files[path] ?? "", change.line),
+        [INDEX_FILE]: withRule(files[INDEX_FILE] ?? "", change.line),
       },
-      grew: path,
+      grew: INDEX_FILE,
     };
   }
   const held = lessonOf(files, change.id);
@@ -620,16 +418,6 @@ const made = (
       };
     case "remove":
       return { files: without };
-    case "move": {
-      const into = pathOf(change.home);
-      return {
-        files: {
-          ...without,
-          [into]: withLine(into, without[into] ?? "", line),
-        },
-        grew: into,
-      };
-    }
     default:
       return unhandled("memory change", change);
   }
@@ -656,8 +444,3 @@ export const applyLineChange = (
   }
   return { files: withPointers(done.files) };
 };
-
-/** Whether `day` (YYYY-MM-DD) is `days` or more before `today`. */
-export const olderThan = (day: string, today: string, days: number): boolean =>
-  Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`) >=
-  days * DAY_MS;

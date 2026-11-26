@@ -3,8 +3,7 @@
  * said, nor a project's git. Every text an agent's `find` answers with
  * (find-tool.ts: excerpts, detailed turns, `around`'s turns; an excerpt
  * read without its sentence by {@link outOfSentenceRanges}) and every
- * `memory_note` before it is written (memory.ts) pass {@link redactSecrets}
- * first; each match is said as {@link REDACTED_SECRET}. The person's own Find
+ * rule `memory_rule` writes (memory.ts) pass {@link redactSecrets} first; each match is said as {@link REDACTED_SECRET}. The person's own Find
  * is not filtered: while "Hide secrets in Find" is on, its answer names where
  * each secret stands ({@link secretRangesOf}, find-secrets.ts), and their
  * screen draws it as dots until they show it. The kinds of match:

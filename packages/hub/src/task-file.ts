@@ -168,7 +168,7 @@ export interface TaskFields {
   /** The machines a routine's check runs on (`check_on:`), each a hostname or machine id; empty: none. */
   checkOn: string[];
   checks: string[];
-  /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the conversation's pick, `knowledge/…`. */
+  /** Project folder files its attempt's brief carries whole (memory.ts `contextFor`): the conversation's pick. */
   context: string[];
   /** Dollars a routine's runs may spend a day of its zone (`daily_cap_usd:`); null: no cap. */
   dailyCapUsd: number | null;

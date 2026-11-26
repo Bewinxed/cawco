@@ -23,6 +23,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
+import { grepScore, wordsOf } from "./grep-score";
 import { type JevAccess, jevAccess } from "./jev";
 import {
   type DuplicateBrief,
@@ -38,7 +39,6 @@ import {
   TRIAGE_FIELD,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import { grepScore, wordsOf } from "./memory-lessons";
 import {
   hubActor,
   type TaskEvent,

@@ -362,8 +362,8 @@ export interface AskItem {
   machine: { name: string; os: string };
   machineId: string;
   /**
-   * The session whose pane draws the ask when it is not its own (a memory
-   * curator run's proposal): the row opens that session; null otherwise.
+   * The session whose pane draws the ask when it is not its own (a delegate
+   * type proposal): the row opens that session; null otherwise.
    */
   origin: string | null;
   /** machine · project */

@@ -42114,7 +42114,6 @@
       "DelegateTypeRole": {
         "type": "string",
         "enum": [
-          "curator",
           "delegate",
           "overseer",
           "trimmer",
@@ -54904,10 +54903,6 @@
               "permission_request"
             ]
           },
-          "memoryProposal": {
-            "description": "A memory or delegate-type proposal's id (hub memory.ts).",
-            "type": "string"
-          },
           "move": {
             "description": "A project move's approval: its job, and the git terms of what it runs (hub moves.ts).",
             "type": "object",
@@ -54928,7 +54923,7 @@
             ]
           },
           "originInstanceId": {
-            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a memory curator run's proposal,\nparked under its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
+            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a delegate type proposal, parked\nunder its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
             "type": "string"
           },
           "presentation": {
@@ -54977,6 +54972,10 @@
           },
           "toolUseId": {
             "description": "The tool call the ask gates, as its transcript message names it.",
+            "type": "string"
+          },
+          "typeProposal": {
+            "description": "A delegate type proposal's id (hub type-proposals.ts).",
             "type": "string"
           }
         },
@@ -55293,7 +55292,7 @@
             ]
           },
           "originInstanceId": {
-            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a memory curator run's proposal,\nparked under its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
+            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a delegate type proposal, parked\nunder its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
             "type": "string"
           },
           "presentation": {
@@ -59786,7 +59785,7 @@
             "type": "string"
           },
           "instanceId": {
-            "description": "The session that did the run, where it is read whole (`/session/<id>`):\na delegate, orchestrator, curator or trim run's work item's session, from\nits start; a conversation run's, once its harness read the run. Null for\na run no session took (skipped, one that ended before any began).",
+            "description": "The session that did the run, where it is read whole (`/session/<id>`):\na delegate, orchestrator or trim run's work item's session, from\nits start; a conversation run's, once its harness read the run. Null for\na run no session took (skipped, one that ended before any began).",
             "type": "string"
           },
           "outcome": {
@@ -59871,11 +59870,10 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes, or\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too. A routine's check (hub\nroutine-check.ts) gates any of the first three: it decides whether a run\nstarts, never what starts.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, or the unused skills and\nservers routine (hub unused-trim.ts), a delegate in the `trimmer` role\nthat only the hub makes. A routine's check (hub\nroutine-check.ts) gates any of the first three: it decides whether a run\nstarts, never what starts.",
         "type": "string",
         "enum": [
           "conversation",
-          "curator",
           "delegate",
           "orchestrator",
           "trim"
@@ -61900,7 +61898,7 @@
             "type": "string"
           },
           "fence": {
-            "description": "This spawn is a project's memory curator or a fleet-watch triage run (a\n`curator` or `overseer` row): the machine gives it CawCo's MCP server\nand no other. Set by the hub alone, on every launch of such a row, and\nnever taken from a caller.",
+            "description": "This spawn is a run of the unused skills and servers routine or a\nfleet-watch triage run (a `trimmer` or `overseer` row): the machine gives it CawCo's MCP server\nand no other. Set by the hub alone, on every launch of such a row, and\nnever taken from a caller.",
             "const": true,
             "type": "boolean"
           },
@@ -62046,7 +62044,6 @@
           "role": {
             "description": "The toolset the session runs in, written on its row at this first spawn\nand kept there: a delegate type's `role` is its work item's. Absent: the hub derives it (`delegate` or `worker`).",
             "enum": [
-              "curator",
               "delegate",
               "overseer",
               "trimmer",
@@ -67313,7 +67310,7 @@
           },
           "target": {
             "$ref": "#/components/schemas/RoutineTarget",
-            "description": "A fresh delegate each run, a message to Caw, or the project's memory curator."
+            "description": "A fresh delegate each run, a fresh orchestrator, a message to Caw, or the unused skills and servers trim."
           },
           "timeZone": {
             "type": "string"

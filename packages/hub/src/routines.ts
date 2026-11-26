@@ -18,8 +18,7 @@
  * - **Gates**, decided inside the insert: a run still going skips a time
  *   slot (an event's run queues behind it); the routine's daily cap in its
  *   zone; the project's spend cap; a conversation run with Caw off.
- * - **Runs a session does** (delegate, orchestrator, the curator's, the
- *   trim's) are started by dispatch: it places them by the task's
+ * - **Runs a session does** (delegate, orchestrator, the trim's) are started by dispatch: it places them by the task's
  *   `runs_on`, picks the type (the task's, else Jev's, else medium),
  *   briefs them from the task file with the event and the output contract
  *   after it, and files the work item with the task's id under the
@@ -37,8 +36,8 @@
  * - **The output contract**: exactly `NO_REPLY` is silent; `AUTOMATION_
  *   FAILED: <why>` fails it, retried once at once (attempt 2); a second
  *   failure stands in Needs you; anything else is delivered. A delegate
- *   run's delivered result is a trigger on the routine (triggers.ts); the curator's and
- *   the trim's are lines on the routine's thread (its task's comments), as
+ *   run's delivered result is a trigger on the routine (triggers.ts); the
+ *   trim's are lines on the routine's thread (its task's comments), as
  *   every failure, ask, stop and the routine's making are. None of it is a
  *   line in the project's Caw chat.
  * - **Stopping** (2026-11-22). Every run answers in its `task_result`: keep
@@ -62,8 +61,7 @@
  *   routine whose task is in a done or dropped stage, or gone, reads off
  *   with no next start in every read (the task's read and list, the
  *   routes, the views, find); its cursor moves on unfired while it does.
- * - **The hub's own**: the Memory curator in every project that is set up,
- *   the unused-skills trim in a project once turned on, and the fleet-wide
+ * - **The hub's own**: the unused-skills trim in a project once turned on, and the fleet-wide
  *   trim in the Fleet project, each a task the hub files with its prompt
  *   kept in code.
  */
@@ -102,7 +100,6 @@ import { DAY_MS } from "@cawco/core/time";
 import type { StageKind } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { conditionWords } from "@cawco/core/words/conditions";
-import { curatorPrompt } from "@cawco/core/words/memory-run";
 import { checkWords } from "@cawco/core/words/routine-check";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
@@ -126,10 +123,8 @@ import { ROUTINE_ORIGIN } from "./hub-words";
 import { eventData } from "./inbound-event";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { type CommandOptions, WouldWait } from "./machine-pause";
-import type { MemoryRun } from "./memory-run";
 import type { Push } from "./push";
 import { recordsProjectOf } from "./records-project";
-import { isProblem } from "./refusal";
 import type { CarryRoutines } from "./routine-carry";
 import {
   answerOf,
@@ -211,17 +206,6 @@ const FAILING_SLOTS = 3;
 /** Runs read back to count a failing streak. */
 const RUNS_READ = 30;
 
-const CURATOR_NAME = "Memory curator";
-/** The curator's task's description: one sentence for the person; what it does is the hub's own prompt. */
-const CURATOR_SAID =
-  "Each morning, reads the project's new messages and notes and keeps what is worth keeping in its memory.";
-/** The nightly memory run's schedule: daily, early, in the hub's own zone. */
-const CURATOR_CRON = "0 6 * * *";
-/** One nightly memory run's budget (memory-run.ts reads 40 turns as 60 operations in 3 calls). */
-const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
-/** A day's cap on the nightly memory run: one run and its retry. */
-const CURATOR_DAILY_USD = 4;
-
 /** What a routine is made of, as the task tools and the routes write it: a task's draft with its trigger. */
 export interface RoutineInput {
   budget?: WorkBudget | null;
@@ -302,8 +286,6 @@ export interface RoutineDeps {
   readonly lifetime: HubLifetimeShape;
   /** Every machine the hub knows: a check's `check_on` names some of them. */
   readonly machines: () => PlacedMachine[];
-  /** The nightly memory run (memory-run.ts). */
-  readonly memoryRun: Pick<MemoryRun, "brief" | "close">;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
   readonly push: Pick<Push, "routine" | "routineMade" | "routineCheckChanged">;
@@ -478,8 +460,7 @@ const clipReason = (words: string): string => {
 /**
  * Whether a run's delivered result is a trigger on its routine
  * (triggers.ts): a delegate's and an orchestrator's. A conversation run's
- * result is its own session's; the curator's and the trim's are said on
- * its thread.
+ * result is its own session's; the trim's is said on its thread.
  */
 const reportsToLead = (routine: Pick<RoutineRow, "target">): boolean =>
   routine.target === "delegate" || routine.target === "orchestrator";
@@ -560,7 +541,7 @@ const dayIn = (at: Date, timeZone: string): string =>
   }).format(at);
 
 /** The targets only the hub files a routine for. */
-const HUB_TARGETS: ReadonlySet<RoutineTarget> = new Set(["curator", "trim"]);
+const HUB_TARGETS: ReadonlySet<RoutineTarget> = new Set(["trim"]);
 
 export const createRoutines = ({
   anyOnline,
@@ -572,7 +553,6 @@ export const createRoutines = ({
   isSetUp,
   lifetime,
   machines,
-  memoryRun,
   pauses,
   push,
   quiets,
@@ -939,29 +919,6 @@ export const createRoutines = ({
     skipRun(routine, run, gate);
   };
 
-  /** A nightly memory run: what it reads made ready first; nothing to read ends it silent. */
-  const fireCurator = async (routine: RoutineRow, run: RoutineRunRow) => {
-    const { projectId } = routine;
-    const brief = await memoryRun.brief(projectId);
-    if (isProblem(brief)) {
-      return brief;
-    }
-    if (brief.kind === "none") {
-      settle(run.id, {
-        outcome: "silent",
-        output: null,
-        reason: brief.reason,
-        usd: null,
-      });
-      return;
-    }
-    return await fireSession(routine, run, {
-      input: brief.text,
-      role: "curator",
-      prompt: curatorPrompt,
-    });
-  };
-
   /** A trim run: the count read first; nothing to propose ends it delivered with that said. */
   const fireTrim = async (routine: RoutineRow, run: RoutineRunRow) => {
     const brief = trimBrief(
@@ -1218,8 +1175,6 @@ export const createRoutines = ({
         return fireLead(routine, run, input ?? inputOf(run));
       case "trim":
         return fireTrim(routine, run);
-      case "curator":
-        return fireCurator(routine, run);
       case null:
         return Promise.resolve(
           problem(409, {
@@ -1306,22 +1261,6 @@ export const createRoutines = ({
 
   // --- settling ------------------------------------------------------------------------
 
-  /** A nightly memory run's end as the run says it (memory-run.ts `close`); any other's as it came. */
-  const memoryEnd = <
-    E extends { outcome: RoutineOutcome; output: string | null },
-  >(
-    runId: string,
-    ended: E
-  ): E => {
-    const ran = store.run(runId);
-    const routine = ran ? store.get(ran.triggerId) : undefined;
-    if (routine?.target !== "curator") {
-      return ended;
-    }
-    const said = memoryRun.close(routine.projectId, ended);
-    return said ? { ...ended, ...said } : ended;
-  };
-
   /**
    * A run's end: booked; its keep, stop or ask acted on; delivered words
    * told; a first failure retried at once, a second one standing in Needs
@@ -1329,11 +1268,10 @@ export const createRoutines = ({
    */
   const settle = (
     runId: string,
-    ended: RunEnd & { usd: number | null },
+    end: RunEnd & { usd: number | null },
     /** The session its work item ran, when it had one. */
     instanceId: string | null = null
   ): void => {
-    const end = memoryEnd(runId, ended);
     if (instanceId) {
       forget(instanceId, runId);
     }
@@ -2941,7 +2879,7 @@ export const createRoutines = ({
     return updated ?? fresh;
   };
 
-  /** Why a change of target cannot go: the curator's and the trim's stay the hub's. */
+  /** Why a change of target cannot go: the trim's stays the hub's. */
   const hubTargetStays = (row: RoutineRow, patch: RoutinePatch) => {
     const to = patch.target;
     if (
@@ -2954,10 +2892,7 @@ export const createRoutines = ({
     }
     return problem(400, {
       code: "routine-hub-target",
-      detail:
-        row.target === "curator" || to === "curator"
-          ? routineToolWords.curatorStays
-          : routineToolWords.trimStays,
+      detail: routineToolWords.trimStays,
     });
   };
 
@@ -3227,54 +3162,42 @@ export const createRoutines = ({
 
   // --- the hub's own ---------------------------------------------------------------------
 
-  /** The project's routine of hub target `target`, when it has one (filed, or carried and waiting). */
-  const ownOf = (projectId: string, target: "curator" | "trim") =>
-    store.list(projectId, true).find((row) => row.target === target) ??
+  /** The project's trim routine, when it has one (filed, or carried and waiting). */
+  const trimOf = (projectId: string) =>
+    store.list(projectId, true).find((row) => row.target === "trim") ??
     store
       .carried()
-      .find((row) => row.projectId === projectId && row.target === target);
+      .find((row) => row.projectId === projectId && row.target === "trim");
 
-  /** Hub's own routines being filed now, by project and target: one at a time. */
+  /** Projects whose trim routine is being filed now: one at a time. */
   const filing = new Set<string>();
 
   /**
-   * Files a routine of the hub's own in `projectId` once: on, kept, landing
-   * nothing, in the hub's own zone; only in a project that is set up, so a
-   * project never set up gets no folder from it.
+   * Files the trim routine in `projectId` once: on, kept, landing nothing,
+   * in the hub's own zone; only in a project that is set up, so a project
+   * never set up gets no folder from it.
    */
-  const fileOwn = (projectId: string, target: "curator" | "trim"): void => {
-    const key = `${projectId}\0${target}`;
+  const fileTrim = (projectId: string): void => {
     const project = db.project(projectId);
     if (
-      filing.has(key) ||
+      filing.has(projectId) ||
       !project ||
       !isSetUp(project) ||
-      ownOf(projectId, target)
+      trimOf(projectId)
     ) {
       return;
     }
-    filing.add(key);
+    filing.add(projectId);
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const made = create(
-      target === "curator"
-        ? {
-            projectId,
-            title: CURATOR_NAME,
-            description: CURATOR_SAID,
-            target,
-            on: { cron: CURATOR_CRON, zone },
-            budget: CURATOR_BUDGET,
-            dailyCapUsd: CURATOR_DAILY_USD,
-            keep: true,
-          }
-        : {
-            projectId,
-            title: TRIM_NAME,
-            description: routineToolWords.trimSaid,
-            target,
-            on: { cron: TRIM_CRON, zone },
-            keep: true,
-          },
+      {
+        projectId,
+        title: TRIM_NAME,
+        description: routineToolWords.trimSaid,
+        target: "trim",
+        on: { cron: TRIM_CRON, zone },
+        keep: true,
+      },
       "hub"
     );
     lifetime.fork(
@@ -3284,37 +3207,31 @@ export const createRoutines = ({
           .then((done) => {
             if (done instanceof ElysiaStatus) {
               console.warn(
-                `[routines] the hub's ${target} routine was not filed in ${projectId}: ${done.response.detail}`
+                `[routines] the hub's trim routine was not filed in ${projectId}: ${done.response.detail}`
               );
               return;
             }
             console.log(
-              `[routines] the hub's ${target} routine filed in ${projectId} as ${done.task.id}`
+              `[routines] the hub's trim routine filed in ${projectId} as ${done.task.id}`
             );
           })
-          .finally(() => filing.delete(key))
+          .finally(() => filing.delete(projectId))
       )
     );
   };
 
-  /** Each project's Memory curator, and, while the fleet switch is on, each project's trim: filed where due. */
+  /** While the fleet switch is on, each project's trim: filed where due. */
   const hubOwn = (): void => {
     const fleetOn = fleetTrim();
     for (const project of db.listProjects()) {
       if (isFleetProject(project.id)) {
         continue;
       }
-      fileOwn(project.id, "curator");
-      if (fleetOn && !ownOf(project.id, "trim")) {
+      if (fleetOn && !trimOf(project.id)) {
         db.trim.answer(project.id, "on");
-        fileOwn(project.id, "trim");
+        fileTrim(project.id);
       }
     }
-  };
-
-  /** Makes the project's nightly memory run when it has none (the project's start, memory.ts); filed once it is set up. */
-  const ensureCurator = (projectId: string): undefined => {
-    fileOwn(projectId, "curator");
   };
 
   /** Whether Caw suggests the trim routine in `projectId`: never answered there and none made. */
@@ -3323,7 +3240,7 @@ export const createRoutines = ({
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    return !(db.trim.answerOf(projectId) || ownOf(projectId, "trim"));
+    return !(db.trim.answerOf(projectId) || trimOf(projectId));
   };
 
   /** The person's answer to Caw's suggestion: Turn on files the routine; Not now waves it away. */
@@ -3334,14 +3251,14 @@ export const createRoutines = ({
     }
     db.trim.answer(projectId, picked);
     if (picked === "on") {
-      fileOwn(projectId, "trim");
+      fileTrim(projectId);
     }
     return null;
   };
 
   /** The fleet switch: on while the Fleet project's trim routine is. */
   const fleetTrim = (): boolean => {
-    const fleet = ownOf(FLEET_PROJECT_ID, "trim");
+    const fleet = trimOf(FLEET_PROJECT_ID);
     return !!fleet && fleet.enabled;
   };
 
@@ -3351,12 +3268,12 @@ export const createRoutines = ({
    * project's, and each project's stays its own.
    */
   const setFleetTrim = (on: boolean) => {
-    const fleet = ownOf(FLEET_PROJECT_ID, "trim");
+    const fleet = trimOf(FLEET_PROJECT_ID);
     if (fleet) {
       store.update(fleet.id, { enabled: on, disabledReason: null });
       schedule();
     } else if (on) {
-      fileOwn(FLEET_PROJECT_ID, "trim");
+      fileTrim(FLEET_PROJECT_ID);
     }
     if (on) {
       hubOwn();
@@ -3670,7 +3587,6 @@ export const createRoutines = ({
     createApproved,
     createdFor,
     drop,
-    ensureCurator,
     fleetTrim,
     get,
     itemEnded,

@@ -23,22 +23,17 @@
  *   the session it judges.
  * - **web-facing**: a session that reads the outside world: it finishes its
  *   work and tells you, with no posting, spawning or admin tools.
- * - **curator**: a project's nightly memory run (memory-run.ts): it reads
- *   its brief and the memory files, writes lessons with `memory_apply`
- *   (each operation checked by the hub, nothing waiting for you), and
- *   finishes. No edit, shell or web tools in its harness either (caw.ts
- *   `fencedSpawn`).
  * - **trimmer**: a run of the unused skills and servers routine
  *   (unused-trim.ts): it reads the count (`calls_by_role`), puts the hub's
- *   trimmed sets to you once with `trim_propose`, and finishes. Fenced as
- *   the curator is.
+ *   trimmed sets to you once with `trim_propose`, and finishes. No edit,
+ *   shell or web tools in its harness either (caw.ts `fencedSpawn`).
  *
  * A session's scope is its folder and, when its row has a `projectId`, its
  * project. A project's own tools ({@link PROJECT_TOOLS}: its views, its
  * folder on the hub, its Setup's steps and settings, a routine run's answer,
- * memory writes) follow that scope, never the folder: a worker in a project
+ * its rules) follow that scope, never the folder: a worker in a project
  * has them wherever it works. A role with a closed list (delegate, overseer,
- * web-facing, curator, trimmer) has only its list. The session a project's events
+ * web-facing, trimmer) has only its list. The session a project's events
  * reach is a worker like any other; the project's row points at it.
  *
  * Every session that works (the worker, the delegate) searches what was
@@ -49,11 +44,8 @@
  * a turn with no text. A work item ends on finish_item instead, and triage
  * on its decision.
  *
- * Memory (§5.4): the worker and the delegate write notes into their
- * project's inbox (`memory_note`), take back their own (`memory_withdraw`),
- * and change one of the project's rules at once (`memory_rule`: remove,
- * reword, add); the nightly run's curator reads
- * and writes the rest of the memory files (`memory_read`, `memory_apply`).
+ * Memory (§5.4): the worker and the delegate change one of the project's
+ * rules at the person's word (`memory_rule`: remove, reword, add).
  */
 import {
   type SessionRole,
@@ -144,9 +136,6 @@ const PROJECT_TOOLS: ReadonlySet<string> = new Set([
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;
 
-/** A nightly memory run's own (memory.ts, memory-run.ts): never a worker's. */
-const CURATOR_OWN = ["memory_read", "memory_apply"] as const;
-
 /** A trim run's own (unused-trim.ts): never a worker's. */
 const TRIMMER_OWN = ["trim_propose"] as const;
 
@@ -195,9 +184,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
     ...ORCHESTRATOR_TASKS,
-    "memory_note",
-    "memory_withdraw",
-    // One of the project's rules changed at once.
+    // One of the project's rules changed at the person's word.
     "memory_rule",
     // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
     "find",
@@ -225,7 +212,6 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "generate_image",
     "show_image",
   ]),
-  curator: new Set(["set_title", "finish_item", ...CURATOR_OWN]),
   trimmer: new Set([
     "set_title",
     "finish_item",
@@ -236,11 +222,10 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
 };
 
 /**
- * What a worker never has: the curator's own, the trim run's, triage's, and a design check's
+ * What a worker never has: the trim run's, triage's, and a design check's
  * verdict.
  */
 const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
-  ...CURATOR_OWN,
   ...TRIMMER_OWN,
   ...TRIAGE_TOOLS,
   // A design check's verifier's alone, which is a delegate (design-verify.ts).
@@ -352,8 +337,6 @@ export const refusal = (row: InstanceRow, name: string): string => {
       return ORCHESTRATORS_ONLY.has(name)
         ? `${name} isn't available here: only a delegate that may start any type changes tasks or starts attempts, and this one is a leaf. Hand the change to the session that started it.`
         : `${name} isn't available here: a delegate or work item files no tasks and changes no fleet settings. Hand the change to the session that started it.`;
-    case "curator":
-      return `${name} isn't available to the nightly memory run: it reads with memory_read, writes with memory_apply, and finishes.`;
     case "trimmer":
       return `${name} isn't available to the unused skills and servers routine: it proposes with trim_propose, and finishes.`;
     case "worker":
@@ -365,7 +348,5 @@ export const refusal = (row: InstanceRow, name: string): string => {
   if (TRIMMER_OWN.some((tool) => tool === name)) {
     return `${name} belongs to a run of the unused skills and servers routine.`;
   }
-  return CURATOR_OWN.some((tool) => tool === name)
-    ? `${name} belongs to a project's nightly memory run.`
-    : `${name} belongs to a design check's verifier.`;
+  return `${name} belongs to a design check's verifier.`;
 };

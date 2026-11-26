@@ -901,7 +901,7 @@ class FleetHooks {
 
 /**
  * A fenced session's extensions (`SpawnPayload.fence`: a fleet-watch triage
- * run, a memory curator): CawCo's inline ones alone, as Claude Code's and
+ * run, a trim run): CawCo's inline ones alone, as Claude Code's and
  * OpenCode's fences give it CawCo's MCP server alone. None of the person's
  * own extensions is the session's, nor a built-in one their settings enable
  * (`builtin:mcp` and its `mcp.json`): pi builds the session's runner from

@@ -47,7 +47,6 @@ const wroteWords = (wrote: FilingWrote): string => {
       : []),
     ...(wrote.todos > 0 ? [counted(wrote.todos, "to-do", "to-dos")] : []),
     ...(wrote.tasks > 0 ? [counted(wrote.tasks, "task", "tasks")] : []),
-    ...(wrote.notes > 0 ? [counted(wrote.notes, "note", "notes")] : []),
   ];
   return parts.length > 0
     ? `Wrote ${andList(parts)}.`

@@ -2819,7 +2819,6 @@ public enum OpenEnums {
 
     /// `#/components/schemas/DelegateTypeRole`.
     public enum DelegateTypeRole: OpenEnum {
-        case curator
         case delegate
         case overseer
         case trimmer
@@ -2830,7 +2829,6 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
-            case "curator": self = .curator
             case "delegate": self = .delegate
             case "overseer": self = .overseer
             case "trimmer": self = .trimmer
@@ -2842,7 +2840,6 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
-            case .curator: "curator"
             case .delegate: "delegate"
             case .overseer: "overseer"
             case .trimmer: "trimmer"
@@ -2856,7 +2853,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.curator, .delegate, .overseer, .trimmer, .webFacing, .worker]
+        public static let allCases: [Self] = [.delegate, .overseer, .trimmer, .webFacing, .worker]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8431,7 +8428,6 @@ public enum OpenEnums {
     /// `#/components/schemas/RoutineTarget`.
     public enum RoutineTarget: OpenEnum {
         case conversation
-        case curator
         case delegate
         case orchestrator
         case trim
@@ -8441,7 +8437,6 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "conversation": self = .conversation
-            case "curator": self = .curator
             case "delegate": self = .delegate
             case "orchestrator": self = .orchestrator
             case "trim": self = .trim
@@ -8452,7 +8447,6 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .conversation: "conversation"
-            case .curator: "curator"
             case .delegate: "delegate"
             case .orchestrator: "orchestrator"
             case .trim: "trim"
@@ -8464,7 +8458,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator, .trim]
+        public static let allCases: [Self] = [.conversation, .delegate, .orchestrator, .trim]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

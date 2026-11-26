@@ -1338,11 +1338,8 @@ function adminGroupWrite(
   }
 }
 
-/** The tool name a project memory proposal is parked under (hub memory.ts). */
-export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";
-
 /**
- * The name Caw's delegate type is parked under as a proposal (hub memory.ts,
+ * The name Caw's delegate type is parked under as a proposal (hub type-proposals.ts,
  * from his `folder_write` of a `delegates/` file): no tool's, so his own
  * `folder_write` call is never drawn as one.
  */
@@ -1390,44 +1387,23 @@ function proposedFiles(
 }
 
 /**
- * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
- * or its knowledge files, as the curator, Jev's sort, the hub's archive or
- * withdrawal, or Caw proposed it, citing the inbox notes it comes from; and
- * Caw's delegate type (§5.1, "a file diff you approve"), drawn the same. The
- * hub puts each file as it stood (`before`) beside its proposed text
- * (`content`) as it parks it: a fact moving between files is one card.
+ * Caw's delegate type proposal (§5.1, "a file diff you approve"): the hub
+ * puts each file as it stood (`before`) beside its proposed text
+ * (`content`) as it parks it.
  */
-function memoryProposal(input: Record<string, unknown>): Presented {
+function typeProposal(input: Record<string, unknown>): Presented {
   const { files, changes, stat } = proposedFiles(input, "content");
-  const notes = Array.isArray(input.notes)
-    ? input.notes.filter((note): note is string => typeof note === "string")
-    : [];
   const [first] = files;
-  let summary = `Change ${plural(files.length, "memory file")}`;
+  let summary = `Change ${plural(files.length, "delegate type")}`;
   if (files.length === 1 && first) {
     summary =
       first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
-  }
-  // A fleet proposal's one file is a fleet memory document (hub memory.ts).
-  if (input.fleet === true && first) {
-    summary =
-      first.before === ""
-        ? `Add ${first.path} to the fleet's memory`
-        : `Change the fleet's ${first.path}`;
   }
   return {
     summary,
     detail: statWords(stat),
     changes,
-    fields: [
-      ...fieldsOf(input, ["files", "notes", "project", "fleet", "loadedInto"]),
-      ...(input.fleet === true && typeof input.loadedInto === "string"
-        ? [{ key: "loaded into", value: input.loadedInto }]
-        : []),
-      ...(notes.length > 0
-        ? [{ key: "from notes", value: notes.join(", ") }]
-        : []),
-    ],
+    fields: fieldsOf(input, ["files", "project"]),
   };
 }
 
@@ -1441,8 +1417,8 @@ export const DESIGN_PROPOSAL_TOOL = "mcp__cawco__design_proposal";
 /**
  * A design proposal (Projects spec §5.7, "Changes arrive as proposals"): an
  * agent's change to its project's design system, every file it writes as it
- * stood (`before`) beside what it would hold (`after`), drawn as the memory
- * proposal's card draws its file.
+ * stood (`before`) beside what it would hold (`after`), drawn as a delegate
+ * type proposal's card draws its file.
  */
 function designProposal(input: Record<string, unknown>): Presented {
   const { files, changes, stat } = proposedFiles(input, "after");
@@ -1951,11 +1927,8 @@ export function presentPermission(
       fields: [],
     };
   }
-  if (
-    toolName === MEMORY_PROPOSAL_TOOL ||
-    toolName === DELEGATE_TYPE_PROPOSAL_TOOL
-  ) {
-    return { ...who, ...memoryProposal(input) };
+  if (toolName === DELEGATE_TYPE_PROPOSAL_TOOL) {
+    return { ...who, ...typeProposal(input) };
   }
   if (toolName === DESIGN_PROPOSAL_TOOL) {
     return { ...who, ...designProposal(input) };

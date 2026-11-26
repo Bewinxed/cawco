@@ -194,15 +194,15 @@ const boardOnlyDenied = (harness: string): readonly string[] => {
   return descriptorOf(named).boardOnlyDenied;
 };
 
-/** A memory curator's denied tools on `harness` (its descriptor's `curatorDenied`); refused on one that cannot fence it. */
-const curatorDenied = (harness: string): readonly string[] => {
+/** A trim run's denied tools on `harness` (its descriptor's `trimmerDenied`); refused on one that cannot fence it. */
+const trimmerDenied = (harness: string): readonly string[] => {
   const named = harnessNamed(harness);
   if (!named) {
     throw new Error(
-      `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
+      `The unused skills and servers routine does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return descriptorOf(named).curatorDenied;
+  return descriptorOf(named).trimmerDenied;
 };
 
 /**
@@ -218,9 +218,8 @@ export const isProjectConversation = (
 
 /**
  * A spawn as it reaches a machine: an overseer row's (a fleet-watch triage
- * run, fleet-watch.ts) denies the board-only list; a curator row's (a
- * project's memory curator run) and a trimmer row's (a run of the unused
- * skills and servers routine) that and the web, whatever else it denies.
+ * run, fleet-watch.ts) denies the board-only list; a trimmer row's (a run
+ * of the unused skills and servers routine) that and the web, whatever else it denies.
  * Each says it is fenced ({@link SpawnPayload.fence}): CawCo's MCP server
  * and no other. Any other row's spawn says it is not, whatever its caller
  * sent.
@@ -234,9 +233,9 @@ export const fencedSpawn = (
   let denied: readonly string[];
   if (row.role === "overseer") {
     denied = boardOnlyDenied(harness);
-  } else if (row.role === "curator" || row.role === "trimmer") {
-    // A trim run reads the hub's count and asks; nothing else, as the curator.
-    denied = curatorDenied(harness);
+  } else if (row.role === "trimmer") {
+    // A trim run reads the hub's count and asks; nothing else.
+    denied = trimmerDenied(harness);
   } else {
     return asked;
   }

@@ -364,9 +364,6 @@ export const routineToolWords = {
   /** A delivered output cut to fit a project note: its end, with the run's session link when it ran one. */
   noteCut: (session?: string): string =>
     `\n\n… (cut; the whole is in the run's conversation${session ? `: ${session}` : ""})`,
-  /** The memory curator routine's target is the hub's. */
-  curatorStays:
-    "The memory curator routine is the hub's: its target stays curator.",
   /** The unused skills and servers routine's target is the hub's too. */
   trimStays:
     "The unused skills and servers routine is the hub's: its target stays trim.",

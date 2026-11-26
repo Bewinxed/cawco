@@ -27,13 +27,12 @@ export type FilingStage = "filing" | "filed" | "stopped";
  * What a session's records held as its filing at the threshold started,
  * each record one line to compare (hub open-items.ts `recordsOf`): its
  * plan's steps (status and the record each names), its task's
- * to-dos and its open filed tasks' (task, place, tick and words), the ids
- * of its open filed tasks and of its notes in its project's memory inbox.
+ * to-dos and its open filed tasks' (task, place, tick and words), and the
+ * ids of its open filed tasks.
  * Kept with the filing's plan (hub schema `limitCompactions.records`), so a
  * hub that restarts mid-filing still counts what it wrote.
  */
 export interface FiledRecords {
-  notes: string[];
   steps: string[];
   tasks: string[];
   todos: string[];
@@ -45,8 +44,6 @@ export interface FiledRecords {
  * `filingWrote`). All zero: its turn wrote nothing new.
  */
 export interface FilingWrote {
-  /** Notes it put in its project's memory inbox. */
-  notes: number;
   /** Its plan's steps written new or changed, a step closed included. */
   steps: number;
   /** Tasks it filed. */

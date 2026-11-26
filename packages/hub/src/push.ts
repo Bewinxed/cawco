@@ -87,7 +87,6 @@ import { DESK_ACK_MS, type DeskAlertFrame } from "@cawco/core/notifications";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
-  MEMORY_PROPOSAL_TOOL,
   PROJECT_SETTINGS_TOOL,
 } from "@cawco/core/permission-presentation";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -202,9 +201,7 @@ const TURN_ENDED = "Finished its turn";
 const SENT_YOU = "Sent you a message";
 /** A failed session's visible body: the reason goes sealed. */
 const FAILED = "Failed";
-/** A memory proposal's visible title (memory.ts): what it is, its project under it. */
-const MEMORY_PROPOSAL_NAME = "Memory proposal";
-/** Caw's delegate type proposal's visible title (memory.ts): what it is, its project under it. */
+/** Caw's delegate type proposal's visible title (type-proposals.ts): what it is, its project under it. */
 const DELEGATE_TYPE_PROPOSAL_NAME = "Delegate type proposal";
 /** A design proposal's visible title (design-system.ts): what it is, its project under it. */
 const DESIGN_PROPOSAL_NAME = "Design system change";
@@ -228,8 +225,7 @@ type PushData =
       machineId: string;
       /**
        * The session whose pane the ask is drawn in when it is not its own
-       * (a memory curator run's proposal): a tap opens that session at the
-       * card. Null otherwise.
+       * (a delegate type proposal): a tap opens that session at the card. Null otherwise.
        */
       originInstanceId: string | null;
       projectId: string | null;
@@ -1681,8 +1677,8 @@ export const createPush = ({
   };
 
   /**
-   * An ask's visible title: a memory proposal and a project setting by what
-   * they are ("Memory proposal", "Project setting"), never by what they say;
+   * An ask's visible title: a proposal and a project setting by what they
+   * are ("Delegate type proposal", "Project setting"), never by what they say;
    * any other by its session ({@link askName}).
    */
   const askTitle = (
@@ -1690,9 +1686,6 @@ export const createPush = ({
     payload: Partial<PermissionRequestFrame>,
     instanceId: string
   ): string => {
-    if (payload.toolName === MEMORY_PROPOSAL_TOOL) {
-      return MEMORY_PROPOSAL_NAME;
-    }
     if (payload.toolName === DELEGATE_TYPE_PROPOSAL_TOOL) {
       return DELEGATE_TYPE_PROPOSAL_NAME;
     }

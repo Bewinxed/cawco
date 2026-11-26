@@ -426,8 +426,8 @@
     isLive ? [] : parkedAsks(sessionsStore.session(viewId)?.pending ?? [])
   );
   /**
-   * An ask is answered where it was made: one a curator run made opens that
-   * run's session, drawing it in its composer. This tab goes there.
+   * An ask is answered where it was made: a delegate type proposal opens
+   * the session that proposed it, drawing it in its composer. This tab goes there.
    */
   const madeIn = $derived(
     rowless.find((one) => one.originInstanceId)?.originInstanceId ?? null
@@ -1362,8 +1362,7 @@
   /**
    * The asks this conversation made: its own (one routed to its parent is
    * the parent's to answer, never the reader's queue), then those parked
-   * elsewhere that it made (a memory curator run's proposal, on machine
-   * "hub"), then the ones its delegates at any depth put to the person (a
+   * elsewhere that it made (a delegate type proposal, on machine "hub"), then the ones its delegates at any depth put to the person (a
    * browser ask two deep reaches the session the person talks to as it is
    * asked, named by the delegate that asked), each answered on the machine
    * it is parked on.

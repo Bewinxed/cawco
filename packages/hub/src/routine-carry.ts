@@ -62,10 +62,6 @@ const ROUTINE_WAIT = new RegExp(`routine:(${UUID})`, "giu");
 /** A front matter block on top of a file. */
 const FRONT = /^---\r?\n[\s\S]*?\r?\n---/u;
 
-/** What the hub's own routines' tasks say, one sentence for the person; their prompts stay in code. */
-const CURATOR_SAID =
-  "Each morning, reads the project's new messages and notes and keeps what is worth keeping in its memory.";
-
 export interface CarryDeps {
   readonly db: Pick<DbShape, "project" | "routines">;
   /** The task files of a project's `tasks/`, by name; none when it has no folder. */
@@ -172,8 +168,6 @@ const fitDescription = (prompt: string): string =>
 /** What a carried routine's task says it does. */
 const descriptionOf = (row: TriggerRow, carried: Carried): string => {
   switch (row.target) {
-    case "curator":
-      return CURATOR_SAID;
     case "trim":
       return routineToolWords.trimSaid;
     case "conversation":
