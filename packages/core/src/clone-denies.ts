@@ -9,12 +9,14 @@
  * a layer of their own (agent layer.ts), and the change set and the commit
  * checks that keep each out of what lands.
  *
- * A leaf: it imports nothing but node's path module and claude-dirs.ts, so
- * the boundary's host, a plain Bun script, imports it as it is.
+ * A leaf: it imports nothing but node's path module, zod, claude-dirs.ts and
+ * the harness descriptors, so the boundary's host, a plain Bun script,
+ * imports it as it is.
  */
 import { join } from "node:path";
 import { z } from "zod";
 import { PLACED_MEMORY, PLACED_SYNCED } from "./claude-dirs";
+import { AGY_CLONE_CONFIG } from "./harness/agy";
 import { HARNESS_PLUGINS } from "./harness/kinds";
 
 /**
@@ -78,9 +80,63 @@ const SRT_DIRS = [".vscode", ".idea"];
  * the owner picked "Admin tools only" (2026-10-23).
  */
 
-/** Every harness's config, as one table. */
-const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
-  Object.assign({}, ...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig));
+/** The one stand-in for a path two harnesses name: a dir read-only when either holds it so; any other two that differ are a descriptor's mistake, refused. */
+const oneStandIn = (
+  path: string,
+  held: CloneDenyEmpty,
+  named: CloneDenyEmpty
+): CloneDenyEmpty => {
+  if (held.kind === "dir" && named.kind === "dir") {
+    return held.readOnly || named.readOnly
+      ? { kind: "dir", readOnly: true }
+      : DIR;
+  }
+  if (
+    (held.kind === "none" && named.kind === "none") ||
+    (held.kind === "file" && named.kind === "file" && held.text === named.text)
+  ) {
+    return held;
+  }
+  throw new Error(
+    `${path}: two harnesses stand in for it differently, as ${JSON.stringify(held)} and ${JSON.stringify(named)}`
+  );
+};
+
+/**
+ * `tables` as one, one stand-in per path. A path several name stands in once
+ * ({@link oneStandIn}). A path below a dir of the table stands in for
+ * nothing of its own: the dir's empty stand-in holds no entry, its bind
+ * holds all below it, and a stand-in made inside a read-only one could not
+ * be made.
+ */
+const oneTable = (
+  tables: readonly Readonly<Record<string, CloneDenyEmpty>>[]
+): Readonly<Record<string, CloneDenyEmpty>> => {
+  const merged = new Map<string, CloneDenyEmpty>();
+  for (const [path, named] of tables.flatMap((table) =>
+    Object.entries(table)
+  )) {
+    const held = merged.get(path);
+    merged.set(path, held ? oneStandIn(path, held, named) : named);
+  }
+  const dirs = [...merged]
+    .filter(([, empty]) => empty.kind === "dir")
+    .map(([path]) => path);
+  return Object.fromEntries(
+    [...merged].filter(
+      ([path]) => !dirs.some((dir) => path.startsWith(`${dir}/`))
+    )
+  );
+};
+
+/**
+ * Every harness's config, as one table. Antigravity's is its own table
+ * until it is a registered harness, whose descriptor's `cloneConfig` it then
+ * is (harness/agy.ts).
+ */
+const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = oneTable(
+  [...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig), AGY_CLONE_CONFIG]
+);
 
 /**
  * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a
@@ -165,7 +221,7 @@ export const protectedFindTests = (paths: readonly string[]): string[] => [
   ")",
 ];
 
-/** The dir names a {@link PROTECTED_CONFIG} path lies under (`.git`, `.claude`, `.agents`, `rules`): a dir of one of these names holds protected config below it. */
+/** The dir names a {@link PROTECTED_CONFIG} path lies under (`.git`, `.claude`, `rules`): a dir of one of these names holds protected config below it. */
 export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
   PROTECTED_CONFIG.flatMap((path) => path.split("/").slice(0, -1))
 );
@@ -178,7 +234,8 @@ export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
  * alternates. And
  * the harness project config the host
  * loads at the workspace's next session, outside any boundary, at the clone's
- * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's, pi's and Codex's);
+ * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's, pi's,
+ * Codex's and Antigravity's);
  * and what the fleet places ({@link FLEET_PLACED}): the project skills with
  * the store their links land in, and the project's memory documents.
  * On Linux a link in a dir the sandbox writes can be swapped for another,

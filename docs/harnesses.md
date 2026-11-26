@@ -84,7 +84,10 @@ relaunched at rest when the form changes.
 
 **Clone denies (security).** Every config file the harness loads from a
 folder and runs on the host is emptied in a workspace: descriptor
-`cloneConfig`. Its logins on the host are unreadable from a workspace:
+`cloneConfig`. Each descriptor names every path it reads, even one another
+descriptor names: core `clone-denies.ts` stands a shared path in once
+(read-only if any descriptor holds it so) and a path under another's dir
+not at all, since the dir's bind holds it. Its logins on the host are unreadable from a workspace:
 descriptor `credentialPlaces`. A path left out of either runs a clone's
 config on the host or hands its credential to a workspace. A harness that
 trusts a folder by itself (Codex's app-server does, for any folder it starts

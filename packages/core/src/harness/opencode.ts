@@ -133,8 +133,9 @@ export const OPENCODE = {
 
   // `opencode.json(c)` and `.opencode/` (plugins, commands' shell blocks,
   // MCP commands), from cwd to the filesystem root
-  // (opencode.ai/v2/docs/config). Its `.agents/skills` is pi's entry too,
-  // and stands there once.
+  // (opencode.ai/v2/docs/config), and its skills in `.agents/skills`, held
+  // as the whole `.agents` dir, empty and read-only, as pi's, Codex's and
+  // Antigravity's (clone-denies.ts stands it in once).
   cloneConfig: {
     "opencode.json": EMPTY_CONFIG,
     "opencode.jsonc": EMPTY_CONFIG,
@@ -144,6 +145,7 @@ export const OPENCODE = {
     // write bits both fail quietly, and the clone loads as one without
     // `.opencode` does (OpenCode 1.18.34: `/config` and `/agent` the same).
     ".opencode": { kind: "dir", readOnly: true },
+    ".agents": { kind: "dir", readOnly: true },
   },
   // `auth.json`, `mcp-auth.json`; `opencode.json` with provider keys and
   // MCP headers.

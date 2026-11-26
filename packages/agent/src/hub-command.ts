@@ -647,7 +647,7 @@ const moveWords = async (workspace: WorkspaceRef): Promise<string> =>
 /**
  * The harness project config that commits no branch of `workspace`'s
  * origin holds change, of those reachable from `revs` there: core's
- * `HARNESS_CONFIG` (Claude Code's, OpenCode's and pi's project config) at
+ * `HARNESS_CONFIG` (each harness's project config) at
  * any depth and in any letter case, and every clone-side deny path at the
  * root (the placed skills and memory among them, srt's own names aside;
  * worktree-guard.ts `denyPathspecs`), by path. A host harness loads them at a workspace's next

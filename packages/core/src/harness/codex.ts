@@ -149,12 +149,14 @@ export const CODEX = {
   hooks: { runs: "harness" },
 
   // `.codex/` (config.toml, whose MCP servers ran on the host: C-k; hooks,
-  // rules, agents) and the repo plugin marketplace. `.agents/skills` is
-  // pi's entry too, and stands there once. The adapter also marks every
-  // clone untrusted before its first thread (C-k3).
+  // rules, agents), and its repo plugin marketplace and skills in
+  // `.agents/plugins` and `.agents/skills`, held as the whole `.agents` dir,
+  // empty and read-only, as OpenCode's, pi's and Antigravity's
+  // (clone-denies.ts stands it in once). The adapter also marks every clone
+  // untrusted before its first thread (C-k3).
   cloneConfig: {
     ".codex": DIR,
-    ".agents/plugins": DIR,
+    ".agents": { kind: "dir", readOnly: true },
   },
   // The machine's own Codex sign-in. CawCo's homes sit under its data dir,
   // which no workspace reads.

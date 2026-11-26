@@ -135,10 +135,12 @@ export const PI = {
   // `.pi/` (extensions, packages, `mcp.json`, settings; CawCo's pi takes
   // every folder as trusted, agent pi-runtime.ts `SettingsManager.create`).
   // "A bare `.pi` directory does not require project trust" (pi docs), so
-  // an empty one stands in. `.agents/skills` is OpenCode's too.
+  // an empty one stands in. Its skills in `.agents/skills`, held as the
+  // whole `.agents` dir, empty and read-only, as OpenCode's, Codex's and
+  // Antigravity's (clone-denies.ts stands it in once).
   cloneConfig: {
     ".pi": DIR,
-    ".agents/skills": DIR,
+    ".agents": { kind: "dir", readOnly: true },
   },
   // `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
   credentialPlaces: [
