@@ -283,7 +283,7 @@ const ROUTINE_SHAPE = {
     .nullable()
     .optional()
     .describe(
-      "Gates the routine: one shell line run before each run on every check_on machine, as the agent's user, unsandboxed, no model. Empty stdout, or a last line {\"wakeAgent\": false}, is quiet: no run. Other stdout is the run's input. Non-zero exit fails it. It keeps its own state. null removes it."
+      "Gates the routine: one shell line run before each run on every check_on machine, as the agent's user, unsandboxed, no model. Empty stdout, or a last line {\"wakeAgent\": false}, is quiet: no run. Other stdout is the run's input. Non-zero exit fails it. It keeps its own state."
     ),
   check_on: z
     .array(z.string())
@@ -1056,6 +1056,9 @@ export function taskTools(context: TaskToolContext | undefined) {
         links: linksParameter(),
         fields: fieldsParameter(),
         ...ROUTINE_SHAPE,
+        check: ROUTINE_SHAPE.check.describe(
+          "As task_create's; null removes it."
+        ),
         enabled: z
           .boolean()
           .optional()

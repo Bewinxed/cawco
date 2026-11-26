@@ -237,6 +237,9 @@ export const artifactToolWords = {
   /** A pick named on an artifact that opens none: a preview or a canvas. */
   pickNoPick: (name: string, kind: string) =>
     `${name} is a ${kind}, which puts no pick to the person: pick is for a design graph's directions or a decision page's cards. Nothing was changed.`,
+  /** A dial named with a space or a symbol: the schema's refusal. */
+  dialName:
+    "A dial's name is one word (letters, digits, - or _), like radius; its words go in label.",
   /** A create with no title, or an empty one: the tool's refusal and the hub's. */
   titleMissing:
     'title is required: a few plain words, sentence case, that name it to the person, like "Title bars close". The panel head, the artifacts menu, Needs you and every chip show it.',

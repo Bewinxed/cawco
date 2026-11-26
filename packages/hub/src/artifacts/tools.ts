@@ -129,8 +129,7 @@ const canvasFields = {
       z.object({
         name: z
           .string()
-          .regex(/^[A-Za-z][\w-]*$/u)
-          .describe("No spaces; its words go in label."),
+          .regex(/^[A-Za-z][\w-]*$/u, { error: artifactToolWords.dialName }),
         label: z.string().optional(),
         kind: z.enum(["number", "color", "select", "toggle", "text", "action"]),
         group: z.string().optional(),
@@ -284,7 +283,7 @@ export const artifactUpdate = {
   input: {
     id,
     elements: elements.describe(
-      "Excalidraw skeletons as artifact_create takes them; one whose id is there replaces it."
+      "As artifact_create's; one whose id is there replaces it."
     ),
     mermaid,
     args: z
@@ -331,6 +330,8 @@ export const artifactUpdate = {
     title: title.optional().describe("A new title."),
     pick: pick.describe("Where its pick is made, as artifact_create's."),
     ...canvasFields,
+    edges: canvasFields.edges.describe("As artifact_create's."),
+    dials: canvasFields.dials.describe("As artifact_create's."),
     dir: z
       .string()
       .startsWith("/")
@@ -464,7 +465,7 @@ export const artifactRead = {
       ])
       .optional()
       .describe(
-        "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta. A story is drawn as mounted: its play runs only under measure."
+        "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta, drawn as mounted (its play runs only under measure)."
       ),
     render: z.boolean().optional().describe("Draws it now."),
     layout: z
