@@ -43,6 +43,7 @@ import {
   type TakeoverLayout,
 } from "@cawco/core/browser";
 import { isRecord } from "@cawco/core/is-record";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
@@ -556,13 +557,11 @@ export class CdpTakeover {
   }
 
   /** The inputs landing, one after another. */
-  #landing: Promise<void> = Promise.resolve();
+  readonly #landing = makeLock();
 
   /** `work` once everything queued before it has landed. */
   #queue(work: () => Promise<void>): Promise<void> {
-    const landed = this.#landing.then(work);
-    this.#landing = landed.catch(() => undefined);
-    return landed;
+    return this.#landing.run(work);
   }
 
   /**

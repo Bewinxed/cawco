@@ -19,6 +19,7 @@
  * its subnet as made.
  */
 import { networkInterfaces } from "node:os";
+import { makeLock } from "@cawco/core/keyed-lock";
 import type Docker from "dockerode";
 import { statusOf } from "./docker-status";
 
@@ -171,7 +172,7 @@ const freeSubnet = async (docker: Docker): Promise<string> => {
 };
 
 /** One making at a time in this process. */
-let making: Promise<unknown> = Promise.resolve();
+const making = makeLock();
 
 /**
  * The bridge network `name` (the media network unless named), made with a
@@ -213,9 +214,7 @@ export const ensureMediaNetwork = (
     }
     return { name, subnet: made };
   };
-  const next = making.then(work, work);
-  making = next.catch(() => undefined);
-  return next;
+  return making.run(work);
 };
 
 /**

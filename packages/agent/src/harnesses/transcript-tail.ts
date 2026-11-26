@@ -14,6 +14,7 @@
  */
 import { unwatchFile, watchFile } from "node:fs";
 import { open, stat } from "node:fs/promises";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { LineSplitter } from "@cawco/core/lines";
 
 /** How often the file's stat is looked at. Ours: a hook's failure is acted on at rest, so a second late changes nothing. */
@@ -33,7 +34,7 @@ export const tailLines = async (
   // mid-line and mid-character: both are carried to the next.
   const lines = new LineSplitter();
   const decoder = new TextDecoder();
-  let reading = Promise.resolve();
+  const reading = makeLock();
   const read = async (): Promise<void> => {
     const handle = await open(file, "r");
     try {
@@ -52,7 +53,7 @@ export const tailLines = async (
     }
   };
   const changed = (): void => {
-    reading = reading.then(read).catch(failed);
+    reading.run(read).catch(failed);
   };
   watchFile(file, { interval: TAIL_LOOK_MS, persistent: false }, changed);
   return () => unwatchFile(file, changed);

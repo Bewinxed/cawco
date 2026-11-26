@@ -47,6 +47,7 @@ import {
 import { basename, dirname, join, relative } from "node:path";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { projectClaudeDir } from "@cawco/core/paths/claude";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
@@ -189,7 +190,7 @@ const listedOf = async (id: string): Promise<string[]> => {
 };
 
 /** Each workspace's listing under way ({@link listStandIns}), by its id: one at a time. */
-const listings = new Map<string, Promise<void>>();
+const listings = makeKeyedLock<string>();
 
 /**
  * Lists the stand-ins in the clone that are CawCo's, each by its own anchored
@@ -206,20 +207,7 @@ const listings = new Map<string, Promise<void>>();
 export const listStandIns = (
   ref: WorkspaceRef,
   willStandIn: boolean
-): Promise<void> => {
-  const next = (listings.get(ref.id) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(() => listNow(ref, willStandIn));
-  listings.set(ref.id, next);
-  next
-    .finally(() => {
-      if (listings.get(ref.id) === next) {
-        listings.delete(ref.id);
-      }
-    })
-    .catch(() => undefined);
-  return next;
-};
+): Promise<void> => listings.run(ref.id, () => listNow(ref, willStandIn));
 
 const listNow = async (
   ref: WorkspaceRef,

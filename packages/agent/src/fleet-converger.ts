@@ -34,6 +34,7 @@ import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { descriptorOf } from "@cawco/core/harness/kinds";
 import { isRecord } from "@cawco/core/is-record";
+import { makeLock } from "@cawco/core/keyed-lock";
 import type { OwnTools } from "@cawco/core/own-tools";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
@@ -150,7 +151,7 @@ export class FleetConverger {
   /** The fleet MCP heal passes, one session after another ({@link healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
-  #fleetQueue: Promise<unknown> = Promise.resolve();
+  readonly #fleetQueue = makeLock();
   // These flags are declared `boolean` and set in the constructor: biome's
   // noUnnecessaryConditions reads `= false` as always false, and
   // noInferrableTypes refuses `: boolean = false`.
@@ -254,9 +255,7 @@ export class FleetConverger {
    * was sent before it.
    */
   #fleetTurn<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#fleetQueue.then(work, work);
-    this.#fleetQueue = next.catch(() => undefined);
-    return next;
+    return this.#fleetQueue.run(work);
   }
   /**
    * A delta held as it arrives (fleet-desired.ts), in the order the hub sent

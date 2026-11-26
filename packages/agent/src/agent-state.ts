@@ -8,6 +8,7 @@
  * write.
  */
 import { join } from "node:path";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -66,7 +67,7 @@ type Recorded = {
 };
 
 const held: Recorded = {};
-let writes: Promise<void> = Promise.resolve();
+const writes = makeLock();
 
 /**
  * Records `value` as what this agent holds of `key`, the file written whole;
@@ -81,12 +82,11 @@ export const recordAgentState = <Key extends keyof AgentState>(
     [key]: { ...value, agent: process.pid, at: Date.now() },
   });
   const path = join(cawcoDataDir(), AGENT_STATE_FILE);
-  writes = writes
-    .then(() => writeStateFile(path, `${JSON.stringify(held)}\n`))
+  return writes
+    .run(() => writeStateFile(path, `${JSON.stringify(held)}\n`))
     .catch((error: unknown) => {
       console.warn(
         `[agent] ${path} could not be written: ${error instanceof Error ? error.message : String(error)}`
       );
     });
-  return writes;
 };

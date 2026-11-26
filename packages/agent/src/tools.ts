@@ -11,6 +11,7 @@ import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
@@ -759,7 +760,7 @@ const readInstallFile = async (): Promise<ToolInstalls> => {
   }
 };
 
-let installWrites: Promise<void> = Promise.resolve();
+const installWrites = makeLock();
 
 /**
  * `change` made to the record file, one write at a time, so none is lost; a
@@ -768,9 +769,9 @@ let installWrites: Promise<void> = Promise.resolve();
 const writeInstalls = (
   what: string,
   change: (file: ToolInstalls) => ToolInstalls
-): Promise<void> => {
-  installWrites = installWrites
-    .then(async () => {
+): Promise<void> =>
+  installWrites
+    .run(async () => {
       const file = change(await readInstallFile());
       await writeStateFile(
         toolInstallsPath(),
@@ -782,8 +783,6 @@ const writeInstalls = (
         `[tools] ${toolInstallsPath()} could not be written, so ${what} is not recorded: ${error instanceof Error ? error.message : String(error)}`
       );
     });
-  return installWrites;
-};
 
 /**
  * CawCo's install of `id` left a copy it runs at `record.path`: kept, over
@@ -2368,8 +2367,8 @@ export const signinMoved = (id: string): void => {
  * ended while the probe read is read again.
  */
 const installing = new Map<string, Promise<ToolStatus>>();
-/** The machine's installs one after another ({@link installTool}): the last one asked, settled. */
-let installTurn: Promise<void> = Promise.resolve();
+/** The machine's installs one after another ({@link installTool}). */
+const installTurn = makeLock();
 const installEnded = new Map<string, number>();
 /**
  * Each running install, by tool id: the version it puts on, when it names
@@ -2865,25 +2864,23 @@ export const installTool = async (
   const target = spec.exactVersion ?? version;
   // One install on the machine at a time, of any tool: package managers
   // take their own locks, and the asks arrive in lanes of their own.
-  const turn = installTurn;
-  const work = turn
-    .then(() => install(spec, target, ask))
-    .finally(() => {
-      installing.delete(spec.id);
-      installingAs.delete(spec.id);
-      installEnded.set(spec.id, Date.now());
-      toolsMoved();
-    });
-  installing.set(spec.id, work);
-  installTurn = work.then(
-    () => undefined,
-    () => undefined
-  );
+  // What it puts on is said before its turn, which may begin at once.
   const to = target ?? ask.newest;
   installingAs.set(spec.id, {
     ...(to ? { to } : {}),
     ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
   });
+  const work = installTurn.run(async () => {
+    try {
+      return await install(spec, target, ask);
+    } finally {
+      installing.delete(spec.id);
+      installingAs.delete(spec.id);
+      installEnded.set(spec.id, Date.now());
+      toolsMoved();
+    }
+  });
+  installing.set(spec.id, work);
   return await work;
 };
 

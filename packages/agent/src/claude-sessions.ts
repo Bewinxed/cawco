@@ -19,6 +19,7 @@ import { cp, lstat, readdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { isGone } from "@cawco/core/absent";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   claudeConfigDirs,
   projectSlug,
@@ -26,6 +27,7 @@ import {
   type SessionEntry,
   sessionConfigDir,
 } from "@cawco/core/paths/claude";
+import { Effect } from "effect";
 
 /** Claude Code names every session by a UUID; a name that starts with one is that session's. */
 const SESSION_ID =
@@ -258,11 +260,8 @@ const carryOne = async (
   );
 };
 
-/**
- * The carry each session's data is in now, by session id: the next carry of
- * that session waits for it ({@link carrySessions}).
- */
-const carrying = new Map<string, Promise<void>>();
+/** Each session's carries, by session id: the next carry of a session waits for the one before it ({@link carrySessions}). */
+const carrying = makeKeyedLock<string>();
 
 /**
  * Carries each session into the dir its row names: every per-session entry
@@ -278,31 +277,22 @@ const carrying = new Map<string, Promise<void>>();
  * moved ("ENOENT … lstat '<old dir>/projects/<slug>/<id>.jsonl'") and failing
  * a launch whose conversation was already whole where it runs.
  */
-export const carrySessions = async (
+export const carrySessions = (
   requests: readonly CarryRequest[]
-): Promise<Map<string, Carried>> => {
-  const before = requests.flatMap(
-    (request) => carrying.get(request.sessionId) ?? []
+): Promise<Map<string, Carried>> =>
+  // Every session's turn, taken in one order, so two carries that name the
+  // same sessions never each hold one the other waits for.
+  Effect.runPromise(
+    [...new Set(requests.map((request) => request.sessionId))]
+      .sort()
+      .reduceRight<Effect.Effect<Map<string, Carried>, unknown>>(
+        (inner, sessionId) => carrying.withLock(sessionId, inner),
+        Effect.tryPromise({
+          try: () => carryNow(requests),
+          catch: (error) => error,
+        })
+      )
   );
-  let done = (): void => undefined;
-  const mine = new Promise<void>((ended) => {
-    done = ended;
-  });
-  for (const request of requests) {
-    carrying.set(request.sessionId, mine);
-  }
-  try {
-    await Promise.all(before);
-    return await carryNow(requests);
-  } finally {
-    done();
-    for (const request of requests) {
-      if (carrying.get(request.sessionId) === mine) {
-        carrying.delete(request.sessionId);
-      }
-    }
-  }
-};
 
 /** {@link carrySessions}' work, once no other carry of these sessions runs. */
 const carryNow = async (

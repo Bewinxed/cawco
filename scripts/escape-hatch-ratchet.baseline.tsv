@@ -486,7 +486,7 @@ catch-drops-reason	empty	apps/dashboard/src/lib/cawco/workspace/PaneGrid.svelte	
 catch-drops-reason	empty	apps/dashboard/src/lib/platform/motion/drag.svelte.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/platform/motion/rows.svelte.ts	2
 catch-drops-reason	empty	apps/dashboard/src/lib/platform/prefs.ts	1
-catch-drops-reason	empty	packages/agent/src/fleet.ts	4
+catch-drops-reason	empty	packages/agent/src/fleet.ts	3
 catch-drops-reason	empty	packages/agent/src/harnesses/claude.ts	3
 catch-drops-reason	empty	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	empty	packages/agent/src/harnesses/pi-runtime.ts	2
@@ -741,7 +741,7 @@ suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/cor
 suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/hub/src/project-edit.ts	1
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/design.css	2
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/lib/cawco/spawn/ns-theme.css	3
-suppression	biome-ignore lint/suspicious/noEmptyBlockStatements	packages/agent/src/fleet.ts	4
+suppression	biome-ignore lint/suspicious/noEmptyBlockStatements	packages/agent/src/fleet.ts	3
 suppression	biome-ignore lint/suspicious/noEmptyBlockStatements	packages/agent/src/harnesses/claude.ts	3
 suppression	biome-ignore lint/suspicious/noEmptyBlockStatements	packages/agent/src/session.ts	3
 suppression	biome-ignore lint/suspicious/noExplicitAny	apps/dashboard/src/lib/cawco/views/openui/OpenUiRenderer.svelte	1

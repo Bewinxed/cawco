@@ -80,6 +80,7 @@ import {
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { inFlight } from "@cawco/core/loop-watch";
 import type { InboundRefusal } from "@cawco/core/machine-inbound";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -304,8 +305,6 @@ interface Claimed {
   proc: { epoch: string; head: number; pid: number };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
-  /** Lets go of the claim, for a reattach waiting on this row. */
-  settle: () => void;
   spec: SpawnPayload;
 }
 
@@ -746,10 +745,15 @@ export class SessionSupervisor {
 
   constructor(ports: SupervisorPorts) {
     this.#ports = ports;
+    const queues = this.#queues;
     gaugeTables("supervisor", {
       asleep: this.#asleep,
       handed: this.#handed,
-      queues: this.#queues,
+      queues: {
+        get size() {
+          return queues.busy().length;
+        },
+      },
       resumable: this.#resumable,
       ingested: this.#ingested,
       openAsks: this.#openAsks,
@@ -840,7 +844,7 @@ export class SessionSupervisor {
         this.#awakeForMove(instanceId, session),
       drop: (instanceId, how) => this.#live.drop(instanceId, how),
       endWork: (instanceId, why) => this.#endWork(instanceId, why),
-      queued: (instanceId) => this.#queues.has(instanceId),
+      queued: (instanceId) => this.#queues.isBusy(instanceId),
       running: (instanceId) => this.#live.sessions.get(instanceId),
     });
 
@@ -921,8 +925,13 @@ export class SessionSupervisor {
    * back, in order, while no connection takes it: said on the next one.
    */
   readonly #unsentGone: Parameters<FrameSink>[0][] = [];
-  /** Reattaches in flight, by instance id: see {@link reattach}. */
-  readonly #adopting = new Map<string, Promise<void>>();
+  /**
+   * The sessions whose custody is still being decided: a start or a reattach
+   * in flight, by instance id, until it has attached or ended. Each runs in
+   * its session's queue ({@link #queues}), so no two of one session run at
+   * once.
+   */
+  readonly #adopting = new Set<string>();
   /**
    * Each held child taken into custody and not yet attached, or a reattach
    * start in flight, by instance id: what a stop for it cuts short
@@ -1015,8 +1024,8 @@ export class SessionSupervisor {
     sink: (frame) => this.sink(frame),
     transcriptDeleted: (sessionId) => this.#transcriptDeleted(sessionId),
   });
-  /** One chain per instance, so envelopes about it are handled in arrival order. */
-  readonly #queues = new Map<string, Promise<void>>();
+  /** One turn at a time per instance (or lane), so envelopes about it are handled in arrival order. */
+  readonly #queues = makeKeyedLock<string>();
 
   /** Transcript reads running now ({@link TRANSCRIPT_READS_AT_ONCE} at most), and those waiting their turn. */
   #transcriptReading = 0;
@@ -1506,8 +1515,13 @@ export class SessionSupervisor {
       (CONTROL_QUERIES.has(control.method) ||
         (!envelope.instanceId && isControlOf(CATALOG_READS, control)))
     ) {
-      // #control sinks its own answer, success or failure.
-      const behind = this.#queues.get(key) ?? Promise.resolve();
+      // #control sinks its own answer, success or failure. What is on its
+      // way is waited for by an empty turn of its own behind it; with
+      // nothing on its way, none is taken, so a question never reads as
+      // something on its way to the session.
+      const behind = this.#queues.isBusy(key)
+        ? this.#queues.run(key, () => Promise.resolve())
+        : Promise.resolve();
       const transcript =
         control.method === "getSessionMessages" ||
         control.method === CONTROL_READ_TRANSCRIPT_WINDOW;
@@ -1521,22 +1535,15 @@ export class SessionSupervisor {
     // A command behind another in its folder says so as it queues (folderTurn).
     const folder =
       control?.method === CONTROL_RUN_COMMAND
-        ? folderTurn(control.args, this.#queues.has(key), this.#ports)
+        ? folderTurn(control.args, this.#queues.isBusy(key), this.#ports)
         : undefined;
-    const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
-      folder?.start();
-      return this.#route(envelope);
-    });
-    const queue = (
-      envelope.verb === "spawn"
-        ? inFlight(
-            envelope.payload.reattachOnly ? "reattaches" : "starts",
-            routed
-          )
-        : routed
-    )
-      .finally(() => folder?.end())
-      .catch((error: unknown) => {
+    // Its failure is said and its folder let go inside its own turn, before
+    // the next envelope's begins.
+    const turn = this.#queues.run(key, async () => {
+      try {
+        folder?.start();
+        await this.#route(envelope);
+      } catch (error) {
         warn(`${envelope.verb} failed: ${error}`);
         // A route failure otherwise reads as delivered silence: spawn answers
         // through #fail and control through its own timeout, but a send or a
@@ -1557,14 +1564,24 @@ export class SessionSupervisor {
             message: error instanceof Error ? error.message : String(error),
           });
         }
-      });
+      } finally {
+        folder?.end();
+      }
+    });
+    const queue =
+      envelope.verb === "spawn"
+        ? inFlight(
+            envelope.payload.reattachOnly ? "reattaches" : "starts",
+            turn
+          )
+        : turn;
     if (imageRequest) {
       detach(
         queue.then(() => this.#imageRequests.delete(imageRequest)),
         "then"
       );
     }
-    return this.#hold(key, queue);
+    return queue;
   }
 
   /** The sessions running right now — what `register` reconciles the hub against. */
@@ -1619,7 +1636,7 @@ export class SessionSupervisor {
       ...new Set([
         ...this.#live.sessions.keys(),
         ...this.#adopting.keys(),
-        ...[...this.#queues.keys()].filter((key) => key && !key.includes(":")),
+        ...this.#queues.busy().filter((key) => key && !key.includes(":")),
       ]),
     ];
   }
@@ -1800,7 +1817,8 @@ export class SessionSupervisor {
    */
   restartHolds(): RestartHold[] {
     const queued = (prefix: string): string[] =>
-      [...this.#queues.keys()]
+      this.#queues
+        .busy()
         .filter((key) => key.startsWith(prefix))
         .map((key) => key.slice(prefix.length));
     return mergeHolds(
@@ -2104,7 +2122,7 @@ export class SessionSupervisor {
     if (awake && !awake.later) {
       return { paused: false, replying: true, why: awake.why };
     }
-    if (this.#queues.has(instanceId)) {
+    if (this.#queues.isBusy(instanceId)) {
       return {
         paused: false,
         replying: true,
@@ -2164,20 +2182,6 @@ export class SessionSupervisor {
   /** The {@link CLI_OUTDATED} lines said, by their uuid: each once. */
   readonly #outdatedSaid = new Set<string>();
 
-  /** Holds `queue` as `key`'s queue until it settles, unless a later one took its place by then. */
-  #hold(key: string, queue: Promise<void>): Promise<void> {
-    this.#queues.set(key, queue);
-    detach(
-      queue.then(() => {
-        if (this.#queues.get(key) === queue) {
-          this.#queues.delete(key);
-        }
-      }),
-      "then"
-    );
-    return queue;
-  }
-
   /**
    * RETIRES A PROCESS ON AN OLD VERSION ({@link HarnessSession.outdated}):
    * put to sleep the moment it is at rest ({@link sleep} with `retire`),
@@ -2191,8 +2195,8 @@ export class SessionSupervisor {
     session: HarnessSession,
     outdated: { uuid: string; words: string }
   ): void {
-    const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
-      .then(async () => {
+    this.#queues
+      .run(instanceId, async () => {
         const slept = await this.sleep(instanceId, true);
         // Asleep now, or no longer carried here: nothing runs the old one.
         if (!slept.awake || this.#outdatedSaid.has(outdated.uuid)) {
@@ -2220,7 +2224,6 @@ export class SessionSupervisor {
           `putting ${instanceId} to sleep for its old version failed: ${error}`
         )
       );
-    this.#hold(instanceId, queue);
   }
 
   /**
@@ -2234,7 +2237,7 @@ export class SessionSupervisor {
     const restless: Record<string, string> = {};
     const serverBusy = await serverBusyInstances();
     for (const instanceId of ids) {
-      if (this.#queues.has(instanceId)) {
+      if (this.#queues.isBusy(instanceId)) {
         restless[instanceId] = "something sent to it is still on its way";
         continue;
       }
@@ -2285,14 +2288,13 @@ export class SessionSupervisor {
       if (now - (this.#live.lastActive(instanceId) ?? now) < IDLE_SLEEP_MS) {
         continue;
       }
-      const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
-        .then(async () => {
+      this.#queues
+        .run(instanceId, async () => {
           await this.sleep(instanceId);
         })
         .catch((error: unknown) =>
           warn(`putting ${instanceId} to sleep failed: ${error}`)
         );
-      this.#hold(instanceId, queue);
     }
   }
 
@@ -2638,7 +2640,7 @@ export class SessionSupervisor {
       return;
     }
     const awake = await this.#awakeForMove(instanceId, session);
-    if (awake || this.#queues.has(instanceId)) {
+    if (awake || this.#queues.isBusy(instanceId)) {
       console.info(
         `[compact] ${instanceId}: its process ran a manual /compact; it is replaced at a later turn's end, not now: ${awake?.why ?? "something sent to it is still on its way"}`
       );
@@ -2687,17 +2689,11 @@ export class SessionSupervisor {
    */
   async #spawn(payload: SpawnPayload): Promise<void> {
     const id = payload.instanceId;
-    const prior = this.#adopting.get(id);
-    if (prior) {
-      await prior;
-      return this.#spawn(payload);
-    }
     if (this.#reuseRecovery(payload)) {
       return;
     }
-    // Claim before the first await: register adoption and direct spawns share it.
-    const claim = Promise.withResolvers<void>();
-    this.#adopting.set(id, claim.promise);
+    // Claimed before the first await: its custody is being decided from here.
+    this.#adopting.add(id);
     // A start that attaches to a held child is cut short by a stop, as a
     // custody attach is.
     // A custody attach queued behind it keeps the one it holds.
@@ -2709,22 +2705,18 @@ export class SessionSupervisor {
       this.#attaching.set(id, attach);
     }
     try {
-      await this.#spawnClaimed(payload, claim.resolve, attach?.signal);
+      await this.#spawnClaimed(payload, attach?.signal);
     } finally {
       if (attach && this.#attaching.get(id) === attach) {
         this.#attaching.delete(id);
       }
-      if (this.#adopting.get(id) === claim.promise) {
-        this.#adopting.delete(id);
-      }
-      claim.resolve();
+      this.#adopting.delete(id);
     }
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one claimed spawn owns preparation, address acknowledgement, publication and refusal cleanup
   async #spawnClaimed(
     payload: SpawnPayload,
-    settleClaim: () => void,
     stopped?: AbortSignal
   ): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
@@ -2793,7 +2785,6 @@ export class SessionSupervisor {
                 spec: { ...payload, cwd: workdir },
                 proc,
                 running,
-                settle: settleClaim,
               },
               Object.fromEntries(this.#ingested),
               stopped
@@ -2976,7 +2967,6 @@ export class SessionSupervisor {
       }
       if (spec.reattachOnly) {
         this.#adopting.delete(instanceId);
-        settleClaim();
         await this.#settleAttached(
           instanceId,
           session,
@@ -3584,18 +3574,20 @@ export class SessionSupervisor {
     const stop = new AbortController();
     this.#attaching.set(instanceId, stop);
     this.#turnPending.add(instanceId);
-    const job = (this.#queues.get(instanceId) ?? Promise.resolve())
-      .then(() => this.#attachHeld(adapter, spec, proc, ingested, stop.signal))
-      .catch((problem: unknown) => {
+    // Its failure is said and its marks dropped inside its own turn: a start
+    // behind it reads #attaching.
+    this.#queues.run(instanceId, async () => {
+      try {
+        await this.#attachHeld(adapter, spec, proc, ingested, stop.signal);
+      } catch (problem) {
         warn(`custody ${instanceId}: its attach failed: ${errorText(problem)}`);
-      })
-      .finally(() => {
+      } finally {
         this.#turnPending.delete(instanceId);
         if (this.#attaching.get(instanceId) === stop) {
           this.#attaching.delete(instanceId);
         }
-      });
-    this.#hold(instanceId, job);
+      }
+    });
   }
 
   /** {@link #holdChild}'s attach, run from the session's queue. */
@@ -3611,8 +3603,7 @@ export class SessionSupervisor {
     if (this.#live.sessions.has(instanceId)) {
       return;
     }
-    const claim = Promise.withResolvers<void>();
-    this.#adopting.set(instanceId, claim.promise);
+    this.#adopting.add(instanceId);
     try {
       const running = await custodyProbe(
         adapter.custody.turnRunning(instanceId, proc.head),
@@ -3627,7 +3618,7 @@ export class SessionSupervisor {
       }
       await this.#adoptClaimed(
         adapter,
-        { spec, proc, running, settle: claim.resolve },
+        { spec, proc, running },
         ingested,
         stopped
       );
@@ -3640,10 +3631,7 @@ export class SessionSupervisor {
       }
       await this.#heldNotAttached(adapter, spec, proc, problem, stopped);
     } finally {
-      if (this.#adopting.get(instanceId) === claim.promise) {
-        this.#adopting.delete(instanceId);
-      }
-      claim.resolve();
+      this.#adopting.delete(instanceId);
     }
   }
 
@@ -3731,7 +3719,7 @@ export class SessionSupervisor {
   /** {@link #attachHeld}'s attach of one held child, its turn decided. */
   async #adoptClaimed(
     adapter: KeeperHarness,
-    { spec, proc, running, settle }: Claimed,
+    { spec, proc, running }: Claimed,
     ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
@@ -3791,7 +3779,6 @@ export class SessionSupervisor {
       this.#live.emitPulse(spec.instanceId, true);
     }
     this.#adopting.delete(spec.instanceId);
-    settle();
     console.info(turnWords.attached(spec.instanceId));
     // Asked of the child, which answers when it can, ahead of what is sent
     // to it ({@link #settleAttached}).
@@ -4647,13 +4634,11 @@ export class SessionSupervisor {
     instanceIds: readonly string[]
   ): Promise<void> {
     return Promise.all(
-      instanceIds.map((instanceId) => {
-        const run = (this.#queues.get(instanceId) ?? Promise.resolve()).then(
-          () => this.#endWork(instanceId, "finished", undefined, workspace)
-        );
-        this.#hold(instanceId, run);
-        return run;
-      })
+      instanceIds.map((instanceId) =>
+        this.#queues.run(instanceId, () =>
+          this.#endWork(instanceId, "finished", undefined, workspace)
+        )
+      )
     ).then(() => undefined);
   }
 

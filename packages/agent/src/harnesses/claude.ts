@@ -125,6 +125,7 @@ import type { OfferedMode, PermissionMode } from "@cawco/core/harness/modes";
 import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
+import { makeLock } from "@cawco/core/keyed-lock";
 import {
   accountConfigDir,
   accountIds,
@@ -2843,7 +2844,7 @@ class ClaudeSession implements HarnessSession {
   /** The config dir its CLI runs in (`CLAUDE_CONFIG_DIR`): its account's, or none for the machine's own. */
   readonly #configDir: string | undefined;
   /** One fleet MCP change taken at a time, in the order they came. */
-  #fleetMcp: Promise<unknown> = Promise.resolve();
+  readonly #fleetMcp = makeLock();
 
   constructor(
     instanceId: string,
@@ -4322,17 +4323,12 @@ class ClaudeSession implements HarnessSession {
       () => this.#verifyHeldCredential()
     ),
     [CONTROL_WITHDRAW_SEND]: (uuid) => this.#withdraw(uuid),
-    [CONTROL_MCP_FLEET_CHANGED]: (changes) => {
-      const taking = this.#fleetMcp.then(() => this.#takeFleetMcp(changes));
-      this.#fleetMcp = taking.catch(() => undefined);
-      return taking;
-    },
+    [CONTROL_MCP_FLEET_CHANGED]: (changes) =>
+      this.#fleetMcp.run(() => this.#takeFleetMcp(changes)),
     [CONTROL_FLEET_SETTINGS]: () => this.#takeFleetSettings(),
     [CONTROL_MCP_FLEET_HEAL]: (names) => {
       const named = names ?? undefined;
-      const healing = this.#fleetMcp.then(() => this.#healFleetMcp(named));
-      this.#fleetMcp = healing.catch(() => undefined);
-      return healing;
+      return this.#fleetMcp.run(() => this.#healFleetMcp(named));
     },
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
@@ -4401,18 +4397,21 @@ class ClaudeSession implements HarnessSession {
     if (!fleetMcp || Object.keys(fleetMcp).length === 0) {
       return;
     }
-    this.#fleetMcp = this.#handle.setMcpServers(fleetMcp).then(
-      ({ errors }) => {
-        for (const [name, error] of Object.entries(errors)) {
+    // The first turn: nothing is under way yet, so it starts at once.
+    this.#fleetMcp.run(() =>
+      this.#handle.setMcpServers(fleetMcp).then(
+        ({ errors }) => {
+          for (const [name, error] of Object.entries(errors)) {
+            console.warn(
+              `[claude] ${this.instanceId}: fleet MCP ${name} did not connect: ${error}`
+            );
+          }
+        },
+        (error: unknown) =>
           console.warn(
-            `[claude] ${this.instanceId}: fleet MCP ${name} did not connect: ${error}`
-          );
-        }
-      },
-      (error: unknown) =>
-        console.warn(
-          `[claude] ${this.instanceId}: the fleet's MCP servers were not set: ${error instanceof Error ? error.message : String(error)}`
-        )
+            `[claude] ${this.instanceId}: the fleet's MCP servers were not set: ${error instanceof Error ? error.message : String(error)}`
+          )
+      )
     );
   }
 

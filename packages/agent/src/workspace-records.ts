@@ -8,6 +8,7 @@ import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   workspaceBorrowedObjectsFile,
   workspacePlaceFoldersFile,
@@ -75,7 +76,7 @@ export const keepBorrowedObjects = async (ref: WorkspaceRef): Promise<void> => {
 };
 
 /** Each place's {@link keepPlaceFolder} in turn, so two holds at once each add theirs. */
-const keepingFolders = new Map<string, Promise<void>>();
+const keepingFolders = makeKeyedLock<string>();
 
 /**
  * Records the real path place `ref`'s folder stands at, added to the folders
@@ -95,15 +96,7 @@ export const keepPlaceFolder = (ref: WorkspaceRef): Promise<void> => {
     }
     await writeStateFile(file, `${JSON.stringify([...kept, folder])}\n`);
   };
-  const next = (keepingFolders.get(ref.id) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(keep);
-  keepingFolders.set(ref.id, next);
-  return next.finally(() => {
-    if (keepingFolders.get(ref.id) === next) {
-      keepingFolders.delete(ref.id);
-    }
-  });
+  return keepingFolders.run(ref.id, keep);
 };
 
 /**

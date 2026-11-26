@@ -29,6 +29,7 @@ import { AGENT_RESTARTED_MID_REQUEST } from "@cawco/core/binary-updates";
 import { makeFolder } from "@cawco/core/folders";
 import type { ControlResultFrame as ControlResult } from "@cawco/core/frames";
 import { jsonSizeEstimate } from "@cawco/core/json-stream";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -143,7 +144,7 @@ trim();
 const pending: Line[] = [];
 let writing: ReturnType<typeof setTimeout> | undefined;
 /** The writes of the file, one after another. */
-let written: Promise<void> = Promise.resolve();
+const written = makeLock();
 
 /** Appends `lines` and flushes them; or, past {@link COMPACT_AFTER}, writes the file whole as the entries kept. */
 const write = async (lines: Line[]): Promise<void> => {
@@ -182,8 +183,8 @@ const persist = (id: string): void => {
   writing = setTimeout(() => {
     writing = undefined;
     const lines = pending.splice(0);
-    written = written
-      .then(() => write(lines))
+    written
+      .run(() => write(lines))
       .catch((error: unknown) =>
         console.warn(
           `[requests] ${path()} could not be written: ${error instanceof Error ? error.message : String(error)}`

@@ -29,6 +29,7 @@ import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -666,30 +667,17 @@ const commitPlan = async (
  * way, so no two `git init` one folder at once and each reads the folder
  * the last one left.
  */
-const turns = new Map<string, Promise<unknown>>();
+const turns = makeKeyedLock<string>();
 
 /** Runs `step` on the folder at `root` once every step queued on it before has finished. */
 export const placeTurn = <T>(
   root: string,
   step: () => Promise<T>
-): Promise<T> => {
-  const mine = (turns.get(root) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(step);
-  turns.set(root, mine);
-  const forget = () => {
-    if (turns.get(root) === mine) {
-      turns.delete(root);
-    }
-  };
-  mine.then(forget, forget);
-  return mine;
-};
+): Promise<T> => turns.run(root, step);
 
-/** Resolves once every step queued on the folder at `root` has finished, either way. */
-export const placeSettled = async (root: string): Promise<void> => {
-  await turns.get(root)?.catch(() => undefined);
-};
+/** Resolves once every step queued on the folder at `root` has finished, either way: a turn of its own, empty, behind them. */
+export const placeSettled = (root: string): Promise<void> =>
+  turns.run(root, () => Promise.resolve());
 
 /** {@link CONTROL_PLACE_REPO}. */
 export const placeRepo = (root: string): Promise<PlaceRepo> =>

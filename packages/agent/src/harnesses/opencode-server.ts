@@ -8,6 +8,7 @@ import {
   opencodeV1Sessions,
   opencodeV1Statuses,
 } from "@cawco/core/harness/opencode-wire";
+import { makeLock } from "@cawco/core/keyed-lock";
 import {
   commandLines,
   listeningPorts,
@@ -506,7 +507,7 @@ export class OpencodeServerOwner {
   #record: OpencodeServerRecord | null = null;
   #transition: Promise<ServerIdentity> | null = null;
   #candidateProcId: string | null = null;
-  #writes = Promise.resolve();
+  readonly #writes = makeLock();
   readonly #retiring = new Map<string, Promise<void>>();
   readonly #retryAt = new Map<string, number>();
   /**
@@ -643,9 +644,7 @@ export class OpencodeServerOwner {
 
   #save(): Promise<void> {
     const record = this.#record;
-    const written = this.#writes.then(() => writeRecord(this.#path, record));
-    this.#writes = written.catch(() => undefined);
-    return written;
+    return this.#writes.run(() => writeRecord(this.#path, record));
   }
 
   /**
@@ -658,8 +657,8 @@ export class OpencodeServerOwner {
     if (record.active || record.retired.length > 0) {
       return;
     }
-    await this.#writes;
-    await rm(this.#path, { force: true });
+    // In the writes' turn: after every write asked for before it, never inside one.
+    await this.#writes.run(() => rm(this.#path, { force: true }));
     this.#record = null;
   }
 

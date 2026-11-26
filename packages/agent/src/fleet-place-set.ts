@@ -18,6 +18,7 @@
 import { readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { fleetPlacesDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
@@ -56,8 +57,8 @@ export const readPlaceSet = async (
   }
 };
 
-/** Each write of a place's file, one after another, so one's fields never land over another's. */
-let writing: Promise<unknown> = Promise.resolve();
+/** Each place's file's writes, one after another per file, so one's fields never land over another's; other places' files are written beside them. */
+const writing = makeKeyedLock<string>();
 
 /**
  * Place `cwd`'s file with `fields` written over what it holds, every other
@@ -67,8 +68,8 @@ let writing: Promise<unknown> = Promise.resolve();
 export const keepPlaceSet = (
   cwd: string,
   fields: Partial<Omit<FleetPlaceSet, "cwd">>
-): Promise<void> => {
-  const next = writing.then(async () => {
+): Promise<void> =>
+  writing.run(fileOf(cwd), async () => {
     const held = await readPlaceSet(cwd);
     const set: FleetPlaceSet = {
       cwd,
@@ -81,15 +82,11 @@ export const keepPlaceSet = (
     };
     await writeStateFile(fileOf(cwd), JSON.stringify(set, null, 2));
   });
-  writing = next.catch(() => undefined);
-  return next;
-};
 
 /** Place `cwd`'s file taken away: the place is gone (its clone archived). */
 export const dropPlaceSet = (cwd: string): Promise<void> => {
-  const next = writing.then(() => rm(fileOf(cwd), { force: true }));
-  writing = next.catch(() => undefined);
-  return next;
+  const file = fileOf(cwd);
+  return writing.run(file, () => rm(file, { force: true }));
 };
 
 /** Every place's file on this machine. */

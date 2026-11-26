@@ -64,6 +64,7 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { isPublicAddress } from "@cawco/core/public-address";
 import type {
   RelayCertified,
@@ -166,7 +167,7 @@ let current: Omit<RelayFrame, "kind" | "machineId"> = {
   ports: NO_PORTS,
 };
 /** One relay command at a time. */
-let queue: Promise<unknown> = Promise.resolve();
+const queue = makeLock();
 
 /** What the relay tells the hub through: its frames, and the machine they are of. */
 export type StreamRelayPorts = Pick<AgentPorts, "machineId" | "relay">;
@@ -201,11 +202,7 @@ class RelayFailed extends Error {
 }
 
 /** Runs `work` after every relay command before it. */
-const serial = <T>(work: () => Promise<T>): Promise<T> => {
-  const next = queue.then(work, work);
-  queue = next.catch(() => undefined);
-  return next;
-};
+const serial = <T>(work: () => Promise<T>): Promise<T> => queue.run(work);
 
 /** The runtime's not-found answer. */
 const notFound = (error: unknown): boolean =>

@@ -9,6 +9,7 @@
  * `#convergeSoon`).
  */
 import type { FleetSyncReport } from "@cawco/core/fleet";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { fleetConvergedFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { FleetSyncReportSchema } from "@cawco/core/stored-shapes";
@@ -103,13 +104,10 @@ export const readConverged = async (): Promise<FleetConverged> => {
 };
 
 /** Each write, one after another, so the last converge's is the one on disk. */
-let writing: Promise<void> = Promise.resolve();
+const writing = makeLock();
 
 /** `converged` written whole, after every write begun before it. */
-export const keepConverged = (converged: FleetConverged): Promise<void> => {
-  const next = writing.then(() =>
+export const keepConverged = (converged: FleetConverged): Promise<void> =>
+  writing.run(() =>
     writeStateFile(fleetConvergedFile(), JSON.stringify(converged))
   );
-  writing = next.catch(() => undefined);
-  return next;
-};

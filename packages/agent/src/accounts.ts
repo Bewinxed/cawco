@@ -22,6 +22,7 @@ import {
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -942,25 +943,14 @@ const sameFile = async (a: string, b: string): Promise<boolean> => {
  * time: a later call waits for the earlier one to end, then looks, finds the
  * link, and returns.
  */
-const linking = new Map<string, Promise<void>>();
+const linking = makeKeyedLock<string>();
 
 const onePathAtATime = (
   path: string,
   link: () => Promise<void>
 ): Promise<void> => {
   const key = resolve(path);
-  const run = (linking.get(key) ?? Promise.resolve()).then(link);
-  const ended = run.then(
-    () => undefined,
-    () => undefined
-  );
-  linking.set(key, ended);
-  ended.then(() => {
-    if (linking.get(key) === ended) {
-      linking.delete(key);
-    }
-  });
-  return run;
+  return linking.run(key, link);
 };
 
 /**

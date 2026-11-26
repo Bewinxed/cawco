@@ -9,6 +9,8 @@ import { Effect, RcMap, Scope, Semaphore } from "effect";
  * once, so work asked for on it begins before the ask returns.
  */
 export interface KeyedLock<K> {
+  /** Every key work holds the turn of or waits for. */
+  readonly busy: () => readonly K[];
   /** Whether work holds `key`'s turn or waits for it. */
   readonly isBusy: (key: K) => boolean;
   /**
@@ -49,5 +51,28 @@ export const makeKeyedLock = <K = string>(): KeyedLock<K> => {
         )
       ),
     isBusy: (key) => Effect.runSync(RcMap.has(permits, key)),
+    busy: () => [...Effect.runSync(RcMap.keys(permits))],
+  };
+};
+
+/** A {@link KeyedLock} of one key: work one at a time, in the order asked. */
+export interface Lock {
+  /** Whether work holds the turn or waits for it. */
+  readonly isBusy: () => boolean;
+  /** {@link KeyedLock.run} on the one key. */
+  readonly run: <A>(work: () => Promise<A>) => Promise<A>;
+  /** {@link KeyedLock.withLock} on the one key. */
+  readonly withLock: <A, E, R>(
+    work: Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>;
+}
+
+/** A {@link Lock}; it lives as long as whatever holds it. */
+export const makeLock = (): Lock => {
+  const turns = makeKeyedLock<"turn">();
+  return {
+    isBusy: () => turns.isBusy("turn"),
+    run: (work) => turns.run("turn", work),
+    withLock: (work) => turns.withLock("turn", work),
   };
 };

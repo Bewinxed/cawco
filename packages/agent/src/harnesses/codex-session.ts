@@ -20,6 +20,7 @@ import { deniedToolsOn } from "@cawco/core/delegate-types";
 import type { SessionCredentialInstall } from "@cawco/core/harness";
 import { CODEX } from "@cawco/core/harness/codex";
 import { type SharedMode, sharedModeNamed } from "@cawco/core/harness/modes";
+import { makeLock } from "@cawco/core/keyed-lock";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import {
   CONTROL_CONTEXT_USAGE,
@@ -226,7 +227,7 @@ class CodexSession implements HarnessSession {
   /** Sends handed to Codex it has not taken up yet, by uuid. */
   readonly #unread = new Set<string>();
   /** The last send handed to Codex, its skills read first: the next send waits for it ({@link send}). */
-  #handed: Promise<void> = Promise.resolve();
+  readonly #handed = makeLock();
   /** The skills Codex lists for the session's folder, by name, with their files: read once, again after a reload. */
   #skills: Promise<Map<string, string>> | undefined;
   /** The skills it was launched with, until its first send takes them into the turn it starts ({@link #hand}). */
@@ -897,10 +898,10 @@ class CodexSession implements HarnessSession {
     this.#setBusy(true);
     // Every send waits for the one before it to be handed to Codex: one
     // whose skills are still being read is never overtaken by a later one.
-    const handed = this.#handed.then(() =>
+    const handed = this.#handed.run(() =>
       this.#hand(thread, message.uuid, text, extras)
     );
-    this.#handed = handed.catch(() => undefined);
+
     handed.catch((error: unknown) => this.#refusedSend(message.uuid, error));
   }
 

@@ -9,6 +9,7 @@ import { readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { makeFolder } from "@cawco/core/folders";
 import { currentKeeper } from "@cawco/core/keepers";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   workspaceAccountsFile,
   workspaceSpillsFile,
@@ -369,7 +370,7 @@ export const reasonsOf = (given: Partial<UpdateReasons>): UpdateReasons => ({
 });
 
 /** Each workspace's decision write under way: one at a time, so none is lost ({@link recordDecision}). */
-const decisionWrites = new Map<string, Promise<void>>();
+const decisionWrites = makeKeyedLock<string>();
 
 /**
  * Adds `entry` to workspace `id`'s {@link DECISIONS_FILE}, its
@@ -377,22 +378,14 @@ const decisionWrites = new Map<string, Promise<void>>();
  * A write that fails is said, never thrown: the record follows the agent,
  * never steers it.
  */
-export const recordDecision = (id: string, entry: Deciding): Promise<void> => {
-  const settled = (decisionWrites.get(id) ?? Promise.resolve())
-    .then(() => appendDecision(id, entry))
+export const recordDecision = (id: string, entry: Deciding): Promise<void> =>
+  decisionWrites
+    .run(id, () => appendDecision(id, entry))
     .catch((error: unknown) => {
       console.warn(
         `[workspace] ${id}: its ${DECISIONS_FILE} could not be written: ${error instanceof Error ? error.message : String(error)}`
       );
-    })
-    .finally(() => {
-      if (decisionWrites.get(id) === settled) {
-        decisionWrites.delete(id);
-      }
     });
-  decisionWrites.set(id, settled);
-  return settled;
-};
 
 /** Every entry of workspace `id`'s {@link DECISIONS_FILE} as stored, of whatever shape; none when there are none or the file does not parse. */
 const storedDecisions = async (id: string): Promise<unknown[]> => {
@@ -427,8 +420,8 @@ const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
 /** Each workspace's gate this agent holds up: how many of its steps hold it, and its write ({@link behindGate}). */
 const gates = new Map<string, { count: number; readonly up: Promise<void> }>();
 
-/** Each workspace's gate on its way down ({@link behindGate}): a step after it waits for it, then puts it up again. */
-const gatesDown = new Map<string, Promise<void>>();
+/** Each workspace's gate's writes, up and down, one at a time in the order asked ({@link behindGate}): a step after a gate's way down puts it up again only once it is down. */
+const gateWrites = makeKeyedLock<string>();
 
 /**
  * Runs `step` with workspace `id`'s gate up ({@link gateOf}): an executor that
@@ -446,13 +439,11 @@ export const behindGate = async <T>(
   if (hold) {
     hold.count += 1;
   } else {
-    const down = gatesDown.get(id);
     hold = {
       count: 1,
-      up: (async () => {
-        await down;
-        await writeStateFile(gateOf(id), String(process.pid));
-      })(),
+      up: gateWrites.run(id, () =>
+        writeStateFile(gateOf(id), String(process.pid))
+      ),
     };
     gates.set(id, hold);
   }
@@ -463,13 +454,7 @@ export const behindGate = async <T>(
     hold.count -= 1;
     if (hold.count === 0 && gates.get(id) === hold) {
       gates.delete(id);
-      const down = rm(gateOf(id), { force: true }).finally(() => {
-        if (gatesDown.get(id) === down) {
-          gatesDown.delete(id);
-        }
-      });
-      gatesDown.set(id, down);
-      await down;
+      await gateWrites.run(id, () => rm(gateOf(id), { force: true }));
     }
   }
 };

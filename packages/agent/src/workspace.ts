@@ -33,6 +33,7 @@ import type { ControlArgs } from "@cawco/core/control-table";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { processesWithin } from "@cawco/core/live-processes";
 import {
   type CreateRecord,
@@ -325,7 +326,7 @@ const hubBase = async (
 };
 
 /** Each source repository's {@link inSource} work in flight: the last of its queue. */
-const sourcing = new Map<string, Promise<unknown>>();
+const sourcing = makeKeyedLock<string>();
 
 /**
  * `work` on source repository `repo`, one at a time per repository, by
@@ -346,19 +347,7 @@ const inSource = <T>(
   repo: string,
   deadline: number,
   work: () => Promise<T>
-): Promise<T> => {
-  const mine = (sourcing.get(repo) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(() => holdingSource(repo, deadline, work));
-  sourcing.set(repo, mine);
-  const forget = () => {
-    if (sourcing.get(repo) === mine) {
-      sourcing.delete(repo);
-    }
-  };
-  mine.then(forget, forget);
-  return mine;
-};
+): Promise<T> => sourcing.run(repo, () => holdingSource(repo, deadline, work));
 
 /**
  * `work` holding the lock of source repository `repo`'s git directory

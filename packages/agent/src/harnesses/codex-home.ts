@@ -27,6 +27,7 @@ import { join } from "node:path";
 import type { ProviderSigninResult } from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { accountsRoot } from "@cawco/core/paths/claude";
 import {
   codexAccountHome,
@@ -141,16 +142,9 @@ export const workspaceEnvironment = (
 });
 
 /** Per home, the writes in flight, so two starts never interleave one file's read and write. */
-const writing = new Map<string, Promise<unknown>>();
-const serial = <T>(home: string, work: () => Promise<T>): Promise<T> => {
-  const before = writing.get(home) ?? Promise.resolve();
-  const done = before.then(work, work);
-  writing.set(
-    home,
-    done.catch(() => undefined)
-  );
-  return done;
-};
+const writing = makeKeyedLock<string>();
+const serial = <T>(home: string, work: () => Promise<T>): Promise<T> =>
+  writing.run(home, work);
 
 type Toml = Record<string, unknown>;
 

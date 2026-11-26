@@ -12,6 +12,7 @@
  */
 import { stat } from "node:fs/promises";
 import { normalize } from "node:path";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { seenFoldersPath } from "@cawco/core/paths/cawco";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { SeenFoldersSchema } from "./stored-shapes";
@@ -51,7 +52,7 @@ const readSeen = async (): Promise<SeenFolders> =>
     () => undefined
   )) ?? { folders: {} };
 
-let writes: Promise<unknown> = Promise.resolve();
+const writes = makeLock();
 
 /**
  * Whether a folder stands at each of `paths`, in their order, each one
@@ -69,25 +70,25 @@ export const foldersStand = async (
   );
   const standing = seen.filter((one) => one.identity !== undefined);
   if (standing.length > 0) {
-    const run = writes.then(async () => {
-      const file = await readSeen();
-      const at = Date.now();
-      for (const { key, identity } of standing) {
-        if (identity) {
-          file.folders[key] = { ...identity, at };
+    await writes
+      .run(async () => {
+        const file = await readSeen();
+        const at = Date.now();
+        for (const { key, identity } of standing) {
+          if (identity) {
+            file.folders[key] = { ...identity, at };
+          }
         }
-      }
-      await writeStateFile(
-        seenFoldersPath(),
-        `${JSON.stringify(file, null, 2)}\n`
+        await writeStateFile(
+          seenFoldersPath(),
+          `${JSON.stringify(file, null, 2)}\n`
+        );
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[seen-folders] the checkouts' folders stand, but were not recorded: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
-    });
-    writes = run.catch((error: unknown) =>
-      console.warn(
-        `[seen-folders] the checkouts' folders stand, but were not recorded: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
-    await writes;
   }
   return seen.map((one) => one.identity !== undefined);
 };

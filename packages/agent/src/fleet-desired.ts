@@ -30,6 +30,7 @@ import {
   itemKindOf,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
+import { makeLock } from "@cawco/core/keyed-lock";
 import {
   OWN_TOOLS_DEFAULT,
   type OwnTools,
@@ -104,7 +105,7 @@ export class FleetDesired {
   /** What the harnesses last converged, as the disk keeps it: the basis every delta's items are judged moved against. */
   #converged: FleetConverged = { items: {} };
   /** Each write of what is held, one after another, so the last delta's is the one on disk. */
-  #writing: Promise<void> = Promise.resolve();
+  readonly #writing = makeLock();
   /** Once what the disk keeps is read: the register and every delta wait for it. */
   readonly loaded: Promise<void>;
 
@@ -285,12 +286,10 @@ export class FleetDesired {
         ])
       ),
     } satisfies z.input<typeof FleetDesiredShape>;
-    const next = this.#writing.then(async () => {
+    return this.#writing.run(async () => {
       await writeStateFile(fleetDesiredFile(), JSON.stringify(kept));
       this.#kept = generation;
     });
-    this.#writing = next.catch(() => undefined);
-    return next;
   }
 
   /** Every item id held now. */

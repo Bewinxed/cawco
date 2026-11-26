@@ -53,6 +53,7 @@ import { join } from "node:path";
 import { lockBy, openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   alternatesText,
   type CreateRecord,
@@ -488,7 +489,7 @@ const dropIndexes = async ({ info, pack }: Store): Promise<void> => {
 };
 
 /** Each workspace's conversions, queued: the last of its queue ({@link borrowFromPool}). */
-const converting = new Map<string, Promise<void>>();
+const converting = makeKeyedLock<string>();
 
 /** The workspaces whose conversion failed in this agent's life: tried again at its next start, never at every boundary start. */
 const unconverted = new Set<string>();
@@ -525,27 +526,23 @@ const unconverted = new Set<string>();
 export const borrowFromPool = (
   ref: WorkspaceRef,
   idle?: () => Promise<string | undefined>
-): Promise<void> => {
-  const next = (converting.get(ref.id) ?? Promise.resolve())
-    .then(() => convert(ref, idle))
-    .catch((error: unknown) => {
+): Promise<void> =>
+  // A failure is marked inside its own turn: the next conversion of the
+  // workspace reads `unconverted` as it begins.
+  converting.run(ref.id, async () => {
+    try {
+      await convert(ref, idle);
+    } catch (error) {
       unconverted.add(ref.id);
       console.warn(
         `[workspace] ${ref.id}: its clone ${ref.path} could not be made to borrow from its object pool, and keeps its whole store: ${error instanceof Error ? error.message : String(error)}`
       );
-    });
-  converting.set(ref.id, next);
-  next.finally(() => {
-    if (converting.get(ref.id) === next) {
-      converting.delete(ref.id);
     }
   });
-  return next;
-};
 
-/** Workspace `id`'s conversion under way ({@link borrowFromPool}), if any: what an archive waits for. */
-export const conversionOf = (id: string): Promise<void> | undefined =>
-  converting.get(id);
+/** Once workspace `id`'s conversions asked for so far ({@link borrowFromPool}) have ended: what an archive waits for. A turn of its own, empty, behind them. */
+export const conversionOf = (id: string): Promise<void> =>
+  converting.run(id, () => Promise.resolve());
 
 /** {@link borrowFromPool}'s one conversion. */
 const convert = async (

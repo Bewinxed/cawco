@@ -60,6 +60,7 @@ import {
   hookProblem,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
+import { makeLock } from "@cawco/core/keyed-lock";
 import type { OwnTools } from "@cawco/core/own-tools";
 import {
   claudeHomeJson,
@@ -3767,18 +3768,14 @@ const converge = async (
  * one in flight rather than being refused — the hub sends one on register and
  * one on every change, and those arrive together often enough.
  */
-let queue: Promise<unknown> = Promise.resolve();
+const queue = makeLock();
 
 /**
  * Runs `work` in that queue: nothing else of cawco's writes a `.claude.json`
  * while it runs (the login move rewrites two of them).
  */
-export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
-  const next = queue.then(work, work);
-  // biome-ignore lint/suspicious/noEmptyBlockStatements: the caller already gets this rejection from `next`; the queue only needs to know the work finished, not how
-  queue = next.catch(() => {});
-  return next;
-};
+export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> =>
+  queue.run(work);
 
 /**
  * Applies the parts `parts` of the fleet's desired state to this machine

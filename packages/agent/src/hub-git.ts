@@ -53,6 +53,7 @@ import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { recordedPool } from "@cawco/core/object-pool";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
@@ -1283,7 +1284,8 @@ const serveHelper = (
 ): void => {
   let pending = Buffer.alloc(0);
   let batch: string[] = [];
-  let chain = Promise.resolve();
+  /** The lines' answers, one at a time in the order git asked them. */
+  const answers = makeLock();
   let ended = false;
   const options: HelperOptions = { dryRun: false, leases: [] };
   const finish = async (): Promise<void> => {
@@ -1335,17 +1337,23 @@ const serveHelper = (
     ) {
       const line = pending.subarray(0, end).toString();
       pending = pending.subarray(end + 1);
-      chain = chain
-        .then(() => (ended ? undefined : answer(line)))
-        .catch((error: unknown) => {
+      // A failure ends the conversation inside its own turn, so no line
+      // behind it is answered.
+      answers.run(async () => {
+        try {
+          if (!ended) {
+            await answer(line);
+          }
+        } catch (error) {
           ended = true;
           fail(error instanceof Error ? error.message : String(error));
-        });
+        }
+      });
     }
   };
   socket.on("data", feed);
   socket.on("end", () => {
-    chain = chain.then(finish);
+    answers.run(finish);
   });
   feed(rest);
   socket.resume();
@@ -1636,13 +1644,14 @@ const pipeHubHelper = (
     (bytes) => child.stdin.write(bytes),
     side
   );
-  let chain = feed(rest);
-  socket.on("data", (chunk: Buffer) => {
-    socket.pause();
-    chain = chain
-      .then(() => feed(chunk))
-      .then(() => {
-        socket.resume();
+  /** The chunks fed to git's stdin, one at a time in the order they came. */
+  const feeds = makeLock();
+  /** `chunk` fed in its turn; a failure says why and closes the socket. */
+  const fed = (chunk: Buffer, after?: () => void): void => {
+    feeds
+      .run(async () => {
+        await feed(chunk);
+        after?.();
       })
       .catch((error: unknown) => {
         console.warn(
@@ -1650,10 +1659,16 @@ const pipeHubHelper = (
         );
         socket.destroy();
       });
+  };
+  fed(rest);
+  socket.on("data", (chunk: Buffer) => {
+    socket.pause();
+    fed(chunk, () => socket.resume());
   });
   socket.on("end", () => {
-    chain = chain.then(() => {
+    feeds.run(() => {
       child.stdin.end();
+      return Promise.resolve();
     });
   });
   socket.resume();

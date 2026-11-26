@@ -82,6 +82,7 @@ import { cloneDenies } from "@cawco/core/clone-denies";
 import { detach, failureOf } from "@cawco/core/detach";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   alternatesText,
   type CreateRecord,
@@ -172,25 +173,13 @@ export const isStageClone = (id: string): boolean =>
   existsSync(join(workspaceStateDir(id), KEPT));
 
 /** Each clone's cut, mirror or write-back under way: one at a time per clone. */
-const turns = new Map<string, Promise<unknown>>();
+const turns = makeKeyedLock<string>();
 
 /** `work` on stage clone `id`, after whatever it is doing now. */
 export const inCloneTurn = <T>(
   id: string,
   work: () => Promise<T>
-): Promise<T> => {
-  const mine = (turns.get(id) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(work);
-  turns.set(id, mine);
-  const forget = () => {
-    if (turns.get(id) === mine) {
-      turns.delete(id);
-    }
-  };
-  mine.then(forget, forget);
-  return mine;
-};
+): Promise<T> => turns.run(id, work);
 
 /** Each source file's size and change time when it was last made in the clone, by clone and path: one unchanged since is not read again. */
 const copied = new Map<string, Map<string, string>>();
@@ -1451,7 +1440,7 @@ export const pinsHeld = async (): Promise<{ at: number; pin: string }[]> => {
         (found) => found.mtimeMs,
         () => undefined
       );
-      return at === undefined || turns.has(pin) ? undefined : { at, pin };
+      return at === undefined || turns.isBusy(pin) ? undefined : { at, pin };
     })
   );
   return each.filter((one) => one !== undefined);

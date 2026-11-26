@@ -7,6 +7,7 @@ import {
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
 import { opensAsFile } from "@cawco/core/file-viewer";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_HELD_HEADER } from "@cawco/core/preview/reach";
 import { PREVIEW_PING_PATH } from "@cawco/core/preview/routes";
@@ -233,20 +234,10 @@ const refusal = (route: string): Response =>
  * side would each find nothing to stop and leave one listener running that
  * nothing names.
  */
-const turns = new Map<string, Promise<unknown>>();
+const turns = makeKeyedLock<string>();
 
-const inTurn = <T>(instanceId: string, work: () => Promise<T>): Promise<T> => {
-  const before = turns.get(instanceId) ?? Promise.resolve();
-  const mine = before.catch(() => undefined).then(work);
-  const settled = mine.catch(() => undefined);
-  turns.set(instanceId, settled);
-  settled.then(() => {
-    if (turns.get(instanceId) === settled) {
-      turns.delete(instanceId);
-    }
-  });
-  return mine;
-};
+const inTurn = <T>(instanceId: string, work: () => Promise<T>): Promise<T> =>
+  turns.run(instanceId, work);
 
 const stopNow = async (instanceId: string): Promise<boolean> => {
   previews.get(instanceId)?.listener.stop(true);

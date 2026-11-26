@@ -29,6 +29,7 @@ import { readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
 import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
@@ -494,18 +495,11 @@ const stagingAlive = (name: string): boolean => {
 /** The dirs the last sync launched from; none before a sync this process ran. */
 let named: Set<string> | undefined;
 /** The one queue every install pass and retirement runs on, one at a time. */
-let queue: Promise<void> = Promise.resolve();
+const queue = makeLock();
 let again: ReturnType<typeof setTimeout> | undefined;
 
 /** `work` after everything before it on the queue, and before everything after. */
-const inTurn = <T>(work: () => Promise<T>): Promise<T> => {
-  const next = queue.then(work);
-  queue = next.then(
-    () => undefined,
-    () => undefined
-  );
-  return next;
-};
+const inTurn = <T>(work: () => Promise<T>): Promise<T> => queue.run(work);
 
 /** The names in `dir`; none when it is not there. */
 const entriesOf = async (dir: string): Promise<string[]> => {

@@ -62,6 +62,7 @@ import {
   opencodeWordsByKeyOf,
 } from "@cawco/core/harness/opencode-wire";
 import { isRecord } from "@cawco/core/is-record";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -2286,7 +2287,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   /** Passes in a row that left a fleet server unsettled: the backoff's exponent. */
   #mendAttempt = 0;
   /** Fleet MCP reads and passes, one at a time ({@link #fleetMcpTurn}). */
-  #fleetMcpQueue: Promise<unknown> = Promise.resolve();
+  readonly #fleetMcpQueue = makeLock();
   readonly #activities = new Map<string, OpencodeActivity>();
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
@@ -7011,9 +7012,7 @@ class OpencodeHarness implements Harness<"opencode"> {
 
   /** Runs `work` once every fleet MCP read and pass before it has ended. */
   #fleetMcpTurn<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#fleetMcpQueue.then(work, work);
-    this.#fleetMcpQueue = next.catch(() => undefined);
-    return next;
+    return this.#fleetMcpQueue.run(work);
   }
 
   /**

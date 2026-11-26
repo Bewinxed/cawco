@@ -35,6 +35,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { descriptorOf } from "@cawco/core/harness/kinds";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
@@ -194,15 +195,9 @@ const removeAccount = async (accountId: string): Promise<void> => {
 };
 
 /** One write at a time per account, in this process: the only writer. */
-const writing = new Map<string, Promise<unknown>>();
-const serial = <T>(accountId: string, work: () => Promise<T>): Promise<T> => {
-  const next = (writing.get(accountId) ?? Promise.resolve()).then(work, work);
-  writing.set(
-    accountId,
-    next.catch(() => undefined)
-  );
-  return next;
-};
+const writing = makeKeyedLock<string>();
+const serial = <T>(accountId: string, work: () => Promise<T>): Promise<T> =>
+  writing.run(accountId, work);
 
 /** pi-ai's store over one account's file: the account's provider only. */
 class AccountStore implements CredentialStore {

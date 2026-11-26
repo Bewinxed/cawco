@@ -17,6 +17,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isGone } from "@cawco/core/absent";
 import { makeFolder } from "@cawco/core/folders";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
@@ -66,22 +67,19 @@ export const readOpencodeCredentials = async (): Promise<
   }
 };
 
-let writing: Promise<unknown> = Promise.resolve();
+const writing = makeLock();
 
 /** `change` applied to the stored credentials, one write at a time, atomic and owner-only. */
 const rewrite = (
   change: (stored: Record<string, HeldCredential>) => void
-): Promise<void> => {
-  const next = writing.then(async () => {
+): Promise<void> =>
+  writing.run(async () => {
     const stored = await readOpencodeCredentials();
     change(stored);
     const file = opencodeCredentialFile();
     await makeFolder(sessionIdentityDir(), { mode: 0o700 });
     await writeStateFile(file, JSON.stringify(stored), { mode: 0o600 });
   });
-  writing = next.catch(() => undefined);
-  return next;
-};
 
 /**
  * Records `held` as `sessionId`'s, beside every other session's. A session's

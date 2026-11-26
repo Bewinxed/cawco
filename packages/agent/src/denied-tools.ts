@@ -39,6 +39,7 @@ import {
   QUESTION_TOOL_DENIED,
   SUBAGENTS_DENIED,
 } from "@cawco/core/delegate-types";
+import { makeLock } from "@cawco/core/keyed-lock";
 import {
   OWN_TOOLS_DEFAULT,
   type OwnTools,
@@ -160,18 +161,15 @@ let writing: Promise<void> = Promise.resolve();
 let lastFailure: { at: number; reason: string } | undefined;
 
 /** The sidecar's writes, one at a time: a delta's policy never lands inside a converge's write of the rest. */
-let sidecarQueue: Promise<unknown> = Promise.resolve();
+const sidecarQueue = makeLock();
 
 /**
  * Runs `work`, a write of the sidecar, after every write of it before:
  * {@link applyFleetDenials}'s, and the converge's own (fleet.ts), which
  * keeps the denials the sidecar holds as it writes.
  */
-export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> => {
-  const next = sidecarQueue.then(work, work);
-  sidecarQueue = next.catch(() => undefined);
-  return next;
-};
+export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> =>
+  sidecarQueue.run(work);
 
 /**
  * The fleet's denials, as a welcome or a delta carried them, into the

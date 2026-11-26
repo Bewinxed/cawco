@@ -12,6 +12,7 @@
  */
 import { lstat } from "node:fs/promises";
 import { normalize } from "node:path";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { madeFoldersPath } from "@cawco/core/paths/cawco";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { MadeFoldersSchema } from "./stored-shapes";
@@ -49,13 +50,13 @@ const identityAt = async (
 const readMade = async (): Promise<MadeFolders> =>
   (await readRecord(madeFoldersPath(), MadeFoldersSchema)) ?? { folders: {} };
 
-let writes: Promise<unknown> = Promise.resolve();
+const writes = makeLock();
 
 /** `change` made to the record, one write at a time, so none is lost; what `change` answers. */
 const changeMade = <T>(
   change: (file: MadeFolders) => { file: MadeFolders; out: T }
-): Promise<T> => {
-  const run = writes.then(async () => {
+): Promise<T> =>
+  writes.run(async () => {
     const { file, out } = change(await readMade());
     await writeStateFile(
       madeFoldersPath(),
@@ -63,9 +64,6 @@ const changeMade = <T>(
     );
     return out;
   });
-  writes = run.catch(() => undefined);
-  return run;
-};
 
 /**
  * Records the folder at `path` as made by CawCo, as it stands now; whether

@@ -47,6 +47,7 @@ import type {
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
+import { makeLock } from "@cawco/core/keyed-lock";
 import type { AgentPorts } from "../agent-ports";
 import {
   ContainerHost,
@@ -1214,7 +1215,7 @@ const followNetwork = (
   }: NetworkFollowing = {}
 ): NetworkFollower => {
   let last = "";
-  let queue: Promise<void> = Promise.resolve();
+  const queue = makeLock();
   const once = async (always: boolean): Promise<void> => {
     const now = await read();
     const said = JSON.stringify(now);
@@ -1235,11 +1236,8 @@ const followNetwork = (
       }
     }
   };
-  const look = (always: boolean): Promise<void> => {
-    const next = queue.then(() => once(always));
-    queue = next.catch(() => undefined);
-    return next;
-  };
+  const look = (always: boolean): Promise<void> =>
+    queue.run(() => once(always));
   const polls = setInterval(() => {
     look(false).catch((error: unknown) =>
       console.warn(

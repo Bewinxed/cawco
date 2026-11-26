@@ -62,6 +62,7 @@ import type { BrowserKey } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
+import { makeLock } from "@cawco/core/keyed-lock";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,
@@ -461,7 +462,7 @@ export class Gate {
   #closedWhy: string | undefined;
   #owners: Owners = { addresses: {}, closed: {}, contexts: {}, targets: {} };
   #loaded: Promise<void> | undefined;
-  #saving: Promise<void> = Promise.resolve();
+  readonly #saving = makeLock();
   readonly #infos = new Map<string, TargetInfo>();
   readonly #tabPage = new Map<string, string>();
   readonly #tabSessions = new Map<string, string>();
@@ -767,7 +768,8 @@ export class Gate {
     if (last) {
       this.drove(id, last.targetId);
     }
-    await this.#saving;
+    // Once the saves asked for so far have landed: a turn of its own, empty, behind them.
+    await this.#saving.run(() => Promise.resolve());
     console.info(
       `[browser] ${this.key}: ${id} came back: ${opened.length} of its ${kept.pages.length} page(s) open again`
     );
@@ -852,8 +854,8 @@ export class Gate {
 
   #save(): void {
     const body = `${JSON.stringify(this.#owners, null, 2)}\n`;
-    this.#saving = this.#saving
-      .then(() => writeStateFile(this.#ownersFile(), body, { mode: 0o600 }))
+    this.#saving
+      .run(() => writeStateFile(this.#ownersFile(), body, { mode: 0o600 }))
       .catch((error: unknown) =>
         console.warn(
           `[browser] ${this.key}: who owns its pages was not kept: ${String(error)}`
@@ -1296,7 +1298,7 @@ class Link {
   #up: WebSocket | undefined;
   #wire: CdpCalls | undefined;
   #queue: string[] = [];
-  #chain: Promise<void> = Promise.resolve();
+  readonly #chain = makeLock();
   /** The agent asked for targets' news, and through which filter. */
   #discover: Filter[] | undefined;
   /** The agent asked to be attached to new targets, and through which filter. */
@@ -1397,8 +1399,8 @@ class Link {
   // -- agent → browser -------------------------------------------------------
 
   #take(data: string): void {
-    this.#chain = this.#chain
-      .then(() => this.#fromAgent(data))
+    this.#chain
+      .run(() => this.#fromAgent(data))
       .catch((error: unknown) =>
         console.warn(
           `[browser] ${this.#gate.key}: a message of workspace ${this.workspace} was dropped: ${String(error)}`
