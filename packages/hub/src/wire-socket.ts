@@ -32,6 +32,7 @@
  * session's frames resume (server.ts `registerAck`).
  */
 
+import { lookUntil } from "@cawco/core/effect/poll";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
 import { isRecord } from "@cawco/core/is-record";
@@ -46,6 +47,7 @@ import {
   WireAssembler,
   WireError,
 } from "@cawco/core/wire";
+import { Effect } from "effect";
 import { AskCard } from "./ask-presentation";
 
 type RawSocket = ServerSocketLike;
@@ -232,8 +234,8 @@ const QUIET_MS = 10;
 const CATCH_UP_MS = 1000;
 
 /**
- * Resolves once the hub has caught up with the socket `socketId`: it has
- * read what the socket holds (until a {@link QUIET_MS} turn brings no frame,
+ * Done once the hub has caught up with the socket `socketId`: it has read
+ * what the socket holds (until a {@link QUIET_MS} turn brings no frame,
  * {@link CATCH_UP_MS} at most) and worked every frame it read through the
  * inbox. What a deadline waits for before it says no answer came. After the
  * hub's thread was held past a deadline, Bun runs the deadline's timer
@@ -242,24 +244,39 @@ const CATCH_UP_MS = 1000;
  * 1716ms"); and one read in time may wait in the inbox behind the frames
  * before it (a transcript's parts, a turn's budget at a time). At once for
  * a socket that is gone.
+ *
+ * A pacing wait, not a read of another process: the socket's count is
+ * looked at every {@link QUIET_MS}, the first look one quiet turn after the
+ * start, until a look finds it unmoved or {@link CATCH_UP_MS} has passed.
  */
-export const caughtUp = async (socketId: string): Promise<void> => {
-  const until = Date.now() + CATCH_UP_MS;
-  for (;;) {
-    const seen = lines.get(socketId)?.received;
+export const caughtUp = (socketId: string): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    let seen = lines.get(socketId)?.received;
     if (seen === undefined) {
       return;
     }
-    await Bun.sleep(QUIET_MS);
-    if (lines.get(socketId)?.received === seen || Date.now() >= until) {
-      break;
+    /** Whether the socket handed over nothing since the last look (or is gone). */
+    const quiet = Effect.sync(() => {
+      const now = lines.get(socketId)?.received;
+      const still = now === undefined || now === seen;
+      seen = now;
+      return still;
+    });
+    yield* lookUntil(
+      {
+        every: QUIET_MS,
+        deadlineMs: CATCH_UP_MS - QUIET_MS,
+        until: (still: boolean) => still,
+      },
+      quiet
+    ).pipe(Effect.delay(QUIET_MS));
+    const line = lines.get(socketId);
+    if (line) {
+      yield* Effect.callback<void>((resume) => {
+        line.inbox.push(0, () => resume(Effect.void));
+      });
     }
-  }
-  const line = lines.get(socketId);
-  if (line) {
-    await new Promise<void>((resolve) => line.inbox.push(0, resolve));
-  }
-};
+  });
 
 /** The socket closed: its queue and any half-received message go with it. */
 export const closeLine = (socket: HubSocket): void => {

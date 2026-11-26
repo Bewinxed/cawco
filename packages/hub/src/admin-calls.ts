@@ -7,9 +7,9 @@
  * validator holds it; what stops a call is a returned problem with its
  * status, code and words.
  */
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Static, TSchema } from "typebox";
 import Value from "typebox/value";
@@ -59,6 +59,7 @@ export type AdminCallsDeps = Parameters<typeof accountsListed>[0] &
     | "harnessConfigDelete"
     | "harnessConfigList"
     | "harnessConfigPut"
+    | "lifetime"
     | "previewListeners"
   >;
 
@@ -71,21 +72,33 @@ export interface AdminCallsExtra {
 /** How long a call that waits on a server outside the hub is waited on. */
 const OUTSIDE_MS = 30_000;
 
-/** `run`, which waits on a server outside the hub, answered or the problem that it did not in time. */
-const within = async <T>(what: string, run: () => Promise<T>) => {
-  const read = await readWithin(OUTSIDE_MS, run);
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      return problem(504, {
-        code: "hub-unanswered",
-        detail: `${what}: the hub did not answer within ${secondsOf(read.after)} s`,
-      });
-    default:
-      return unhandled("read", read);
-  }
-};
+/**
+ * `run`, which waits on a server outside the hub, answered or the problem
+ * that it did not in time: the kit's bounded read, on `lifetime`'s edge. A
+ * failure of `run`'s own rejects with it.
+ */
+const within = <T>(
+  lifetime: AdminCallsDeps["lifetime"],
+  what: string,
+  run: () => Promise<T>
+) =>
+  lifetime.run(
+    boundedRead(
+      OUTSIDE_MS,
+      Effect.tryPromise({ try: run, catch: (error) => error })
+    ).pipe(
+      Effect.catch((error) =>
+        error instanceof Unanswered
+          ? Effect.succeed(
+              problem(504, {
+                code: "hub-unanswered",
+                detail: `${what}: the hub did not answer within ${secondsOf(error.after)} s`,
+              })
+            )
+          : Effect.fail(error)
+      )
+    )
+  );
 
 /** `asked` as `schema` takes it, or the problem that says what does not fit, as a route answers an invalid body. */
 const shaped = <S extends TSchema>(
@@ -145,19 +158,25 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
         const body = shaped(createConnectionBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : within("create a connection", () => connections.create(body));
+          : within(deps.lifetime, "create a connection", () =>
+              connections.create(body)
+            );
       },
       update: (name: string, asked: unknown) => {
         const body = shaped(updateConnectionBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : within("change a connection", () => connections.update(name, body));
+          : within(deps.lifetime, "change a connection", () =>
+              connections.update(name, body)
+            );
       },
       signIn: (name: string, asked: unknown) => {
         const body = shaped(signInBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : within("start a sign-in", () => connections.signIn(name, body));
+          : within(deps.lifetime, "start a sign-in", () =>
+              connections.signIn(name, body)
+            );
       },
       remove: connections.remove,
     },
@@ -179,7 +198,9 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
         const body = shaped(mcpBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : within("put an MCP server", () => mcp.put(name, body));
+          : within(deps.lifetime, "put an MCP server", () =>
+              mcp.put(name, body)
+            );
       },
       remove: mcp.remove,
     },

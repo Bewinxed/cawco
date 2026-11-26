@@ -59,6 +59,7 @@ import {
 } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
+import { Effect, Schedule } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
@@ -215,24 +216,28 @@ export const candidateOf = (
 };
 
 /** One port's STUN binding: answered within {@link STUN_MS}, or why not. */
-const bind = (url: string): Promise<{ up: boolean; error?: string }> =>
-  new Promise((resolve) => {
+const bind = (url: string): Effect.Effect<{ up: boolean; error?: string }> =>
+  Effect.callback((resume) => {
     try {
       getPublicIP(url, { timeout: STUN_MS }, (error, address) => {
-        if (error || !address) {
-          resolve({
-            up: false,
-            error: error?.message ?? "answered with no mapped address",
-          });
-          return;
-        }
-        resolve({ up: true });
+        resume(
+          Effect.succeed(
+            error || !address
+              ? {
+                  up: false,
+                  error: error?.message ?? "answered with no mapped address",
+                }
+              : { up: true }
+          )
+        );
       });
     } catch (error) {
-      resolve({
-        up: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      resume(
+        Effect.succeed({
+          up: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
     }
   });
 
@@ -240,7 +245,7 @@ const bind = (url: string): Promise<{ up: boolean; error?: string }> =>
 const probeRelay = (
   address: string,
   tlsName: string | null
-): Promise<RelayPortHealth[]> => {
+): Effect.Effect<RelayPortHealth[]> => {
   const host = address.includes(":") ? `[${address}]` : address;
   const on = STREAM_RELAY_PORT;
   const ports: [RelayPortName, string][] = [
@@ -255,8 +260,11 @@ const probeRelay = (
         ]
       : []),
   ];
-  return Promise.all(
-    ports.map(async ([port, url]) => ({ port, ...(await bind(url)) }))
+  return Effect.all(
+    ports.map(([port, url]) =>
+      bind(url).pipe(Effect.map((bound) => ({ port, ...bound })))
+    ),
+    { concurrency: "unbounded" }
   );
 };
 
@@ -408,7 +416,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return failed(frame);
     }
     heard(frame);
-    await check();
+    await deps.lifetime.run(check);
   };
 
   const heard = (frame: RelayFrame): void => {
@@ -444,17 +452,17 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
   };
 
   /** Each port asked, while the relay should be running. */
-  const check = async (): Promise<void> => {
+  const check = Effect.gen(function* () {
     const relay = db.read();
     if (!(relay?.wanted && relay.state === "live")) {
       return;
     }
-    probed = await probeRelay(
+    probed = yield* probeRelay(
       relay.address,
       relay.ports?.tls && relay.hostname ? relay.hostname : null
     );
     changed();
-  };
+  });
 
   /** `stream-relay-renew`: the certificate renewed when certbot says it is due, by DNS with the token the journey keeps. */
   const renew = async () => {
@@ -617,46 +625,65 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         console.warn(
           `[stream-relay] not started again on ${machineName(machineId)}: ${why}`
         );
-      send(relay)
-        .then((sent) => {
-          if (sent instanceof ElysiaStatus) {
-            notStarted(sent.response.detail);
-          }
-        })
-        .catch((error: unknown) =>
-          notStarted(error instanceof Error ? error.message : String(error))
-        );
+      deps.lifetime.fork(
+        "stream relay started again",
+        Effect.tryPromise(() => send(relay)).pipe(
+          Effect.match({
+            onSuccess: (sent) => {
+              if (sent instanceof ElysiaStatus) {
+                notStarted(sent.response.detail);
+              }
+            },
+            onFailure: ({ cause }) =>
+              notStarted(
+                cause instanceof Error ? cause.message : String(cause)
+              ),
+          })
+        )
+      );
     },
     watch: () => {
       const said = (what: string) => (error: unknown) =>
         console.warn(
           `[stream-relay] ${what}: ${error instanceof Error ? error.message : String(error)}`
         );
-      const health = deps.lifetime.every(
+      // Each runs one spell after it is watched, then a spell after each
+      // run ends, as the timers it replaces waited first.
+      const health = deps.lifetime.fork(
         "stream relay health",
-        HEALTH_MS,
-        () => {
-          check().catch(said("health not checked"));
-        }
+        check.pipe(
+          Effect.catchDefect((error) =>
+            Effect.sync(() => said("health not checked")(error))
+          ),
+          Effect.repeat(Schedule.spaced(HEALTH_MS)),
+          Effect.delay(HEALTH_MS)
+        )
       );
-      const renewal = deps.lifetime.every(
+      const renewOnce = Effect.tryPromise(() => renew()).pipe(
+        Effect.match({
+          onSuccess: (renewed) => {
+            if (renewed instanceof ElysiaStatus) {
+              said("stream-relay-renew failed")(
+                new Error(renewed.response.detail)
+              );
+            }
+          },
+          onFailure: ({ cause }) => said("stream-relay-renew failed")(cause),
+        }),
+        Effect.catchDefect((error) =>
+          Effect.sync(() => said("stream-relay-renew failed")(error))
+        )
+      );
+      const renewal = deps.lifetime.fork(
         "stream relay renewal",
-        RENEW_MS,
-        () => {
-          renew()
-            .then((renewed) => {
-              if (renewed instanceof ElysiaStatus) {
-                said("stream-relay-renew failed")(
-                  new Error(renewed.response.detail)
-                );
-              }
-            })
-            .catch(said("stream-relay-renew failed"));
-        }
+        renewOnce.pipe(
+          Effect.repeat(Schedule.spaced(RENEW_MS)),
+          Effect.delay(RENEW_MS)
+        )
       );
       return () => {
-        deps.lifetime.cancel(health);
-        deps.lifetime.cancel(renewal);
+        health.interruptUnsafe();
+        renewal.interruptUnsafe();
       };
     },
   };

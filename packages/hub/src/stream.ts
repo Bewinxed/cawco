@@ -53,6 +53,7 @@ import {
   type StreamSubscribe,
 } from "@cawco/core/stream";
 import { pictureWords } from "@cawco/core/words/pictures";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
@@ -532,21 +533,30 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         return;
       }
       ackTo(socket, { type: "command.ack", commandId, stage: "accepted" });
-      ports.withdrawSend(machineId, sessionId, payload.sendId).then(
-        (outcome) =>
-          ackTo(socket, {
-            type: "command.ack",
-            commandId,
-            stage: "applied",
-            outcome,
-          }),
-        (error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
-          console.error(
-            `[hub] dashboard command send.withdraw ${commandId} for ${sessionId} failed: ${reason}`
-          );
-          fail(socket, commandId, reason);
-        }
+      const { sendId } = payload;
+      ports.lifetime.fork(
+        "a send withdrawn",
+        Effect.tryPromise(() =>
+          ports.withdrawSend(machineId, sessionId, sendId)
+        ).pipe(
+          Effect.match({
+            onSuccess: (outcome) =>
+              ackTo(socket, {
+                type: "command.ack",
+                commandId,
+                stage: "applied",
+                outcome,
+              }),
+            onFailure: ({ cause }) => {
+              const reason =
+                cause instanceof Error ? cause.message : String(cause);
+              console.error(
+                `[hub] dashboard command send.withdraw ${commandId} for ${sessionId} failed: ${reason}`
+              );
+              fail(socket, commandId, reason);
+            },
+          })
+        )
       );
       return;
     }

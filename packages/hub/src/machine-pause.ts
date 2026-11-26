@@ -33,6 +33,7 @@
 import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
 import { pauseClock, stoppedWords } from "@cawco/core/words/machine-pause";
+import { Deferred, Effect, Schema } from "effect";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { machineName } from "./machine-name";
@@ -79,32 +80,43 @@ export interface CommandOptions {
  * is what for, as a status says it ("queued for the Mac's build slot behind …",
  * "Omars-MacBook-Pro is paused until 00:57").
  */
-export class WouldWait extends Error {}
+export class WouldWait extends Schema.TaggedError<WouldWait>()("WouldWait", {
+  message: Schema.String,
+}) {}
 
 /**
  * A run whose owner ended it ({@link CommandOptions.stop}): it was cancelled
  * on its machine, or never started.
  */
-export class CommandStopped extends Error {}
+export class CommandStopped extends Schema.TaggedError<CommandStopped>()(
+  "CommandStopped",
+  { message: Schema.String }
+) {}
 
 /** Throws {@link CommandStopped} for `cmd` once its owner ended it (`how.stop`). */
 export const throwIfStopped = (how: CommandOptions, cmd: string): void => {
   if (how.stop?.aborted) {
-    throw new CommandStopped(
-      `the command was stopped with its owner: \`${cutShort(cmd, 120)}\``
-    );
+    throw new CommandStopped({
+      message: `the command was stopped with its owner: \`${cutShort(cmd, 120)}\``,
+    });
   }
 };
 
-/** Settles once `stop` is aborted; never when there is none. */
-export const whenStopped = (stop: AbortSignal | undefined): Promise<void> =>
-  new Promise((resolve) => {
-    if (stop?.aborted) {
-      resolve();
-      return;
-    }
-    stop?.addEventListener("abort", () => resolve(), { once: true });
-  });
+/** Done once `stop` is aborted; never when there is none. */
+export const whenStopped = (
+  stop: AbortSignal | undefined
+): Effect.Effect<void> =>
+  stop
+    ? Effect.callback<void>((resume) => {
+        const go = () => resume(Effect.void);
+        if (stop.aborted) {
+          go();
+          return;
+        }
+        stop.addEventListener("abort", go, { once: true });
+        return Effect.sync(() => stop.removeEventListener("abort", go));
+      })
+    : Effect.never;
 
 /** The longest a single timer is armed for; a later end is armed again from there. */
 const TIMER_MAX_MS = DAY_MS;
@@ -143,8 +155,8 @@ export interface MachinePauseDeps {
 }
 
 export interface MachinePause {
-  /** Resolves once `machineId` is not paused; at once when it is not now. */
-  readonly free: (machineId: string) => Promise<void>;
+  /** Done once `machineId` is not paused; at once when it is not now. */
+  readonly free: (machineId: string) => Effect.Effect<void>;
   /**
    * Pauses `machineId` until `until`, once what ran there has stopped;
    * false when the hub knows no such machine. `caller`: the session whose
@@ -170,7 +182,8 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
   /** Each paused machine's end, in ms: the rows', read once and kept in step. */
   const ends = new Map<string, number>();
   const timers = new Map<string, HubTimer>();
-  const waiting = new Map<string, (() => void)[]>();
+  /** Each paused machine's end as a wait: done as its pause ends ({@link MachinePause.free}). */
+  const freed = new Map<string, Deferred.Deferred<void>>();
 
   const disarm = (machineId: string): void => {
     lifetime.cancel(timers.get(machineId));
@@ -184,10 +197,11 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
     }
     db.setMachinePause(machineId, null, null);
     console.log(`[pause] ${machineId}: resumed`);
-    for (const go of waiting.get(machineId) ?? []) {
-      go();
+    const free = freed.get(machineId);
+    freed.delete(machineId);
+    if (free) {
+      Deferred.doneUnsafe(free, Effect.void);
     }
-    waiting.delete(machineId);
     deps.resumed(machineId);
   };
 
@@ -249,10 +263,16 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
       return `${name} is paused until ${pauseClock(at)}`;
     },
     free: (machineId) =>
-      ends.has(machineId)
-        ? new Promise<void>((go) => {
-            waiting.set(machineId, [...(waiting.get(machineId) ?? []), go]);
-          })
-        : Promise.resolve(),
+      Effect.suspend(() => {
+        if (!ends.has(machineId)) {
+          return Effect.void;
+        }
+        let free = freed.get(machineId);
+        if (!free) {
+          free = Deferred.makeUnsafe<void>();
+          freed.set(machineId, free);
+        }
+        return Deferred.await(free);
+      }),
   };
 };

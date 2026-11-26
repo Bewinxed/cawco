@@ -26,6 +26,7 @@ import {
   type PasskeyScanArgs,
   type PasskeyStatusFrame,
 } from "@cawco/core/browser";
+import { Effect } from "effect";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { AgentCall } from "./machine-answers";
 
@@ -52,7 +53,7 @@ export interface PasskeyRelayDeps {
   call: AgentCall;
   /** Whether the machine reported a BLE adapter (browsers.ts). */
   hasBle: (machineId: string) => boolean;
-  lifetime: Pick<HubLifetimeShape, "after" | "cancel">;
+  lifetime: Pick<HubLifetimeShape, "after" | "cancel" | "fork">;
   /** The name a machine is called by. */
   machineName: (machineId: string) => string;
   /** The machines whose socket the hub holds now. */
@@ -83,18 +84,25 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
   const stopScanning = (attempt: RelayAttempt): void => {
     deps.lifetime.cancel(attempt.timer);
     for (const machine of attempt.scanning) {
-      deps
-        .call(
-          machine.id,
-          PASSKEY_SCAN_STOP,
-          [{ key: attempt.key } satisfies PasskeyScanArgs],
-          SCAN_CALL_MS
+      deps.lifetime.fork(
+        "passkey scan stopped",
+        Effect.tryPromise(() =>
+          deps.call(
+            machine.id,
+            PASSKEY_SCAN_STOP,
+            [{ key: attempt.key } satisfies PasskeyScanArgs],
+            SCAN_CALL_MS
+          )
+        ).pipe(
+          Effect.catch(({ cause }) =>
+            Effect.sync(() =>
+              console.info(
+                `[passkey] stop-scan to ${machine.name} not delivered: ${String(cause)}`
+              )
+            )
+          )
         )
-        .catch((error: unknown) => {
-          console.info(
-            `[passkey] stop-scan to ${machine.name} not delivered: ${String(error)}`
-          );
-        });
+      );
     }
   };
 
@@ -154,18 +162,25 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
       };
       attempts.set(key, attempt);
       for (const machine of scanning) {
-        deps
-          .call(
-            machine.id,
-            PASSKEY_SCAN_START,
-            [{ key } satisfies PasskeyScanArgs],
-            SCAN_CALL_MS
+        deps.lifetime.fork(
+          "passkey scan started",
+          Effect.tryPromise(() =>
+            deps.call(
+              machine.id,
+              PASSKEY_SCAN_START,
+              [{ key } satisfies PasskeyScanArgs],
+              SCAN_CALL_MS
+            )
+          ).pipe(
+            Effect.catch(({ cause }) =>
+              Effect.sync(() =>
+                console.info(
+                  `[passkey] scan-start to ${machine.name} not delivered: ${String(cause)}`
+                )
+              )
+            )
           )
-          .catch((error: unknown) => {
-            console.info(
-              `[passkey] scan-start to ${machine.name} not delivered: ${String(error)}`
-            );
-          });
+        );
       }
       tell(key, "scanning", scanning);
     },

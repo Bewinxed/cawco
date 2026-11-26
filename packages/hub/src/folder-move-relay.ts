@@ -10,18 +10,24 @@
  * side ending early ends the other's request too, and the job's own end
  * closes both. Off the control link: no heartbeat waits behind a folder.
  */
+import { Deferred, Effect, Schema } from "effect";
 import { bytes, problem } from "elysia";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 /** How long one side waits for the other to arrive. */
 const MEET_MS = 5 * 60_000;
 
+/** The stream ended for both sides before it was done: `message` says by what. */
+class RelayEnded extends Schema.TaggedError<RelayEnded>()("RelayEnded", {
+  message: Schema.String,
+}) {}
+
 interface Pipe {
   /** The put's body, once it came: the take reads it. */
-  body: Promise<ReadableStream<Uint8Array>>;
-  give: (body: ReadableStream<Uint8Array>) => void;
+  body: Deferred.Deferred<ReadableStream<Uint8Array>>;
   given: boolean;
-  stop: AbortController;
+  /** Fails once the stream ends for both sides ({@link RelayEnded}). */
+  stopped: Deferred.Deferred<never, RelayEnded>;
   timer: HubTimer;
 }
 
@@ -30,6 +36,10 @@ const gone = () =>
     code: "folder-move-relay-gone",
     detail: "That copy's stream is over.",
   });
+
+/** What failed a side's request, in its words. */
+const wordsOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
   const pipes = new Map<string, Pipe>();
@@ -42,7 +52,10 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
     }
     pipes.delete(token);
     lifetime.cancel(pipe.timer);
-    pipe.stop.abort(new Error(why));
+    Deferred.doneUnsafe(
+      pipe.stopped,
+      Effect.fail(new RelayEnded({ message: why }))
+    );
   };
 
   /** A new stream for one copy, by an unguessable token. */
@@ -51,15 +64,10 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
       "-",
       ""
     );
-    let give: Pipe["give"] = () => undefined;
-    const body = new Promise<ReadableStream<Uint8Array>>((resolve) => {
-      give = resolve;
-    });
     pipes.set(token, {
-      body,
-      give,
+      body: Deferred.makeUnsafe(),
       given: false,
-      stop: new AbortController(),
+      stopped: Deferred.makeUnsafe(),
       timer: lifetime.after("folder move relay meets", MEET_MS, () =>
         close(token, "the other computer never joined the copy")
       ),
@@ -67,10 +75,14 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
     return token;
   };
 
-  /** The folder's machine puts the stream: answered once the take has read all of it. */
+  /**
+   * The folder's machine puts the stream: answered once the take has read
+   * all of it. The promise edge of the pipe, which the stream's end cuts.
+   */
   const put = async (token: string, request: Request) => {
     const pipe = pipes.get(token);
-    if (!pipe || pipe.given || !request.body) {
+    const { body } = request;
+    if (!pipe || pipe.given || !body) {
       return gone();
     }
     pipe.given = true;
@@ -78,15 +90,27 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
       Uint8Array,
       Uint8Array
     >();
-    pipe.give(readable);
+    Deferred.doneUnsafe(pipe.body, Effect.succeed(readable));
     try {
-      await request.body.pipeTo(writable, { signal: pipe.stop.signal });
-      return { taken: true as const };
-    } catch (error) {
-      return problem(502, {
-        code: "folder-move-relay-ended",
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      return await lifetime.run(
+        Effect.raceFirst(
+          Effect.tryPromise({
+            try: (signal) => body.pipeTo(writable, { signal }),
+            catch: (error) => error,
+          }),
+          Deferred.await(pipe.stopped)
+        ).pipe(
+          Effect.as({ taken: true as const }),
+          Effect.catch((error) =>
+            Effect.succeed(
+              problem(502, {
+                code: "folder-move-relay-ended",
+                detail: wordsOf(error),
+              })
+            )
+          )
+        )
+      );
     } finally {
       if (pipes.get(token) === pipe) {
         pipes.delete(token);
@@ -95,25 +119,32 @@ export const createFolderMoveRelay = (lifetime: HubLifetimeShape) => {
     }
   };
 
-  /** The destination's machine takes the stream, as the put sends it (`application/octet-stream`, Elysia's `bytes`). */
-  const take = async (token: string) => {
+  /**
+   * The destination's machine takes the stream, as the put sends it
+   * (`application/octet-stream`, Elysia's `bytes`). The promise edge of the
+   * wait for the put's body, which the stream's end cuts.
+   */
+  const take = (token: string) => {
     const pipe = pipes.get(token);
     if (!pipe) {
-      return gone();
+      return Promise.resolve(gone());
     }
-    const stopped = new Promise<never>((_, reject) => {
-      pipe.stop.signal.addEventListener("abort", () =>
-        reject(pipe.stop.signal.reason)
-      );
-    });
-    try {
-      return bytes(await Promise.race([pipe.body, stopped]));
-    } catch (error) {
-      return problem(410, {
-        code: "folder-move-relay-ended",
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
+    return lifetime.run(
+      Effect.raceFirst(
+        Deferred.await(pipe.body),
+        Deferred.await(pipe.stopped)
+      ).pipe(
+        Effect.map((stream) => bytes(stream)),
+        Effect.catch((error) =>
+          Effect.succeed(
+            problem(410, {
+              code: "folder-move-relay-ended",
+              detail: error.message,
+            })
+          )
+        )
+      )
+    );
   };
 
   return { open, close, put, take };

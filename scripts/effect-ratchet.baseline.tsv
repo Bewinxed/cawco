@@ -28,11 +28,9 @@ bare-run	Effect.runSync	packages/hub/src/intake.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
-error-class	CapabilityCallsRefusal	packages/hub/src/capability-calls.ts	1
 error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
-error-class	CommandStopped	packages/hub/src/machine-pause.ts	1
 error-class	ConnectionProblem	packages/hub/src/connections.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
@@ -74,7 +72,6 @@ error-class	Unbound	packages/hub/src/db/trash.ts	1
 error-class	Unreachable	packages/hub/src/fleet-mcp.ts	1
 error-class	UnreadJson	packages/agent/src/json-file.ts	1
 error-class	UpdateInterrupted	packages/agent/src/binary-update.ts	1
-error-class	WouldWait	packages/hub/src/machine-pause.ts	1
 hand-promise	new Promise	packages/agent/src/activity.ts	2
 hand-promise	new Promise	packages/agent/src/auth.ts	1
 hand-promise	new Promise	packages/agent/src/awake-hold.ts	1
@@ -130,25 +127,21 @@ hand-promise	new Promise	packages/hub/src/artifacts/service.ts	1
 hand-promise	new Promise	packages/hub/src/browser-tools.ts	1
 hand-promise	new Promise	packages/hub/src/connect-asks.ts	1
 hand-promise	new Promise	packages/hub/src/context-reads.ts	1
+hand-promise	new Promise	packages/hub/src/continuations.ts	1
 hand-promise	new Promise	packages/hub/src/favicon.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-fetches.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-watch.ts	1
-hand-promise	new Promise	packages/hub/src/folder-move-relay.ts	2
 hand-promise	new Promise	packages/hub/src/host-build.ts	1
 hand-promise	new Promise	packages/hub/src/installs.ts	1
 hand-promise	new Promise	packages/hub/src/law-tasks.ts	1
 hand-promise	new Promise	packages/hub/src/lifetime.ts	3
-hand-promise	new Promise	packages/hub/src/machine-calls.ts	1
-hand-promise	new Promise	packages/hub/src/machine-pause.ts	2
 hand-promise	new Promise	packages/hub/src/preview-control.ts	1
 hand-promise	new Promise	packages/hub/src/project-stops.ts	1
 hand-promise	new Promise	packages/hub/src/server.ts	2
 hand-promise	new Promise	packages/hub/src/ssh-add.ts	1
 hand-promise	new Promise	packages/hub/src/ssh-tunnels.ts	1
-hand-promise	new Promise	packages/hub/src/stream-relay.ts	1
 hand-promise	new Promise	packages/hub/src/tool-facts.ts	1
 hand-promise	new Promise	packages/hub/src/views/wire.ts	1
-hand-promise	new Promise	packages/hub/src/wire-socket.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary-host.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
@@ -210,7 +203,6 @@ promise-map	installing	packages/agent/src/tools.ts	1
 promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
 promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
 promise-map	lists	packages/hub/src/fleet-mcp-relay.ts	1
-promise-map	live	packages/hub/src/call-keys.ts	1
 promise-map	liveGroups	packages/agent/src/group-run.ts	1
 promise-map	local	packages/agent/src/stage-host/host.ts	1
 promise-map	looksQueued	packages/hub/src/at-limit.ts	1
@@ -276,7 +268,6 @@ timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
 timed-loop	Bun.sleep	packages/hub/src/fleet-mcp-relay.ts	1
 timed-loop	Bun.sleep	packages/hub/src/landing.ts	1
 timed-loop	Bun.sleep	packages/hub/src/ssh-tunnels.ts	2
-timed-loop	Bun.sleep	packages/hub/src/wire-socket.ts	1
 timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.ts	1
 timed-loop	delay	packages/agent/src/mcp-status.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/browser/passkey-inject.ts	1

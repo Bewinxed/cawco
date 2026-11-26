@@ -18,6 +18,7 @@ import {
 } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { Deferred, Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { machineAccount } from "./accounts";
 import type { ClosureContext } from "./closure-context";
@@ -39,6 +40,7 @@ export type ContextReadsContext = Pick<
   ClosureContext,
   | "awayError"
   | "db"
+  | "lifetime"
   | "locateSession"
   | "machineFault"
   | "machineName"
@@ -74,11 +76,13 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     cancelled: () => boolean,
     mode: PermissionMode
   ) => {
-    const answered = new Promise<void>((resolve, reject) => {
-      ctx.turnWaiters.set(id, { machineId: source.machineId, resolve, reject });
+    /** The summariser's turn ended, or failed: its waiter in `turnWaiters` is done by the frame that says so. */
+    const answered = Deferred.makeUnsafe<void, Error>();
+    ctx.turnWaiters.set(id, {
+      machineId: source.machineId,
+      resolve: () => Deferred.doneUnsafe(answered, Effect.void),
+      reject: (error) => Deferred.doneUnsafe(answered, Effect.fail(error)),
     });
-    // Never unhandled: a spawn that fails first leaves this to be abandoned.
-    answered.catch(() => undefined);
     ctx.summarisers.add(id);
     try {
       const spawned = await ctx.spawnFromHub(
@@ -119,7 +123,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         },
         crypto.randomUUID()
       );
-      await answered;
+      await ctx.lifetime.run(Deferred.await(answered));
       const text = await storedAnswer(id, true);
       if (!text) {
         throw new Error(

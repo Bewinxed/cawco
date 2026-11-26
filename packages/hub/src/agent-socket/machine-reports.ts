@@ -1,7 +1,7 @@
 /** A machine's own reports on its socket, none naming a session: each is taken in whole. */
 
-import { detach } from "@cawco/core/detach";
 import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
+import { Effect } from "effect";
 import { z } from "zod";
 import { stagePlaceRef } from "../caw";
 import type { HubContext } from "../hub-context";
@@ -18,6 +18,7 @@ export type MachineReportsContext = Pick<
   | "db"
   | "fleetSyncs"
   | "keepFleetReport"
+  | "lifetime"
   | "moves"
   | "folderMoves"
   | "passkeyRelay"
@@ -88,9 +89,11 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
         );
         return "stop";
       }
-      detach(
-        ctx.workItems.fileStageClone(message.machineId, frame, by),
-        `file the stage clone ${frame.id}`
+      ctx.lifetime.fork(
+        `file the stage clone ${frame.id}`,
+        Effect.tryPromise(() =>
+          ctx.workItems.fileStageClone(message.machineId, frame, by)
+        )
       );
       return "stop";
     }
@@ -143,13 +146,15 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     if (body.kind === "catalog_moved") {
       const moved = MovedShape.safeParse(body);
       if (moved.success) {
-        detach(
-          ctx.find.catalogMoved(
-            message.machineId,
-            moved.data.moved,
-            moved.data.removed
-          ),
-          "keep the machine's moved transcripts"
+        ctx.lifetime.fork(
+          "keep the machine's moved transcripts",
+          Effect.tryPromise(() =>
+            ctx.find.catalogMoved(
+              message.machineId,
+              moved.data.moved,
+              moved.data.removed
+            )
+          )
         );
       } else {
         console.warn(
@@ -208,16 +213,18 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     // of the other machines (browsers.ts); the scan that caught it stops.
     if (body.kind === "passkey_advert") {
       const { serviceData, rssi, capturedAt } = body;
-      detach(
-        ctx.browsers.relayPasskeyAdvert(
-          message.machineId,
-          { serviceData, rssi, capturedAt },
-          {
-            captured: (key) => ctx.passkeyRelay.captured(key),
-            injected: (key) => ctx.passkeyRelay.injected(key),
-          }
-        ),
-        "relay the passkey advert"
+      ctx.lifetime.fork(
+        "relay the passkey advert",
+        Effect.tryPromise(() =>
+          ctx.browsers.relayPasskeyAdvert(
+            message.machineId,
+            { serviceData, rssi, capturedAt },
+            {
+              captured: (key) => ctx.passkeyRelay.captured(key),
+              injected: (key) => ctx.passkeyRelay.injected(key),
+            }
+          )
+        )
       );
       return "stop";
     }
@@ -256,7 +263,14 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     const { message } = run;
     const body = message.payload;
     if (body.kind === "account_borrow") {
-      ctx.answerBorrow(message.machineId, body).catch(console.error);
+      ctx.lifetime.fork(
+        "answer a borrow",
+        Effect.tryPromise(() => ctx.answerBorrow(message.machineId, body)).pipe(
+          Effect.catch((failed) =>
+            Effect.sync(() => console.error(failed.cause))
+          )
+        )
+      );
       return "stop";
     }
     return "continue";

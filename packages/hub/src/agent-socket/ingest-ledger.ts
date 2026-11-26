@@ -1,7 +1,7 @@
 /** The ingest ledger's gate, what reads every admitted frame, and keep-alive pings. */
 
-import { detach } from "@cawco/core/detach";
 import { readProvenance, readSent } from "@cawco/core/stream";
+import { Effect } from "effect";
 import { isProjectConversation } from "../caw";
 import type { HubContext } from "../hub-context";
 import { keepAliveResult, keepAliveUsage } from "../keep-alive";
@@ -12,6 +12,7 @@ export type IngestLedgerContext = Pick<
   HubContext,
   | "db"
   | "keepAliveScheduler"
+  | "lifetime"
   | "recordTurnUsage"
   | "routines"
   | "streams"
@@ -120,7 +121,10 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
               `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
             );
             // A refreshed request establishes the next original deadline.
-            detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
+            ctx.lifetime.fork(
+              "keepalive wake",
+              Effect.tryPromise(() => ctx.keepAliveScheduler.wake())
+            );
           }
           ctx.streams.sequence(row.id, { ...frame, keepAlive: true });
           return "stop";

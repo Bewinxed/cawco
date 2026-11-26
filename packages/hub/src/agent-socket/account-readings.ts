@@ -5,8 +5,8 @@ import {
   CLAUDE_PROVIDER,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { detach } from "@cawco/core/detach";
 import { ACCOUNT_READ, RATE_LIMIT_READ } from "@cawco/core/harness";
+import { Effect } from "effect";
 import {
   keepReading,
   noteRateLimit,
@@ -20,6 +20,7 @@ import { onSessionFrame } from "./frame-run";
 export type AccountReadingsContext = Pick<
   HubContext,
   | "db"
+  | "lifetime"
   | "limitRefused"
   | "machineName"
   | "probeAccount"
@@ -121,19 +122,21 @@ export const accountReadingStagesOf = (ctx: AccountReadingsContext) => {
           account?.provider === CLAUDE_PROVIDER
         ) {
           const { machineId: probedOn } = message;
-          detach(
-            refreshCatalog(
-              ctx.db,
-              probedOn,
-              account,
-              ctx.probeAccount,
-              "stale"
-            ).then((went) => {
-              if (went === "read") {
-                ctx.publishUsage(probedOn);
-              }
-            }),
-            "account catalog refresh"
+          ctx.lifetime.fork(
+            "account catalog refresh",
+            Effect.tryPromise(() =>
+              refreshCatalog(
+                ctx.db,
+                probedOn,
+                account,
+                ctx.probeAccount,
+                "stale"
+              ).then((went) => {
+                if (went === "read") {
+                  ctx.publishUsage(probedOn);
+                }
+              })
+            )
           );
         }
         ctx.publishUsage(message.machineId);

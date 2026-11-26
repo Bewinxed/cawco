@@ -21,6 +21,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
+import { Schema } from "effect";
 import type { DbShape } from "./db";
 import { mcpUsageName, SCORE_WINDOW_DAYS } from "./usage-count";
 
@@ -69,7 +70,10 @@ export interface CapabilityCallsReport {
 }
 
 /** Why a count cannot be answered as asked. */
-export class CapabilityCallsRefusal extends Error {}
+export class CapabilityCallsRefusal extends Schema.TaggedError<CapabilityCallsRefusal>()(
+  "CapabilityCallsRefusal",
+  { message: Schema.String }
+) {}
 
 /** The role a session's calls count under. */
 const roleOf = (session: {
@@ -120,15 +124,15 @@ export const capabilityCalls = (
 ): CapabilityCallsReport => {
   const days = asked.days ?? CALLS_DEFAULT_DAYS;
   if (!Number.isInteger(days) || days < 1 || days > CALLS_MAX_DAYS) {
-    throw new CapabilityCallsRefusal(
-      `days is ${days}: give a whole number of days from 1 to ${CALLS_MAX_DAYS}, the calls the hub keeps.`
-    );
+    throw new CapabilityCallsRefusal({
+      message: `days is ${days}: give a whole number of days from 1 to ${CALLS_MAX_DAYS}, the calls the hub keeps.`,
+    });
   }
   const project = asked.projectId ? db.project(asked.projectId) : undefined;
   if (asked.projectId && !project) {
-    throw new CapabilityCallsRefusal(
-      `${asked.projectId} is no project of this hub.`
-    );
+    throw new CapabilityCallsRefusal({
+      message: `${asked.projectId} is no project of this hub.`,
+    });
   }
   const since = now - days * DAY_MS;
   const calls = db.capabilityCalls

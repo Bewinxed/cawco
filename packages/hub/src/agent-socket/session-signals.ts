@@ -2,6 +2,7 @@
 
 import { EFFORT_READ, SESSION_DIR_READ, SPENT_READ } from "@cawco/core/harness";
 import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness/kinds";
+import { Effect } from "effect";
 import { cutCommandsWords } from "../cut-turns";
 import type { HubContext } from "../hub-context";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
@@ -179,13 +180,20 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     if (relaunchFor) {
       const { machineId } = message;
       const why = relaunchFor;
-      ctx
-        .relaunchAtRest(machineId, instanceId, why)
-        .catch((error: unknown) =>
-          console.error(
-            `[hub] ${why}: relaunching ${instanceId} failed: ${String(error)}`
+      ctx.lifetime.fork(
+        "relaunch at rest",
+        Effect.tryPromise(() =>
+          ctx.relaunchAtRest(machineId, instanceId, why)
+        ).pipe(
+          Effect.catch(({ cause }) =>
+            Effect.sync(() =>
+              console.error(
+                `[hub] ${why}: relaunching ${instanceId} failed: ${String(cause)}`
+              )
+            )
           )
-        );
+        )
+      );
       return "stop";
     }
     return "continue";

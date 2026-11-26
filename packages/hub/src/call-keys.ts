@@ -31,11 +31,14 @@
  * marks those a stopped hub was running as interrupted.
  */
 import { createHash } from "node:crypto";
+import { makeJoin } from "@cawco/core/effect/join";
 import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { Effect } from "effect";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
+import type { HubLifetimeShape } from "./lifetime";
 import { INTERRUPTED_CALL } from "./tool-call-keys";
 
 /** The tools a key makes run once: each starts work or sends words that a second run would double. */
@@ -79,34 +82,42 @@ export const mcpCallKey = (
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export const createCallKeys = ({ db }: { db: ToolCallKeysDb }) => {
-  /** Each keyed call this process runs now, by its stored id. */
-  const live = new Map<string, Promise<CallToolResult>>();
+/** A call's failure as the answer its caller reads. */
+const failedAnswer = (error: unknown): CallToolResult => ({
+  isError: true,
+  content: [
+    {
+      type: "text",
+      text: error instanceof Error ? error.message : String(error),
+    },
+  ],
+});
 
-  return {
-    /**
-     * `run`'s answer, run once per `instanceId`, `name` and `key`; a tool
-     * outside {@link KEYED_TOOLS}, or a call with no key, is simply run.
-     */
-    async once(
-      instanceId: string | null,
-      name: string,
-      key: string | undefined,
-      run: () => Promise<CallToolResult>
-    ): Promise<CallToolResult> {
-      if (!(instanceId && key && KEYED_TOOLS.has(name))) {
-        return await run();
-      }
-      const id = createHash("sha256")
-        .update(["session-call", instanceId, name, key].join("\n"))
-        .digest("hex");
-      const running = live.get(id);
-      if (running !== undefined) {
-        console.info(
-          `[call-keys] ${name} from ${instanceId} sent again while it runs: answered as it answers`
-        );
-        return await running;
-      }
+export const createCallKeys = ({
+  db,
+  lifetime,
+}: {
+  db: ToolCallKeysDb;
+  lifetime: Pick<HubLifetimeShape, "run">;
+}) => {
+  /**
+   * Each keyed call this process runs now, by its stored id: a call sent
+   * again while it runs joins it. What outlives the run is its row.
+   */
+  const live = makeJoin<string, CallToolResult>();
+
+  /**
+   * The keyed call `id` the first time it comes: run, and its answer kept
+   * on its row; one whose row was taken before (by a run that ended, or a
+   * hub that stopped) answers what the row holds.
+   */
+  const firstRun = (
+    id: string,
+    instanceId: string,
+    name: string,
+    run: () => Promise<CallToolResult>
+  ): Effect.Effect<CallToolResult> =>
+    Effect.gen(function* () {
       if (!db.take(id, Date.now())) {
         const row = db.get(id);
         if (row?.state === "answered" && row.body) {
@@ -120,33 +131,60 @@ export const createCallKeys = ({ db }: { db: ToolCallKeysDb }) => {
         return {
           isError: true,
           content: [{ type: "text", text: INTERRUPTED_CALL }],
-        };
+        } satisfies CallToolResult;
       }
-      const answered = run().catch((error: unknown): CallToolResult => ({
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: error instanceof Error ? error.message : String(error),
-          },
-        ],
-      }));
-      live.set(id, answered);
-      try {
-        const result = await answered;
-        db.answer(
+      const result = yield* Effect.tryPromise({
+        try: run,
+        catch: (error) => error,
+      }).pipe(Effect.catch((error) => Effect.succeed(failedAnswer(error))));
+      db.answer(
+        id,
+        {
+          status: 200,
+          headers: [],
+          body: encoder.encode(JSON.stringify(result)),
+        },
+        Date.now()
+      );
+      return result;
+    });
+
+  return {
+    /**
+     * `run`'s answer, run once per `instanceId`, `name` and `key`; a tool
+     * outside {@link KEYED_TOOLS}, or a call with no key, is simply run.
+     * The promise edge of the join.
+     */
+    async once(
+      instanceId: string | null,
+      name: string,
+      key: string | undefined,
+      run: () => Promise<CallToolResult>
+    ): Promise<CallToolResult> {
+      if (!(instanceId && key && KEYED_TOOLS.has(name))) {
+        return await run();
+      }
+      const id = createHash("sha256")
+        .update(["session-call", instanceId, name, key].join("\n"))
+        .digest("hex");
+      // The join starts a run on the caller's own turn: one that did not
+      // start here joined the run in flight.
+      let started = false;
+      const answer = lifetime.run(
+        live.run(
           id,
-          {
-            status: 200,
-            headers: [],
-            body: encoder.encode(JSON.stringify(result)),
-          },
-          Date.now()
+          Effect.suspend(() => {
+            started = true;
+            return firstRun(id, instanceId, name, run);
+          })
+        )
+      );
+      if (!started) {
+        console.info(
+          `[call-keys] ${name} from ${instanceId} sent again while it runs: answered as it answers`
         );
-        return result;
-      } finally {
-        live.delete(id);
       }
+      return await answer;
     },
   };
 };

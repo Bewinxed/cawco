@@ -11723,7 +11723,7 @@ export const createServer = (
     lifetime,
     decidesKinds: () => db.decides.kinds(),
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
-    callKeys: createCallKeys({ db: db.toolCallKeys }),
+    callKeys: createCallKeys({ db: db.toolCallKeys, lifetime }),
     tasks,
     connections,
     hubTools,

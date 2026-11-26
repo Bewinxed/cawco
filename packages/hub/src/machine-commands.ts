@@ -7,6 +7,7 @@ import {
 import { cutShort } from "@cawco/core/words/helpers";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { Effect } from "effect";
 import type { ClosureContext } from "./closure-context";
 import { folderStandsOn } from "./folder-stands";
 import type { CommandOptions } from "./machine-pause";
@@ -19,6 +20,7 @@ export type MachineCommandsContext = Pick<
   | "callAgent"
   | "commandQueues"
   | "db"
+  | "lifetime"
   | "machinePause"
   | "projectsChanged"
   | "readAgent"
@@ -60,7 +62,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       throwIfStopped(how, cmd);
       const paused = how.noWait ? ctx.machinePause.words(machineId) : undefined;
       if (paused) {
-        throw new WouldWait(paused);
+        throw new WouldWait({ message: paused });
       }
       await pauseOver(machineId, how.onWait, how.stop);
       throwIfStopped(how, cmd);
@@ -77,9 +79,9 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
         return result;
       }
       if (how.noWait) {
-        throw new WouldWait(
-          ctx.machinePause.words(machineId) ?? "its machine's pause"
-        );
+        throw new WouldWait({
+          message: ctx.machinePause.words(machineId) ?? "its machine's pause",
+        });
       }
       console.log(
         `[pause] ${machineId}: a command it stopped waits for the pause's end, then runs again`
@@ -101,7 +103,9 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       return;
     }
     onWait?.(`waiting: ${words}`);
-    await Promise.race([ctx.machinePause.free(machineId), whenStopped(stop)]);
+    await ctx.lifetime.run(
+      Effect.raceFirst(ctx.machinePause.free(machineId), whenStopped(stop))
+    );
     onWait?.(null);
   };
 
@@ -203,9 +207,16 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       console.log(
         `[command] ${machineId}: cancelling command run ${run.id}, its owner stopped: \`${cutShort(cmd, 120)}\``
       );
-      cancelRun(machineId, run.id).catch((error: unknown) =>
-        console.warn(
-          `[command] ${machineId}: run ${run.id}, stopped with its owner, could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
+      ctx.lifetime.fork(
+        "cancel a run its owner stopped",
+        Effect.tryPromise(() => cancelRun(machineId, run.id)).pipe(
+          Effect.catch(({ cause }) =>
+            Effect.sync(() =>
+              console.warn(
+                `[command] ${machineId}: run ${run.id}, stopped with its owner, could not be cancelled: ${cause instanceof Error ? cause.message : String(cause)}`
+              )
+            )
+          )
         )
       );
     };
@@ -222,9 +233,16 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
           return;
         }
         waited = queueWords(queue);
-        cancelRun(machineId, run.id).catch((error: unknown) =>
-          console.warn(
-            `[command] ${machineId}: a run that may not wait (${waited}) could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
+        ctx.lifetime.fork(
+          "cancel a run that may not wait",
+          Effect.tryPromise(() => cancelRun(machineId, run.id)).pipe(
+            Effect.catch(({ cause }) =>
+              Effect.sync(() =>
+                console.warn(
+                  `[command] ${machineId}: a run that may not wait (${waited}) could not be cancelled: ${cause instanceof Error ? cause.message : String(cause)}`
+                )
+              )
+            )
           )
         );
       });
@@ -256,7 +274,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       }
       const { result } = response.value;
       if (waited !== undefined && result.cancelled) {
-        throw new WouldWait(waited);
+        throw new WouldWait({ message: waited });
       }
       return result;
     } finally {

@@ -7,7 +7,6 @@ import {
   outOfCredit,
 } from "@cawco/core/accounts";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
-import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { asLastErrorKind } from "@cawco/core/relaunch";
 import {
@@ -16,6 +15,7 @@ import {
   PROVIDER_RETRY,
 } from "@cawco/core/session-messages";
 import { unreadAskWords } from "@cawco/core/words/ask-lines";
+import { Effect } from "effect";
 import {
   noteAnswered,
   noteNotEnabled,
@@ -242,9 +242,11 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         console.warn(
           `[hub] ask unreadable session=${message.instanceId ?? "none"} request=${message.requestId} fields=${unread.join(",")}`
         );
-        detach(
-          ctx.withdrawUnshown(ask, unreadAskWords(unread)),
-          "ask withdrawal"
+        ctx.lifetime.fork(
+          "ask withdrawal",
+          Effect.tryPromise(() =>
+            ctx.withdrawUnshown(ask, unreadAskWords(unread))
+          )
         );
         return "stop";
       }
@@ -271,7 +273,10 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           });
         }
         // Admission does not wait on the machine.
-        detach(ctx.withdrawUnshown(ask, refusal), "ask withdrawal");
+        ctx.lifetime.fork(
+          "ask withdrawal",
+          Effect.tryPromise(() => ctx.withdrawUnshown(ask, refusal))
+        );
         return "stop";
       }
       // The call a permit of its session granted runs once without
@@ -282,7 +287,10 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         !ctx.pending.get(message.requestId) &&
         ctx.hubAsks.granted(owner, ask)
       ) {
-        detach(ctx.allowGranted(ask), "granted call");
+        ctx.lifetime.fork(
+          "granted call",
+          Effect.tryPromise(() => ctx.allowGranted(ask))
+        );
         return "stop";
       }
       // A replayed ask (the daemon re-announces unresolved asks after
@@ -566,9 +574,16 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         ctx.credentialTurns.delete(ended);
         ctx.limitRefused.delete(ended);
         ctx.turnInFlight.over(ended);
-        ctx.atLimit.signedOut(ended).catch((error: unknown) => {
-          ctx.limitAnswerFailed(ended, "its refused sign-in", error);
-        });
+        ctx.lifetime.fork(
+          "answer a refused sign-in",
+          Effect.tryPromise(() => ctx.atLimit.signedOut(ended)).pipe(
+            Effect.catch(({ cause }) =>
+              Effect.sync(() =>
+                ctx.limitAnswerFailed(ended, "its refused sign-in", cause)
+              )
+            )
+          )
+        );
       } else if (
         neutral.type === "result" &&
         ctx.limitRefused.delete(message.instanceId) &&
@@ -583,9 +598,16 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         // A move it owes to an account with room is its turn's
         // end, as any turn's end is.
         if (!ctx.moveOwedAtRefusal(refused)) {
-          ctx.atLimit.turnRefused(refused).catch((error: unknown) => {
-            ctx.limitAnswerFailed(refused, "its account's limit", error);
-          });
+          ctx.lifetime.fork(
+            "answer a turn its limit refused",
+            Effect.tryPromise(() => ctx.atLimit.turnRefused(refused)).pipe(
+              Effect.catch(({ cause }) =>
+                Effect.sync(() =>
+                  ctx.limitAnswerFailed(refused, "its account's limit", cause)
+                )
+              )
+            )
+          );
         }
       } else if (
         neutral.type === "result" &&

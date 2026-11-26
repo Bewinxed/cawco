@@ -1,10 +1,10 @@
 /** What a turn's end does, one step each, listed in order by turnEndedStepsOf. */
 
 import { type ArtifactNeed, unparked } from "@cawco/core/artifact-needs";
-import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { waitsOnItself } from "@cawco/core/session-messages";
+import { Effect } from "effect";
 import type { HubContext } from "../hub-context";
 import { keepAliveResult } from "../keep-alive";
 import type { TurnEnd } from "./turn-ended";
@@ -21,6 +21,7 @@ export type TurnEndedContext = Pick<
   | "interruptedTurns"
   | "keepAliveScheduler"
   | "lastRequestContext"
+  | "lifetime"
   | "oweMoveOff"
   | "owedMoves"
   | "projectOffers"
@@ -53,7 +54,10 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       );
       ctx.lastRequestContext.delete(cacheRow.id);
       // Real turns re-arm from their own request clock.
-      detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
+      ctx.lifetime.fork(
+        "keepalive wake",
+        Effect.tryPromise(() => ctx.keepAliveScheduler.wake())
+      );
       ctx.atLimit.turnEnded(cacheRow.id);
       // A compaction after a move: its next step, or its end.
       ctx.compactionTurnEnded(cacheRow.id);
@@ -104,9 +108,11 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
     // Its context as this turn left it, against its window:
     // at its policy's threshold, it files its open items.
     if (cacheRow) {
-      detach(
-        ctx.fileAtThreshold(cacheRow.id, neutral.compactsAt),
-        "context threshold"
+      ctx.lifetime.fork(
+        "context threshold",
+        Effect.tryPromise(() =>
+          ctx.fileAtThreshold(cacheRow.id, neutral.compactsAt)
+        )
       );
     }
   };
@@ -283,17 +289,24 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       // instruction answers goes back, and may end the item.
       // Meaning rules answer once Jev does; the hand-back
       // waits for them.
-      answered()
-        .then((replied) => {
-          if (!replied) {
-            handBack(delegate);
-          }
-        })
-        .catch((error) => {
-          console.error(
-            `[hand-back] ${turnId}: ${error instanceof Error ? error.message : error}`
-          );
-        });
+      ctx.lifetime.fork(
+        "hand back an unanswered turn",
+        Effect.tryPromise(() =>
+          answered().then((replied) => {
+            if (!replied) {
+              handBack(delegate);
+            }
+          })
+        ).pipe(
+          Effect.catch(({ cause }) =>
+            Effect.sync(() =>
+              console.error(
+                `[hand-back] ${turnId}: ${cause instanceof Error ? cause.message : cause}`
+              )
+            )
+          )
+        )
+      );
     } else {
       // A failed turn goes back at once and ends its item, so
       // nothing answers it; a session that is not delegated
@@ -310,20 +323,22 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       // interrupt cut is answered by nothing.
       const owners = row && !parentId;
       if (!cut) {
-        detach(
-          answered().then((replied) => {
-            if (owners && !replied) {
-              ctx.push.turnEnded(
-                turnId,
-                text || harnessError,
-                endedAt,
-                neutral.wakes,
-                silent,
-                artifactLeft
-              );
-            }
-          }),
-          "rule answer"
+        ctx.lifetime.fork(
+          "rule answer",
+          Effect.tryPromise(() =>
+            answered().then((replied) => {
+              if (owners && !replied) {
+                ctx.push.turnEnded(
+                  turnId,
+                  text || harnessError,
+                  endedAt,
+                  neutral.wakes,
+                  silent,
+                  artifactLeft
+                );
+              }
+            })
+          )
         );
       }
     }

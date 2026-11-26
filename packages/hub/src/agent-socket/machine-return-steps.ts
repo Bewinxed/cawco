@@ -1,7 +1,7 @@
 /** What a machine's return does, one step each, listed in order by machineReturnStepsOf. */
 
-import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { Effect } from "effect";
 import { TURN_UNRECORDED } from "../db/sends";
 import type { HubContext } from "../hub-context";
 import { nextTurn } from "../lifetime";
@@ -54,6 +54,7 @@ export type MachineReturnContext = Pick<
   | "keptOn"
   | "launchingOn"
   | "learnCheckout"
+  | "lifetime"
   | "projectLocate"
   | "lifecycle"
   | "locations"
@@ -142,19 +143,20 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // register asks of the agent.
     ctx.workItems.resumeLandings(message.machineId);
     // The landing gate's clones a hub before 2026-11-17 cut here go.
-    detach(
-      ctx.workItems.closeGateClones(message.machineId),
-      "close the landing gate's clones"
+    ctx.lifetime.fork(
+      "close the landing gate's clones",
+      Effect.tryPromise(() => ctx.workItems.closeGateClones(message.machineId))
     );
     // A checkout coming online can be where a ready task's
     // workspace is cut.
     ctx.dispatcher.machineOnline(message.machineId);
     // What a project held while none of its machines was online starts now
     // (triggers.ts `rerunHeld`).
-    if (ctx.triggers) {
-      detach(
-        ctx.triggers.machineOnline(message.machineId),
-        "run the projects' held triggers"
+    const { triggers } = ctx;
+    if (triggers) {
+      ctx.lifetime.fork(
+        "run the projects' held triggers",
+        Effect.tryPromise(() => triggers.machineOnline(message.machineId))
       );
     }
     // A delegate that waited for owned files may start on it now.
@@ -167,19 +169,26 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // its origin here, now that the machine can run git.
     // Then each folder a Locate folder held for it is pointed there
     // (project-locate.ts `resumeHeld`).
-    Promise.all(
-      ctx.db
-        .checkoutsOn(message.machineId)
-        .map((checkout) =>
-          ctx.learnCheckout({ ...checkout, machineId: message.machineId })
+    ctx.lifetime.fork(
+      "learn the machine's checkouts",
+      Effect.tryPromise(() =>
+        Promise.all(
+          ctx.db
+            .checkoutsOn(message.machineId)
+            .map((checkout) =>
+              ctx.learnCheckout({ ...checkout, machineId: message.machineId })
+            )
+        ).then(() => ctx.projectLocate.resumeHeld(message.machineId))
+      ).pipe(
+        Effect.catch(({ cause }) =>
+          Effect.sync(() =>
+            console.warn(
+              `[hub] reading ${message.machineId}'s project remotes failed: ${cause instanceof Error ? cause.message : String(cause)}`
+            )
+          )
         )
-    )
-      .then(() => ctx.projectLocate.resumeHeld(message.machineId))
-      .catch((error: unknown) =>
-        console.warn(
-          `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      )
+    );
   };
 
   const previewsReconciled = (ret: MachineReturn): void => {
@@ -279,14 +288,19 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
       console.warn(
         `[browser] ${ctx.machineName(message.machineId)}'s browsers were not read as it registered: ${why}`
       );
-    ctx.browsers.connected(message.machineId).then(
-      (refused) => {
-        if (refused) {
-          unread(refused.response.detail);
-        }
-      },
-      (error: unknown) =>
-        unread(error instanceof Error ? error.message : String(error))
+    ctx.lifetime.fork(
+      "read the machine's browsers",
+      Effect.tryPromise(() => ctx.browsers.connected(message.machineId)).pipe(
+        Effect.match({
+          onSuccess: (refused) => {
+            if (refused) {
+              unread(refused.response.detail);
+            }
+          },
+          onFailure: ({ cause }) =>
+            unread(cause instanceof Error ? cause.message : String(cause)),
+        })
+      )
     );
     ctx.browserStream.connected(message.machineId);
     ctx.relayJourney.connected(message.machineId);
@@ -336,13 +350,23 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // What this machine runs is built now, so opening any of it is
     // a page off what is built rather than a read of its machine;
     // what an agent on another commit read is read again.
-    ctx.transcripts
-      .machineRegistered(message.machineId, agentFrame.instances)
-      .catch((error: unknown) =>
-        console.warn(
-          `[hub] building ${message.machineId}'s transcripts failed: ${error instanceof Error ? error.message : String(error)}`
+    ctx.lifetime.fork(
+      "build the machine's transcripts",
+      Effect.tryPromise(() =>
+        ctx.transcripts.machineRegistered(
+          message.machineId,
+          agentFrame.instances
         )
-      );
+      ).pipe(
+        Effect.catch(({ cause }) =>
+          Effect.sync(() =>
+            console.warn(
+              `[hub] building ${message.machineId}'s transcripts failed: ${cause instanceof Error ? cause.message : String(cause)}`
+            )
+          )
+        )
+      )
+    );
     const { custody } = agentFrame;
     ctx.keepCustody(message.machineId, custody);
     const heldIds = new Set(
@@ -598,15 +622,20 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const boardPublished = (ret: MachineReturn): void => {
     const { message } = ret;
-    detach(ctx.pushAgents(message.machineId), "agent push");
+    ctx.lifetime.fork(
+      "agent push",
+      Effect.tryPromise(() => ctx.pushAgents(message.machineId))
+    );
     // Its catalog, for Recent's stored list, and what its stored
     // conversations are called, for the ones nobody has ever named,
     // off that catalog.
-    detach(
-      ctx.find
-        .relist(message.machineId)
-        .then(() => ctx.nameStoredSessions(message.machineId)),
-      "stored session names"
+    ctx.lifetime.fork(
+      "stored session names",
+      Effect.tryPromise(() =>
+        ctx.find
+          .relist(message.machineId)
+          .then(() => ctx.nameStoredSessions(message.machineId))
+      )
     );
   };
 
@@ -742,7 +771,10 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const keepAliveWake = (_ret: MachineReturn): void => {
     // Reconnect retries overdue stored schedules right after the register ACK.
-    detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
+    ctx.lifetime.fork(
+      "keepalive wake",
+      Effect.tryPromise(() => ctx.keepAliveScheduler.wake())
+    );
   };
 
   const continuationsGoOn = (ret: MachineReturn): void => {
@@ -751,7 +783,10 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // for their new session — go on from where their record says.
     for (const job of ctx.continuationsWhole(false)) {
       if (ctx.machineFor(job) === message.machineId) {
-        detach(ctx.advanceContinuation(job.id), "continuation");
+        ctx.lifetime.fork(
+          "continuation",
+          Effect.tryPromise(() => ctx.advanceContinuation(job.id))
+        );
       }
     }
   };
@@ -763,7 +798,10 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     for (const plan of ctx.db.atLimit.compactions()) {
       const [row] = ctx.db.getInstancesByIds([plan.instanceId]);
       if (row?.machineId === message.machineId) {
-        detach(ctx.recoverCompaction(plan.instanceId), "compaction recovery");
+        ctx.lifetime.fork(
+          "compaction recovery",
+          Effect.tryPromise(() => ctx.recoverCompaction(plan.instanceId))
+        );
       }
     }
   };
@@ -773,9 +811,11 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // Whether it signs in to GitHub, which files agents' usability
     // feedback: the tool is listed while one machine does
     // (usability-feedback.ts).
-    detach(
-      ctx.usabilityFeedback.readMachine(message.machineId),
-      "read a machine's GitHub sign-in for usability feedback"
+    ctx.lifetime.fork(
+      "read a machine's GitHub sign-in for usability feedback",
+      Effect.tryPromise(() =>
+        ctx.usabilityFeedback.readMachine(message.machineId)
+      )
     );
   };
 

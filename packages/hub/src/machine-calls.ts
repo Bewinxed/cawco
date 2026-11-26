@@ -1,9 +1,8 @@
 import type { Bounded } from "@cawco/core/bounded";
-import { readWithin } from "@cawco/core/bounded";
 import type { CommandQueue } from "@cawco/core/commands/controls";
 import { type FsOp, SPAWN_REPLY } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FleetSkillMeta } from "@cawco/core/fleet";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
@@ -12,6 +11,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
+import { Deferred, Effect, Schema } from "effect";
 import { problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
@@ -47,10 +47,45 @@ const ABANDON_MS = 5000;
 /** Deduplicate recently orphaned replies without retaining every request forever. */
 const UNROUTED_REPLY_LIMIT = 4096;
 
+/** `answer` read with `timeoutMs` to come: the kit's bounded read, as {@link Bounded}. */
+const answeredWithin = (
+  timeoutMs: number,
+  answer: Deferred.Deferred<ControlResult>
+): Effect.Effect<Bounded<ControlResult>> =>
+  boundedRead(timeoutMs, Deferred.await(answer)).pipe(
+    Effect.map((value): Bounded<ControlResult> => ({
+      kind: "answered",
+      value,
+    })),
+    Effect.catchTag("Unanswered", ({ after, reason }) =>
+      Effect.succeed<Bounded<ControlResult>>({
+        kind: "unanswered",
+        after,
+        reason,
+      })
+    )
+  );
+
+/** A call's asker stopped waiting for its answer (its `letGo` signal aborted) before it came. */
+class LetGo extends Schema.TaggedError<LetGo>()("LetGo", {}) {}
+
+/** Fails with {@link LetGo} once `signal` aborts: at once when it has already. */
+const whenLetGo = (signal: AbortSignal): Effect.Effect<never, LetGo> =>
+  Effect.callback<never, LetGo>((resume) => {
+    const go = () => resume(Effect.fail(new LetGo()));
+    if (signal.aborted) {
+      go();
+      return;
+    }
+    signal.addEventListener("abort", go, { once: true });
+    return Effect.sync(() => signal.removeEventListener("abort", go));
+  });
+
 export type MachineCallsContext = Pick<
   ClosureContext,
   | "db"
   | "fleetChanged"
+  | "lifetime"
   | "machineName"
   | "machinePresence"
   | "presenced"
@@ -272,17 +307,17 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * will not answer is unanswered, reason "timeout"; an answered frame with
    * `ok: false` is the machine's refusal.
    */
-  const callAgent = <K extends ControlName>(
+  const askMachine = <K extends ControlName>(
     machineId: string,
     method: K,
     args: ControlArgs<K>,
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
-  ): Promise<Bounded<ControlAnswer<K>>> => {
+  ): Effect.Effect<Bounded<ControlAnswer<K>>> => {
     const agent = ctx.registry.agent(machineId);
     if (!agent && ctx.machinePresence(machineId).kind !== "reconnecting") {
-      return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
+      return Effect.succeed({ kind: "unanswered", reason: "dead", after: 0 });
     }
 
     const requestId = crypto.randomUUID();
@@ -293,7 +328,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return awaitReply(machineId, method, requestId, timeoutMs, () => {
+    return replyTo(machineId, method, requestId, timeoutMs, () => {
       const frame = {
         verb: "control",
         machineId,
@@ -307,6 +342,19 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       return frame;
     });
   };
+
+  /** The promise edge of {@link askMachine}. */
+  const callAgent = <K extends ControlName>(
+    machineId: string,
+    method: K,
+    args: ControlArgs<K>,
+    timeoutMs: number,
+    harness?: HarnessKind,
+    instanceId?: string
+  ): Promise<Bounded<ControlAnswer<K>>> =>
+    ctx.lifetime.run(
+      askMachine(machineId, method, args, timeoutMs, harness, instanceId)
+    );
 
   /**
    * A read's answer: one held past its deadline with its machine still away
@@ -326,29 +374,20 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       ? { kind: "unanswered", reason: "dead", after: 0 }
       : answer;
 
-  /** Asks a session's process `method` directly and reads its answer ({@link asRead}). */
-  const readSessionProcess = async <K extends ControlName>(
+  /** Asks a session's process `method` directly and reads its answer ({@link asRead}). The promise edge of {@link replyTo}. */
+  const readSessionProcess = <K extends ControlName>(
     row: { id: string; machineId: string },
     method: K,
     args: ControlArgs<K>
   ): Promise<Bounded<ControlAnswer<K>>> => {
     const requestId = crypto.randomUUID();
-    return asRead(
-      await awaitReply(
-        row.machineId,
-        method,
-        requestId,
-        READ_TIMEOUT_MS,
-        () => {
-          const agent = ctx.registry.agent(row.machineId);
-          return agent
-            ? sendAnswerable(
-                agent,
-                sessionControl(row, requestId, method, args)
-              )
-            : undefined;
-        }
-      )
+    return ctx.lifetime.run(
+      replyTo(row.machineId, method, requestId, READ_TIMEOUT_MS, () => {
+        const agent = ctx.registry.agent(row.machineId);
+        return agent
+          ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
+          : undefined;
+      }).pipe(Effect.map(asRead))
     );
   };
 
@@ -564,59 +603,65 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       return null;
     }
     const requestId = crypto.randomUUID();
+    /** The machine is told the read was let go (core `CONTROL_ABANDON`), and the hub does not wait for it to hear. */
     const stop = () =>
-      detach(
-        callAgent(machineId, CONTROL_ABANDON, [requestId], ABANDON_MS).then(
-          (answer) => {
-            if (answer.kind === "unanswered") {
-              console.warn(
-                `[find] ${ctx.silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
-              );
-            }
-          }
-        ),
-        "a let-go read"
-      );
-    try {
-      const answer = asRead(
-        await awaitReply(
-          machineId,
-          method,
-          requestId,
-          timeoutMs,
-          () => {
-            const agent = ctx.registry.agent(machineId);
-            const frame = {
-              verb: "control",
-              machineId,
-              payload: {
-                requestId,
-                method,
-                args,
-              } satisfies ControlPayload,
-            } satisfies HubEnvelope<"control">;
-            if (agent) {
-              ctx.sendToMachine(agent, frame);
-            }
-            return frame;
-          },
-          ask.signal
+      ctx.lifetime.fork(
+        "a let-go read",
+        askMachine(machineId, CONTROL_ABANDON, [requestId], ABANDON_MS).pipe(
+          Effect.tap((answer) =>
+            answer.kind === "unanswered"
+              ? Effect.sync(() =>
+                  console.warn(
+                    `[find] ${ctx.silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
+                  )
+                )
+              : Effect.void
+          )
         )
       );
-      if (answer.kind === "unanswered" && answer.reason === "timeout") {
-        console.warn(
-          `[find] ${ctx.machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
-        );
-        stop();
-      }
-      return answer;
-    } catch (error) {
-      if (!ask.signal?.aborted) {
-        throw error;
-      }
-      stop();
-      return null;
-    }
+    const read = replyTo(
+      machineId,
+      method,
+      requestId,
+      timeoutMs,
+      () => {
+        const agent = ctx.registry.agent(machineId);
+        const frame = {
+          verb: "control",
+          machineId,
+          payload: {
+            requestId,
+            method,
+            args,
+          } satisfies ControlPayload,
+        } satisfies HubEnvelope<"control">;
+        if (agent) {
+          ctx.sendToMachine(agent, frame);
+        }
+        return frame;
+      },
+      ask.signal ? whenLetGo(ask.signal) : undefined
+    );
+    return await ctx.lifetime.run(
+      read.pipe(
+        Effect.map((reply) => {
+          const answer = asRead(reply);
+          if (answer.kind === "unanswered" && answer.reason === "timeout") {
+            console.warn(
+              `[find] ${ctx.machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
+            );
+            stop();
+          }
+          return answer;
+        }),
+        Effect.catchTag("LetGo", () =>
+          Effect.sync(() => {
+            stop();
+            return null;
+          })
+        )
+      )
+    );
   };
 
   /**
@@ -626,101 +671,135 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * answer ({@link resendHeld}). A deadline that passes with the machine
    * away answers MACHINE_DISCONNECTED; one that passes with it there is
    * unanswered, a machine that did not answer.
+   *
+   * The answer is a {@link Deferred} parked in {@link waiting} under the
+   * request id, claimed and sent before the wait's first step, and done by
+   * the frame that answers (agent-socket/control-replies.ts). The deadline
+   * is the kit's bounded read over it; past the deadline the Deferred is
+   * still the answer when it came while the hub caught up with the socket.
    */
-  const awaitFrame = async (
+  const awaitFrame = <E = never>(
     machineId: string,
     requestId: string,
     timeoutMs: number,
     send: () => HubEnvelope | undefined,
-    /** Aborts once its asker stops waiting: the wait ends there, thrown as the abort. */
-    letGo?: AbortSignal
-  ): Promise<Bounded<ControlResult>> => {
-    let answered: ControlResult | undefined;
+    /** Fails once its asker stops waiting: the wait ends there, with that failure. */
+    letGo?: Effect.Effect<never, E>
+  ): Effect.Effect<Bounded<ControlResult>, E> =>
+    Effect.gen(function* () {
+      const sentAt = Date.now();
+      const { answer, forget } = park(machineId, requestId, send);
+      const read = answeredWithin(timeoutMs, answer);
+      const reply = yield* (letGo ? Effect.raceFirst(read, letGo) : read).pipe(
+        Effect.tapError(() => Effect.sync(forget))
+      );
+      if (reply.kind === "answered") {
+        return reply;
+      }
+      if (reply.reason !== "timeout") {
+        forget();
+        return reply;
+      }
+      return yield* pastDeadline(
+        { machineId, requestId, sentAt, timeoutMs },
+        answer,
+        forget,
+        reply
+      );
+    });
+
+  /**
+   * Parks the answer to `requestId` in {@link waiting} and sends the call
+   * ({@link awaitFrame}): `send`'s frame is kept to go again
+   * ({@link resendHeld}). A `send` that throws leaves nothing waiting and
+   * throws on. `forget` lets the call go.
+   */
+  const park = (
+    machineId: string,
+    requestId: string,
+    send: () => HubEnvelope | undefined
+  ): { answer: Deferred.Deferred<ControlResult>; forget: () => void } => {
+    const answer = Deferred.makeUnsafe<ControlResult>();
     const forget = () => {
       waiting.delete(requestId);
       waitingMachines.delete(requestId);
     };
-    const sentAt = Date.now();
-    const reply = await readWithin(
-      timeoutMs,
-      (signal) =>
-        new Promise<ControlResult>((resolve, reject) => {
-          if (letGo) {
-            signal.addEventListener(
-              "abort",
-              () => {
-                if (letGo.aborted) {
-                  forget();
-                  reject(letGo.reason);
-                }
-              },
-              { once: true }
-            );
-          }
-          waitOn(requestId, machineId);
-          waiting.set(requestId, (frame) => {
-            answered = frame;
-            forget();
-            resolve(frame);
-          });
-          try {
-            const sent = send();
-            const call = waitingMachines.get(requestId);
-            if (call && sent) {
-              call.again = sent;
-            }
-          } catch (error) {
-            // Refused before it went: nothing will answer, so nothing waits.
-            forget();
-            throw error;
-          }
-        }),
-      letGo ? { signal: letGo } : {}
-    );
-    if (reply.kind === "answered") {
-      return reply;
-    }
-    if (reply.reason !== "timeout") {
+    waitOn(requestId, machineId);
+    waiting.set(requestId, (frame) => {
       forget();
-      return reply;
-    }
-    // The deadline passed. The hub catches up with the machine's socket
-    // first (wire-socket.ts `caughtUp`): after its thread was held, the
-    // deadline's timer runs before the socket is read, and an answer read in
-    // time can wait in the inbox behind the frames before it (2026-10-23,
-    // three machines' answers to one configure logged as unrouted in the
-    // same second, while twenty transcript reads came in).
-    const call = waitingMachines.get(requestId);
-    if (call?.socketId) {
-      await caughtUp(call.socketId);
-    }
-    if (answered) {
-      return { kind: "answered", value: answered };
-    }
-    const awayAtDeadline =
-      waitingMachines.get(requestId)?.socketId === undefined;
-    forget();
-    noteLapsed(requestId, {
-      machineId,
-      what:
-        call?.again?.verb === "control"
-          ? call.again.payload.method
-          : call?.again?.verb,
-      sentAt,
-      timeoutMs,
+      Deferred.doneUnsafe(answer, Effect.succeed(frame));
     });
-    return awayAtDeadline
-      ? {
-          kind: "answered",
-          value: {
-            kind: "control_result",
-            requestId,
-            ok: false,
-            error: MACHINE_DISCONNECTED,
-          },
-        }
-      : reply;
+    try {
+      const sent = send();
+      const held = waitingMachines.get(requestId);
+      if (held && sent) {
+        held.again = sent;
+      }
+    } catch (error) {
+      // Refused before it went: nothing will answer, so nothing waits.
+      forget();
+      throw error;
+    }
+    return { answer, forget };
   };
+
+  /**
+   * A call's deadline passed unanswered ({@link awaitFrame}). The hub
+   * catches up with the machine's socket first (wire-socket.ts
+   * `caughtUp`): after its thread was held, the deadline's timer runs
+   * before the socket is read, and an answer read in time can wait in the
+   * inbox behind the frames before it (2026-10-23, three machines' answers
+   * to one configure logged as unrouted in the same second, while twenty
+   * transcript reads came in). One that came meanwhile is the answer; else
+   * the call lapses, MACHINE_DISCONNECTED when its machine is away.
+   */
+  const pastDeadline = (
+    call: {
+      machineId: string;
+      requestId: string;
+      sentAt: number;
+      timeoutMs: number;
+    },
+    answer: Deferred.Deferred<ControlResult>,
+    forget: () => void,
+    reply: Bounded<ControlResult>
+  ): Effect.Effect<Bounded<ControlResult>> =>
+    Effect.gen(function* () {
+      const { requestId } = call;
+      const held = waitingMachines.get(requestId);
+      if (held?.socketId) {
+        yield* caughtUp(held.socketId);
+      }
+      if (Deferred.isDoneUnsafe(answer)) {
+        return {
+          kind: "answered",
+          value: yield* Deferred.await(answer),
+        } satisfies Bounded<ControlResult>;
+      }
+      const awayAtDeadline =
+        waitingMachines.get(requestId)?.socketId === undefined;
+      forget();
+      noteLapsed(requestId, {
+        machineId: call.machineId,
+        what:
+          held?.again?.verb === "control"
+            ? held.again.payload.method
+            : held?.again?.verb,
+        sentAt: call.sentAt,
+        timeoutMs: call.timeoutMs,
+      });
+      return awayAtDeadline
+        ? ({
+            kind: "answered",
+            value: {
+              kind: "control_result",
+              requestId,
+              ok: false,
+              error: MACHINE_DISCONNECTED,
+            },
+          } satisfies Bounded<ControlResult>)
+        : reply;
+    });
 
   /** `reply`'s frame read by `read` (machine-answers.ts `answerOf`), once it came. */
   const parsedReply = <T>(
@@ -736,7 +815,27 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * reply's schema where it arrives (machine-answers.ts `answerOf`), a reply
    * that is not its type failed on this call alone.
    */
-  const awaitReply = async <K extends ControlName>(
+  const replyTo = <K extends ControlName, E = never>(
+    machineId: string,
+    method: K,
+    requestId: string,
+    timeoutMs: number,
+    send: () => HubEnvelope | undefined,
+    letGo?: Effect.Effect<never, E>
+  ): Effect.Effect<Bounded<ControlAnswer<K>>, E> =>
+    awaitFrame(machineId, requestId, timeoutMs, send, letGo).pipe(
+      Effect.map((reply) =>
+        parsedReply(reply, (frame) =>
+          answerOf(method, frame, ctx.machineName(machineId))
+        )
+      )
+    );
+
+  /**
+   * The promise edge of {@link replyTo}. `letGo` aborts once its asker
+   * stops waiting: the promise rejects there, with the abort's reason.
+   */
+  const awaitReply = <K extends ControlName>(
     machineId: string,
     method: K,
     requestId: string,
@@ -744,22 +843,33 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     send: () => HubEnvelope | undefined,
     letGo?: AbortSignal
   ): Promise<Bounded<ControlAnswer<K>>> =>
-    parsedReply(
-      await awaitFrame(machineId, requestId, timeoutMs, send, letGo),
-      (frame) => answerOf(method, frame, ctx.machineName(machineId))
+    ctx.lifetime.run(
+      replyTo(
+        machineId,
+        method,
+        requestId,
+        timeoutMs,
+        send,
+        letGo ? whenLetGo(letGo) : undefined
+      ).pipe(Effect.catchTag("LetGo", () => Effect.die(letGo?.reason)))
     );
 
-  /** {@link awaitFrame} for `fs` op `op`: its answer parsed against its reply's schema (machine-answers.ts `fsAnswerOf`). */
-  const awaitFs = async <O extends FsOp>(
+  /** {@link awaitFrame} for `fs` op `op`: its answer parsed against its reply's schema (machine-answers.ts `fsAnswerOf`). The promise edge. */
+  const awaitFs = <O extends FsOp>(
     machineId: string,
     op: O,
     requestId: string,
     timeoutMs: number,
     send: () => HubEnvelope | undefined
   ): Promise<Bounded<FsAnswer<O>>> =>
-    parsedReply(
-      await awaitFrame(machineId, requestId, timeoutMs, send),
-      (frame) => fsAnswerOf(op, frame, ctx.machineName(machineId))
+    ctx.lifetime.run(
+      awaitFrame(machineId, requestId, timeoutMs, send).pipe(
+        Effect.map((reply) =>
+          parsedReply(reply, (frame) =>
+            fsAnswerOf(op, frame, ctx.machineName(machineId))
+          )
+        )
+      )
     );
 
   /**
@@ -779,40 +889,43 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * `ROOM_HELD`): a start is never refused for the machine's room. The spawn
    * is sent once; a later wait listens for the same answer.
    */
-  const awaitStart = async (
+  const awaitStart = (
     machineId: string,
     instanceId: string,
     requestId: string,
     send: () => HubEnvelope | undefined
-  ): Promise<Bounded<CallAnswer<unknown>>> => {
-    const sentAt = Date.now();
-    let sent: HubEnvelope | undefined;
-    let reply = await awaitFrame(
-      machineId,
-      requestId,
-      SPAWN_START_TIMEOUT_MS,
-      () => {
-        sent = send();
-        return sent;
-      }
+  ): Promise<Bounded<CallAnswer<unknown>>> =>
+    ctx.lifetime.run(
+      Effect.gen(function* () {
+        const sentAt = Date.now();
+        let sent: HubEnvelope | undefined;
+        let reply = yield* awaitFrame(
+          machineId,
+          requestId,
+          SPAWN_START_TIMEOUT_MS,
+          () => {
+            sent = send();
+            return sent;
+          }
+        );
+        while (
+          reply.kind === "unanswered" &&
+          ctx.db
+            .machineLinesOf(instanceId)
+            .some((line) => line.kind === "room" && line.at >= sentAt)
+        ) {
+          reply = yield* awaitFrame(
+            machineId,
+            requestId,
+            SPAWN_START_TIMEOUT_MS,
+            () => sent
+          );
+        }
+        return parsedReply(reply, (frame) =>
+          parsedAs(SPAWN_REPLY, frame, ctx.machineName(machineId), "its start")
+        );
+      })
     );
-    while (
-      reply.kind === "unanswered" &&
-      ctx.db
-        .machineLinesOf(instanceId)
-        .some((line) => line.kind === "room" && line.at >= sentAt)
-    ) {
-      reply = await awaitFrame(
-        machineId,
-        requestId,
-        SPAWN_START_TIMEOUT_MS,
-        () => sent
-      );
-    }
-    return parsedReply(reply, (frame) =>
-      parsedAs(SPAWN_REPLY, frame, ctx.machineName(machineId), "its start")
-    );
-  };
 
   return {
     waiting,
