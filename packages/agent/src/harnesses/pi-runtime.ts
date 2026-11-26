@@ -58,6 +58,7 @@ import { pricedRequest } from "@cawco/core/usage/pricing";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import {
+  instructionRead,
   judgeCall,
   readPolicy,
   type Verdict,
@@ -919,6 +920,26 @@ const cawcosExtensionsAlone = (
     extension.path.startsWith("<inline:")
   ),
 });
+
+/**
+ * The context files pi read for a session, less any in a workspace's clone
+ * that leads to a file the workspace does not read (core workspace-judge.ts
+ * `instructionRead`). pi reads each file at its path, following a link
+ * (resource-loader.js `loadContextFileFromDir`: `statSync`, then
+ * `readFileSync`), at every reload of the session's resources, so this is
+ * where none reaches the model; the supervisor refuses the session's turns
+ * while one is there, naming it (session.ts `holdInstructions`).
+ */
+const boundedAgentsFiles = <File extends { path: string }>(
+  files: readonly File[],
+  ctx: HarnessContext
+): File[] => {
+  if (!ctx.boundary) {
+    return [...files];
+  }
+  const policy = readPolicy(ctx.boundary.policy);
+  return files.filter((file) => instructionRead(policy, file.path));
+};
 
 /**
  * A clean session's resources (`SpawnPayload.clean`), beside its fence's
@@ -2251,7 +2272,7 @@ export async function startPiHost(
     // A fenced session keeps CawCo's inline extensions alone.
     ...(fenced ? { extensionsOverride: cawcosExtensionsAlone } : {}),
     agentsFilesOverride: (base) => ({
-      agentsFiles: [...base.agentsFiles, ...memory],
+      agentsFiles: [...boundedAgentsFiles(base.agentsFiles, ctx), ...memory],
     }),
   });
   await resourceLoader.reload();

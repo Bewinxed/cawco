@@ -390,6 +390,29 @@ const boundaryOf = (id: string, root: string): HeldBoundary => {
   };
 };
 
+// Workspace `id`'s judge and policy; what cannot be read refuses
+// `refusing` (a tool's name, a request).
+const judgeOf = async (
+  id: string,
+  refusing: string
+): Promise<{ judge: typeof Judge; policy: Judge.Policy }> => {
+  const state = `${settings.workspaces}/${id}`;
+  try {
+    const judge: typeof Judge = await import(
+      `${state}/${settings.judgeScript}`
+    );
+    return {
+      judge,
+      policy: judge.readPolicy(`${state}/${settings.workspacePolicyName}`),
+    };
+  } catch (error) {
+    throw new Error(
+      `cawco: ${refusing} was refused: workspace ${id}'s file policy could not be read (${said(error)}).`,
+      { cause: error }
+    );
+  }
+};
+
 // Judges a call of workspace `id`'s session by the workspace's policy, and
 // throws its refusal. A judge or policy that cannot be read refuses it too.
 const judgeIn = async (
@@ -398,24 +421,34 @@ const judgeIn = async (
   input: unknown,
   directory: string
 ): Promise<void> => {
-  const state = `${settings.workspaces}/${id}`;
-  let judge: typeof Judge;
-  let policy: Judge.Policy;
-  try {
-    judge = await import(`${state}/${settings.judgeScript}`);
-    policy = judge.readPolicy(`${state}/${settings.workspacePolicyName}`);
-  } catch (error) {
-    throw new Error(
-      `cawco: ${tool} was refused: workspace ${id}'s file policy could not be read (${said(error)}).`,
-      { cause: error }
-    );
-  }
+  const { judge, policy } = await judgeOf(id, tool);
   const verdict = judge.judgeCall(policy, {
     harness: "opencode",
     tool,
     input,
     cwd: directory,
     toolOutput,
+  });
+  if (!verdict.ok) {
+    throw new Error(verdict.reason);
+  }
+};
+
+// Refuses a bounded session's model request, by throwing, while an
+// AGENTS.md OpenCode reads from the clone's root down to `directory` leads
+// out of what workspace `id` reads: OpenCode rereads one that changes, into
+// the turn's next request (the probe's `oc-midturn-watch`), with no tool
+// call between for the judge to refuse.
+const judgeInstructionsIn = async (
+  id: string,
+  directory: string
+): Promise<void> => {
+  const { judge, policy } = await judgeOf(id, "this request");
+  const verdict = judge.judgeInstructions(policy, {
+    harness: "opencode",
+    cwd: directory,
+    reading: [],
+    refusing: "this request",
   });
   if (!verdict.ok) {
     throw new Error(verdict.reason);
@@ -1715,11 +1748,15 @@ const plugin: Plugin.Plugin = {
     await transformMcp(ctx, here);
     await hookTools(ctx, here, instanceOf);
     if (here.holding) {
-      await ctx.session.hook("context", (event) => {
+      await ctx.session.hook("context", async (event) => {
+        const bounded = here.bounded(event.sessionID);
         if (event.tools.shell) {
-          event.tools.shell.description = here.bounded(event.sessionID)
+          event.tools.shell.description = bounded
             ? BOUNDED_SHELL_DESCRIPTION
             : HOST_SHELL_DESCRIPTION;
+        }
+        if (bounded && here.workspace) {
+          await judgeInstructionsIn(here.workspace, here.directory);
         }
       });
     }

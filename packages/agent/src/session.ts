@@ -183,6 +183,7 @@ import {
   CutCommitGone,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
+import { judgeInstructions, readPolicy } from "@cawco/core/workspace-judge";
 import { Deferred, Effect, Exit, Schema, Semaphore } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { drawArtifact } from "./artifact-picture";
@@ -348,6 +349,42 @@ const shellCallsOf = (
     }
   }
   return started;
+};
+
+/**
+ * Where a session runs, as its last start or attach set it: its harness, and,
+ * when its commands run in a workspace's boundary, the boundary's pid, the
+ * workspace, the policy its harness's reads are judged by, and its folder.
+ */
+interface Placed {
+  boundaryPid?: number;
+  cwd?: string;
+  harness: HarnessKind;
+  policy?: string;
+  workspace?: string;
+}
+
+/**
+ * Refuses `refusing` (a launch, a turn) of a bounded session, by throwing in
+ * one sentence, while an instruction file its harness reads from the clone
+ * leads to a file the workspace does not read (core workspace-judge.ts
+ * `judgeInstructions`). A session outside any boundary is not judged.
+ */
+const holdInstructions = (
+  placed: Placed | undefined,
+  refusing: string
+): void => {
+  if (!(placed?.policy && placed.cwd)) {
+    return;
+  }
+  const verdict = judgeInstructions(readPolicy(placed.policy), {
+    harness: placed.harness,
+    cwd: placed.cwd,
+    refusing,
+  });
+  if (!verdict.ok) {
+    throw new Error(verdict.reason);
+  }
 };
 
 /**
@@ -921,10 +958,7 @@ export class SessionSupervisor {
    * ({@link #limitReached}), and which boundaries a carried session holds
    * ({@link boundedWorkspaces}).
    */
-  readonly #placed = new Map<
-    string,
-    { harness: HarnessKind; boundaryPid?: number; workspace?: string }
-  >();
+  readonly #placed = new Map<string, Placed>();
 
   /**
    * The workspaces whose boundary a carried session's commands run in, of
@@ -2949,6 +2983,11 @@ export class SessionSupervisor {
       }
       this.#failures.delete(instanceId);
       this.#unsentFailures.delete(instanceId);
+      // A launch reads its harness's instruction files: none may lead out
+      // of what the workspace reads. A reattach reads none.
+      if (!spec.reattachOnly) {
+        holdInstructions(this.#placed.get(instanceId), "this launch");
+      }
       const session = spec.reattachOnly
         ? await adapter.reattach(spec, ctx)
         : await adapter.spawn(spill?.spec ?? spec, ctx);
@@ -3237,7 +3276,12 @@ export class SessionSupervisor {
     this.#placed.set(instanceId, {
       harness: adapter.kind,
       ...(boundary && bounded
-        ? { boundaryPid: boundary.pid, workspace: bounded.workspace }
+        ? {
+            boundaryPid: boundary.pid,
+            workspace: bounded.workspace,
+            policy: boundary.policy,
+            cwd: workdir,
+          }
         : {}),
     });
     const launchOf = (message: NeutralMessage) =>
@@ -4624,6 +4668,9 @@ export class SessionSupervisor {
       this.#failureRun.delete(instanceId);
       this.#noteHanded(payload);
     }
+    // A turn sends what its harness read of its instruction files, which a
+    // command may have linked out of the workspace since the last one.
+    holdInstructions(this.#placed.get(instanceId), "this turn");
     session.send(message, { attachments, images });
   }
 

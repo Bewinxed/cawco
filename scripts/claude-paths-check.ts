@@ -31,6 +31,8 @@ export const checkReads = [
 const ALLOWED: Record<string, string> = {
   "packages/core/src/claude-dirs.ts":
     "the owner's browser-safe half: the one place the dir name is spelled",
+  "packages/core/src/workspace-judge.ts":
+    "the workspace judge, a plain Bun script that imports nothing: the instruction files Claude Code reads from a workspace's clone, by their names there",
   "scripts/claude-paths-check.ts":
     "this check, whose own examples name the paths it looks for",
   "packages/jsonl-parser/bench/bench.ts":

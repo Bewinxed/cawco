@@ -27,7 +27,13 @@
  * call whose input is not an object, a policy file it cannot read.
  */
 
-import { readFileSync, realpathSync } from "node:fs";
+import {
+  type Dirent,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgyKind } from "./harness/agy";
@@ -828,5 +834,269 @@ export const judgeCall = (policy: Policy, call: Call): Verdict => {
       );
     }
   }
-  return ALLOWED;
+  // A nested harness reads the instruction files of each folder down to a
+  // file it reads, edits or writes, as the call runs: a link made since the
+  // turn began is judged before the call reads through it.
+  return judgeInstructions(session, {
+    harness: call.harness,
+    cwd: call.cwd,
+    reading: named.map((target) => target.path),
+    refusing: call.tool,
+  });
+};
+
+/**
+ * Where a harness reads its instruction files from a folder: on the host,
+ * outside any boundary, and through any link they are (an include-time
+ * realpath is the harness's own business; the file's own read follows the
+ * link). Each instruction file the harness would read from inside the
+ * workspace's clone is judged as a read of the session's own
+ * ({@link judgeInstructions}), so a link a command makes, or one the
+ * repository arrives with, never takes a file the workspace does not read
+ * into the model's context. Host probe 2026-11-26 (Claude Code 2.1.326,
+ * OpenCode 2.3.0, pi 1.5.2, Codex 0.169.0; the project's
+ * `assets/tsk-528/`): each read an instruction file that is a link to a
+ * file outside the clone, and none expanded an include out of it: Claude
+ * Code refuses an `@path` import whose real path is outside the project
+ * until the person approves external imports there, which no workspace's
+ * clone has; the others take none.
+ */
+interface InstructionFiles {
+  /**
+   * The include it expands while it reads one, the included path in group
+   * 1: agy's `@[label](path)` (the project's `assets/cc1d4173/REPORT.md`),
+   * each included file judged as the instruction file is, and read for its
+   * own includes.
+   */
+  readonly includes?: RegExp;
+  /** Each name it reads from a folder, as a path from that folder. */
+  readonly names: readonly string[];
+  /**
+   * It also reads them from each folder below the clone's root that a file
+   * it reads lies under, mid-turn: Claude Code's nested `CLAUDE.md`, loaded
+   * when a tool reads, edits or writes a file there; OpenCode 2.3's read
+   * tool, which hands back each `AGENTS.md` from the clone's root down to
+   * the file it read.
+   */
+  readonly nested: boolean;
+}
+
+/**
+ * Each harness's instruction files. Claude Code: `CLAUDE.md`,
+ * `CLAUDE.local.md` and `.claude/CLAUDE.md` (code.claude.com/docs/en/memory);
+ * its `.claude/rules` keeps a linked rule from outside the project out on its
+ * own (the probe's `cc-rules-symlink`, `cc-rules-dirlink`), as it does an
+ * import. OpenCode 2.3.0: `AGENTS.md` alone (its instruction plugin's
+ * `projectSource`, `targets:["AGENTS.md"]`), reread when it changes, mid-turn
+ * (the probe's `oc-midturn-watch`). pi 1.5.2: the first of its candidates in
+ * each folder (resource-loader.js `loadContextFileFromDir`). Codex 0.169.0:
+ * `AGENTS.override.md`, then `AGENTS.md`, from the repository's root down to
+ * its folder. agy: `AGENTS.md` with its includes.
+ */
+const INSTRUCTIONS: Record<JudgedHarness, InstructionFiles> = {
+  claude: {
+    names: ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"],
+    nested: true,
+  },
+  opencode: { names: ["AGENTS.md"], nested: true },
+  pi: {
+    names: [
+      "AGENTS.override.md",
+      "AGENTS.md",
+      "AGENTS.MD",
+      "CLAUDE.md",
+      "CLAUDE.MD",
+    ],
+    nested: false,
+  },
+  codex: { names: ["AGENTS.override.md", "AGENTS.md"], nested: false },
+  agy: {
+    names: ["AGENTS.md"],
+    nested: false,
+    includes: /@\[[^\]\n]*\]\(([^)\n]+)\)/gu,
+  },
+};
+
+/** `path` without `.` or `..` parts, as written: the folders a harness names on its way to it. */
+const lexical = (path: string): string => {
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "..") {
+      parts.pop();
+    } else if (part && part !== ".") {
+      parts.push(part);
+    }
+  }
+  return `/${parts.join("/")}`;
+};
+
+/** The folders from the clone's root down to `dir`, as written; none when `dir` lies outside the clone. */
+const foldersDownTo = (clone: string, dir: string): string[] => {
+  const at = lexical(dir);
+  if (!within(at, clone)) {
+    return [];
+  }
+  const below = at.slice(clone.length).split("/").filter(Boolean);
+  return [
+    clone,
+    ...below.map((_, index) => join(clone, ...below.slice(0, index + 1))),
+  ];
+};
+
+/** Every folder in the clone, links to folders not followed (each is judged where a harness reads through it, {@link foldersDownTo}), `.git` left out. */
+const everyFolder = (clone: string): string[] => {
+  const found = [clone];
+  // A for-of over an array reaches what is pushed onto it as it runs.
+  for (const dir of found) {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name !== ".git") {
+        found.push(join(dir, entry.name));
+      }
+    }
+  }
+  return found;
+};
+
+/** Whether anything is at `path`, a link that leads nowhere included. */
+const present = (path: string): boolean => {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** `path`'s real path, or how it fails to resolve. */
+const realOrWhy = (path: string): string => {
+  try {
+    return resolveReal(path);
+  } catch (error) {
+    return `nowhere it can be resolved (${error instanceof Error ? error.message : String(error)})`;
+  }
+};
+
+/**
+ * The first file of `files` (instruction files, or what one includes) that
+ * `policy` does not let the session read, as the instruction file that led
+ * to it and where it resolves; reading each it does read for its includes.
+ */
+const firstUnread = (
+  policy: Policy,
+  harness: InstructionFiles,
+  files: readonly { file: string; from: string }[],
+  seen: Set<string>
+): { file: string; from: string; real: string } | undefined => {
+  for (const { file, from } of files) {
+    if (seen.has(file) || !present(file)) {
+      continue;
+    }
+    seen.add(file);
+    if (!judge(policy, file, "read").ok) {
+      return { file, from, real: realOrWhy(file) };
+    }
+    if (!harness.includes) {
+      continue;
+    }
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const included = [...text.matchAll(harness.includes)].flatMap((match) =>
+      against(match[1].trim(), [dirname(file)], policy.home)
+    );
+    const unread = firstUnread(
+      policy,
+      harness,
+      included.map((path) => ({ file: path, from })),
+      seen
+    );
+    if (unread) {
+      return unread;
+    }
+  }
+};
+
+/**
+ * Whether a harness may put instruction file `file`, which it found, in the
+ * model's context: one outside the workspace's clone (a folder above it) is
+ * the host's own, and one inside it must be a file the workspace reads
+ * ({@link judgeInstructions}). A place's folder is its person's own.
+ */
+export const instructionRead = (policy: Policy, file: string): boolean =>
+  policy.protectConfig !== undefined ||
+  !within(lexical(file), policy.clone) ||
+  judge(policy, file, "read").ok;
+
+/** What {@link judgeInstructions} judges. */
+export interface InstructionsAt {
+  /** The session's folder: its harness reads instruction files from the clone's root down to it. */
+  readonly cwd: string;
+  readonly harness: JudgedHarness;
+  /**
+   * The paths a tool call names: a nested harness reads the instruction
+   * files of each folder down to each as the call runs
+   * ({@link InstructionFiles.nested}). Absent at a launch or a turn, when
+   * every folder in the clone is judged for a nested harness.
+   */
+  readonly reading?: readonly string[];
+  /** What is refused, as the refusal begins: `this turn`, a tool's name. */
+  readonly refusing: string;
+}
+
+/**
+ * Whether the instruction files `at.harness` reads from the workspace's
+ * clone are files the workspace reads: each, and each file it includes, at
+ * its real path, by {@link judge}. The first that is not refuses, in one
+ * sentence naming it and where it leads. Judged at a session's launch and
+ * before each of its turns (agent session.ts), and for a nested harness
+ * before each file call ({@link judgeCall}) and, on OpenCode, before each
+ * model request (opencode-plugin-module.ts), so no read of the harness's
+ * own takes a file the workspace does not read into the model's context.
+ * A place's own folder is its person's, whose instruction files are theirs
+ * to link anywhere: a place's policy alone has `protectConfig`
+ * (workspace-policy.ts), and nothing is judged for it.
+ */
+export const judgeInstructions = (
+  policy: Policy,
+  at: InstructionsAt
+): Verdict => {
+  if (policy.protectConfig !== undefined) {
+    return ALLOWED;
+  }
+  const harness = INSTRUCTIONS[at.harness];
+  const folders = new Set(foldersDownTo(policy.clone, at.cwd));
+  if (harness.nested) {
+    const below =
+      at.reading?.flatMap((dir) => foldersDownTo(policy.clone, dir)) ??
+      everyFolder(policy.clone);
+    for (const dir of below) {
+      folders.add(dir);
+    }
+  }
+  const files = [...folders].flatMap((dir) =>
+    harness.names.map((name) => {
+      const file = join(dir, name);
+      return { file, from: file };
+    })
+  );
+  const unread = firstUnread(policy, harness, files, new Set());
+  if (!unread) {
+    return ALLOWED;
+  }
+  const what =
+    unread.file === unread.from
+      ? `${unread.file} is an instruction file ${at.harness} reads on the host`
+      : `${unread.from}, an instruction file ${at.harness} reads on the host, includes ${unread.file}`;
+  return refused(
+    `cawco: ${at.refusing} was refused: ${what}, and it leads to ${unread.real}, which this workspace does not read, so remove it or point it inside the clone (${policy.clone}).`
+  );
 };
