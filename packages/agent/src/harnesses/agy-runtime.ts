@@ -29,6 +29,17 @@
  *   starts agy again, which reads its credential afresh, resumes and sends
  *   the prompt once more; a second empty end is said in words. No turn ends
  *   silently.
+ * - **Pictures.** agy keeps a prompt's pictures in its conversation and
+ *   sends them again with every later request, so one Google can't read
+ *   fails every turn after it. A send's pictures go to agy only once they
+ *   decode whole within every model's limits (agy-pictures.ts); one refused
+ *   fails that send alone, in words naming it. A request Google still
+ *   refuses as invalid sets the conversation aside: agy offers no edit of
+ *   its history, and a resume sends the same history again, so the session
+ *   goes on in a new agy conversation whose first prompt carries what was
+ *   said (agy-carry.ts). A turn that carried no picture of its own is sent
+ *   again there at once; one that did ends naming it, and the next message
+ *   goes to the new conversation.
  */
 import { dirname } from "node:path";
 import {
@@ -70,9 +81,10 @@ import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
-import { Deferred, Effect, Exit, Scope } from "effect";
+import { Deferred, Effect, Exit, Scope, Semaphore } from "effect";
 import type { SessionControls, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
+import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
 import {
   argsOf,
   askedCall,
@@ -89,7 +101,8 @@ import {
 import { serveAgyJudge } from "./agy-hook";
 import { agyAnswerTo } from "./agy-judge";
 import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
-import { lastStep, turnFault } from "./agy-outcome";
+import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
+import { sendRefusal } from "./agy-pictures";
 import { credentialControls } from "./credential-controls";
 
 /** A start's command, as the host was handed it. */
@@ -137,6 +150,8 @@ interface AgyProcess {
 interface Turn {
   /** The store's last step before it began (agy-outcome.ts `lastStep`). */
   readonly after: number;
+  /** How many pictures its prompts carried. */
+  pictures: number;
   /** Whether agy said anything in it: text, thinking, a tool call. */
   said: boolean;
   text: string;
@@ -172,6 +187,12 @@ const modeOf = (named: string | undefined): SharedMode => {
   return mode;
 };
 
+/** A prompt's own words, as the carried record keeps them (agy-carry.ts). */
+const wordsOf = (blocks: readonly ContentBlock[]): string =>
+  blocks
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
+
 /** A send's words, its pasted texts after them. */
 const textOf = (message: SentMessage, extras: TurnExtras): string => {
   const { content } = message.message;
@@ -196,6 +217,16 @@ class AgySession {
   #model: string | undefined;
   #effort: string | undefined;
   #agy: AgyProcess | undefined;
+  /** Whether the running agy takes CawCo's words appended to its system prompt. */
+  #append = false;
+  /**
+   * One send at a time from its pictures' check to agy taking it, so sends
+   * reach agy in the order they came, and none while a conversation is set
+   * aside for a new one.
+   */
+  readonly #sending = Semaphore.makeUnsafe(1);
+  /** The carried record, said first in the next prompt of a new conversation (agy-carry.ts). */
+  #carry: string | undefined;
   /** The judge's socket, served for as long as this scope is open. */
   readonly #judge = Effect.runSync(Scope.make());
   readonly #asks = new Map<string, ParkedAsk>();
@@ -255,13 +286,13 @@ class AgySession {
         agyAnswerTo(line, judged)
       ).pipe(Scope.provide(this.#judge))
     );
-    const append = await this.#startAgy();
+    await this.#startAgy();
     const resumed = this.#start.spec.resume?.sessionKey;
-    await this.#openSession(resumed, append);
+    await this.#openSession(resumed, this.#append);
   }
 
-  /** agy started, `initialize`d and signed in by the account's method; whether it takes appended words. */
-  async #startAgy(): Promise<boolean> {
+  /** agy started, `initialize`d and signed in by the account's method, and whether it takes appended words noted. */
+  async #startAgy(): Promise<void> {
     const { launch } = this.#start;
     // Its end, said once the process this start made is known.
     const holder: { agy?: AgyProcess; why?: string } = {};
@@ -309,7 +340,7 @@ class AgySession {
       this.#version = initialized.agentInfo.version;
       this.#ctx.version(initialized.agentInfo.version);
     }
-    return takesAppend(initialized);
+    this.#append = takesAppend(initialized);
   }
 
   /** The session opened in the running agy: new, or the stored one resumed, its model and level set. */
@@ -508,6 +539,11 @@ class AgySession {
       });
     }
     if (turn.text) {
+      if (this.sessionId) {
+        keepCarried(this.#start.launch.home, this.sessionId, [
+          { who: "agent", text: turn.text },
+        ]);
+      }
       this.#emit({
         type: "assistant",
         uuid: crypto.randomUUID(),
@@ -651,27 +687,50 @@ class AgySession {
 
   // ---------------------------------------------------------- turns
 
+  /** A send, its pictures read first: one agy or Google can't take fails the send in words naming it, and nothing reaches agy. */
   send(message: SentMessage, extras: TurnExtras): void {
+    const images = extras.images ?? [];
+    const text = textOf(message, extras);
     const blocks: ContentBlock[] = [
-      ...(extras.images ?? []).map((image): ContentBlock => ({
+      ...images.map((image): ContentBlock => ({
         type: "image",
         mimeType: image.mediaType,
         data: image.data,
       })),
-      { type: "text", text: textOf(message, extras) },
+      { type: "text", text },
     ];
     this.#unread.add(message.uuid);
-    this.#prompt(message.uuid, blocks, false).catch((error: unknown) => {
-      this.#unread.delete(message.uuid);
-      this.#ctx.rejected(message.uuid, error);
-    });
+    // The prompt is handed to agy under the permit and answered after it.
+    const handed = this.#sending.withPermit(
+      sendRefusal(images, text).pipe(
+        Effect.flatMap((refused) =>
+          refused
+            ? Effect.fail(new Error(refused))
+            : Effect.sync(() => ({
+                answered: this.#prompt(
+                  message.uuid,
+                  blocks,
+                  false,
+                  images.length
+                ),
+              }))
+        )
+      )
+    );
+    Effect.runPromise(handed)
+      .then(({ answered }) => answered)
+      .catch((error: unknown) => {
+        this.#unread.delete(message.uuid);
+        this.#ctx.rejected(message.uuid, error);
+      });
   }
 
   /** One prompt to agy; the turn ends with the last prompt's answer. */
   async #prompt(
     uuid: string,
     blocks: ContentBlock[],
-    again: boolean
+    again: boolean,
+    pictures: number
   ): Promise<void> {
     const connection = this.#connection();
     const { sessionId } = this;
@@ -684,10 +743,14 @@ class AgySession {
         said: false,
         text: "",
         thinking: "",
+        pictures: 0,
         tokens: [],
       };
     }
     this.#prompts += 1;
+    if (this.#turn) {
+      this.#turn.pictures += pictures;
+    }
     this.#ctx.busy(true);
     if (!again) {
       this.#unread.delete(uuid);
@@ -697,17 +760,27 @@ class AgySession {
         read: [uuid],
         session_id: sessionId,
       });
+      keepCarried(this.#start.launch.home, sessionId, [
+        {
+          who: "person",
+          text: wordsOf(blocks),
+          ...(pictures > 0 ? { pictures } : {}),
+        },
+      ]);
     }
+    // A new conversation's first prompt says what the one set aside held.
+    const carry = this.#carry;
+    this.#carry = undefined;
     let answer: unknown;
     try {
       answer = await connection.agent.request(methods.agent.session.prompt, {
         sessionId,
-        prompt: blocks,
+        prompt: carry ? [{ type: "text", text: carry }, ...blocks] : blocks,
       });
     } catch (error) {
       this.#prompts = Math.max(0, this.#prompts - 1);
       if (this.#prompts === 0) {
-        this.#endTurn("end_turn", saidBy(error));
+        this.#endTurn("end_turn", { words: saidBy(error) });
       }
       return;
     }
@@ -723,22 +796,89 @@ class AgySession {
     const empty = stopReason === "end_turn" && !this.#turn?.said;
     if (empty && this.#start.launch.methodId === "agent-platform") {
       if (again) {
-        this.#endTurn(stopReason, agyWords.emptyTurn);
+        this.#endTurn(stopReason, { words: agyWords.emptyTurn });
         return;
       }
       await this.#restart();
-      await this.#prompt(uuid, blocks, true);
+      await this.#prompt(uuid, blocks, true, pictures);
       return;
     }
-    this.#endTurn(stopReason);
+    const fault = this.#faultOf(this.#turn, sessionId, stopReason);
+    if (fault?.atLimit === undefined && fault?.invalid) {
+      await this.#invalidEnd(uuid, blocks, again, stopReason, fault);
+      return;
+    }
+    this.#endTurn(stopReason, fault);
+  }
+
+  /**
+   * A turn Google refused as invalid: its conversation set aside for a new
+   * one. A turn that carried no picture of its own failed of what the
+   * conversation already held, and goes again in the new one at once; a
+   * turn with pictures ends naming them.
+   */
+  async #invalidEnd(
+    uuid: string,
+    blocks: ContentBlock[],
+    again: boolean,
+    stopReason: string,
+    fault: Exclude<TurnFault, { atLimit: true }>
+  ): Promise<void> {
+    const pictures = this.#turn?.pictures ?? 0;
+    const retry = !again && pictures === 0;
+    try {
+      await Effect.runPromise(
+        this.#sending.withPermit(Effect.promise(() => this.#setAside(retry)))
+      );
+    } catch (error) {
+      this.#endTurn(stopReason, { words: saidBy(error) });
+      return;
+    }
+    if (retry) {
+      await this.#prompt(uuid, blocks, true, 0);
+      return;
+    }
+    this.#endTurn(
+      stopReason,
+      pictures > 0
+        ? { words: agyWords.pictureRefused(fault.said ?? fault.words) }
+        : fault
+    );
+  }
+
+  /**
+   * The running conversation set aside: a new one opened on the same agy,
+   * which keeps what the old one kept and says it first in its next prompt
+   * (but the prompt about to go again, which goes as itself).
+   */
+  async #setAside(retrying: boolean): Promise<void> {
+    const { home } = this.#start.launch;
+    const old = this.sessionId;
+    const kept = old ? carriedOf(home, old) : [];
+    const carried =
+      retrying && kept.at(-1)?.who === "person" ? kept.slice(0, -1) : kept;
+    const window = this.#context?.size;
+    await this.#openSession(undefined, this.#append);
+    this.#context = undefined;
+    this.#carry =
+      carried.length > 0 ? carriedWords(carried, window) : undefined;
+    if (this.sessionId) {
+      keepCarried(home, this.sessionId, kept);
+    }
+    if (old) {
+      // agy's store keeps it; its live session is let go.
+      this.#connection()
+        .agent.request(methods.agent.session.close, { sessionId: old })
+        .catch(() => undefined);
+    }
   }
 
   /** agy started again in place of the running one, its credential read afresh, the session resumed. */
   async #restart(): Promise<void> {
     const sessionId = this.sessionId ?? undefined;
     this.#endAgy();
-    const append = await this.#startAgy();
-    await this.#openSession(sessionId, append);
+    await this.#startAgy();
+    await this.#openSession(sessionId, this.#append);
   }
 
   /** What the turn's prompts spent, as one request of its model. */
@@ -770,14 +910,11 @@ class AgySession {
   }
 
   /** The turn's end: its last words whole, how it ended, and the session at rest. */
-  #endTurn(stopReason: string, failure?: string): void {
+  #endTurn(stopReason: string, fault?: TurnFault): void {
     const turn = this.#turn;
     const lastText = turn?.text ?? "";
     this.#flush();
     const sessionId = this.sessionId ?? "";
-    const fault = failure
-      ? { words: failure }
-      : this.#faultOf(turn, sessionId, stopReason);
     const turnUsage = this.#turnUsage();
     this.#emit({
       type: "result",

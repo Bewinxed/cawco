@@ -103,13 +103,26 @@ const resetOf = (text: string, now: number): string | undefined => {
 
 /** How a turn ended badly, in CawCo's words; none for a turn that did not. */
 export type TurnFault =
-  { atLimit: true; words: string } | { atLimit?: undefined; words: string };
+  | { atLimit: true; words: string }
+  | {
+      atLimit?: undefined;
+      /**
+       * Google refused the request as invalid (`INVALID_ARGUMENT`, 400):
+       * built from the conversation's history, which agy sends again with
+       * every later request, so the conversation fails each turn after it.
+       */
+      invalid?: true;
+      /** Google's own words, when the error said them. */
+      said?: string;
+      words: string;
+    };
 
 /**
  * How the turn of session `sessionId` that began after step `after` ended
  * badly, if it did: agy's stop reason `refusal` or a `QUOTA_EXHAUSTED`
  * error is the account's limit; a 429 from Google's API too; any other
- * error step is said in its own words.
+ * error step is said in its own words, a request Google refused as invalid
+ * marked so.
  */
 export const turnFault = (
   home: string,
@@ -136,5 +149,9 @@ export const turnFault = (
   }
   return {
     words: message ? agyWords.apiError(message) : agyWords.unknownError,
+    ...(message ? { said: message } : {}),
+    ...(http === "400" || name === "INVALID_ARGUMENT"
+      ? { invalid: true as const }
+      : {}),
   };
 };

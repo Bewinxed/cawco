@@ -51,4 +51,28 @@ export const agyWords = {
   liveCredential: "New credentials apply only on Antigravity's next start.",
   /** agy ended a turn on an error step whose words CawCo can't read. */
   unknownError: "Turn failed.",
+  /**
+   * Which of a send's pictures a refusal names (agy-pictures.ts): `at` is
+   * its place among them, from 0; `of` how many the send carries.
+   */
+  picture: (at: number, of: number) =>
+    of === 1 ? "The picture" : `Picture ${at + 1}`,
+  /** A picture whose bytes don't decode as the type it was sent as. */
+  pictureUnreadable: (picture: string, type: string) =>
+    `${picture} isn't a readable ${type} file.`,
+  /** A picture over the size each model agy runs takes. */
+  pictureTooBig: (picture: string, limit: string) =>
+    `${picture} is over ${limit}.`,
+  /** A picture wider or taller than each model agy runs takes. */
+  pictureTooWide: (picture: string, pixels: number) =>
+    `${picture} is over ${pixels} pixels wide or tall.`,
+  /** A send whose pictures and words together are over Google's request size. */
+  sendTooBig: (limit: string) => `This message is over ${limit}.`,
+  /**
+   * Google refused a turn's pictures after agy took them: the conversation
+   * that holds them is set aside, and the next message starts a new one
+   * carrying its transcript (agy-runtime.ts).
+   */
+  pictureRefused: (said: string) =>
+    `Google couldn't read the picture: ${said} Your next message starts a new conversation with this one's transcript.`,
 } as const;
