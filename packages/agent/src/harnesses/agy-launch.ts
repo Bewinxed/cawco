@@ -53,6 +53,7 @@ import { agyWords } from "@cawco/core/words/agy";
 import { Effect, Option, Schema } from "effect";
 import { readHeld } from "../provider-accounts";
 import { toolGate, toolPath } from "../tools";
+import { linkAgyFleet } from "./agy-fleet";
 import { agyJudgeEnv, writeAgyHook } from "./agy-hook";
 
 const AGY_TOOL = toolSpec("antigravity");
@@ -264,7 +265,8 @@ const hookScript = (home: string): string => join(home, "cawco-hook.pl");
 
 /**
  * Account `accountId`'s agy home, readied for a launch on `signIn`: its
- * settings and CawCo's hook written. Returns the home.
+ * settings and CawCo's hook written, the fleet's skills and memory linked
+ * (agy-fleet.ts). Returns the home.
  */
 export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
   accountId: string,
@@ -282,6 +284,9 @@ export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
     Effect.mapError((error) =>
       refuse(`CawCo couldn't write its hook into ${error.path}.`)
     )
+  );
+  yield* linkAgyFleet(home).pipe(
+    Effect.mapError((error) => refuse(agyWords.noFleetLink(error.link)))
   );
   return home;
 });

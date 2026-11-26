@@ -22,7 +22,7 @@
  * another (2026-11-17, Codex 0.169.0 against a scripted model).
  */
 import { existsSync, readdirSync } from "node:fs";
-import { lstat, readFile, readlink, rm, symlink } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderSigninResult } from "@cawco/core/accounts";
 import { boundedRead } from "@cawco/core/effect/bounded";
@@ -44,6 +44,7 @@ import { type NativeBinary, nativeEnv } from "../codex-native";
 import { resolveBin, runnable, toolGate, toolPath } from "../tools";
 import type * as V2 from "./codex-protocol/v2.gen";
 import { type CodexPeer, withAppServer } from "./codex-rpc";
+import { pointLink } from "./fleet-common";
 
 const CODEX_TOOL = toolSpec("codex");
 if (!CODEX_TOOL) {
@@ -164,14 +165,7 @@ const readToml = async (path: string): Promise<Toml> => {
 /** `link` pointing at `target`, made or put right. */
 const linkTo = async (link: string, target: string): Promise<void> => {
   await makeFolder(target);
-  const stat = await lstat(link).catch(() => undefined);
-  if (stat?.isSymbolicLink() && (await readlink(link)) === target) {
-    return;
-  }
-  if (stat) {
-    await rm(link, { recursive: true, force: true });
-  }
-  await symlink(target, link);
+  await pointLink(link, target);
 };
 
 /**

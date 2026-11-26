@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
+import { inStartingSet } from "@cawco/core/delegate-types";
 import {
   type AgyHostCommand,
   type AgyHostEvent,
@@ -18,6 +19,7 @@ import {
   agyHostEvent,
   agyHostState,
 } from "@cawco/core/harness/agy-host-state";
+import { fleetMemoryFile } from "@cawco/core/paths/fleet";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
@@ -26,7 +28,6 @@ import type { PermissionResult } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { agyWords } from "@cawco/core/words/agy";
 import { Effect } from "effect";
-import { CHROME_DEVTOOLS } from "../browser/door";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { sessionGitEnv } from "../git-credential";
@@ -44,6 +45,7 @@ import { agyDeniedTools } from "./agy-judge";
 import { agyLaunch, agyToStart } from "./agy-launch";
 import { hostSnapshot } from "./host-line";
 import { HostedSession } from "./hosted-session";
+import { sessionMemory } from "./session-memory";
 
 /** The machine's keepers as Antigravity's hosts reach them. */
 export const agyKeepers = new KeeperPool();
@@ -197,50 +199,61 @@ class AgyRemoteSession
   }
 }
 
+/** A fleet server's entry as agy takes it in `session/new` (ACP `McpServer`, its HTTP form). */
+const agyServer = (
+  name: string,
+  config: { url: string; headers?: Readonly<Record<string, string>> }
+): AgyMcpServer => ({
+  type: "http",
+  name,
+  url: config.url,
+  headers: Object.entries(config.headers ?? {}).map(([header, value]) => ({
+    name: header,
+    value,
+  })),
+});
+
 /**
  * The MCP servers a session hands agy: CawCo's own with the session's
- * credential, and the fleet's chrome-devtools through the session's gate,
- * which runs it on the host and opens its browser door. A session with no
- * gate (a fenced one) takes CawCo's alone.
+ * credential, and every fleet server its folder loads (the fleet's own and
+ * its project's placed copies, held to its starting set), each with a
+ * command through the session's gate, which runs it on the host
+ * (chrome-devtools with its browser door), each remote HTTP one as it is,
+ * as Claude Code's sessions take them (claude.ts `fleetMcpFor`). A server
+ * agy's ACP takes no form of (a remote SSE one) is left out. A session with
+ * no gate (a fenced one) takes the remote servers alone.
  */
-const mcpServersOf = async (ctx: HarnessContext): Promise<AgyMcpServer[]> => {
+const mcpServersOf = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): Promise<AgyMcpServer[]> => {
   const cawco = delegationMcp(ctx.instanceId, ctx.sessionCredential);
-  const own: AgyMcpServer = {
-    type: "http",
-    name: MCP_SERVER_NAME,
-    url: cawco.url,
-    headers: Object.entries(cawco.headers ?? {}).map(([name, value]) => ({
-      name,
-      value,
-    })),
-  };
-  const gate = ctx.mcpGate;
-  if (!gate) {
-    return [own];
-  }
-  const fleet = await fleetMcpAt(ctx.cwd);
-  const browser = fleet[CHROME_DEVTOOLS];
-  if (!browser) {
-    return [own];
-  }
-  const gated = throughMcpGate({ [CHROME_DEVTOOLS]: browser }, gate)[
-    CHROME_DEVTOOLS
-  ];
-  return gated && "url" in gated
-    ? [
-        own,
-        {
-          type: "http",
-          name: CHROME_DEVTOOLS,
-          url: gated.url,
-          headers: Object.entries(gated.headers ?? {}).map(([name, value]) => ({
-            name,
-            value,
-          })),
-        },
-      ]
-    : [own];
+  const own = agyServer(MCP_SERVER_NAME, cawco);
+  const all = inStartingSet(await fleetMcpAt(ctx.cwd), spec.startingSet);
+  const reached = ctx.mcpGate
+    ? throughMcpGate(all, ctx.mcpGate)
+    : Object.fromEntries(
+        Object.entries(all).filter(([, config]) => !("command" in config))
+      );
+  const fleet = Object.entries(reached).flatMap(([name, config]) =>
+    name !== MCP_SERVER_NAME && "url" in config && config.type === "http"
+      ? [agyServer(name, config)]
+      : []
+  );
+  return [own, ...fleet];
 };
+
+/**
+ * The session's own memory documents, each under its path, for agy's
+ * system prompt: its folder's placed memory and the hub's documents for
+ * it. The fleet's memory is left out: it is the home's `GEMINI.md`
+ * (agy-fleet.ts), which agy reads again before each turn.
+ */
+const memoryOf = async (spec: SpawnPayload, cwd: string): Promise<string> =>
+  (await sessionMemory(spec, cwd))
+    .filter(({ path }) => path !== fleetMemoryFile())
+    .map(({ path, content }) => `# ${path}\n\n${content.trim()}`)
+    .join("\n\n");
 
 /**
  * What agy's commands get of the session beyond its account's: git reaching
@@ -272,7 +285,8 @@ export const spawnAgy = async (
       Effect.mapError((refused) => new Error(refused.message))
     )
   );
-  const mcpServers = await mcpServersOf(ctx);
+  const mcpServers = await mcpServersOf(spec, ctx);
+  const memory = await memoryOf(spec, ctx.cwd);
   const client = await agyKeepers.current();
   const procId = procIdFor("agy", ctx.instanceId);
   await agyKeepers.replaceElsewhere(procId, client);
@@ -314,6 +328,7 @@ export const spawnAgy = async (
       mcpServers,
       denied: [...denied],
       clientVersion: runtimeVersion,
+      ...(memory ? { memory } : {}),
     });
     // Answered once the host has started agy and opened the session, or
     // with why it could not.

@@ -85,6 +85,7 @@ import { Deferred, Effect, Exit, Scope, Semaphore } from "effect";
 import type { SessionControls, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
+import { AgyFleetHooks } from "./agy-fleet-hooks";
 import {
   argsOf,
   askedCall,
@@ -99,7 +100,6 @@ import {
   takesAppend,
 } from "./agy-frames";
 import { serveAgyJudge } from "./agy-hook";
-import { agyAnswerTo } from "./agy-judge";
 import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
 import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
@@ -220,15 +220,18 @@ class AgySession {
   /** Whether the running agy takes CawCo's words appended to its system prompt. */
   #append = false;
   /**
-   * One send at a time from its pictures' check to agy taking it, so sends
-   * reach agy in the order they came, and none while a conversation is set
-   * aside for a new one.
+   * One send at a time from its pictures' check and the fleet's
+   * `UserPromptSubmit` hooks to agy taking it, so sends reach agy in the
+   * order they came, and none while a conversation is set aside for a new
+   * one.
    */
   readonly #sending = Semaphore.makeUnsafe(1);
   /** The carried record, said first in the next prompt of a new conversation (agy-carry.ts). */
   #carry: string | undefined;
   /** The judge's socket, served for as long as this scope is open. */
   readonly #judge = Effect.runSync(Scope.make());
+  /** The fleet's hooks, run on its events (agy-fleet-hooks.ts). */
+  readonly #fleet: AgyFleetHooks;
   readonly #asks = new Map<string, ParkedAsk>();
   /** The sends handed to agy it has not taken yet, by uuid. */
   readonly #unread = new Set<string>();
@@ -255,6 +258,7 @@ class AgySession {
     this.#mode = modeOf(start.spec.permissionMode);
     this.#model = modelNamed(start.spec.model);
     this.#effort = start.spec.effort;
+    this.#fleet = new AgyFleetHooks(start.spec.cwd, () => this.sessionId);
   }
 
   /** The session the judge answers for, read afresh at each call. */
@@ -283,12 +287,13 @@ class AgySession {
     const judged = this.#judged();
     await Effect.runPromise(
       serveAgyJudge(launch.judgeSocket, (line) =>
-        agyAnswerTo(line, judged)
+        this.#fleet.answer(line, judged)
       ).pipe(Scope.provide(this.#judge))
     );
     await this.#startAgy();
     const resumed = this.#start.spec.resume?.sessionKey;
     await this.#openSession(resumed, this.#append);
+    await this.#fleet.started(resumed ? "resume" : "startup");
   }
 
   /** agy started, `initialize`d and signed in by the account's method, and whether it takes appended words noted. */
@@ -353,7 +358,17 @@ class AgySession {
       cwd: this.#start.spec.cwd,
       mcpServers: [...this.#start.mcpServers],
       ...(append
-        ? { _meta: { antigravity: { systemPrompt: { append: APPEND } } } }
+        ? {
+            _meta: {
+              antigravity: {
+                systemPrompt: {
+                  append: [APPEND, this.#start.memory]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                },
+              },
+            },
+          }
         : {}),
     };
     let answer: unknown;
@@ -687,18 +702,15 @@ class AgySession {
 
   // ---------------------------------------------------------- turns
 
-  /** A send, its pictures read first: one agy or Google can't take fails the send in words naming it, and nothing reaches agy. */
+  /**
+   * A send, its pictures read first and the fleet's `UserPromptSubmit`
+   * hooks run on it: a picture agy or Google can't take, or a hook's block,
+   * fails the send in words and nothing reaches agy; what the hooks say
+   * goes after its words.
+   */
   send(message: SentMessage, extras: TurnExtras): void {
     const images = extras.images ?? [];
     const text = textOf(message, extras);
-    const blocks: ContentBlock[] = [
-      ...images.map((image): ContentBlock => ({
-        type: "image",
-        mimeType: image.mediaType,
-        data: image.data,
-      })),
-      { type: "text", text },
-    ];
     this.#unread.add(message.uuid);
     // The prompt is handed to agy under the permit and answered after it.
     const handed = this.#sending.withPermit(
@@ -706,10 +718,26 @@ class AgySession {
         Effect.flatMap((refused) =>
           refused
             ? Effect.fail(new Error(refused))
+            : Effect.promise(() => this.#fleet.prompted(text))
+        ),
+        Effect.flatMap((hooked) =>
+          "refused" in hooked
+            ? Effect.fail(new Error(agyWords.promptRefused(hooked.refused)))
             : Effect.sync(() => ({
                 answered: this.#prompt(
                   message.uuid,
-                  blocks,
+                  [
+                    ...images.map((image): ContentBlock => ({
+                      type: "image",
+                      mimeType: image.mediaType,
+                      data: image.data,
+                    })),
+                    { type: "text", text },
+                    ...hooked.context.map((said): ContentBlock => ({
+                      type: "text",
+                      text: said,
+                    })),
+                  ],
                   false,
                   images.length
                 ),
@@ -723,6 +751,19 @@ class AgySession {
         this.#unread.delete(message.uuid);
         this.#ctx.rejected(message.uuid, error);
       });
+  }
+
+  /** The fleet's `Stop` hooks on a turn that ended: a block's reason is sent as a prompt that starts another turn. */
+  async #stopHooks(): Promise<void> {
+    const reason = await this.#fleet.stopped();
+    if (reason !== undefined && !this.#stopped) {
+      await this.#prompt(
+        crypto.randomUUID(),
+        [{ type: "text", text: reason }],
+        true,
+        0
+      );
+    }
   }
 
   /** One prompt to agy; the turn ends with the last prompt's answer. */
@@ -935,6 +976,9 @@ class AgySession {
     this.#turn = undefined;
     this.#calls.clear();
     this.#ctx.busy(false);
+    if (stopReason === "end_turn" && !fault) {
+      this.#stopHooks().catch((error: unknown) => this.#ctx.failed(error));
+    }
   }
 
   async interrupt(): Promise<void> {
@@ -953,6 +997,7 @@ class AgySession {
     }
     await this.interrupt().catch(() => undefined);
     this.#stopped = true;
+    this.#fleet.end();
     this.#endAgy();
     await Effect.runPromise(Scope.close(this.#judge, Exit.void));
   }

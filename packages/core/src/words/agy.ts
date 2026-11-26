@@ -27,6 +27,10 @@ export const agyWords = {
   noWorkItems: "Antigravity can't run work items yet. Use another agent.",
   /** A fork, which agy's ACP has no method for. */
   noFork: "Antigravity can't fork a session. Start a new one.",
+  /** A fleet hook's `UserPromptSubmit` block, its reason in the hook's words. */
+  promptRefused: (said: string) => `A fleet hook refused this prompt: ${said}`,
+  /** A home whose fleet links CawCo couldn't make, at `link`. */
+  noFleetLink: (link: string) => `CawCo couldn't link the fleet into ${link}.`,
   /** agy's own sign-in refused the account's method, in agy's words. */
   signInRefused: (said: string) => `Antigravity sign-in failed: ${said}`,
   /**

@@ -125,6 +125,13 @@ const AGY_HOST_COMMAND = variant("type", [
     denied: array(string()),
     /** The CawCo build the host names itself as in `initialize`. */
     clientVersion: string(),
+    /**
+     * The session's own memory documents, each headed by its path: its
+     * folder's placed memory and the hub's documents for it, appended to
+     * agy's system prompt. The fleet's memory is the home's `GEMINI.md`
+     * (agent harnesses/agy-fleet.ts), which agy reads again each turn.
+     */
+    memory: optional(string()),
   }),
   ...HOST_COMMANDS,
   object({

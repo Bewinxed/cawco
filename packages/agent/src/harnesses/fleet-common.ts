@@ -17,7 +17,8 @@
  * and {@link dropHarnessUserLayer} takes those writes back out.
  */
 
-import type { FleetItemState } from "@cawco/core/fleet";
+import { lstat, readlink, rm, symlink } from "node:fs/promises";
+import type { FleetItemState, FleetSyncReport } from "@cawco/core/fleet";
 import {
   heldSkills,
   skillDrift,
@@ -149,3 +150,33 @@ export const skillStatesIn = async (
   }
   return states;
 };
+
+/**
+ * `link` pointing at `target`, made or put right, whatever stood there in
+ * its place removed: how a harness's home takes a file or dir of CawCo's
+ * own fleet files (Codex's and Antigravity's homes).
+ */
+export const pointLink = async (
+  link: string,
+  target: string
+): Promise<void> => {
+  const stat = await lstat(link).catch(() => undefined);
+  if (stat?.isSymbolicLink() && (await readlink(link)) === target) {
+    return;
+  }
+  if (stat) {
+    await rm(link, { recursive: true, force: true });
+  }
+  await symlink(target, link);
+};
+
+/** A sync's report with nothing said of any part yet but its skills, which `skills` collects. */
+export const fleetReport = (
+  skills: Record<string, FleetItemState>
+): FleetSyncReport => ({
+  mcp: {},
+  marketplaces: {},
+  plugins: {},
+  skills,
+  at: Date.now(),
+});

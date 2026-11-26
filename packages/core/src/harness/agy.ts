@@ -301,9 +301,44 @@ export const AGY = {
   curatorDenied: [...BOARD_DENIED, ...WEB],
   deniedTools: AGY_DENIED_TOOLS,
   tools: { edit: WRITES, fetch: [], powershell: [], search: WEB, shell: RUNS },
-  // agy runs a hook itself, from its home's `config/hooks.json` (agent
-  // harnesses/agy-hook.ts), its payloads its own.
-  hooks: { runs: "harness" },
+  // CawCo runs them, from its one hook in the home's `config/hooks.json`
+  // (agent harnesses/agy-hook.ts) and its ACP client (agent
+  // harnesses/agy-fleet-hooks.ts): agy hands a hook its own payload and
+  // reads its own answer, so no fleet hook is an entry of agy's own.
+  // `PreToolUse` after the session's judge, `PostToolUse` and
+  // `PostToolUseFailure` on agy's `PostToolUse`, by its `error`;
+  // `SessionStart`, `UserPromptSubmit` and `Stop` as CawCo opens the
+  // session, sends a prompt and sees a turn end. Each tool's argument keys
+  // as agy 1.5.18 hands its hook them (the project's
+  // `assets/8c459ba3/q2-payloads.txt`).
+  hooks: {
+    runs: "cawco",
+    events: [
+      "PreToolUse",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "SessionStart",
+      "UserPromptSubmit",
+      "Stop",
+    ],
+    toolNames: {
+      run_command: { name: "Bash", input: { CommandLine: "command" } },
+      read_file: { name: "Read", input: { Path: "file_path" } },
+      write_file: {
+        name: "Write",
+        input: { Path: "file_path", Content: "content" },
+      },
+      edit_file: {
+        name: "Edit",
+        input: {
+          Path: "file_path",
+          Target: "old_string",
+          Replacement: "new_string",
+        },
+      },
+      search_web: { name: "WebSearch" },
+    },
+  },
 
   cloneConfig: AGY_CLONE_CONFIG,
   // The owner's own agy home, which Gemini CLI shares, holding its saved

@@ -39,7 +39,7 @@ import type { SharedMode } from "@cawco/core/harness/modes";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { unhandled } from "@cawco/core/unhandled";
 import { judgeCall, type Policy } from "@cawco/core/workspace-judge";
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 
 /** What agy hands its `PreToolUse` hook on stdin (its hooks doc, "Input/Output Contract"). */
 const HookInput = Schema.Struct({
@@ -52,10 +52,11 @@ const HookInput = Schema.Struct({
   }),
 });
 
-/** A `PreToolUse` call as the judge reads it. */
-type AgyHookInput = typeof HookInput.Type;
+/** A call as agy handed its hook, as the judge reads it. */
+export type AgyHookInput = typeof HookInput.Type;
 
-const decodeInput = Schema.decodeUnknownOption(
+/** One line the hook sent, read as the call agy handed it; none for a line that is not one. */
+export const decodeAgyHookInput = Schema.decodeUnknownOption(
   Schema.fromJsonString(HookInput)
 );
 
@@ -70,6 +71,14 @@ export type AgyAnswer =
       readonly decision: "force_ask";
       readonly overwrite?: Readonly<Record<string, unknown>>;
     };
+
+/**
+ * The answer to agy's `PostToolUse`, which takes no decision: an empty
+ * object. agy 1.5.18 logs `{"decision":"allow"}` there as a hook that
+ * failed ("unknown field \"decision\"", the project's
+ * `assets/8c459ba3/q2-agy-log-excerpt.txt`) and takes `{}` quietly.
+ */
+export type AgyAfterAnswer = Readonly<Record<never, never>>;
 
 /** A workspace session's boundary, as the judge holds it to it. */
 interface AgyWorkspace {
@@ -330,7 +339,10 @@ const refusedOutright = (
 };
 
 /** The judge's answer to one call, read from what agy handed the hook, for `session`. */
-const agyAnswer = (call: AgyHookInput, session: AgySession): AgyAnswer => {
+export const agyAnswer = (
+  call: AgyHookInput,
+  session: AgySession
+): AgyAnswer => {
   if (call.hookEventName !== "PreToolUse") {
     return deny(
       `cawco: the judge answers PreToolUse alone, and was handed ${call.hookEventName}.`
@@ -368,18 +380,3 @@ const agyAnswer = (call: AgyHookInput, session: AgySession): AgyAnswer => {
       return unhandled("action", action);
   }
 };
-
-/**
- * The answer to one line the hook sent: the call agy handed it, as JSON. A
- * line that is not one is denied: the judge never lets a call run that it
- * could not read.
-
- */
-export const agyAnswerTo = (line: string, session: AgySession): AgyAnswer =>
-  Option.match(decodeInput(line), {
-    onNone: () =>
-      deny(
-        "cawco: this call did not run, because the judge could not read what agy handed its hook."
-      ),
-    onSome: (call) => agyAnswer(call, session),
-  });

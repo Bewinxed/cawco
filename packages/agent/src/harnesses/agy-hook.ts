@@ -47,7 +47,7 @@ import {
 } from "../boundary/hook-judge";
 import { JUDGE_ANSWER_END, JUDGE_ANSWER_END_PERL } from "../boundary/protocol";
 
-import type { AgyAnswer } from "./agy-judge";
+import type { AgyAfterAnswer, AgyAnswer } from "./agy-judge";
 
 /**
  * The environment variable the agy process of one session is started
@@ -67,8 +67,12 @@ const AGY_JUDGE_ENV = CAWCO_ENV.agyJudge;
 // @limit measured: HOOK_TIMEOUT_S less 10 s, so the judge answers before its hook is killed
 const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 
-/** What every answer the hook passes on begins with: one of agy's decisions, never `{}` (which agy 1.5.18 reads as a denial) nor `ask`. */
-const DECISION_HEAD = String.raw`\A\{"decision":"(?:allow|deny|force_ask)"`;
+/**
+ * What every answer the hook passes on is: one of agy's decisions, never
+ * `ask`, or `{}` whole, the answer after a call ({@link AgyAfterAnswer}),
+ * which agy 1.5.18 reads as a denial before one, so it fails closed there.
+ */
+const DECISION_HEAD = String.raw`\A(?:\{"decision":"(?:allow|deny|force_ask)"|\{\}\z)`;
 
 /**
  * The hook's script. Its one line out is the judge's answer as the judge
@@ -115,30 +119,33 @@ const hookCommand = (script: string): string =>
   `${shellQuote(perl())} -T ${shellQuote(script)}`;
 
 /**
- * An agy home's `config/hooks.json`, holding the hook at `script` alone, on
- * every tool (its matcher is a regex agy anchors), with agy's limit on it.
+ * An agy home's `config/hooks.json`, holding the hook at `script` alone,
+ * before and after every tool (its matcher is a regex agy anchors), with
+ * agy's limit on it: before, the judge's answer and then the fleet's
+ * `PreToolUse` hooks; after, the fleet's `PostToolUse` hooks
+ * (agy-fleet-hooks.ts). The fleet's hooks are never entries of their own
+ * here: agy would hand them its own payload and read its own answer, and a
+ * rewrite of theirs could undo the judge's.
  */
-const agyHooksFile = (script: string): string =>
-  `${JSON.stringify(
+const agyHooksFile = (script: string): string => {
+  const every = [
     {
-      cawco: {
-        PreToolUse: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command",
-                command: hookCommand(script),
-                timeout: HOOK_TIMEOUT_S,
-              },
-            ],
-          },
-        ],
-      },
+      matcher: ".*",
+      hooks: [
+        {
+          type: "command",
+          command: hookCommand(script),
+          timeout: HOOK_TIMEOUT_S,
+        },
+      ],
     },
+  ];
+  return `${JSON.stringify(
+    { cawco: { PreToolUse: every, PostToolUse: every } },
     null,
     2
   )}\n`;
+};
 
 /** The hook could not be written. */
 class AgyHookWriteError extends Schema.TaggedError<AgyHookWriteError>()(
@@ -190,7 +197,7 @@ export const agyJudgeEnv = Effect.fn("agyJudgeEnv")(function* (socket: string) {
 });
 
 /** A judge's answer as the hook passes it on: never with the end mark inside it (JSON escapes a NUL). */
-const answerText = (answer: AgyAnswer): string =>
+const answerText = (answer: AgyAnswer | AgyAfterAnswer): string =>
   `${JSON.stringify(answer)}${JUDGE_ANSWER_END}`;
 
 /**
@@ -204,18 +211,17 @@ const answerText = (answer: AgyAnswer): string =>
  */
 export const serveAgyJudge = Effect.fn("serveAgyJudge")(function* (
   socket: string,
-  answer: (line: string) => AgyAnswer
+  answer: (line: string) => Promise<AgyAnswer | AgyAfterAnswer>
 ) {
-  const answered = (line: string): string => {
-    try {
-      return answerText(answer(line));
-    } catch (error) {
-      return answerText({
-        decision: "deny",
-        reason: `cawco: this call did not run, because its judge could not answer it: ${error instanceof Error ? error.message : String(error)}`,
-      });
-    }
-  };
+  const answered = (line: string): Promise<string> =>
+    Promise.resolve()
+      .then(() => answer(line))
+      .then(answerText, (error: unknown) =>
+        answerText({
+          decision: "deny",
+          reason: `cawco: this call did not run, because its judge could not answer it: ${error instanceof Error ? error.message : String(error)}`,
+        })
+      );
   yield* Effect.acquireRelease(
     Effect.callback<Server, AgyJudgeError>((resume) => {
       rmSync(socket, { force: true });
@@ -229,7 +235,10 @@ export const serveAgyJudge = Effect.fn("serveAgyJudge")(function* (
             return;
           }
           connection.removeAllListeners("data");
-          connection.end(answered(read.subarray(0, end).toString("utf8")));
+          // `answered` never rejects: a judge that throws is a denial.
+          answered(read.subarray(0, end).toString("utf8")).then((text) =>
+            connection.end(text)
+          );
         });
         // A hook agy killed mid-call leaves nothing to answer.
         connection.on("error", () => connection.destroy());

@@ -3,12 +3,13 @@
  * acp`, one per session, held by a CawCo host the keeper keeps
  * (agy-sessiond.ts, agy-host.ts, agy-runtime.ts), in a home CawCo keeps per
  * Antigravity account and launched as that account's one sign-in method
- * says (agy-launch.ts). Plain sessions run here; a work item's session,
- * stored conversations, fleet sync and adoption's proof are the later
+ * says (agy-launch.ts). Plain sessions run here, the fleet reaching them
+ * (agy-fleet.ts); a work item's session,
+ * stored conversations and adoption's proof are the later
  * items of tsk-340, and each refuses until then in its own words.
  */
 import type { RestartHold } from "@cawco/core/binary-updates";
-import type { FleetSyncReport } from "@cawco/core/fleet";
+import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type {
   HarnessCapabilities,
   HarnessReport,
@@ -27,6 +28,7 @@ import type { TranscriptWindow } from "@cawco/core/transcript-types";
 import { agyWords } from "@cawco/core/words/agy";
 import { toolVersion } from "../capabilities";
 import { sessionFleetDenials } from "../denied-tools";
+import type { FleetPart } from "../fleet-parts";
 import {
   cannot,
   type Harness,
@@ -38,6 +40,12 @@ import {
 import { probeStarted } from "../probe-count";
 import { procEpoch } from "../sessiond-client";
 import { resolveBin, toolGate } from "../tools";
+import {
+  agyFleetHoldings,
+  agyFleetHooks,
+  agyFleetStatus,
+  syncAgyFleet,
+} from "./agy-fleet";
 import { AGY_SPEC } from "./agy-launch";
 import { agyAccountIds, agyAccountModels } from "./agy-models";
 import {
@@ -80,18 +88,14 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
   deleteSession: false,
   // Its background commands are agy's own; CawCo's task list is not wired to them.
   tasks: false,
-  // The fleet's skills, memory, hooks and plugins reach agy's home with its fleet sync (tsk-340 item 9).
-  fleet: false,
-  skills: false,
-  hooks: false,
+  // The fleet's skills and memory reach every account's home and its hooks
+  // run through CawCo's own (agy-fleet.ts); a fleet plugin is Claude
+  // Code's, which agy does not load.
   plugins: false,
 };
 
 /** Why each stored-conversation member refuses until agy's store is read. */
 const NO_STORE = "CawCo doesn't read Antigravity's stored conversations yet.";
-
-/** Why agy's fleet hooks are not read: the fleet sync writes none for it yet. */
-const NO_FLEET = "CawCo doesn't sync the fleet into Antigravity yet.";
 
 /**
  * Whether `spec` is a work item's session, which agy runs none of until its
@@ -287,28 +291,25 @@ class AgyHarness implements Harness<"agy"> {
     return agyFleetRoot();
   }
 
-  /**
-   * Nothing written yet (capability `fleet`): an empty report, which says
-   * nothing of any entry, so no other harness's word on one is outranked.
-   */
-  syncFleet(): Promise<FleetSyncReport> {
-    return Promise.resolve({
-      mcp: {},
-      marketplaces: {},
-      plugins: {},
-      skills: {},
-      at: Date.now(),
-    });
+  /** The fleet's skills and memory, linked into every Antigravity account's home here (agy-fleet.ts). */
+  syncFleet(
+    config: PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ): Promise<FleetSyncReport> {
+    return syncAgyFleet(config, parts, agyAccountIds());
   }
 
   fleetHoldings() {
-    return Promise.resolve({ skills: {} });
+    return agyFleetHoldings();
   }
 
-  readonly fleetHooks = cannot(NO_FLEET);
+  /** Each fleet hook as CawCo's hook and ACP client run it (agy-fleet-hooks.ts). */
+  fleetHooks() {
+    return agyFleetHooks();
+  }
 
   fleetStatus(): Promise<FleetSyncReport> {
-    return this.syncFleet();
+    return agyFleetStatus();
   }
 
   dispose(): Promise<void> {
