@@ -262,6 +262,8 @@ export default {
         "@earendil-works/pi-tui",
         // tsconfig.paths.json:48 and bunfig.toml:1-3 (vaul-svelte, huntabyte/vaul-svelte#130)
         "bits-ui",
+        // No root file imports it: the root copy is there for its guide and source, node_modules/effect/AGENTS.md and node_modules/effect/src, which CLAUDE.md's "Learning more about Effect" sends agents to (.claude/skills/effect-ts/SKILL.md, step 1).
+        "effect",
       ],
     },
     "apps/dashboard": {

@@ -47,6 +47,16 @@ from `Effect.runPromise` at its edge. Load the `effect-ts` skill before writing 
 app stays as it is. `scripts/effect-ratchet.ts` (in `bun run check`) holds the hand-written
 locks, promise chains and timed loops left in these packages to their count.
 
+### Learning more about Effect
+
+This repository uses the Effect Typescript library.
+
+Before writing any Effect code, first read `node_modules/effect/AGENTS.md`
+**completely**, and follow the links in the file when required.
+
+If you need to learn more about particular Effect apis and concepts that the
+guide doesn't cover, search through the source code in `node_modules/effect/src`.
+
 ## Tests
 
 Run `bun run check` before `finish_item`: the hub rebases and pushes your commits as they are.
