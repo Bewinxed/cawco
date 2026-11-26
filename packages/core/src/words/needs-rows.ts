@@ -5,5 +5,5 @@
  */
 export const needsRowWords = {
   /** A task whose questions wait on the person while it is in `stage`: its row's line. */
-  taskQuestions: (stage: string) => `Its questions wait on you, in ${stage}`,
+  taskQuestions: (stage: string) => `Stage: ${stage}`,
 };

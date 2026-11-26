@@ -3,6 +3,8 @@
  * an edit's controls, the send. The dashboard renders them from here.
  */
 export const transcriptWords = {
+  /** The note on an answer recorded from the person's words: `session` names the session that recorded it. */
+  recordedBy: (session: string) => `Recorded by ${session}`,
   /** The toast when a stored composer draft was dropped to keep the stored drafts under their size cap: `what` names the draft by its first words. */
   draftDropped: (what: string) =>
     `Storage for unsent drafts was full, so the oldest draft was dropped: ${what}`,

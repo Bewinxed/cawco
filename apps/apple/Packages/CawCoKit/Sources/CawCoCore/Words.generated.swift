@@ -1113,6 +1113,11 @@ public enum Words {
 
     public enum Transcript {
         // packages/core/src/words/transcript.ts `transcriptWords`
+        /// The note on an answer recorded from the person's words: `session` names the session that recorded it.
+        public static func recordedBy(session: String) -> String {
+            "Recorded by \(session)"
+        }
+
         /// The toast when a stored composer draft was dropped to keep the stored drafts under their size cap: `what` names the draft by its first words.
         public static func draftDropped(what: String) -> String {
             "Storage for unsent drafts was full, so the oldest draft was dropped: \(what)"

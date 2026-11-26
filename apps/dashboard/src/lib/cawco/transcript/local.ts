@@ -5,6 +5,7 @@
  */
 import type { AskAnswer } from "@cawco/core/asks";
 import type { SendPayload } from "@cawco/core/protocol";
+import { transcriptWords } from "@cawco/core/words/transcript";
 import { newId } from "#lib/platform/id.js";
 import type { Message } from "../types";
 
@@ -101,7 +102,9 @@ export function answeredNote(
     session: answer.name ? `by ${answer.name}` : "by another session",
     harness: `in ${harness}`,
     fullSend: "by Full Send",
-    words: answer.name ? `from his words, by ${answer.name}` : "from his words",
+    words: answer.name
+      ? transcriptWords.recordedBy(answer.name)
+      : "from his words",
   }[answer.via];
   return {
     id: newId(),
