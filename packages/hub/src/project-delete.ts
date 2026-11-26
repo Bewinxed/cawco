@@ -60,6 +60,7 @@ import {
   type RemoveFolder,
   type WorkspaceArchive,
 } from "@cawco/core/workspace/controls";
+import { Schema } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Browsers } from "./browsers";
 import type { DbShape } from "./db";
@@ -108,11 +109,10 @@ export interface ProjectDeleted {
 }
 
 /** A machine kept a workspace's clone: its agent predates deleting one (`held`), so it is updated first. */
-class AgentTooOld extends Error {
-  constructor() {
-    super("its agent predates deleting a project for good");
-  }
-}
+class AgentTooOld extends Schema.TaggedError<AgentTooOld>()(
+  "AgentTooOld",
+  {}
+) {}
 
 /** One removal on a machine: what it removes, counted under `kind`. */
 interface Removal {

@@ -8949,6 +8949,7 @@ export const createServer = (
     machines: () => db.machineFacts(),
     projectIds: () => db.listProjects().map((project) => project.id),
     index: db.taskIndex,
+    lifetime,
     waiters: db.taskWaiters,
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
@@ -10083,6 +10084,7 @@ export const createServer = (
     folderText,
     folderNames: folderFileNames,
     instance: (id) => db.getInstancesByIds([id])[0],
+    lifetime,
     page: (artifactId) => {
       const doc = artifactDocs.doc(artifactId);
       const meta = docMeta(doc);

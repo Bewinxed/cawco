@@ -68,9 +68,11 @@ import {
   recordPath,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
@@ -80,6 +82,7 @@ import type { FolderProblem } from "./decision-page";
 import type { DecisionLinks, DecisionProblem } from "./decision-problems";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import type { changeFolderFiles, folderFileNames } from "./project-folder";
 import type { ProblemsOf } from "./refusal";
 import type { Tasks } from "./tasks";
@@ -372,6 +375,8 @@ export interface DecisionsDeps {
     path: string
   ) => Promise<string | undefined | FolderProblem>;
   instance: (id: string) => InstanceRow | undefined;
+  /** The hub's lifetime: record writes run on it, and a record followed is forked on it. */
+  lifetime: HubLifetimeShape;
   /** An artifact's doc as the page reads it: its picks and its last send. */
   page: (artifactId: string) => {
     meta: PageArtifact["meta"];
@@ -909,13 +914,21 @@ export const createDecisions = (deps: DecisionsDeps) => {
       ? problem(409, { code: "decision-unheard", detail: routed.why })
       : undefined;
 
-  /** Record writes, one at a time across the hub: each reads the record the last one left. */
-  let writing: Promise<unknown> = Promise.resolve();
-  const serially = <T>(work: () => Promise<T>): Promise<T> => {
-    const run = writing.then(work);
-    writing = run.catch(() => undefined);
-    return run;
-  };
+  /**
+   * A project's record writes, one at a time: each reads the records the
+   * last one left and commits on that, so the read is inside the turn with
+   * the commit (the folder's own turn covers the commit alone). Records are
+   * a project's, so projects write beside each other.
+   */
+  const recordTurns = makeKeyedLock();
+  /** `work` in project `projectId`'s record turn, which starts at once when the project's records are free. */
+  const serially = <T>(projectId: string, work: () => Promise<T>): Promise<T> =>
+    deps.lifetime.run(
+      recordTurns.withLock(
+        projectId,
+        Effect.tryPromise({ try: () => work(), catch: (error) => error })
+      )
+    );
 
   /**
    * Page `name`'s record as it stands now: its cards from its own file,
@@ -1064,22 +1077,39 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
   };
 
-  /** A record write that failed, said in the journal: nothing waits on it. */
-  const followed = (
-    projectId: string,
-    run: Promise<DecisionProblem | undefined>
-  ): void => {
-    run.then(
-      (unread) => {
-        if (unread) {
-          console.warn(
-            `[decisions] ${projectId}: a record was not written: ${unread.response.detail}`
-          );
-        }
-      },
-      (error: unknown) =>
-        console.warn(
-          `[decisions] ${projectId}: a record was not written: ${error instanceof Error ? error.message : String(error)}`
+  /**
+   * Records followed ({@link followRecords}) in the project's record turn,
+   * forked on the hub's lifetime: nothing waits on it, and a write that
+   * failed is said in the journal.
+   */
+  const follow = (projectId: string, only?: string): void => {
+    const unwritten = (why: string) =>
+      console.warn(
+        `[decisions] ${projectId}: a record was not written: ${why}`
+      );
+    deps.lifetime.fork(
+      "decision records follow",
+      recordTurns
+        .withLock(
+          projectId,
+          Effect.tryPromise({
+            try: () => followRecords(projectId, only),
+            catch: (error) => error,
+          })
+        )
+        .pipe(
+          Effect.flatMap((unread) =>
+            Effect.sync(() => {
+              if (unread) {
+                unwritten(unread.response.detail);
+              }
+            })
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              unwritten(error instanceof Error ? error.message : String(error))
+            )
+          )
         )
     );
   };
@@ -1141,7 +1171,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     name: string,
     artifactId: string
   ): Promise<DecisionProblem | undefined> =>
-    serially(async () => {
+    serially(projectId, async () => {
       if (artifactsByName(projectId).get(name) !== artifactId) {
         return;
       }
@@ -1495,7 +1525,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         "instance" in to
           ? { askedOf: to.instance.id, askedSend: crypto.randomUUID() }
           : { askedOf: null };
-      const unasked = await serially(async () => {
+      const unasked = await serially(projectId, async () => {
         const recorded = await recordFor(projectId, name, artifactId);
         if (recorded instanceof ElysiaStatus) {
           return recorded;
@@ -1608,18 +1638,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
     /** A pick or note on page `name` stood quiet: its record, when it is decided, follows it. */
     picksMoved(projectId: string, name: string): void {
-      followed(
-        projectId,
-        serially(() => followRecords(projectId, name))
-      );
+      follow(projectId, name);
     },
 
     /** The project's tasks changed: records whose tasks moved are written again. */
     tasksChanged(projectId: string): void {
-      followed(
-        projectId,
-        serially(() => followRecords(projectId))
-      );
+      follow(projectId);
     },
   };
 };

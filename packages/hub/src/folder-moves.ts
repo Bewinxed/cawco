@@ -22,7 +22,6 @@
 import { posix } from "node:path";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
 import {
   CONTROL_FOLDER_MOVE_COPY,
   CONTROL_FOLDER_MOVE_DROP,
@@ -55,6 +54,7 @@ import type {
 } from "@cawco/core/project-folders";
 import { DAY_MS } from "@cawco/core/time";
 import { blockWords, folderMoveWords } from "@cawco/core/words/folder-move";
+import { Effect } from "effect";
 import { problem } from "elysia";
 import type { DbShape } from "./db";
 import type { FolderMoveRow } from "./db/folder-moves";
@@ -1534,9 +1534,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         return;
       }
       if (!done) {
-        deps.lifetime.after("folder move looks again", WAIT_LOOK_MS, () =>
-          goOn(id)
-        );
+        goOnAfterLook("folder move looks again", id);
         return;
       }
       // A rename that became a copy names its own steps from here.
@@ -1567,21 +1565,38 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
     }));
   };
 
-  const advance = async (id: string): Promise<void> => {
-    if (advancing.has(id)) {
-      return;
-    }
-    advancing.add(id);
-    try {
-      await runSteps(id);
-    } catch (error) {
-      stepFailed(id, error);
-    } finally {
-      advancing.delete(id);
-    }
+  /**
+   * The job's steps ({@link runSteps}), unless they run already: the claim
+   * is taken as it starts, before anything else runs; a step that throws
+   * fails the job ({@link stepFailed}).
+   */
+  const advance = (id: string): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      if (advancing.has(id)) {
+        return Effect.void;
+      }
+      advancing.add(id);
+      return Effect.tryPromise({
+        try: () => runSteps(id),
+        catch: (error) => error,
+      }).pipe(
+        Effect.catch((error) => Effect.sync(() => stepFailed(id, error))),
+        Effect.ensuring(Effect.sync(() => advancing.delete(id)))
+      );
+    });
+
+  /** The job's steps go on, let go on the hub's lifetime. */
+  const goOn = (id: string): void => {
+    deps.lifetime.fork("folder move", advance(id));
   };
 
-  const goOn = (id: string): void => detach(advance(id), `folder move ${id}`);
+  /** The job's steps go on once {@link WAIT_LOOK_MS} has passed; `name` is the wait's. */
+  const goOnAfterLook = (name: string, id: string): void => {
+    deps.lifetime.fork(
+      name,
+      Effect.sleep(WAIT_LOOK_MS).pipe(Effect.andThen(advance(id)))
+    );
+  };
 
   // ── The person ──────────────────────────────────────────────────────────
 
@@ -1700,9 +1715,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       });
     }
     await deps.interrupt(instanceId);
-    deps.lifetime.after("folder move after an interrupt", WAIT_LOOK_MS, () =>
-      goOn(row.id)
-    );
+    goOnAfterLook("folder move after an interrupt", row.id);
     return { interrupted: true };
   };
 

@@ -31,7 +31,6 @@
  * The person's words go into every message verbatim, step by step.
  */
 
-import { detach } from "@cawco/core/detach";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import {
   PLAN_WAKE_QUIET_MS,
@@ -44,10 +43,11 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect, type Fiber } from "effect";
 import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import type { createOpenItems } from "./open-items";
 import type { PlanChangeCalls } from "./plan-change-calls";
 import {
@@ -125,8 +125,13 @@ const named = (row: InstanceRow): string =>
 
 export const createPlanChanges = (deps: PlanChangesDeps) => {
   const { db, plans } = deps;
-  /** One quiet window per receiver: its timer, re-armed by each waking change. */
-  const quiet = new Map<string, HubTimer>();
+  /** One quiet window per receiver: its fiber, waiting out the quiet, re-armed by each waking change. */
+  const quiet = new Map<string, Fiber.Fiber<void>>();
+  /** Ends `key`'s quiet window, if one is open, before it delivers. */
+  const stopQuiet = (key: string): void => {
+    quiet.get(key)?.interruptUnsafe();
+    quiet.delete(key);
+  };
   /** Each receiver's deliveries, one at a time and in order. */
   const turns = makeKeyedLock();
 
@@ -357,18 +362,28 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   const inOrder = (
     key: string,
     work: () => Promise<AnyProblem | undefined>
-  ): Promise<void> => {
+  ): Effect.Effect<void> => {
     const logged = (said: string) =>
       console.warn(`[plan-changes] ${key}: ${said}`);
-    return turns.run(key, work).then(
-      (refused) => {
-        if (refused) {
-          logged(refused.response.detail);
-        }
-      },
-      (error: unknown) =>
-        logged(error instanceof Error ? error.message : String(error))
-    );
+    return turns
+      .withLock(
+        key,
+        Effect.tryPromise({ try: () => work(), catch: (error) => error })
+      )
+      .pipe(
+        Effect.flatMap((refused) =>
+          Effect.sync(() => {
+            if (refused) {
+              logged(refused.response.detail);
+            }
+          })
+        ),
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            logged(error instanceof Error ? error.message : String(error))
+          )
+        )
+      );
   };
 
   /**
@@ -412,10 +427,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
    * (`goOnFrom`); a refusal is kept on each change, in its words. A plan
    * that does not read leaves its changes owed, the refusal in the hub's log.
    */
-  const deliver = (key: string): Promise<void> =>
+  const deliver = (key: string): Effect.Effect<void> =>
     inOrder(key, async () => {
-      deps.lifetime.cancel(quiet.get(key));
-      quiet.delete(key);
+      stopQuiet(key);
       const read = await readPlans(db.untoldPlanChanges(key));
       if (read instanceof ElysiaStatus) {
         return read;
@@ -460,14 +474,23 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
 
   /** Starts (again) `key`'s quiet window: its changes go once the person has been quiet that long. */
   const arm = (key: string): void => {
-    deps.lifetime.cancel(quiet.get(key));
-    quiet.set(
-      key,
-      deps.lifetime.after("plan wake quiet", PLAN_WAKE_QUIET_MS, () => {
-        quiet.delete(key);
-        detach(deliver(key), "plan changes delivery");
-      })
+    stopQuiet(key);
+    // Out of the map as it wakes, so nothing ends it once it delivers: the
+    // delivery's own turn is what keeps a second one from starting.
+    const window = deps.lifetime.fork(
+      "plan wake quiet",
+      Effect.sleep(PLAN_WAKE_QUIET_MS).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (quiet.get(key) === window) {
+              quiet.delete(key);
+            }
+          })
+        ),
+        Effect.andThen(deliver(key))
+      )
     );
+    quiet.set(key, window);
   };
 
   /**
@@ -487,11 +510,10 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       }
       const read = knownPlans(rows);
       if (!read) {
-        detach(deliver(key), "plan changes read for a turn");
+        deps.lifetime.fork("plan changes read for a turn", deliver(key));
         continue;
       }
-      deps.lifetime.cancel(quiet.get(key));
-      quiet.delete(key);
+      stopQuiet(key);
       words.push(message(receiverOfKey(key), rows, read));
       db.closePlanChanges(
         rows.map((one) => one.id),
@@ -524,7 +546,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const key = receiverKey(to);
       const running = sessionOfReceiver(to);
       if (running && deps.busy(running)) {
-        await deliver(key);
+        await deps.lifetime.run(deliver(key));
       } else if (PLAN_WAKING_EDITS.has(edit.kind)) {
         arm(key);
       }
@@ -555,7 +577,8 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
      */
     cannotGoOn(instanceId: string, reason: string): void {
       const key = receiverKey({ kind: "session", instanceId });
-      detach(
+      deps.lifetime.fork(
+        "plan changes carried on",
         inOrder(key, async () => {
           const rows = db
             .sentPlanChanges(key)
@@ -578,8 +601,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
             rows.map((row) => row.id)
           );
           plansMoved(rows);
-        }),
-        "plan changes carried on"
+        })
       );
     },
 

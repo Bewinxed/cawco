@@ -1,6 +1,8 @@
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
+import { makeJoin } from "@cawco/core/effect/join";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
+import { Effect, Fiber } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
@@ -27,6 +29,7 @@ export type ProjectJoiningContext = Pick<
   | "caw"
   | "db"
   | "learnCheckout"
+  | "lifetime"
   | "machineName"
   | "machinePause"
   | "onlineMachines"
@@ -143,9 +146,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   };
 
   /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
-  const projectsMaking = new Map<
+  const projectsMaking = makeJoin<
     string,
-    ReturnType<typeof makeOrJoinProject>
+    ProjectMade | ProjectMakeProblem,
+    unknown
   >();
 
   /** The place a project was made from: its checkout, else its folder on the hub. */
@@ -167,15 +171,15 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     if (!promptId) {
       return makeOrJoinProject(asked);
     }
-    const first = projectsMaking.get(promptId);
-    if (first !== undefined) {
-      return first;
-    }
-    const making = makeOrJoinProject(asked);
-    projectsMaking.set(promptId, making);
-    const done = () => projectsMaking.delete(promptId);
-    making.then(done, done);
-    return making;
+    return ctx.lifetime.run(
+      projectsMaking.run(
+        promptId,
+        Effect.tryPromise({
+          try: () => makeOrJoinProject(asked),
+          catch: (error) => error,
+        })
+      )
+    );
   };
 
   /**
@@ -186,7 +190,21 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    */
   const lookFor = (place: PlaceRow | undefined): void => {
     if (place) {
-      detach(ctx.learnCheckout(place), `read ${place.path}'s folder`);
+      ctx.lifetime.fork(
+        "read a checkout's folder",
+        Effect.tryPromise({
+          try: () => ctx.learnCheckout(place),
+          catch: (error) => error,
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              console.warn(
+                `[read ${place.path}'s folder] failed: ${failureOf(error)}`
+              )
+            )
+          )
+        )
+      );
     }
   };
 
@@ -314,20 +332,39 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   ): Promise<string | undefined> | undefined => {
     // Its nightly memory run, filed with it once it is set up (routines.ts `ensureCurator`).
     ctx.routines.ensureCurator(created.id);
-    if (!asked.setup) {
+    const { setup } = asked;
+    if (!setup) {
       return;
     }
-    const conversation = ctx.caw.setup(created.id, asked.setup).then((set) => {
-      if (set instanceof ElysiaStatus) {
-        console.warn(
-          `[project-joining] ${created.id}: Caw did not set it up: ${set.response.detail}`
-        );
-        return;
-      }
-      return set;
-    });
-    detach(conversation, `set up ${created.id} with Caw`);
-    return conversation;
+    // Let go on the hub's lifetime; a caller that waits on it reads its
+    // session id, or undefined when it did not start (its failure said here).
+    const conversation = ctx.lifetime.fork(
+      "set up a project with Caw",
+      Effect.tryPromise({
+        try: () => ctx.caw.setup(created.id, setup),
+        catch: (error) => error,
+      }).pipe(
+        Effect.flatMap((set) =>
+          Effect.sync((): string | undefined => {
+            if (set instanceof ElysiaStatus) {
+              console.warn(
+                `[project-joining] ${created.id}: Caw did not set it up: ${set.response.detail}`
+              );
+              return undefined;
+            }
+            return typeof set === "string" ? set : undefined;
+          })
+        ),
+        Effect.catch((error) =>
+          Effect.sync((): undefined => {
+            console.warn(
+              `[set up ${created.id} with Caw] failed: ${failureOf(error)}`
+            );
+          })
+        )
+      )
+    );
+    return ctx.lifetime.run(Fiber.join(conversation));
   };
 
   /**

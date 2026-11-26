@@ -25,7 +25,6 @@ bare-run	Effect.runPromise	packages/hub/src/usability-feedback.ts	1
 bare-run	Effect.runPromise	packages/hub/src/writes.ts	1
 bare-run	Effect.runSync	packages/hub/src/clock.ts	1
 bare-run	Effect.runSync	packages/hub/src/intake.ts	1
-error-class	AgentTooOld	packages/hub/src/project-delete.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
@@ -171,8 +170,6 @@ promise-chain	standing	packages/hub/src/preview-server/listeners.ts	1
 promise-chain	state.queue	packages/hub/src/fleet-mcp-relay.ts	1
 promise-chain	sync.running	packages/hub/src/account-probes.ts	1
 promise-chain	this.#healing	packages/agent/src/fleet-converger.ts	1
-promise-chain	writing	packages/hub/src/decisions.ts	1
-promise-chain	written	packages/hub/src/hub-record.ts	1
 promise-map	#clients	packages/agent/src/keepers.ts	1
 promise-map	#fleetDenials	packages/agent/src/fleet-converger.ts	1
 promise-map	#marks	packages/agent/src/browser/gate.ts	1

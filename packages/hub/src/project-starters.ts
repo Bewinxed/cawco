@@ -59,6 +59,7 @@ import {
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
+import { Effect, type Fiber } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
@@ -66,7 +67,7 @@ import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { projectDesign } from "./landed";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 import { fileOr } from "./memory";
 import { INDEX_FILE, KNOWLEDGE_DIR } from "./memory-lessons";
@@ -144,7 +145,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   /** A project's ask waiting out its quiet, and what asked. */
   const waiting = new Map<
     string,
-    { timer: HubTimer; triggers: Set<StartersTrigger> }
+    { quiet: Fiber.Fiber<void>; triggers: Set<StartersTrigger> }
   >();
   /** When each project's set was last asked of Jev, or found unchanged. */
   const asked = new Map<string, number>();
@@ -379,32 +380,47 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const held = waiting.get(projectId);
     const triggers = held?.triggers ?? new Set<StartersTrigger>();
     triggers.add(trigger);
-    deps.lifetime.cancel(held?.timer);
+    held?.quiet.interruptUnsafe();
     const now = Date.now();
     const last =
       asked.get(projectId) ??
       db.starters.set(projectId, "board")?.generatedAt.getTime() ??
       0;
     const at = Math.max(now + QUIET_MS, last + GAP_MS);
-    // A timer per project, dropped at the next ask.
-    const timer = deps.lifetime.after("project starter", at - now, () => {
-      waiting.delete(projectId);
-      if (writing.has(projectId)) {
-        touched(projectId, trigger);
-        return;
-      }
-      writing.add(projectId);
-      const said = (words: string | undefined) =>
-        words && console.warn(`[starters] project=${projectId}: ${words}`);
-      write(projectId, triggers)
-        .then(
-          (refused) => said(refused?.response.detail),
-          (error: unknown) =>
-            said(error instanceof Error ? error.message : String(error))
+    const said = (words: string | undefined) =>
+      words && console.warn(`[starters] project=${projectId}: ${words}`);
+    // A wait per project, ended at the next ask; out of `waiting` as it
+    // wakes, so nothing ends the write it starts.
+    const quiet = deps.lifetime.fork(
+      "project starter",
+      Effect.sleep(at - now).pipe(
+        Effect.andThen(
+          Effect.suspend(() => {
+            waiting.delete(projectId);
+            if (writing.has(projectId)) {
+              touched(projectId, trigger);
+              return Effect.void;
+            }
+            writing.add(projectId);
+            return Effect.tryPromise({
+              try: () => write(projectId, triggers),
+              catch: (error) => error,
+            }).pipe(
+              Effect.flatMap((refused) =>
+                Effect.sync(() => said(refused?.response.detail))
+              ),
+              Effect.catch((error) =>
+                Effect.sync(() =>
+                  said(error instanceof Error ? error.message : String(error))
+                )
+              ),
+              Effect.ensuring(Effect.sync(() => writing.delete(projectId)))
+            );
+          })
         )
-        .finally(() => writing.delete(projectId));
-    });
-    waiting.set(projectId, { timer, triggers });
+      )
+    );
+    waiting.set(projectId, { quiet, triggers });
   };
 
   return {

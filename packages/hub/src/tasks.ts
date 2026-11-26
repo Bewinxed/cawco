@@ -63,7 +63,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import type { AttemptResult, ResultArtifact } from "@cawco/core/deliverables";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
+import { makeJoin } from "@cawco/core/effect/join";
 import type {
   ExternalComment,
   ExternalRef,
@@ -112,12 +113,14 @@ import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { workWords } from "@cawco/core/words/work";
 import { linkOfUrl } from "@cawco/providers/registry";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { WorkItemAttempt } from "./db/project-work";
 import type { Tracker } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
 import type { TaskIndexRow } from "./db/task-index";
 import { boardTitle } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -410,6 +413,8 @@ export interface TaskStore {
   readonly doneByYou: (projectId: string) => Promise<boolean>;
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
+  /** The hub's lifetime: work a task change lets go is forked on it. */
+  readonly lifetime: HubLifetimeShape;
   /** The tasks that link an item (`task_read`'s `link`): a URL, or `#12` in the project's repository; a refusal in words. */
   readonly linked: (projectId: string, link: string) => string[] | string;
   /** A task's external items, its record first, as the hub mirrors them (db task-links.ts). */
@@ -2729,18 +2734,30 @@ export const createTasks = (store: TaskStore) => {
     }
     settling.add(key);
     const what = `task ${path} settle`;
-    detach(
-      taskTurns.run(projectId, async () => {
-        try {
-          const refused = await settleQueued(projectId, path, number);
-          if (refused) {
-            console.warn(`[${what}] failed: ${refused.response.detail}`);
-          }
-        } finally {
-          settling.delete(key);
-        }
-      }),
-      what
+    store.lifetime.fork(
+      "task settle",
+      taskTurns
+        .withLock(
+          projectId,
+          Effect.tryPromise({
+            try: () => settleQueued(projectId, path, number),
+            catch: (error) => error,
+          }).pipe(Effect.ensuring(Effect.sync(() => settling.delete(key))))
+        )
+        .pipe(
+          Effect.flatMap((refused) =>
+            Effect.sync(() => {
+              if (refused) {
+                console.warn(`[${what}] failed: ${refused.response.detail}`);
+              }
+            })
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              console.warn(`[${what}] failed: ${failureOf(error)}`)
+            )
+          )
+        )
     );
   };
 
@@ -3504,19 +3521,30 @@ export const createTasks = (store: TaskStore) => {
       console.warn(
         `[tasks] project ${projectId}'s delegate types were not filled: ${why}`
       );
-    detach(
+    store.lifetime.fork(
+      "fill a project's delegate types",
       taskTurns
-        .run(projectId, () => fillTypes(projectId))
-        .then(
-          (refused) => {
-            if (refused) {
-              unfilled(refused.response.detail);
-            }
-          },
-          (error: unknown) =>
-            unfilled(error instanceof Error ? error.message : String(error))
-        ),
-      "fill a project's delegate types"
+        .withLock(
+          projectId,
+          Effect.tryPromise({
+            try: () => fillTypes(projectId),
+            catch: (error) => error,
+          })
+        )
+        .pipe(
+          Effect.flatMap((refused) =>
+            Effect.sync(() => {
+              if (refused) {
+                unfilled(refused.response.detail);
+              }
+            })
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              unfilled(error instanceof Error ? error.message : String(error))
+            )
+          )
+        )
     );
   };
 
@@ -4356,11 +4384,49 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
+   * Comment `id` as its device chose it, written once: one already written
+   * is answered with the task as it stands (refused when it is on another
+   * task), else it is written and noted as said.
+   */
+  const commentOnce = async (
+    projectId: string,
+    ref: string,
+    text: string,
+    actor: TaskActor,
+    id: string
+  ) => {
+    const said = store.commentSaid(id);
+    if (said) {
+      const asked =
+        said.projectId === projectId ? taskRef("task", ref) : undefined;
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      if (asked === undefined || said.taskId !== asked) {
+        return problem(409, {
+          code: "task-comment-elsewhere",
+          detail: "That comment is already on another task.",
+        });
+      }
+      return await readTask(projectId, ref);
+    }
+    const task = await writeComment(projectId, ref, text, actor);
+    if (!(task instanceof ElysiaStatus)) {
+      store.noteComment({ id, projectId, taskId: task.id });
+    }
+    return task;
+  };
+
+  /**
    * Each comment being written now, by the id its device chose: the same
    * comment again meanwhile (a device sending it again after its answer was
    * lost) is answered by the first one's commit, never written twice.
    */
-  const commenting = new Map<string, ReturnType<typeof writeComment>>();
+  const commenting = makeJoin<
+    string,
+    Awaited<ReturnType<typeof commentOnce>>,
+    unknown
+  >();
 
   /** The tasks the list's filter links (`link`); undefined when it names none, refused when it does not read. */
   const linkedBy = (projectId: string, filter: TaskFilter) => {
@@ -6064,35 +6130,15 @@ export const createTasks = (store: TaskStore) => {
       if (!id) {
         return await writeComment(projectId, ref, text, actor, via);
       }
-      const first = commenting.get(id);
-      if (first !== undefined) {
-        return await first;
-      }
-      const said = store.commentSaid(id);
-      if (said) {
-        const asked =
-          said.projectId === projectId ? taskRef("task", ref) : undefined;
-        if (asked instanceof ElysiaStatus) {
-          return asked;
-        }
-        if (asked === undefined || said.taskId !== asked) {
-          return problem(409, {
-            code: "task-comment-elsewhere",
-            detail: "That comment is already on another task.",
-          });
-        }
-        return await readTask(projectId, ref);
-      }
-      const writing = writeComment(projectId, ref, text, actor).then((task) => {
-        if (!(task instanceof ElysiaStatus)) {
-          store.noteComment({ id, projectId, taskId: task.id });
-        }
-        return task;
-      });
-      commenting.set(id, writing);
-      const done = () => commenting.delete(id);
-      writing.then(done, done);
-      return await writing;
+      return await store.lifetime.run(
+        commenting.run(
+          id,
+          Effect.tryPromise({
+            try: () => commentOnce(projectId, ref, text, actor, id),
+            catch: (error) => error,
+          })
+        )
+      );
     },
 
     /**
