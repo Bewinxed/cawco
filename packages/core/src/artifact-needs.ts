@@ -1,42 +1,37 @@
 /**
  * Artifacts waiting on the person, as Needs you lists them (Projects spec
- * §5.2: "every card of kind `you`, every session that is asking, and every
- * artifact waiting on the person"). The hub derives each from the artifact's
- * doc (its `state`, `pins`, `meta.changes`) and the person's own marks there
- * (`seenAt`, the panel's look), never from a stored flag
- * (hub artifacts/needs.ts), and serves the lane with every other item:
+ * §5.2). Something reaches the person only when it holds a question for
+ * them: an artifact waits on them only while it puts a pick to them (a
+ * decision page's cards, a design graph's two or more directions) and a
+ * question of it is still open. The hub derives each from the artifact's
+ * doc (its `state`, `pins`, `meta.changes`) and the person's own marks there,
+ * never from a stored flag (hub artifacts/needs.ts), and serves the lane:
  * `GET /api/artifact-needs`, the `artifact.needs` frame, and `/api/pending`.
  *
- * One item per artifact with an open question (hub artifacts/questions.ts):
- * a page to pick on or a canvas to judge, its ask line set, its session not
- * ended, or an open pin whose agent's reply asks the person something (core
- * comments.ts `pinAsks`), its reasons strongest first: not opened, questions
- * not answered, pins asking. A question is answered by a pick, a note, a set
- * value, or a pin on it the agent replied to and resolved, Send or no Send:
- * what is written and not sent asks nothing more of the person. A reply that
- * asks nothing stays on the page. A page or preview with no ask and no pin
- * asking is never one. A revision with nothing asked, a resolved pin's
- * closing answer and a session that ended with its ask unanswered are
- * notices, never needs: a notice never outranks an ask.
+ * A question is answered by a pick, his own words, a note, or a pin on it
+ * the agent replied to and resolved, Send or no Send: what is written and
+ * not sent asks nothing more of the person. A page that asks no pick (a
+ * report, a canvas to look at) never waits on him, opened or not. An agent's
+ * reply on a pin that needs his choice is a question of its session (core
+ * asks.ts, `comment_reply`'s `question`), never the artifact's. A revision
+ * with nothing asked, a resolved pin's closing answer and a session that
+ * ended with its ask unanswered are notices, never needs.
  */
 
 import type { ArtifactKind } from "./artifact-kinds";
 import type { HarnessKind } from "./harness/kinds";
-import { unhandled } from "./unhandled";
 import { artifactWords } from "./words/artifacts";
 
-/** Why an artifact waits on the person, one reason each. */
-export type ArtifactReason =
-  /** A canvas or page to judge, shown and never opened. */
-  | { kind: "unopened" }
-  /** A decision page's questions: `answered` of `asked` (those withdrawn are not asked). */
-  | { answered: number; asked: number; kind: "answers" }
-  /**
-   * Open pins whose agent's reply asks the person something, not yet
-   * replied to or resolved (core comments.ts `pinAsks`); `pin` the first by
-   * number. It stands an artifact's row by itself.
-   */
-  | { count: number; kind: "answer"; pin: number };
+/**
+ * Why an artifact waits on the person: its questions, `answered` of
+ * `asked` (those withdrawn are not asked); a design graph's pick between
+ * its directions is one question.
+ */
+export interface ArtifactReason {
+  answered: number;
+  asked: number;
+  kind: "answers";
+}
 
 /** Where the panel opens an artifact: its first pending stop. */
 export type ArtifactStop = { card: string } | { pin: number } | { top: true };
@@ -82,7 +77,7 @@ export interface ArtifactNeed {
   pending: ArtifactReason[];
   /** The project it was made in; null outside one. */
   project: string | null;
-  /** When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest reply that asks. */
+  /** When it became pending, ms epoch on the hub's clock: its publish. */
   raisedAt: number;
   stop: ArtifactStop;
   /** What it is named by to the person (its agent's title): a row's name, a push's title. */
@@ -234,32 +229,10 @@ export const artifactStopOf = (value: string | null): ArtifactPlace => {
   return { top: true };
 };
 
-/** One reason in the row's words; `alone`, the only one, an answer says on which pin. */
-export const reasonWords = (reason: ArtifactReason, alone = false): string => {
-  switch (reason.kind) {
-    case "unopened":
-      return artifactWords.notOpened;
-    case "answers":
-      return artifactWords.answered(reason.answered, reason.asked);
-    case "answer":
-      return alone && reason.count === 1
-        ? artifactWords.newAnswerOn(reason.pin)
-        : artifactWords.newAnswers(reason.count);
-    default:
-      unhandled("reason", reason);
-  }
-};
+/** One reason in the row's words ("3 of 9 answered"). */
+export const reasonWords = (reason: ArtifactReason): string =>
+  artifactWords.answered(reason.answered, reason.asked);
 
-/** The strongest reason as a Files card's meta line says it ("3 of 9"). */
-export const reasonShort = (reason: ArtifactReason): string => {
-  switch (reason.kind) {
-    case "unopened":
-      return artifactWords.notOpenedShort;
-    case "answers":
-      return artifactWords.answeredShort(reason.answered, reason.asked);
-    case "answer":
-      return reasonWords(reason);
-    default:
-      unhandled("reason", reason);
-  }
-};
+/** The reason as a Files card's meta line says it ("3 of 9"). */
+export const reasonShort = (reason: ArtifactReason): string =>
+  artifactWords.answeredShort(reason.answered, reason.asked);

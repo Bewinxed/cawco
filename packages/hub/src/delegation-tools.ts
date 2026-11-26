@@ -44,6 +44,7 @@ import {
   recordPick,
   settle,
 } from "./artifacts/tools";
+import { namesAsk } from "./ask-closes";
 import type {
   HandoffActions,
   HandoffDeps,
@@ -1080,7 +1081,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "answer_delegate",
-      'Answers an ask your delegate routed to you. Use it when a "[delegate-ask ...]" message reaches you.',
+      'Answers or forwards an ask your delegate routed to you. Use it when a "[delegate-ask ...]" message reaches you.',
       {
         target: z.string().describe("Its handle, directory or id."),
         requestId: z.string().describe("The message's request=."),
@@ -1096,10 +1097,16 @@ export function handoffTools(view: ToolView) {
           .describe(
             "true refuses the ask; with neither deny nor answers, it is allowed as asked."
           ),
+        forward: z
+          .boolean()
+          .optional()
+          .describe("true: only the person can answer; it goes to them."),
       },
-      ({ target, requestId, answers, deny }, _format, bound) =>
+      ({ target, requestId, answers, deny, forward }, _format, bound) =>
         Promise.resolve(
-          bound.actions.answerDelegate(target, requestId, answers, deny)
+          forward
+            ? bound.actions.forwardAsked(requestId)
+            : bound.actions.answerDelegate(target, requestId, answers, deny)
         ),
       sentence
     ),
@@ -1123,7 +1130,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "open_items",
-      "Your open items: your plan, task to-dos, filed tasks, inbox notes, asks, and every question your tree put to the person, open or answered, yours first. Use it first after a compaction, and to see which questions were answered.",
+      "Your open items: your plan, task to-dos, filed tasks, inbox notes, your asks, every question your tree put to the person, and your project's open questions to them. Use it first after a compaction, and to see which questions were answered.",
       {
         cursor: z
           .string()
@@ -1278,19 +1285,47 @@ export function handoffTools(view: ToolView) {
       recordPick.name,
       recordPick.description,
       recordPick.input,
-      ({ card, ...picked }, _format, bound) => {
+      async ({ card, answers, options, ...picked }, _format, bound) => {
+        if (namesAsk(card)) {
+          return bound.actions.recordAsked(card, {
+            ...picked,
+            ...(answers ? { answers } : {}),
+            ...(options ? { options } : {}),
+          });
+        }
+        if (!options) {
+          throw new Error(
+            `A card's pick names its option ids: record_pick { card: "${card}", options: ["<option id>"], quote, message or pin }.`
+          );
+        }
         const [page, id] = pageCard(card);
-        return bound.actions.artifacts.cite(page, { card: id, ...picked });
+        const cited = await bound.actions.artifacts.cite(page, {
+          card: id,
+          options,
+          ...picked,
+        });
+        return cited instanceof ElysiaStatus ? cited : citedWords(cited);
       },
-      citedWords
+      sentence
     ),
     handoffTool(
       questionClose.name,
       questionClose.description,
       questionClose.input,
-      (closing, _format, bound) =>
-        bound.actions.artifacts.closeQuestion(closing),
-      questionClosedWords
+      async ({ evidence, ...closing }, _format, bound) => {
+        if (namesAsk(closing.question)) {
+          return await bound.actions.closeAsked(closing.question, {
+            as: closing.as,
+            why: closing.why,
+            ...(evidence ? { evidence } : {}),
+          });
+        }
+        const closed = await bound.actions.artifacts.closeQuestion(closing);
+        return closed instanceof ElysiaStatus
+          ? closed
+          : questionClosedWords(closed);
+      },
+      sentence
     ),
     handoffTool(
       artifactRead.name,

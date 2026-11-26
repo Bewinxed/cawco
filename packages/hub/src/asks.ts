@@ -60,9 +60,11 @@ import {
   type AskedQuestion,
   type AskRecord,
   type AskResult,
+  type AskWithdrawnBy,
   askAnsweredText,
   askLink,
   askOutcome,
+  askOvertakenText,
   FULL_SEND_ANSWER,
   HUB_RESTARTED,
   isAdminWrite,
@@ -71,7 +73,6 @@ import {
   sameCall,
   UserQuestionShape,
 } from "@cawco/core/asks";
-import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
@@ -88,6 +89,7 @@ import {
 } from "@cawco/core/words/ask-lines";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
+import { QUESTION_FIELDS, questionRefusal } from "./ask-fields";
 import type { DbShape } from "./db";
 import { tool as mcpTool, sentence } from "./mcp-tool";
 import { uuidOf } from "./named-uuid";
@@ -105,13 +107,7 @@ export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
 /** The words the model reads for `ask`. */
 const ASK_DESCRIPTION =
   "Questions put to the person, whose answer arrives later as a message while you carry on. " +
-  "Use it for a go-ahead or a fact only the person knows that your work turns on; a design to judge and a choice between options open in their panel, as the `show` skill says.";
-
-/** The most questions one ask carries, answered one at a time in a row. */
-const QUESTIONS_MAX = 4;
-
-/** The longest `waiting` or `meanwhile` line the card shows. */
-const STANCE_MAX = 200;
+  "Use it when your work turns on a go-ahead or a fact only the person knows; a design to judge and a choice between options open in their panel, as the `show` skill says.";
 
 /** An approve ask's own: the CawCo call it runs on yes. */
 type Approve = Extract<AskRecord["asked"], { kind: "approve" }>;
@@ -176,6 +172,11 @@ const askRefusal = (
 export interface AsksDeps {
   /** Whether the session has read the send `uuid` (its record `read`). */
   readonly answerRead: (uuid: string) => boolean;
+  /**
+   * What a question of `asker`'s is stamped with as it asks: the task of its
+   * own attempt, and the record its plan's step at work now names.
+   */
+  readonly askedAt: (asker: InstanceRow) => { step?: string; task?: string };
   readonly asks: DbShape["asks"];
   /**
    * A call's input with the caller's place bound in, as it is asked
@@ -197,6 +198,14 @@ export interface AsksDeps {
   readonly ended: (instanceId: string) => boolean;
   /** The session that asked, as the hub holds it now. */
   readonly instance: (instanceId: string) => InstanceRow | undefined;
+  /** Says `text` to a session as the hub's quiet note: its next turn reads it, and it starts none. */
+  readonly note: (instanceId: string, text: string) => void;
+  /**
+   * The parent a delegate's question goes to (ask-routing.ts
+   * `delegateAskParent`): live, or asleep with a conversation to wake from;
+   * undefined for a session with none, whose questions are the person's.
+   */
+  readonly parentFor: (asker: InstanceRow) => InstanceRow | undefined;
   /**
    * Puts an ask on every screen and push, and tells a delegate's parent
    * (server.ts `parkForPerson`, delegate-waits.ts): a question it may
@@ -254,6 +263,9 @@ export interface AsksDeps {
   ) => void;
 }
 
+/** What a pin question's asker reads when the person resolved its pin without a reply. */
+const PIN_RESOLVED = "He resolved the pin without a reply.";
+
 /** Why a session's ask goes unanswered when it ends. */
 const ENDED_WHY = "its session ended before anyone answered";
 
@@ -292,6 +304,39 @@ const keptAsk = (
   return questions.success
     ? { kind: "question", questions: questions.data, blocks: true }
     : undefined;
+};
+
+/** An ask's request id, as tools name one. */
+export const ASK_ID = /^ask_[0-9a-f-]{36}$/u;
+
+/** Words as two questions compare: one form of each character, one space, one case. */
+const plainWords = (text: string): string =>
+  text.normalize("NFC").replace(/\s+/gu, " ").trim().toLowerCase();
+
+/**
+ * Whether `asked` repeats `open`, an open question of the same asker: it
+ * stands on the same pin, asks a question in the same words, or blocks the
+ * same work (the same `waiting`). The newer replaces it.
+ */
+const repeats = (open: AskRecord, asked: AskedQuestion): boolean => {
+  const was = open.asked;
+  if (was.kind !== "question") {
+    return false;
+  }
+  if (was.pin && asked.pin) {
+    return was.pin.id === asked.pin.id;
+  }
+  if (
+    was.blocks &&
+    asked.blocks &&
+    was.waiting &&
+    asked.waiting &&
+    plainWords(was.waiting) === plainWords(asked.waiting)
+  ) {
+    return true;
+  }
+  const words = new Set(was.questions.map((one) => plainWords(one.question)));
+  return asked.questions.some((one) => words.has(plainWords(one.question)));
 };
 
 export const createAsks = (deps: AsksDeps) => {
@@ -424,43 +469,78 @@ export const createAsks = (deps: AsksDeps) => {
     return record(actor, name, input, source, toolUseId);
   };
 
+  /** Throws, in a sentence, when `replaces` names no open question of `actor`'s. */
+  const replaceable = (actor: InstanceRow, replaces: string | undefined) => {
+    if (replaces === undefined) {
+      return;
+    }
+    const replacing = deps.asks.get(replaces);
+    if (!(replacing?.instanceId === actor.id && replacing.state === "open")) {
+      throw new Error(
+        `${replaces} is no open question of yours, so nothing was asked. Your open questions are listed in open_items.`
+      );
+    }
+  };
+
   /**
-   * Records `actor`'s question for the person, parks it on every screen and
-   * push (which tells a delegate's parent), and answers the words its
-   * session reads. Refuses one identical to a question of the session's still open.
+   * Records `actor`'s question, stamped with what it is about (its task, its
+   * plan's step), and parks it: on every screen and push, or, from a
+   * delegate whose parent takes its asks ({@link AsksDeps.parentFor}), with
+   * that parent alone, which answers it or forwards it to the person
+   * ({@link forward}). An open question of the same asker that it repeats
+   * ({@link repeats}) is withdrawn, replaced by it. Answers its id and the
+   * words its session reads; throws, in a sentence, when it can't be asked.
    */
   const question = (
     actor: InstanceRow,
     asked: AskedQuestion,
-    toolUseId?: string
-  ): string => {
-    const same = canonicalJson(asked.questions);
-    const open = deps.asks
-      .openOf(actor.id)
-      .find(
-        (one) =>
-          one.asked.kind === "question" &&
-          canonicalJson(one.asked.questions) === same
-      );
-    if (open) {
-      throw new Error(
-        `You already asked this as ${askLink(open)}; its answer comes as a message.`
-      );
+    toolUseId?: string,
+    replaces?: string
+  ): { id: string; words: string } => {
+    const refusal = questionRefusal(asked);
+    if (refusal) {
+      throw new Error(refusal);
     }
+    replaceable(actor, replaces);
+    const at = deps.askedAt(actor);
+    const stamped: AskedQuestion = {
+      ...asked,
+      ...(asked.task === undefined && at.task ? { task: at.task } : {}),
+      ...(at.step ? { step: at.step } : {}),
+    };
+    const parent = deps.parentFor(actor);
     const ask: AskRecord = {
       id: newAskId(),
       instanceId: actor.id,
       state: "open",
       raisedAt: Date.now(),
-      asked,
+      asked: stamped,
+      ...(parent ? { routedTo: "parent" as const } : {}),
       ...(toolUseId ? { toolUseId } : {}),
     };
+    const replaced = deps.asks
+      .openOf(actor.id)
+      .filter((one) => one.id === replaces || repeats(one, stamped));
     deps.asks.add(ask);
+    for (const old of replaced) {
+      withdraw(old, `replaced by its asker's newer question ${ask.id}`, {
+        by: "asker",
+        session: actor.id,
+      });
+    }
     deps.park(askEnvelope(ask, actor));
+    const replacedIds = replaced.map((one) => one.id);
     console.log(
-      `[asks] ${actor.id} asks the person a question (${ask.id}, ${asked.blocks ? "blocks work" : "work goes on"})`
+      `[asks] ${actor.id} asks ${parent?.id ?? "the person"} a question (${ask.id}); it replaces ${replacedIds.join(", ") || "none"}`
     );
-    return askQuestionWords(askLink(ask), asked);
+    return {
+      id: ask.id,
+      words: askQuestionWords(askLink(ask), stamped, {
+        id: ask.id,
+        replaced: replacedIds,
+        routed: parent !== undefined,
+      }),
+    };
   };
 
   /**
@@ -481,10 +561,10 @@ export const createAsks = (deps: AsksDeps) => {
         const ran = await deps.run(tool, bound, asker);
         said =
           typeof ran === "string"
-            ? `Full Send approved it again for what it holds now and the hub ran it, so don't call ${tool} again for it. It said:\n\n${ran}`
+            ? `Full Send approved it again for what it holds now and the hub ran it; it is done. It said:\n\n${ran}`
             : `It can't be asked again: ${ran.response.detail}`;
       } else {
-        said = `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
+        said = `CawCo has asked the person again for what it holds now; the hub runs it once he approves. ${recorded}`;
       }
     } catch (error) {
       said = `It can't be asked again: ${error instanceof Error ? error.message : String(error)}`;
@@ -536,12 +616,38 @@ export const createAsks = (deps: AsksDeps) => {
     return true;
   };
 
-  /** An open ask withdrawn by the hub, and taken off every screen; the session is not told. */
-  const withdraw = (ask: AskRecord, why: string): void => {
-    if (deps.asks.withdraw(ask.id, Date.now(), why)) {
-      console.log(`[asks] ${named(ask)} (${ask.id}) withdrawn: ${why}`);
-      deps.settle(ask.id, { cut: why });
+  /**
+   * An open ask withdrawn, by the hub unless `by` names its asker or
+   * another session of its project, and taken off every screen. False when
+   * it was not open.
+   */
+  const withdraw = (
+    ask: AskRecord,
+    why: string,
+    by?: { by: AskWithdrawnBy; session?: string }
+  ): boolean => {
+    if (!deps.asks.withdraw(ask.id, Date.now(), why, by)) {
+      return false;
     }
+    console.log(
+      `[asks] ${named(ask)} (${ask.id}) withdrawn by ${by?.session ?? "the hub"}: ${why}`
+    );
+    deps.settle(ask.id, { cut: why });
+    return true;
+  };
+
+  /** Whether `ask` is a question `asker`'s session may close: one it asked, open. */
+  const openQuestion = (id: string): AskRecord & { asked: AskedQuestion } => {
+    const ask = deps.asks.get(id);
+    if (ask?.asked.kind !== "question") {
+      throw new Error(
+        `${id} is no question to the person; questions are named by their request id (ask_…) in open_items.`
+      );
+    }
+    if (ask.state !== "open") {
+      throw new Error(askClosedWords(ask));
+    }
+    return { ...ask, asked: ask.asked };
   };
 
   return {
@@ -748,6 +854,111 @@ export const createAsks = (deps: AsksDeps) => {
       }
     },
 
+    /**
+     * The question an agent's reply on a pin carries (`comment_reply`'s
+     * `question`), asked as `actor`'s ({@link question}): its id, and the
+     * words its session reads.
+     */
+    pinQuestion(
+      actor: InstanceRow,
+      asked: AskedQuestion
+    ): { id: string; words: string } {
+      return question(actor, asked);
+    },
+
+    /**
+     * The pin question `id` stands on moved: the person's reply there
+     * answers it in his words, his resolve dismisses it, and its asker's
+     * resolve withdraws it. Nothing for one no longer open.
+     */
+    pinAnswered(
+      id: string,
+      by: { reply: string } | { resolved: "person" | "agent" }
+    ): void {
+      const ask = deps.asks.get(id);
+      if (ask?.state !== "open" || ask.asked.kind !== "question") {
+        return;
+      }
+      if ("reply" in by) {
+        const answers = Object.fromEntries(
+          ask.asked.questions.map((one) => [one.question, by.reply])
+        );
+        take(
+          id,
+          { behavior: "allow", updatedInput: { answers } },
+          { via: "page" }
+        );
+      } else if (by.resolved === "person") {
+        take(id, { behavior: "deny", message: PIN_RESOLVED }, { via: "page" });
+      } else {
+        withdraw(ask, "its asker resolved the pin it stood on", {
+          by: "asker",
+          session: ask.instanceId,
+        });
+      }
+    },
+
+    /** `actor` takes back its own open question `id`, saying why: off every screen, waiting on no one. */
+    withdrawOwn(actor: InstanceRow, id: string, why: string): string {
+      const ask = openQuestion(id);
+      if (ask.instanceId !== actor.id) {
+        throw new Error(
+          `${id} is another session's question. To close it as overtaken, give the evidence: the task or to-do it held closed or ticked, or a newer question on the same thing.`
+        );
+      }
+      withdraw(ask, why, { by: "asker", session: actor.id });
+      return `Withdrew ${askLink(ask)}: it no longer waits on anyone.`;
+    },
+
+    /**
+     * `closer`, a session of the asker's project, closes question `id` as
+     * overtaken, the evidence `why` checked by its caller (ask-closes.ts):
+     * off every screen, and its asker told in a quiet note its next turn
+     * reads.
+     */
+    overtaken(
+      closer: InstanceRow,
+      closerName: string,
+      id: string,
+      why: string
+    ) {
+      const ask = openQuestion(id);
+      withdraw(ask, `overtaken: ${why}`, { by: "session", session: closer.id });
+      if (ask.instanceId !== closer.id) {
+        deps.note(ask.instanceId, askOvertakenText(ask, closerName, why));
+      }
+      return `Closed ${askLink(ask)} as overtaken: it no longer waits on the person, and its asker reads why at its next turn.`;
+    },
+
+    /**
+     * The person's words elsewhere, quoted by `recorder` (`name`) and checked
+     * by its caller (ask-closes.ts), answer question `id`: `answers` keyed by
+     * each question's text, an option's label or his words. It leaves every
+     * screen, and its asker hears his answer with his quote, as an answer on
+     * its card reaches it.
+     */
+    answerInWords(
+      id: string,
+      answers: Record<string, string>,
+      from: { name: string; quote: string }
+    ): string {
+      const ask = openQuestion(id);
+      const asked = new Set(ask.asked.questions.map((one) => one.question));
+      const stray = Object.keys(answers).filter((key) => !asked.has(key));
+      const missing = [...asked].filter((key) => !(key in answers));
+      if (stray.length > 0 || missing.length > 0) {
+        throw new Error(
+          `Answers are keyed by each question's exact text: ${[...asked].map((one) => `"${one}"`).join(", ")}${stray.length > 0 ? `; not a question of it: ${stray.map((one) => `"${one}"`).join(", ")}` : ""}. Nothing was recorded.`
+        );
+      }
+      take(
+        id,
+        { behavior: "allow", updatedInput: { answers } },
+        { via: "words", name: from.name, quote: from.quote }
+      );
+      return `Recorded his answer to ${askLink(ask)} from his words; its asker hears it as his answer, with your quote.`;
+    },
+
     /** `ask`, bound to the calling session (none for a listing). */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
       return [
@@ -755,50 +966,16 @@ export const createAsks = (deps: AsksDeps) => {
           "ask",
           ASK_DESCRIPTION,
           {
-            questions: z
-              .array(UserQuestionShape)
-              .min(1)
-              .max(QUESTIONS_MAX)
-              .describe(
-                "Related questions asked as one, answered one at a time in a row: each a question, a short header, and its options (label, description); multiSelect when several may be picked."
-              ),
-            blocks: z
-              .boolean()
-              .describe(
-                "true when going the wrong way would waste work, so it waits on the answer; false when you go ahead meanwhile, saying with what in `meanwhile`."
-              ),
-            waiting: z
+            ...QUESTION_FIELDS,
+            replaces: z
               .string()
-              .trim()
-              .min(1)
-              .max(STANCE_MAX)
+              .regex(ASK_ID)
               .optional()
-              .describe(
-                'With blocks: what is paused until they answer, e.g. "Deleting the /v1 routes and the API docs".'
-              ),
-            meanwhile: z
-              .string()
-              .trim()
-              .min(1)
-              .max(STANCE_MAX)
-              .optional()
-              .describe(
-                'Without blocks: what you go ahead with meanwhile, your assumption, e.g. "Going ahead with 90 days, then 410".'
-              ),
+              .describe("An open question of yours (ask_…) this one replaces."),
           },
-          ({ questions, blocks, waiting, meanwhile }) => {
+          ({ questions, blocks, waiting, meanwhile, task, replaces }) => {
             if (!actor) {
               throw new Error("Discovery cannot execute tools");
-            }
-            if (blocks && !waiting) {
-              throw new Error(
-                "A question that blocks work names what is paused in `waiting`; nothing was asked."
-              );
-            }
-            if (!(blocks || meanwhile)) {
-              throw new Error(
-                "A question work goes on past says what you go ahead with in `meanwhile`; nothing was asked."
-              );
             }
             return Promise.resolve(
               question(
@@ -808,9 +985,11 @@ export const createAsks = (deps: AsksDeps) => {
                   questions,
                   blocks,
                   ...(blocks ? { waiting } : { meanwhile }),
+                  ...(task ? { task } : {}),
                 },
-                toolUseId
-              )
+                toolUseId,
+                replaces
+              ).words
             );
           },
           sentence

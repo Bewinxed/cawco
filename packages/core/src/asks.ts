@@ -119,15 +119,47 @@ const QUESTION_ASKED = z.object({
   blocks: z.boolean(),
   waiting: z.string().optional(),
   meanwhile: z.string().optional(),
+  /**
+   * The task it is about, by handle (`tsk-12`), in its asker's project: the
+   * asker's own attempt's task unless it named another. A task waiting on
+   * the person and every open question about it are one row of Needs you
+   * (hub needs-rows.ts).
+   */
+  task: z.string().optional(),
+  /**
+   * The pin it stands on: an agent's reply in a pin's thread that needs the
+   * person's choice (`comment_reply`'s `question`). His reply in that
+   * thread answers it in his words; his resolve dismisses it.
+   */
+  pin: z
+    .object({ artifact: z.string(), id: z.string(), number: z.number() })
+    .optional(),
+  /** Its asker's plan step it was asked at, by the record the step names. */
+  step: z.string().optional(),
 });
 const QUESTION = QUESTION_ASKED.extend({ kind: z.literal("question") });
 export type AskedQuestion = z.infer<typeof QUESTION>;
 
+/** What a question is asked with: `ask`'s input, or `comment_reply`'s `question`. */
+export type QuestionInput = Pick<
+  AskedQuestion,
+  "blocks" | "meanwhile" | "questions" | "task" | "waiting"
+>;
+
 const ANSWER_BY = z.object({
   behavior: z.enum(["allow", "deny"]).optional(),
   name: z.string().optional(),
-  via: z.enum(["page", "app", "session", "harness", "fullSend"]),
+  quote: z.string().optional(),
+  via: z.enum(["page", "app", "session", "harness", "fullSend", "words"]),
 }) satisfies z.ZodType<AskAnswer>;
+
+/**
+ * Who withdrew an ask: the hub (its session ended, a prompt asked again),
+ * its asker (taken back, or replaced by its newer ask), or another session
+ * of its project, with evidence that the work it held was overtaken.
+ */
+const WITHDRAWN_BY = z.enum(["hub", "asker", "session"]);
+export type AskWithdrawnBy = z.infer<typeof WITHDRAWN_BY>;
 
 const RESULT = z.discriminatedUnion("behavior", [
   /** `answers`: a question's, keyed by the question's text. */
@@ -172,7 +204,13 @@ export const ASK_RECORD = z.object({
     })
     .optional(),
   withdrawn: z
-    .object({ at: z.number(), by: z.literal("hub"), why: z.string() })
+    .object({
+      at: z.number(),
+      by: WITHDRAWN_BY,
+      /** The session that closed it, when another than the hub. */
+      session: z.string().optional(),
+      why: z.string(),
+    })
     .optional(),
   /** An approved permit's grant, spent: the hub allowed the same call when the session's harness asked it again. */
   used: z.object({ at: z.number() }).optional(),
@@ -213,8 +251,14 @@ export const ASK_KEPT = z.object({
   carried: z
     .object({ said: z.string().optional(), failed: z.string().optional() })
     .optional(),
-  /** Why the hub withdrew it; when is the row's. */
-  withdrawn: z.object({ why: z.string() }).optional(),
+  /** Who withdrew it (absent: the hub) and why; when is the row's. */
+  withdrawn: z
+    .object({
+      by: WITHDRAWN_BY.optional(),
+      session: z.string().optional(),
+      why: z.string(),
+    })
+    .optional(),
 });
 export type AskKept = z.infer<typeof ASK_KEPT>;
 
@@ -350,7 +394,7 @@ export const askAnsweredText = (ask: AskRecord): string => {
         ask.answer?.result.behavior === "deny"
           ? ask.answer.result.message.trim()
           : "";
-      return `${tag}The person declined ${tool}${reason ? `: ${reason}` : ""}. Nothing ran; don't do it another way.`;
+      return `${tag}The person declined ${tool}${reason ? `: ${reason}` : ""}. Nothing ran, and that work stays undone.`;
     }
     case "granted":
     case "lapsed":
@@ -371,7 +415,7 @@ const permitAnsweredText = (ask: AskRecord, asked: AskedPermit): string => {
   const result = ask.answer?.result;
   if (result?.behavior !== "allow") {
     const reason = result?.message.trim() ?? "";
-    return `${answeredBy(ask)} declined the ${tool} call your harness asked to make before your last process ended${reason ? `: ${reason}` : ""}. Don't make it, and don't do it another way.`;
+    return `${answeredBy(ask)} declined the ${tool} call your harness asked to make before your last process ended${reason ? `: ${reason}` : ""}. Leave that call, and the work it was for, undone.`;
   }
   const input = JSON.stringify(asked.input, null, 2);
   const shown =
@@ -407,13 +451,30 @@ const questionAnsweredText = (ask: AskRecord, asked: AskedQuestion): string => {
   const link = askLink(ask);
   const result = ask.answer?.result;
   if (result?.behavior !== "allow") {
-    return `${answeredBy(ask)} dismissed ${link} without answering:\n${questionLines(asked.questions)}\nDon't ask it again in the same words; decide what you can and say what you assumed.`;
+    return `${answeredBy(ask)} dismissed ${link} without answering:\n${questionLines(asked.questions)}\nDecide what you can and say what you assumed.`;
   }
   const differs = asked.blocks
     ? ""
     : "\nIf this differs from what you went ahead with, change course.";
+  const by = ask.answer?.by;
+  if (by?.via === "words") {
+    const recorder = by.name ? `"${by.name}"` : "a session";
+    return `The person answered ${link} in his own words elsewhere, recorded by ${recorder}: “${by.quote ?? ""}”\n${questionLines(asked.questions, result.answers ?? {})}${differs}`;
+  }
   return `${answeredBy(ask)} answered ${link}:\n${questionLines(asked.questions, result.answers ?? {})}${differs}`;
 };
+
+/**
+ * What an asker is told of its question closed by another session of its
+ * project, the work it held overtaken (hub asks.ts `close`): a note its
+ * next turn reads, never a turn of its own.
+ */
+export const askOvertakenText = (
+  ask: Pick<AskRecord, "asked" | "instanceId">,
+  closer: string,
+  why: string
+): string =>
+  `${closer} closed your question ${askLink(ask)}: the work it held was overtaken (${why}). It no longer waits on the person. If it still needs them, ask again with what changed.`;
 
 /** Every way an ask ends ({@link AskOutcome}). */
 const OUTCOMES = everyOf<AskOutcome>()([
@@ -485,13 +546,21 @@ export interface AskAnswer {
    */
   name?: string;
   /**
+   * His words that answered it, quoted as he wrote them, when a session
+   * recorded his answer from a message or a pin of his (`via` words); `name`
+   * is the session that recorded it.
+   */
+  quote?: string;
+  /**
    * Where it was answered: a dashboard page; the app (a client that is no
    * page: the iOS and Mac app); another session; the harness itself, in
-   * its own interface; or Full Send, the mode the person put its session
-   * in, which approves an approval the session had open as it entered it
-   * (hub asks.ts `fullSendFiled`).
+   * its own interface; Full Send, the mode the person put its session in,
+   * which approves an approval the session had open as it entered it (hub
+   * asks.ts `fullSendFiled`); or his own words elsewhere (a message to any
+   * session, a pin), quoted by the session that recorded them and checked
+   * by the hub (`record_pick`).
    */
-  via: "page" | "app" | "session" | "harness" | "fullSend";
+  via: "page" | "app" | "session" | "harness" | "fullSend" | "words";
 }
 
 /**

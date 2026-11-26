@@ -15,9 +15,10 @@ import type {
   AskKind,
   AskRecord,
   AskResult,
+  AskWithdrawnBy,
 } from "@cawco/core/asks";
 import type { ParkedAsk } from "@cawco/core/frames";
-import { and, asc, eq, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, notInArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
 import { askPushes, asks, parkedAsks } from "./schema";
@@ -44,6 +45,8 @@ export interface AsksDb {
     id: string,
     answer: { at: number; by: AskAnswer; result: AskResult }
   ) => AskAnswered | undefined;
+  /** `instanceId`'s answered questions, the newest answer first, `count` at most. */
+  readonly answeredOf: (instanceId: string, count: number) => AskRecord[];
   /** How the approved call ended: what it said, or why it failed. */
   readonly carried: (
     id: string,
@@ -80,11 +83,15 @@ export interface AsksDb {
   readonly openUnread: () => UnreadAsk[];
   /** An ask routed to its session's parent made the person's (`routedTo` gone). */
   readonly unroute: (id: string) => void;
-  /** An open ask withdrawn by the hub; undefined when it was not open. */
+  /**
+   * An open ask withdrawn, by the hub unless `by` names its asker or
+   * another session of its project; undefined when it was not open.
+   */
   readonly withdraw: (
     id: string,
     at: number,
-    why: string
+    why: string,
+    by?: { by: AskWithdrawnBy; session?: string }
   ) => AskRecord | undefined;
   /** An open row that does not read as an ask withdrawn by the hub, its state and time alone; false when it was not open. */
   readonly withdrawUnread: (id: string, at: number) => boolean;
@@ -168,9 +175,17 @@ const withdrawnOf = (
   if (row.withdrawnAt === null) {
     return kept === undefined ? { value: undefined } : undefined;
   }
-  return kept === undefined
-    ? undefined
-    : { value: { at: row.withdrawnAt, by: "hub", why: kept.why } };
+  if (kept === undefined) {
+    return;
+  }
+  return {
+    value: {
+      at: row.withdrawnAt,
+      by: kept.by ?? "hub",
+      ...(kept.session === undefined ? {} : { session: kept.session }),
+      why: kept.why,
+    },
+  };
 };
 
 /**
@@ -247,7 +262,17 @@ const keptOf = (ask: AskRecord): AskKept => {
           },
         }
       : {}),
-    ...(ask.withdrawn ? { withdrawn: { why: ask.withdrawn.why } } : {}),
+    ...(ask.withdrawn
+      ? {
+          withdrawn: {
+            why: ask.withdrawn.why,
+            ...(ask.withdrawn.by === "hub" ? {} : { by: ask.withdrawn.by }),
+            ...(ask.withdrawn.session === undefined
+              ? {}
+              : { session: ask.withdrawn.session }),
+          },
+        }
+      : {}),
   };
 };
 
@@ -395,13 +420,29 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
         put(unrouted);
       }
     },
+    answeredOf: (instanceId, count) =>
+      readable(
+        db
+          .select()
+          .from(asks)
+          .where(
+            and(
+              eq(asks.instanceId, instanceId),
+              eq(asks.state, "answered"),
+              eq(asks.kind, "question")
+            )
+          )
+          .orderBy(desc(asks.answeredAt))
+          .limit(count)
+          .all()
+      ),
     open: () => readable(openRows()),
     openOf: (instanceId) => readable(openRows(instanceId)),
     openUnread: () =>
       openRows().flatMap((row) =>
         recordOf(row) ? [] : [{ id: row.id, instanceId: row.instanceId }]
       ),
-    withdraw: (id, at, why) =>
+    withdraw: (id, at, why, by) =>
       db.transaction(() => {
         const row = read(id);
         const ask = row && recordOf(row);
@@ -411,7 +452,12 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
         return put({
           ...ask,
           state: "withdrawn",
-          withdrawn: { at, by: "hub", why },
+          withdrawn: {
+            at,
+            by: by?.by ?? "hub",
+            ...(by?.session === undefined ? {} : { session: by.session }),
+            why,
+          },
         });
       }),
     withdrawUnread: (id, at) =>

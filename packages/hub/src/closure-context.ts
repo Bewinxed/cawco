@@ -193,9 +193,11 @@ import type { CommandOptions, MachinePause } from "./machine-pause";
 import type { createMemory } from "./memory";
 import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
+import type { NeedsRows } from "./needs-rows";
 import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
 import type { OffersWaiting } from "./offers-waiting";
+import type { OpenAsks } from "./open-asks";
 import type { createOpenItems } from "./open-items";
 import type { createPasskeyRelay } from "./passkey-relay";
 import type { AnswerFrom, PendingShape } from "./pending";
@@ -568,6 +570,8 @@ export interface ClosureContext {
     dashboard: ClientSocket,
     remember?: boolean
   ) => boolean;
+  /** A parent's forward of the ask its delegate routed to it, to the person (ask-routing.ts `forward`). */
+  forwardRouted: (parent: InstanceRow, requestId: string) => string;
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
   handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
@@ -884,6 +888,8 @@ export interface ClosureContext {
   nameFromFirstTurn: (instanceId: string, raw: string) => string;
   nameFromLiveTurn: (instanceId: string, message: unknown) => void;
   nameStoredSessions: (machineId: string) => Promise<void>;
+  /** Needs you's rows, one per piece of stopped work (needs-rows.ts). */
+  needsRows: NeedsRows;
   /** project-joining.ts `newProject`, typed from project-making.ts as `createOrJoinProject` is: `POST /api/projects` and `project_create`. */
   newProject: NewProject;
   noteActivity: (instanceId: string) => void;
@@ -924,6 +930,8 @@ export interface ClosureContext {
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
   onlineMachines: () => string[];
+  /** A session's project's open questions to the person, said with each turn (open-asks.ts). */
+  openAsks: OpenAsks;
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;

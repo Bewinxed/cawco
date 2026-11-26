@@ -1369,7 +1369,7 @@ const CommentAttachmentShape = z.object({
 export type CommentAttachmentOutput = z.output<typeof CommentAttachmentShape>;
 
 const ThreadEntryShape = z.object({
-  asks: z.literal(true).optional(),
+  ask: z.string().optional(),
   at: z.string(),
   attachments: z.array(CommentAttachmentShape).optional(),
   by: z.enum(["person", "agent"]),

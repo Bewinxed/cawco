@@ -20,6 +20,12 @@ import { ElysiaStatus, problem } from "elysia";
 import type { Static } from "typebox";
 import { artifactTools } from "./artifacts/calls";
 import type { Artifacts } from "./artifacts/service";
+import {
+  type CloseAsked,
+  createAskCloses,
+  type RecordAsked,
+} from "./ask-closes";
+import type { Asks } from "./asks";
 import type { DbShape } from "./db";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
@@ -43,6 +49,7 @@ import {
   type ProjectDelegateTypes,
 } from "./project-delegate-types";
 import type { continueBody } from "./routes/session-bodies";
+import type { Tasks } from "./tasks";
 import { unreachable } from "./unreachable";
 import { titleProblem } from "./work-items";
 import type { Unlanded } from "./workspaces";
@@ -80,6 +87,10 @@ export interface SessionCallsDeps {
     lastTurnAt: string | null;
     activityBound: boolean;
   };
+  /** A parent's forward of the ask its delegate routed to it, to the person (ask-routing.ts `forward`). */
+  readonly forwardRouted: (parent: InstanceRow, requestId: string) => string;
+  /** The asks the hub owns (asks.ts). */
+  readonly hubAsks: Asks;
   readonly inFlightFor: (
     sourceId: string
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
@@ -98,6 +109,8 @@ export interface SessionCallsDeps {
   ) => Promise<
     { tokens: number; readAt: number } | { reason: string } | Unanswered
   >;
+  /** A session as its notes name it. */
+  readonly sessionName: (row: InstanceRow) => string;
   readonly sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
   readonly settledContinuation: (
     id: string
@@ -108,6 +121,8 @@ export interface SessionCallsDeps {
     askedBy: ContinuationAsker,
     inFlight?: WorkInFlight | undefined
   ) => ContinuationRow;
+  /** The project's tasks (tasks.ts), as an overtaken question's evidence reads them. */
+  readonly tasks: Pick<Tasks, "get">;
   /** The write door (writes.ts): a session's `forge_post` goes through it. */
   readonly writes: Writes;
 }
@@ -235,6 +250,54 @@ export const openItemsCalls = ({
     return text instanceof ElysiaStatus ? text : { text };
   },
 });
+
+/**
+ * A question to the person settled by a session of its project
+ * (ask-closes.ts): his words elsewhere recorded, its asker's withdrawal, or
+ * another session's close with evidence that its work moved on; and a
+ * parent's forward of its delegate's question to the person.
+ */
+const askCalls = ({
+  db,
+  forwardRouted,
+  hubAsks,
+  sessionName,
+  tasks,
+}: Pick<
+  SessionCallsDeps,
+  "db" | "forwardRouted" | "hubAsks" | "sessionName" | "tasks"
+>) => {
+  const closes = createAskCloses({
+    asks: hubAsks,
+    db,
+    name: sessionName,
+    task: async (projectId, id) => {
+      const task = await tasks.get(projectId, id);
+      return task instanceof ElysiaStatus
+        ? undefined
+        : { kind: task.kind, todos: task.todos };
+    },
+  });
+  /** The session `id` names, as the hub holds it; throws when it holds none. */
+  const actorOf = (id: string): InstanceRow => {
+    const [actor] = db.getInstancesByIds([db.instanceIdOf(id)]);
+    if (!actor) {
+      throw new Error(`No session ${id} on this hub.`);
+    }
+    return actor;
+  };
+  return {
+    /** `record_pick` naming a question to the person (ask-closes.ts `record`). */
+    recordAsked: (id: string, ask: string, asked: RecordAsked): string =>
+      closes.record(actorOf(id), ask, asked),
+    /** `question_close` naming a question to the person (ask-closes.ts `close`). */
+    closeAsked: (id: string, ask: string, closing: CloseAsked) =>
+      closes.close(actorOf(id), ask, closing),
+    /** `answer_delegate` with `forward`: the ask its delegate routed to it goes to the person (ask-routing.ts `forward`). */
+    forwardAsked: (id: string, ask: string): string =>
+      forwardRouted(actorOf(id), ask),
+  };
+};
 
 /** Continuing a session in a new one. */
 export const continuationCalls = ({
@@ -581,6 +644,7 @@ export const sessionCalls = (deps: SessionCallsDeps) => ({
   ...contextSizeCalls(deps),
   ...followupCalls(deps),
   ...openItemsCalls(deps),
+  ...askCalls(deps),
   ...continuationCalls(deps),
   ...outcomeCalls(deps),
   ...mediaCalls(deps),

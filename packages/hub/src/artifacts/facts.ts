@@ -14,6 +14,7 @@ import {
 } from "@cawco/core/doc-meta";
 import type { KeptStep } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { canvasOf } from "@cawco/core/stage";
 import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
@@ -34,6 +35,16 @@ export const stillThere = (
   }
   return row;
 };
+
+/**
+ * How many directions design graph `row` puts to the person to pick
+ * between (its spec's `directions`, core stage.ts `canvasOf`); 0 for any
+ * other artifact. Two or more is a pick: a question.
+ */
+export const directionsOf = (row: ArtifactRow): number =>
+  row.kind === "component" && "path" in row.source
+    ? (canvasOf(row.source.path ?? "").spec.directions?.length ?? 0)
+    : 0;
 
 /** The doc's `state`, read as entries. */
 /**
@@ -140,28 +151,28 @@ export const createFacts = (ctx: FactsContext) => {
   };
   /**
    * Artifact `row`'s questions to the person (questions.ts), read from its
-   * doc; `put` whether it is put to the person at all (needs.ts `asks`) and
-   * whether its pins may ask him. Needs you reads them with both set and
-   * its own rules gating (needs.ts), `open_items` with each read here.
+   * doc; `put` whether it is put to the person at all (needs.ts `asks`).
+   * Needs you reads them with it set and its own rules gating (needs.ts),
+   * `open_items` with it read here.
    */
   const questionsFrom = (
     row: ArtifactRow,
     doc: Doc,
     pins: readonly Pin[],
-    put: { asked: boolean; pinsMayAsk: boolean }
+    put: { asked: boolean }
   ): Question[] =>
     questionsOf({
       artifact: { id: row.id, name: row.name, title: row.title, ask: row.ask },
       ...put,
       cards: choicesAsked(row),
-      judged: row.does === "judge",
+      judged: row.does === "judge" && directionsOf(row) >= 2,
       media: row.kind === "page" ? mediaCards(row) : new Map(),
       pins,
       // His answers alone: a dial he moves answers nothing.
       state: answersIn(stateOf(doc)),
       closes: closesOf(doc),
     });
-  /** A decision page's questions counted, its first open one, and whether a canvas to judge has its answer (needs.ts). */
+  /** An artifact's questions counted (a page's cards, a design graph's pick), its first open card, and whether a design graph's pick has its answer (needs.ts). */
   const answersFacts = (
     questions: readonly Question[]
   ): Pick<ArtifactFacts, "answers" | "firstOpen" | "judged"> => {
@@ -207,24 +218,10 @@ export const createFacts = (ctx: FactsContext) => {
     const pins = pinsToTell(docs.pins(row.id).values()).sort(
       (a, b) => a.number - b.number
     );
-    const questions = questionsFrom(row, doc, pins, {
-      asked: true,
-      pinsMayAsk: true,
-    });
-    // A pin asks while its question is open: its reply answers it, and the agent's close takes it.
-    const open = new Set(
-      questions.flatMap((one) =>
-        one.kind === "pin" && one.state === "open" ? [one.key] : []
-      )
-    );
-    const asking = pins.filter((pin) => open.has(`pin:${pin.id}`));
+    const questions = questionsFrom(row, doc, pins, { asked: true });
     const facts: ArtifactFacts = {
       ...answersFacts(questions),
       asked: meta.get("asked") ?? null,
-      asking: asking.map((pin) => pin.number),
-      askingAt: asking
-        .map(answeredOn)
-        .reduce<string | null>((a, b) => (a !== null && a > b ? a : b), null),
       changes: changesFacts(doc),
       closed: pins
         .filter((pin) => pin.resolvedAt && newAnswer(pin))

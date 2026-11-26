@@ -96,7 +96,6 @@ import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
-import { artifactWords } from "@cawco/core/words/artifacts";
 import { configurePage } from "@cawco/core/words/configure";
 import { contactWords } from "@cawco/core/words/contact";
 import { decidesWords } from "@cawco/core/words/decides";
@@ -1682,97 +1681,6 @@ export const createPush = ({
     return askName(row, instanceId);
   };
 
-  /** How many of an artifact's pins ask the person, as its Needs-you item counts them. */
-  const askingOf = (need: ArtifactNeed): number => {
-    const reason = need.pending.find((one) => one.kind === "answer");
-    return reason?.kind === "answer" ? reason.count : 0;
-  };
-
-  /** By artifact: how many asking pins its push says ({@link Push.pinAsked}), while it stands. */
-  const pinCounts = new Map<string, number>();
-
-  /**
-   * An artifact's push for `count` pins asking: one alone says the reply
-   * `text`'s first line, sealed; several say how many. About no session for
-   * the gate, as {@link artifactLeft}.
-   */
-  const pinArrival = (
-    need: ArtifactNeed,
-    count: number,
-    text?: string
-  ): Arrival => {
-    const many = artifactWords.newAnswers(count);
-    const project = projectName(need.project);
-    return {
-      ask: false,
-      instanceId: null,
-      landedAt: new Date(),
-      still: () => artifactWaiting(need.artifactId, need.raisedAt),
-      notification: {
-        shown: alertOf(
-          sessionName(need.instanceId) ?? "A session",
-          project,
-          many
-        ),
-        sealed: alertOf(
-          need.title,
-          project,
-          count === 1 && text ? (firstLine(text) ?? many) : many
-        ),
-        category: PUSH_CATEGORIES.taskOpenOnly,
-        collapseId: artifactCollapseId(need.artifactId),
-        group: need.artifactId,
-        data: {
-          kind: "artifact",
-          artifactId: need.artifactId,
-          instanceId: need.instanceId,
-          machineId: need.machineId,
-          projectId: need.project,
-        },
-      },
-    };
-  };
-
-  /**
-   * Artifact `artifactId`'s pins asking fell from `was` to `count` (`need`
-   * its item now; none once it left the lane, whose `left` takes its push
-   * down): its push still in the open burst goes out with the new count;
-   * one shown alone is replaced quietly, or taken down at 0.
-   */
-  const pinsFell = (
-    artifactId: string,
-    was: number,
-    count: number,
-    need: ArtifactNeed | undefined
-  ): void => {
-    const id = artifactCollapseId(artifactId);
-    if (count === 0) {
-      pinCounts.delete(artifactId);
-      open?.items.delete(id);
-      if (need && alone.has(id)) {
-        console.log(`[notify] push ${id}: no pin asks any more, taken down`);
-        notifications.clear([id], "settled");
-      }
-      return;
-    }
-    pinCounts.set(artifactId, count);
-    if (!need) {
-      return;
-    }
-    const next = pinArrival(need, count);
-    if (open?.items.has(id)) {
-      console.log(
-        `[notify] push ${id}: ${was} pins asked, now ${count}; goes out so with ${open.id}`
-      );
-      open.items.set(id, next);
-    } else if (alone.has(id)) {
-      console.log(
-        `[notify] push ${id}: ${was} pins asked, now ${count}; replaced quietly`
-      );
-      replace({ ...next.notification, quiet: true });
-    }
-  };
-
   return {
     /**
      * A session is blocked on you: a permission or a question.
@@ -1841,49 +1749,6 @@ export const createPush = ({
           },
         },
       });
-    },
-
-    /**
-     * The agent's reply on a pin of an artifact asks the person something
-     * (artifacts service `commentReply`, `asks`), and `need` is the
-     * artifact's Needs-you item now. One notification per artifact: under
-     * its collapse id (the desk tab's tag, `renotify` set) and with its id as
-     * APNs' `thread-id`, so its pushes group per artifact and a later one
-     * takes the earlier's place. Replies landing within the burst's window
-     * ({@link QUIET_MS} after the last, at most {@link BURST_MS}) are one
-     * arrival, the newest, saying how many pins ask; one reply alone says
-     * its first line, sealed. Routed as any item: the person gate shows it on
-     * their desk tab while they are at one. About no session for the gate,
-     * as {@link artifactLeft}: a look at the artifact, or every pin
-     * answered, takes it down.
-     */
-    pinAsked(need: ArtifactNeed, text: string): void {
-      const count = askingOf(need);
-      pinCounts.set(need.artifactId, count);
-      console.log(
-        `[push] ${artifactCollapseId(need.artifactId)}: a pin asks the person (${count} asking), arrives`
-      );
-      arrive(pinArrival(need, count, text), false);
-    },
-
-    /**
-     * Needs you's artifacts as they stand now (artifacts/lane.ts, at each
-     * change), unparked. An artifact whose pins asking fell below what its
-     * push says (the person replied on one, or resolved it) has that push
-     * brought to the new count, as an answered ask's burst push is: still
-     * waiting in the open burst, it goes out with the new count; shown
-     * alone on the device, it is replaced quietly (no sound, passive) under
-     * the same collapse id, or taken down at 0 while the artifact stays in
-     * the lane for something else (one that left is the lane's `left`).
-     */
-    needsNow(needs: readonly ArtifactNeed[]): void {
-      for (const [artifactId, was] of pinCounts) {
-        const need = needs.find((one) => one.artifactId === artifactId);
-        const count = need ? askingOf(need) : 0;
-        if (count < was) {
-          pinsFell(artifactId, was, count, need);
-        }
-      }
     },
 
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */

@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * What Caw's popover holds (NeedsCaw): one list in two sections. Needs you
-   * first, longest wait first (home `needs`), each a NeedsCard row; then
+   * first, newest first (home `needs`, hub needs-rows.ts), each a NeedsCard
+   * row, or a piece of work with several (NeedsWork); then
    * Notices, the update notice, the logins moved in, what an account's
    * arrival set moving and each artifact's notice (ArtifactNoticeRow), each
    * with its ✕, and `Clear all` at the head's trailing edge acknowledging
@@ -38,6 +39,7 @@
   import type { CawFeed } from "./caw-feed.svelte";
   import MovedLogins from "./MovedLogins.svelte";
   import NeedsCard from "./NeedsCard.svelte";
+  import NeedsWork from "./NeedsWork.svelte";
   import UpdateCard, { forgetFold } from "./UpdateCard.svelte";
 
   let {
@@ -208,7 +210,13 @@
       </div>
       <ul class="m-0 list-none p-0" {@attach echoBeat()}>
         {#each needs as item (item.key)}
-          <li data-flip><NeedsCard {item} {onchoose} {stale} /></li>
+          <li data-flip>
+            {#if item.kind === "work"}
+              <NeedsWork {item} {onchoose} {stale} />
+            {:else}
+              <NeedsCard {item} {onchoose} {stale} />
+            {/if}
+          </li>
         {/each}
       </ul>
     </section>

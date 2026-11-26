@@ -24,8 +24,8 @@ export type Activity = (typeof ACTIVITIES)[number];
  *   session above it too, up to the one the person talks to: its card is
  *   drawn there (the dashboard's SessionPane), however deep it was asked;
  * - an artifact it holds is in Needs you (artifact-needs.ts): a decision
- *   page with a card not picked, a canvas to judge never opened, picks
- *   written and not sent, a pin whose reply asks. One put away with Not now
+ *   page with a card not picked, a design graph's directions not picked.
+ *   One put away with Not now
  *   (`parked`) is out of Needs you, and out of here.
  *
  * The daemon's pulse sees only the first: an artifact is the hub's.

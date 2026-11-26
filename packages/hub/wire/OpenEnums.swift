@@ -649,6 +649,7 @@ public enum OpenEnums {
         case harness
         case page
         case session
+        case words
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -659,6 +660,7 @@ public enum OpenEnums {
             case "harness": self = .harness
             case "page": self = .page
             case "session": self = .session
+            case "words": self = .words
             default: self = .unrecognized(rawValue)
             }
         }
@@ -670,6 +672,7 @@ public enum OpenEnums {
             case .harness: "harness"
             case .page: "page"
             case .session: "session"
+            case .words: "words"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -678,7 +681,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.app, .fullSend, .harness, .page, .session]
+        public static let allCases: [Self] = [.app, .fullSend, .harness, .page, .session, .words]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6074,6 +6077,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.approval, .clone, .lfs, .snapshot, .start]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/NeedsRowTaskWaits`.
+    public enum NeedsRowTaskWaits: OpenEnum {
+        case failed
+        case review
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "review": self = .review
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .review: "review"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .review]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

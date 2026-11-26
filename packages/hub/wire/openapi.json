@@ -13907,9 +13907,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "asks": {
-                    "type": "boolean"
-                  },
                   "files": {
                     "type": "array",
                     "items": {
@@ -13917,6 +13914,75 @@
                       "maxLength": 4096,
                       "type": "string"
                     }
+                  },
+                  "question": {
+                    "type": "object",
+                    "properties": {
+                      "blocks": {
+                        "type": "boolean"
+                      },
+                      "meanwhile": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "questions": {
+                        "minItems": 1,
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "header": {
+                              "type": "string"
+                            },
+                            "multiSelect": {
+                              "type": "boolean"
+                            },
+                            "options": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "description",
+                                  "label"
+                                ]
+                              }
+                            },
+                            "question": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "header",
+                            "multiSelect",
+                            "options",
+                            "question"
+                          ]
+                        }
+                      },
+                      "task": {
+                        "pattern": "^tsk-\\d+$",
+                        "type": "string"
+                      },
+                      "waiting": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "blocks",
+                      "questions"
+                    ]
                   },
                   "text": {
                     "minLength": 1,
@@ -18948,6 +19014,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiMovesByIdRetry422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/needs-rows": {
+      "get": {
+        "operationId": "getApiNeedsRows",
+        "responses": {
+          "200": {
+            "description": "getApiNeedsRows 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedsRowsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiNeedsRows 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiNeedsRows422"
                 }
               }
             }
@@ -35405,7 +35498,7 @@
             "type": "string"
           },
           "raisedAt": {
-            "description": "When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest reply that asks.",
+            "description": "When it became pending, ms epoch on the hub's clock: its publish.",
             "type": "number"
           },
           "stop": {
@@ -35961,66 +36054,26 @@
         ]
       },
       "ArtifactReason": {
-        "description": "Why an artifact waits on the person, one reason each.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "count": {
-                "type": "number"
-              },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "answer"
-                ]
-              },
-              "pin": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "count",
-              "kind",
-              "pin"
-            ]
+        "description": "Why an artifact waits on the person: its questions, `answered` of\n`asked` (those withdrawn are not asked); a design graph's pick between\nits directions is one question.",
+        "type": "object",
+        "properties": {
+          "answered": {
+            "type": "number"
           },
-          {
-            "type": "object",
-            "properties": {
-              "answered": {
-                "type": "number"
-              },
-              "asked": {
-                "type": "number"
-              },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "answers"
-                ]
-              }
-            },
-            "required": [
-              "answered",
-              "asked",
-              "kind"
-            ]
+          "asked": {
+            "type": "number"
           },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "unopened"
-                ]
-              }
-            },
-            "required": [
-              "kind"
+          "kind": {
+            "type": "string",
+            "enum": [
+              "answers"
             ]
           }
+        },
+        "required": [
+          "answered",
+          "asked",
+          "kind"
         ]
       },
       "ArtifactStatus": {
@@ -36117,7 +36170,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
+            "description": "Whose move it is: the person's (what Needs you lists it for: picks not made, marks not sent, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
@@ -36301,9 +36354,13 @@
             "description": "The paired device that answered (a page or the app), or the session that\ndid (a delegate's parent, its project's conversation), by name; absent when the\nhub knows no name (a page or app it trusts by its network).",
             "type": "string"
           },
+          "quote": {
+            "description": "His words that answered it, quoted as he wrote them, when a session\nrecorded his answer from a message or a pin of his (`via` words); `name`\nis the session that recorded it.",
+            "type": "string"
+          },
           "via": {
             "$ref": "#/components/schemas/AskAnswerVia",
-            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); another session; the harness itself, in\nits own interface; or Full Send, the mode the person put its session\nin, which approves an approval the session had open as it entered it\n(hub asks.ts `fullSendFiled`)."
+            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); another session; the harness itself, in\nits own interface; Full Send, the mode the person put its session in,\nwhich approves an approval the session had open as it entered it (hub\nasks.ts `fullSendFiled`); or his own words elsewhere (a message to any\nsession, a pin), quoted by the session that recorded them and checked\nby the hub (`record_pick`)."
           }
         },
         "required": [
@@ -36324,7 +36381,8 @@
           "fullSend",
           "harness",
           "page",
-          "session"
+          "session",
+          "words"
         ]
       },
       "AsleepFrame": {
@@ -40335,6 +40393,11 @@
       "Created": {
         "type": "object",
         "properties": {
+          "asksNothing": {
+            "description": "Made to pick or judge with no pick in it (no card, fewer than two directions): it waits on no one.",
+            "const": true,
+            "type": "boolean"
+          },
           "broken": {
             "$ref": "#/components/schemas/PageBroken",
             "description": "What a decision page's program left broken on the picks and the links; absent when nothing."
@@ -42403,7 +42466,7 @@
             "type": "string"
           },
           "renotify": {
-            "description": "A newer alert under its tag alerts again rather than replacing the older\nin silence: an artifact's (one tag per artifact, hub push.ts `pinAsked`).",
+            "description": "A newer alert under its tag alerts again rather than replacing the older\nin silence: an artifact's (one tag per artifact).",
             "type": "boolean"
           },
           "session": {
@@ -51517,6 +51580,110 @@
           "hue",
           "id",
           "name"
+        ]
+      },
+      "NeedsRow": {
+        "description": "One row of Needs you.",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "description": "Its artifacts waiting on the person, by id, newest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "asks": {
+            "description": "Its parked asks, by request id, newest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "at": {
+            "description": "When its newest item was raised, ms epoch: the rows' order, newest first.",
+            "type": "number"
+          },
+          "instanceId": {
+            "description": "The session whose questions it holds, when it stands for no task.",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "since": {
+            "description": "When its work began waiting on the person, ms epoch: its oldest item's raise.",
+            "type": "number"
+          },
+          "task": {
+            "$ref": "#/components/schemas/NeedsRowTask"
+          }
+        },
+        "required": [
+          "artifacts",
+          "asks",
+          "at",
+          "key",
+          "since"
+        ]
+      },
+      "NeedsRowTask": {
+        "description": "The task a row stands for.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "stage": {
+            "description": "Its stage, as the board names it.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "waits": {
+            "$ref": "#/components/schemas/NeedsRowTaskWaits",
+            "description": "Why it waits on the person by itself: in review, or its routine failed; null while it waits only through its questions."
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "stage",
+          "title"
+        ]
+      },
+      "NeedsRowTaskWaits": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "review"
+        ]
+      },
+      "NeedsRowsRead": {
+        "description": "`GET /api/needs-rows`.",
+        "type": "object",
+        "properties": {
+          "missing": {
+            "description": "A sentence for each project whose tasks could not be read.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NeedsRow"
+            }
+          }
+        },
+        "required": [
+          "missing",
+          "rows"
         ]
       },
       "NeutralAssistantBlock": {
@@ -61396,11 +61563,15 @@
         ]
       },
       "Shown": {
-        "description": "What `artifact_show` answers: {@link Opened}, with the artifact's link, `[title](cawco:artifact/<id>)`, which the agent names it by and its tool row draws.",
+        "description": "What `artifact_show` answers; `asksNothing`: it holds no pick, so it waits on no one.",
         "anyOf": [
           {
             "type": "object",
             "properties": {
+              "asksNothing": {
+                "const": true,
+                "type": "boolean"
+              },
               "href": {
                 "type": "string"
               },
@@ -61426,6 +61597,10 @@
           {
             "type": "object",
             "properties": {
+              "asksNothing": {
+                "const": true,
+                "type": "boolean"
+              },
               "link": {
                 "type": "string"
               },
@@ -64647,10 +64822,9 @@
       "ThreadEntry": {
         "type": "object",
         "properties": {
-          "asks": {
-            "description": "An agent's reply that needs the person's answer or pick\n(`comment_reply`'s `asks`): its pin waits on them in Needs you until\nthey reply or resolve it ({@link pinAsks}). Never on a person's entry.",
-            "const": true,
-            "type": "boolean"
+          "ask": {
+            "description": "The question an agent's reply carries (`comment_reply`'s `question`), by\nits ask's id (core asks.ts): the reply needs the person's choice, and\nthat choice is the ask's. Their reply after it in the thread answers it\nin their words; their resolve dismisses it. Never on a person's entry.",
+            "type": "string"
           },
           "at": {
             "type": "string"
@@ -98395,6 +98569,42 @@
         }
       },
       "getApiMoves422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiNeedsRows422": {
         "type": "object",
         "properties": {
           "code": {
@@ -157801,6 +158011,9 @@
       "postApiInstancesByIdArtifactsCommentsByPinReply200": {
         "type": "object",
         "properties": {
+          "asked": {
+            "type": "string"
+          },
           "entry": {
             "$ref": "#/components/schemas/ThreadEntry"
           },

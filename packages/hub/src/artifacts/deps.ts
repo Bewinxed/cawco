@@ -1,4 +1,5 @@
 import type { PictureCut, PictureTaken } from "@cawco/core/artifact-picture";
+import type { AskedQuestion } from "@cawco/core/asks";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
@@ -385,11 +386,25 @@ export interface ArtifactServiceDeps {
     | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
-   * The agent's reply `text` on a pin of artifact `artifactId` asks the
-   * person something (`comment_reply`'s `asks`): its push, grouped per
-   * artifact (push.ts `pinAsked`).
+   * The thread of a pin whose agent's reply carries question `askId` moved:
+   * the person's reply after it answers it in his words, his resolve
+   * dismisses it, the agent's resolve withdraws it (hub asks.ts
+   * `pinAnswered`). Nothing for a question no longer open.
    */
-  pinAsked: (artifactId: string, text: string) => void;
+  pinAnswered: (
+    askId: string,
+    by: { reply: string } | { resolved: "person" | "agent" }
+  ) => void;
+  /**
+   * Records the question an agent's reply on a pin carries
+   * (`comment_reply`'s `question`) as its session's question for the person
+   * (hub asks.ts `question`), standing on that pin: its id, and what the
+   * agent reads of it. Throws, in a sentence, when it can't be asked.
+   */
+  pinQuestion: (
+    asker: InstanceRow,
+    asked: AskedQuestion
+  ) => { id: string; words: string };
   /**
    * The place a port preview of session `instance`, in no workspace, is
    * staged from, and its server's folder in it: from `folder`, the app's

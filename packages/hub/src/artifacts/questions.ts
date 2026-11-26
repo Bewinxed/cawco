@@ -6,26 +6,24 @@
  * doc on every read, never stored, but for the agent's own marks
  * (`meta.questionsClosed`).
  *
- * An artifact asks while it is put to the person (`asked`: a page to pick
- * on or a canvas to judge, its ask line set, not a draft, not handed up or
- * held, not an option's media on a page, its folder not gone):
+ * An artifact asks only while it puts a pick to the person (`asked`: a page
+ * to pick on or a design graph to judge, its ask line set, not a draft, not
+ * handed up or held, not an option's media on a page, its folder not gone):
  *
  * - **card**: each card of a decision page (each `data-cawco-choice` of an
  *   HTML page). Answered by a pick (core `pickMade`), his own words in place
  *   of one (core choices.ts `ownWordsEntry`), a note on it, or a pin
  *   standing on it ({@link pinCard}) that the agent replied to and resolved;
  *   dismissed by his Dismiss on it (`dismissedEntry`).
- * - **judge**: a canvas or preview to judge, the artifact itself. Answered
- *   by any value, pick or note the person set on it (a direction picked,
- *   his own words in place of a pick, `cawco.set`), never by one he is only
- *   trying out (core `answersIn`: a dial, a tuned move); dismissed by his
- *   Dismiss on its pick (`picked`).
+ * - **judge**: a design graph's pick between its two or more directions,
+ *   the artifact itself. Answered by any value, pick or note the person set
+ *   on it (a direction picked, his own words in place of a pick,
+ *   `cawco.set`), never by one he is only trying out (core `answersIn`: a
+ *   dial, a tuned move); dismissed by his Dismiss on its pick (`picked`).
  *
- * Any artifact of the person's (not a draft, not handed up or held, not an
- * option's media, not a working canvas: `draw`) also asks on each pin the agent's reply asked on
- * (`comment_reply`'s `asks`): **pin**, open while it asks (core `pinAsks`),
- * answered by the person's reply after it or his resolve. The agent's own
- * resolve closes it.
+ * A page or canvas that puts no pick to him asks nothing, opened or not. An
+ * agent's reply on a pin that needs his choice is its session's question
+ * (core asks.ts, `comment_reply`'s `question`), never the artifact's.
  *
  * Send counts for nothing here: what is written is an answer whether or not
  * it went. A question he dismissed is `dismissed` until he answers it after
@@ -40,11 +38,10 @@ import type { AskState } from "@cawco/core/asks";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { noteText } from "@cawco/core/choices";
 import type { Anchor } from "@cawco/core/comments/anchor";
-import { type Pin, pinAsks } from "@cawco/core/comments/model";
+import type { Pin } from "@cawco/core/comments/model";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
 import type { QuestionClose } from "@cawco/core/doc-meta";
-import { pinName } from "@cawco/core/pin-name";
-import { artifactLink, decisionLink, pinLink } from "@cawco/core/references";
+import { artifactLink, decisionLink } from "@cawco/core/references";
 import type {
   SessionAnswerHow,
   SessionQuestionKind,
@@ -57,7 +54,7 @@ export interface QuestionAnswer {
   by: SessionAnswerHow;
   /** The options he picked, by label; a pick only. */
   options?: string[];
-  /** His words: the note, his own words in place of a pick, the set keys, the pin's or reply's text, what a dismissal recorded before answers in his own words existed holds; empty for a resolve or a dismissal without words. */
+  /** His words: the note, his own words in place of a pick, the set keys, the pin's text, what a dismissal recorded before answers in his own words existed holds; empty for a dismissal without words. */
   said: string;
 }
 
@@ -67,35 +64,33 @@ export type QuestionState = AskState | "dismissed" | "taken";
 export interface Question {
   answer: QuestionAnswer | null;
   close: QuestionClose | null;
-  /** Its key in `meta.questionsClosed`: `card:<id>`, `judge`, `pin:<id>`. */
+  /** Its key in `meta.questionsClosed`: `card:<id>`, `judge`. */
   key: string;
   kind: SessionQuestionKind;
-  /** What names it to the person and to `question_close`: a card's, the artifact's or a pin's link. */
+  /** What names it to the person and to `question_close`: a card's or the artifact's link. */
   link: string;
   state: QuestionState;
-  /** Where the artifact's panel opens to answer it: the card, the pin, or its top. */
+  /** Where the artifact's panel opens to answer it: the card, or its top. */
   stop: ArtifactStop;
   /** A card's why; empty for any other. */
   why: string;
-  /** The question as asked: a card's, the artifact's ask, the agent's asking reply. */
+  /** The question as asked: a card's, or the artifact's ask. */
   words: string;
 }
 
 /** What the questions of one artifact are read from. */
 export interface QuestionsInput {
   artifact: { ask: string; id: string; name: string; title: string };
-  /** It is put to the person: a page to pick on or a canvas to judge (needs.ts `asks`). */
+  /** It is put to the person: a page to pick on or a design graph to judge, its ask line set (needs.ts `asks`). */
   asked: boolean;
   /** Its choices: a program's cards, or an HTML page's choice ids. */
   cards: readonly { card?: DecisionCard; id: string }[];
   closes: Readonly<Record<string, QuestionClose>>;
-  /** It is a canvas or preview to judge, not a page of cards. */
+  /** It is a design graph to judge whose two or more directions put a pick to the person, not a page of cards. */
   judged: boolean;
   /** Each Canvas or Preview piece's card, by the artifact it shows. */
   media: ReadonlyMap<string, string>;
   pins: readonly Pin[];
-  /** Its pins may ask the person: not a draft, not handed up or held, not an option's media. */
-  pinsMayAsk: boolean;
   /** His answers in its `state` (core `answersIn`): what he is only trying out, like a dial, left out. */
   state: Readonly<Record<string, ChoiceEntry>>;
 }
@@ -204,17 +199,6 @@ const judgeAnswer = (
   };
 };
 
-/** An asking pin's answer: his reply after the agent's last asking reply, or his resolve. */
-const pinAnswer = (pin: Pin, asking: number): QuestionAnswer | null => {
-  if (pin.resolvedAt && pin.resolvedBy === "person") {
-    return { by: "resolve", at: pin.resolvedAt, said: "" };
-  }
-  const reply = pin.thread
-    .slice(asking + 1)
-    .find((entry) => entry.by === "person");
-  return reply ? { by: "reply", at: reply.at, said: reply.text } : null;
-};
-
 /** Its state: withdrawn for good; taken until a newer answer; dismissed; answered; open. */
 const questionState = (
   answer: QuestionAnswer | null,
@@ -277,50 +261,24 @@ const askedOn = (input: QuestionsInput): Asked[] => {
     : cards;
 };
 
-/** What `input`'s pins ask: each the agent's reply asked on, but one the agent resolved itself (its resolve closes what it asked). */
-const askedOnPins = (input: QuestionsInput): Asked[] =>
-  input.pins.flatMap((pin): Asked[] => {
-    const asking = pin.thread.findLastIndex(
-      (entry) => entry.by === "agent" && entry.asks === true
-    );
-    if (asking < 0 || (pin.resolvedAt && pin.resolvedBy !== "person")) {
-      return [];
-    }
-    return [
-      {
-        key: `pin:${pin.id}`,
-        kind: "pin",
-        link: pinLink(input.artifact.id, pin.number, pinName(pin)),
-        stop: { pin: pin.number },
-        words: pin.thread[asking]?.text ?? "",
-        why: "",
-        answer: pinAsks(pin) ? null : pinAnswer(pin, asking),
-      },
-    ];
-  });
-
-/** Every question `input`'s artifact puts to the person, in page order: its cards or its judgement, then its asking pins, each with the agent's close. */
+/** Every question `input`'s artifact puts to the person, in page order: its cards or its judgement, each with the agent's close. */
 export const questionsOf = (input: QuestionsInput): Question[] =>
-  [
-    ...(input.asked ? askedOn(input) : []),
-    ...(input.pinsMayAsk ? askedOnPins(input) : []),
-  ].map((one) => {
+  (input.asked ? askedOn(input) : []).map((one) => {
     const close = input.closes[one.key] ?? null;
     return { ...one, close, state: questionState(one.answer, close) };
   });
 
-/** What a page's questions count for Needs you: those still asked (not withdrawn), those answered or taken, and the first open one. */
+/** What an artifact's questions count for Needs you: those still asked (not withdrawn), those answered or taken, and the first open card. */
 export const answersOf = (
   questions: readonly Question[]
 ): { answered: number; asked: number; firstOpen: string | null } => {
-  const cards = questions.filter(
-    (one) => one.kind === "card" && one.state !== "withdrawn"
-  );
-  const open = cards.filter((one) => one.state === "open");
+  const asked = questions.filter((one) => one.state !== "withdrawn");
+  const open = asked.filter((one) => one.state === "open");
+  const card = open.find((one) => one.kind === "card");
   return {
-    asked: cards.length,
-    answered: cards.length - open.length,
-    firstOpen: open[0]?.key.slice("card:".length) ?? null,
+    asked: asked.length,
+    answered: asked.length - open.length,
+    firstOpen: card?.key.slice("card:".length) ?? null,
   };
 };
 

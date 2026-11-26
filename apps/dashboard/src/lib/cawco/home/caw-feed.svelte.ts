@@ -13,7 +13,7 @@ import { notices } from "../notices.svelte";
 import type { Notice } from "../updates/model";
 import { actOnUpdate, dismissUpdate } from "../updates/update-notice.svelte";
 import { cawNotices } from "./caw-notices.svelte";
-import { home, type NeedsItem } from "./home-state.svelte";
+import { home, type NeedsEntry } from "./home-state.svelte";
 
 export interface CawFeed {
   /** Notice ids acknowledged: gone here at once, and everywhere once the hub has them. */
@@ -27,7 +27,7 @@ export interface CawFeed {
   /** The hub is live: a row that is not can't be answered (NeedsCard `stale`). */
   readonly live: boolean;
   readonly moved: MovedLogin[];
-  readonly needs: NeedsItem[];
+  readonly needs: NeedsEntry[];
   /** The hub's notices record is damaged: notices are off until Reset. */
   readonly noticesDamaged: DamagedHubRecord | null;
   readonly rebalanced: RebalanceNotice[];

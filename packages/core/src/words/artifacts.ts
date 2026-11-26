@@ -36,20 +36,14 @@ export const artifactWords = {
   waitingOnYou: commonWords.needsYou,
 
   // ── Needs you: an artifact waiting on the person (home/NeedsCard.svelte, Files' cards) ──
-  /** Shown and never opened: the row's line. */
-  notOpened: "New · not opened",
-  /** The same on a Files card's meta line. */
-  notOpenedShort: "New",
-  /** A decision page's questions answered: by a pick, a note, or a pin the agent answered and resolved. */
+  /** An artifact's questions answered: a decision page's cards by a pick, a note, or a pin the agent answered and resolved; a design graph's pick between its directions. */
   answered: (answered: number, asked: number) =>
     `${answered} of ${asked} answered`,
   /** The same on a Files card's meta line. */
   answeredShort: (answered: number, asked: number) => `${answered} of ${asked}`,
-  /** Open pins whose agent's reply asks the person something: the row's line, the push's body. */
+  /** Resolved pins with answers the person hasn't read: Jump's line. */
   newAnswers: (count: number) =>
     count === 1 ? "1 new answer" : `${count} new answers`,
-  /** The one reason, an answer on one pin: where it is. */
-  newAnswerOn: (pin: number) => `1 new answer on pin ${pin}`,
   /** The kind on the row's meta line, where an ask says "Question". */
   kindWord: {
     page: "Page",
@@ -82,15 +76,10 @@ export const artifactWords = {
   ended: (who: string, what: string) => `${who} ended; ${what}`,
   /** Who ended, when the hub no longer holds the session. */
   itsSession: commonWords.itsSession,
-  neverOpened: (name: string) => `${name} never opened`,
   neverAnswered: (count: number, name: string) =>
     count === 1
       ? `1 question on ${name} never answered`
       : `${count} questions on ${name} never answered`,
-  neverRead: (count: number, name: string) =>
-    count === 1
-      ? `1 answer on ${name} never read`
-      : `${count} answers on ${name} never read`,
   /** A notice's ✕, for a screen reader. */
   dismissNotice: (name: string) => `Dismiss the notice on ${name}`,
   open: "Open",

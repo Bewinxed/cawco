@@ -319,13 +319,32 @@ export const statementsBody = t.Object({
   statements: t.String({ minLength: 1, maxLength: PROGRAM_MAX }),
 });
 
+/** A question to the person, in the shape `ask` takes (ask-fields.ts `QUESTION_FIELDS`). */
+const QUESTION_BODY = t.Object({
+  questions: t.Array(
+    t.Object({
+      header: t.String(),
+      multiSelect: t.Boolean(),
+      options: t.Array(
+        t.Object({ label: t.String(), description: t.String() })
+      ),
+      question: t.String(),
+    }),
+    { minItems: 1, maxItems: 4 }
+  ),
+  blocks: t.Boolean(),
+  waiting: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  meanwhile: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  task: t.Optional(t.String({ pattern: "^tsk-\\d+$" })),
+});
+
 /** An agent's answer to a pin. */
 export const replyBody = t.Object({
   text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
   files: t.Optional(
     t.Array(t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }))
   ),
-  asks: t.Optional(t.Boolean()),
+  question: t.Optional(QUESTION_BODY),
 });
 
 /** An agent's resolve of a pin, with an optional last line. */

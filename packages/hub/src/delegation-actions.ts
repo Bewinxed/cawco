@@ -827,6 +827,11 @@ export interface HandoffActions {
   ) => string;
   /** The session's artifact tools' calls (artifacts/calls.ts). */
   readonly artifacts: ReturnType<SessionCalls["artifacts"]>;
+  /** `question_close` naming a question to the person (ask-closes.ts `close`). */
+  readonly closeAsked: (
+    ask: string,
+    closing: Parameters<SessionCalls["closeAsked"]>[2]
+  ) => Promise<string>;
   readonly continueSession: (input: {
     session: string;
     from?: "summary" | "asks";
@@ -943,6 +948,8 @@ export interface HandoffActions {
     op: MachineWriteOp;
     repo?: string;
   }) => ReturnType<SessionCalls["forgePost"]>;
+  /** `answer_delegate` with `forward`: its delegate's question goes to the person (asks.ts `forward`). */
+  readonly forwardAsked: (requestId: string) => string;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<
@@ -1002,6 +1009,11 @@ export interface HandoffActions {
     cursor?: string,
     format?: "concise" | "detailed"
   ) => Promise<string | ProblemsOf<ReturnType<SessionCalls["openItems"]>>>;
+  /** `record_pick` naming a question to the person (ask-closes.ts `record`). */
+  readonly recordAsked: (
+    ask: string,
+    asked: Parameters<SessionCalls["recordAsked"]>[2]
+  ) => string;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   sendToUser: (message: string, attachments?: string[]) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
@@ -1628,6 +1640,9 @@ export const handoffActions = ({
     },
     forgePost: (ask) => calls.forgePost(instanceId, ask),
     artifacts: calls.artifacts(instanceId),
+    closeAsked: (ask, closing) => calls.closeAsked(instanceId, ask, closing),
+    forwardAsked: (requestId) => calls.forwardAsked(instanceId, requestId),
+    recordAsked: (ask, asked) => calls.recordAsked(instanceId, ask, asked),
     listDelegateTypes: () => Promise.resolve(calls.delegateTypes(projectId)),
     async listSessions(query: SessionListQuery): Promise<SessionList> {
       const { peers, own, hosts } = roster(fleet, instanceId);

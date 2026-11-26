@@ -33,6 +33,7 @@ import {
   setupLanding,
 } from "@cawco/core/artifact-needs";
 import { PICTURE_VIEW } from "@cawco/core/artifact-picture";
+import type { QuestionInput } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { type CanvasAuthor, canvasOutline } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
@@ -182,7 +183,13 @@ import {
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
 import type { DesignFile } from "./design-folder";
-import { createFacts, metaOf, stateOf, stillThere } from "./facts";
+import {
+  createFacts,
+  directionsOf,
+  metaOf,
+  stateOf,
+  stillThere,
+} from "./facts";
 import { createFolderMove } from "./folder-move";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
@@ -459,8 +466,7 @@ const LINK_DESTINATION = /\]\((cawco:[^)\s]+)\)\s*$/u;
 
 /**
  * The artifact and question key `asked` names (`question_close`): a card's
- * link or `<page>#<card>` (`card:<id>`), a pin's link (`pin:<number>`, its
- * number read to its id by the caller), else an artifact's link, name or
+ * link or `<page>#<card>` (`card:<id>`), else an artifact's link, name or
  * handle (`judge`). A link is read bare or as its markdown.
  */
 const questionKeyOf = (asked: string): [artifact: string, key: string] => {
@@ -471,10 +477,6 @@ const questionKeyOf = (asked: string): [artifact: string, key: string] => {
     if (card) {
       return [card.artifact, `card:${card.card}`];
     }
-  }
-  if (ref?.kind === "pin") {
-    const slash = ref.id.lastIndexOf("/");
-    return [ref.id.slice(0, slash), `pin:${ref.id.slice(slash + 1)}`];
   }
   if (ref?.kind === "artifact") {
     return [ref.id, "judge"];
@@ -3277,6 +3279,47 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /**
+   * Whether `row` is put to the person to pick or judge and holds no pick:
+   * no card, and fewer than two directions. It waits on no one (needs.ts),
+   * and its create or show says so to the agent.
+   */
+  const asksNothing = (row: ArtifactRow): boolean =>
+    (row.does === "pick" || row.does === "judge") &&
+    choicesAsked(row).length === 0 &&
+    directionsOf(row) < 2;
+
+  /** An agent's show's answer, marked when what it showed holds no pick ({@link asksNothing}). */
+  const markPickless = (
+    row: ArtifactRow,
+    shown: Shown,
+    by: PanelHand
+  ): Shown =>
+    by === "agent" && asksNothing(row)
+      ? { ...shown, asksNothing: true }
+      : shown;
+
+  /** A create's answer, marked when what it made holds no pick ({@link asksNothing}). */
+  const pickless = <Made extends { id: string }>(
+    made: Made
+  ): Made | (Made & { asksNothing: true }) => {
+    const row = db.get(made.id);
+    return row && asksNothing(row) ? { ...made, asksNothing: true } : made;
+  };
+
+  /** A preview's create refused (its folder missing, a home folder its copy refuses, a server that didn't start), said once in the journal. */
+  const previewRefused = (
+    instance: InstanceRow,
+    input: ArtifactInput,
+    why: string
+  ): void => {
+    if (input.kind === "preview") {
+      console.warn(
+        `[artifacts] preview ${input.name} of session ${instance.id.slice(0, 8)} (${sessionLabel(instance).name}) refused: ${why}`
+      );
+    }
+  };
+
   /** Whether what the person wrote on `row` goes to its session by itself (needs.ts `sendsItself`). */
   const sendsItself = (row: ArtifactRow): boolean =>
     answeredWhole(row, withMedia(row, factsOf(row)));
@@ -3506,7 +3549,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const facts = withMedia(row, factsOf(row));
     const mine = !(facts.draft || facts.handed || facts.media);
-    // A working canvas (`draw`) is the agent's drawing for the next agent: it asks him nothing.
     const doc = docs.doc(row.id);
     return stillAsked(
       questionsFrom(
@@ -3519,7 +3561,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             facts.gone === null &&
             (row.does === "pick" || row.does === "judge") &&
             row.ask.trim() !== "",
-          pinsMayAsk: mine && row.does !== "draw",
         }
       )
     );
@@ -3584,8 +3625,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * The question `asked` names for `instance` (`question_close`): a card's
-   * link or `<page>#<card>`, a pin's link, an artifact's link, name or
-   * handle (its judgement), on an artifact it reads ({@link readable}).
+   * link or `<page>#<card>`, an artifact's link, name or handle (its
+   * judgement), on an artifact it reads ({@link readable}).
    * Refused in words when it names none of its questions.
    */
   const questionNamed = (instance: InstanceRow, asked: string) => {
@@ -3596,15 +3637,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const doc = docs.doc(row.id);
     const pins = [...readPins(doc).values()];
-    // A pin's link names it by number; its key is its id.
-    const pinKey = key.startsWith("pin:")
-      ? `pin:${pins.find((pin) => String(pin.number) === key.slice(4))?.id ?? key.slice(4)}`
-      : key;
-    const questions = questionsFrom(row, doc, pins, {
-      asked: true,
-      pinsMayAsk: true,
-    });
-    const question = questions.find((one) => one.key === pinKey);
+    const questions = questionsFrom(row, doc, pins, { asked: true });
+    const question = questions.find((one) => one.key === key);
     if (!question) {
       return problem(404, {
         code: "artifact-question-unknown",
@@ -3990,10 +4024,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
-    const asked = questionsFrom(row, doc, [], {
-      asked: true,
-      pinsMayAsk: false,
-    });
+    const asked = questionsFrom(row, doc, [], { asked: true });
     const at = {
       artifact: { id: row.id, name: row.name, title: row.title },
       askedAt: row.createdAt.toISOString(),
@@ -5174,13 +5205,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const ownWay = madeOwnWay(making, input);
       if (ownWay === null) {
         const created = await createShown(instance, making, input);
-        // A preview's create refused (its folder missing, a home folder its copy refuses, a server that didn't start) is said once in the journal.
-        if (created instanceof ElysiaStatus && input.kind === "preview") {
-          console.warn(
-            `[artifacts] preview ${input.name} of session ${instance.id.slice(0, 8)} (${sessionLabel(instance).name}) refused: ${String(created.response.detail)}`
-          );
+        if (created instanceof ElysiaStatus) {
+          previewRefused(instance, input, String(created.response.detail));
+          return created;
         }
-        return created;
+        return pickless(created);
       }
       const made = await ownWay;
       if (made instanceof ElysiaStatus) {
@@ -5189,7 +5218,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const shown = linked(made);
       askedNow(instance, shown.id);
       wroteNow(instance, shown.id);
-      return shown;
+      return pickless(shown);
     },
 
     /**
@@ -6360,7 +6389,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       // Its link: what the agent names it by, and its tool row draws.
       const opened: Shown = { ...openedOf(shown), link };
-      return opened;
+      return markPickless(row, opened, by);
     },
 
     /**
@@ -6622,18 +6651,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return comments;
     },
 
-    /** The agent answers a pin: an entry in its thread, by the agent, shown at once wherever the artifact is open. */
     /**
-     * The agent answers a pin in its thread. One that `asks` waits on the
-     * person in Needs you (core `pinAsks`) and pushes; one that doesn't
-     * stays on the page.
+     * The agent answers a pin in its thread, shown at once wherever the
+     * artifact is open. A reply that needs the person's choice carries its
+     * `question` in the shape `ask` takes: it is recorded as the session's
+     * question standing on the pin (deps `pinQuestion`), which reaches the
+     * person (or, from a delegate, its parent) as any of its questions
+     * does, and the entry names it. Any other reply is a reply: it stays on
+     * the page and waits on nobody.
      */
     commentReply: (
       instanceId: string,
       pinId: string,
-      reply: { asks?: boolean; files?: string[]; text: string }
+      reply: { files?: string[]; question?: QuestionInput; text: string }
     ) => {
-      const { asks, files, text } = reply;
+      const { files, question, text } = reply;
       const found = pinIn(instanceId, pinId);
       if (found instanceof ElysiaStatus) {
         return found;
@@ -6645,7 +6677,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         text,
         at: new Date().toISOString(),
         ...(files && files.length > 0 ? { files: [...new Set(files)] } : {}),
-        ...(asks ? { asks: true as const } : {}),
       };
       const heldBytes = threadBytes(readPins(docs.doc(row.id)).values());
       if (heldBytes + entryBytes(entry) > COMMENT_LIMITS.bytes) {
@@ -6654,16 +6685,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           detail: commentsFull(heldBytes, COMMENT_LIMITS.bytes, "reply"),
         });
       }
+      const asker = deps.instance(instanceId);
+      const asked =
+        question && asker
+          ? deps.pinQuestion(asker, {
+              kind: "question",
+              ...question,
+              pin: { artifact: row.id, id: pin.id, number: pin.number },
+            })
+          : undefined;
+      const written: ThreadEntry = asked ? { ...entry, ask: asked.id } : entry;
       // An answer means everything before it was heard (core `pinHeard`).
       docs.transact(row.id, "hub", (doc) => {
-        stampHeard(doc, pin, pin, entry.at);
-        writeEntry(doc, pin.id, entry);
-        answeredHere(doc, pin.id, entry.at);
+        stampHeard(doc, pin, pin, written.at);
+        writeEntry(doc, pin.id, written);
+        answeredHere(doc, pin.id, written.at);
       });
-      if (asks) {
-        deps.pinAsked(row.id, text);
-      }
       const replied: {
+        asked?: string;
         entry: ThreadEntry;
         link: string;
         number: number;
@@ -6672,9 +6711,34 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         pin: pin.id,
         number: pin.number,
         link: linkOfPin(row.id, pin),
-        entry,
+        entry: written,
+        ...(asked ? { asked: asked.words } : {}),
       };
       return replied;
+    },
+
+    /**
+     * Artifact `id`'s doc moved by the person's hand: each agent's reply on
+     * its pins that carries a question still open is answered by his reply
+     * after it in the thread, in his words, or dismissed by his resolve
+     * (deps `pinAnswered`; one no longer open is left as it is).
+     */
+    pinThreadsMoved: (id: string): void => {
+      for (const pin of readPins(docs.doc(id)).values()) {
+        pin.thread.forEach((entry, at) => {
+          if (entry.by !== "agent" || entry.ask === undefined) {
+            return;
+          }
+          const reply = pin.thread
+            .slice(at + 1)
+            .find((after) => after.by === "person");
+          if (reply) {
+            deps.pinAnswered(entry.ask, { reply: reply.text });
+          } else if (pin.resolvedAt && pin.resolvedBy === "person") {
+            deps.pinAnswered(entry.ask, { resolved: "person" });
+          }
+        });
+      }
     },
 
     /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
@@ -6722,6 +6786,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           });
         }
       });
+      // Its resolve closes what its replies asked there.
+      for (const entry of pin.thread) {
+        if (entry.by === "agent" && entry.ask !== undefined) {
+          deps.pinAnswered(entry.ask, { resolved: "agent" });
+        }
+      }
       const done: {
         link: string;
         number: number;

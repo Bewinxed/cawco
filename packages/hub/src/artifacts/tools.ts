@@ -37,6 +37,7 @@ import {
 } from "@cawco/core/stage-measure";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { z } from "zod";
+import { QUESTION_SHAPE } from "../ask-fields";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 
@@ -199,7 +200,7 @@ export const artifactCreate = {
   name: "artifact_create" as const,
   description:
     "Something opened in the person's panel for them to act on: a decision page, the design graph, a preview or a canvas. " +
-    "Use it when they must pick, judge, try or draw, once the `show` skill has chosen `does`, `ask` and `kind`; proof, plans and finished work go in your own words, and a task attempt's result by task_result.",
+    "Use it when they must pick, judge, try or draw, once the `show` skill has chosen `does`, `ask` and `kind`; it waits on them while a card or direction is unpicked. Proof, plans and finished work go in your own words, a task attempt's result by task_result.",
   input: {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
@@ -522,7 +523,7 @@ export const artifactList = {
 export const artifactShow = {
   name: "artifact_show" as const,
   description:
-    "Brings an artifact, yours or your delegation tree's, to the front of your panel at its newest version. Use it to open one a delegate handed you, or to put one back in front of the person.",
+    "Brings an artifact, yours or your delegation tree's, to the front of your panel at its newest version. Use it when a delegate handed you one the person must see, or to put one back in front of them.",
   input: { id },
 };
 
@@ -597,20 +598,21 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply" as const,
   description:
-    "Answers in a pin's thread. Use it to reply to a pin; once your change answers it, comment_resolve closes it.",
+    "Answers in a pin's thread. Use it when you reply to a pin; once your change answers it, comment_resolve closes it.",
   input: {
     pin,
-    text: z.string().min(1).max(COMMENT_LIMITS.text),
+    text: z
+      .string()
+      .min(1)
+      .max(COMMENT_LIMITS.text)
+      .describe("Your reply, as they read it in the thread."),
     files: z
       .array(z.string().min(1).max(COMMENT_LIMITS.file))
       .optional()
       .describe("After a change, the files it changed."),
-    asks: z
-      .boolean()
-      .optional()
-      .describe(
-        "true when the reply needs their answer or pick: it reaches them in Needs you until they reply or resolve, so leave the pin open. A fix, a done or an FYI goes without it and stays on the page."
-      ),
+    question: QUESTION_SHAPE.optional().describe(
+      "When the reply needs their choice: the question, as ask takes it."
+    ),
   },
 };
 
@@ -631,22 +633,34 @@ export const commentResolve = {
 export const questionClose = {
   name: "question_close" as const,
   description:
-    "Closes a question your tree put to the person, so they are asked it no more; nothing is deleted. Use it when open_items lists it answered and you acted on it, or when it no longer applies.",
+    "Closes a question put to the person; nothing is deleted. Use it when you acted on his answer, or when a question's work has moved on.",
   input: {
     question: z
       .string()
       .min(1)
       .max(400)
-      .describe("Its link from open_items, or <page>#<card>."),
+      .describe(
+        "A card's link from open_items or <page>#<card>, or a question's request id (ask_…)."
+      ),
     as: z
       .enum(["taken", "withdrawn"])
-      .describe("taken: you acted on his answer. withdrawn: superseded."),
+      .describe(
+        "taken: you acted on his answer to a card. withdrawn: its work moved on."
+      ),
     why: z
       .string()
       .min(1)
       .max(CHOICE_LIMITS.why)
       .describe(
-        "taken: his words you acted on, quoted. withdrawn: what superseded it."
+        "taken: his words you acted on, quoted. withdrawn: what overtook it."
+      ),
+    evidence: z
+      .string()
+      .min(1)
+      .max(400)
+      .optional()
+      .describe(
+        "Another session's question: its task closed (tsk-12), its to-do ticked (link), step (its step ticked), or a newer ask_…."
       ),
   },
 };
@@ -654,19 +668,26 @@ export const questionClose = {
 export const recordPick = {
   name: "record_pick" as const,
   description:
-    "Records the person's pick on a decision card from his own words: his comment on that page or a message he typed, quoted on the card for him to change. Use it only when his words plainly answer the card; a question, a doubt or a maybe picks nothing.",
+    "Records the person's answer to a decision card or a question (ask_…) from his own words, quoted for him to change. Use it when his message or comment plainly answers one.",
   input: {
     card: z
       .string()
       .min(3)
       .max(ARTIFACT_REF_MAX + CHOICE_LIMITS.id + 1)
-      .describe("<page>#<card>."),
+      .describe("<page>#<card>, or a question's request id (ask_…)."),
     options: z
       .array(z.string().min(1).max(CHOICE_LIMITS.option))
       .min(1)
       .max(CHOICE_LIMITS.options)
-      .describe("The option ids his words pick."),
-    pin: pin.optional().describe("His comment on that page."),
+      .optional()
+      .describe("A card: the option ids his words pick."),
+    answers: z
+      .record(z.string(), z.string().min(1).max(CHOICE_LIMITS.quote))
+      .optional()
+      .describe(
+        "A question: each question's exact text → the label he picks, or his words."
+      ),
+    pin: pin.optional().describe("A card: his comment on that page."),
     message: z
       .string()
       .min(1)

@@ -497,7 +497,7 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
+  /** Whose move it is: the person's (what Needs you lists it for: picks not made, marks not sent, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
@@ -511,6 +511,8 @@ export interface ArtifactList {
 }
 
 export interface Created {
+  /** Made to pick or judge with no pick in it (no card, fewer than two directions): it waits on no one. */
+  asksNothing?: true;
   /** What a decision page's program left broken on the picks and the links; absent when nothing. */
   broken?: PageBroken;
   /** A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by. */
@@ -591,9 +593,16 @@ export type Opened =
     };
 
 /** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[title](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
+/** What `artifact_show` answers; `asksNothing`: it holds no pick, so it waits on no one. */
 export type Shown =
-  | { link: string; opened: true }
-  | { href?: string; link: string; opened: false; why: string };
+  | { asksNothing?: true; link: string; opened: true }
+  | {
+      asksNothing?: true;
+      href?: string;
+      link: string;
+      opened: false;
+      why: string;
+    };
 
 /**
  * What `artifact_browse` answers: the address the session's own browser

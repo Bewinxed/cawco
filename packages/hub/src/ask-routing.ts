@@ -1,5 +1,5 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import type { ArrivingAsk } from "@cawco/core/frames";
+import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
 import { DELEGATE_WAIT_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { DelegateWaitAbout } from "@cawco/core/injected";
@@ -316,23 +316,54 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       if (routedRecipient(parked) !== recipientId) {
         continue;
       }
-      ctx.pending.unroute(parked.requestId ?? "");
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
-      ctx.registry.broadcast(AskCard.of(parked));
-      ctx.push.onAsk(parked);
-      // Its parent, if it can still be woken, hears it is the person's now.
-      ctx.delegateWaits.asked(parked, true);
+      makePersons(parked);
     }
   };
 
   /**
-   * The parent a delegate's ask goes to: the session that started its work,
-   * and no other (work-items.ts `reportees`), live, or asleep with a
-   * conversation to wake from, and whose own work is not finished; none
-   * leaves the ask the person's.
+   * The parked ask routed to a delegate's parent made the person's: its
+   * routing taken off, on every screen and push, and the sessions above
+   * told it is the person's now. Its parent's forward ({@link forward}) and
+   * its parent's end ({@link escalateRoutedAsks}) both come here.
    */
+  const makePersons = (parked: ParkedAsk): void => {
+    ctx.pending.unroute(parked.requestId ?? "");
+    ctx.registry.broadcast(AskCard.of(parked));
+    ctx.push.onAsk(parked);
+    // Its parent, if it can still be woken, hears it is the person's now.
+    ctx.delegateWaits.asked(parked, true);
+  };
+
+  /**
+   * `parent` forwards the ask `requestId` its delegate's ask routed to it to
+   * the person ({@link makePersons}): `answer_delegate` with `forward`.
+   * Answers what the tool says; throws a sentence when it can't.
+   */
+  const forward = (parent: InstanceRow, requestId: string): string => {
+    const parked = ctx.pending.get(requestId);
+    if (!parked) {
+      throw new Error(
+        `${requestId} waits on no one now: it was answered or closed.`
+      );
+    }
+    if (parked.payload.routedTo !== "parent") {
+      throw new Error(`${requestId} is the person's already.`);
+    }
+    if (routedRecipient(parked) !== parent.id) {
+      throw new Error(
+        `${requestId} was routed to another session; that session forwards it.`
+      );
+    }
+    console.log(
+      `[hub] ask ${requestId} of ${parked.instanceId} forwarded to the person by ${parent.id}`
+    );
+    makePersons(parked);
+    return `Forwarded ${requestId} to the person: their answer reaches your delegate, and you hear how it ended.`;
+  };
+
   const delegateAskParent = (
     sender: InstanceRow,
     { unknown = false }: { unknown?: boolean } = {}
@@ -387,10 +418,12 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     const { ask } = card;
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
-    const instruction =
-      "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
-      "answers are keyed by the exact question text and the value is the chosen option label " +
-      "(pass deny=true to refuse it).";
+    const question =
+      ask.payload.requestKind === "question" ||
+      ask.payload.toolName === ASK_USER_QUESTION;
+    const instruction = question
+      ? "Answer it from what you know with answer_delegate(target, requestId, answers): answers keyed by the exact question text, each the chosen option's label. When only the person can answer it, forward it as it stands: answer_delegate(target, requestId, forward=true)."
+      : "Answer it with answer_delegate(target, requestId): allowed as asked, or deny=true to refuse it. When only the person can decide it, forward it: answer_delegate(target, requestId, forward=true).";
     const sent = ctx.deliverSend(
       sessionWord(
         parent,
@@ -595,6 +628,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     askRefusal,
     ownsPermission,
     escalateRoutedAsks,
+    forward,
     delegateAskParent,
     deliverDelegateAsk,
     tellParentOfWait,

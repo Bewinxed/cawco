@@ -2197,6 +2197,31 @@
               },
               "meanwhile": {
                 "type": "string"
+              },
+              "task": {
+                "type": "string"
+              },
+              "pin": {
+                "type": "object",
+                "properties": {
+                  "artifact": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "artifact",
+                  "id",
+                  "number"
+                ]
+              },
+              "step": {
+                "type": "string"
               }
             },
             "required": [
@@ -2241,6 +2266,9 @@
               "name": {
                 "type": "string"
               },
+              "quote": {
+                "type": "string"
+              },
               "via": {
                 "type": "string",
                 "enum": [
@@ -2248,7 +2276,8 @@
                   "app",
                   "session",
                   "harness",
-                  "fullSend"
+                  "fullSend",
+                  "words"
                 ]
               }
             },
@@ -2303,6 +2332,17 @@
       "withdrawn": {
         "type": "object",
         "properties": {
+          "by": {
+            "type": "string",
+            "enum": [
+              "hub",
+              "asker",
+              "session"
+            ]
+          },
+          "session": {
+            "type": "string"
+          },
           "why": {
             "type": "string"
           }

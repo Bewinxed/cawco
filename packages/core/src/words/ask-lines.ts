@@ -22,13 +22,30 @@ export const askUnreadWords = (id: string): string =>
 
 /** What an approve ask's call answers at once, in one paragraph. */
 export const askRecordedWords = (ask: { id: string; link: string }): string =>
-  `Recorded as ${ask.link}: it waits on the person. Carry on with work that doesn't depend on it; the answer arrives as a message that names it. Don't ask it again, and don't do it another way. With nothing else to do, end your turn: the answer wakes you.`;
+  `Recorded as ${ask.link}: it waits on the person. Carry on with work independent of it; the answer arrives as a message that names it, and the hub runs the call once he approves. With nothing else to do, end your turn: the answer wakes you.`;
 
-/** What a question's `ask` call answers at once: what waits on the answer, or what goes ahead. */
-export const askQuestionWords = (link: string, asked: AskedQuestion): string =>
-  asked.blocks
-    ? `Asked as ${link}; ${asked.waiting ?? ""} waits on the person's answer. Don't do that work or anything that rests on it until the answer arrives as a message naming it. Do only work independent of it; with none left, end your turn: the answer wakes you.`
-    : `Asked as ${link}. Go ahead with ${asked.meanwhile ?? ""}; if their answer differs, it arrives as a message naming it and you change course.`;
+/**
+ * What a question's `ask` call answers at once: where it went (the person,
+ * or a delegate's parent), its request id, the open questions of the asker
+ * it replaced, and what waits on the answer or what goes ahead.
+ */
+export const askQuestionWords = (
+  link: string,
+  asked: AskedQuestion,
+  how: { id: string; replaced: readonly string[]; routed: boolean }
+): string => {
+  const to = how.routed
+    ? "your parent session, which answers it or forwards it to the person"
+    : "the person";
+  const replaced =
+    how.replaced.length > 0
+      ? ` It replaces your earlier ${how.replaced.join(", ")}, now closed.`
+      : "";
+  const head = `Asked ${to} as ${link} (request ${how.id}).${replaced}`;
+  return asked.blocks
+    ? `${head} ${asked.waiting ?? ""} waits on the answer, which arrives as a message naming it. Meanwhile do only work independent of it; with none left, end your turn: the answer wakes you. If it stops applying, withdraw it with question_close.`
+    : `${head} Go ahead with ${asked.meanwhile ?? ""}; if the answer differs, it arrives as a message naming it and you change course.`;
+};
 
 /** The line a question's card and push carry: whether work waits on it. */
 export const askStanceLine = (asked: {
@@ -56,6 +73,8 @@ const answererWords = (by: AskAnswer): string => {
       return "the harness";
     case "fullSend":
       return "Full Send";
+    case "words":
+      return "a session quoting the person";
     default:
       return by.via satisfies never;
   }
@@ -67,5 +86,5 @@ export const askClosedWords = (ask: AskRecord): string => {
     const { at, by } = ask.answer;
     return `That ask was already answered by ${answererWords(by)} at ${dayWords(at)} ${clockWords(at)}.`;
   }
-  return `That ask was withdrawn: ${ask.withdrawn?.why ?? "its session ended"}.`;
+  return `That ask was closed: ${ask.withdrawn?.why ?? "its session ended"}.`;
 };

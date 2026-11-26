@@ -333,19 +333,6 @@ export const findTasks = (projectId: string, words: string, archived = false) =>
     refusedOrUnreached
   );
 
-/** The project's tasks the hub says wait on you (`needsYou`): Caw's Needs you lists them. */
-export const listTasksWaiting = async (
-  projectId: string
-): Promise<TaskSummary[]> =>
-  (
-    await hubData(
-      hub.api.projects({ id: projectId }).tasks.get({
-        query: { needsYou: "1" },
-      }),
-      refusedOrUnreached
-    )
-  ).tasks;
-
 export const readStages = (projectId: string, client: HubClient = hub) =>
   hubData(
     client.api.projects({ id: projectId }).stages.get(),

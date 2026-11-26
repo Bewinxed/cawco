@@ -562,6 +562,7 @@ import { createMemory, inboxNotes } from "./memory";
 import { createMemoryRun } from "./memory-run";
 import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
+import { createNeedsRows } from "./needs-rows";
 import { createNoticesSeen } from "./notices";
 import {
   artifactCollapseId,
@@ -570,6 +571,7 @@ import {
   notificationRoutes,
 } from "./notifications";
 import { createOffersWaiting, offersWaitingRoutes } from "./offers-waiting";
+import { createOpenAsks } from "./open-asks";
 import { createOpenItems } from "./open-items";
 import { createOutsiders, outsiderRoutes } from "./outsiders";
 import { watchPairingRequests } from "./pairing-requests";
@@ -1539,6 +1541,7 @@ export const createServer = (
     credentialTurns: () => credentialTurns,
     endOwedNotices: () => endOwedNotices,
     forgetPending: () => forgetPending,
+    forwardRouted: () => forwardRouted,
     forkNoticeFor: () => forkNoticeFor,
     hubStep: () => hubStep,
     hubTurn: () => hubTurn,
@@ -1581,6 +1584,8 @@ export const createServer = (
     lifecycle: () => lifecycle,
     locateSession: () => locateSession,
     noteAtLimit: () => noteAtLimit,
+    needsRows: () => needsRows,
+    openAsks: () => openAsks,
     openItems: () => openItems,
     owedMoves: () => owedMoves,
     parkForPerson: () => parkForPerson,
@@ -2227,6 +2232,7 @@ export const createServer = (
     delegateAskParent,
     deliverDelegateAsk,
     escalateRoutedAsks,
+    forward: forwardRouted,
     forgetPending,
     ownsPermission,
     processGeneration,
@@ -2860,6 +2866,20 @@ export const createServer = (
         name: origin,
         ...(uuid ? { uuid } : {}),
       }),
+    note: (instanceId, text) =>
+      tellSession(instanceId, text, { name: ASK_ORIGIN, quiet: true }),
+    // A delegate's question goes to its parent, as its prompts do.
+    parentFor: (asker) => delegateAskParent(asker),
+    askedAt: (asker) => {
+      const item = asker.workItemId ? db.workItem(asker.workItemId) : undefined;
+      const step = db
+        .sessionPlan(asker.id)
+        ?.steps.find((one) => one.status === "in_progress")?.id;
+      return {
+        ...(item?.taskId ? { task: item.taskId } : {}),
+        ...(step ? { step } : {}),
+      };
+    },
     // A notice's line, written again on its record and to every screen.
     reline: (uuid, line) => {
       const record = db.sendRecord(uuid);
@@ -4629,8 +4649,6 @@ export const createServer = (
     artifactMoved: (id, last) => artifacts.laneMoved(id, last),
     broadcast: (frame) => {
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
-      // A pin answered: an artifact's push still saying more asks comes to its count.
-      push.needsNow(unparked(frame.needs));
     },
     left: (id) => {
       notifications.clear([artifactCollapseId(id)], "settled");
@@ -4639,6 +4657,19 @@ export const createServer = (
   // The lane holds its read until something it is read from moves: an
   // artifact's row is one of them, whoever writes it.
   db.onArtifactsWritten(() => artifactLane.moved());
+  // Each turn's word of the project's open questions to the person.
+  const openAsks = createOpenAsks({
+    db,
+    needs: () => artifactLane.now().needs,
+  });
+  // Needs you's rows, one per piece of stopped work (needs-rows.ts).
+  const needsRows = createNeedsRows({
+    db,
+    needs: () => artifactLane.now().needs,
+    parked: () => pending.list(),
+    // The project's tasks are made further down; read when asked.
+    tasks: { list: (projectId) => tasks.list(projectId) },
+  });
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
@@ -4649,6 +4680,8 @@ export const createServer = (
       artifactLane.artifactMoved(id);
       if (by === "person") {
         artifacts.personMarked(id);
+        // His reply on a pin that asked him answers it; his resolve dismisses it.
+        artifacts.pinThreadsMoved(id);
       }
       // Every question answered, what he wrote goes by itself.
       artifacts.answersMoved(id, by);
@@ -5063,16 +5096,9 @@ export const createServer = (
         machineId: "hub",
         payload: { kind: "questions.moved", artifactId },
       }),
-    // A pin's reply that asks: the artifact's item as the lane reads it now
-    // (its count), pushed unless it is put away with Not now or not in the lane.
-    pinAsked: (artifactId, text) => {
-      const need = unparked(artifactLane.now().needs).find(
-        (one) => one.artifactId === artifactId
-      );
-      if (need) {
-        push.pinAsked(need, text);
-      }
-    },
+    // A reply on a pin that needs his choice is its session's question.
+    pinQuestion: (asker, asked) => hubAsks.pinQuestion(asker, asked),
+    pinAnswered: (askId, by) => hubAsks.pinAnswered(askId, by),
     // A look at the artifact takes its push down.
     looked: (id) => {
       notifications.clear([artifactCollapseId(id)], "look");
@@ -10234,6 +10260,7 @@ export const createServer = (
     inbox: inboxNotes,
     plan: plans.read,
     questions: (instanceId) => artifacts.questions(instanceId),
+    projectAsks: (row) => openAsks.of(row),
     tasks,
   });
   /**

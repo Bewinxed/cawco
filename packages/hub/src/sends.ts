@@ -442,6 +442,7 @@ export type SendsContext = Pick<
   | "movingAtMessage"
   | "nameFromLiveTurn"
   | "notifications"
+  | "openAsks"
   | "planChanges"
   | "processAt"
   | "pulses"
@@ -2423,13 +2424,22 @@ export const createSends = (ctx: SendsContext) => {
       : [...content, { type: "text", text: withReminder("", lines) }];
   };
 
+  /** A send that starts a turn carries its project's open questions to the person (open-asks.ts); none for a quiet note. */
+  const turnAsks = (
+    row: InstanceRow | undefined,
+    message: HubEnvelope<"send">["payload"]["message"]
+  ): string | undefined =>
+    row && message.shouldQuery !== false ? ctx.openAsks.block(row) : undefined;
+
   /**
    * The send as its machine is handed it: a copy with CawCo's word to the
    * agent after its text, in one `<system-reminder>` block (core
    * `withReminder`), read fresh at every hand, a hand again included, on
    * every harness alike: the send's own reminder (core
    * `NeutralUserMessage.reminder`: where it came from, which skill applies),
-   * then the person's presence ({@link personSaid}). The record keeps the
+   * then the person's presence ({@link personSaid}), then, on a send that
+   * starts a turn, its project's open questions to the person
+   * (open-asks.ts). The record keeps the
    * send as it was accepted: the person's bubble is their words alone. A
    * keep-alive ping goes as it is; a send to a session that does not talk
    * with the person (roles.ts `talksWithPerson`: a work item asks its
@@ -2443,10 +2453,12 @@ export const createSends = (ctx: SendsContext) => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
     const said =
       row && !toldOfPerson(row) ? undefined : personSaid(instanceId, message);
+    const asking = turnAsks(row, message);
     const { reminder, ...sent } = message;
     const lines = [
       ...(reminder ? [reminder] : []),
       ...(said ? [presenceLine(said)] : []),
+      ...(asking ? [asking] : []),
     ];
     if (lines.length === 0) {
       return envelope;

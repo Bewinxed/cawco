@@ -25,7 +25,6 @@
     IconDecisions,
     IconEye,
     IconKey,
-    IconPin,
     IconQuestion,
     IconShieldKeyhole,
   } from "#lib/icons.js";
@@ -46,7 +45,6 @@
   const KIND_GLYPH: Record<WaitingKind, Component<Record<string, unknown>>> = {
     card: IconDecisions,
     judge: IconEye,
-    pin: IconPin,
     permission: IconShieldKeyhole,
     question: IconQuestion,
     connect: IconKey,

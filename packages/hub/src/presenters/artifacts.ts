@@ -84,6 +84,8 @@ export type Updated =
 
 /** What `comment_reply` answers. */
 export interface CommentReplied {
+  /** What the agent reads of the question its reply carried, when it carried one. */
+  asked?: string;
   entry: ThreadEntry;
   /** The pin's link, `[label](cawco:pin/<artifact>/<number>)`. */
   link: string;
@@ -594,9 +596,14 @@ const brokenLines = (broken: PageBroken | undefined): string[] =>
     : [];
 
 /** `artifact_create`: whether it opened, and what a decision page or canvas came to. */
+/** What a create or show of an artifact that holds no pick says: where it stands, and where a choice goes. */
+const ASKS_NOTHING =
+  "It puts no pick to the person, so it waits on no one; they find it in Files. A choice for them goes on a decision page's cards, a design graph's directions, or ask.";
+
 export const artifactCreatedWords = (created: Created): string =>
   lines(
     `Made ${named(created)}. ${openedWords(created.opened ? { opened: true } : { opened: false, why: created.why ?? "no view said why" })}`,
+    created.asksNothing && ASKS_NOTHING,
     markedLine(created.marked),
     created.held,
     created.note,
@@ -760,7 +767,7 @@ export const artifactUpdatedDetailed = (updated: Updated): Presented =>
 
 /** `artifact_show`: the artifact by its link, and whether it is on the person's screen. */
 export const artifactShownWords = (shown: Shown): string =>
-  `${shown.link}: ${openedWords(shown)}`;
+  `${shown.link}: ${openedWords(shown)}${shown.asksNothing ? ` ${ASKS_NOTHING}` : ""}`;
 
 /** `artifact_browse`: the address to load, and until when; a design's directions each at its own address. */
 export const artifactBrowsedWords = (
@@ -863,7 +870,7 @@ export const commentReadWords = (
 
 /** `comment_reply`. */
 export const commentRepliedWords = (replied: CommentReplied): string =>
-  `Answered ${replied.link} in its thread, where they read it${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}. Name the pin to the person by that link.`;
+  `Answered ${replied.link} in its thread, where they read it${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}. Name the pin to the person by that link.${replied.asked ? ` Its question: ${replied.asked}` : ""}`;
 
 /** `comment_resolve`. */
 export const commentResolvedWords = (resolved: CommentResolved): string =>

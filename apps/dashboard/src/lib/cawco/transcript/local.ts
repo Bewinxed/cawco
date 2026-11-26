@@ -101,6 +101,7 @@ export function answeredNote(
     session: answer.name ? `by ${answer.name}` : "by another session",
     harness: `in ${harness}`,
     fullSend: "by Full Send",
+    words: answer.name ? `from his words, by ${answer.name}` : "from his words",
   }[answer.via];
   return {
     id: newId(),

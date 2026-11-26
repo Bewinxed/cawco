@@ -2329,13 +2329,7 @@ public enum Words {
         /// A row's dot, for a screen reader: the person has something to do on it.
         public static let waitingOnYou = "Needs you"
 
-        /// Shown and never opened: the row's line.
-        public static let notOpened = "New · not opened"
-
-        /// The same on a Files card's meta line.
-        public static let notOpenedShort = "New"
-
-        /// A decision page's questions answered: by a pick, a note, or a pin the agent answered and resolved.
+        /// An artifact's questions answered: a decision page's cards by a pick, a note, or a pin the agent answered and resolved; a design graph's pick between its directions.
         public static func answered(answered: Int, asked: Int) -> String {
             "\(answered) of \(asked) answered"
         }
@@ -2345,14 +2339,9 @@ public enum Words {
             "\(answered) of \(asked)"
         }
 
-        /// Open pins whose agent's reply asks the person something: the row's line, the push's body.
+        /// Resolved pins with answers the person hasn't read: Jump's line.
         public static func newAnswers(count: Int) -> String {
             count == 1 ? "1 new answer" : "\(count) new answers"
-        }
-
-        /// The one reason, an answer on one pin: where it is.
-        public static func newAnswerOn(pin: Int) -> String {
-            "1 new answer on pin \(pin)"
         }
 
         /// The kind on the row's meta line, where an ask says "Question".
@@ -2421,16 +2410,8 @@ public enum Words {
         /// Who ended, when the hub no longer holds the session.
         public static let itsSession = "Its session"
 
-        public static func neverOpened(name: String) -> String {
-            "\(name) never opened"
-        }
-
         public static func neverAnswered(count: Int, name: String) -> String {
             count == 1 ? "1 question on \(name) never answered" : "\(count) questions on \(name) never answered"
-        }
-
-        public static func neverRead(count: Int, name: String) -> String {
-            count == 1 ? "1 answer on \(name) never read" : "\(count) answers on \(name) never read"
         }
 
         /// A notice's ✕, for a screen reader.

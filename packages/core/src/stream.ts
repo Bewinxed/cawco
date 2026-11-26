@@ -556,12 +556,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    outside service's unvouched author's words held on an item no task
  *    links (hub outsiders.ts). A page built for 109 reads the offers'
  *    kinds closed, so it reloads first.
+ * 111: an agent's pin reply carries the question it asks as `ask` (an
+ *    ask's id, core comments/model.ts) in place of the `asks` flag, an
+ *    artifact need's reason is only `answers`, and a session question's
+ *    kind is a card or a design graph's pick (core artifact-needs.ts,
+ *    session-questions.ts). A page built for 110 reads them closed, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 110;
+export const WIRE_PROTOCOL = 111;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

@@ -118,8 +118,8 @@ export const stepNamesArtifact = (
 /**
  * The plan's own needs: what of a session waits on the person, exactly its
  * items in Needs you (artifact-needs.ts `unparked`, which the hub's
- * artifacts/needs.ts reads from questions.ts: an open question, a canvas to
- * judge not opened, a pin asking), in its order, that no open step's
+ * artifacts/needs.ts reads from questions.ts: an open card or design
+ * graph's pick), in its order, that no open step's
  * `waitsOn` names a card or pin of ({@link stepNamesArtifact}), by artifact
  * id. One a step names shows on that step. Derived on every read, never
  * stored: a page whose every question is answered, taken or withdrawn, or

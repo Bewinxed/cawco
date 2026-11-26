@@ -311,10 +311,17 @@ import {
  * owner's decision on outsiders that day: readable and settable through
  * the project's settings tools) (worker 33,865 measured); the worker's
  * budget is raised to it.
+ * 2026-11-26: a raise to the person must hold a question (tsk-519):
+ * `comment_reply` takes its `question` in `ask`'s shape in place of the
+ * `asks` flag, `ask` takes the task it is about and the question it
+ * replaces, `record_pick` takes a session question's answers,
+ * `question_close` the evidence that another session's question was
+ * overtaken, and `answer_delegate` a `forward` to the person (worker
+ * 34,139, delegate 14,631 measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 33_865,
-  delegate: 14_380,
+  worker: 34_139,
+  delegate: 14_631,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

@@ -20,7 +20,10 @@
  *   every question its delegation tree put to the person, open or answered
  *   and not yet taken (artifacts/questions.ts, its own first, an ended
  *   delegate's taken up by it), its notes still in the project's memory
- *   inbox, and its asks still waiting on the person (asks.ts). Every harness has it listed after each of its compactions,
+ *   inbox, its asks (asks.ts: those open, each question with its options
+ *   and what waits on it, then its questions answered most lately, with
+ *   his answer), and every question its project holds open for the person
+ *   (open-asks.ts). Every harness has it listed after each of its compactions,
  *   whoever asked for it, each reading the `open_items` tool: Claude Code
  *   through the agent's SessionStart hook on the `compact` source (claude.ts
  *   `openItemsAfterCompaction`), pi as a message that starts no turn on its
@@ -29,13 +32,14 @@
  *   opencode-plugin.ts). A person's Continue opens the new session on it.
  */
 
-import { askLink } from "@cawco/core/asks";
+import { type AskRecord, askLink, askOutcome } from "@cawco/core/asks";
 import type {
   ContextFill,
   FiledRecords,
   FilingWrote,
 } from "@cawco/core/context-filing";
 import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import { ElysiaStatus, problem } from "elysia";
@@ -44,7 +48,9 @@ import type { Artifacts } from "./artifacts/service";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { inboxNotes, Note } from "./memory";
+import type { OpenAsk } from "./open-asks";
 import type { Plans } from "./plans";
+import { ago } from "./presenters/words";
 import { recordsProjectOf } from "./records-project";
 
 import type { Tasks } from "./tasks";
@@ -91,12 +97,14 @@ const OPEN_ITEMS_HEADING =
 
 /** What the reader gathered: each source's rows, as stored. */
 export interface OpenItemRows {
-  /** Its asks still waiting on the person, approvals and questions, each by its link. */
-  asks: string[];
+  /** Its asks: those still open (approvals and questions), then its questions answered most lately, the newest answer first. */
+  asks: AskRecord[];
   /** Its notes still in its project's memory inbox. */
   notes: Note[];
   /** Its plan: the tasks and to-dos it works on, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
+  /** Every question its project holds open for the person, newest first (open-asks.ts). */
+  projectAsks: OpenAsk[];
   /** The project its records live in (records-project.ts). */
   projectId: string;
   /** Every question its delegation tree put to the person, open or answered, its own first (artifacts/service.ts `questions`). */
@@ -172,10 +180,6 @@ const answerWords = (answer: QuestionAnswer, detailed: boolean): string => {
       return `set ${answer.said}`;
     case "pin":
       return `a pin on it you answered and resolved: ${quoted(answer.said, detailed)}`;
-    case "reply":
-      return `replied ${quoted(answer.said, detailed)}`;
-    case "resolve":
-      return "resolved it";
     case "dismiss":
       return answer.said
         ? `dismissed it without a pick, saying ${quoted(answer.said, detailed)}`
@@ -204,9 +208,6 @@ const questionLines = (
       : "open";
   return [
     `  - ${head}: ${question.link}`,
-    ...(detailed && question.kind === "pin" && question.words
-      ? [`    You asked: ${quoted(question.words, true)}`]
-      : []),
     ...(detailed && question.why ? [`    Why: ${question.why}`] : []),
   ];
 };
@@ -230,7 +231,7 @@ const questionsPart = (
   const shown = all.slice(page.cursor, page.cursor + QUESTIONS_PAGE);
   const lines: string[] = [
     "### Questions you and your delegates put to the person",
-    "An open one waits on him; an answered or dismissed one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies). One answered in his own words is him talking to you: answer what he said, then take it as the option it plainly approves, or ask again in place with what it raised. A dismissed one he put down without a pick: don't ask it again in the same words.",
+    "An open one waits on him; an answered or dismissed one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies). One answered in his own words is him talking to you: answer what he said, then take it as the option it plainly approves, or ask again in place with what it raised. A dismissed one he put down without a pick: decide what you can and say what you assumed.",
   ];
   shown.forEach(({ of, question }, n) => {
     if (shown[n - 1]?.of !== of) {
@@ -247,12 +248,74 @@ const questionsPart = (
   return lines;
 };
 
+/** How many of a session's answered questions its Open items lists, the newest answer first. */
+const ANSWERED_LISTED = 10;
+
+/** An ask's options, as one line: each label, a bar between. */
+const optionsLine = (options: readonly { label: string }[]): string =>
+  options.map((one) => one.label).join(" | ");
+
+/**
+ * An ask's lines: its state (open, with what waits on it or what went
+ * ahead, or answered, with when), its link and request id and what it is
+ * about, then each question with its options while open, or with his
+ * answer once answered.
+ */
+const askLines = (ask: AskRecord, now: number): string[] => {
+  const { asked } = ask;
+  if (asked.kind !== "question") {
+    return [
+      `- ${ask.state}, ${ago(ask.raisedAt, now)}: ${askLink(ask)} (${ask.id})`,
+    ];
+  }
+  const about = [
+    ask.id,
+    ...(asked.task ? [`about ${asked.task}`] : []),
+    ...(asked.pin ? [`on pin ${asked.pin.number}`] : []),
+  ].join(", ");
+  const { answer } = ask;
+  if (ask.state === "answered" && answer) {
+    const answers =
+      answer.result.behavior === "allow" ? (answer.result.answers ?? {}) : {};
+    const said = (one: string): string => {
+      const given = answers[one];
+      if (given === undefined) {
+        return "(no answer)";
+      }
+      return Array.isArray(given) ? given.join(", ") : given;
+    };
+    const how =
+      askOutcome(ask) === "dismissed"
+        ? "dismissed without an answer"
+        : `answered${answer.by.via === "words" ? ` in his words elsewhere (“${answer.by.quote ?? ""}”)` : ""}`;
+    return [
+      `- ${how}, ${ago(answer.at, now)}: ${askLink(ask)} (${about})`,
+      ...asked.questions.map(
+        (one) => `  - ${one.question}: ${said(one.question)}`
+      ),
+    ];
+  }
+  const stance = asked.blocks
+    ? `blocks ${asked.waiting ?? "work"}`
+    : `went ahead with ${asked.meanwhile ?? "work"}`;
+  return [
+    `- open, ${stance}, asked ${ago(ask.raisedAt, now)}${ask.routedTo ? ", with your parent" : ""}: ${askLink(ask)} (${about})`,
+    ...asked.questions.map(
+      (one) => `  - ${one.question} Options: ${optionsLine(one.options)}`
+    ),
+  ];
+};
+
 /**
  * The Open items section, built from `rows`: each source under its own
  * heading, its rows as stored; a source with nothing open says nothing. With
  * nothing open anywhere it says so, so a reader knows the records were read.
  */
-function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
+function openItemsSection(
+  rows: OpenItemRows,
+  page: QuestionsPage,
+  now = Date.now()
+): string {
   const parts: string[] = [];
   const steps = (rows.plan?.steps ?? []).filter(
     (step) => step.status !== "completed"
@@ -285,8 +348,14 @@ function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
   parts.push(...questionsPart(rows.questions, page));
   if (rows.asks.length > 0) {
     parts.push(
-      "### Your asks waiting on the person (each answer arrives as a message)",
-      ...rows.asks.map((link) => `- ${link}`)
+      "### Your asks to the person (an answer arrives as a message; withdraw one that stopped applying with question_close)",
+      ...rows.asks.flatMap((ask) => askLines(ask, now))
+    );
+  }
+  if (rows.projectAsks.length > 0) {
+    parts.push(
+      "### Open questions to the person in this project, newest first (record his words that answer one with record_pick; close one whose work moved on with question_close and the evidence)",
+      ...rows.projectAsks.map((one) => `${one.line} · ${ago(one.at, now)}`)
     );
   }
   if (rows.notes.length > 0) {
@@ -303,7 +372,7 @@ function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
     ...(parts.length > 0
       ? parts
       : [
-          "Nothing open is filed: no open plan steps, to-dos, tasks, questions to the person, notes or asks.",
+          "Nothing open is filed: the records hold no open plan step, to-do, task, question to the person, note or ask.",
         ]),
   ].join("\n");
 }
@@ -365,6 +434,8 @@ export interface OpenItemsDeps {
   inbox: typeof inboxNotes;
   /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
   plan: Plans["read"];
+  /** Every question the project `row`'s records live in holds open for the person (open-asks.ts `of`). */
+  projectAsks: (row: InstanceRow) => OpenAsk[];
   /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`), or the refusal of a session the hub does not have. */
   questions: Artifacts["questions"];
   tasks: Pick<Tasks, "get" | "list">;
@@ -421,7 +492,10 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     if (plan instanceof ElysiaStatus) {
       return plan;
     }
-    const asks = deps.db.asks.openOf(instanceId).map(askLink);
+    const asks = [
+      ...deps.db.asks.openOf(instanceId),
+      ...deps.db.asks.answeredOf(instanceId, ANSWERED_LISTED),
+    ];
     const questions = deps.questions(instanceId);
     if (questions instanceof ElysiaStatus) {
       return questions;
@@ -439,6 +513,7 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     const held: OpenItemRows = {
       projectId,
       asks,
+      projectAsks: deps.projectAsks(row),
       plan,
       questions,
       tasks,

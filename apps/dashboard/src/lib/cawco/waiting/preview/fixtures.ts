@@ -56,7 +56,7 @@ const ONE_PAGE: SessionQuestion[] = [
   ),
 ];
 
-/** A page, a canvas to judge, a pin that asks him. */
+/** A page, and a design graph's pick between its directions. */
 const SEVERAL: SessionQuestion[] = [
   ...ONE_PAGE,
   card(
@@ -72,17 +72,6 @@ const SEVERAL: SessionQuestion[] = [
     state: "open",
     answer: null,
     stop: { top: true },
-    artifact: RECORD,
-    session: null,
-  },
-  {
-    key: "pin:p7",
-    kind: "pin",
-    words:
-      "Should the decided count link to the Decisions tab, or open the member's own record?",
-    state: "open",
-    answer: null,
-    stop: { pin: 7 },
     artifact: RECORD,
     session: null,
   },

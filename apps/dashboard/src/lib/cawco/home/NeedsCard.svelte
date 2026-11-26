@@ -75,6 +75,7 @@
   import { causeLine } from "@cawco/core/words/install";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { mcpWords } from "@cawco/core/words/mcp";
+  import { needsRowWords } from "@cawco/core/words/needs-rows";
   import { offerWords } from "@cawco/core/words/offers";
   import { outsiderWords } from "@cawco/core/words/outsiders";
   import { pairingWords } from "@cawco/core/words/pairing";
@@ -197,6 +198,19 @@
     // An ask opens where it was made (`askView`).
     return conversationHref(askView(item), boardStore.instanceIndex);
   });
+  /** A task's line: its review, its failed attempt, or its questions while it stands in `stage`. */
+  const taskWant = (
+    reason: "review" | "failed" | null,
+    stage: string
+  ): string => {
+    if (reason === null) {
+      return needsRowWords.taskQuestions(stage);
+    }
+    return reason === "review"
+      ? `Review the draft: it waits on you in ${stage}`
+      : "Its session failed: read why, then try again";
+  };
+
   /** What it asks for, in the words it is asked: its second line. */
   const want = $derived.by(() => {
     switch (item.kind) {
@@ -238,9 +252,7 @@
       case "machine":
         return contactWords.lostLine(item.name, item.minutes, item.hub);
       case "task":
-        return item.reason === "review"
-          ? `Review the draft: it waits on you in ${item.stage}`
-          : "Its session failed: read why, then try again";
+        return taskWant(item.reason, item.stage);
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;

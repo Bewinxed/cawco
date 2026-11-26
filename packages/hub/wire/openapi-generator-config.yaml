@@ -146,6 +146,7 @@ typeOverrides:
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep
+    NeedsRowTaskWaits: OpenEnums.NeedsRowTaskWaits
     NeutralOriginLive: OpenEnums.NeutralOriginLive
     NeutralOriginSubkind: OpenEnums.NeutralOriginSubkind
     NeutralSessionInfoStartedBy: OpenEnums.NeutralSessionInfoStartedBy

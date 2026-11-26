@@ -11,12 +11,12 @@
 import type { ArtifactKind } from "./artifact-kinds";
 import type { ArtifactStop } from "./artifact-needs";
 
-/** What a question is: a decision card, a canvas or preview to judge, a pin the agent's reply asked on. */
-export type SessionQuestionKind = "card" | "judge" | "pin";
+/** What a question is: a decision card, or a design graph's pick between its directions. */
+export type SessionQuestionKind = "card" | "judge";
 
-/** How he answered: a pick, a note, his own words in place of a pick, a value set, a pin or a reply written, a pin resolved, or the question dismissed without a pick. */
+/** How he answered: a pick, a note, his own words in place of a pick, a value set, a pin on it answered and resolved, or the question dismissed without a pick. */
 export type SessionAnswerHow =
-  "pick" | "note" | "words" | "value" | "pin" | "reply" | "resolve" | "dismiss";
+  "pick" | "note" | "words" | "value" | "pin" | "dismiss";
 
 export interface SessionQuestion {
   /** His answer, as the list shows it under the question; null while open. */
@@ -24,12 +24,12 @@ export interface SessionQuestion {
     /** When, ISO. */
     at: string;
     by: SessionAnswerHow;
-    /** What he said: the options he picked, joined; his words; empty for a resolve. */
+    /** What he said: the options he picked, joined; his words. */
     said: string;
   } | null;
   /** The artifact that asks it. */
   artifact: { id: string; kind: ArtifactKind; title: string };
-  /** Its key on that artifact: `card:<id>`, `judge`, `pin:<id>`. */
+  /** Its key on that artifact: `card:<id>`, `judge`. */
   key: string;
   kind: SessionQuestionKind;
   /** The session under this one that holds it; null when it is this session's own. */
@@ -38,7 +38,7 @@ export interface SessionQuestion {
   state: "open" | "answered";
   /** Where the artifact's panel opens to answer it. */
   stop: ArtifactStop;
-  /** The question as asked: a card's question, the artifact's ask, the agent's asking reply. */
+  /** The question as asked: a card's question, the artifact's ask. */
   words: string;
 }
 

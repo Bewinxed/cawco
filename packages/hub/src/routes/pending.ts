@@ -8,6 +8,7 @@ import type {
   ArtifactNeedsRead,
 } from "@cawco/core/artifact-needs";
 import type { ParkedAsk } from "@cawco/core/frames";
+import type { NeedsRowsRead } from "@cawco/core/needs-rows";
 import type { Envelope } from "@cawco/core/protocol";
 
 import { Elysia, problem, t } from "elysia";
@@ -24,6 +25,7 @@ export const pendingRoutes = ({
   artifactLane,
   db,
   handoffs,
+  needsRows,
   notifications,
   pending,
 }: Pick<
@@ -32,6 +34,7 @@ export const pendingRoutes = ({
   | "artifactLane"
   | "db"
   | "handoffs"
+  | "needsRows"
   | "notifications"
   | "pending"
 >) =>
@@ -126,4 +129,8 @@ export const pendingRoutes = ({
     // Needs you's artifacts and their notices as they stand (core
     // artifact-needs.ts); each change after arrives as an
     // `artifact.needs` frame.
-    .get("/api/artifact-needs", (): ArtifactNeedsRead => artifactLane.now());
+    .get("/api/artifact-needs", (): ArtifactNeedsRead => artifactLane.now())
+    // Needs you's rows, one per piece of stopped work, newest first
+    // (needs-rows.ts): the dashboard reads them again as asks, the lane or
+    // a project's tasks move.
+    .get("/api/needs-rows", (): Promise<NeedsRowsRead> => needsRows.read());
