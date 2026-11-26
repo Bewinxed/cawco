@@ -840,9 +840,7 @@ class AgySession {
     }
     this.#endTurn(
       stopReason,
-      pictures > 0
-        ? { words: agyWords.pictureRefused(fault.said ?? fault.words) }
-        : fault
+      pictures > 0 ? { words: agyWords.pictureRefused(fault.said) } : fault
     );
   }
 

@@ -4,7 +4,8 @@
  * that cannot start one, a session kind Antigravity runs none of yet, and a
  * turn that ends without a reply or at the account's quota. Read by the
  * agent alone; the app draws none of it. Decided by Gemini 4 Neon on
- * 2026-11-26 (the project's `assets/eb689d78/neon-answer.md`).
+ * 2026-11-26 (the project's `assets/eb689d78/neon-answer.md`; the picture
+ * strings, `assets/046b2a6e/neon-answer.md`).
  */
 
 export const agyWords = {
@@ -69,10 +70,12 @@ export const agyWords = {
   /** A send whose pictures and words together are over Google's request size. */
   sendTooBig: (limit: string) => `This message is over ${limit}.`,
   /**
-   * Google refused a turn's pictures after agy took them: the conversation
-   * that holds them is set aside, and the next message starts a new one
-   * carrying its transcript (agy-runtime.ts).
+   * Google refused a turn's pictures after agy took them, in Google's words
+   * when it said any; the conversation that holds them is set aside, and the
+   * next message goes to a new one carrying its transcript (agy-runtime.ts).
    */
-  pictureRefused: (said: string) =>
-    `Google couldn't read the picture: ${said} Your next message starts a new conversation with this one's transcript.`,
+  pictureRefused: (said: string | undefined) =>
+    said
+      ? `Google refused the picture. ${said}`
+      : "Google refused the picture.",
 } as const;
