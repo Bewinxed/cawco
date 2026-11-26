@@ -11,6 +11,7 @@
  * GitLab's refusal read into its kind and words.
  */
 import { Gitlab } from "@gitbeaker/rest";
+import { quote } from "../quote";
 import { type ProviderRefused, refusedWith, request } from "../read-stop";
 
 /** A client signed in to one GitLab host. */
@@ -18,10 +19,11 @@ export interface GitLabClient {
   api: Gitlab<false>;
 }
 
-/** Gitbeaker's own deadline on a request, past which it gives up (its default is five minutes). Our choice: past the hub's own deadline. */
-const QUERY_TIMEOUT_MS = 120_000;
-
-/** A client for `api` (`https://gitlab.example.com`), signed in with `token`. */
+/**
+ * A client for `api` (`https://gitlab.example.com`), signed in with `token`.
+ * Each request is held to its caller's deadline ({@link gitlabAsk}); behind
+ * it stands gitbeaker's own, its default of five minutes.
+ */
 export const gitlabClient = (signIn: {
   api: string;
   token: string;
@@ -29,7 +31,6 @@ export const gitlabClient = (signIn: {
   api: new Gitlab({
     host: signIn.api,
     token: signIn.token,
-    queryTimeout: QUERY_TIMEOUT_MS,
   }),
 });
 
@@ -53,7 +54,7 @@ const answerOf = (
   return {
     status: response?.status ?? null,
     headers: response?.headers ?? null,
-    said: said.length > 300 ? `${said.slice(0, 300)}…` : said,
+    said: quote(said),
   };
 };
 

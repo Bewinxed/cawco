@@ -10,6 +10,7 @@ import {
   BUILT_IN_MEMBERS,
   DEFAULT_ROUTES,
   KIND_SEED,
+  type MarkHue,
   type Member,
 } from "@cawco/core/decides";
 import { decidesWords } from "@cawco/core/words/decides";
@@ -34,7 +35,12 @@ export const facts: Record<string, Facts> = {
   },
 };
 
-const agent = (id: string, name: string, job: string, hue: number): Member => ({
+const agent = (
+  id: string,
+  name: string,
+  job: string,
+  hue: MarkHue
+): Member => ({
   id,
   type: "agent",
   name,

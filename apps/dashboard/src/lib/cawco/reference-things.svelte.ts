@@ -221,7 +221,10 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       state: total > 0 ? `${done} of ${total}` : null,
       peek: plan.steps
         .filter((step) => step.depth === 0)
-        .slice(0, 3)
+        .slice(
+          0,
+          /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 3
+        )
         .map((step) => `${STEP_WORDS[step.status] ?? ""} · ${step.content}`),
       place: { plan: id },
     };

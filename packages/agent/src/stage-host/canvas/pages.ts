@@ -152,6 +152,7 @@ let loaded = false;
 const across = () => document.documentElement.clientWidth;
 
 function laid(): void {
+  // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
   const width =
     view.width ?? Math.min(FORMS.desk, Math.max(0, across() - 2 * GUTTER));
   const scale =

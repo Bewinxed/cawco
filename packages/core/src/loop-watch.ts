@@ -25,6 +25,7 @@
  */
 
 import { heapSize } from "bun:jsc";
+import { recordLimitReading } from "./limit-readings";
 import {
   BEAT,
   DOING_BYTES,
@@ -203,6 +204,8 @@ export const doing = (name: string): void => {
   if (!watchdog) {
     return;
   }
+  // The name's length in characters, a floor on its UTF-8 bytes (DOING_BYTES).
+  recordLimitReading("core.loop-doing-chars", name.length);
   const { written } = encoder.encodeInto(name, watchdog.doing.subarray(4));
   new Int32Array(watchdog.doing.buffer, 0, 1)[0] = written;
 };

@@ -474,7 +474,7 @@ const LISTED = [
       gone.add(name);
       say(`${name}: deleted, nothing uses it`);
     } else {
-      say(`${name}: kept, ${reasons.slice(0, 4).join("; ")}`);
+      say(`${name}: kept, ${reasons.join("; ")}`);
     }
   }
   if (gone.size > 0) {

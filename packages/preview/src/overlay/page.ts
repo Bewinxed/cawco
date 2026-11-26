@@ -16,7 +16,6 @@ import {
   stableSelector,
 } from "@cawco/core/comments/anchor";
 import {
-  COMMENT_LIMITS,
   type CommentAttachment,
   type CommentTarget,
   commentOn,
@@ -35,6 +34,7 @@ import {
 import type { DocMap } from "@cawco/core/doc-maps";
 import { readFileSpot } from "@cawco/core/file-spot";
 import type { InkGroup } from "@cawco/core/ink";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import type { PreviewElement } from "@cawco/core/preview/protocol";
 import {
@@ -85,6 +85,7 @@ import {
   stageSeekOf,
 } from "@cawco/core/stage-graph";
 import { cutShort } from "@cawco/core/words/helpers";
+import { quote } from "@cawco/providers/quote";
 import {
   type Anchorable,
   anchorable,
@@ -1176,6 +1177,7 @@ function takeInset(said: unknown) {
 }
 
 /** The most room a host's head may take over the page's top, px: a floating bar's, never a page's. */
+// @limit measured: a floating host bar's height on screen, in px; a box taller than that is the host's page, not its bar
 const HEAD_ROOM_MOST = 200;
 
 /**
@@ -1715,6 +1717,7 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   };
 }
 /** The widest frame a pane may ask a canvas for, px. Ours: past a desk's. */
+// @limit external: the widest display standard, UHD at 3840 pixels (ITU-R BT.2020, https://www.itu.int/rec/R-REC-BT.2020)
 const CANVAS_WIDTH_MAX = 3840;
 
 function reactSource(
@@ -2041,9 +2044,7 @@ const NAMED_BY = [
 
 /**
  * The element's text as a pin keeps it: its words in order, white space
- * run together, cut to the anchor's bound; with none, its name
- * ({@link NAMED_BY}). Read from its text nodes until the bound is reached,
- * so a page-sized element costs what a paragraph does.
+ * run together; with none, its name ({@link NAMED_BY}).
  */
 function textOf(el: Element): string {
   const words = wordsOf(el);
@@ -2053,7 +2054,7 @@ function textOf(el: Element): string {
   for (const attribute of NAMED_BY) {
     const name = el.getAttribute(attribute)?.replace(/\s+/gu, " ").trim();
     if (name) {
-      return name.slice(0, COMMENT_LIMITS.anchorText);
+      return name;
     }
   }
   return "";
@@ -2064,11 +2065,7 @@ function wordsOf(el: Element): string {
   const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let text = "";
   let parent: Node | null = null;
-  for (
-    let node = walker.nextNode();
-    node && text.length <= COMMENT_LIMITS.anchorText;
-    node = walker.nextNode()
-  ) {
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (UNSHOWN.has(node.parentElement?.localName ?? "")) {
       continue;
     }
@@ -2076,7 +2073,7 @@ function wordsOf(el: Element): string {
     text += `${parent && node.parentNode !== parent ? " " : ""}${node.textContent ?? ""}`;
     parent = node.parentNode;
   }
-  return text.replace(/\s+/gu, " ").trim().slice(0, COMMENT_LIMITS.anchorText);
+  return text.replace(/\s+/gu, " ").trim();
 }
 
 /**
@@ -2242,6 +2239,7 @@ function waiting(anchor: PageAnchor): boolean {
 }
 
 /** The most anchors {@link locate} keeps what it found of. Our call: every pin a page may hold, and a draft. */
+// @limit recording: overlay.anchors-found until 2026-12-03
 const FOUND_MOST = 512;
 
 /**
@@ -2511,6 +2509,7 @@ function locate(anchor: PageAnchor): AnchorFound<Element> | null {
   const found = findAnchorHere(anchor) ?? stillThere(anchor, was);
   foundBy.delete(key);
   foundBy.set(key, { doc, found, seen });
+  recordLimitReading("overlay.anchors-found", foundBy.size);
   if (foundBy.size > FOUND_MOST) {
     const [oldest] = foundBy.keys();
     if (oldest !== undefined) {
@@ -2800,9 +2799,6 @@ async function thumbnail(): Promise<{
 /** The page's root's tag in Comment mode: the word the design and the commenting page use. */
 const WHOLE_PAGE = "Whole page";
 
-/** The most of an element's words its hover label quotes, characters. Our call: a button's or a heading's whole, a paragraph's start. */
-const LABEL_WORDS = 40;
-
 /** Whether `el` draws words of its own: a text node of its own that says something, not only its children's. */
 const drawsWords = (el: Element): boolean =>
   [...el.childNodes].some(
@@ -2838,9 +2834,7 @@ function labelOf(el: Element): string {
     return `${named} — ${frameOrigin(el)}`;
   }
   const words = drawsWords(el) ? wordsOf(el) : "";
-  const quoted = words
-    ? ` "${words.length > LABEL_WORDS ? `${words.slice(0, LABEL_WORDS - 1).trimEnd()}…` : words}"`
-    : "";
+  const quoted = words ? ` "${quote(words)}"` : "";
   const source = sourceOf(el);
   return `${named}${quoted}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
 }
@@ -2969,6 +2963,7 @@ function pressedOn(el: Element | null, clientX: number, clientY: number) {
 }
 
 /** The most of an element's ancestors its composer's target chip offers, before the whole page. Our call. */
+// @limit recording: overlay.chain-ancestors until 2026-12-03
 const CHAIN_MOST = 5;
 
 /**
@@ -2978,6 +2973,15 @@ const CHAIN_MOST = 5;
  * In an embed of another origin, what holds `el` there as its embed read it
  * (embeds.ts), then its frame and what holds that here.
  */
+/** How many elements stand between `el` and `root`. */
+const ancestorsOf = (el: Element, root: Element): number => {
+  let count = 0;
+  for (let at = el.parentElement; at && at !== root; at = at.parentElement) {
+    count += 1;
+  }
+  return count;
+};
+
 function chainOf(el: Element): Element[] {
   const standIn = embeds.read(el);
   if (standIn) {
@@ -2993,6 +2997,7 @@ function chainOf(el: Element): Element[] {
     return [root];
   }
   const chain: Element[] = [el];
+  recordLimitReading("overlay.chain-ancestors", ancestorsOf(el, root));
   let last = rectOf(el);
   for (
     let at = el.parentElement;
@@ -3670,19 +3675,16 @@ let picturesTimer: ReturnType<typeof setTimeout> | undefined;
 /** The pictures of what is unheard, to the hub now. */
 async function postPictures(): Promise<void> {
   const pictures = await markPictures();
-  // One post carries at most COMMENT_LIMITS.pictures: the rest follow in posts of their own, so no mark goes without its picture here.
-  for (let at = 0; at < pictures.length; at += COMMENT_LIMITS.pictures) {
-    await artifact
-      .pictures({
-        pictures: pictures.slice(at, at + COMMENT_LIMITS.pictures),
-        url: location.href,
-      })
-      .catch((error: unknown) => {
-        console.warn(
-          `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
+  if (pictures.length === 0) {
+    return;
   }
+  await artifact
+    .pictures({ pictures, url: location.href })
+    .catch((error: unknown) => {
+      console.warn(
+        `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
 }
 
 /** The person marked this page: once they pause, its pictures of what is unheard go to the hub. A canvas's picture is its own. */
@@ -3696,36 +3698,30 @@ function picturesLater() {
 
 type HostMessage = Record<string, unknown>;
 
-/** The most boxes a host says it covers the page with. Our call: a list and a card. */
-const COVERED_MOST = 4;
-
 /** The host's covered boxes, the viewport's px; each finite and sized, or left out. */
 /** The most room the host may keep under the page's foot, px: a floating bar's, never a page's. */
+// @limit measured: a floating host bar's height on screen, in px; a box taller than that is the host's page, not its bar
 const FOOT_ROOM_MOST = 200;
 
 function coveredOf(value: unknown): Box[] {
-  return (Array.isArray(value) ? value.slice(0, COVERED_MOST) : []).flatMap(
-    (raw) => {
-      const box = raw as Partial<Record<keyof Box, unknown>> | null;
-      const [x, y, w, h] = [box?.x, box?.y, box?.w, box?.h].map((n) =>
-        typeof n === "number" && Number.isFinite(n) ? n : Number.NaN
-      );
-      return [x, y, w, h].some(Number.isNaN) || w <= 0 || h <= 0
-        ? []
-        : [{ x, y, w, h }];
-    }
-  );
+  return (Array.isArray(value) ? value : []).flatMap((raw) => {
+    const box = raw as Partial<Record<keyof Box, unknown>> | null;
+    const [x, y, w, h] = [box?.x, box?.y, box?.w, box?.h].map((n) =>
+      typeof n === "number" && Number.isFinite(n) ? n : Number.NaN
+    );
+    return [x, y, w, h].some(Number.isNaN) || w <= 0 || h <= 0
+      ? []
+      : [{ x, y, w, h }];
+  });
 }
 
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
 
-/** A host's list of strings, its other entries left out; none when it is no list. Our bound: 200. */
+/** A host's list of strings, its other entries left out; none when it is no list. */
 const strings = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value
-        .filter((one): one is string => typeof one === "string")
-        .slice(0, 200)
+    ? value.filter((one): one is string => typeof one === "string")
     : [];
 
 /**

@@ -2,6 +2,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { localDashboardPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
@@ -325,7 +326,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     if (others.length > 0) {
       return;
     }
-    const tree = `${workspaceIdKindOf(server.workspace) === "place" ? "place" : "workspace"} ${server.workspace.slice(0, 8)}`;
+    const tree = `${workspaceIdKindOf(server.workspace) === "place" ? "place" : "workspace"} ${shortId(server.workspace)}`;
     deps.lifetime.fork(
       "preview server stop",
       Effect.tryPromise(() =>
@@ -351,7 +352,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     letGoServer(
       before.machineId,
       before.source,
-      `${row?.name ?? "An artifact"} (${id.slice(0, 8)}) moved to another source`
+      `${row?.name ?? "An artifact"} (${shortId(id)}) moved to another source`
     );
   };
   /**

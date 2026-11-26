@@ -1859,11 +1859,6 @@ public enum Words {
 
     public enum Preview {
         // packages/core/src/words/preview.ts `previewWords`
-        /// A stroke group marking more elements than a group names: how many it kept and left out.
-        public static func inkMarksLeftOut(kept: Int, left: Int) -> String {
-            "This stroke marks more elements than a group names, so it kept the first \(kept) and left out \(left). Draw round fewer elements."
-        }
-
         /// The pane's mode tabs (Preview, Comment, …), as a screen reader names them.
         public static let previewMode = "Preview mode"
 
@@ -3093,10 +3088,6 @@ public enum Words {
         public static let namePlaceholder = "Triage new issues"
 
         public static let needsName = "Name it in 3 to 6 plain words."
-
-        public static func nameTooLong(length: Int, max: Int) -> String {
-            "The name runs \(length) characters. Keep it to \(max)."
-        }
 
         public static let promptLabel = "What each run does"
 

@@ -14,15 +14,14 @@
  */
 
 import {
+  fitReport,
   PAGE_FAULT_EVENT,
-  PAGE_FAULT_TEXT_MAX,
   PAGE_FAULTS_KEPT,
   type PageErrorReport,
   type PageFault,
   sameFault,
 } from "@cawco/core/page-faults";
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
-import { cutShort } from "@cawco/core/words/helpers";
 
 /** The first frame of a stack that names its place: V8's `at … (url:line:col)` or `at url:line:col`, WebKit's and Gecko's `…@url:line:col`. */
 const FRAME_PLACE = /(?:\(|@|at )((?:https?|blob):[^\s()]+):(\d+):(\d+)\)?/u;
@@ -33,22 +32,19 @@ let to: { artifact: string; revision: number } | null = null;
 const met: PageFault[] = [];
 let sent = 0;
 
-/** `text` kept to the hub's bound, ending in "…" where it was cut (the "…" is within the bound). */
-const clip = (text: string): string => cutShort(text, PAGE_FAULT_TEXT_MAX - 1);
-
 /** An address as the fault names it: a path on the page's own origin, else the whole address; null for the page's own document. */
 function placeOf(address: string): string | null {
   try {
     const url = new URL(address, location.href);
     if (url.origin !== location.origin) {
-      return clip(url.href);
+      return url.href;
     }
     const page = new URL(location.href);
     return url.pathname === page.pathname && url.search === page.search
       ? null
-      : clip(url.pathname);
+      : url.pathname;
   } catch {
-    return clip(address);
+    return address;
   }
 }
 
@@ -71,20 +67,18 @@ function send(fault: PageFault): void {
   }
   sent += 1;
   const report: PageErrorReport = {
-    message: clip(
-      fault.kind === "error" ? fault.message : `${fault.kind} fault`
-    ),
+    message: fault.kind === "error" ? fault.message : `${fault.kind} fault`,
     stack: "",
-    path: location.pathname.slice(0, 1000) || "/",
+    path: location.pathname || "/",
     sessionId: null,
     version: "overlay",
-    userAgent: navigator.userAgent.slice(0, 512),
+    userAgent: navigator.userAgent,
     fault: { artifact: to.artifact, revision: to.revision, fault },
   };
   fetch(PREVIEW_ERRORS_PATH, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(report),
+    body: JSON.stringify(fitReport(report)),
     keepalive: true,
   }).catch(() => undefined);
 }
@@ -105,7 +99,7 @@ async function withSource(fault: PageFault): Promise<PageFault> {
     return fault;
   }
   const words = (await servedLines())?.[fault.line - 1]?.trim();
-  return words ? { ...fault, source: clip(words) } : fault;
+  return words ? { ...fault, source: words } : fault;
 }
 
 /** A fault met: sent once, or held until the page knows where it goes. */
@@ -141,7 +135,7 @@ function thrownFault(
         };
   return {
     kind: "error",
-    message: clip(messageOf(thrown)),
+    message: messageOf(thrown),
     source: null,
     file: place ? placeOf(place.file) : null,
     line: place ? place.line : null,
@@ -163,7 +157,7 @@ function assetOf(target: EventTarget | null): PageFault | null {
     ? {
         kind: "asset",
         element: `<${target.localName}>`,
-        url: placeOf(url) ?? clip(url),
+        url: placeOf(url) ?? url,
       }
     : null;
 }
@@ -188,11 +182,10 @@ export const thrownBeforeLoad = (): string | null => thrownEarly;
 /** `thrown` kept as the page's first throw, while its load is still to come. */
 function early(thrown: unknown): void {
   if (thrownEarly === null && document.readyState !== "complete") {
-    thrownEarly = clip(
+    thrownEarly =
       thrown instanceof Error && thrown.message
         ? `${thrown.name}: ${thrown.message}`
-        : messageOf(thrown)
-    );
+        : messageOf(thrown);
   }
 }
 

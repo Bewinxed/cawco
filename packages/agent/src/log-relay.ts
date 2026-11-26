@@ -25,6 +25,7 @@ export interface LogRelay {
   readonly token: string;
 }
 
+// @limit measured: a log frame is one line of a shim's output; 64 KiB is far over the longest line the shims write (boundary-log-protocol.ts)
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 const encoder = new TextEncoder();

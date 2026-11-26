@@ -27,6 +27,7 @@ import {
 import type { Policy } from "@cawco/core/workspace-judge";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { workspaceDenies, workspacePolicy } from "@cawco/core/workspace-policy";
+import { namedAndMore } from "@cawco/providers/names";
 import {
   membershipName,
   readOnlyDeniesBwrap,
@@ -143,8 +144,10 @@ const formFrom = (
       hash.update("\0");
     }
     hash.update(text);
+    // @limit measured: 12 hex characters are 48 bits of SHA-256; the parts of one boundary plan, so two collide after about 2^24 names
     parts[name] = createHash("sha256").update(text).digest("hex").slice(0, 12);
   });
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the boundary plans one machine holds, so two collide after about 2^32 names
   return { form: hash.digest("hex").slice(0, 16), parts };
 };
 
@@ -194,7 +197,7 @@ const policyMoves = (was: Policy | undefined, now: Policy): string[] => {
  * What moved in workspace `ref`'s form since its boundary `held` started,
  * for the log line that hands it over or keeps it: each part that moved
  * ({@link movedParts}) and, when its policy's part did, how the policy moved
- * ({@link policyMoves}), the first {@link REASONS_SAID} of it. Empty when
+ * ({@link policyMoves}), the first few of it. Empty when
  * its form did not move, or cannot be read now.
  */
 export const formMoveWords = async (
@@ -216,8 +219,7 @@ export const formMoveWords = async (
           await workspacePolicy(ref)
         )
       : [];
-    const more = paths.length - REASONS_SAID;
-    return `; its form moved: ${moved.join(", ")}${paths.length > 0 ? ` (${paths.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""})` : ""}`;
+    return `; its form moved: ${moved.join(", ")}${paths.length > 0 ? ` (${namedAndMore(paths)})` : ""}`;
   } catch {
     return "";
   }
@@ -470,6 +472,3 @@ export const pathsOf = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string")
     ? value
     : undefined;
-
-/** At most this many reasons for a narrowing are said, then how many more. */
-export const REASONS_SAID = 3;

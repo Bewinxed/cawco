@@ -24,6 +24,7 @@ const ParkedKindShape = z.object({
     .number()
     .int()
     .min(0)
+    // @limit measured: reached is an index into KIND_STEPS, so the list's last index is the most it can be
     .max(KIND_STEPS.length - 1),
 });
 type ParkedKind = z.output<typeof ParkedKindShape>;

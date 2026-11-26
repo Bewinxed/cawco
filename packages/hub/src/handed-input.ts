@@ -32,6 +32,7 @@ import { cutShort } from "@cawco/core/words/helpers";
 import { z } from "zod";
 
 /** An id, ref or path an entry points at: a path runs to Linux PATH_MAX, 4,096. */
+// @limit external: Linux PATH_MAX, 4,096 bytes (limits.h)
 const ref = z.string().min(1).max(4096);
 
 /** One path component: not `.` or `..`, no slash. */
@@ -44,6 +45,7 @@ const LEADING_DOTS = /^[.-]+/u;
 const fileName = z
   .string()
   .min(1)
+  // @limit external: Linux NAME_MAX, 255 bytes (limits.h)
   .max(255)
   .regex(ONE_COMPONENT, "a file name, with no folder");
 
@@ -109,12 +111,36 @@ export const handedInputs = (
   return { inputs };
 };
 
-/** A name, made one path component an input may land under in `inputs/`. */
-export const inputFileName = (raw: string): string => {
-  const name = raw
-    .replace(SEPARATORS, "-")
-    .replace(UNSAFE, "-")
-    .replace(LEADING_DOTS, "")
-    .slice(0, 120);
+/** The most bytes a file name holds. */
+// @limit external: a file name holds 255 bytes on Linux (NAME_MAX, limits.h)
+const NAME_MAX = 255;
+
+const ENCODER = new TextEncoder();
+
+/** `text` cut to the most whole characters that weigh `room` bytes or less. */
+const withinBytes = (text: string, room: number): string => {
+  let kept = "";
+  let weight = 0;
+  for (const character of text) {
+    weight += ENCODER.encode(character).length;
+    if (weight > room) {
+      break;
+    }
+    kept += character;
+  }
+  return kept;
+};
+
+/**
+ * A name, made one path component an input may land under in `inputs/`:
+ * cut to what the file name's other parts (`around`, their bytes: the
+ * prefix and the extension the caller puts round it) leave of
+ * {@link NAME_MAX}.
+ */
+export const inputFileName = (raw: string, around: string): string => {
+  const name = withinBytes(
+    raw.replace(SEPARATORS, "-").replace(UNSAFE, "-").replace(LEADING_DOTS, ""),
+    NAME_MAX - ENCODER.encode(around).length
+  );
   return name || "input";
 };

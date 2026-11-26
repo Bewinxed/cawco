@@ -13,6 +13,7 @@ import { createHash, randomBytes } from "node:crypto";
  */
 export function generateCodeVerifier(): string {
   // Generate 96 random bytes and encode as base64url (128 chars)
+  // @limit external: RFC 7636 section 4.1: a PKCE code verifier is 43 to 128 characters, and 96 random bytes in base64url are exactly 128
   return randomBytes(96).toString("base64url").slice(0, 128);
 }
 

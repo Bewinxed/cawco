@@ -133,10 +133,6 @@ export const MACHINE_TTL_MS = 45_000;
  * one away clock before their last input.
  */
 export const AWAY_AFTER_DEFAULT_MS = 5 * 60_000;
-/** The shortest away clock the person can set. Our call. */
-export const AWAY_AFTER_MIN_MS = 60_000;
-/** The longest away clock the person can set. Our call. */
-export const AWAY_AFTER_MAX_MS = 4 * HOUR_MS;
 /** The away clocks the presence menu offers, ms. Our call, the default among them. */
 export const AWAY_AFTER_CHOICES_MS = [
   5 * 60_000,

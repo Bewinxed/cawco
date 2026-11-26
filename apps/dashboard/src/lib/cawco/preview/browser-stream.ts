@@ -25,6 +25,7 @@ import {
   type TakeoverLayout,
   type TakeoverTouchPoint,
 } from "@cawco/core/browser";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { z } from "zod";
 import type { Typed } from "./keyboard-sink";
 
@@ -384,6 +385,7 @@ const FocusSchema = z.object({
  * picture as a patch, as a share of the frame: a caret's blink or a letter
  * typed is, a scroll is not (the whole frame is drawn then). Our call.
  */
+// @limit recording: dashboard.stream-patch-share until 2026-12-10
 const PATCH_MOST = 0.25;
 
 /** The local browser's frames, or a take-over's on either host: a view that also says the layout it holds and its fingers. */
@@ -550,6 +552,10 @@ export const cdpStream = (
     if (!box) {
       return true;
     }
+    recordLimitReading(
+      "dashboard.stream-patch-share",
+      (box.w * box.h) / (picture.width * picture.height)
+    );
     if (box.w * box.h > picture.width * picture.height * PATCH_MOST) {
       return false;
     }

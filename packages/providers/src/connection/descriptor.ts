@@ -15,7 +15,8 @@ export const HOOK_SCHEMES = [
 ] as const;
 export type HookScheme = (typeof HOOK_SCHEMES)[number];
 
-/** The shortest interval a connector poll takes, s. */
+/** The shortest interval a connector poll takes, s: the one poll loop's period. */
+// @limit measured: the Projects PRD's one poll loop reads every watch each 60 s (.design-foundations/plans/2026-10-06-projects.md:585); a connector poll is due no sooner than the others
 export const CONNECTOR_MIN_S = 60;
 
 /** A connector poll's call and paths, as its watch's settings hold them. */

@@ -30,8 +30,6 @@ export const routinesWords = {
   nameLabel: "Name",
   namePlaceholder: "Triage new issues",
   needsName: "Name it in 3 to 6 plain words.",
-  nameTooLong: (length: number, max: number) =>
-    `The name runs ${length} characters. Keep it to ${max}.`,
   promptLabel: "What each run does",
   promptPlaceholder:
     "Read the issues opened since the last run, label each one, and say which need me.",
@@ -360,8 +358,6 @@ export const routineToolWords = {
   /** `action_list`'s heading, when the project has more actions than it lists. */
   actionsCut: (older: number, skip: number): string =>
     `Actions, newest first; ${older} older: call again with skip ${skip} to read on. action_cancel takes the handle of one listed:`,
-  /** An event route's regex over its bound. */
-  regexOver: (max: number): string => `regex is at most ${max} characters.`,
   /** An event route's regex, beside it: how much of each event it reads. */
   regexReads: (kib: number): string =>
     `(reads the first ${kib} KiB of an event)`,

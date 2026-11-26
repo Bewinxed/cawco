@@ -22,6 +22,7 @@
  * are read by their own paths (`fullkey`).
  */
 import type { Database } from "bun:sqlite";
+import { quote } from "@cawco/providers/quote";
 
 type JsonType =
   "string" | "number" | "integer" | "boolean" | "null" | "object" | "array";
@@ -268,8 +269,9 @@ export interface LiftedRow {
   reads: number;
 }
 
-/** A value as the log shows it: cut short, on one line. */
-export const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
+/** A value as the log shows it: one line of it (core `quote`), as JSON. */
+export const shown = (raw: string | null): string =>
+  JSON.stringify(quote(raw ?? ""));
 
 /** `column`'s value, whether it is JSON, whether an object, and whether it reads whole by `reads`, as {@link LiftedRow} names them. */
 export const liftedColumns = (column: string, reads: string): string =>

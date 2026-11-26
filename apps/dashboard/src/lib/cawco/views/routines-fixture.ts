@@ -77,6 +77,7 @@ const base = {
 const MONDAYS_AT_NINE = {
   cron: "0 9 * * 1",
   nextRuns: weekOf(9, [1]),
+  nextRunsCut: false,
   nextSlot: weekOf(9, [1])[0] ?? now,
   schedule: {
     cron: "0 9 * * 1",
@@ -98,6 +99,7 @@ const OWN: Routine[] = [
     target: "curator",
     prompt: "Fold, reshape and archive the project's knowledge files.",
     nextRuns: weekOf(6, [0, 1, 2, 3, 4, 5, 6]),
+    nextRunsCut: false,
     nextSlot: weekOf(6, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
     schedule: {
       cron: "0 6 * * *",
@@ -125,6 +127,7 @@ const OWN: Routine[] = [
     target: "delegate",
     prompt: "Run `bun run check --all` on main and file what fails as tasks.",
     nextRuns: weekOf(2, [1, 2, 3, 4, 5]),
+    nextRunsCut: false,
     nextSlot: weekOf(2, [1, 2, 3, 4, 5])[0] ?? now,
     schedule: {
       cron: "0 2 * * 1-5",
@@ -144,6 +147,7 @@ const OWN: Routine[] = [
     target: "delegate",
     prompt: "File each new GitHub issue on Bewinxed/cawco as a task.",
     nextRuns: [],
+    nextRunsCut: false,
     nextSlot: now + HOUR_MS,
     schedule: {
       cron: "*/30 * * * *",
@@ -284,6 +288,7 @@ export const CHECK_GATED: Routine = {
     "Read the new findings, file a task for each one with a fix, and tell me about the rest.",
   cron: "0 7 * * *",
   nextRuns: weekOf(7, [0, 1, 2, 3, 4, 5, 6]),
+  nextRunsCut: false,
   nextSlot: weekOf(7, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
   schedule: {
     cron: "0 7 * * *",

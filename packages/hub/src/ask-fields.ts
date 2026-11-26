@@ -9,10 +9,8 @@ import { type QuestionInput, UserQuestionShape } from "@cawco/core/asks";
 import { z } from "zod";
 
 /** The most questions one ask carries, answered one at a time in a row. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const QUESTIONS_MAX = 4;
-
-/** The longest `waiting` or `meanwhile` line the card shows. */
-const STANCE_MAX = 200;
 
 /** A task's handle, as a project numbers its tasks. */
 const TASK_HANDLE = /^tsk-\d+$/u;
@@ -21,8 +19,8 @@ const TASK_HANDLE = /^tsk-\d+$/u;
 const FIELDS = {
   questions: z.array(UserQuestionShape).min(1).max(QUESTIONS_MAX),
   blocks: z.boolean(),
-  waiting: z.string().trim().min(1).max(STANCE_MAX).optional(),
-  meanwhile: z.string().trim().min(1).max(STANCE_MAX).optional(),
+  waiting: z.string().trim().min(1).optional(),
+  meanwhile: z.string().trim().min(1).optional(),
   task: z.string().regex(TASK_HANDLE).optional(),
 };
 

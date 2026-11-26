@@ -25,10 +25,7 @@ export interface StarterSet {
 /** A project's starters as last written, by place, and what the person did with them (project-starters.ts). */
 export interface StartersDb {
   /** The newest outcomes in every place, newest first. */
-  readonly outcomes: (
-    projectId: string,
-    limit: number
-  ) => {
+  readonly outcomes: (projectId: string) => {
     at: Date;
     outcome: StarterOutcome;
     place: StarterPlace;
@@ -232,7 +229,7 @@ const writePlace = (
 
 export const startersDb = (db: BunSQLiteDatabase): StartersDb => ({
   set: (projectId, place) => placeOf(db, projectId, place),
-  outcomes: (projectId, limit) =>
+  outcomes: (projectId) =>
     db
       .select({
         text: starterOutcomes.text,
@@ -243,7 +240,6 @@ export const startersDb = (db: BunSQLiteDatabase): StartersDb => ({
       .from(starterOutcomes)
       .where(eq(starterOutcomes.projectId, projectId))
       .orderBy(desc(starterOutcomes.at), desc(starterOutcomes.id))
-      .limit(limit)
       .all(),
   record: (projectId, place, text, outcome) => {
     db.insert(starterOutcomes)

@@ -45,8 +45,7 @@ if (ran) {
     `sent_messages: ${sends} sends, ${owed.length} owed: ${of("same").length} owed and envelope equal, ${of("alone").length} owed alone, ${envelopeAloneCount(client)} envelope alone, ${of("different").length} both different, ${of("unread-beside").length} owed unreadable beside an envelope, ${of("unread-alone").length} owed unreadable alone`
   );
   /** A value as this shows it: cut short, on one line. */
-  const shown = (raw: string | null): string =>
-    JSON.stringify((raw ?? "").slice(0, 120));
+  const shown = (raw: string | null): string => JSON.stringify(raw ?? "");
   for (const one of of("different")) {
     console.log(
       `  both different: ${one.key}: the kept envelope stays; the owed one ${shown(one.owed)} goes to owed_unread`

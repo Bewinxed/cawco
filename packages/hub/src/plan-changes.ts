@@ -42,6 +42,7 @@ import {
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect, type Fiber } from "effect";
 import { Elysia, ElysiaStatus, t } from "elysia";
@@ -343,7 +344,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         return;
       }
       console.info(
-        `[plan-changes] ${ended.id.slice(0, 8)} cannot go on (${reason}): the person's plan changes went to the new session ${next.slice(0, 8)}`
+        `[plan-changes] ${shortId(ended.id)} cannot go on (${reason}): the person's plan changes went to the new session ${shortId(next)}`
       );
       db.closePlanChanges(ids, { at: new Date() });
     } catch (error) {
@@ -626,7 +627,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
 export type PlanChanges = ReturnType<typeof createPlanChanges>;
 
 const stepId = () => t.String({ minLength: 1 });
-const words = () => t.String({ minLength: 1, maxLength: 4000 });
+const words = () => t.String({ minLength: 1 });
 
 /** The person's change, as the route takes it. */
 const PLAN_EDIT_SCHEMA = t.Union([

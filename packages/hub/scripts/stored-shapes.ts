@@ -494,7 +494,7 @@ const PRIMITIVE: Partial<Record<ts.SyntaxKind, string>> = {
 
 const refuse = (node: ts.Node, what: string): never => {
   throw new Error(
-    `stored-shapes: ${where(node)}: no schema is made from ${what} (${node.getText().slice(0, 80)})`
+    `stored-shapes: ${where(node)}: no schema is made from ${what} (${node.getText()})`
   );
 };
 
@@ -518,7 +518,7 @@ const ownClosedSet = (node: ts.Node, provider: ts.Node): void => {
       ? provider.name.getText()
       : (declaration?.name.text ?? "?");
   throw new Error(
-    `stored-shapes: the stored type ${stored}, at ${[...trail, ...path].join(".") || "its root"}, holds ${name} from the package ${declaredInOf(provider)} as a closed set (${node.getText().replace(LEADING_BAR, "").slice(0, 80)}), which refuses the provider's next value. Hold the provider's value as \`unknown\` or \`string\` and narrow where it is read.`
+    `stored-shapes: the stored type ${stored}, at ${[...trail, ...path].join(".") || "its root"}, holds ${name} from the package ${declaredInOf(provider)} as a closed set (${node.getText().replace(LEADING_BAR, "")}), which refuses the provider's next value. Hold the provider's value as \`unknown\` or \`string\` and narrow where it is read.`
   );
 };
 

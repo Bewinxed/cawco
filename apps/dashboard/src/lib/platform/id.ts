@@ -36,6 +36,7 @@ export function newId(source: Crypto = globalThis.crypto): string {
     hex.push(byte.toString(16).padStart(2, "0"));
   }
   return [
+    // @limit external: a UUID's first group is 4 bytes, 8 hex characters (RFC 9562 section 4)
     hex.slice(0, 4).join(""),
     hex.slice(4, 6).join(""),
     hex.slice(6, 8).join(""),

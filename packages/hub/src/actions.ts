@@ -37,9 +37,12 @@
 import { createHash } from "node:crypto";
 import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
 import type { SessionRole } from "@cawco/core/delegate-types";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
+import { namedAndMore } from "@cawco/providers/names";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
 import { Effect } from "effect";
@@ -67,14 +70,15 @@ const NAP_MS = 15_000;
 /** The soonest it looks again. */
 const MIN_GAP_MS = 250;
 /** The largest arguments a proposal carries, as JSON. Our choice. */
+// @limit recording: hub.action-args-bytes until 2026-12-10
 const ARGS_MAX = 64 * 1024;
 /** How much of the service's answer is kept. Our choice. */
+// @limit recording: hub.action-result-bytes until 2026-12-10
 const RESULT_MAX = 16 * 1024;
 /** How far ahead a run may be set. Our choice. */
 const AHEAD_MAX_MS = 366 * DAY_MS;
 /** A time this far past is a typo, not "now". Our choice. */
 const PAST_GRACE_MS = 60_000;
-const REASON_MAX = 300;
 const LISTED = 50;
 /** How far up a proposer's parents its routine run is looked for. */
 const ROUTINE_DEPTH = 8;
@@ -131,10 +135,11 @@ const argsProblem = (
   if (validate(args)) {
     return undefined;
   }
-  const said = (validate.errors ?? [])
-    .slice(0, 5)
-    .map((one) => `${one.instancePath || "args"} ${one.message ?? "is wrong"}`)
-    .join("; ");
+  const said = namedAndMore(
+    (validate.errors ?? []).map(
+      (one) => `${one.instancePath || "args"} ${one.message ?? "is wrong"}`
+    )
+  );
   return `These arguments do not fit ${found.name}'s input schema: ${said}.`;
 };
 
@@ -377,13 +382,18 @@ export const createActions = ({
       });
     }
     const reason = input.reason.trim();
-    if (!reason || reason.length > REASON_MAX) {
+    if (!reason) {
       return problem(400, {
         code: "action-reason-unfit",
-        detail: `reason is one sentence of up to ${REASON_MAX} characters: why this call, for the owner deciding.`,
+        detail:
+          "reason is one sentence: why this call, for the owner deciding.",
       });
     }
     const args = JSON.stringify(input.args);
+    recordLimitReading(
+      "hub.action-args-bytes",
+      Buffer.byteLength(args, "utf8")
+    );
     if (Buffer.byteLength(args, "utf8") > ARGS_MAX) {
       return problem(400, {
         code: "action-args-too-large",
@@ -714,7 +724,12 @@ export const createActions = ({
       }
     );
     if (outcome.kind === "answered") {
-      const result = capped(JSON.stringify(outcome.result), RESULT_MAX);
+      const whole = JSON.stringify(outcome.result);
+      recordLimitReading(
+        "hub.action-result-bytes",
+        Buffer.byteLength(whole, "utf8")
+      );
+      const result = capped(whole, RESULT_MAX);
       const ended = outcome.result.isError
         ? file(row, {
             state: "failed",
@@ -955,7 +970,7 @@ export const createActions = ({
                   {
                     id: (action) => action.id,
                     said: (action) =>
-                      `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
+                      `${action.connection}:${action.tool} ${shortId(action.id)}`,
                   },
                   "action"
                 ).id,
@@ -1033,7 +1048,10 @@ export const actionRoutes = (actions: Actions) =>
       {
         body: t.Object({
           /** SHA-256 hex of the arguments the card showed. */
-          argsHash: t.String({ minLength: 64, maxLength: 64 }),
+          argsHash: t.String({
+            /* @limit external: a SHA-256 digest is 64 hex characters */ minLength: 64,
+            /* @limit external: a SHA-256 digest is 64 hex characters */ maxLength: 64,
+          }),
         }),
       },
       ({ params, body }) => actions.approve(params.id, body.argsHash)

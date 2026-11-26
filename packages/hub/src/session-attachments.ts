@@ -13,6 +13,7 @@ import type {
 } from "@cawco/core/transcript-types";
 
 /** Blocks per page the walk asks for, back to the conversation's start. */
+// @limit measured: a page; the walk goes on to the next page until it reaches the conversation's start, so its size sets one read's weight and no limit on what is found
 export const ATTACHMENT_PAGE_LIMIT = 500;
 
 /** One block's attachments, in the order it carried them. */

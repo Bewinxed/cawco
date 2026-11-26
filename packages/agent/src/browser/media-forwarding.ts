@@ -179,6 +179,7 @@ const measuredAdvice = (endpoint: string, media: MediaPath): string => {
 /** Where measurements are kept: one file per runtime endpoint, each written whole, so two starts never lose each other's. */
 const measurementsDir = (): string => join(browsersDir(), "media");
 
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the measurement files one machine holds, so two collide after about 2^32 names
 const measurementFile = (endpoint: string): string =>
   join(
     measurementsDir(),

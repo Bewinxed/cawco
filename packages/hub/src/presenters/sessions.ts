@@ -6,6 +6,7 @@
  */
 import { type DelegateType, startsAny } from "@cawco/core/delegate-types";
 import type { GeneratedImage } from "@cawco/core/image-generation";
+import { fitItems, TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import {
   artifactLink,
   decisionLink,
@@ -13,6 +14,7 @@ import {
   planLink,
   sessionLink,
 } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { contextWords } from "@cawco/core/words/context";
 import { delegateTypesWords as delegateTypesUiWords } from "@cawco/core/words/delegate-types";
 import {
@@ -34,16 +36,13 @@ import type { SessionList, SessionListRow } from "../session-list";
 import type { Step } from "../transcript-steps";
 import type { PersonWait, QueuedDelegate } from "../work-items";
 import { excludedNamed, type HeldWork } from "../workspaces";
-import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
-
-/** How many of a list's newest a concise answer names; the rest are counted. */
-const LISTED = 25;
+import { ago, ahead, count, lasted, lines, quote } from "./words";
 
 /** A delegate's handle: its folder's name and its id's first eight, what handoff and stop_delegate take. */
 const tagOf = (node: Pick<DelegateNode, "instanceId" | "name">): string =>
   node.name.includes("#")
     ? node.name
-    : `${node.name}#${handle(node.instanceId)}`;
+    : `${node.name}#${shortId(node.instanceId)}`;
 
 /** What a delegate resting on the person waits on: each card by its link, each ask by what it asks. */
 const personWords = (wait: PersonWait): string =>
@@ -54,7 +53,7 @@ const personWords = (wait: PersonWait): string =>
           ? decisionLink(one.artifactId, one.card, one.title)
           : artifactLink(one.artifactId, one.title)
       ),
-      ...wait.asks.map((what) => delegateWaitWords.listedAsk(quote(what, 120))),
+      ...wait.asks.map((what) => delegateWaitWords.listedAsk(quote(what))),
     ].join(", ")
   );
 
@@ -73,7 +72,7 @@ const stateWords = (node: DelegateNode, now: number): string => {
         ...(node.onPerson ? [personWords(node.onPerson)] : []),
         ...(node.waitingOn
           ? [
-              `waiting on ${quote(node.waitingOn.reason, 120)}${node.waitingOn.until ? ` until ${ahead(node.waitingOn.until, now)}` : ""}`,
+              `waiting on ${quote(node.waitingOn.reason)}${node.waitingOn.until ? ` until ${ahead(node.waitingOn.until, now)}` : ""}`,
             ]
           : []),
       ];
@@ -123,7 +122,7 @@ const nodeLines = (
   // An ended delegate's report is its headline; a live one has none yet.
   let report = live ? "" : ": no report";
   if (node.report) {
-    report = `: ${quote(node.report, 240)}`;
+    report = `: ${quote(node.report)}`;
   }
   const own = `${"  ".repeat(depth)}- ${sessionLink(tagOf(node), node.title)} · ${facts.join(" · ")}${report}`;
   return [
@@ -138,15 +137,12 @@ const newestFirst = (nodes: DelegateNode[]): DelegateNode[] =>
   nodes.toSorted((a, b) => b.startedAt.localeCompare(a.startedAt));
 
 const queuedLine = (one: QueuedDelegate, now: number): string =>
-  `- ${quote(one.title, 120)} ${handle(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}${one.unreadable ? " · held: request unreadable" : ""}`;
+  `- ${quote(one.title)} ${shortId(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title)} (${one.heldBy.globs})` : ""}${one.unreadable ? " · held: request unreadable" : ""}`;
 
 const heldLine = (work: HeldWork, now: number): string => {
   const excluded = excludedNamed(work.excluded);
-  return `- workspace ${handle(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
+  return `- workspace ${shortId(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
 };
-
-/** How much of a delegate's last words a look at it quotes. */
-const LAST_WORDS_MAX = 400;
 
 /** One step as a line: the tool in words, its target, and how it ended. */
 const stepLine = (step: Step, now: number): string => {
@@ -155,7 +151,7 @@ const stepLine = (step: Step, now: number): string => {
     pending: ` · ${peek.running}`,
     success: "",
   }[step.status];
-  return `- ${step.tool}${step.target ? ` ${quote(step.target, 140)}` : ""}${ended}${step.at ? ` · ${ago(step.at, now)}` : ""}`;
+  return `- ${step.tool}${step.target ? ` ${quote(step.target)}` : ""}${ended}${step.at ? ` · ${ago(step.at, now)}` : ""}`;
 };
 
 /** What it does now: the call open and for how long, thinking between calls, or idle since its last activity. */
@@ -169,7 +165,7 @@ const nowLine = (look: DelegatePeek, now: number): string => {
   }
   const [newest] = "list" in look.steps ? look.steps.list : [];
   if (newest?.status === "pending") {
-    const line = `${newest.tool}${newest.target ? ` ${quote(newest.target, 140)}` : ""}`;
+    const line = `${newest.tool}${newest.target ? ` ${quote(newest.target)}` : ""}`;
     return peek.nowStep(
       line,
       newest.at
@@ -248,7 +244,7 @@ const peekWords = (look: DelegatePeek): string => {
     look.lastWords
       ? peek.lastWords(
           look.lastWords.at ? ago(look.lastWords.at, now) : "undated",
-          quote(look.lastWords.text, LAST_WORDS_MAX)
+          quote(look.lastWords.text)
         )
       : peek.lastWordsNone
   );
@@ -265,7 +261,12 @@ export const delegateListWords = (
   const tree = answer;
   const now = Date.now();
   const roots = newestFirst(tree.delegates);
-  const shown = roots.slice(0, LISTED);
+  // The newest that fit a tool's answer (core prompt-budget.ts); the rest are counted.
+  const shown = fitItems(
+    roots,
+    TOOL_ANSWER_CHARS,
+    (node) => nodeLines(node, 0, now).join("\n").length
+  );
   const window = asked.since || asked.before ? " in that window" : "";
   const which =
     asked.include === "all" || window ? "" : " live or ended within the hour";
@@ -403,12 +404,12 @@ const sessionRowLines = (row: SessionListRow, now: number): string[] => {
     ...(row.relation ? [row.relation] : []),
   ];
   const read = row.lastRead
-    ? `last read ${at(row.lastRead.at, now)} from ${row.lastRead.from}: ${quote(row.lastRead.words, 160)}`
+    ? `last read ${at(row.lastRead.at, now)} from ${row.lastRead.from}: ${quote(row.lastRead.words)}`
     : "has read no message yet";
   // The person's last message, unless it is the one it last read.
   let person = "";
   if (row.personSaid) {
-    person = `the person last wrote ${at(row.personSaid.at, now)}: ${quote(row.personSaid.words, 160)}`;
+    person = `the person last wrote ${at(row.personSaid.at, now)}: ${quote(row.personSaid.words)}`;
   } else if (row.interactedAt === null) {
     person = "the person never wrote to it";
   }

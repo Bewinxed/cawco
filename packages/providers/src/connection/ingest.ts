@@ -16,6 +16,7 @@ import type {
   Polled,
   SourceEvent,
 } from "../provider";
+import { quote } from "../quote";
 import { refusedWith } from "../read-stop";
 import {
   CONNECTOR_MIN_S,
@@ -83,8 +84,6 @@ const recordOf = (watchId: string, id: string): MirroredRef => ({
   url: null,
 });
 
-const MOST_REASON = 500;
-
 /** A connector poll's ingest. */
 export const connectionIngest: Ingest<ToolCaller, ConnectorCursor> = {
   everyMs: (watch) =>
@@ -106,10 +105,10 @@ export const connectionIngest: Ingest<ToolCaller, ConnectorCursor> = {
   poll: ({ client, cursor, now, watch }) => {
     const call = connectorCallOf(watch.settings);
     const refused = (error: unknown) => {
-      const said = `${watch.connection}/${call.tool}: ${error instanceof Error ? error.message : String(error)}`;
-      return refusedWith(
-        said.length > MOST_REASON ? `${said.slice(0, MOST_REASON)}…` : said
+      const said = quote(
+        error instanceof Error ? error.message : String(error)
       );
+      return refusedWith(`${watch.connection}/${call.tool}: ${said}`);
     };
     return Effect.tryPromise({
       try: async () =>

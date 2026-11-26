@@ -43,6 +43,7 @@ export interface MediaNetwork {
 /** The address of `host` in `network`'s /24. */
 const hostOf = (network: MediaNetwork, host: number): string => {
   const [base = ""] = network.subnet.split("/");
+  // @limit external: a /24 network is the first 3 of an IPv4 address's 4 octets (CIDR, RFC 4632 section 3.1)
   return `${base.split(".").slice(0, 3).join(".")}.${host}`;
 };
 

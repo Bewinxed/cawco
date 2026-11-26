@@ -26,11 +26,13 @@ import {
   type PasskeyScanArgs,
   type PasskeyStatusFrame,
 } from "@cawco/core/browser";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Effect } from "effect";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { AgentCall } from "./machine-answers";
 
 /** How long the relay waits for a BLE advert before timing out. */
+// @limit recording: hub.passkey-relay-ms until 2026-12-26
 const PASSKEY_RELAY_TIMEOUT_MS = 30_000;
 
 /** How long a machine gets to take a scan command. */
@@ -41,6 +43,8 @@ interface RelayAttempt {
   key: BrowserKey;
   /** The machines told to scan. */
   scanning: { id: string; name: string }[];
+  /** When its scan started. */
+  startedAt: number;
   status: PasskeyRelayStatus;
   /** The timer that times the attempt out. */
   timer: HubTimer;
@@ -114,6 +118,7 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
     }
     attempts.delete(key);
     stopScanning(attempt);
+    recordLimitReading("hub.passkey-relay-ms", Date.now() - attempt.startedAt);
     tell(key, status);
   };
 
@@ -153,6 +158,7 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
       const attempt: RelayAttempt = {
         key,
         scanning,
+        startedAt: Date.now(),
         status: "scanning",
         timer: deps.lifetime.after(
           "passkey relay timed out",

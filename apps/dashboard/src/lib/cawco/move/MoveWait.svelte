@@ -246,6 +246,7 @@
       : `${done} of ${whole}`;
   }
   const share = (bytes: number, total: number): number =>
+    // @limit external: a percentage runs from 0 to 100
     total > 0 ? Math.min(100, Math.floor((bytes / total) * 100)) : 0;
 
   /**

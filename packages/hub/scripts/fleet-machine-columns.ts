@@ -56,7 +56,7 @@ const has = (table: string, column: string): boolean => {
 };
 /** A value as this shows it, on one line, its first 120 characters. */
 const shown = (raw: string | null): string =>
-  JSON.stringify(raw === null ? "" : raw.slice(0, 120));
+  JSON.stringify(raw === null ? "" : raw);
 /** Says that `migration` has run on the database, so `what` is not counted. */
 const ran = (what: string, migration: string): void =>
   console.log(

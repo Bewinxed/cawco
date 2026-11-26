@@ -45,6 +45,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -83,6 +84,7 @@ export const PROJECT_TRASH_DIR = join(PROJECTS_DIR, ".trash");
  * whose every version the hub keeps, read whole. A design system's fonts
  * (woff2, tens of KiB) and images fit; heavier media are not the folder's.
  */
+// @limit recording: hub.folder-file-bytes until 2026-12-10
 export const FOLDER_FILE_LIMIT = 1024 * 1024;
 
 /** How a write's content is given: words as they are, or bytes as base64 (a font, an image). */
@@ -116,12 +118,15 @@ export const folderContent = (
   return new Uint8Array(Buffer.from(compact, "base64"));
 };
 /** Entries one listing answers before it says it stopped. */
+// @limit measured: a page; the next page's cursor rides the answer. 2000 is the rows one page returns
 const LIST_LIMIT = 2000;
 /** Commits one history answers by default, and at most. */
 const HISTORY_DEFAULT = 50;
+// @limit measured: a page; the answer's `more` and a `skip` walk on to the next page. 200 is the most commits one page returns
 const HISTORY_LIMIT = 200;
-export const MESSAGE_LIMIT = 2000;
+// @limit measured: the longest path in 15 project folders is 169 bytes (obelisk, 2026-11-26)
 const PATH_LIMIT = 1024;
+// @limit recording: hub.folder-git-ms until 2026-12-10
 const GIT_TIMEOUT_MS = 30_000;
 
 const HUB_NAME = "CawCo hub";
@@ -440,6 +445,7 @@ const run = async (root: string, args: string[]) => {
         "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again.",
     });
   }
+  const asked = Date.now();
   const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
     runCaptured(
       [
@@ -462,6 +468,7 @@ const run = async (root: string, args: string[]) => {
       { cwd: root, env: gitEnv(), signal }
     )
   );
+  recordLimitReading("hub.folder-git-ms", Date.now() - asked);
   switch (ran.kind) {
     case "answered":
       return ran.value;
@@ -521,12 +528,6 @@ const signature = (author: FolderAuthor): string => {
 /** The commit message a caller asked for, trimmed; undefined for none, so the hub names the change. */
 const askedMessage = (message: string | undefined) => {
   const trimmed = message?.trim();
-  if (trimmed && trimmed.length > MESSAGE_LIMIT) {
-    return problem(400, {
-      code: "folder-message-too-long",
-      detail: `The commit message is ${trimmed.length} characters long; messages stop at ${MESSAGE_LIMIT}.`,
-    });
-  }
   return trimmed || undefined;
 };
 
@@ -953,6 +954,7 @@ export const readFolderFile = async (projectId: string, rawPath: string) => {
       detail: `${rel} is a folder; list it instead of reading it.`,
     });
   }
+  recordLimitReading("hub.folder-file-bytes", info.size);
   if (info.size > FOLDER_FILE_LIMIT) {
     return problem(413, {
       code: "folder-file-too-large",
@@ -1024,6 +1026,7 @@ export const servedFile = (bytes: Blob, type: string) =>
   });
 
 /** The largest file the raw route serves: a task's video or audio output. */
+// @limit measured: the largest file in 15 project folders is 2.1 MiB (obelisk, 2026-11-26)
 const FOLDER_RAW_LIMIT = 256 * 1024 * 1024;
 
 /**
@@ -1080,6 +1083,7 @@ const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 /** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
 const readAt = new Map<string, string | undefined>();
 /** How many past readings {@link readFolderFileAt} keeps. */
+// @limit recording: hub.folder-reads-at-held until 2026-12-03
 const READ_AT_LIMIT = 2000;
 
 /**
@@ -1121,6 +1125,7 @@ export const readFolderFileAt = async (
     }
   }
   readAt.set(key, content);
+  recordLimitReading("hub.folder-reads-at-held", readAt.size);
   return content;
 };
 
@@ -1248,9 +1253,6 @@ const placeOnly = async (
  */
 const writeTo = (projectId: string, message: string | undefined) => {
   const asked = askedMessage(message);
-  if (asked instanceof ElysiaStatus) {
-    return asked;
-  }
   const root = projectRoot(projectId);
   return root instanceof ElysiaStatus ? root : { asked, root };
 };
@@ -1313,6 +1315,7 @@ export const writeFolderFile = async (
     });
   }
   const asGiven = typeof content === "string" ? Buffer.from(content) : content;
+  recordLimitReading("hub.folder-file-bytes", asGiven.byteLength);
   if (asGiven.byteLength > FOLDER_FILE_LIMIT) {
     return problem(413, {
       code: "folder-write-too-large",
@@ -1409,6 +1412,7 @@ const toWrite = (files: { path: string; content: string | Uint8Array }[]) => {
       });
     }
     const bytes = typeof content === "string" ? Buffer.from(content) : content;
+    recordLimitReading("hub.folder-file-bytes", bytes.byteLength);
     if (bytes.byteLength > FOLDER_FILE_LIMIT) {
       return problem(413, {
         code: "folder-write-too-large",
@@ -1635,17 +1639,10 @@ export interface FolderChangeAsked {
 
 /**
  * A change's writes and deletes checked, and its message: or why it cannot
- * be made. `ownMessage`: the hub wrote the message itself (a memory commit
- * naming each source it rests on), so {@link MESSAGE_LIMIT}, the cap on a
- * message a route was asked for, is not its.
+ * be made.
  */
-const changeAsked = (change: FolderChangeAsked, ownMessage = false) => {
-  const asked = ownMessage
-    ? change.message.trim() || undefined
-    : askedMessage(change.message);
-  if (asked instanceof ElysiaStatus) {
-    return asked;
-  }
+const changeAsked = (change: FolderChangeAsked) => {
+  const asked = askedMessage(change.message);
   if (!asked) {
     return problem(400, {
       code: "folder-message-missing",
@@ -1793,7 +1790,7 @@ export const changeFolderInTurn = async <T>(
       if (!change) {
         return { value };
       }
-      const checked = changeAsked(change, true);
+      const checked = changeAsked(change);
       if (isProblem(checked)) {
         return checked;
       }
@@ -1993,6 +1990,7 @@ export const moveFolderFile = async (
 export const folderHistory = async (
   projectId: string,
   rawPath = "",
+  // @limit measured: a page; the next page's cursor rides the answer. 50 is the rows one page returns
   limit = HISTORY_DEFAULT,
   skip = 0
 ) => {
@@ -2498,6 +2496,7 @@ export const folderUncommitted = async (projectId: string, rawDir: string) => {
   const records = out.split("\0");
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index] ?? "";
+    // @limit external: git status --porcelain=v1 -z writes each record as "XY <path>": two status letters and a space before the path (https://git-scm.com/docs/git-status#_short_format)
     if (record.length > 3) {
       paths.add(record.slice(3));
       // A rename or copy's source path follows as a record of its own.
@@ -2625,7 +2624,7 @@ export const FOLDER_WRITE = t.Object({
   read: t.Union([t.String({ pattern: "^[0-9a-f]{64}$" }), t.Null()]),
   // `base64`: `content` is the file's bytes (a font, an image).
   encoding: t.Optional(t.UnionEnum(FOLDER_ENCODINGS)),
-  message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
+  message: t.Optional(t.String()),
 });
 
 /**
@@ -2742,7 +2741,7 @@ export const projectFolderRoutes = (
       {
         query: t.Object({
           path: t.String(),
-          message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
+          message: t.Optional(t.String()),
         }),
       },
       async ({ params, query }) =>

@@ -28,6 +28,7 @@
  */
 
 import { makeJoin } from "@cawco/core/effect/join";
+import { shortSha } from "@cawco/core/short-id";
 import {
   CONTROL_PLACE_REPO,
   type PlaceRepo,
@@ -60,7 +61,7 @@ export const createPlaceRepos = ({ call, lifetime }: PlaceRepoDeps) => {
     ]);
     if (answer.state === "made") {
       console.log(
-        `[place-repo] ${answer.root}: made a git repository, ${answer.files} file(s) in ${answer.commit.slice(0, 9)}, ${answer.leftOut.length} path(s) left out`
+        `[place-repo] ${answer.root}: made a git repository, ${answer.files} file(s) in ${shortSha(answer.commit)}, ${answer.leftOut.length} path(s) left out`
       );
     }
     return answer;

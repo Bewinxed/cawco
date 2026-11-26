@@ -64,6 +64,7 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import type { LayoutRead } from "@cawco/core/layout-guides";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
@@ -132,6 +133,8 @@ import {
 import { graphWords as words } from "@cawco/core/words/graph";
 import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
+import { firstNames } from "@cawco/providers/names";
+import { quote } from "@cawco/providers/quote";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { forcedPlace } from "./forced";
@@ -183,8 +186,6 @@ import {
 } from "./viewport";
 import type { StageAnswer } from "./window-events";
 
-/** The most of a story's error a Preview's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
-const EMBED_WHY_MAX = 200;
 /** How long a reach's play may run, then its motion (design-graph moves.md). */
 const PLAY_MS = 6000;
 const MOTION_MS = 3000;
@@ -195,6 +196,7 @@ const QUIET_MS = 250;
 /** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
 const REST_MS = 600;
 /** The longest a sweep of the canvas's other states files waits for the page to go idle, ms: a page never idle still sweeps them. */
+// @limit recording: agent.page-idle-wait-ms until 2026-12-10
 const IDLE_MOST_MS = 2000;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--spacing-space-4";
@@ -823,6 +825,7 @@ export function bootStage(page: Page): Mode {
   /** The page's room for the drawing: its own width inside its scroller's gutters, less its gutters. */
   const room = () => windowRoom() - 2 * tokenPx(GUTTER);
   /** The width a story is laid out at: his pick, else its own, else the desk's up to the page's room. */
+  // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
   const roomWidth = (story: Story): number =>
     view.widths?.[0] ??
     story.form?.width ??
@@ -2446,7 +2449,7 @@ export function bootStage(page: Page): Mode {
     if (matched.size === 0) {
       return { refused: measureWords.nothingMatches(on) };
     }
-    const listed = [...matched].slice(0, 5).map(elementSaid);
+    const { shown: listed } = firstNames([...matched].map(elementSaid));
     return {
       refused: measureWords.severalMatch(
         on,
@@ -3108,10 +3111,7 @@ function bootColumn(page: Page): Mode {
     const error = threw?.live?.into.error;
     if (threw && error) {
       const first = error.message.split("\n")[0]?.trim() ?? "";
-      const said =
-        first.length > EMBED_WHY_MAX
-          ? `${first.slice(0, EMBED_WHY_MAX - 1)}…`
-          : first;
+      const said = quote(first);
       return `its story ${threw.target.story.name} threw as it mounted${said ? `: ${said}` : "."}`;
     }
     const failedOne = sections.find((one) => one.failure);
@@ -3295,5 +3295,15 @@ function bootColumn(page: Page): Mode {
 /** The page's next idle period: what waits on it runs when nothing the person does is waiting, or after {@link IDLE_MOST_MS}. */
 const idleTurn = (): Promise<void> =>
   new Promise((resolve) => {
-    requestIdleCallback(() => resolve(), { timeout: IDLE_MOST_MS });
+    const asked = performance.now();
+    requestIdleCallback(
+      () => {
+        recordLimitReading(
+          "agent.page-idle-wait-ms",
+          performance.now() - asked
+        );
+        resolve();
+      },
+      { timeout: IDLE_MOST_MS }
+    );
   });

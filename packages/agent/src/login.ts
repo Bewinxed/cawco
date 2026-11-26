@@ -8,6 +8,8 @@ import {
 } from "@cawco/core/accounts";
 import { failureOf } from "@cawco/core/detach";
 import { boundedRead, boundedWhileHeard } from "@cawco/core/effect/bounded";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   accountConfigDir,
   accountIds,
@@ -86,9 +88,11 @@ const AUTHORIZE_PARAMS = ["client_id", "code_challenge", "state"];
 const LINKS = /https:\/\/\S+(?=\s)/gu;
 
 /** How long the CLI may go without a word while it boots and prints its link. */
+// @limit recording: agent.login-link-ms until 2026-12-26
 const LINK_TIMEOUT_MS = 30_000;
 
 /** How long the CLI may go without a word while it exchanges the code and stores the login. */
+// @limit recording: agent.login-exchange-ms until 2026-12-26
 const EXCHANGE_TIMEOUT_MS = 60_000;
 
 /**
@@ -422,10 +426,9 @@ const beginSignIn = async (
   );
 
   // Ready once its authorize link is on the screen, whatever its prompt says.
-  const shown = await until(
-    current,
-    () => authorizeLinks(current).length > 0,
-    LINK_TIMEOUT_MS
+  const shown = await timed(
+    until(current, () => authorizeLinks(current).length > 0, LINK_TIMEOUT_MS),
+    (ms) => recordLimitReading("agent.login-link-ms", ms)
   );
   const links = authorizeLinks(current);
   let failure: string | undefined;
@@ -477,10 +480,9 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
 
   const from = signIn.output.length;
   signIn.terminal.write(`${trimmed}\r`);
-  const exited = await until(
-    signIn,
-    () => signIn.child.exitCode !== null,
-    EXCHANGE_TIMEOUT_MS
+  const exited = await timed(
+    until(signIn, () => signIn.child.exitCode !== null, EXCHANGE_TIMEOUT_MS),
+    (ms) => recordLimitReading("agent.login-exchange-ms", ms)
   );
   const { exitCode } = signIn.child;
   end(signIn);

@@ -69,7 +69,8 @@ import type { TaskActor, Tasks, TaskView } from "./tasks";
 
 /** How far a comment's headings go into a task file (sync.ts `intoFile`). */
 const COMMENT_DEPTH = 2;
-/** Links read from one forge in one poll at most; the next poll reads on. Our choice. */
+/** Links read from one forge in one poll at most; the next poll reads on. */
+// @limit measured: a page; the next poll reads on, and the log says how many were left. 20 is the links read from one forge in one poll
 const READS_PER_POLL = 20;
 const HASH = /^#/u;
 
@@ -421,7 +422,13 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   ): Promise<void> => {
     const revisions: ItemRevision[] = [];
     let changed = false;
-    for (const item of dueItems(projectId, forge).slice(0, READS_PER_POLL)) {
+    const due = dueItems(projectId, forge);
+    if (due.length > READS_PER_POLL) {
+      console.info(
+        `[links] ${forge.host}: read ${READS_PER_POLL} of ${due.length} due items; the next poll reads on`
+      );
+    }
+    for (const item of due.slice(0, READS_PER_POLL)) {
       const outcome = await Effect.runPromise(
         Effect.result(items.read(client, item, item.etag, requestMs))
       );

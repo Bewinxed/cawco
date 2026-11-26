@@ -8,6 +8,7 @@
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import type { Pin } from "@cawco/core/comments/model";
+  import { shortId } from "@cawco/core/short-id";
   import { holdArtifact, noteArtifact } from "./artifact-names.svelte";
   import MessageBody from "./MessageBody.svelte";
   import { provideMarkdownFleet } from "./markdown-fleet";
@@ -24,7 +25,7 @@
     kind: "conversation",
     id,
     instanceId: id,
-    handle: `${cwd.split("/").pop()}#${id.slice(0, 8)}`,
+    handle: `${cwd.split("/").pop()}#${shortId(id)}`,
     title,
     cwd,
     dir: cwd.split("/").pop(),

@@ -25,6 +25,7 @@ import {
   type TranscriptDoc,
   userAuthor,
 } from "./text.ts";
+import { recordLimitReading } from "./limit-readings.ts";
 
 /**
  * The prefix indexes the FTS table keeps (https://www.sqlite.org/fts5.html#prefix_indexes):
@@ -275,6 +276,7 @@ const RECENT_TIERS = [2000, 20_000];
 const PREFIX_MIN = 3;
 
 /** How many moments of one conversation a search answers with. */
+// @limit recording: parser.conversation-moments until 2026-12-03
 const MOMENTS_PER_CONVERSATION = 3;
 
 /** How much each of a conversation's moments counts in its score, best first. */
@@ -287,9 +289,22 @@ const MOMENT_COUNTS = [1, 0.3, 0.15];
  */
 const SCAN_PER_CONVERSATION = 12;
 
+/** The SQL that holds documents to the conversations `#sessionIds` names. */
+const SESSIONS_FILTER = " AND d.session IN (SELECT value FROM json_each(?))";
+
+/** What a search or a listing answers: its page of conversations, and how many matched in all. */
+export interface Searched {
+  hits: ConversationHit[];
+  /** Conversations a search matched; documents a listing's window holds. */
+  matched: number;
+}
+
+/** The answer when nothing can match. */
+const EMPTY: Searched = { hits: [], matched: 0 };
+
 export interface SearchOptions {
-  /** How many conversations to answer with (default 20). */
-  limit?: number;
+  /** How many conversations to answer with. */
+  limit: number;
   /** Only documents by this author: `owner` is "said by me". */
   author?: DocAuthor;
   /** Only documents of these conversations, by session id. */
@@ -417,6 +432,7 @@ const SAID_PLACE_COLUMNS = "text thinking";
  * the find being stepped through and the words typed just before it, each
  * a few hundred KB at most (two numbers a place). Our own call.
  */
+// @limit recording: parser.place-lists-held until 2026-12-03
 const PLACE_LISTS = 4;
 
 /** Every place of one find in one conversation, oldest first, as `places` holds them between windows. */
@@ -465,6 +481,7 @@ const TURN_CHARS = 8000;
  * conversation's records written between them. Past this, the walk says
  * there is more without having found it.
  */
+// @limit measured: a page; the walk says there is more past it. 20,000 records are 10 to 29 MB, at the 48 to 146 MB a hundred thousand records hold (FTS_BUILD_BYTES below)
 const WALK_MAX = 20_000;
 /** How many records one step of a walk reads. */
 const WALK_CHUNK = 1000;
@@ -618,6 +635,7 @@ const MARKED_CHARS = 4 * CONTEXT_CHARS;
  * found more often than this is taken to stand everywhere in the column (a
  * word as common as "the"), and the stretch is chosen by the rarer ones.
  */
+// @limit recording: parser.word-places until 2026-12-10
 const PLACES_PER_WORD = 512;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 
@@ -647,6 +665,7 @@ function stretchOf(column: string, words: readonly string[]): number {
         break;
       }
     }
+    recordLimitReading("parser.word-places", found.length);
     if (found.length > PLACES_PER_WORD) {
       everywhere += 1;
     } else {
@@ -800,6 +819,7 @@ const FTS_BUILD_BYTES_MIN = 64 * 1024;
  * The most rows one step of the prefix build looks at for its bytes, so
  * finding where a step ends never reads far ahead. Our own call.
  */
+// @limit measured: a page; each step carries its place to the next. 20,000 records are 10 to 29 MB, at the 48 to 146 MB a hundred thousand records hold (above)
 const FTS_BUILD_ROWS_MAX = 20_000;
 
 /** A record's words, in bytes, read off their lengths without their content. */
@@ -1841,14 +1861,14 @@ export class TranscriptIndex {
    * an excerpt or a name read for every match would cost what the matches
    * cost, and the answer keeps a few.
    */
-  search(query: string, options: SearchOptions = {}): ConversationHit[] {
+  search(query: string, options: SearchOptions): Searched {
     return section("search index: query", () => this.#searchNow(query, options));
   }
 
-  #searchNow(query: string, options: SearchOptions): ConversationHit[] {
+  #searchNow(query: string, options: SearchOptions): Searched {
     const { words, prefix } = matchQueries(query, options.submitted);
     if (words.length === 0) {
-      return [];
+      return EMPTY;
     }
     // What tools answered is matched only when asked for: else every phrase
     // reads what was said, thought and called alone.
@@ -1859,14 +1879,14 @@ export class TranscriptIndex {
       mark: scoped(phrases(words, asPrefix, " OR ")),
       words: lower,
     });
-    const limit = options.limit ?? 20;
+    const { limit } = options;
     const params: (string | number)[] = [];
     let filters = "";
     if (options.author !== undefined) {
       // An author no row names has no id, and no hits.
       const id = this.#idOf(options.author);
       if (id === undefined) {
-        return [];
+        return EMPTY;
       }
       filters = "AND d.author = ?";
       params.push(id);
@@ -1875,9 +1895,9 @@ export class TranscriptIndex {
       // Filtered after the FTS match, as the author is.
       const ids = this.#sessionIds(options.sessions);
       if (ids === null) {
-        return [];
+        return EMPTY;
       }
-      filters += " AND d.session IN (SELECT value FROM json_each(?))";
+      filters += SESSIONS_FILTER;
       params.push(ids);
     }
     if (options.before !== undefined) {
@@ -1886,13 +1906,9 @@ export class TranscriptIndex {
       filters += " AND d.ts <= ?";
       params.push(options.before);
     }
-    const ranked = this.#rankedPasses(
-      pass(false),
-      prefix ? pass(true) : null,
-      filters,
-      params,
-      limit,
-    );
+    const whole = pass(false);
+    const typing = prefix ? pass(true) : null;
+    const ranked = this.#rankedPasses(whole, typing, filters, params, limit);
     const described = this.#described(ranked.map((row) => row.id));
     const kept = this.#moments(ranked, described);
     const marked = new Map<number, Marked>();
@@ -1907,7 +1923,11 @@ export class TranscriptIndex {
         marked.set(id, one);
       }
     }
-    return kept
+    // The conversations the words match in all, by the widest pass the
+    // answer drew on: the page is `limit` of them, and the answer says how
+    // many there are.
+    const widest = typing && ranked.some((row) => row.pass.match === typing.match) ? typing : whole;
+    const hits = kept
       .map((each) => ({
         ...each.hit,
         moments: each.moments.flatMap((moment): Moment[] => {
@@ -1932,6 +1952,21 @@ export class TranscriptIndex {
         }),
       }))
       .slice(0, limit);
+    return { hits, matched: this.#matched(widest, filters, params) };
+  }
+
+  /** How many conversations hold a document `pass` matches under `filters`: all of them, not the page. */
+  #matched(pass: Pick<Pass, "match">, filters: string, params: (string | number)[]): number {
+    const row = this.db
+      .query<{ n: number }, (string | number)[]>(
+        `SELECT count(*) AS n FROM (
+           SELECT DISTINCT d.harness, d.session
+           FROM docs_fts
+           JOIN docs d ON d.id = docs_fts.rowid
+           WHERE docs_fts MATCH ? ${filters})`,
+      )
+      .get(pass.match, ...params);
+    return row?.n ?? 0;
   }
 
   /**
@@ -1972,14 +2007,14 @@ export class TranscriptIndex {
    * each with every listed moment of it, newest first; a moment's snippet is
    * the start of its words.
    */
-  listed(options: ListOptions): ConversationHit[] {
+  listed(options: ListOptions): Searched {
     return section("search index: listed", () => this.#listedNow(options));
   }
 
-  #listedNow(options: ListOptions): ConversationHit[] {
+  #listedNow(options: ListOptions): Searched {
     const author = this.#idOf(options.author);
     if (author === undefined || options.limit < 1) {
-      return [];
+      return EMPTY;
     }
     const params: (string | number)[] = [author];
     let filters = options.toolOutput
@@ -1996,11 +2031,19 @@ export class TranscriptIndex {
     if (options.sessions !== undefined) {
       const ids = this.#sessionIds(options.sessions);
       if (ids === null) {
-        return [];
+        return EMPTY;
       }
-      filters += " AND d.session IN (SELECT value FROM json_each(?))";
+      filters += SESSIONS_FILTER;
       params.push(ids);
     }
+    // The documents the window holds in all: the page is `limit` of them.
+    const matched =
+      this.db
+        .query<{ n: number }, (string | number)[]>(
+          `SELECT count(*) AS n FROM docs d INDEXED BY docs_author_ts
+           WHERE d.author = ? AND d.ts IS NOT NULL${filters}`,
+        )
+        .get(...params)?.n ?? 0;
     const ids = (
       this.db
         .prepare(
@@ -2023,9 +2066,12 @@ export class TranscriptIndex {
       }
       const said = words.get(id);
       // The column the gist was cut from, its start.
-      const context = said
-        ? (said.text || said.output || "").slice(0, 2 * CONTEXT_CHARS)
-        : undefined;
+      const column = said ? said.text || said.output || "" : undefined;
+      if (column !== undefined) {
+        recordLimitReading("parser.hit-column-chars", column.length);
+      }
+      // @limit recording: parser.hit-column-chars until 2026-12-10
+      const context = column?.slice(0, 2 * CONTEXT_CHARS);
       const key = `${doc.harness}\u0000${doc.session_id}`;
       const hit = conversations.get(key) ?? {
         harness: doc.harness,
@@ -2047,7 +2093,7 @@ export class TranscriptIndex {
         ...(context === undefined ? {} : { context }),
       });
     }
-    return [...conversations.values()];
+    return { hits: [...conversations.values()], matched };
   }
 
   /**
@@ -2266,6 +2312,7 @@ export class TranscriptIndex {
       }
     }
     this.#placeLists.set(key, list);
+    recordLimitReading("parser.place-lists-held", this.#placeLists.size);
     for (const old of this.#placeLists.keys()) {
       if (this.#placeLists.size <= PLACE_LISTS) {
         break;
@@ -2512,6 +2559,9 @@ export class TranscriptIndex {
       };
       conversations.set(key, held);
       const gist = doc.gist.replace(SPACES, " ").trim().toLowerCase();
+      if (!held.said.has(gist)) {
+        recordLimitReading("parser.conversation-moments", held.said.size + 1);
+      }
       if (held.moments.length < MOMENTS_PER_CONVERSATION && !held.said.has(gist)) {
         held.said.add(gist);
         held.moments.push(row);

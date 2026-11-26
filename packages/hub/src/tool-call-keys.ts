@@ -43,6 +43,7 @@ import type { HubLifetimeShape } from "./lifetime";
  * `HUB_AWAY_BOUND_MS`); ten minutes is that with room, a hub restart's
  * outage (30.5 s measured on 2026-10-09) inside it.
  */
+// @limit measured: past the 90 s a tool call waits while the hub is away (HUB_AWAY_BOUND_MS) and a hub restart's 30.5 s outage, measured 2026-10-09
 const TOOL_CALL_KEY_KEPT_MS = 10 * 60_000;
 /** How often what is past {@link TOOL_CALL_KEY_KEPT_MS} goes. */
 const PRUNE_EVERY_MS = 60_000;

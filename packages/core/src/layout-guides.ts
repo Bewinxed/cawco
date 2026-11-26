@@ -134,9 +134,13 @@ export interface SpacingRead extends LayoutPlace {
  * sheet whose rules it can't read).
  */
 export interface LayoutRead {
+  /** How many elements the drawing holds, read or not ({@link LAYOUT_LIMITS} `elements`). */
+  elements: number;
   groups: LayoutGroup[];
   height: number;
   leftOut?: {
+    /** The drawing's elements past {@link LAYOUT_LIMITS} `elements`, whose groups and spacing are not read. */
+    elements?: number;
     groups?: number;
     nearMisses?: number;
     /** Style sheets of another origin, whose rules (and so their tokens) the page can't read. */
@@ -151,8 +155,12 @@ export interface LayoutRead {
 
 /** How much one read holds, so a long list stays an answer an agent can read. Ours. */
 export const LAYOUT_LIMITS = {
+  // @limit recording: hub.layout-elements until 2026-12-10
   elements: 4000,
+  // @limit recording: hub.layout-groups until 2026-12-10
   groups: 120,
+  // @limit recording: hub.layout-near-misses until 2026-12-10
   nearMisses: 120,
+  // @limit recording: hub.layout-spacing until 2026-12-10
   spacing: 240,
 } as const;

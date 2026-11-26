@@ -651,9 +651,7 @@ const EDITS: Edit[] = [
 function apply(edit: Edit, touched: Set<string>) {
   const text = read(edit.file);
   if (!text.includes(edit.find)) {
-    throw new Error(
-      `${edit.file}: ${JSON.stringify(edit.find.slice(0, 60))} not found`
-    );
+    throw new Error(`${edit.file}: ${JSON.stringify(edit.find)} not found`);
   }
   write(edit.file, text.split(edit.find).join(edit.replace));
   touched.add(edit.file);

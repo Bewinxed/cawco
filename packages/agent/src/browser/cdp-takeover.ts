@@ -46,6 +46,7 @@ import { boundedRead } from "@cawco/core/effect/bounded";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { Effect, Fiber } from "effect";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
@@ -102,15 +103,20 @@ const SETTLE_MS = 150;
  * a bound so the gate never waits on a browser that stopped answering
  * ({@link restoreWindows} sets the page right whatever this missed).
  */
+// @limit recording: agent.takeover-capture-ms until 2026-12-10
 const CAPTURE_MOST_MS = 500;
 /** Fingers a phone layout's page takes at once. */
+// @limit external: a phone reports navigator.maxTouchPoints of 5 (iOS Safari, WebKit); the emulation reports what the device it stands in for does
 const TOUCH_POINTS = 5;
 /** A phone layout's page is never laid out smaller than this, CSS px: a sheet's least room. */
+// @limit recording: dashboard.takeover-phone-side until 2026-12-10
 const PHONE_LEAST = 120;
 /** Nor larger than this, CSS px. */
+// @limit recording: dashboard.takeover-phone-side until 2026-12-10
 const PHONE_MOST = 4096;
 /** Fingers a view sends at most at once. */
-const FINGERS_MOST = 10;
+// @limit external: Chromium holds 16 touches in one touch event (WebTouchEvent::kTouchesLengthCap; DevTools refuses more with "Touch points must be between 1 and 16", third_party/blink/renderer/core/inspector/inspector_emulation_agent.cc)
+const FINGERS_MOST = 16;
 
 /** How long one call to Chromium may take before it is given up. */
 const CALL_MS = 15_000;
@@ -1199,7 +1205,10 @@ export class CdpTakeover {
   async #captured(): Promise<void> {
     const capture = this.#capture;
     if (capture) {
-      await readWithin(CAPTURE_MOST_MS, () => capture);
+      await timed(
+        readWithin(CAPTURE_MOST_MS, () => capture),
+        (ms) => recordLimitReading("agent.takeover-capture-ms", ms)
+      );
     }
   }
 

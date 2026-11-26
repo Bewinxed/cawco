@@ -53,6 +53,7 @@ import type { AgyAnswer } from "./agy-judge";
  * agy's own limit on it ({@link HOOK_TIMEOUT_S}, written in hooks.json), so
  * the hook's words, not agy's kill, are what the model reads.
  */
+// @limit measured: HOOK_TIMEOUT_S less 10 s, so the judge answers before its hook is killed
 const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 
 /** What every answer the hook passes on begins with: one of agy's decisions, never `{}` (which agy 1.5.18 reads as a denial) nor `ask`. */

@@ -29,6 +29,7 @@ import {
   type ViewRemoved,
   viewTitle,
 } from "@cawco/core/blocks";
+import { shortSha } from "@cawco/core/short-id";
 import type { TaskSummary, ViewTaskRow } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import {
@@ -63,7 +64,6 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-
 import { nextRunsOf, slotLabel } from "./routine-schedule";
 import { standingOf } from "./routine-standing";
 import type { Tasks } from "./tasks";
@@ -332,10 +332,12 @@ export const createViews = ({
       const row = stood(kept);
       const zone =
         row.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const nextRuns =
-        row.cron && row.nextSlot ? nextRunsOf(row.cron, zone, Date.now()) : [];
-      if (nextRuns instanceof ElysiaStatus) {
-        return nextRuns;
+      const ahead =
+        row.cron && row.nextSlot
+          ? nextRunsOf(row.cron, zone, Date.now())
+          : { cut: false, runs: [] };
+      if (ahead instanceof ElysiaStatus) {
+        return ahead;
       }
       rows.push({
         id: row.id,
@@ -346,7 +348,8 @@ export const createViews = ({
         cron: row.cron ?? "",
         timeZone: row.timeZone ?? "",
         nextSlot: row.nextSlot?.getTime() ?? 0,
-        nextRuns,
+        nextRuns: ahead.runs,
+        nextRunsCut: ahead.cut,
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
           slot: slotLabel(run.slot, zone),
@@ -383,6 +386,7 @@ export const createViews = ({
     return spend;
   };
 
+  // @limit measured: a page; the next page's cursor rides the answer. 20 is the rows one page returns
   const eventsOf = (projectId: string, limit = 20) => {
     const unknown = known(projectId);
     if (unknown instanceof ElysiaStatus) {
@@ -863,7 +867,7 @@ export const viewRoutes = (
           file: removed.file,
           commit: removed.sha,
           page,
-          said: `Removed “${viewTitle(removed.view)}”: ${removed.file} is deleted as your commit ${removed.sha.slice(0, 9)}, and ${page ? `its block left the ${BLOCK_PAGE_TITLES[page]} page` : "its tab is gone"}.`,
+          said: `Removed “${viewTitle(removed.view)}”: ${removed.file} is deleted as your commit ${shortSha(removed.sha)}, and ${page ? `its block left the ${BLOCK_PAGE_TITLES[page]} page` : "its tab is gone"}.`,
         };
         return answer;
       }

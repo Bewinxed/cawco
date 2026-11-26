@@ -1,5 +1,6 @@
 <script lang="ts" module>
   /** Carried comments drawn under an item before "N more" folds the rest: its newest. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   export const COMMENTS_SHOWN = 2;
 </script>
 

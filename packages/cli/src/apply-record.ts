@@ -26,6 +26,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 const APPLY_RECORD_FILE = "apply-record.json";
 
 /** How many of the latest events the record keeps. Ours: many updates' worth, each a handful. */
+// @limit measured: 256 events held 3.9 days of updates on obelisk (apply-record.json, 2026-11-22 to 2026-11-26)
 const EVENTS_KEPT = 256;
 
 export type ApplyEvent =
@@ -67,6 +68,7 @@ export const recordApply = async (event: ApplyEvent): Promise<void> => {
     } catch {
       before = [];
     }
+    // @limit measured: 256 events held 3.9 days of updates on obelisk (apply-record.json, 2026-11-22 to 2026-11-26)
     const all = [
       ...(Array.isArray(before) ? before : []),
       { ...event, at: Date.now(), pid: process.pid },

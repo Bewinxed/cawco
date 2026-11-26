@@ -27,17 +27,6 @@
 import type { Anchor, PageAnchor } from "./comments/anchor";
 import { FILE_SPOT_PROBLEM, fileSpotProblem } from "./comments/validate";
 
-export const INK_LIMITS = {
-  /** Elements one group names it marks. Our call. */
-  elementsPerGroup: 20,
-  /** Points one stroke keeps. */
-  pointsPerStroke: 2000,
-  /** Groups an artifact keeps, placed and moved together. */
-  groups: 200,
-  /** Strokes one group keeps. Our call. */
-  strokesPerGroup: 200,
-} as const;
-
 /** A point of a stroke: x and y as fractions of the anchor's box, and the pen's pressure. */
 export type InkPoint = [x: number, y: number, pressure: number];
 
@@ -71,17 +60,8 @@ function inkGroupProblem(value: unknown): string | null {
   if (!(isObject(value) && Array.isArray(value.strokes))) {
     return "A stroke group is an object with its strokes.";
   }
-  if (
-    value.over !== undefined &&
-    !(
-      Array.isArray(value.over) &&
-      value.over.length <= INK_LIMITS.elementsPerGroup
-    )
-  ) {
-    return `A stroke group names at most ${INK_LIMITS.elementsPerGroup} elements it marks.`;
-  }
-  if (value.strokes.length > INK_LIMITS.strokesPerGroup) {
-    return `A stroke group keeps at most ${INK_LIMITS.strokesPerGroup} strokes.`;
+  if (value.over !== undefined && !Array.isArray(value.over)) {
+    return "A stroke group names the elements it marks as a list.";
   }
   if (isObject(value.anchor) && fileSpotProblem(value.anchor)) {
     return FILE_SPOT_PROBLEM;
@@ -90,26 +70,16 @@ function inkGroupProblem(value: unknown): string | null {
     if (!(isObject(stroke) && Array.isArray(stroke.points))) {
       return "A stroke is an object with its points.";
     }
-    if (stroke.points.length > INK_LIMITS.pointsPerStroke) {
-      return `A stroke keeps at most ${INK_LIMITS.pointsPerStroke} points.`;
-    }
   }
   return null;
 }
 
 /**
  * Why an artifact's ink and moved groups after a person's change may not be
- * kept; null when they may: `groups`, the groups both maps hold after it,
- * and `changed`, each group it wrote. A group it left stood within these
- * bounds already.
+ * kept; null when they may: `changed`, each group it wrote. A group it
+ * left stood within these checks already.
  */
-export function inkProblem(
-  groups: number,
-  changed: Iterable<unknown>
-): string | null {
-  if (groups > INK_LIMITS.groups) {
-    return `An artifact keeps at most ${INK_LIMITS.groups} stroke groups.`;
-  }
+export function inkProblem(changed: Iterable<unknown>): string | null {
   for (const group of changed) {
     const problem = inkGroupProblem(group);
     if (problem) {

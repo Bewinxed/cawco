@@ -141,10 +141,10 @@ for (const path of [
   const lines = text.split("\n");
   lines.forEach((line, i) => {
     if (READER.test(line)) {
-      refuse(path, "reader", `line ${i + 1}: ${line.trim().slice(0, 100)}`);
+      refuse(path, "reader", `line ${i + 1}: ${line.trim()}`);
     }
     if (LOOK.test(line)) {
-      refuse(path, "look", `line ${i + 1}: ${line.trim().slice(0, 100)}`);
+      refuse(path, "look", `line ${i + 1}: ${line.trim()}`);
     }
   });
   const shell =
@@ -153,7 +153,7 @@ for (const path of [
   if (shell) {
     lines.forEach((line, i) => {
       if (SWITCH.test(line)) {
-        refuse(path, "switch", `line ${i + 1}: ${line.trim().slice(0, 100)}`);
+        refuse(path, "switch", `line ${i + 1}: ${line.trim()}`);
       }
     });
   }

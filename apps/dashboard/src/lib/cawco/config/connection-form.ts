@@ -32,6 +32,7 @@ export const nameFor = (service: string, account: string): string => {
     .toLowerCase()
     .replace(NOT_NAME, "-")
     .replace(EDGE_HYPHENS, "");
+  // @limit measured: 24 leaves a connection's tools room under the 64-character tool name (connections.ts sessionToolName)
   return (words ? `${service}-${words}` : service)
     .slice(0, CONNECTION_NAME_LENGTH)
     .replace(TRAILING_HYPHENS, "");

@@ -66,11 +66,12 @@ export const lfsRoutes = ({
         ...hidden,
         params: t.Object({ id: t.String() }),
         body: t.Object({
+          // @limit external: Linux PATH_MAX, 4,096 bytes (limits.h)
           root: t.String({ minLength: 1, maxLength: 4096 }),
-          endpoint: t.String({ minLength: 1, maxLength: 2000 }),
+          endpoint: t.String({ minLength: 1 }),
           // The asking machine's own word for itself, for a trusted hub's
           // caller, which proves none.
-          machineId: t.String({ minLength: 1, maxLength: 200 }),
+          machineId: t.String({ minLength: 1 }),
         }),
       },
       ({ body, params, request, server }) => {

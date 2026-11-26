@@ -2707,7 +2707,6 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "maxLength": 80,
                     "pattern": "^[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f][^\\u0000-\\u001f\\u007f]*$",
                     "type": "string"
                   }
@@ -2877,7 +2876,7 @@
                 "type": "object",
                 "properties": {
                   "account": {
-                    "maxLength": 320,
+                    "maxLength": 254,
                     "type": [
                       "string",
                       "null"
@@ -2928,7 +2927,6 @@
                     ]
                   },
                   "name": {
-                    "maxLength": 80,
                     "pattern": "^[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f][^\\u0000-\\u001f\\u007f]*$",
                     "type": "string"
                   },
@@ -3367,7 +3365,6 @@
                     "type": "string"
                   },
                   "message": {
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "path": {
@@ -3507,7 +3504,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 2000,
               "type": "string"
             }
           }
@@ -3897,7 +3893,6 @@
                     ]
                   },
                   "name": {
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "required": {
@@ -6261,7 +6256,6 @@
                     "properties": {
                       "artifact": {
                         "minLength": 1,
-                        "maxLength": 64,
                         "type": "string"
                       },
                       "fault": {
@@ -6270,7 +6264,6 @@
                             "type": "object",
                             "properties": {
                               "element": {
-                                "maxLength": 500,
                                 "type": "string"
                               },
                               "kind": {
@@ -6278,7 +6271,6 @@
                                 "const": "asset"
                               },
                               "url": {
-                                "maxLength": 500,
                                 "type": "string"
                               }
                             },
@@ -6292,7 +6284,6 @@
                             "type": "object",
                             "properties": {
                               "control": {
-                                "maxLength": 500,
                                 "type": "string"
                               },
                               "kind": {
@@ -6300,11 +6291,9 @@
                                 "const": "dial"
                               },
                               "panel": {
-                                "maxLength": 500,
                                 "type": "string"
                               },
                               "path": {
-                                "maxLength": 500,
                                 "type": "string"
                               }
                             },
@@ -6326,7 +6315,6 @@
                                 ]
                               },
                               "file": {
-                                "maxLength": 500,
                                 "type": [
                                   "string",
                                   "null"
@@ -6344,11 +6332,9 @@
                                 ]
                               },
                               "message": {
-                                "maxLength": 500,
                                 "type": "string"
                               },
                               "source": {
-                                "maxLength": 500,
                                 "type": [
                                   "string",
                                   "null"
@@ -6378,33 +6364,27 @@
                     ]
                   },
                   "message": {
-                    "maxLength": 1000,
                     "type": "string"
                   },
                   "path": {
                     "minLength": 1,
-                    "maxLength": 1000,
                     "pattern": "^/",
                     "type": "string"
                   },
                   "sessionId": {
-                    "maxLength": 256,
                     "type": [
                       "string",
                       "null"
                     ]
                   },
                   "stack": {
-                    "maxLength": 6000,
                     "type": "string"
                   },
                   "userAgent": {
-                    "maxLength": 512,
                     "type": "string"
                   },
                   "version": {
                     "minLength": 1,
-                    "maxLength": 128,
                     "type": "string"
                   }
                 },
@@ -6872,9 +6852,17 @@
                     "type": "string"
                   },
                   "hue": {
-                    "minimum": 1,
-                    "maximum": 8,
-                    "type": "integer"
+                    "enum": [
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                      6,
+                      7,
+                      8
+                    ],
+                    "type": "number"
                   },
                   "job": {
                     "type": "string"
@@ -7003,9 +6991,17 @@
                     "type": "string"
                   },
                   "hue": {
-                    "minimum": 1,
-                    "maximum": 8,
-                    "type": "integer"
+                    "enum": [
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                      6,
+                      7,
+                      8
+                    ],
+                    "type": "number"
                   },
                   "job": {
                     "type": "string"
@@ -7221,9 +7217,17 @@
                     "type": "object",
                     "properties": {
                       "hue": {
-                        "minimum": 1,
-                        "maximum": 8,
-                        "type": "integer"
+                        "enum": [
+                          1,
+                          2,
+                          3,
+                          4,
+                          5,
+                          6,
+                          7,
+                          8
+                        ],
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -8559,11 +8563,9 @@
                 "type": "object",
                 "properties": {
                   "names": {
-                    "maxItems": 200,
                     "type": "array",
                     "items": {
                       "minLength": 1,
-                      "maxLength": 200,
                       "type": "string"
                     }
                   }
@@ -12272,7 +12274,6 @@
                     "type": "object",
                     "properties": {
                       "address": {
-                        "maxLength": 500,
                         "type": "string"
                       },
                       "route": {
@@ -12284,7 +12285,6 @@
                         "properties": {
                           "page": {
                             "minLength": 1,
-                            "maxLength": 100,
                             "type": "string"
                           },
                           "seq": {
@@ -12307,7 +12307,6 @@
                     "type": "object",
                     "properties": {
                       "password": {
-                        "maxLength": 4096,
                         "type": "string"
                       },
                       "port": {
@@ -12332,7 +12331,6 @@
                         "properties": {
                           "page": {
                             "minLength": 1,
-                            "maxLength": 100,
                             "type": "string"
                           },
                           "seq": {
@@ -12346,7 +12344,6 @@
                         ]
                       },
                       "target": {
-                        "maxLength": 500,
                         "type": "string"
                       }
                     },
@@ -12416,11 +12413,9 @@
                 "type": "object",
                 "properties": {
                   "host": {
-                    "maxLength": 255,
                     "type": "string"
                   },
                   "said": {
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "status": {
@@ -12489,14 +12484,12 @@
                     "type": "object",
                     "properties": {
                       "address": {
-                        "maxLength": 500,
                         "type": [
                           "string",
                           "null"
                         ]
                       },
                       "port": {
-                        "maxLength": 10,
                         "type": "string"
                       },
                       "route": {
@@ -12520,7 +12513,6 @@
                         ]
                       },
                       "target": {
-                        "maxLength": 500,
                         "type": "string"
                       }
                     }
@@ -12530,7 +12522,6 @@
                     "properties": {
                       "page": {
                         "minLength": 1,
-                        "maxLength": 100,
                         "type": "string"
                       },
                       "seq": {
@@ -12701,7 +12692,6 @@
                 "type": "object",
                 "properties": {
                   "password": {
-                    "maxLength": 4096,
                     "type": "string"
                   }
                 }
@@ -12848,7 +12838,6 @@
                 "type": "object",
                 "properties": {
                   "ids": {
-                    "maxItems": 64,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -13330,7 +13319,6 @@
                 "properties": {
                   "ask": {
                     "minLength": 1,
-                    "maxLength": 160,
                     "type": "string"
                   },
                   "content": {
@@ -13343,13 +13331,11 @@
                     "type": "string"
                   },
                   "dials": {
-                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "object",
                       "properties": {
                         "group": {
-                          "maxLength": 80,
                           "type": "string"
                         },
                         "kind": {
@@ -13364,7 +13350,6 @@
                           ]
                         },
                         "label": {
-                          "maxLength": 80,
                           "type": "string"
                         },
                         "max": {
@@ -13375,15 +13360,12 @@
                         },
                         "name": {
                           "minLength": 1,
-                          "maxLength": 60,
                           "pattern": "^[A-Za-z][\\w-]*$",
                           "type": "string"
                         },
                         "options": {
-                          "maxItems": 24,
                           "type": "array",
                           "items": {
-                            "maxLength": 100,
                             "type": "string"
                           }
                         },
@@ -13398,7 +13380,6 @@
                               "properties": {
                                 "arg": {
                                   "minLength": 1,
-                                  "maxLength": 100,
                                   "type": "string"
                                 }
                               },
@@ -13411,7 +13392,6 @@
                               "properties": {
                                 "cssVar": {
                                   "pattern": "^--[\\w-]+$",
-                                  "maxLength": 100,
                                   "type": "string"
                                 }
                               },
@@ -13422,7 +13402,6 @@
                           ]
                         },
                         "unit": {
-                          "maxLength": 10,
                           "type": "string"
                         }
                       },
@@ -13452,7 +13431,6 @@
                         },
                         "file": {
                           "minLength": 1,
-                          "maxLength": 1000,
                           "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                           "type": "string"
                         },
@@ -13463,12 +13441,10 @@
                         },
                         "line": {
                           "minLength": 1,
-                          "maxLength": 200,
                           "type": "string"
                         },
                         "name": {
                           "minLength": 1,
-                          "maxLength": 80,
                           "type": "string"
                         }
                       },
@@ -13491,23 +13467,19 @@
                     "type": "boolean"
                   },
                   "edges": {
-                    "maxItems": 100,
                     "type": "array",
                     "items": {
                       "type": "object",
                       "properties": {
                         "from": {
                           "minLength": 1,
-                          "maxLength": 1100,
                           "type": "string"
                         },
                         "label": {
-                          "maxLength": 80,
                           "type": "string"
                         },
                         "to": {
                           "minLength": 1,
-                          "maxLength": 1100,
                           "type": "string"
                         }
                       },
@@ -13519,7 +13491,6 @@
                   },
                   "elements": {
                     "minItems": 1,
-                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "additionalProperties": true,
@@ -13527,7 +13498,6 @@
                       "properties": {
                         "id": {
                           "minLength": 1,
-                          "maxLength": 100,
                           "type": "string"
                         },
                         "type": {
@@ -13555,14 +13525,12 @@
                         "type": "array",
                         "items": {
                           "minLength": 1,
-                          "maxLength": 1000,
                           "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                           "type": "string"
                         }
                       },
                       {
                         "minLength": 1,
-                        "maxLength": 1000,
                         "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                         "type": "string"
                       }
@@ -13573,7 +13541,6 @@
                     "patternProperties": {
                       "^.*$": {
                         "minLength": 1,
-                        "maxLength": 1100,
                         "type": "string"
                       }
                     }
@@ -13595,12 +13562,10 @@
                   },
                   "machine": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "mermaid": {
                     "minLength": 1,
-                    "maxLength": 20000,
                     "type": "string"
                   },
                   "name": {
@@ -13608,7 +13573,6 @@
                     "type": "string"
                   },
                   "path": {
-                    "maxLength": 2000,
                     "pattern": "^\\/(?!\\/)\\S*$",
                     "type": "string"
                   },
@@ -13637,11 +13601,9 @@
                     "properties": {
                       "command": {
                         "minLength": 1,
-                        "maxLength": 2000,
                         "type": "string"
                       },
                       "cwd": {
-                        "maxLength": 1000,
                         "type": "string"
                       }
                     },
@@ -13651,7 +13613,6 @@
                   },
                   "title": {
                     "minLength": 1,
-                    "maxLength": 80,
                     "type": "string"
                   },
                   "workspace": {
@@ -13809,7 +13770,6 @@
             "required": false,
             "schema": {
               "minLength": 1,
-              "maxLength": 100,
               "type": "string"
             }
           },
@@ -13831,7 +13791,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 40,
               "type": "string"
             }
           },
@@ -13923,12 +13882,10 @@
                       },
                       "meanwhile": {
                         "minLength": 1,
-                        "maxLength": 200,
                         "type": "string"
                       },
                       "questions": {
                         "minItems": 1,
-                        "maxItems": 4,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -13975,7 +13932,6 @@
                       },
                       "waiting": {
                         "minLength": 1,
-                        "maxLength": 200,
                         "type": "string"
                       }
                     },
@@ -13986,7 +13942,6 @@
                   },
                   "text": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   }
                 },
@@ -14071,7 +14026,6 @@
                 "properties": {
                   "text": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   }
                 }
@@ -14131,7 +14085,6 @@
             "required": false,
             "schema": {
               "minLength": 1,
-              "maxLength": 1000,
               "type": "string"
             }
           },
@@ -14141,7 +14094,6 @@
             "required": false,
             "schema": {
               "minLength": 1,
-              "maxLength": 100,
               "type": "string"
             }
           },
@@ -14151,7 +14103,6 @@
             "required": false,
             "schema": {
               "minLength": 1,
-              "maxLength": 1000,
               "type": "string"
             }
           },
@@ -14163,7 +14114,6 @@
               "anyOf": [
                 {
                   "minimum": 1,
-                  "maximum": 200,
                   "type": "number"
                 },
                 {
@@ -14177,7 +14127,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 20,
               "type": "string"
             }
           },
@@ -14285,7 +14234,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 60,
               "type": "string"
             }
           },
@@ -14378,12 +14326,10 @@
                   },
                   "question": {
                     "minLength": 1,
-                    "maxLength": 400,
                     "type": "string"
                   },
                   "why": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   }
                 },
@@ -14447,7 +14393,6 @@
             "in": "query",
             "required": true,
             "schema": {
-              "maxLength": 200,
               "type": "string"
             }
           }
@@ -14545,7 +14490,7 @@
               "anyOf": [
                 {
                   "minimum": 320,
-                  "maximum": 2560,
+                  "maximum": 3840,
                   "multipleOf": 1,
                   "type": "number"
                 },
@@ -14573,7 +14518,6 @@
             "required": false,
             "schema": {
               "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-              "maxLength": 1100,
               "type": "string"
             }
           },
@@ -14582,7 +14526,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 1400,
               "type": "string"
             }
           },
@@ -14592,7 +14535,6 @@
             "required": false,
             "schema": {
               "minLength": 1,
-              "maxLength": 1000,
               "type": "string"
             }
           },
@@ -14631,7 +14573,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 2000,
               "type": "string"
             }
           },
@@ -14763,11 +14704,9 @@
                 "properties": {
                   "delete": {
                     "minItems": 1,
-                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "minLength": 1,
-                      "maxLength": 100,
                       "type": "string"
                     }
                   },
@@ -14779,7 +14718,6 @@
                   },
                   "elements": {
                     "minItems": 1,
-                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "additionalProperties": true,
@@ -14787,7 +14725,6 @@
                       "properties": {
                         "id": {
                           "minLength": 1,
-                          "maxLength": 100,
                           "type": "string"
                         },
                         "type": {
@@ -14815,7 +14752,6 @@
                   },
                   "mermaid": {
                     "minLength": 1,
-                    "maxLength": 20000,
                     "type": "string"
                   },
                   "patch": {
@@ -14831,7 +14767,6 @@
                               "const": "remove"
                             },
                             "path": {
-                              "maxLength": 1000,
                               "type": "string"
                             }
                           },
@@ -14844,7 +14779,6 @@
                           "type": "object",
                           "properties": {
                             "from": {
-                              "maxLength": 1000,
                               "type": "string"
                             },
                             "op": {
@@ -14855,7 +14789,6 @@
                               ]
                             },
                             "path": {
-                              "maxLength": 1000,
                               "type": "string"
                             }
                           },
@@ -14877,7 +14810,6 @@
                               ]
                             },
                             "path": {
-                              "maxLength": 1000,
                               "type": "string"
                             },
                             "value": {}
@@ -15192,21 +15124,17 @@
                 "properties": {
                   "card": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "message": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "options": {
                     "minItems": 1,
-                    "maxItems": 50,
                     "type": "array",
                     "items": {
                       "minLength": 1,
-                      "maxLength": 200,
                       "type": "string"
                     }
                   },
@@ -15217,7 +15145,6 @@
                   },
                   "quote": {
                     "minLength": 1,
-                    "maxLength": 500,
                     "type": "string"
                   }
                 },
@@ -15671,26 +15598,21 @@
                 "properties": {
                   "card": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "option": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "sources": {
-                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "minLength": 1,
-                      "maxLength": 2000,
                       "type": "string"
                     }
                   },
                   "why": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   }
                 },
@@ -15851,15 +15773,12 @@
                     "properties": {
                       "story": {
                         "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-                        "maxLength": 1100,
                         "type": "string"
                       },
                       "unset": {
-                        "maxItems": 100,
                         "type": "array",
                         "items": {
                           "minLength": 1,
-                          "maxLength": 100,
                           "type": "string"
                         }
                       },
@@ -15867,8 +15786,7 @@
                         "type": "object",
                         "patternProperties": {
                           "^.*$": {}
-                        },
-                        "maxProperties": 100
+                        }
                       }
                     },
                     "required": [
@@ -15883,15 +15801,13 @@
                         "properties": {
                           "add": {
                             "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-                            "maxLength": 1100,
                             "type": "string"
                           },
                           "args": {
                             "type": "object",
                             "patternProperties": {
                               "^.*$": {}
-                            },
-                            "maxProperties": 100
+                            }
                           }
                         },
                         "required": [
@@ -15907,7 +15823,6 @@
                           },
                           "duplicate": {
                             "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-                            "maxLength": 1100,
                             "type": "string"
                           }
                         },
@@ -15928,7 +15843,6 @@
                           },
                           "move": {
                             "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-                            "maxLength": 1100,
                             "type": "string"
                           }
                         },
@@ -15942,7 +15856,6 @@
                         "properties": {
                           "remove": {
                             "pattern": "^(?:[^:]+\\.stories\\.[cm]?[jt]sx?:)?[A-Z][A-Za-z0-9_]{0,99}$",
-                            "maxLength": 1100,
                             "type": "string"
                           }
                         },
@@ -16085,7 +15998,6 @@
                         "properties": {
                           "card": {
                             "minLength": 1,
-                            "maxLength": 200,
                             "type": "string"
                           }
                         },
@@ -16098,7 +16010,6 @@
                         "properties": {
                           "change": {
                             "minLength": 1,
-                            "maxLength": 200,
                             "type": "string"
                           }
                         },
@@ -16269,7 +16180,6 @@
                 "properties": {
                   "client": {
                     "minLength": 1,
-                    "maxLength": 100,
                     "type": "string"
                   },
                   "error": {
@@ -16292,7 +16202,6 @@
                   },
                   "revision": {
                     "minLength": 1,
-                    "maxLength": 100,
                     "type": "string"
                   }
                 },
@@ -17498,7 +17407,6 @@
                       },
                       "text": {
                         "minLength": 1,
-                        "maxLength": 4000,
                         "type": "string"
                       }
                     },
@@ -17555,7 +17463,6 @@
                     "properties": {
                       "content": {
                         "minLength": 1,
-                        "maxLength": 4000,
                         "type": "string"
                       },
                       "kind": {
@@ -18132,12 +18039,10 @@
                 "properties": {
                   "endpoint": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "projectId": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -18177,6 +18082,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiLfsRefusalsDismiss422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/limit-readings": {
+      "get": {
+        "operationId": "getApiLimitReadings",
+        "responses": {
+          "200": {
+            "description": "getApiLimitReadings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiLimitReadings200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiLimitReadings 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiLimitReadings422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/limit-readings/{machine}": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "readings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "bucket": {
+                          "type": "integer"
+                        },
+                        "count": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "metric": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "bucket",
+                        "count",
+                        "day",
+                        "metric",
+                        "value"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "readings"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiLimitReadingsByMachine",
+        "responses": {
+          "204": {
+            "description": "postApiLimitReadingsByMachine 204"
+          },
+          "422": {
+            "description": "postApiLimitReadingsByMachine 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiLimitReadingsByMachine422"
                 }
               }
             }
@@ -19200,7 +19215,6 @@
                 "type": "object",
                 "properties": {
                   "collapseIds": {
-                    "maxItems": 200,
                     "type": "array",
                     "items": {
                       "minLength": 1,
@@ -19544,7 +19558,6 @@
                     ]
                   },
                   "name": {
-                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -19866,8 +19879,7 @@
                 "type": "object",
                 "properties": {
                   "awayAfterMs": {
-                    "minimum": 60000,
-                    "maximum": 14400000,
+                    "minimum": 1,
                     "type": "integer"
                   }
                 },
@@ -19984,7 +19996,6 @@
                   },
                   "clientId": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "deskIdleMs": {
@@ -20073,7 +20084,6 @@
                 "properties": {
                   "clientId": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "collapseId": {
@@ -20132,7 +20142,6 @@
             "in": "query",
             "required": true,
             "schema": {
-              "maxLength": 300,
               "type": "string"
             }
           }
@@ -20204,7 +20213,6 @@
                     ]
                   },
                   "pattern": {
-                    "maxLength": 270,
                     "type": "string"
                   }
                 },
@@ -20465,16 +20473,13 @@
                   },
                   "name": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "prompt": {
-                    "maxLength": 20000,
                     "type": "string"
                   },
                   "promptId": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   },
                   "template": {
@@ -20664,7 +20669,7 @@
                 "type": "object",
                 "properties": {
                   "account": {
-                    "maxLength": 320,
+                    "maxLength": 254,
                     "type": [
                       "string",
                       "null"
@@ -20693,11 +20698,9 @@
                     ],
                     "properties": {
                       "connection": {
-                        "maxLength": 200,
                         "type": "string"
                       },
                       "url": {
-                        "maxLength": 2000,
                         "type": "string"
                       }
                     },
@@ -20707,7 +20710,6 @@
                     ]
                   },
                   "name": {
-                    "maxLength": 200,
                     "type": "string"
                   }
                 }
@@ -21165,7 +21167,6 @@
                 "type": "object",
                 "properties": {
                   "blocks": {
-                    "maxItems": 64,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -21851,7 +21852,6 @@
                 "properties": {
                   "message": {
                     "minLength": 1,
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "routes": {
@@ -22249,7 +22249,6 @@
                 "type": "object",
                 "properties": {
                   "text": {
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "writes": {
@@ -23395,7 +23394,6 @@
                     "type": "string"
                   },
                   "message": {
-                    "maxLength": 2000,
                     "type": "string"
                   },
                   "path": {
@@ -23535,7 +23533,6 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 2000,
               "type": "string"
             }
           }
@@ -24454,7 +24451,6 @@
                   },
                   "itemId": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -25671,7 +25667,6 @@
                   },
                   "name": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   }
                 }
@@ -25996,7 +25991,6 @@
                     "type": "string"
                   },
                   "message": {
-                    "maxLength": 2000,
                     "type": "string"
                   }
                 },
@@ -26282,7 +26276,6 @@
                   },
                   "text": {
                     "minLength": 1,
-                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -29535,7 +29528,7 @@
                     "description": "How many; 20 when left out.",
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 100
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
@@ -29602,7 +29595,7 @@
                     "description": "How many of each routine's newest runs; 5 when left out.",
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 20
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
@@ -29679,7 +29672,7 @@
                     "description": "How many days back from now; 30 when left out.",
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 90
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
@@ -32975,7 +32968,6 @@
                       },
                       "token": {
                         "minLength": 1,
-                        "maxLength": 200,
                         "type": "string"
                       }
                     },
@@ -33027,7 +33019,6 @@
                       },
                       "token": {
                         "minLength": 1,
-                        "maxLength": 200,
                         "type": "string"
                       }
                     },
@@ -33160,21 +33151,18 @@
                 "type": "object",
                 "properties": {
                   "answered": {
-                    "maxItems": 8,
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   },
                   "refused": {
-                    "maxItems": 8,
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   },
                   "seenAs": {
-                    "maxLength": 64,
                     "type": [
                       "string",
                       "null"
@@ -35143,6 +35131,16 @@
           },
           "hue": {
             "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
             "type": "number"
           },
           "id": {
@@ -36292,7 +36290,7 @@
             "$ref": "#/components/schemas/ArtifactThumbnail"
           },
           "title": {
-            "description": "What every surface names it by to the person, in the agent's plain words ({@link ARTIFACT_TITLE_LIMIT}). Empty on one made before titles were kept.",
+            "description": "What every surface names it by to the person, in the agent's plain words. Empty on one made before titles were kept.",
             "type": "string"
           },
           "updatedAt": {
@@ -45612,7 +45610,7 @@
                 "description": "Finished turns in a row that changed no file.",
                 "type": "number",
                 "enum": [
-                  6
+                  8
                 ]
               },
               "sameCall": {
@@ -49782,6 +49780,51 @@
           "main",
           "none",
           "pr"
+        ]
+      },
+      "LimitReadingSummary": {
+        "description": "One metric's readings on one machine, read back (hub `GET /api/limit-readings`).",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "first": {
+            "description": "The first and last day it was read.",
+            "type": "string"
+          },
+          "last": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "max": {
+            "type": "number"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "p50": {
+            "type": "number"
+          },
+          "p95": {
+            "type": "number"
+          },
+          "p99": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "first",
+          "last",
+          "machine",
+          "max",
+          "metric",
+          "p50",
+          "p95",
+          "p99"
         ]
       },
       "LimitWindow": {
@@ -54390,7 +54433,7 @@
             ]
           },
           "text": {
-            "description": "The element's text, at most {@link COMMENT_LIMITS.anchorText} characters.",
+            "description": "The element's text.",
             "type": "string"
           },
           "view": {
@@ -56057,6 +56100,16 @@
           },
           "hue": {
             "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
             "type": "number"
           },
           "id": {
@@ -56467,7 +56520,6 @@
           "folder-link-outside",
           "folder-listed-file",
           "folder-message-missing",
-          "folder-message-too-long",
           "folder-path-absolute",
           "folder-path-backslash",
           "folder-path-control",
@@ -56489,7 +56541,6 @@
           "lfs-refused",
           "name-needed",
           "name-one-line",
-          "name-too-long",
           "no-account",
           "no-area",
           "no-project",
@@ -60005,11 +60056,15 @@
             "type": "string"
           },
           "nextRuns": {
-            "description": "Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next\nweek's, at most 288, epoch ms; a paused routine's too.",
+            "description": "Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next\nweek's, epoch ms; a paused routine's too.",
             "type": "array",
             "items": {
               "type": "number"
             }
+          },
+          "nextRunsCut": {
+            "description": "Its runs ahead stop before the week's end: the scheduler starts more than they tell.",
+            "type": "boolean"
           },
           "nextSlot": {
             "type": "number"
@@ -60057,6 +60112,7 @@
           "lands",
           "name",
           "nextRuns",
+          "nextRunsCut",
           "nextSlot",
           "prompt",
           "runs",
@@ -60323,12 +60379,17 @@
               "type": "number"
             }
           },
+          "nextRunsCut": {
+            "description": "The runs stop before the week's end: the schedule runs more than they tell.",
+            "type": "boolean"
+          },
           "words": {
             "type": "string"
           }
         },
         "required": [
           "nextRuns",
+          "nextRunsCut",
           "words"
         ]
       },
@@ -66806,6 +66867,16 @@
           },
           "hue": {
             "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
             "type": "number"
           },
           "id": {
@@ -67366,11 +67437,15 @@
             "type": "string"
           },
           "nextRuns": {
-            "description": "Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms.",
+            "description": "Its runs ahead, as the hub's scheduler will start them: the next week's, epoch ms.",
             "type": "array",
             "items": {
               "type": "number"
             }
+          },
+          "nextRunsCut": {
+            "description": "`nextRuns` stop before the week's end: the scheduler starts more than they tell.",
+            "type": "boolean"
           },
           "nextSlot": {
             "type": "number"
@@ -67396,6 +67471,7 @@
           "id",
           "name",
           "nextRuns",
+          "nextRunsCut",
           "nextSlot",
           "runs",
           "target",
@@ -69839,42 +69915,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -70951,42 +70991,6 @@
                 "type": "string",
                 "enum": [
                   "folder-link-outside"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -72168,42 +72172,6 @@
                 "type": "string",
                 "enum": [
                   "folder-link-outside"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -75130,42 +75098,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -77105,42 +77037,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -78357,42 +78253,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -79485,42 +79345,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -80440,42 +80264,6 @@
                 "type": "string",
                 "enum": [
                   "folder-file-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -81606,42 +81394,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -82111,42 +81863,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -98293,6 +98009,56 @@
           "type"
         ]
       },
+      "getApiLimitReadings200": {
+        "type": "object",
+        "properties": {
+          "readings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitReadingSummary"
+            }
+          }
+        },
+        "required": [
+          "readings"
+        ]
+      },
+      "getApiLimitReadings422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiLocalName422": {
         "type": "object",
         "properties": {
@@ -100646,42 +100412,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -101999,42 +101729,6 @@
                 "type": "string",
                 "enum": [
                   "folder-message-missing"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -119431,42 +119125,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -120661,114 +120319,6 @@
       },
       "patchApiInstancesByIdArtifactsByArtifact413": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-canvas-deletes-many"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-canvas-elements-many"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-canvas-mermaid-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -123161,42 +122711,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "name-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "no-account"
                 ]
               },
@@ -125473,42 +124987,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -125870,42 +125348,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -127317,42 +126759,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -127786,42 +127192,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -129121,42 +128491,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -129698,42 +129032,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -144676,42 +143974,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -146123,8 +145385,6 @@
             "properties": {
               "code": {
                 "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
                   "artifact-canvas-no-screen",
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
@@ -146148,7 +145408,6 @@
               "status": {
                 "enum": [
                   409,
-                  413,
                   422,
                   502,
                   503,
@@ -146175,78 +145434,6 @@
       },
       "postApiInstancesByIdArtifacts413": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-canvas-elements-many"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-canvas-mermaid-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -146303,59 +145490,6 @@
                 "enum": [
                   413
                 ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
-                  "artifact-canvas-no-screen",
-                  "artifact-canvas-screen-unjoined",
-                  "artifact-canvas-unconverted",
-                  "artifact-canvas-undrawn",
-                  "artifact-screen-unopened",
-                  "machine-away",
-                  "machine-silent",
-                  "preview-no-listener",
-                  "preview-owner-gone",
-                  "preview-port-unopened",
-                  "preview-ports-taken"
-                ],
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  409,
-                  413,
-                  422,
-                  502,
-                  503,
-                  504
-                ],
-                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -147229,8 +146363,6 @@
             "properties": {
               "code": {
                 "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
                   "artifact-canvas-no-screen",
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
@@ -147254,7 +146386,6 @@
               "status": {
                 "enum": [
                   409,
-                  413,
                   422,
                   502,
                   503,
@@ -147466,8 +146597,6 @@
             "properties": {
               "code": {
                 "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
                   "artifact-canvas-no-screen",
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
@@ -147491,7 +146620,6 @@
               "status": {
                 "enum": [
                   409,
-                  413,
                   422,
                   502,
                   503,
@@ -147776,8 +146904,6 @@
             "properties": {
               "code": {
                 "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
                   "artifact-canvas-no-screen",
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
@@ -147801,7 +146927,6 @@
               "status": {
                 "enum": [
                   409,
-                  413,
                   422,
                   502,
                   503,
@@ -147977,8 +147102,6 @@
             "properties": {
               "code": {
                 "enum": [
-                  "artifact-canvas-elements-many",
-                  "artifact-canvas-mermaid-long",
                   "artifact-canvas-no-screen",
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
@@ -148002,7 +147125,6 @@
               "status": {
                 "enum": [
                   409,
-                  413,
                   422,
                   502,
                   503,
@@ -149431,7 +148553,6 @@
                   "folder-link-outside",
                   "folder-listed-file",
                   "folder-message-missing",
-                  "folder-message-too-long",
                   "folder-path-absolute",
                   "folder-path-backslash",
                   "folder-path-control",
@@ -149453,7 +148574,6 @@
                   "lfs-refused",
                   "name-needed",
                   "name-one-line",
-                  "name-too-long",
                   "no-account",
                   "no-area",
                   "no-project",
@@ -149619,7 +148739,6 @@
                   "folder-link-outside",
                   "folder-listed-file",
                   "folder-message-missing",
-                  "folder-message-too-long",
                   "folder-path-absolute",
                   "folder-path-backslash",
                   "folder-path-control",
@@ -149641,7 +148760,6 @@
                   "lfs-refused",
                   "name-needed",
                   "name-one-line",
-                  "name-too-long",
                   "no-account",
                   "no-area",
                   "no-project",
@@ -149807,7 +148925,6 @@
                   "folder-link-outside",
                   "folder-listed-file",
                   "folder-message-missing",
-                  "folder-message-too-long",
                   "folder-path-absolute",
                   "folder-path-backslash",
                   "folder-path-control",
@@ -149829,7 +148946,6 @@
                   "lfs-refused",
                   "name-needed",
                   "name-one-line",
-                  "name-too-long",
                   "no-account",
                   "no-area",
                   "no-project",
@@ -150091,7 +149207,6 @@
                   "folder-link-outside",
                   "folder-listed-file",
                   "folder-message-missing",
-                  "folder-message-too-long",
                   "folder-path-absolute",
                   "folder-path-backslash",
                   "folder-path-control",
@@ -150113,7 +149228,6 @@
                   "lfs-refused",
                   "name-needed",
                   "name-one-line",
-                  "name-too-long",
                   "no-account",
                   "no-area",
                   "no-project",
@@ -152952,42 +152066,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -155366,42 +154444,6 @@
                 "type": "string",
                 "enum": [
                   "folder-message-missing"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -160265,42 +159307,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -160734,42 +159740,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -162919,6 +161889,106 @@
         ]
       },
       "postApiLfsRefusalsDismiss422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiLimitReadingsByMachine422": {
         "anyOf": [
           {
             "type": "object",
@@ -168259,42 +167329,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -168800,42 +167834,6 @@
                 "type": "string",
                 "enum": [
                   "name-one-line"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "name-too-long"
                 ]
               },
               "detail": {
@@ -170427,42 +169425,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -171851,42 +170813,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -172284,42 +171210,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -178796,42 +177686,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -179516,42 +178370,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "task-text-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-words-empty"
                 ]
               },
@@ -179589,42 +178407,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -185153,42 +183935,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -186573,42 +185319,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -187006,42 +185716,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -188684,42 +187358,6 @@
                 "type": "string",
                 "enum": [
                   "folder-link-outside"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -194496,42 +193134,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -194929,42 +193531,6 @@
                 "type": "string",
                 "enum": [
                   "task-text-heading"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-text-too-long"
                 ]
               },
               "detail": {
@@ -196387,42 +194953,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -196964,42 +195494,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -202718,42 +201212,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -203223,42 +201681,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -204566,42 +202988,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -205035,42 +203421,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -211985,42 +210335,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-move-unnamed"
                 ]
               },
@@ -213583,42 +211897,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -214160,42 +212438,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -215913,42 +214155,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -216418,42 +214624,6 @@
                 "type": "string",
                 "enum": [
                   "task-words-line-break"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-words-too-long"
                 ]
               },
               "detail": {
@@ -217773,42 +215943,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -218350,42 +216484,6 @@
                 "type": "string",
                 "enum": [
                   "task-field-own"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "task-fields-too-many"
                 ]
               },
               "detail": {
@@ -223793,42 +221891,6 @@
                 "type": "string",
                 "enum": [
                   "folder-file-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {
@@ -232069,42 +230131,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -233248,42 +231274,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "folder-message-too-long"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-path-absolute"
                 ]
               },
@@ -234297,42 +232287,6 @@
                 "type": "string",
                 "enum": [
                   "folder-message-missing"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-message-too-long"
                 ]
               },
               "detail": {

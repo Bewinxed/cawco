@@ -19,8 +19,7 @@
  * Each `<style>` is read by Svelte's own compiler (`parse`, modern AST), the
  * parse the component itself goes through, comments with their offsets.
  *
- *   bun scripts/style-residual-check.ts <file…>             a lane: at most 5 unmapped declarations per file
- *   bun scripts/style-residual-check.ts --no-cap <file…>    an Opus lane: unmapped uncapped
+ *   bun scripts/style-residual-check.ts <file…>             the named files: unmapped must be 0, as over the tree
  *   bun scripts/style-residual-check.ts                     every .svelte under apps/dashboard/src: unmapped must be 0
  *   bun scripts/style-residual-check.ts --list [file…]      also print every unmapped declaration as `file:line  property: value`
  *
@@ -65,8 +64,6 @@ const KINDS = [
   "unmapped",
 ] as const;
 type Kind = (typeof KINDS)[number];
-/** Unmapped declarations a Sonnet lane may leave in one file. */
-const LANE_CAP = 5;
 
 const RESIDUAL = /^\s*residual:\s*([a-z-]+)/u;
 interface Css {
@@ -481,9 +478,8 @@ const classFiles = (): string[] =>
   sourceFiles(CLASS_FILE).filter((path) => !path.startsWith(`${GENERATED}/`));
 
 const args = process.argv.slice(2);
-const noCap = args.includes("--no-cap");
 const list = args.includes("--list");
-const named = args.filter((arg) => arg !== "--no-cap" && arg !== "--list");
+const named = args.filter((arg) => arg !== "--list");
 const whole = named.length === 0;
 const files = whole
   ? sourceFiles(SVELTE_FILE)
@@ -496,9 +492,6 @@ if (missing.length > 0) {
   console.error(`no such file: ${missing.join(", ")}`);
   process.exit(2);
 }
-/** Unmapped declarations allowed per file: 0 over the whole tree, 5 in a lane, none counted with --no-cap. */
-const laneCap = noCap ? Number.POSITIVE_INFINITY : LANE_CAP;
-const cap = whole ? 0 : laneCap;
 const totals = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<
   Kind,
   number
@@ -507,9 +500,9 @@ let styled = 0;
 let violations = 0;
 for (const path of files) {
   const report = check(path);
-  if (report.hasStyle && report.counts.unmapped > cap) {
+  if (report.hasStyle && report.counts.unmapped > 0) {
     report.violations.push(
-      `${report.file}  ${report.counts.unmapped} unmapped declarations (at most ${cap}${whole ? ": the whole tree clears them at integration" : " in a lane: STOP"})`
+      `${report.file}  ${report.counts.unmapped} unmapped declarations (none are allowed)`
     );
   }
   if (report.hasStyle) {

@@ -57,8 +57,16 @@
  *   carried to the next night once, and the run's one line said.
  */
 
+import {
+  CLAUDE_WINDOW_TOKENS,
+  cutToHead,
+  fitItems,
+  promptBudgetChars,
+  shareOut,
+} from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
+import { shortSha } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
@@ -119,7 +127,6 @@ import {
   wordsOf,
 } from "./memory-lessons";
 import {
-  ANCHOR_MATCH,
   type AnchorPlace,
   anchorRead,
   type MachineRead,
@@ -151,14 +158,23 @@ interface MemoryWrite<T> {
   value: T;
 }
 
+/**
+ * What a run reads, dealt out of a Claude window in the proportion its cuts
+ * had to one another: one message, the messages, and the notes.
+ */
+const READS = shareOut(promptBudgetChars(CLAUDE_WINDOW_TOKENS), {
+  message: 1500,
+  messages: 60 * 1500,
+  notes: 60 * 1500,
+});
 /** A correction is short; a longer message is a paste or a brief, and its start says which. */
-const SAID_CHARS = 1500;
+const SAID_CHARS = READS.message;
 /** A message shorter than this is no rule: never asked about, never a source. */
 const SAID_WORDS = 6;
-/** The messages the run itself reads: about a tenth of chat is worth keeping, so 60 leaves room for a day of nothing but corrections. */
-const AGENT_SAID = 60;
-/** The notes one run reads, oldest first. */
-const RUN_NOTES = 60;
+/** The messages the run itself reads: its room for messages, in messages cut to {@link SAID_CHARS}. */
+const AGENT_SAID = Math.floor(READS.messages / SAID_CHARS);
+/** The notes one run reads, oldest first: its room for notes, in notes cut to {@link SAID_CHARS}. */
+const RUN_NOTES = Math.floor(READS.notes / SAID_CHARS);
 /** A note no run reached in this many days is archived unread. */
 const NOTE_DAYS = 7;
 /** Questions one Jev request carries. */
@@ -171,10 +187,6 @@ const JEV_QUESTIONS = 120;
 const SUPPORTS = 0.7;
 /** A new lesson says what a kept one says at or over this: the likelier of two. */
 const SAME = 0.5;
-/** The operations one `memory_apply` call takes. */
-const APPLY_OPS = 20;
-/** Lessons grep pairs with a message in the brief, at most. */
-const RELATED = 3;
 
 const CURATOR: FolderAuthor = { name: "Memory curator" };
 const HUB: FolderAuthor = { name: "CawCo hub" };
@@ -345,9 +357,8 @@ const SAID_CRITERIA: Record<SaidKind, string> = memoryJevWords.saidKinds;
 const isSaidKind = (choice: string): choice is SaidKind =>
   Object.hasOwn(SAID_CRITERIA, choice);
 
-/** A message's words, cut to what one read takes. */
-const cut = (text: string): string =>
-  text.length > SAID_CHARS ? `${text.slice(0, SAID_CHARS)}…` : text;
+/** A message's words, cut to what one read takes, saying how much it left out. */
+const cut = (text: string): string => cutToHead(text, SAID_CHARS);
 
 const SPACES = /\s+/u;
 const HEADING_MARKS = /^#+\s*/u;
@@ -805,7 +816,7 @@ export const createMemoryRun = ({
     if (done.commits) {
       folderChanged(projectId);
       console.log(
-        `[memory] ${projectId}: ${done.commits.paths.length} file(s) at ${done.commits.sha.slice(0, 9)}`
+        `[memory] ${projectId}: ${done.commits.paths.length} file(s) at ${shortSha(done.commits.sha)}`
       );
     }
     return {
@@ -1046,15 +1057,21 @@ export const createMemoryRun = ({
 
   // --- the brief -----------------------------------------------------------------
 
-  /** The lessons of `kept` a message shares the most words with, at most {@link RELATED}: what it may repeat or change. */
-  const relatedTo = (text: string, kept: readonly Kept[]): Kept[] => {
+  /** The lessons of `kept` a message shares the most words with, as many as fit {@link SAID_CHARS}: what it may repeat or change. */
+  const relatedTo = (
+    text: string,
+    kept: readonly Kept[]
+  ): { all: number; shown: Kept[] } => {
     const words = wordsOf(text);
-    return kept
+    const matched = kept
       .map((lesson) => ({ lesson, score: grepScore(words, lesson.text) }))
       .filter(({ score }) => score >= 2)
       .sort((a, b) => b.score - a.score)
-      .slice(0, RELATED)
       .map(({ lesson }) => lesson);
+    return {
+      all: matched.length,
+      shown: fitItems(matched, SAID_CHARS, (lesson) => lesson.text.length),
+    };
   };
 
   /** The skill lessons and knowledge files, each by name, first line, line count and size; the room each budget has left. */
@@ -1100,9 +1117,9 @@ export const createMemoryRun = ({
       return [
         `### ${handle} · ${dayOf(given.said.acceptedAt)} · ${given.session}`,
         given.text,
-        ...(related.length > 0
+        ...(related.all > 0
           ? [
-              `${memoryRunWords.briefRelated}\n${related.map((line) => `- ${line.id}: ${line.text}`).join("\n")}`,
+              `${memoryRunWords.briefRelated}\n${related.shown.map((line) => `- ${line.id}: ${line.text}`).join("\n")}${related.shown.length < related.all ? `\n- … (${related.shown.length} of ${related.all} shown)` : ""}`,
             ]
           : []),
       ].join("\n\n");
@@ -1508,8 +1525,7 @@ export const createMemoryRun = ({
 
   /**
    * An anchor checked and read (§4.3): a path inside the project's
-   * checkout and a literal match of at most {@link ANCHOR_MATCH} characters
-   * on one line, the file read at the first checkout whose machine answers.
+   * checkout and a literal match on one line, the file read at the first checkout whose machine answers.
    * The anchor when the match is there, or when no machine answered (read
    * again each night); why not when the file or the match is not there, or
    * the anchor does not read.
@@ -1525,10 +1541,9 @@ export const createMemoryRun = ({
       path === "" ||
       path.includes(" | ") ||
       match === "" ||
-      match.includes("\n") ||
-      match.length > ANCHOR_MATCH
+      match.includes("\n")
     ) {
-      return memoryRunWords.anchorUnfit(ANCHOR_MATCH);
+      return memoryRunWords.anchorUnfit;
     }
     const read = await anchorRead(machine, checkoutsOf(projectId), {
       path,
@@ -1960,12 +1975,6 @@ export const createMemoryRun = ({
       return found;
     }
     const { run, projectId } = found;
-    if (ops.length > APPLY_OPS) {
-      return problem(400, {
-        code: "memory-apply-many",
-        detail: memoryRunWords.tooMany(APPLY_OPS),
-      });
-    }
     const files = await filesOf(projectId);
     if (isProblem(files)) {
       return files;

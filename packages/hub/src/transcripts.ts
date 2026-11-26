@@ -30,6 +30,7 @@ import {
   type SessionMessage,
   STREAM_SO_FAR,
 } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import type { SessionStreamFrame } from "@cawco/core/stream";
 import type {
   TranscriptEvent,
@@ -446,7 +447,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         const builtIn = Date.now() - building;
         if (readIn + builtIn >= SLOW_LOAD_MS) {
           console.info(
-            `[transcripts] ${instanceId.slice(0, 8)}: ${read.entries.length} stored entries read in ${readIn} ms, built in ${builtIn} ms`
+            `[transcripts] ${shortId(instanceId)}: ${read.entries.length} stored entries read in ${readIn} ms, built in ${builtIn} ms`
           );
         }
         return read;

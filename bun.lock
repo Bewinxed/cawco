@@ -119,6 +119,7 @@
         "zod": "4.6.5",
       },
       "devDependencies": {
+        "@cawco/agent": "workspace:*",
         "@cawco/hub": "workspace:*",
         "@iconify-json/iconoir": "^1.2.12",
         "@iconify-json/logos": "^1.2.15",
@@ -348,6 +349,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cawco/core": "workspace:*",
+        "@cawco/providers": "workspace:*",
         "idiomorph": "0.8.0",
         "modern-screenshot": "4.7.0",
         "perfect-freehand": "1.2.3",

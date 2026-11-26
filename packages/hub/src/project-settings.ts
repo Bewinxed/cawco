@@ -162,7 +162,6 @@ import { budgetOf } from "./work-limits";
 
 const GITHUB_REPO =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/u;
-const REASON_LIMIT = 300;
 
 /** A refusal in one sentence: the call's error. */
 /** A rename, checked as the person's own is (project-edit.ts `projectName`). */
@@ -230,7 +229,6 @@ const definition = z.object({
   changes: z
     .array(ASKED_CHANGE)
     .min(1)
-    .max(6)
     .optional()
     .describe(
       "Left out: read only. A starting set can be proposed again at any time."
@@ -1329,12 +1327,6 @@ export const createProjectSettings = ({
       return problem(400, {
         code: "say-why-one-sentence",
         detail: "Say why, in one sentence.",
-      });
-    }
-    if (reason.length > REASON_LIMIT) {
-      return problem(400, {
-        code: "say-why-one-sentence",
-        detail: `Say why in one sentence, under ${REASON_LIMIT} characters.`,
       });
     }
     return reason;

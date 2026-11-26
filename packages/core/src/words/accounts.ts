@@ -11,6 +11,8 @@
  * shows each; a word marked "the app's alone" is one only the app says,
  * where the HIG asks for something the web does another way.
  */
+
+import { andList } from "@cawco/providers/names";
 import type {
   AccountHue,
   ColdMove,
@@ -18,7 +20,7 @@ import type {
   PlacementStrategy,
 } from "../accounts/kinds";
 import { commonWords } from "./common";
-import { andList, pad2 } from "./helpers";
+import { pad2 } from "./helpers";
 
 /** One strategy, as its card names it and its line explains it. */
 export interface StrategyWords {

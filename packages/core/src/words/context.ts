@@ -8,9 +8,10 @@
  * tokens", core accounts.ts `tokenWords`) and the harness by its name; what
  * the model and agents read, whole ("137,000").
  */
+
+import { andList } from "@cawco/providers/names";
 import type { ContextLine, FilingStage, FilingWrote } from "../context-filing";
 import { harnessName } from "../harness/kinds";
-import { andList } from "./helpers";
 
 const NUMBER = new Intl.NumberFormat("en-US");
 

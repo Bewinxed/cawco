@@ -15,12 +15,11 @@
  * httpolyglot's way (node:http's `server.emit("connection", socket)`) is
  * node's servers', not Bun.serve's: so the door carries the bytes.
  */
+import { maxHeaderSize } from "node:http";
 import type { Socket, TCPSocketListener, TCPSocketListenOptions } from "bun";
 
 /** The first byte of a TLS record that carries a handshake (RFC 8446 §5.1 `ContentType.handshake`). */
 const TLS_HANDSHAKE = 0x16;
-/** The longest request head the door reads before it answers 431. Our choice: the redirect needs the request line alone. */
-const HEAD_MAX = 16 * 1024;
 /** How long a connection may take to say what it is, and a plain request its head. Our choice. */
 const SNIFF_S = 30;
 const HEAD_END = "\r\n\r\n";
@@ -184,7 +183,7 @@ const readPlain = (
 ): void => {
   const end = head.indexOf(HEAD_END);
   if (end < 0) {
-    if (head.length > HEAD_MAX) {
+    if (head.length > maxHeaderSize) {
       client.end(answer("431 Request Header Fields Too Large"));
       return;
     }

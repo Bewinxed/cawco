@@ -6,6 +6,7 @@
  * come in, and the rest of the pane works on shapes it knows.
  */
 
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { PageSays } from "@cawco/core/page-wire";
 import {
   isReferenceHref,
@@ -35,16 +36,23 @@ import {
   STAGE_SCROLLED,
   STAGE_TIME,
 } from "@cawco/core/stage-graph";
-import { cutShort } from "@cawco/core/words/helpers";
+import { quote } from "@cawco/providers/quote";
 
-const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
+// @limit recording: dashboard.preview-png-chars until 2026-12-10
 const PNG_MAX = 4_000_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const PIN_ID = /^[0-9a-f-]{36}$/u;
 
-const text = (value: unknown, max: number): string | null =>
-  typeof value === "string" ? value.slice(0, max) : null;
+const text = (value: unknown, max: number): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  if (max === SHEET_BOUNDS.text) {
+    sheetSized("text", value.length);
+  }
+  return value.slice(0, max);
+};
 
 const finite = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -72,6 +80,9 @@ export function previewPngTooLong(value: unknown): boolean {
 
 /** A screenshot as the overlay sends it, or nothing. */
 function previewPng(value: unknown): string | null {
+  if (typeof value === "string") {
+    recordLimitReading("dashboard.preview-png-chars", value.length);
+  }
   return typeof value === "string" &&
     value.length > 0 &&
     value.length <= PNG_MAX &&
@@ -113,14 +124,12 @@ export function previewThumbnail(
 }
 
 export function previewError(value: unknown): string | null {
-  return typeof value === "string" ? cutShort(value, ERROR_MAX) : null;
+  return typeof value === "string" ? quote(value) : null;
 }
 
 export function previewTitle(value: unknown): string | null {
   return text(value, 300);
 }
-
-const RPC_ID_MAX = 100;
 
 /** A JSON-RPC ask of `method` from the page's overlay: its id, or null when the message is not one. */
 function rpcAsk(
@@ -136,9 +145,7 @@ function rpcAsk(
   if (typeof id === "number" && Number.isSafeInteger(id)) {
     return { id, params };
   }
-  return typeof id === "string" && id.length <= RPC_ID_MAX
-    ? { id, params }
-    : null;
+  return typeof id === "string" ? { id, params } : null;
 }
 
 /**
@@ -162,10 +169,7 @@ export function previewOpenArtifact(
 ): { artifact: string; id: number | string } | null {
   const ask = rpcAsk(value, "cawco/open-artifact");
   const artifact = ask?.params?.artifact;
-  return ask &&
-    typeof artifact === "string" &&
-    artifact.length > 0 &&
-    artifact.length <= RPC_ID_MAX
+  return ask && typeof artifact === "string" && artifact.length > 0
     ? { artifact, id: ask.id }
     : null;
 }
@@ -230,9 +234,6 @@ export function previewPinAt(value: unknown): PreviewPinAt | null {
   return mark && box ? { mark, box } : null;
 }
 
-/** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */
-const CHAIN_MAX = 8;
-
 /** One target the composer's chip offers: what it stands on, as a pin would hold it (named by core pin-name.ts): a page's element, or a canvas's by id. */
 export interface ComposeTarget {
   anchor:
@@ -260,14 +261,14 @@ export function previewCompose(
   message: Record<string, unknown>
 ): { chain: ComposeTarget[]; chosen: number } | null {
   const chain = Array.isArray(message.chain)
-    ? message.chain.slice(0, CHAIN_MAX).flatMap((one) => {
+    ? message.chain.flatMap((one) => {
         const target = record(one);
         const anchor = composeAnchor(target?.anchor);
         return anchor && Array.isArray(target?.elements)
           ? [
               {
                 anchor,
-                elements: target.elements.slice(0, 4),
+                elements: target.elements,
               },
             ]
           : [];
@@ -301,14 +302,23 @@ const KINDS: readonly PropKind[] = [
   "other",
 ];
 export const SHEET_BOUNDS = {
+  // @limit recording: dashboard.sheet-stories until 2026-12-10
   stories: 100,
+  // @limit recording: dashboard.sheet-components until 2026-12-10
   components: 20,
+  // @limit recording: dashboard.sheet-props until 2026-12-10
   props: 200,
+  // @limit recording: dashboard.sheet-options until 2026-12-10
   options: 100,
+  // @limit recording: dashboard.sheet-args until 2026-12-10
   args: 100,
+  // @limit recording: dashboard.sheet-tokens until 2026-12-10
   tokens: 2000,
+  // @limit recording: dashboard.sheet-tags until 2026-12-10
   tags: 20,
+  // @limit recording: dashboard.sheet-name-chars until 2026-12-10
   name: 200,
+  // @limit recording: dashboard.sheet-text-chars until 2026-12-10
   text: 1000,
 } as const;
 
@@ -324,6 +334,41 @@ let cuts: Map<string, SheetCut> = new Map();
 /** How many names of the sheet being read were over {@link SHEET_BOUNDS.name} (cut, or the entry dropped). */
 let longNames = 0;
 
+/** How long a sheet's list or text was before its {@link SHEET_BOUNDS} bound, recorded under that bound. */
+function sheetSized(what: string, size: number): void {
+  switch (what) {
+    case "stories":
+      recordLimitReading("dashboard.sheet-stories", size);
+      return;
+    case "components":
+      recordLimitReading("dashboard.sheet-components", size);
+      return;
+    case "props":
+      recordLimitReading("dashboard.sheet-props", size);
+      return;
+    case "options":
+      recordLimitReading("dashboard.sheet-options", size);
+      return;
+    case "args":
+      recordLimitReading("dashboard.sheet-args", size);
+      return;
+    case "tokens":
+      recordLimitReading("dashboard.sheet-tokens", size);
+      return;
+    case "tags":
+      recordLimitReading("dashboard.sheet-tags", size);
+      return;
+    case "name":
+      recordLimitReading("dashboard.sheet-name-chars", size);
+      return;
+    case "text":
+      recordLimitReading("dashboard.sheet-text-chars", size);
+      return;
+    default:
+      return;
+  }
+}
+
 function cutAt(what: string, kept: number, of: number) {
   const so_far = cuts.get(what);
   cuts.set(what, {
@@ -337,6 +382,7 @@ const list = (value: unknown, max: number, what: string): unknown[] => {
   if (!Array.isArray(value)) {
     return [];
   }
+  sheetSized(what, value.length);
   if (value.length > max) {
     cutAt(what, max, value.length);
   }
@@ -345,6 +391,9 @@ const list = (value: unknown, max: number, what: string): unknown[] => {
 
 /** A name, bounded: what is longer than {@link SHEET_BOUNDS.name} is cut (or its entry dropped) and counted. */
 const nameText = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    sheetSized("name", value.length);
+  }
   if (typeof value === "string" && value.length > SHEET_BOUNDS.name) {
     longNames += 1;
   }
@@ -358,6 +407,7 @@ const argsOf = (value: unknown): Record<string, unknown> => {
     return {};
   }
   const entries = Object.entries(raw);
+  sheetSized("args", entries.length);
   if (entries.length > SHEET_BOUNDS.args) {
     cutAt("args", SHEET_BOUNDS.args, entries.length);
   }
@@ -597,9 +647,21 @@ export type PageMessage = Record<string, unknown> & {
   type: (typeof PAGE_MESSAGES)[number];
 };
 
-/** A message the page posted, as one the pane answers, or null for any other. */
+/** The most a message the page posts weighs, in characters of its JSON: the page is not trusted and `postMessage` has no cap of its own. */
+const PAGE_MESSAGE_CHARS = 8 * 1024 * 1024;
+
+/** Whether `message` is within {@link PAGE_MESSAGE_CHARS}: one that does not stringify is refused. */
+function withinGate(message: Record<string, unknown>): boolean {
+  try {
+    return JSON.stringify(message).length <= PAGE_MESSAGE_CHARS;
+  } catch {
+    return false;
+  }
+}
+
+/** A message the page posted, as one the pane answers, or null for any other or one past the gate. */
 export function pageMessage(value: unknown): PageMessage | null {
   const message = record(value);
   const type = PAGE_MESSAGES.find((one) => one === message?.type);
-  return message && type ? { ...message, type } : null;
+  return message && type && withinGate(message) ? { ...message, type } : null;
 }

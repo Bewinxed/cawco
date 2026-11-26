@@ -22,6 +22,7 @@
  * proved a list.
  */
 import type { Database } from "bun:sqlite";
+import { shown } from "./json-reads";
 
 /** `record` is a JSON object. */
 const OBJECT =
@@ -184,9 +185,6 @@ type Row = {
   state: string;
 } & Record<`part_${string}`, number | null> &
   Record<(typeof PLACEABLE)[number], unknown>;
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Why a record does not read, in a clause: each part that does not. */
 const whyOf = (row: Row): string => {

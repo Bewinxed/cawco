@@ -13,6 +13,7 @@
  */
 import { basename } from "node:path";
 import { readWithin } from "./bounded";
+import { recordLimitReading, timed } from "./limit-readings";
 import { secondsOf } from "./time";
 import { unhandled } from "./unhandled";
 import {
@@ -27,6 +28,7 @@ type HookShell = "bash" | "sh";
 
 /** How long one `<shell> -n` gets. Our choice: a parse of a hook script is
  * milliseconds, and one that hangs is not a script worth registering. */
+// @limit recording: core.hook-parse-ms until 2026-12-10
 const PARSE_TIMEOUT_MS = 5000;
 
 const WHITESPACE = /\s+/u;
@@ -73,40 +75,43 @@ export const scriptParseError = async (
   if (!shell) {
     return undefined;
   }
-  const parsed = await readWithin(PARSE_TIMEOUT_MS, async (signal) => {
-    // Bun throws as it spawns a program that is not on the PATH.
-    const spawn = () => {
-      try {
-        return Bun.spawn([shell, "-n"], {
-          env,
-          stdin: new TextEncoder().encode(script),
-          stdout: "ignore",
-          stderr: "pipe",
-          signal,
-        });
-      } catch (error) {
-        return error instanceof Error ? error : new Error(String(error));
+  const parsed = await timed(
+    readWithin(PARSE_TIMEOUT_MS, async (signal) => {
+      // Bun throws as it spawns a program that is not on the PATH.
+      const spawn = () => {
+        try {
+          return Bun.spawn([shell, "-n"], {
+            env,
+            stdin: new TextEncoder().encode(script),
+            stdout: "ignore",
+            stderr: "pipe",
+            signal,
+          });
+        } catch (error) {
+          return error instanceof Error ? error : new Error(String(error));
+        }
+      };
+      const child = spawn();
+      if (child instanceof Error) {
+        return shellCheckMissing(shell);
       }
-    };
-    const child = spawn();
-    if (child instanceof Error) {
-      return shellCheckMissing(shell);
-    }
-    const stderr = await new Response(child.stderr).text();
-    const code = await child.exited;
-    if (child.signalCode) {
-      return shellCheckEnded(shell, String(child.signalCode));
-    }
-    if (code === 0) {
-      return;
-    }
-    return (
-      stderr
-        .split("\n")
-        .find((line) => line.trim() !== "")
-        ?.trim() ?? shellCheckExited(shell, code)
-    );
-  });
+      const stderr = await new Response(child.stderr).text();
+      const code = await child.exited;
+      if (child.signalCode) {
+        return shellCheckEnded(shell, String(child.signalCode));
+      }
+      if (code === 0) {
+        return;
+      }
+      return (
+        stderr
+          .split("\n")
+          .find((line) => line.trim() !== "")
+          ?.trim() ?? shellCheckExited(shell, code)
+      );
+    }),
+    (ms) => recordLimitReading("core.hook-parse-ms", ms)
+  );
   switch (parsed.kind) {
     case "answered":
       return parsed.value === undefined

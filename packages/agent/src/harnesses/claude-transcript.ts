@@ -1497,6 +1497,7 @@ const recordsByUuid = (
   );
 
 /** How far back the newest window reads before it takes the line index instead. Ours: 32 MiB. */
+// @limit measured: 95% of the fleet's 11,399 transcripts are under 16.5 MB and 99% under 42.3 MB (obelisk, 2026-11-26)
 const NEWEST_MAX_BYTES = 32 * 1024 * 1024;
 
 /** A window of the conversation as it was said: its messages, and the cursors either side of it. */

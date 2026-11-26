@@ -52,7 +52,7 @@ const VALUE_OF = {
 export const labelOf = (key: string): string =>
   DNS_LABEL.test(key)
     ? key
-    : `o-${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
+    : `o-${createHash("sha256").update(key).digest("hex").slice(0, /* @limit measured: 40 hex characters are 160 bits of a hash; preview host labels share one namespace, so two collide after about 2^80 names */ 40)}`;
 
 /**
  * `pattern` parsed, or its refusal in one sentence: one whose names stand under

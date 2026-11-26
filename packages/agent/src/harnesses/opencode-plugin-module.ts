@@ -104,6 +104,7 @@ import {
   hookToolInputBack,
 } from "@cawco/core/hooks";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type * as Judge from "@cawco/core/workspace-judge";
@@ -334,7 +335,7 @@ const workspaceOf = (directory: string): Holding | undefined => {
   const [top] = (
     at.startsWith(`${worktrees}/`) ? at.slice(worktrees.length + 1) : ""
   ).split("/");
-  const hit = damaged.find(({ id }) => top?.endsWith(`-${id.slice(0, 8)}`));
+  const hit = damaged.find(({ id }) => top?.endsWith(`-${shortId(id)}`));
   if (hit) {
     throw new Error(
       `cawco: workspace ${hit.id}'s record is damaged: ${hit.damage}. Archive the workspace to remove it.`
@@ -430,7 +431,9 @@ const judgeIn = async (
 // only after every `execute.after` hook has run, and leaves alone a result
 // whose metadata names `truncated` ("if(D.metadata?.truncated!==void 0)
 // return D"), so the result this answers is never cut again.
+// @limit external: OpenCode's own cut of a tool's output, 2000 lines or 51,200 bytes, which this reproduces for a workspace session's call (OpenCode's tool truncation, packages/opencode/src/tool/truncation.ts)
 const OUTPUT_LINES = 2000;
+// @limit external: OpenCode's own cut of a tool's output, 2000 lines or 51,200 bytes, which this reproduces for a workspace session's call (OpenCode's tool truncation, packages/opencode/src/tool/truncation.ts)
 const OUTPUT_BYTES = 51_200;
 
 /** What a tool call answers. */
@@ -605,6 +608,7 @@ const withoutSecret = (input: unknown): unknown => {
   return rest;
 };
 
+// @limit external: Claude Code's BASH_MAX_OUTPUT_LENGTH, default 30000 (https://code.claude.com/docs/en/env-vars); OpenCode's bash output is held to the same
 const OUTPUT_LIMIT = 30_000;
 
 /** What `shell` is called with. */
@@ -634,6 +638,7 @@ const runShell = async (
   context: CallContext,
   directory: string
 ): Promise<ToolResult> => {
+  // @limit external: Claude Code's BASH_MAX_TIMEOUT_MS, default 600000 (https://code.claude.com/docs/en/env-vars); OpenCode is held to the same
   const timeout = Math.min(input.timeout ?? 120_000, 600_000);
   const env = {
     ...cleanEnv({ ...process.env }),

@@ -51,10 +51,6 @@ export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
  */
 export const ARTIFACT_PICKS = ["quick", "enlarged"] as const;
 export type ArtifactPick = (typeof ARTIFACT_PICKS)[number];
-/** The ask's length: one line in the panel's head. */
-export const ASK_LIMIT = 160;
-/** A title's length: the panel head's name, a menu row, a chip. */
-export const ARTIFACT_TITLE_LIMIT = 80;
 /** Words the owner banned from anything that reaches him. */
 export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/iu;
 /** A path or a file in the ask: the person's words carry neither. */

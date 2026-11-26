@@ -927,6 +927,12 @@
   --spacing-c-starters-w: calc(
     var(--spacing-c-starter-w) * 4 + var(--spacing-space-2) * 3
   );
+  /* How much of a report's row, from its top, must lie inside the transcript's view and above the composer for a tray chip to fly to it (transcript DelegateTray `reportInView`). */
+  --spacing-c-report-seen: 28px;
+  /* The most height the tray's shelf takes over the composer's dock before it scrolls (transcript DelegateTray). */
+  --spacing-c-shelf-room: 320px;
+  /* How far past a row's edge, along its list's axis, the pointer still counts as on it (highlight). */
+  --spacing-c-row-reach: 8px;
   /* A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after. */
   --spacing-c-row-lead: 28px;
   /* A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line. */
@@ -1110,9 +1116,9 @@
   --fig-pad: 12px;
   /* The strategy figure's chip side and bar height (figure.ts CHIP). */
   --fig-chip: 10px;
-  /* The strategy figure's caption line height (figure.ts CAP_LINE). */
+  /* The strategy figure's caption line height (figure.ts CAPTION_LINE). */
   --fig-cap-line: 16px;
-  /* The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT). */
+  /* The strategy figure's caption distance from the stage's foot (figure.ts CAPTION_FOOT). */
   --fig-cap-foot: 8px;
   /* The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room. A page holding a Preview of a page-sized design naming no width stands at the room's whole width, its words keeping their measure. */
   --spacing-c-decision-page-max: 1348px;
@@ -1371,8 +1377,12 @@
   --ease-glide-out: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
   /* Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger. */
   --duration-stagger: 60ms;
+  /* The most a canvas's fit enlarges a drawing: the view comes to rest at this zoom or less (canvas host scene.ts, fit). */
+  --zoom-fit-most: 1.5;
   /* Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting (decision page onboarding-design, card describe-hint, the person's pick); it erases at half this. */
   --duration-type: 50ms;
+  /* A run's drag step and an arrow's in the design graph's motion bars: the grid a run's start and length settle on. */
+  --duration-run-step: 10ms;
   /* The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together. */
   --duration-cascade: 480ms;
   /* The hover ghost following the pointer from row to row. */
@@ -1447,6 +1457,19 @@
   --account-stale-opacity: 0.82;
   /* The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch). */
   --ride-fade: 14px;
+  /* How far past its end a dragged surface follows the finger, as a share of the surface's size: the workspace deck and tab gesture, a dragged sheet, the transcript's canvas. No published number sets rubber-band resistance; it is set here as design. */
+  --resist-max: 0.25;
+  /* The fastest a tab strip scrolls while a dragged tab is at its end, px a frame. */
+  --tab-scroll-max: 12;
+  /* How many rows of a list swap come in staggered before the rest move together: a stagger that keeps growing down a forty-row list is a wait, not a rhythm. */
+  --stagger-rows: 9;
+  /* The longest a spring's settle is simulated before it is taken to rest. */
+  --duration-settle-max: 1500ms;
+  /* The most rows deep the recall wheel fades its rows by depth. */
+  --recall-depth-rows: 4;
+  /* How far up a grown row's outline its fade begins in the middle and at the edge, px. */
+  --grown-fade-mid: 24;
+  --grown-fade-edge: 40;
   /* How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise. */
   --pop-rise: 8px;
   /* How far a tooltip settles toward its trigger as it fades in: The Enter Rule's one exception, short because it is seen tens of times a day (The Frequency Rule). */

@@ -334,6 +334,7 @@ function shadowFrom(
       }
     }
     const [offsetX, offsetY, blur = none.blur, spread = none.spread] = lengths;
+    // @limit external: a DTCG shadow layer is offsetX, offsetY, blur and spread: four lengths (design-tokens.github.io/community-group/format, shadow type)
     if (!(colour && offsetX && offsetY) || lengths.length > 4) {
       throw new Error(`${where}: unsupported shadow "${layer}"`);
     }

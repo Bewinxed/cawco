@@ -2,6 +2,8 @@ import type { BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { Clock, Duration, Effect, Schedule, Schema } from "effect";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { quote } from "@cawco/providers/quote";
 
 /**
  * THE HUB AWAY IS NO ANSWER. What this machine asks of the hub over HTTP is
@@ -24,6 +26,7 @@ import { Clock, Duration, Effect, Schedule, Schema } from "effect";
  * (core handover.ts `CUSTODY_BOUND_MS`, 90 s), three times the 30.5 s hub
  * outage measured on 2026-10-09.
  */
+// @limit recording: agent.hub-away-ms until 2026-12-10
 export const HUB_AWAY_BOUND_MS = 90_000;
 
 /** Statuses that say the hub is not there to answer, rather than that it answered. */
@@ -92,6 +95,11 @@ export const throughHubAway = (
       catch: (error) => new HubAway({ away: awayWords(error) }),
     });
     if (!again(answer.status)) {
+      // How long the hub was away before it answered, from the first try.
+      recordLimitReading(
+        "agent.hub-away-ms",
+        Date.now() - (deadline - HUB_AWAY_BOUND_MS)
+      );
       return answer;
     }
     // What could not be read of the answer is the reason in its place.
@@ -109,7 +117,7 @@ export const throughHubAway = (
       catch: unread,
     });
     return yield* new HubAway({
-      away: `HTTP ${answer.status}: ${text.slice(0, 300)}`,
+      away: `HTTP ${answer.status}: ${quote(text)}`,
     });
   });
   // Each wait is the house backoff's; it gives up once the asker has, or

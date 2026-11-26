@@ -14,6 +14,7 @@ import {
   workspacePlaceFoldersFile,
   workspacesDir,
 } from "@cawco/core/paths/workspace";
+import { shortId } from "@cawco/core/short-id";
 import {
   type DamagedRecord,
   isDamagedRecord,
@@ -183,7 +184,7 @@ const insideCloneOf = async (at: string, id: string): Promise<boolean> => {
   return (
     !rel.startsWith("..") &&
     Boolean(top) &&
-    (top ?? "").endsWith(`-${id.slice(0, 8)}`)
+    (top ?? "").endsWith(`-${shortId(id)}`)
   );
 };
 

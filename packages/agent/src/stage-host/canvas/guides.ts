@@ -44,6 +44,7 @@ import {
   SAME_EDGE,
   type SpacingRead,
 } from "@cawco/core/layout-guides";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { describe, sourceOf } from "./measure";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -746,6 +747,9 @@ export function readLayout(
   }));
   const drawn = reader.drawn();
   const leftOut = {
+    ...(elements.length > walked.length
+      ? { elements: elements.length - walked.length }
+      : {}),
     ...(sheetsUnread > 0 ? { sheets: sheetsUnread } : {}),
     ...(surfacesLeft > 0 ? { groups: surfacesLeft } : {}),
     ...(misses.length > LAYOUT_LIMITS.nearMisses
@@ -756,6 +760,7 @@ export function readLayout(
       : {}),
   };
   return {
+    elements: elements.length,
     width: drawn.w,
     height: drawn.h,
     tokens,
@@ -807,6 +812,7 @@ function nearMisses(
 }
 
 /** The most surfaces standing in one group whose rows are read pair by pair. Ours: a screen's tiles, a list's first rows. */
+// @limit recording: agent.layout-row-surfaces until 2026-12-10
 const ROW_PAIRS_MAX = 60;
 
 /**
@@ -823,6 +829,7 @@ function rowMisses(
   misses: NearMiss[]
 ): void {
   const ends = (box: LayoutBox) => [box.y, box.y + box.h / 2, box.y + box.h];
+  recordLimitReading("agent.layout-row-surfaces", ids.length);
   const kept = ids.slice(0, ROW_PAIRS_MAX);
   for (const [at, one] of kept.entries()) {
     for (const other of kept.slice(at + 1)) {
@@ -1055,6 +1062,7 @@ function gapsOf(
 }
 
 /** The most children of one element whose gaps are read. Ours: a long list's first screenfuls. */
+// @limit recording: agent.layout-children until 2026-12-10
 const CHILDREN_READ = 200;
 
 /**
@@ -1101,6 +1109,7 @@ function spacingOf(
         const one = boxes.get(child);
         return one ? [{ el: child, box: one }] : [];
       });
+      recordLimitReading("agent.layout-children", children.length);
       gapsOf(el, styleOf(el), children.slice(0, CHILDREN_READ), keep);
     }
   }

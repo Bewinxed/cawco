@@ -44,7 +44,7 @@
 
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
-import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+import { dur, ease, numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { watchRendered } from "#lib/platform/rendered.js";
 
 /**
@@ -220,8 +220,8 @@ const rootOf = (container: HTMLElement): ShadowRoot => {
 
 type Axis = "x" | "y" | "xy";
 
-/** How far past a row's edge, along the list's axis, the pointer still counts as on it. */
-const REACH = 8;
+/** How far past a row's edge, along the list's axis, the pointer still counts as on it (`--spacing-c-row-reach`). */
+const reach = (): number => numberOf("--spacing-c-row-reach");
 /** How far a row is drawn from where it lands before it counts as on its way. */
 const CARRIED = 0.5;
 /** How near (device pixels) an edge is to a grid line to count as on it. */
@@ -1098,8 +1098,8 @@ export function highlight(options: HighlightOptions) {
       box: { x: number; y: number; w: number; h: number },
       at: { x: number; y: number }
     ): boolean => {
-      const growX = axis === "y" ? 0 : REACH;
-      const growY = axis === "x" ? 0 : REACH;
+      const growX = axis === "y" ? 0 : reach();
+      const growY = axis === "x" ? 0 : reach();
       return (
         at.x >= box.x - growX &&
         at.x <= box.x + box.w + growX &&
@@ -1122,7 +1122,7 @@ export function highlight(options: HighlightOptions) {
      */
     const drawnNear = (row: HTMLElement, x: number, y: number): boolean => {
       const rect = row.getBoundingClientRect();
-      const inX = Math.min(REACH, rect.width / 2);
+      const inX = Math.min(reach(), rect.width / 2);
       const inY = Math.min(1, rect.height / 2);
       const seen = document.elementFromPoint(
         Math.min(rect.right - inX, Math.max(rect.left + inX, x)),
@@ -1163,7 +1163,7 @@ export function highlight(options: HighlightOptions) {
      * scrolled out of sight behind it, nearer by its centre. A row a slide
      * is still carrying is not counted this way: the ghost is aimed at where
      * rows land. Between rows, the nearest of those the pointer can reach: a
-     * row counts only when its box, grown by REACH along the list's axis
+     * row counts only when its box, grown by its reach along the list's axis
      * (enough to bridge the gaps between rows), holds the point, and it is
      * drawn there. Over a header, a seam, the list's own chrome or anything
      * that lies over the list there is none, and the ghost fades rather than

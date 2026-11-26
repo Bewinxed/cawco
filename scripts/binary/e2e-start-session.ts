@@ -18,7 +18,7 @@ socket.onmessage = (event) => {
       payload?: { kind?: string; message?: string };
     };
     if (frame.instanceId === instanceId && frame.payload?.kind === "error") {
-      refused.push(frame.payload.message ?? text.slice(0, 300));
+      refused.push(frame.payload.message ?? text);
       return;
     }
   } catch (error) {
@@ -28,7 +28,7 @@ socket.onmessage = (event) => {
     }
   }
   if (text.includes('"ok":false') || text.includes("failure")) {
-    refused.push(text.slice(0, 300));
+    refused.push(text);
   }
 };
 await new Promise<void>((resolve, reject) => {

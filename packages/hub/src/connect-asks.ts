@@ -56,9 +56,6 @@ import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
 /** The session tools connect asks give, by name: what a call is routed by (delegation-mcp.ts). */
 export const CONNECT_TOOLS: ReadonlySet<string> = new Set(["connect_ask"]);
 
-/** The longest reason the person reads. */
-const REASON_MAX = 300;
-
 const DESCRIPTION =
   "Asks the person to sign in to one of the fleet's MCP servers, so its tools reach this session without any credential reaching you. " +
   "Use it when you need a server's tools and they are missing or refused for want of a sign-in.";
@@ -388,7 +385,6 @@ const CONNECT_ASK_DEFINITION = defineTool(
       .string()
       .trim()
       .min(1)
-      .max(REASON_MAX)
       .describe(
         'One sentence they read: what you need it for, e.g. "Import the Settings page design from Figma."'
       ),

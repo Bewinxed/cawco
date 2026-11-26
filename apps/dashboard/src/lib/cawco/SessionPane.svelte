@@ -3,6 +3,7 @@
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { descriptorOf } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
+  import { recordLimitReading } from "@cawco/core/limit-readings";
   import {
     type ParkedDirection,
     type ParkedItem,
@@ -137,7 +138,7 @@
     type ServerTail,
   } from "./stores/transcript-reads.svelte";
   import { seededSession } from "./stores/transcripts.svelte";
-  import { clip, type SuggestCandidate } from "./suggest.svelte";
+  import type { SuggestCandidate } from "./suggest.svelte";
   import {
     type Beside,
     besideOf,
@@ -986,6 +987,7 @@
    * Try again. The slowest install the host runs saw took about a minute
    * (npm moving a package, `claude update`); our call.
    */
+  // @limit recording: dashboard.install-read-wait-ms until 2026-12-10
   const WAIT_BOUND_MS = 90_000;
   /** The waiting read whose bound passed ({@link WAIT_BOUND_MS}). */
   let waitLapsed = $state.raw<ReadFault | null>(null);
@@ -1134,10 +1136,15 @@
     if (!(now?.reason === "refused" && now.updating) || waitedCell) {
       return;
     }
+    const began = Date.now();
     const timer = setTimeout(() => {
       waitLapsed = now;
     }, WAIT_BOUND_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      // How long a read that said an install runs was waited on.
+      recordLimitReading("dashboard.install-read-wait-ms", Date.now() - began);
+      clearTimeout(timer);
+    };
   });
 
   /**
@@ -1261,9 +1268,9 @@
         id: `skill:${command.name}`,
         kind: "skill",
         name: command.name,
-        description: clip(
-          cleanDetail(command.description, undefined, command.source) ?? ""
-        ),
+        // Whole: the hub fits the candidates to Jev's window (hub suggest.ts).
+        description:
+          cleanDetail(command.description, undefined, command.source) ?? "",
       }));
     const servers: SuggestCandidate[] = tooling.servers
       .filter(
@@ -1276,12 +1283,10 @@
           id: `mcp:${server.name}`,
           kind: "mcp",
           name: server.name,
-          description: clip(
-            tooling.tools
-              .filter((tool) => tool.startsWith(prefix))
-              .map((tool) => tool.slice(prefix.length))
-              .join(", ")
-          ),
+          description: tooling.tools
+            .filter((tool) => tool.startsWith(prefix))
+            .map((tool) => tool.slice(prefix.length))
+            .join(", "),
         };
       });
     // Every non-MCP tool by name alone; an MCP server's tools ride on its chip.

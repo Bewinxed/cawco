@@ -27,6 +27,7 @@ import type { HubLifetimeShape } from "./lifetime";
 const HUB_RECORD_FILE = "hub-record.json";
 
 /** How many of the latest events the record keeps. Ours: a run's worth of refusals, a beat's every 15 s for an hour. */
+// @limit measured: 512 events held 12.7 days of the hub's refusals and holds on obelisk (hub-record.json, 2026-11-13 to 2026-11-26)
 const EVENTS_KEPT = 512;
 
 /** How soon an event reaches the disk. Ours: a burst of refused frames is one write. */

@@ -99,6 +99,7 @@
   const LONGEST = HOUR_MS;
   /** A spring's bounce when he first picks it, and how high it goes. */
   const SPRING_START = 0.2;
+  // @limit measured: the top stop of the Bounce dial in this panel, 0.9: the most a spring's bounce is set to here
   const BOUNCE_MOST = 0.9;
 
   // --- Delay ---------------------------------------------------------------

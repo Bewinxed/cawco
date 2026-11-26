@@ -94,6 +94,14 @@ export const CAW_POSE_IDS: [CawPoseId, ...CawPoseId[]] = [
   ...OTHER_POSES.map((pose) => pose.id),
 ];
 
+/** The identity marks a member wears, one per palette slot (the theme's `--color-mark-1` to `-8`). */
+export const MARK_HUES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export type MarkHue = (typeof MARK_HUES)[number];
+
+/** `value` as a mark, or null when it is none of the eight. */
+export const markHueOf = (value: number | null): MarkHue | null =>
+  MARK_HUES.find((hue) => hue === value) ?? null;
+
 /** What every member of Who decides has, whatever it runs as. */
 interface MemberFields {
   /** `you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name). */
@@ -101,7 +109,7 @@ interface MemberFields {
   /** How he hears about its answers; null for You, Caw and The agent, which have none. */
   hear: Hear | null;
   /** One of the eight identity marks (1–8); null for Caw's flock and You. */
-  hue: number | null;
+  hue: MarkHue | null;
   id: string;
   /** One line under the name: what it does with a decision. */
   job: string;
@@ -283,6 +291,7 @@ export const slugOf = (name: string): string =>
     .replace(NOT_SLUG, "-")
     .replace(EDGE_DASHES, "")
     .replace(LEADING_DIGITS, "")
+    // @limit external: a DNS label, 63 characters (RFC 1035 section 2.3.4)
     .slice(0, 63)
     .replace(EDGE_DASHES, "");
 

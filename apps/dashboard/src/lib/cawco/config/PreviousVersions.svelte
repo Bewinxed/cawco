@@ -26,6 +26,7 @@
 </script>
 
 <script lang="ts">
+  import { shortId } from "@cawco/core/short-id";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
@@ -37,6 +38,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import ShowAllVersions from "./ShowAllVersions.svelte";
 
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const LATEST = 5;
 
   let {
@@ -94,7 +96,7 @@
               · from {versionSource(version.source)}
               ·
               <span class="font-(family-name:--font-mono)"
-                >{version.hash.slice(0, 7)}</span
+                >{shortId(version.hash)}</span
               >
             </span>
           </span>

@@ -1,4 +1,10 @@
 import type { Bounded } from "@cawco/core/bounded";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
+import {
+  cutToTail,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+} from "@cawco/core/prompt-budget";
 import type { Rule, RuleFacts } from "@cawco/core/rules";
 import { ruleInScope } from "@cawco/core/rules";
 import type { NeutralMessage } from "@cawco/core/session-messages";
@@ -9,6 +15,7 @@ import { askJev, jevAccess, jevCost } from "./jev";
 import type { JevResult } from "./jev-types";
 
 /** A meaning rule answers inside the turn it judges, so it is asked briefly. */
+// @limit recording: hub.meaning-ms until 2026-12-10
 const MEANING_TIMEOUT_MS = 10_000;
 
 /**
@@ -27,11 +34,10 @@ const MEANING_TIMEOUT_MS = 10_000;
 /** A yes probability at or above this fires the rule. */
 export const MEANING_THRESHOLD = 0.8;
 
-/** Jev reads 32,000 tokens; the tail of the output is what gets judged. */
-const MEANING_TEXT_LIMIT = 60_000;
+/** What Jev reads of an output: its window less what it writes; the tail of the output is what gets judged. */
+const MEANING_TEXT_LIMIT = promptBudgetChars(JEV_WINDOW_TOKENS);
 
-const tail = (text: string): string =>
-  text.length > MEANING_TEXT_LIMIT ? text.slice(-MEANING_TEXT_LIMIT) : text;
+const tail = (text: string): string => cutToTail(text, MEANING_TEXT_LIMIT);
 
 /** Which `state` fields a rule's question is about, by what it watches. */
 const SUBJECT = {
@@ -163,9 +169,12 @@ export class MeaningJudge {
       );
     let result: JevResult<typeof questions>;
     try {
-      const asking = await askJev(access, state, questions, {
-        timeoutMs: MEANING_TIMEOUT_MS,
-      });
+      const asking = await timed(
+        askJev(access, state, questions, {
+          timeoutMs: MEANING_TIMEOUT_MS,
+        }),
+        (ms) => recordLimitReading("hub.meaning-ms", ms)
+      );
       switch (asking.kind) {
         case "answered":
           result = asking.value;

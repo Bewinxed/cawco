@@ -25,6 +25,7 @@
 import { createHash } from "node:crypto";
 import { Effect, Result, Schema } from "effect";
 import { deliveryJson, deliveryText } from "../delivery";
+import { derivedName } from "../derived-name";
 import type {
   HookAt,
   RawDelivery,
@@ -79,8 +80,6 @@ export const hookSigningOf = (settings: object): HookSigning | undefined => {
 export const hookSource = (relay: string): string => `hook:${relay}`;
 
 const SHA256_PREFIX = "sha256=";
-/** The most of an id kept as a key. */
-const KEY_MAX = 200;
 
 /** Stripe's `Stripe-Signature`: "t=…,v1=…,v1=…,v0=…", the timestamp, then one or more signatures of `<t>.<body>`. */
 const stripeMisfit = (
@@ -165,13 +164,13 @@ const keyOf = (
   body: unknown
 ): string | undefined => {
   if (signing.scheme === "standard-webhooks") {
-    return delivery.headers.get("webhook-id")?.slice(0, KEY_MAX) || undefined;
+    return delivery.headers.get("webhook-id") || undefined;
   }
   const path = signing.scheme === "stripe" ? "id" : signing.idPath;
   if (!path) {
     return createHash("sha256").update(delivery.body).digest("hex");
   }
-  return keyPart(valueAt(body, path))?.slice(0, KEY_MAX);
+  return keyPart(valueAt(body, path));
 };
 
 /** What the person does at the sender, by how it signs. */
@@ -218,7 +217,7 @@ export const connectionWebhook: Webhook<never> = {
         });
       }
       const type = valueAt(body, "type");
-      const named = typeof type === "string" ? type.slice(0, 100) : null;
+      const named = typeof type === "string" ? type : null;
       const created = Number(valueAt(body, "created"));
       const event: SourceEvent = {
         item: null,
@@ -229,7 +228,7 @@ export const connectionWebhook: Webhook<never> = {
         labels: [],
         branch: null,
         url: null,
-        title: named,
+        title: named === null ? null : derivedName(named),
         body: null,
         at:
           signing.scheme === "stripe" && Number.isFinite(created)

@@ -8,11 +8,9 @@
  * and the dashboard reads every stored one through {@link readFault}, so
  * rows stored before that read the same.
  */
-import { HARNESSES, type HarnessKind } from "./harness/kinds";
-import { cutShort } from "./words/helpers";
 
-/** A reason's longest plain text: a longer one is kept cut short. */
-const PLAIN_MAX = 160;
+import { quote } from "@cawco/providers/quote";
+import { HARNESSES, type HarnessKind } from "./harness/kinds";
 
 /** What went wrong, as short as it can be said. */
 export type FaultReason =
@@ -42,9 +40,7 @@ function faultReason(raw: string): FaultReason | undefined {
     return { word: "refused" };
   }
   const text = raw.replace(/\s+/gu, " ").trim();
-  return text && !MARKUP.test(text)
-    ? { text: cutShort(text, PLAIN_MAX) }
-    : undefined;
+  return text && !MARKUP.test(text) ? { text: quote(text) } : undefined;
 }
 
 /** A reason as the agent keeps it and the dashboard reads it back. */

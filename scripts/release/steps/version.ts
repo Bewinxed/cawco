@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { gitShort } from "../../../packages/core/src/git-short";
 import type { ReleaseManifest } from "../../../packages/core/src/release-manifest";
 import { SESSIOND_V1 } from "../../../packages/core/src/sessiond";
 import type { Runner } from "../binary-tests";
@@ -51,7 +52,7 @@ export const manifestOf = async (
       throw new Error("Nightly builds need end-user notes: --notes <file>");
     }
     notes = given;
-    version = `${base}-nightly.${sequence}+${current.commit.slice(0, 12)}`;
+    version = `${base}-nightly.${sequence}+${gitShort(checkout, current.commit)}`;
   }
   return {
     version,

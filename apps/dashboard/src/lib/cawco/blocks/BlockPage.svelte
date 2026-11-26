@@ -160,6 +160,7 @@
       return columns;
     }
     const measure = item ? (px.measures[item.measure] ?? 0) : 0;
+    // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
     return Math.min(
       columns,
       Math.max(1, Math.ceil(measure / columnWidth - 0.001))

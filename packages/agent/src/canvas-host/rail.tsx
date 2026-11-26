@@ -82,6 +82,7 @@ const IMAGE_KEY = "9";
 
 /** Excalidraw's zoom bounds. */
 const ZOOM_MIN = 0.1;
+// @limit external: Excalidraw's MAX_ZOOM (https://github.com/excalidraw/excalidraw/blob/master/packages/common/src/constants.ts)
 const ZOOM_MAX = 30;
 /** One step of Zoom in or out. Excalidraw's own step. */
 const ZOOM_STEP = 0.1;

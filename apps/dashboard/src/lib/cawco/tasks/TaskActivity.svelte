@@ -167,6 +167,7 @@
     const pieces: Piece[] = [];
     let run: Line[] = [];
     const flush = () => {
+      // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
       if (run.length > 3) {
         pieces.push({ kind: "fold", key: `fold-${run[0].key}`, lines: run });
       } else {

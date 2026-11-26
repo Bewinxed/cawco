@@ -38,6 +38,7 @@ function* chunksBeforeData(
 ): Generator<{ at: number; length: number; type: string }> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let at = SIGNATURE.length;
+  // @limit external: PNG section 5.3: a chunk is its length (4 bytes), type (4) and CRC (4) round its data, 12 bytes
   while (at + CHUNK_FRAME <= bytes.length) {
     const length = view.getUint32(at);
     const type = typeAt(bytes, at);

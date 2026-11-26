@@ -117,6 +117,7 @@ export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
  * tool, its route and work-items.ts `waitItem` hold a session to it, and a
  * landing waiting for a machine its gate needs declares it (landing-run.ts).
  */
+// @limit measured: a wait's or a pause's end is told as a clock time with no date (waitClock, pauseClock), so 24 hours, 1,440 minutes, is the longest whose end names one moment; the hub holds the timer, so no harness's tool-call limit bounds it
 export const WAIT_ITEM_MAX_MINUTES = 1440;
 
 export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason saying what you wait for.`;

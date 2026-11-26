@@ -7,11 +7,10 @@
  * only its own scope (which candidates the caller may name).
  */
 
+import { namedAndMore } from "@cawco/providers/names";
+
 /** The fewest characters of an id that name it. */
 export const HANDLE_MIN = 6;
-
-/** How many candidates a refusal names; the rest are counted. */
-const NAMED_AT_MOST = 12;
 
 /** A handle: hex and dashes, at least {@link HANDLE_MIN} of them. */
 const HANDLE = /^[0-9a-f-]+$/u;
@@ -87,9 +86,9 @@ export interface Handled<T> {
   said: (thing: T) => string;
 }
 
-/** `things` as a refusal lists them, at most {@link NAMED_AT_MOST}. */
+/** `things` as a refusal lists them. */
 const listed = <T>(things: readonly T[], keys: Handled<T>): string =>
-  `${things.slice(0, NAMED_AT_MOST).map(keys.said).join("; ")}${things.length > NAMED_AT_MOST ? `; and ${things.length - NAMED_AT_MOST} more` : ""}`;
+  namedAndMore(things.map(keys.said));
 
 /** The refusal of `asked` naming several of `what`: each listed, and to give more of its id. */
 const ambiguousHandle = <T>(

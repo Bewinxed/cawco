@@ -67,6 +67,7 @@
  * cawco's but dependency-free modules).
  */
 import { chmodSync, readFileSync, rmSync, statSync } from "node:fs";
+import { maxHeaderSize } from "node:http";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { listenOrEnd } from "@cawco/core/listeners";
 import {
@@ -153,10 +154,6 @@ fi`;
 const CRLF = Buffer.from("\r\n");
 const HEAD_END = Buffer.from("\r\n\r\n");
 const EMPTY = Buffer.alloc(0);
-/** The most a request's head may hold before the relay refuses it (Node's own default head limit is 16 KiB). */
-const MAX_HEAD = 64 * 1024;
-/** The most a chunk's size line or a trailer line may hold. */
-const MAX_LINE = 4096;
 const CHUNKED = /(?:^|,)\s*chunked\s*$/iu;
 const DECIMAL = /^\d+$/u;
 const HEX = /^[0-9a-f]+$/iu;
@@ -280,7 +277,7 @@ const lineStep = (
 ): Step => {
   const end = pending.indexOf(CRLF);
   if (end < 0) {
-    return pending.length > MAX_LINE ? BAD_REQUEST : WAIT;
+    return pending.length > maxHeaderSize ? BAD_REQUEST : WAIT;
   }
   const phase = next(pending.subarray(0, end).toString("latin1"));
   return phase
@@ -491,7 +488,7 @@ const relayOne = (
   const head = (): boolean => {
     const end = pending.indexOf(HEAD_END);
     if (end < 0) {
-      if (pending.length > MAX_HEAD) {
+      if (pending.length > maxHeaderSize) {
         refuse("431 Request Header Fields Too Large");
       }
       return false;

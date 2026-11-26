@@ -75,7 +75,6 @@ import { folderFilePaths } from "./project-folder";
 
 import {
   boundStarterInputs,
-  STARTER_BOUNDS,
   STARTER_OFTEN,
   STARTER_RECENT_DAYS,
   type StarterInputs,
@@ -299,13 +298,11 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       routines: db.routines
         .list(projectId)
         .map((routine) => ({ id: routine.id, name: routine.name })),
-      shown: db.starters
-        .outcomes(projectId, STARTER_BOUNDS.shown)
-        .map((each) => ({
-          place: each.place,
-          text: each.text,
-          outcome: each.outcome,
-        })),
+      shown: db.starters.outcomes(projectId).map((each) => ({
+        place: each.place,
+        text: each.text,
+        outcome: each.outcome,
+      })),
     });
   };
 
@@ -526,7 +523,7 @@ export const starterRoutes = (starters: ProjectStarters) =>
       params: t.Object({ id: t.String() }),
       body: t.Object({
         place: t.UnionEnum(STARTER_PLACES),
-        text: t.String({ minLength: 1, maxLength: 200 }),
+        text: t.String({ minLength: 1 }),
         outcome: t.Union([t.Literal("picked"), t.Literal("edited")]),
       }),
     },

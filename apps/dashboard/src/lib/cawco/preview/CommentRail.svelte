@@ -719,7 +719,7 @@
             class="mt-space-1 flex items-center gap-space-1"
             data-attach-strip
           >
-            {#each attached.slice(0, STRIP) as one (one.ref)}
+            {#each attached.slice(0, /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ STRIP) as one (one.ref)}
               {#if one.kind === "image"}
                 <img
                   alt={one.name}
@@ -738,7 +738,7 @@
                 >
               {/if}
             {/each}
-            {#if attached.length > STRIP}
+            {#if attached.length > /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ STRIP}
               <span class={["type-meta num", "text-ink-muted"]} data-slot="more"
                 >+{attached.length - STRIP}</span
               >

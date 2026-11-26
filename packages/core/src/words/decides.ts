@@ -5,7 +5,7 @@
  * §3.8). Said by the hub and the dashboard only: the app draws none of it,
  * so it is not written into it (scripts/words-swift.ts).
  */
-import { andList } from "./helpers";
+import { andList } from "@cawco/providers/names";
 
 /** A removed member's kinds, coming back to him. */
 const kindsBack = (kinds: readonly string[]): string => {

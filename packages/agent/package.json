@@ -13,6 +13,7 @@
     "./config": "./src/config.ts",
     "./daemon": "./src/daemon.ts",
     "./discovery": "./src/discovery.ts",
+    "./limit-readings-hand-on": "./src/limit-readings-hand-on.ts",
     "./machine-fetch": "./src/machine-fetch.ts",
     "./awake-hold": "./src/awake-hold.ts",
     "./group-run": "./src/group-run.ts",

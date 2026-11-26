@@ -13,6 +13,7 @@
  * call as an Effect within the hub's deadline, its answer parsed.
  */
 import { Effect } from "effect";
+import { quote } from "../quote";
 import {
   type ProviderFailure,
   type RefusalKind,
@@ -146,9 +147,7 @@ export const giteaAnswer = (
         return Effect.succeed<unknown>(JSON.parse(said));
       } catch {
         return Effect.fail(
-          refusedWith(
-            `gitea-mcp's ${tool} didn't return JSON: ${said.slice(0, 200)}`
-          )
+          refusedWith(`gitea-mcp's ${tool} didn't return JSON: ${quote(said)}`)
         );
       }
     })

@@ -91,12 +91,12 @@ export interface ArtifactChanges {
  * label alone. The anchor is what the person's look is kept by.
  */
 export interface ChangedItem {
-  /** Its words now, whole (up to {@link CHANGE_WORDS_MOST}); `label` when it has none past its label. */
+  /** Its words now, whole; `label` when it has none past its label. */
   after?: string;
   anchor: string;
   /** Whether the agent answered its pin in the revision that changed it (a reply in its thread since the revision before). */
   answered?: boolean;
-  /** Its words, whole (up to {@link CHANGE_WORDS_MOST}), when the person last looked; none when it was put in. */
+  /** Its words, whole, when the person last looked; none when it was put in. */
   before?: string;
   /** What it is, by name ("Headline", "Button": core pin-name.ts `elementName`). */
   element?: string;

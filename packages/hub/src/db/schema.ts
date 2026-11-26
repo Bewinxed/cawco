@@ -935,6 +935,7 @@ export const taskMoves = sqliteTable(
 );
 
 /** How long a task's move is kept ({@link taskMoves}). */
+// @limit recording: hub.return-recap-span-ms until 2026-12-03
 export const TASK_MOVES_KEPT_DAYS = 30;
 
 /**
@@ -5799,7 +5800,7 @@ export const artifacts = sqliteTable(
     pick: storedEnum(z.enum(ARTIFACT_PICKS))("pick"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
     ask: text("ask").notNull().default(""),
-    /** What every surface names it by to the person: the panel head, the artifacts menu, Needs you, chips, push text. Written by its agent in plain words (core `ARTIFACT_TITLE_LIMIT`); empty on a row made before titles were kept. `name` stays its slug for agents and URLs. */
+    /** What every surface names it by to the person: the panel head, the artifacts menu, Needs you, chips, push text. Written by its agent in plain words; empty on a row made before titles were kept. `name` stays its slug for agents and URLs. */
     title: text("title").notNull().default(""),
     /**
      * The person's own canvas, opened in the composer (artifacts service.ts
@@ -7460,4 +7461,35 @@ export const heldTriggers = sqliteTable(
     at: timestamp("at").notNull(),
   },
   (table) => [index("held_triggers_project").on(table.projectId, table.at)]
+);
+
+/**
+ * The readings of the bounds still waiting on data (core limit-readings.ts):
+ * one row per metric, machine, UTC day and bucket, holding how many
+ * readings fell in the bucket and the largest of them. A day's largest is
+ * the high-water mark; the buckets give its percentiles (hub
+ * `GET /api/limit-readings`).
+ */
+export const limitReadings = sqliteTable(
+  "limit_readings",
+  {
+    /** The metric a bound's `@limit recording:` tag names. */
+    metric: text("metric").notNull(),
+    /** Where it was read: a machine's id, or `browser` for a page's. */
+    machine: text("machine").notNull(),
+    /** The UTC day, `YYYY-MM-DD`. */
+    day: text("day").notNull(),
+    /** Its logarithmic bucket (core limit-readings.ts `bucketOf`). */
+    bucket: integer("bucket").notNull(),
+    /** The largest reading in the bucket that day. */
+    value: real("value").notNull(),
+    count: integer("count").notNull(),
+    /** When the last of them was read. */
+    at: timestamp("at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.metric, table.machine, table.day, table.bucket],
+    }),
+  ]
 );

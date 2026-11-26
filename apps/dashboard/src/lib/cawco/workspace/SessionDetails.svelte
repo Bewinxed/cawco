@@ -29,6 +29,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import MiddleClip from "#lib/components/ui/middle-clip/middle-clip.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     IconChevronDown as Down,
@@ -292,11 +293,6 @@
   const hubOpen = $derived(connectionStore.status === "connected");
   /** The settings take picks: the session's, or a stored transcript's resume once its machine has said what it ran with. */
   const settable = $derived(resume ? !!resume.run : hubOpen);
-  /** `~/…/leaf`: the folder name is what tells sessions apart. */
-  const shortPath = (path: string) => {
-    const parts = path.replace(HOME, "~").split("/");
-    return parts.length > 3 ? `${parts[0]}/…/${parts.at(-1)}` : parts.join("/");
-  };
   /*
    * The reading only arrives when something asks for it, and the transcript
    * asks at the end of a turn it watched. A tab opened after a reload, or a
@@ -400,6 +396,7 @@
         })
       : null
   );
+  // @limit external: a percentage runs from 0 to 100
   const percent = $derived(
     stats.totalTokens !== null && stats.maxTokens
       ? Math.min(100, Math.round((stats.totalTokens / stats.maxTokens) * 100))
@@ -986,7 +983,7 @@
             title={cwd}
             type="button"
           >
-            <MorphText text={shortPath(cwd)} />
+            <MiddleClip text={cwd.replace(HOME, "~")} />
           </button>
         {/if}
         <!-- Started clean, so a comparison tells it from one started with its

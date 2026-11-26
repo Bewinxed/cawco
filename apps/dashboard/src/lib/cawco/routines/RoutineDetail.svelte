@@ -168,6 +168,7 @@
   );
 
   /** The runs shown first: the newest five; a button shows the rest, then reads older pages from the hub. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const SHOWN = 5;
   let allRuns = $state(false);
   /** Older runs read from the hub past the ones the routine carries. */
@@ -439,6 +440,7 @@
       {now}
       paused={!routine.enabled}
       runs={routine.nextRuns}
+      cut={routine.nextRunsCut}
     />
   </div>
   <div

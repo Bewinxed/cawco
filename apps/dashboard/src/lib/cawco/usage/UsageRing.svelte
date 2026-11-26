@@ -28,6 +28,7 @@
     state: MeterState;
   } = $props();
 
+  // @limit external: a percentage runs from 0 to 100
   const drawn = $derived(Math.min(100, Math.max(0, share)));
   /** On a 16-unit box (1em): the stroke is 0.15em, its centre line inset by half of it. */
   const STROKE = 2.4;

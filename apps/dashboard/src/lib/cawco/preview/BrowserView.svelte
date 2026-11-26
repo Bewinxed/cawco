@@ -56,6 +56,7 @@
    * link lost or refused, the stream that found no way here (the stream
    * relay's settings), a codec this browser can't play.
    */
+  import { recordLimitReading } from "@cawco/core/limit-readings";
   import { FORMS, screenHeight } from "@cawco/core/stage";
   import { browserWords } from "@cawco/core/words/browser";
   import { commonWords } from "@cawco/core/words/common";
@@ -94,13 +95,7 @@
     type TakeoverStream,
   } from "./browser-stream";
   import CoverState from "./CoverState.svelte";
-  import {
-    SINK_AT_SPACE,
-    SINK_MOST,
-    SINK_PAD,
-    sinkKeyRole,
-    typedBetween,
-  } from "./keyboard-sink";
+  import { SINK_PAD, sinkKeyRole, typedBetween } from "./keyboard-sink";
   import PasskeyQr from "./PasskeyQr.svelte";
 
   /** The layout a take-over's page is in: a phone's or the desktop's. */
@@ -207,6 +202,7 @@
   /** The desktop layout on a phone opens at this share of its size: the takeover pitch's measure, where a form's column fits the sheet and its text reads. */
   const READ_SCALE = 0.6;
   /** The desktop layout's picture zooms to this share of its size at most: twice its own. */
+  // @limit external: text resizes to 200 percent without loss (WCAG 2.2 SC 1.4.4, https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html)
   const ZOOM_MOST = 2;
   /** A sheet's room changes for a while as it moves between its stops: the page is laid out again once it has stood this long, ms. Our call. */
   const LAYOUT_SETTLE_MS = 200;
@@ -265,6 +261,7 @@
     handheld
       ? { w: Math.floor(room.w), h: Math.floor(below) }
       : {
+          // @limit measured: a phone's page at a desk is drawn at the phone form's own width (core stage.ts FORMS.phone), or the room when that is narrower
           w: Math.min(FORMS.phone, Math.floor(room.w)),
           h: Math.min(screenHeight(FORMS.phone), Math.floor(room.h)),
         }
@@ -325,6 +322,9 @@
     if (w <= 0 || h <= 0) {
       return null;
     }
+    recordLimitReading("dashboard.device-pixel-ratio", window.devicePixelRatio);
+    recordLimitReading("dashboard.takeover-phone-side", w);
+    recordLimitReading("dashboard.takeover-phone-side", h);
     return {
       form: "phone",
       width: w,
@@ -1106,10 +1106,7 @@
       return;
     }
     const caret = now.length;
-    if (
-      !now.startsWith(SINK_PAD) ||
-      (caret > SINK_MOST && SINK_AT_SPACE.test(now))
-    ) {
+    if (!now.startsWith(SINK_PAD)) {
       resetSink();
     } else if (sink.selectionStart !== caret || sink.selectionEnd !== caret) {
       sink.setSelectionRange(caret, caret);
@@ -1483,8 +1480,14 @@
           ></canvas>
           <div
             class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-hair border-2 border-coral-9"
-            style:--view-h="{Math.min(100, (screen.h / pageBox.h) * 100)}%"
-            style:--view-w="{Math.min(100, (screen.w / pageBox.w) * 100)}%"
+            style:--view-h="{Math.min(
+              /* @limit external: a percentage runs from 0 to 100 */ 100,
+              (screen.h / pageBox.h) * 100
+            )}%"
+            style:--view-w="{Math.min(
+              /* @limit external: a percentage runs from 0 to 100 */ 100,
+              (screen.w / pageBox.w) * 100
+            )}%"
             style:--view-x="{(pageBox.x / pageBox.w) * 100}%"
             style:--view-y="{(pageBox.y / pageBox.h) * 100}%"
           ></div>

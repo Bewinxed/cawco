@@ -7,8 +7,6 @@
 
 /** A markdown link, its label kept. */
 const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/gu;
-/** A work item's title, at most (hub work-items.ts). */
-const TITLE_MAX = 48;
 
 /** Where the rest of the project is read: the last line of everything a fresh session reads. */
 const READ_THE_REST =
@@ -57,11 +55,8 @@ const WHERE_IT_GOES =
   "Write what you did on the thing itself: a task's comments with task_comment, a pin's thread with comment_reply, a routine's run with task_result. Anything you need from the person goes to them with ask or a decision card. Never message, hand off to or continue another session, and never write to the project's Caw conversation.";
 
 export const triggerWords = {
-  /** A fresh session's title: what it handles, a link's label in its place, cut to a work item's 48 characters. */
-  title: (thing: string) => {
-    const said = `Handle ${thing.replace(MARKDOWN_LINK, "$1")}`;
-    return said.length > TITLE_MAX ? `${said.slice(0, TITLE_MAX - 1)}…` : said;
-  },
+  /** A fresh session's title: what it handles, a link's label in its place. */
+  title: (thing: string) => `Handle ${thing.replace(MARKDOWN_LINK, "$1")}`,
   /** A fresh session's brief: who it is, the trigger that started it, how it ends, and where the rest is read. */
   brief: (
     project: string,

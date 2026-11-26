@@ -30,6 +30,7 @@
 
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { gitShort } from "@cawco/core/git-short";
 import ts from "typescript";
 import { z } from "zod";
 
@@ -403,7 +404,7 @@ export const hubWireAt = (commit: string): Wire => {
     .at(-1);
   if (!began) {
     throw new Error(
-      `${commit.slice(0, 12)} was made after the app's copy stood still and before the hub recorded its wire, which it reads from the commit that began ${WIRE_RECORD}; no commit in HEAD's history adds it yet: commit it first.`
+      `${gitShort(REPO, commit)} was made after the app's copy stood still and before the hub recorded its wire, which it reads from the commit that began ${WIRE_RECORD}; no commit in HEAD's history adds it yet: commit it first.`
     );
   }
   return wireFrom(began, WIRE_RECORD, WIRE_RECORD_CONFIG);
@@ -457,7 +458,6 @@ interface Place {
 
 const COMPONENT = "#/components/schemas/";
 const UNIONS = ["oneOf", "anyOf"] as const;
-const MAX_HOPS = 32;
 const OPEN_ENUM = /^ {4}([A-Za-z0-9_]+): OpenEnums\./gmu;
 
 export const isObject = (value: unknown): value is Schema =>
@@ -472,7 +472,8 @@ const resolveIn = (
 ): Side | undefined => {
   let current = schema;
   let name: string | undefined;
-  for (let hops = 0; hops <= MAX_HOPS; hops += 1) {
+  const followed = new Set<string>();
+  for (;;) {
     const ref = refOf(current);
     if (ref === undefined) {
       return { schema: current, name };
@@ -482,12 +483,12 @@ const resolveIn = (
     }
     name = ref.slice(COMPONENT.length);
     const target = schemas[name];
-    if (!isObject(target)) {
+    if (!isObject(target) || followed.has(name)) {
       return undefined;
     }
+    followed.add(name);
     current = target;
   }
-  return undefined;
 };
 
 const valueKind = (value: unknown): string => {
@@ -1025,7 +1026,7 @@ if (import.meta.main) {
   const app = flag("--app");
   const hub = flag("--hub");
   const result = commitBreaks(app, hub);
-  const what = `the app at ${app.slice(0, 12)} (WIRE_PROTOCOL ${result.app}) against the hub at ${hub.slice(0, 12)} (WIRE_PROTOCOL ${result.hub})`;
+  const what = `the app at ${gitShort(REPO, app)} (WIRE_PROTOCOL ${result.app}) against the hub at ${gitShort(REPO, hub)} (WIRE_PROTOCOL ${result.hub})`;
   if (result.breaks.length && !result.allowed) {
     console.error(
       `The wire breaks ${what}, at ${result.breaks.length} place${result.breaks.length === 1 ? "" : "s"}:\n${result.breaks.map((line) => `  ${line}`).join("\n")}`

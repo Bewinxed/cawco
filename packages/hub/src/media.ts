@@ -175,6 +175,7 @@ const MEDIA_URL_PREFIX = /^\/api\/media\//u;
 const FILES_DIR = join(MEDIA_DIR, "files");
 
 /** The most one attached file may weigh. */
+// @limit measured: the largest media file the hub holds is 42.0 MiB of 30,389 (obelisk, 2026-11-26)
 export const FILE_LIMIT_BYTES = 100 * 1024 * 1024;
 
 const FILE_HASH = /^[a-f0-9]{64}$/u;

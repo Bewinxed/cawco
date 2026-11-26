@@ -18,6 +18,8 @@
  * `#retry`); a retry at the limit of an account of CawCo's is the at-limit
  * controller's, whose harness ends the turn on it (server.ts).
  */
+
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { workWords } from "@cawco/core/words/work";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
@@ -28,6 +30,7 @@ import { isLive } from "./work-item-state";
  * How long a work item may sit in its provider's retry: our call, the half
  * hour run d1ee813a sat in OpenCode's before its attempt timed out.
  */
+// @limit recording: hub.provider-retry-ms until 2026-12-26
 const PROVIDER_RETRY_DEADLINE_MS = 30 * 60_000;
 
 /** What a provider's retry says: its words, and when the harness tries again (ms epoch) if it said. */
@@ -39,6 +42,8 @@ export interface ProviderRetry {
 interface Stretch {
   deadline: number;
   last: ProviderRetry;
+  /** When the provider's retry began. */
+  since: number;
   timer: HubTimer;
 }
 
@@ -80,6 +85,8 @@ export const createProviderRetries = ({
   const forget = (instanceId: string): void => {
     const stretch = stretches.get(instanceId);
     if (stretch) {
+      // How long a provider's retry lasted, ended by progress or its deadline.
+      recordLimitReading("hub.provider-retry-ms", Date.now() - stretch.since);
       lifetime.cancel(stretch.timer);
       stretches.delete(instanceId);
     }
@@ -119,6 +126,7 @@ export const createProviderRetries = ({
         const deadline = deadlineOf(item, Date.now());
         stretch = {
           deadline,
+          since: Date.now(),
           last: retry,
           timer: lifetime.after(
             "provider retries ended",

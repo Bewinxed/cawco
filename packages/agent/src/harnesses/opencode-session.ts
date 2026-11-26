@@ -58,6 +58,7 @@ import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { OPENCODE } from "@cawco/core/harness/opencode";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
 import { opencodeRecordFile } from "@cawco/core/paths/harnesses";
@@ -163,6 +164,7 @@ import {
 import { listedSkillFiles } from "./skill-files";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
+// @limit recording: agent.opencode-recovery-read-ms until 2026-12-10
 const RECOVERY_TIMEOUT_MS = 10_000;
 
 /** A session's pending gates read back: three reads, from 250 ms apart. */
@@ -182,10 +184,13 @@ export const askOpencode = <T>(
   read: (options: { signal: AbortSignal }) => Promise<T>,
   signal?: AbortSignal
 ): Promise<Bounded<T>> =>
-  readWithin(
-    RECOVERY_TIMEOUT_MS,
-    (within) => read({ signal: within }),
-    signal ? { signal } : {}
+  timed(
+    readWithin(
+      RECOVERY_TIMEOUT_MS,
+      (within) => read({ signal: within }),
+      signal ? { signal } : {}
+    ),
+    (ms) => recordLimitReading("agent.opencode-recovery-read-ms", ms)
   );
 
 /**
@@ -220,6 +225,7 @@ function messageId(): string {
     idCounter = 0;
   }
   idCounter += 1;
+  // @limit external: OpenCode's ascending id: 12 hex characters of time, then 14 random (packages/schema/src/identifier.ts, anomalyco/opencode@697db192101b)
   const stamp = (BigInt(now) * 0x10_00n + BigInt(idCounter))
     .toString(16)
     .padStart(12, "0")
@@ -559,6 +565,7 @@ const skillAllowlist = (skills: readonly string[]): OpencodeRule[] => [
 const ROLE_ENTRY = "cawco-role.";
 
 /** The most an instruction entry's value may be, in JSON bytes (2.0.28's `Ohe=262144`, settled #11). */
+// @limit external: OpenCode 2.0.28's instruction entry limit, `Ohe=262144` JSON bytes (the comment above names it)
 const INSTRUCTION_ENTRY_MAX = 262_144;
 
 /** What an instruction key may not hold (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
@@ -1961,6 +1968,7 @@ export class OpencodeSession implements HarnessSession {
               sessionID: this.#opencodeSessionId(),
               type: "synthetic",
               order: "desc",
+              // @limit external: OpenCode's page size for session.messages, a list its server pages by a cursor
               limit: 100,
               ...(page ? { cursor: page } : {}),
             },
@@ -2969,6 +2977,7 @@ export class OpencodeSession implements HarnessSession {
             {
               sessionID: this.#opencodeSessionId(),
               order: "desc",
+              // @limit external: OpenCode's page size for session.messages, a list its server pages by a cursor
               limit: 100,
               ...(page ? { cursor: page } : {}),
             },
@@ -3704,6 +3713,7 @@ export class OpencodeSession implements HarnessSession {
       return {
         totalTokens: total,
         maxTokens,
+        // @limit external: a percentage runs from 0 to 100
         percentage: Math.min(100, Math.round((total / maxTokens) * 100)),
         categories: [
           {

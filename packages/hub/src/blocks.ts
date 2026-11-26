@@ -35,9 +35,6 @@ import {
 import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "./db";
 
-/** The most blocks one page holds: its built-ins and the views placed on it. */
-const MOST = 64;
-
 export interface BlocksDeps {
   readonly changed: (projectId: string) => void;
   readonly db: Pick<DbShape, "blocks">;
@@ -259,8 +256,7 @@ export const blockRoutes = (blocks: Blocks) =>
               block: t.String({ pattern: BLOCK_ID.source }),
               width: WIDTH,
               hidden: t.Boolean(),
-            }),
-            { maxItems: MOST }
+            })
           ),
         }),
       },

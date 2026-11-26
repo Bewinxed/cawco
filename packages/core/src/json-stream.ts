@@ -80,6 +80,7 @@ const resolved = (value: unknown, key: string): unknown => {
  */
 const isSmallLeaf = (value: object): boolean => {
   const values = Array.isArray(value) ? value : Object.values(value);
+  // @limit measured: up to 256 small primitives are one native JSON.stringify call, a cost the size of the leaf bounds (this file's isSmallLeaf)
   if (values.length > 256) {
     return false;
   }

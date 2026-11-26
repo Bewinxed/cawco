@@ -27,6 +27,7 @@ import { skillTextProblems } from "../src/skill-text-rules";
 export const checkReads = ["packages/hub/"];
 
 /** Claude Code's longest skill description. */
+// @limit external: the Agent Skills specification: description, "Max 1024 characters" (https://agentskills.io/specification); Claude Code's listing cuts description and when_to_use at 1,536 together (https://code.claude.com/docs/en/skills)
 const DESCRIPTION_LIMIT = 1024;
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/u;
 const CALL = "artifact_create(";

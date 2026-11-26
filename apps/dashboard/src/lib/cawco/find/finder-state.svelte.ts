@@ -522,7 +522,10 @@ export class FinderState {
       result.moments.length > 0
         ? result.moments
         : (this.momentsOf.get(keyOf(result)) ?? [])
-    ).slice(0, 3);
+    ).slice(
+      0,
+      /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 3
+    );
   }
 
   /** The words the answer for `text` is keyed by (who said it counts for the machines). */
@@ -597,10 +600,9 @@ export class FinderState {
     this.morePage = { ...this.morePage, [source]: "asking" };
     const asked =
       source === "names"
-        ? await findNames(this.asked, { cursor: next, limit: 20 })
+        ? await findNames(this.asked, { cursor: next })
         : await findEverywhere(this.asked, {
             cursor: next,
-            limit: 20,
             by: this.by,
           });
     if (asked.kind === "superseded") {
@@ -652,7 +654,6 @@ export class FinderState {
       this.names = { state: "asking", for: key, since: Date.now() };
     }
     const asked = await findNames(words, {
-      limit: 20,
       signal: abort.signal,
       ...(relist ? { relist } : {}),
     });
@@ -681,7 +682,6 @@ export class FinderState {
       this.everywhere = { state: "asking", for: key, since: Date.now() };
     }
     const asked = await findEverywhere(words, {
-      limit: 20,
       by: this.by,
       signal: abort.signal,
     });

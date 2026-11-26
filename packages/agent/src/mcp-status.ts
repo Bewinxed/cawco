@@ -5,12 +5,15 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import {
   type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
 } from "@cawco/core/fleet";
 import { Effect } from "effect";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { unhandled } from "@cawco/core/unhandled";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
@@ -44,6 +47,7 @@ export const CLAUDE_MCP_ENV = { MCP_TIMEOUT: String(MCP_CONNECT_MS) };
  */
 const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
   const set = Number(env.MCP_TIMEOUT);
+  // @limit external: a timer's delay holds at most 2,147,483,647 ms, a signed 32-bit count (https://nodejs.org/api/timers.html#settimeoutcallback-delay-args)
   return set > 0 ? Math.min(set, 2_147_483_647) : 30_000;
 };
 /** Each harness's last reading of the fleet's servers, with the servers it read ({@link readSettledOnce}). */
@@ -103,6 +107,7 @@ export const fleetMcpMoved = (): void => {
 };
 
 /** CawCo's own bound on the CLI starting and answering its first status read. */
+// @limit recording: agent.mcp-status-start-ms until 2026-12-10
 const START_TIMEOUT_MS = 30_000;
 /** How often a connecting server's status is read again, once the CLI is up. */
 const SETTLE_READ_MS = 250;
@@ -175,7 +180,10 @@ export const readMcpRuntime = async (
     handle: Query
   ): Effect.fn.Return<FleetSyncReport["mcp"], Error> {
     // The CLI's start: its first status.
-    const first = yield* boundedRead(START_TIMEOUT_MS, statusOf(handle)).pipe(
+    const first = yield* timedEffect(
+      boundedRead(START_TIMEOUT_MS, statusOf(handle)),
+      (ms) => recordLimitReading("agent.mcp-status-start-ms", ms)
+    ).pipe(
       Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
     );
     if (first === undefined) {

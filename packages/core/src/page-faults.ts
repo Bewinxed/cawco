@@ -12,6 +12,9 @@
  * a {@link PAGE_FAULT_EVENT} on the window.
  */
 
+import { recordLimitReading } from "./limit-readings";
+import { errorReportWords } from "./words/error-report";
+
 /** One fault a page met. */
 export type PageFault =
   | {
@@ -72,10 +75,67 @@ export interface PageFaultsKept {
 export const PAGE_FAULT_EVENT = "cawco:page-fault";
 
 /** How many faults a revision keeps: past them the page is broken enough to read the first ones. */
+// @limit recording: core.page-faults-per-revision until 2026-12-03
 export const PAGE_FAULTS_KEPT = 20;
 
-/** The longest message, file or address a fault carries. */
-export const PAGE_FAULT_TEXT_MAX = 500;
+/** The journal line an error report is written as, before its JSON: "dashboard error: " (hub dashboard-errors.ts). */
+const REPORT_LINE_PREFIX_CHARS = "dashboard error: ".length;
+
+/** The most one error report weighs: it is written as one journal line, and journald breaks a line past `LineMax` into several records. */
+// @limit external: a report is written as one journal line, and journald breaks a line past LineMax, 48K by default, into several records (journald.conf(5), https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html)
+export const ERROR_REPORT_BYTES = 48 * 1024 - REPORT_LINE_PREFIX_CHARS;
+
+const bytesOf = (value: unknown): number =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
+
+/** What a report holds that can be cut: its stack, its message, and the words of a fault it carries. */
+interface Fittable {
+  fault?: { fault: object };
+  message: string;
+  stack: string;
+}
+
+/**
+ * `report` as the hub takes it: whole, until its JSON passes
+ * {@link ERROR_REPORT_BYTES}; then its stack is cut to what fits, then its
+ * message, then the longest words of its fault, each ending in "… cut".
+ */
+export const fitReport = <T extends Fittable>(report: T): T => {
+  const over = (one: T): number => bytesOf(one) - ERROR_REPORT_BYTES;
+  const cutTo = (text: string, drop: number): string =>
+    // Every character weighs at least one byte, so dropping `drop` characters, and the room the cut's own words take, brings it under.
+    `${text.slice(0, Math.max(0, text.length - drop - errorReportWords.cut.length))}${errorReportWords.cut}`;
+  let fitted = report;
+  for (const field of ["stack", "message"] as const) {
+    while (
+      over(fitted) > 0 &&
+      fitted[field].length > errorReportWords.cut.length
+    ) {
+      fitted = { ...fitted, [field]: cutTo(fitted[field], over(fitted)) };
+    }
+  }
+  while (over(fitted) > 0 && fitted.fault) {
+    const [longest] = Object.entries(fitted.fault.fault)
+      .filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string"
+      )
+      .sort((a, b) => b[1].length - a[1].length);
+    if (!longest || longest[1].length <= errorReportWords.cut.length) {
+      break;
+    }
+    fitted = {
+      ...fitted,
+      fault: {
+        ...fitted.fault,
+        fault: {
+          ...fitted.fault.fault,
+          [longest[0]]: cutTo(longest[1], over(fitted)),
+        },
+      },
+    };
+  }
+  return fitted;
+};
 
 /** Whether two faults say the same thing: one is kept of each. */
 export const sameFault = (one: PageFault, other: PageFault): boolean =>
@@ -95,6 +155,10 @@ export function faultsWith(
   if (faults.some((one) => sameFault(one, fault))) {
     return null;
   }
+  recordLimitReading(
+    "core.page-faults-per-revision",
+    faults.length + (had?.revision === revision ? (had.dropped ?? 0) : 0) + 1
+  );
   if (faults.length >= PAGE_FAULTS_KEPT) {
     return { revision, faults, dropped: (had?.dropped ?? 0) + 1 };
   }

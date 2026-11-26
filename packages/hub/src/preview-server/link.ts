@@ -43,8 +43,8 @@ export interface HubLink {
   hub: HubClient;
   /** Runs `listener` each time the link opens. */
   onOpen: (listener: () => void) => void;
-  /** Says `said` to the hub when the link is open; dropped while it isn't. */
-  say: (said: ServerSays) => void;
+  /** Says `said` to the hub when the link is open; dropped while it isn't. Whether it was said. */
+  say: (said: ServerSays) => boolean;
   token: string;
 }
 
@@ -132,10 +132,12 @@ export const openHubLink = (
     );
 
     return {
-      say(said: ServerSays): void {
+      say(said: ServerSays): boolean {
         if (socket?.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify(said));
+          return true;
         }
+        return false;
       },
       onOpen(listener: () => void): void {
         listeners.push(listener);

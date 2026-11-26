@@ -43,7 +43,7 @@ export interface TranscriptQuery {
    */
   context?: boolean;
   /** How many conversations to answer with; for a listing (no words), how many documents. */
-  limit?: number;
+  limit: number;
   /**
    * Only these conversations, by their harness session ids: a find narrowed
    * to a project asks for its sessions alone, so their matches are not cut
@@ -135,6 +135,8 @@ export interface TranscriptAnswer {
    * transcript last written before then). 0 when it can say no time yet.
    */
   indexedThrough: number;
+  /** How many conversations the words match on this machine in all, of which `conversations` holds the page asked for; for a listing, how many documents its window holds; absent from an agent that does not say. */
+  matched?: number;
   /** What the query itself took on the machine, ms. */
   queryMs: number;
   /** What bringing the index up to date took before the query (0 when it was fresh, or a sync was already running), ms. */
@@ -355,8 +357,9 @@ export type FindSessionsAnswer = Record<string, FindConversation | null>;
  * of the places list, so a scroll or a step reads the next one before it
  * reaches its end. The machine finds every place once a find and holds
  * them (jsonl-parser fts5.ts `PLACE_LISTS`); a window is only its records
- * read and cut. Our call.
+ * read and cut.
  */
+// @limit measured: a page; the next window's offset rides the find. 50 is the places one window returns
 export const PLACES_WINDOW = 50;
 
 /** Whose words a place is (`FindPlace.whose`): the person's, the agent's, what its tools returned, a delegate's report. */

@@ -100,6 +100,7 @@ const ownSheet = (file: string, id: string) => {
 /** A package specifier split into its name and the path inside it: `@scope/pkg/a.css` is `@scope/pkg` and `a.css`. */
 const packageOf = (id: string): { name: string; sub: string } => {
   const parts = id.split("/");
+  // @limit external: an npm package name is one segment, or two when scoped (@scope/name) (docs.npmjs.com/cli/configuring-npm/package-json#name)
   const size = id.startsWith("@") ? 2 : 1;
   return {
     name: parts.slice(0, size).join("/"),

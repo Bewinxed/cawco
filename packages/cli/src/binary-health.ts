@@ -14,6 +14,7 @@
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import type { BinaryInstallation } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   dataOf,
@@ -39,6 +40,7 @@ import {
  * it each time. Thirty seconds of nothing is a hub that says nothing; the
  * verification asks again after it.
  */
+// @limit recording: cli.hub-probe-ms until 2026-12-26
 const PROBE_TIMEOUT_MS = 30_000;
 
 /** The least a request is waited on, however near the deadline it is asked. */
@@ -77,7 +79,9 @@ async function askWithin<T>(
   );
   let got: Bounded<Tried<T>>;
   try {
-    got = await readWithin(within, try_);
+    got = await timed(readWithin(within, try_), (ms) =>
+      recordLimitReading("cli.hub-probe-ms", ms)
+    );
   } catch (error) {
     return {
       kind: "failed",

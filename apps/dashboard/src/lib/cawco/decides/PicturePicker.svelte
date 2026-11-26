@@ -7,7 +7,14 @@
    * press picks and folds the picker; the keys are the house's radio
    * group's. Seven across, four on a phone.
    */
-  import { CAW_POSES, type CawPoseId, type Member } from "@cawco/core/decides";
+  import {
+    CAW_POSES,
+    type CawPoseId,
+    MARK_HUES,
+    type MarkHue,
+    type Member,
+    markHueOf,
+  } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import {
     OptionGroup,
@@ -21,10 +28,9 @@
   }: {
     /** The member as it would be drawn: a new one wears its draft's hue. */
     member: Member;
-    onpicked: (picture: { pose: CawPoseId } | { hue: number }) => void;
+    onpicked: (picture: { pose: CawPoseId } | { hue: MarkHue }) => void;
   } = $props();
 
-  const HUES = [1, 2, 3, 4, 5, 6, 7, 8];
   const flock = $derived(member.pose !== null);
   const chosen = $derived(
     member.pose === null ? [String(member.hue ?? "")] : [member.pose]
@@ -44,7 +50,10 @@
           return;
         }
         if (!flock) {
-          onpicked({ hue: Number(picked) });
+          const hue = markHueOf(Number(picked));
+          if (hue !== null) {
+            onpicked({ hue });
+          }
           return;
         }
         const pose = CAW_POSES.find((one) => one.id === picked);
@@ -61,7 +70,7 @@
         </OptionGroupItem>
       {/each}
     {:else}
-      {#each HUES as hue (hue)}
+      {#each MARK_HUES as hue (hue)}
         <OptionGroupItem
           aria-label={decidesWords.hueName(hue)}
           tile="picture"

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cawco/core": "workspace:*",
+    "@cawco/providers": "workspace:*",
     "idiomorph": "0.8.0",
     "modern-screenshot": "4.7.0",
     "perfect-freehand": "1.2.3",

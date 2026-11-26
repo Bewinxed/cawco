@@ -365,6 +365,36 @@
   inherits: true;
   initial-value: 0;
 }
+@property --resist-max {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --tab-scroll-max {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --stagger-rows {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --recall-depth-rows {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --grown-fade-mid {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --grown-fade-edge {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
 @property --pop-scale {
   syntax: "<number>";
   inherits: true;
@@ -389,6 +419,33 @@
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
+}
+/* Sizes script reads as px (`numberOf`): each registered as a length; the theme
+   (lib/tokens/theme.css) sets every one, so unset reads 0px. */
+@property --spacing-c-report-seen {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-mark {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-shelf-room {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-lead-card-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spacing-c-row-reach {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
 }
 /* --echo-scale's one fallback is its own value (ConnectWindow). */
 @property --echo-scale {

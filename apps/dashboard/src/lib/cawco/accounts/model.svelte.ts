@@ -30,6 +30,7 @@ import {
   harnessName,
 } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
+import { keyTail } from "@cawco/core/short-id";
 import { sinceWords } from "@cawco/core/words/account-lines";
 import { accountsWords as words } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
@@ -63,7 +64,7 @@ export const nameOf = (
   account: NameableAccount & Partial<Pick<Account, "kind">>
 ): string => {
   if (account.kind === "api_key" && !account.label && account.email) {
-    return words.keyTail(account.email.replace(ELLIPSIS, "").slice(-4));
+    return words.keyTail(keyTail(account.email.replace(ELLIPSIS, "")));
   }
   return accountNameAmong(account, accountsStore.accounts?.accounts ?? []);
 };

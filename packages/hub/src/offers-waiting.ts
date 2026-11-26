@@ -90,8 +90,8 @@ export const offersWaitingRoutes = (offers: OffersWaiting) =>
       "/api/lfs-refusals/dismiss",
       {
         body: t.Object({
-          projectId: t.String({ minLength: 1, maxLength: 200 }),
-          endpoint: t.String({ minLength: 1, maxLength: 2000 }),
+          projectId: t.String({ minLength: 1 }),
+          endpoint: t.String({ minLength: 1 }),
         }),
       },
       ({ body }) =>

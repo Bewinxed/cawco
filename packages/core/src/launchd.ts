@@ -24,6 +24,7 @@ import { constants, homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { unlessGone } from "./absent";
+import { recordLimitReading } from "./limit-readings";
 import { bootId } from "./process-identity";
 import { runInC } from "./run-captured";
 import { isDamagedRecord, readRecord } from "./state-file";
@@ -47,6 +48,7 @@ export const launchdLog = (name: string, dir = launchdLogsDir()): string =>
  * live file and one `.1` copy, so a service holds at most twice this on disk
  * (our call).
  */
+// @limit recording: core.launchd-log-bytes until 2026-12-26
 const LAUNCHD_LOG_CAP_BYTES = 10 * 1024 * 1024;
 
 /**
@@ -74,6 +76,7 @@ export async function capLaunchdLogs(
       (found) => (found.isFile() ? found.size : 0),
       unlessGone(0)
     );
+    recordLimitReading("core.launchd-log-bytes", size);
     if (size > LAUNCHD_LOG_CAP_BYTES) {
       await copyFile(path, `${path}.1`);
       await truncate(path, 0);

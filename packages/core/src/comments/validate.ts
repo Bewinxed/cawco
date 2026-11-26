@@ -1,14 +1,9 @@
 /** The hub's bounds on what a writer may leave in an artifact's doc. */
 
 import { readFileSpot } from "../file-spot";
-import {
-  commentsFull,
-  seenAnchorTooLong,
-  seenTooManyAnchors,
-} from "../words/comment-lines";
+import { commentsFull } from "../words/comment-lines";
 import {
   attachmentsProblem,
-  CHANGES_LIMIT,
   COMMENT_LIMITS,
   isObject,
   type Pin,
@@ -17,9 +12,6 @@ import {
 
 /** A revision's key in the `seen` map: its number. */
 const REVISION_KEY = /^\d{1,9}$/u;
-
-/** Characters one anchor of a look holds. */
-const SEEN_ANCHOR_MAX = 500;
 
 /**
  * Why a person's `seen` map may not be kept; null when it may: `size`, the
@@ -41,12 +33,6 @@ export function seenProblem(
     )) {
       return "A look is a revision's list of the anchors seen.";
     }
-    if (anchors.length > CHANGES_LIMIT) {
-      return seenTooManyAnchors(CHANGES_LIMIT);
-    }
-    if (anchors.some((anchor) => anchor.length > SEEN_ANCHOR_MAX)) {
-      return seenAnchorTooLong(SEEN_ANCHOR_MAX);
-    }
   }
   return null;
 }
@@ -61,9 +47,6 @@ const entryProblem = (entry: unknown): string | null => {
     typeof entry.at === "string"
   )) {
     return "A thread entry is an object with its id, by, text and at.";
-  }
-  if (entry.text.length > COMMENT_LIMITS.text) {
-    return `A thread entry holds at most ${COMMENT_LIMITS.text} characters.`;
   }
   const attached = attachmentsProblem(entry.attachments);
   if (attached) {
@@ -194,9 +177,6 @@ export function pinsProblem(change: PinsChange): string | null {
       return problem;
     }
   }
-  if (change.standing > COMMENT_LIMITS.pins) {
-    return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
-  }
   if (change.bytes > COMMENT_LIMITS.bytes) {
     return commentsFull(change.bytes, COMMENT_LIMITS.bytes, "page");
   }
@@ -223,10 +203,6 @@ export function pinsProblem(change: PinsChange): string | null {
   return null;
 }
 
-/** The longest pin id a tombstone names, and its time's length. Our call: a UUID and an ISO time fit well inside. */
-const GONE_KEY_MAX = 100;
-const GONE_AT_MAX = 40;
-
 /** A map's values by key, as the doc's `gone` is read: a Yjs map is one. */
 interface KeyedValues {
   get: (key: string) => unknown;
@@ -236,14 +212,13 @@ interface KeyedValues {
 /**
  * Why a person's change of the doc's `gone` (by pin id), `before` to
  * `after`, may not be kept; null when it may: `keys`, each key the change
- * wrote, and `size`, the tombstones `after` holds. A tombstone is written
+ * wrote. A tombstone is written
  * once, by a delete, and stays as it was: a deletion is never undone.
  */
 export function goneProblem(
   before: KeyedValues,
   after: KeyedValues,
-  keys: Iterable<string>,
-  size: number
+  keys: Iterable<string>
 ): string | null {
   const written = [...keys];
   for (const id of written) {
@@ -251,17 +226,9 @@ export function goneProblem(
       return "A deleted comment stays deleted.";
     }
   }
-  if (size > COMMENT_LIMITS.gone) {
-    return `An artifact keeps at most ${COMMENT_LIMITS.gone} deleted comments.`;
-  }
   for (const id of written) {
     const at = after.get(id);
-    if (!(
-      !after.has(id) ||
-      (id.length <= GONE_KEY_MAX &&
-        typeof at === "string" &&
-        at.length <= GONE_AT_MAX)
-    )) {
+    if (!(!after.has(id) || typeof at === "string")) {
       return "A deleted comment is its pin's id and when it was deleted.";
     }
   }
@@ -284,7 +251,5 @@ export const heldNoteProblem = (value: unknown): string | null => {
   )) {
     return "A held note is its time and its words, so nothing was sent.";
   }
-  return value.text.length > COMMENT_LIMITS.text
-    ? `A note holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so nothing was sent. Shorten it, then send again.`
-    : null;
+  return null;
 };

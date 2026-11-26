@@ -222,7 +222,7 @@
           >
         </span>
       {/each}
-      {#each task.labels.slice(0, 2) as label (label)}
+      {#each task.labels.slice(0, /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 2) as label (label)}
         <!-- A tag longer than the card ends in its ellipsis inside the
              badge (DESIGN.md, The Truncate Inside Rule), never past the
              card's edge; the task's own page lists it whole. Its line is
@@ -235,7 +235,7 @@
           ></Badge
         >
       {/each}
-      {#if task.labels.length > 2}
+      {#if task.labels.length > /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 2}
         <Badge data-num figures="tabular" variant="secondary"
           ><span>+{task.labels.length - 2}</span></Badge
         >

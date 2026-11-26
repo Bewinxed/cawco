@@ -59,6 +59,7 @@ const secretsOf = (): string[] => [
  * are six characters or fewer, and scrubbing them out of everything git
  * prints would wreck it.
  */
+// @limit measured: the user names that are no secrets ("git", "x", "oauth2") are six characters or fewer
 const USER_HELD_MIN = 8;
 
 /**

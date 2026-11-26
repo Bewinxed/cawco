@@ -67,10 +67,12 @@ import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
+import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortSha } from "@cawco/core/short-id";
 import { askWords } from "@cawco/core/words/asks";
 import { lastLines } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
@@ -80,6 +82,7 @@ import {
 } from "@cawco/design-tokens/design-tokens";
 import { resolverFiles, tokensIn } from "@cawco/design-tokens/dtcg-resolver";
 import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
+import { namedAndMore } from "@cawco/providers/names";
 import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
@@ -104,8 +107,6 @@ import { isLive } from "./work-item-state";
 import { isHostFolder } from "./workspaces";
 
 const DESIGN_DIR = "design";
-/** The most files one `design_write` takes. */
-export const DESIGN_WRITE_FILES = 40;
 const MANIFEST = "manifest.json";
 const TOKENS = "tokens.json";
 const RESOLVER = "tokens.resolver.json";
@@ -931,7 +932,7 @@ const writeDesign = async (store: DesignStore, files: DesignFile[]) => {
 };
 
 /** The longest a file's text is drawn on a proposal's card. */
-const PREVIEW_CHARS = 60_000;
+const PREVIEW_CHARS = TOOL_ANSWER_CHARS;
 /** Bytes that are text: UTF-8 with no NUL. */
 const textOf = (bytes: Uint8Array | null): string | null => {
   if (!bytes) {
@@ -1436,8 +1437,6 @@ const folderStore = (
 
 /** What `git status` says of design/ that is not committed, a path a line. */
 const UNCOMMITTED = `git status --porcelain --untracked-files=all -- ${DESIGN_DIR}`;
-/** How many uncommitted paths a hold names. */
-const NAMED = 5;
 
 const uncommittedLine = (
   where: string,
@@ -1450,9 +1449,7 @@ const uncommittedLine = (
   if (paths.length === 0) {
     return;
   }
-  const named = paths.slice(0, NAMED).join(", ");
-  const more = paths.length > NAMED ? ` and ${paths.length - NAMED} more` : "";
-  return `design/ isn't committed in ${where}: ${named}${more}. Send it back so the builder commits it, then approve.`;
+  return `design/ isn't committed in ${where}: ${namedAndMore(paths)}. Send it back so the builder commits it, then approve.`;
 };
 
 /** What the project's folder on the hub holds of design/ that no commit has, said as the hold on an approval; nothing when it all is. */
@@ -1601,9 +1598,6 @@ export const designSection = async (
     "Then `design_map` for the components it builds from: mount them, never redraw them (the `design-graph` skill).",
   ].join("\n\n");
 };
-
-/** The longest a proposal's reason runs: its commit's subject carries it. */
-const WHY_LIMIT = 500;
 
 /**
  * Where a session's design/ is: a repository ({@link RepositoryAt}), with the
@@ -1887,12 +1881,6 @@ export const createDesignSystem = (deps: {
         code: "design-why-missing",
         detail:
           "Nothing was written. This changes the project's design system, which goes to the person as a proposal: say why, in one line (why).",
-      });
-    }
-    if (why.length > WHY_LIMIT) {
-      return problem(400, {
-        code: "design-why-long",
-        detail: `Nothing was written. why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`,
       });
     }
     const store = storeAt(projectId, place, actor.id, boardTitle(actor));
@@ -2200,11 +2188,11 @@ export const createDesignSystem = (deps: {
       );
     } else {
       console.log(
-        `[design] ${row.projectId}: ${row.id} approved, committed as ${sha.slice(0, 9)}`
+        `[design] ${row.projectId}: ${row.id} approved, committed as ${shortSha(sha)}`
       );
       deps.tell(
         row.instanceId,
-        `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${sha.slice(0, 9)} in ${row.root ?? "the project's folder"}.`
+        `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${shortSha(sha)} in ${row.root ?? "the project's folder"}.`
       );
     }
     deps.db.designChecks.dropProposal(row.id);

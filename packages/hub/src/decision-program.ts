@@ -58,10 +58,12 @@ import {
   undrawn,
 } from "@cawco/core/house-faces";
 import { blockFile, programLibraryOf } from "@cawco/core/inline-blocks";
+import { listWithin, TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import { type PageLinks, programReferences } from "@cawco/core/reference-faces";
 import { unhandled } from "@cawco/core/unhandled";
 import { cutShort } from "@cawco/core/words/helpers";
 import { transcriptWords } from "@cawco/core/words/transcript";
+import { quoteAround } from "@cawco/providers/quote";
 import {
   type ASTNode,
   createParser,
@@ -80,12 +82,12 @@ process.env.DO_NOT_TRACK = "1";
 export const PROGRAM_FILE = "page.oui";
 
 /** The longest program a page may be. Our bound: 21 cards with their media are about 20 KiB. */
+// @limit measured: the largest update of a page artifact is 804 KiB, an upper bound for the program field (artifact_updates on obelisk, 2026-11-26)
 export const PROGRAM_MAX = 128 * 1024;
 
 /** Where the host page's bundle is served on every preview origin (hub decision-host.ts). */
 export const DECISION_ASSETS = "/__cawco/decision/";
 
-const MAX_PROBLEMS = 8;
 const parser = createParser(spec.schema, spec.root);
 /** A kept block's parser (core views-library.ts `blockLibrary`, tsk-330): a page whose root is a Column is a block's program. */
 const blockParser = createParser(blocksSpec.schema, blocksSpec.root);
@@ -117,7 +119,7 @@ const programRefusal = <const Code extends string>(
     detail:
       unique.length === 1
         ? (unique[0] ?? "")
-        : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+        : `The program has ${unique.length} problems:\n- ${listWithin(unique, TOOL_ANSWER_CHARS, "\n- ")}`,
   });
 };
 
@@ -201,7 +203,6 @@ const CARD_PARTS: ReadonlySet<string> = new Set<DecisionComponentName>([
   "Decision",
   "Option",
 ]);
-const EXCERPT = 60;
 
 /** Where a string stands, as a fault names it: its card and option, or the page's title or a Section's. */
 interface WordsAt {
@@ -209,15 +210,6 @@ interface WordsAt {
   option?: string;
   section?: string;
 }
-
-/** `value` cut to {@link EXCERPT} characters around `at`. */
-const excerpt = (value: string, at: number): string => {
-  if (value.length <= EXCERPT) {
-    return value;
-  }
-  const start = Math.max(0, Math.min(at - 20, value.length - EXCERPT));
-  return `${start > 0 ? "…" : ""}${value.slice(start, start + EXCERPT)}${start + EXCERPT < value.length ? "…" : ""}`;
-};
 
 /** Why one string can't stand in the house face: the characters it lacks, where the string is, and what to write; null when it can. */
 const glyphProblem = (
@@ -242,7 +234,7 @@ const glyphProblem = (
   const lead =
     where.length > 0 ? `${where.join(", ")}: ${what}` : `The page's ${prop}`;
   const chars = missing.map(named).join(", ");
-  return `${lead} “${excerpt(value, value.indexOf(first))}” holds ${chars}, which ${SANS_FAMILY}, the page's face, doesn't draw: it would show as an empty box or in another face. Say what it stands for in words (an icon by its name, like "paperclip"), or leave it out.`;
+  return `${lead} “${quoteAround(value, value.indexOf(first))}” holds ${chars}, which ${SANS_FAMILY}, the page's face, doesn't draw: it would show as an empty box or in another face. Say what it stands for in words (an icon by its name, like "paperclip"), or leave it out.`;
 };
 
 /** Where an element's words stand: in its own card, option or Section, else where it stands itself. */

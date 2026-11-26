@@ -4,12 +4,12 @@
  * app draws none of it, so it is not written into it (scripts/words-swift.ts).
  */
 
+import { andList } from "@cawco/providers/names";
 import type { FleetReportSection } from "../fleet";
 import type { FaultReason } from "../fleet-fault-reason";
 import type { HarnessKind } from "../harness/kinds";
 import { harnessName } from "../harness/kinds";
 import { type HarnessConfigKind, harnessConfigLabel } from "../harness-config";
-import { andList } from "./helpers";
 
 const TRAILING_STOP = /\.$/u;
 

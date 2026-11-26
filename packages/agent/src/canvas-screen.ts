@@ -21,6 +21,7 @@ import {
   type CanvasScreenOpen,
 } from "@cawco/core/canvas";
 import { Duration, Effect, Fiber } from "effect";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 
@@ -63,7 +64,9 @@ export async function openCanvasScreen(
       viewport: { width: 1440, height: 900 },
     });
     await page.addInitScript(HOST_STAND_IN);
-    await page.goto(url, { timeout: CANVAS_LIMITS.screenLoadMs });
+    await timed(page.goto(url, { timeout: CANVAS_LIMITS.screenLoadMs }), (ms) =>
+      recordLimitReading("agent.canvas-screen-load-ms", ms)
+    );
     // The dashboard's hello (stage.svelte.ts `hello`), its canvas docked: no inset.
     await greet(
       page,

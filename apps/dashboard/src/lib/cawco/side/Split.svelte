@@ -119,6 +119,7 @@
    */
   const MAIN_MIN = 30;
   /** The surface's widest share beside the page. */
+  // @limit measured: the whole split less the page's narrowest share, MAIN_MIN: 70 percent of the split
   const SIDE_MAX = 100 - MAIN_MIN;
   /** The surface's share at the far edge: the whole split. */
   const WHOLE = 99.99;

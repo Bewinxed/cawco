@@ -52,6 +52,7 @@ import { type IngressDb, ingressDb } from "./ingress";
 import { type InstancesDb, instancesDb } from "./instances";
 import { type IntakeDb, intakeDb } from "./intake";
 import { type LfsRefusalsDb, lfsRefusalsDb } from "./lfs-refusals";
+import { type LimitReadingsDb, limitReadingsDb } from "./limit-readings";
 import { type MachinesDb, machinesDb } from "./machines";
 import { type McpServersDb, mcpServersDb } from "./mcp-servers";
 import {
@@ -164,6 +165,8 @@ interface HubStore {
   readonly intake: IntakeDb;
   /** LFS servers a checkout named that the project never declared (routes/lfs.ts). */
   readonly lfsRefusals: LfsRefusalsDb;
+  /** The readings of the bounds still waiting on data (limit-readings.ts). */
+  readonly limitReadings: LimitReadingsDb;
   /** When briefs last carried a project's knowledge lessons (memory.ts). */
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
@@ -416,6 +419,7 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     intake: intakeDb(db),
     writes: writesDb(db),
+    limitReadings: limitReadingsDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
     sshMachines: sshMachinesDb(db, hubId),

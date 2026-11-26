@@ -27,6 +27,7 @@ import { recordsProjectOf } from "./records-project";
  * counted and left to `open_items`. The brief asked for the block to stay
  * brief (tsk-519, item 4).
  */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const LISTED_MAX = 10;
 
 /** One open question to the person, as a session's turn lists it. */

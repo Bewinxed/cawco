@@ -124,6 +124,7 @@ import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { createLoopProfiler } from "@cawco/core/loop-profile";
 import { doing, syncSection } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
@@ -200,6 +201,7 @@ import type {
   SentMessage,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { keyTail, shortId } from "@cawco/core/short-id";
 import {
   isEmbedShape,
   STAGE_COMPONENTS,
@@ -299,6 +301,7 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
+import { quote } from "@cawco/providers/quote";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
@@ -530,6 +533,7 @@ import {
   type TakenUpBy,
 } from "./limit-decision";
 import { createLimitMoves } from "./limit-moves";
+import { keepHubReadings, limitReadingsRoutes } from "./limit-readings";
 import { createLinks } from "./links";
 import { createLoginMoves } from "./login-moves";
 import {
@@ -592,7 +596,6 @@ import {
 } from "./plan-changes";
 import { createPlans, planRoutes } from "./plans";
 import { machinesUpdatedWords } from "./presenters/hub";
-import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
   noteParent,
@@ -1122,6 +1125,7 @@ const envelopeOf = (
   };
 };
 /** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
+// @limit recording: hub.leaks-told until 2026-12-03
 const LEAKS_KEPT = 4096;
 
 /**
@@ -2405,7 +2409,7 @@ export const createServer = (
       false,
       "control-reads-keyed",
       () =>
-        `A statement reads ${scan.table} whole (${scan.detail}): ${scan.sql.length > 400 ? `${scan.sql.slice(0, 400)}…` : scan.sql}`
+        `A statement reads ${scan.table} whole (${scan.detail}): ${quote(scan.sql)}`
     );
   });
 
@@ -3566,6 +3570,8 @@ export const createServer = (
     }),
     "own machine id"
   );
+  // The hub's own readings of the bounds still waiting on data, under its machine.
+  keepHubReadings(lifetime, db.limitReadings, () => ownMachineIdRead);
   /**
    * Whether the hub has lost a machine (machine-contact.ts): the one
    * person-facing "didn't answer", Needs you's item and one push, for a
@@ -3639,7 +3645,7 @@ export const createServer = (
     derivedTitle?: string | null;
     id: string;
     title?: string | null;
-  }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
+  }): string => row.title || row.derivedTitle || shortId(row.id);
   /**
    * A session a send wakes: its process is gone, or ended and on its way out
    * (`stopping`), its conversation on record. A stopping one is woken as a
@@ -3980,7 +3986,7 @@ export const createServer = (
       route: jevAccess(db)?.route ?? null,
       typesafe: settings.typesafeKey
         ? {
-            ends: settings.typesafeKey.slice(-4),
+            ends: keyTail(settings.typesafeKey),
             setAt: settings.typesafeKeySetAt?.getTime() ?? null,
           }
         : null,
@@ -4008,7 +4014,7 @@ export const createServer = (
       const [now] = db.getInstancesByIds([continuationNow(row.id)]);
       return {
         reason: continuedInWords(
-          now ? sessionName(now) : row.continuedInto.slice(0, 8)
+          now ? sessionName(now) : shortId(row.continuedInto)
         ),
       };
     }
@@ -4442,11 +4448,14 @@ export const createServer = (
   db.onCredentialsRevoked((hashes) => {
     for (const machineId of registry.machineIds()) {
       detach(
-        callAgent(
-          machineId,
-          CONTROL_FORGET_CREDENTIALS,
-          [hashes],
-          FORGET_CREDENTIALS_TIMEOUT_MS
+        timed(
+          callAgent(
+            machineId,
+            CONTROL_FORGET_CREDENTIALS,
+            [hashes],
+            FORGET_CREDENTIALS_TIMEOUT_MS
+          ),
+          (ms) => recordLimitReading("hub.forget-credentials-ms", ms)
         ).then((answer) => {
           if (answer.kind === "unanswered") {
             console.warn(
@@ -4771,7 +4780,7 @@ export const createServer = (
     const listed = sessions
       .map(
         ({ row }) =>
-          `${artifactLink(row.id, row.title)} (${row.kind} ${idHandle(row.id)})`
+          `${artifactLink(row.id, row.title)} (${row.kind} ${shortId(row.id)})`
       )
       .join(", ");
     const now = sessions.every(
@@ -5341,11 +5350,14 @@ export const createServer = (
           `/__cawco/canvas/${artifact.id}/`
         ),
       };
-      const asked = await callAgent(
-        machineId,
-        CANVAS_SCREEN_OPEN,
-        [open],
-        CANVAS_LIMITS.screenOpenMs
+      const asked = await timed(
+        callAgent(
+          machineId,
+          CANVAS_SCREEN_OPEN,
+          [open],
+          CANVAS_LIMITS.screenOpenMs
+        ),
+        (ms) => recordLimitReading("hub.canvas-screen-open-ms", ms)
       );
       switch (asked.kind) {
         case "unanswered":
@@ -7513,7 +7525,7 @@ export const createServer = (
     machineName,
     sessionName: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
-      return row ? sessionName(row) : instanceId.slice(0, 8);
+      return row ? sessionName(row) : shortId(instanceId);
     },
     projectMoved: (projectId, machines, folderMoved) =>
       projectMoved(projectId, machines, folderMoved),
@@ -8510,12 +8522,16 @@ export const createServer = (
     // A delegate's inputs admitted or read only look at its parent's files,
     // and a folder's checkout is only read ({@link asRead}); every other
     // method here changes the machine.
+    const asked = Date.now();
     const answer =
       method === CONTROL_INPUTS_ADMIT ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_REPO_ROOT
         ? await readAgent(machineId, method, args, timeout)
         : await callAgent(machineId, method, args, timeout);
+    if (timeout === WORKSPACE_TIMEOUT_MS) {
+      recordLimitReading("hub.workspace-control-ms", Date.now() - asked);
+    }
     switch (answer.kind) {
       case "unanswered":
         throw new MachineProblem(
@@ -12353,6 +12369,7 @@ export const createServer = (
       return;
     }
     leaksTold.add(key);
+    recordLimitReading("hub.leaks-told", leaksTold.size);
     const [oldest] = leaksTold;
     if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
       leaksTold.delete(oldest);
@@ -12377,6 +12394,13 @@ export const createServer = (
     machineName,
     noticed: (notice) => {
       rebalanceNotices.unshift(notice);
+      const dropped = rebalanceNotices[REBALANCE_NOTICES_KEPT];
+      if (dropped) {
+        recordLimitReading(
+          "hub.rebalance-notice-dropped-age-ms",
+          Date.now() - dropped.at
+        );
+      }
       rebalanceNotices.splice(REBALANCE_NOTICES_KEPT);
       console.info(
         `[rebalance] ${rebalanceWords(notice).title}: ${rebalanceWords(notice).lines.join(" · ")}`
@@ -13523,6 +13547,9 @@ export const createServer = (
     syncSection("beat: stored sessions dated", () =>
       beatDated(machineId, agentFrame)
     );
+    syncSection("beat: limit readings kept", () =>
+      db.limitReadings.keep(machineId, agentFrame.limitReadings)
+    );
     syncSection("beat: acknowledged", () => {
       const beatIds = agentFrame.instances;
       const tailnetServing = tailnetHttps.serving();
@@ -14089,6 +14116,8 @@ export const createServer = (
           origin: artifactListener,
           passes: db.previewPasses,
           previews: db.previews,
+          machine: () => ownMachineIdRead,
+          readings: db.limitReadings,
           reach: (key) => {
             const origin = originOfKey(key);
             const row =
@@ -14164,7 +14193,12 @@ export const createServer = (
       .use([
         websocket(),
         hubAuth.routes(),
-        dashboardErrorsRoutes(),
+        // What pages report (their errors, their bound readings), one
+        // Elysia of its own for its depth allowance.
+        new Elysia().use([
+          dashboardErrorsRoutes(),
+          limitReadingsRoutes(db.limitReadings),
+        ]),
         delegateTypesRoutes(ctx),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)

@@ -37,6 +37,7 @@ import { Session } from "node:inspector/promises";
 import { join } from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { detach } from "./detach";
+import { recordLimitReading } from "./limit-readings";
 import { type NamedTime, syncSection, tallyNamedWork } from "./loop-watch";
 import { CLOCK_TICKS, threadStat } from "./loop-watch-shared";
 import { MINUTE_MS } from "./time";
@@ -63,6 +64,7 @@ const BUSY_MAIN_PERCENT = 70;
  */
 const AUTO_GAP_MS = 15 * MINUTE_MS;
 /** The profiles kept of each process: the newest, six hours of the ones it takes by itself. */
+// @limit recording: core.loop-profiles-held until 2026-12-03
 const PROFILES_KEPT = 24;
 /** An ISO time's milliseconds, left out of a profile's name. */
 const MILLISECONDS = /\.\d+Z$/u;
@@ -110,6 +112,7 @@ const prune = async (dir: string, who: string): Promise<void> => {
     .filter((name) => named.test(name))
     .sort()
     .reverse();
+  recordLimitReading("core.loop-profiles-held", profiles.length);
   await Promise.all(
     profiles
       .slice(PROFILES_KEPT)

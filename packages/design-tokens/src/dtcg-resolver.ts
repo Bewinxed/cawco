@@ -148,11 +148,9 @@ const validatorsOf = () => {
 };
 
 const errorsOf = (validate: ValidateFunction, where: string): string[] =>
-  (validate.errors ?? [])
-    .slice(0, 8)
-    .map(
-      (e) => `${where}${e.instancePath || "/"} ${e.message ?? "is invalid"}`
-    );
+  (validate.errors ?? []).map(
+    (e) => `${where}${e.instancePath || "/"} ${e.message ?? "is invalid"}`
+  );
 
 /** Each token's resolved `$type` in a tree, by path: its own, else its nearest group's. */
 function typesIn(

@@ -7,6 +7,7 @@
 export const CONTINUATION_CANCELLED = "the continuation was cancelled";
 
 /** The summariser's answer is asked to stay under this; the opening budgets for it. */
+// @limit measured: the model's window (claude_context_windows, or its catalog entry) less its output reserve and the prompt's fixed part, at 2.45 characters a token over 22,145 tool results in the fleet's transcripts (2026-07-25 to 2026-11-26); this is the output reserve of that arithmetic
 export const SUMMARY_CAP_TOKENS = 8000;
 /** Room a summariser needs beyond what it reads, for what it writes. */
 export const SUMMARISER_OUTPUT_RESERVE_TOKENS = 16_000;

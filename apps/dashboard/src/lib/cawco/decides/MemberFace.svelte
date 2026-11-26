@@ -19,14 +19,11 @@
     size: 18 | 24 | 28 | 48 | 56;
   } = $props();
 
-  const initials = $derived(
-    member.name
-      .split(" ")
-      .slice(0, 2)
-      .map((word) => word[0] ?? "")
-      .join("")
-      .toUpperCase()
-  );
+  /** The first letters of the name's first two words. */
+  const initials = $derived.by(() => {
+    const [first = "", second = ""] = member.name.split(" ");
+    return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase();
+  });
 </script>
 
 {#snippet tile(inner: Snippet)}

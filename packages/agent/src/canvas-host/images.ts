@@ -10,6 +10,7 @@
  * sentence the canvas shows over its grid until the person next acts on it.
  */
 import { CANVAS_IMAGE_TYPES, CANVAS_LIMITS } from "@cawco/core/canvas";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
@@ -19,7 +20,6 @@ import {
 } from "@excalidraw/excalidraw";
 import type { FileId } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-
 import { heardFirst } from "./window-events";
 
 const MB = 1024 * 1024;
@@ -50,6 +50,7 @@ export const refusalOf = (file: File): string | null => {
   if (!(file.type in CANVAS_IMAGE_TYPES)) {
     return `${kindOf(file)} isn't an image the canvas takes (${named}), so it wasn't added.`;
   }
+  recordLimitReading("canvas.image-bytes", file.size);
   if (file.size > CANVAS_LIMITS.imageBytes) {
     return `That image is ${sizeOf(file.size)}, and a canvas image can be ${CANVAS_LIMITS.imageBytes / MB} MB at most, so it wasn't added. Shrink it, then paste it again.`;
   }

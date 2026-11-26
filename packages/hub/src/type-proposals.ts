@@ -24,6 +24,7 @@ import { DELEGATE_TYPE_PROPOSAL_TOOL } from "@cawco/core/permission-presentation
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { shortSha } from "@cawco/core/short-id";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
@@ -63,6 +64,7 @@ const proposalIdAt = (at: Date): string => {
     .slice(0, 19)
     .replace(STAMP_PUNCTUATION, "")
     .replace("T", "-");
+  // @limit measured: 6 hex characters of a random UUID are 24 bits; one hub's ids of this kind share the namespace, so two collide after about 2^12 ids
   return `p-${stamp}-${crypto.randomUUID().replaceAll("-", "").slice(0, 6)}`;
 };
 
@@ -113,7 +115,7 @@ const answeredNote = (
       }
     : {
         title: `You approved the change to ${named}`,
-        body: `Committed as your commit ${sha.slice(0, 9)}.`,
+        body: `Committed as your commit ${shortSha(sha)}.`,
         event: { kind: "file", what: "approved", path, sha },
       };
 };
@@ -249,7 +251,7 @@ export const createTypeProposals = ({
     folderChanged(project.id);
     parkProposal(proposal);
     console.log(
-      `[type proposals] ${project.name}: ${proposal.id} by ${proposal.by} proposes ${pathsOf(proposal)} at ${written.sha.slice(0, 9)}`
+      `[type proposals] ${project.name}: ${proposal.id} by ${proposal.by} proposes ${pathsOf(proposal)} at ${shortSha(written.sha)}`
     );
   };
 

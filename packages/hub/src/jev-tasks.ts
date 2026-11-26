@@ -25,9 +25,10 @@ import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
 import { type JevAccess, jevAccess } from "./jev";
 import {
-  DUPLICATE_CANDIDATES_MAX,
   type DuplicateBrief,
+  duplicateBriefSize,
   head,
+  JEV_BUDGET_CHARS,
   jevDuplicate,
   jevPhone,
   jevTriage,
@@ -72,14 +73,14 @@ export type DuplicateOutcome =
       candidates: { id: string; title: string }[];
       /** What the filing session reads. */
       ask: string;
-      /** Open tasks left out of the comparison: past the nearest {@link DUPLICATE_CANDIDATES_MAX}. */
+      /** Open tasks left out of the comparison: past the nearest ones that fit Jev's window. */
       notCompared?: number;
     }
   | {
       by: "jev" | "rule" | "session";
       duplicateOf: null;
       note?: string;
-      /** Open tasks left out of the comparison: past the nearest {@link DUPLICATE_CANDIDATES_MAX}. */
+      /** Open tasks left out of the comparison: past the nearest ones that fit Jev's window. */
       notCompared?: number;
     };
 
@@ -114,9 +115,9 @@ export const createJevTasks = ({
   const key = () => jevAccess(db);
 
   /**
-   * The open tasks filed before `newTask`, the {@link DUPLICATE_CANDIDATES_MAX}
-   * whose titles share the most words with it (the newest changed first among
-   * equals), as their files read, and how many more were not taken: a task is a duplicate of one that was there first, never of
+   * The open tasks filed before `newTask` whose titles share the most words
+   * with it (the newest changed first among equals), as many as fit Jev's
+   * window, as their files read, and how many more were not taken: a task is a duplicate of one that was there first, never of
    * one filed after it (two filed together are each judged once, the later
    * against the earlier).
    */
@@ -136,20 +137,20 @@ export const createJevTasks = ({
       )
       .map((task) => ({ task, score: grepScore(wanted, task.title) }))
       .sort((a, b) => b.score - a.score || b.task.updatedAt - a.task.updatedAt);
-    const open = eligible
-      .slice(0, DUPLICATE_CANDIDATES_MAX)
-      .map(({ task }) => task);
-    const read = await Promise.all(
-      open.map((task) => tasks.get(projectId, task.id))
-    );
     const candidates: TaskView[] = [];
-    for (const task of read) {
-      if (task instanceof ElysiaStatus) {
-        return task;
+    let used = JSON.stringify(briefOf(newTask)).length;
+    for (const { task } of eligible) {
+      const view = await tasks.get(projectId, task.id);
+      if (view instanceof ElysiaStatus) {
+        return view;
       }
-      candidates.push(task);
+      used += duplicateBriefSize(briefOf(view));
+      if (used > JEV_BUDGET_CHARS && candidates.length > 0) {
+        break;
+      }
+      candidates.push(view);
     }
-    return { candidates, notCompared: eligible.length - open.length };
+    return { candidates, notCompared: eligible.length - candidates.length };
   };
 
   /** Drops `task` as a duplicate of `of`, as the hub, saying why; the words of its refusal when it was not dropped. */

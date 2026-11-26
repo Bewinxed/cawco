@@ -9,6 +9,7 @@
  */
 
 import { heapStats } from "bun:jsc";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 
 /**
  * Each gauge by name: how many entries (or MB, when the name says so) a table
@@ -43,6 +44,7 @@ const MB = 1024 * 1024;
 const mb = (bytes: number): number => Math.round(bytes / MB);
 
 /** How many object types {@link memoryLine} names, most numerous first. */
+// @limit recording: agent.memory-object-types until 2026-12-10
 const TOP_TYPES = 15;
 
 /**
@@ -54,6 +56,10 @@ const TOP_TYPES = 15;
 export const memoryLine = (): string => {
   const { rss } = process.memoryUsage();
   const stats = heapStats();
+  recordLimitReading(
+    "agent.memory-object-types",
+    Object.keys(stats.objectTypeCounts).length
+  );
   const top = Object.entries(stats.objectTypeCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, TOP_TYPES)

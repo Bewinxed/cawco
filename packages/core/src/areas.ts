@@ -125,9 +125,6 @@ export const settingsInEffect = (
   };
 };
 
-/** An area's name: trimmed, one line, 1 to {@link AREA_NAME_LIMIT} characters. */
-export const AREA_NAME_LIMIT = 80;
-
 /**
  * What reaching a project's spend cap does (Projects spec §5.3): `pause`
  * starts no new attempts at its tasks, `quiet` books what would wake its Caw

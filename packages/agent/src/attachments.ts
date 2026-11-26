@@ -13,6 +13,7 @@ import {
   type TextAttachment,
 } from "@cawco/core/attachments";
 import { readWithin } from "@cawco/core/bounded";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type { SendPayload } from "@cawco/core/protocol";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -23,6 +24,7 @@ import { provenFetch } from "./hub-proof";
 const attachmentsDir = (): string => join(homedir(), ".cawco", "attachments");
 
 /** How long one file's fetch from the hub may take. */
+// @limit recording: agent.attachment-fetch-ms until 2026-12-26
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 const fetchFailed = (file: FileAttachment, why: string): Error =>
@@ -39,19 +41,22 @@ async function deliverFile(
   file: FileAttachment
 ): Promise<string> {
   const path = join(attachmentsDir(), attachedFileName(sessionId, file));
-  const read = await readWithin<{ bytes: Uint8Array } | { status: number }>(
-    FETCH_TIMEOUT_MS,
-    async (signal) => {
-      // As this machine, with its key's proof: a hub that requires paired
-      // devices, and the door of an SSH-added machine, take no request
-      // without one (hub hub-auth.ts).
-      const response = await provenFetch(`${delegationHubUrl()}${file.ref}`, {
-        signal,
-      });
-      return response.ok
-        ? { bytes: new Uint8Array(await response.arrayBuffer()) }
-        : { status: response.status };
-    }
+  const read = await timed(
+    readWithin<{ bytes: Uint8Array } | { status: number }>(
+      FETCH_TIMEOUT_MS,
+      async (signal) => {
+        // As this machine, with its key's proof: a hub that requires paired
+        // devices, and the door of an SSH-added machine, take no request
+        // without one (hub hub-auth.ts).
+        const response = await provenFetch(`${delegationHubUrl()}${file.ref}`, {
+          signal,
+        });
+        return response.ok
+          ? { bytes: new Uint8Array(await response.arrayBuffer()) }
+          : { status: response.status };
+      }
+    ),
+    (ms) => recordLimitReading("agent.attachment-fetch-ms", ms)
   ).catch((error: unknown) => {
     throw fetchFailed(
       file,

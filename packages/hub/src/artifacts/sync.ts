@@ -17,8 +17,8 @@
  * canvas's screen may write its `elements` and `files`, its pen mode in
  * `meta`, and its claims and results on the agent's `requests`, within the
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
- * its moved groups and its pins (`ink`, `moved`, `pins`), within core
- * `INK_LIMITS`. Each update is checked against what it wrote alone, on a
+ * its moved groups and its pins (`ink`, `moved`, `pins`), as core `ink.ts`
+ * reads them. Each update is checked against what it wrote alone, on a
  * copy of the doc kept in step with it (gate.ts). An update that breaks
  * them is not applied, and its writer is told why on its socket, which
  * stays open ({@link refusal}): never a closed socket, so nothing the writer
@@ -31,6 +31,7 @@ import { rm } from "node:fs/promises";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { getMeta, setMeta } from "@cawco/core/doc-meta";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { writeStateFile } from "@cawco/core/state-file";
 import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
@@ -161,6 +162,7 @@ export const artifactPicture =
       });
     }
     const body = new Uint8Array(await request.arrayBuffer());
+    recordLimitReading("hub.canvas-picture-bytes", body.length);
     if (body.length > CANVAS_LIMITS.pictureBytes) {
       return problemResponse({
         status: 413,

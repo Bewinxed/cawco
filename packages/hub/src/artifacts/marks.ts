@@ -12,7 +12,6 @@ import {
   withoutHeld,
 } from "@cawco/core/comments/deliver";
 import {
-  COMMENT_LIMITS,
   type CommentAttachment,
   heldNoteOf,
   type Pin,
@@ -41,7 +40,6 @@ import {
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
   askedAgainLine,
-  noCropLine,
   notedLine,
   wroteLine,
 } from "@cawco/core/words/comment-lines";
@@ -92,10 +90,8 @@ const errorSection = (error: StageError): string => {
 const FINAL_STOP = /\.$/u;
 
 /**
- * How one stored attachment rides a delivery: a picture as an image block
- * while the message has room (core `COMMENT_LIMITS.pictures`, each at most
- * `pictureChars`), past that as a file; a text folded in; anything else a
- * file the session's machine keeps.
+ * How one stored attachment rides a delivery: a picture as an image block; a
+ * text folded in; anything else a file the session's machine keeps.
  */
 function carryOne(
   one: CommentAttachment,
@@ -105,16 +101,9 @@ function carryOne(
   // A picture of a type every session takes (Claude Code's four) rides as a
   // picture; any other as a file, which reaches a session on any harness.
   const { mediaType } = one;
-  if (
-    one.kind === "image" &&
-    isClaudeImageMediaType(mediaType) &&
-    images.length < COMMENT_LIMITS.pictures
-  ) {
-    const data = bytes.toString("base64");
-    if (data.length <= COMMENT_LIMITS.pictureChars) {
-      images.push({ data, mediaType });
-      return { carried: { picture: images.length } };
-    }
+  if (one.kind === "image" && isClaudeImageMediaType(mediaType)) {
+    images.push({ data: bytes.toString("base64"), mediaType });
+    return { carried: { picture: images.length } };
   }
   if (one.kind === "text") {
     return {
@@ -484,9 +473,7 @@ export const createMarks = (ctx: MarksContext) => {
   /**
    * How one delivery carries what the person's unheard entries attach
    * (attachments design §5): each picture as an image block after its pin's
-   * crop, in the order attached, while the message's picture caps hold
-   * (core `COMMENT_LIMITS.pictures`, `pictureChars`), past them as a file;
-   * each text folded in; anything else a file the session's machine keeps.
+   * crop, in the order attached; each text folded in; anything else a file the session's machine keeps.
    * A picture's number is its place in the message.
    */
   const carryAttachments = (
@@ -496,14 +483,10 @@ export const createMarks = (ctx: MarksContext) => {
     const images: TurnImage[] = [];
     const attachments: SendAttachment[] = [];
     const carried = new Map<string, Carried>();
-    // Marks whose crop the message had no room for: the delivery names them.
-    const uncropped: Pin[] = [];
     for (const pin of owed) {
       const picture = crop(pin);
-      if (picture && images.length < COMMENT_LIMITS.pictures) {
+      if (picture) {
         images.push({ data: picture, mediaType: "image/png" });
-      } else if (picture) {
-        uncropped.push(pin);
       }
       const stored = unheardEntries(pin).flatMap((entry) =>
         (entry.attachments ?? []).flatMap((one) => {
@@ -523,7 +506,7 @@ export const createMarks = (ctx: MarksContext) => {
         }
       }
     }
-    return { images, attachments, carried, uncropped };
+    return { images, attachments, carried };
   };
   /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
@@ -580,7 +563,7 @@ export const createMarks = (ctx: MarksContext) => {
       return "nothing";
     }
     const url = ctx.addressOf(id, doc);
-    const { images, attachments, carried, uncropped } = carryAttachments(
+    const { images, attachments, carried } = carryAttachments(
       owed,
       (pin) => held.picture(id, pin.id) ?? undefined
     );
@@ -588,14 +571,6 @@ export const createMarks = (ctx: MarksContext) => {
     const note = only ? undefined : heldNoteOf(doc);
     const marks = [
       ...(note && owed.length > 0 ? [notedLine(note.text)] : []),
-      ...(uncropped.length > 0
-        ? [
-            noCropLine(
-              COMMENT_LIMITS.pictures,
-              uncropped.map((pin) => linkOfPin(row.id, pin))
-            ),
-          ]
-        : []),
       ...pinSections(
         row.id,
         owed,

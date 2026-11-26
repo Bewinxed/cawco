@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shortId } from "@cawco/core/short-id";
   import { memoryResult } from "@cawco/core/tool-presentation";
   import {
     type FleetMemoryVersion,
@@ -233,7 +234,7 @@
     }
     const parts = [
       action === "set" || action === "set_doc" ? "saved" : undefined,
-      parsed.hash?.slice(0, 7),
+      parsed.hash ? shortId(parsed.hash) : undefined,
       parsed.updatedAt ? clock(parsed.updatedAt) : undefined,
     ].filter(Boolean);
     return parts.length ? parts.join(" · ") : undefined;

@@ -7,12 +7,13 @@ import {
 import { sentSkeletonsRefusal } from "@cawco/core/canvas-skeleton";
 import type { MapChange } from "@cawco/core/doc-maps";
 import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
+import { timedEffect } from "@cawco/core/effect/timed";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { ElysiaStatus, problem } from "elysia";
 import { type ArtifactRow, isSessionArtifact } from "../../db/artifacts";
-
 import {
   canvasEntries,
   clearDrawing,
@@ -197,7 +198,9 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     }
     if (
       await ctx.deps.lifetime.run(
-        screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)
+        timedEffect(screenJoined(docs, row.id, CANVAS_LIMITS.convertMs), (ms) =>
+          recordLimitReading("hub.canvas-convert-ms", ms)
+        )
       )
     ) {
       return one;
@@ -272,8 +275,14 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       return;
     }
     const meta = docMeta(docs.doc(id));
+    const lastWrite = Date.now();
     const pictured = (event: MapChange) => {
       if (event.keysChanged.has("pictureAt")) {
+        // The picture that follows a canvas's last write: how long after.
+        recordLimitReading(
+          "hub.canvas-picture-after-write-ms",
+          Date.now() - lastWrite
+        );
         letGoHeadless(id);
       }
     };
@@ -303,21 +312,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     replace = false
   ) => {
     if ("elements" in change) {
-      if (change.elements.length > CANVAS_LIMITS.elementsPerCall) {
-        return problem(413, {
-          code: "artifact-canvas-elements-many",
-          detail: `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`,
-        });
-      }
       const refusal = sentSkeletonsRefusal(change.elements);
       if (refusal !== undefined) {
         return unconverted(refusal);
       }
-    } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
-      return problem(413, {
-        code: "artifact-canvas-mermaid-long",
-        detail: `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`,
-      });
     }
     const replacing = replace ? { replace: true as const } : {};
     const convert = () =>
@@ -573,12 +571,6 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     ownersRead: boolean
   ) => {
     if ("delete" in change) {
-      if (change.delete.length > CANVAS_LIMITS.deletePerCall) {
-        return problem(413, {
-          code: "artifact-canvas-deletes-many",
-          detail: `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`,
-        });
-      }
       const before = canvasEntries(docs, row.id);
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
       const fresh = markSceneChanges(row, before);

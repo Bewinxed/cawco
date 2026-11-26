@@ -66,6 +66,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@cawco/agent": "workspace:*",
     "@cawco/hub": "workspace:*",
     "@iconify-json/iconoir": "^1.2.12",
     "@iconify-json/logos": "^1.2.15",

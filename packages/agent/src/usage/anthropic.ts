@@ -58,6 +58,7 @@ import { accountLogin } from "../move-login";
 
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage?skip_spend=1";
 /** Claude Code's own bound on the read (`timeout:5000`, 2.1.325). */
+// @limit external: Claude Code's own bound on the usage read, timeout:5000 (2.1.325)
 const TIMEOUT_MS = 5000;
 /** A login this close to its expiry is renewed first: the read would outlive it. */
 const EXPIRY_MARGIN_MS = 60_000;

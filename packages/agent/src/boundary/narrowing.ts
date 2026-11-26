@@ -9,11 +9,12 @@ import { cutShort } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
+import { namedAndMore } from "@cawco/providers/names";
 import { membershipName } from "../boundary-policy";
 import type { SessiondClient } from "../sessiond-client";
 import type { NarrowCause } from "./decisions";
 import { type Seen, snapshot } from "./place-guard";
-import { pathsOf, REASONS_SAID } from "./plan";
+import { pathsOf } from "./plan";
 import {
   answering,
   commandsIn,
@@ -374,11 +375,9 @@ export const tellStopped = async (
   return line;
 };
 
-/** Why a narrowed boundary was replaced, in a delegate's words: at most {@link REASONS_SAID} reasons, then how many more. */
-export const narrowedCause = (narrowed: readonly string[]): string => {
-  const more = narrowed.length - REASONS_SAID;
-  return `this workspace's access was narrowed (${narrowed.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""}), so its boundary was replaced`;
-};
+/** Why a narrowed boundary was replaced, in a delegate's words: the first few reasons, then how many more. */
+export const narrowedCause = (narrowed: readonly string[]): string =>
+  `this workspace's access was narrowed (${namedAndMore(narrowed)}), so its boundary was replaced`;
 
 /** The generations of a workspace whose access narrowed ({@link narrowedGenerations}): the current one's reasons (none when it did not), and each older one still beside it that did. */
 export interface Narrowed {

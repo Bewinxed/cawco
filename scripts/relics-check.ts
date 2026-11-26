@@ -118,9 +118,7 @@ const counts = new Map<Kind, number>(KINDS.map((kind) => [kind, 0]));
 const found: string[] = [];
 const note = (file: string, line: number, kind: Kind, text: string) => {
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  found.push(
-    `${relative(ROOT, file)}:${line}  ${kind}  ${text.trim().slice(0, 140)}`
-  );
+  found.push(`${relative(ROOT, file)}:${line}  ${kind}  ${text.trim()}`);
 };
 
 for (const file of files) {

@@ -57,11 +57,10 @@
  */
 import { createHash } from "node:crypto";
 import { networkInterfaces } from "node:os";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   AWAY_AFTER_DEFAULT_MS,
-  AWAY_AFTER_MAX_MS,
-  AWAY_AFTER_MIN_MS,
   DEVICE_TTL_MS,
   type DeskAck,
   type DismissVia,
@@ -78,6 +77,7 @@ import {
   type PresenceDevice,
 } from "@cawco/core/notifications";
 import { plainAddress } from "@cawco/core/public-address";
+import { shortId } from "@cawco/core/short-id";
 import { MachineStateSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
@@ -104,9 +104,11 @@ const CLIENT_KEPT_MS = DAY_MS;
  * outlet takes from an item landing to offering it (a turn's grace, a task's
  * read).
  */
+// @limit recording: hub.front-asked-back-ms until 2026-12-10
 const FRONT_KEPT_MS = 10 * 60_000;
 /** How far back a push's `cawco.cleared` reaches, and how many it carries. */
 const CARRIED_MS = DAY_MS;
+// @limit external: APNs takes a payload of 4,096 bytes and a collapse id of 64 bytes (https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification); 50 ids of 64 bytes with their quotes and commas are 3,350 bytes of it, leaving 746 for the alert
 const CARRIED_IDS = 50;
 /** How long sends and clears are kept. */
 const KEPT_MS = 3 * DAY_MS;
@@ -119,9 +121,10 @@ const DEVICE_SKEW_MS = 120_000;
 
 /** A collapse id fits APNs' 64 bytes: long ids go as their hash. */
 const collapseOf = (prefix: string, id: string): string =>
+  // @limit external: APNs' apns-collapse-id, 64 bytes (developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
   `${prefix}-${id}`.length <= 64
     ? `${prefix}-${id}`
-    : `${prefix}-${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
+    : `${prefix}-${createHash("sha256").update(id).digest("hex").slice(0, /* @limit measured: 40 hex characters are 160 bits of a hash; collapse ids share one namespace, so two collide after about 2^80 names */ 40)}`;
 
 /** An ask's collapse id, the same on every device. */
 export const askCollapseId = (requestId: string): string =>
@@ -340,7 +343,7 @@ const lockSince = (
 const labelOf = (device: DeviceFacts): string =>
   device.kind === "send"
     ? "a send from no device that beats"
-    : `${device.kind} ${device.id.slice(0, 8)}`;
+    : `${device.kind} ${shortId(device.id)}`;
 
 /** The device with the newest input, or null when none has said any. */
 const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
@@ -952,6 +955,8 @@ export const createNotifications = ({
   /** A client reading the session now, or one was at some moment since `since`. */
   const inFrontSince = (instanceId: string, since: number): boolean => {
     const now = Date.now();
+    // How far back an outlet asks: what FRONT_KEPT_MS must still hold.
+    recordLimitReading("hub.front-asked-back-ms", now - since);
     for (const client of clients.values()) {
       if (client.sessionId === instanceId && readUntil(client) > now) {
         return true;
@@ -966,7 +971,7 @@ export const createNotifications = ({
       : `input ${Math.round((now - at) / 1000)}s ago`;
 
   const said = (clientId: string, client: Client, now: number): string =>
-    `[presence] ${client.client} ${clientId.slice(0, 8)}: ${client.active && client.sessionId ? `active on ${client.sessionId}` : `inactive (${client.sessionId ?? "no session"} in front)`}, ${ago(client.inputAt, now)}${client.machine ? `, machine ${client.machine}` : ""}${client.handheld ? ", handheld" : ""}`;
+    `[presence] ${client.client} ${shortId(clientId)}: ${client.active && client.sessionId ? `active on ${client.sessionId}` : `inactive (${client.sessionId ?? "no session"} in front)`}, ${ago(client.inputAt, now)}${client.machine ? `, machine ${client.machine}` : ""}${client.handheld ? ", handheld" : ""}`;
 
   /**
    * A beat worth a log line: a new client, another session or state, one
@@ -1012,7 +1017,7 @@ export const createNotifications = ({
       lapsed.add(clientId);
       if (client.active && client.sessionId) {
         console.log(
-          `[presence] ${client.client} ${clientId.slice(0, 8)}: lapsed, no beat for ${PRESENCE_TTL_MS / 1000}s while active on ${client.sessionId}`
+          `[presence] ${client.client} ${shortId(clientId)}: lapsed, no beat for ${PRESENCE_TTL_MS / 1000}s while active on ${client.sessionId}`
         );
       }
     }
@@ -1063,7 +1068,7 @@ export const createNotifications = ({
       // Said before the beat already kept: it landed late, and is over.
       if (before !== undefined && beat.saidAt < before.saidAt) {
         console.log(
-          `[presence] ${beat.client} ${beat.clientId.slice(0, 8)}: a beat said ${before.saidAt - beat.saidAt}ms before the one kept landed late; dropped`
+          `[presence] ${beat.client} ${shortId(beat.clientId)}: a beat said ${before.saidAt - beat.saidAt}ms before the one kept landed late; dropped`
         );
         return;
       }
@@ -1127,12 +1132,12 @@ export const createNotifications = ({
         const [clientId, client] = found;
         keepClient(clientId, { ...client, inputAt: now, at: now });
         console.log(
-          `[presence] ${client.client} ${clientId.slice(0, 8)}: the person's send to ${instanceId.slice(0, 8)}, counted as input there`
+          `[presence] ${client.client} ${shortId(clientId)}: the person's send to ${shortId(instanceId)}, counted as input there`
         );
       } else {
         keepSpoke(now, instanceId);
         console.log(
-          `[presence] the person's send to ${instanceId.slice(0, 8)} from no device that beats on it: counted as input`
+          `[presence] the person's send to ${shortId(instanceId)} from no device that beats on it: counted as input`
         );
       }
       reroll();
@@ -1157,7 +1162,7 @@ export const createNotifications = ({
       // states this hub reads.
       if (!MachineStateSchema.safeParse(activity.state).success) {
         console.log(
-          `[presence] machine ${machineId.slice(0, 8)}: a state this hub does not know, ${JSON.stringify(activity.state)}; dropped`
+          `[presence] machine ${shortId(machineId)}: a state this hub does not know, ${JSON.stringify(activity.state)}; dropped`
         );
         return;
       }
@@ -1172,7 +1177,7 @@ export const createNotifications = ({
       });
       if (before?.state !== activity.state) {
         console.log(
-          `[presence] machine ${machineId.slice(0, 8)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)`
+          `[presence] machine ${shortId(machineId)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)`
         );
       }
       reroll();
@@ -1256,7 +1261,7 @@ export const createNotifications = ({
         db.presence.dropClient(machineId);
       }
       console.log(
-        `[presence] machine ${machineId.slice(0, 8)}: ${on ? "counts" : "does not count"} toward the person`
+        `[presence] machine ${shortId(machineId)}: ${on ? "counts" : "does not count"} toward the person`
       );
       reroll();
       return viewOf(told, Date.now());
@@ -1421,7 +1426,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
       "/api/presence",
       {
         body: t.Object({
-          clientId: t.String({ minLength: 1, maxLength: 200 }),
+          clientId: t.String({ minLength: 1 }),
           client: t.Union([
             t.Literal("web"),
             t.Literal("ios"),
@@ -1459,7 +1464,8 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
       "/api/presence/desk-ack",
       {
         body: t.Object({
-          clientId: t.String({ minLength: 1, maxLength: 200 }),
+          clientId: t.String({ minLength: 1 }),
+          // @limit external: APNs' apns-collapse-id, 64 bytes (developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
           collapseId: t.String({ minLength: 1, maxLength: 64 }),
           how: t.Union([
             t.Literal("notification"),
@@ -1488,10 +1494,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
       "/api/person/away-clock",
       {
         body: t.Object({
-          awayAfterMs: t.Integer({
-            minimum: AWAY_AFTER_MIN_MS,
-            maximum: AWAY_AFTER_MAX_MS,
-          }),
+          awayAfterMs: t.Integer({ minimum: 1 }),
         }),
       },
       ({ body }) => notifications.setAwayAfter(body.awayAfterMs)
@@ -1508,9 +1511,8 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
       "/api/notifications/dismiss",
       {
         body: t.Object({
-          collapseIds: t.Array(t.String({ minLength: 1, maxLength: 64 }), {
-            maxItems: 200,
-          }),
+          // @limit external: APNs' apns-collapse-id, 64 bytes (developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
+          collapseIds: t.Array(t.String({ minLength: 1, maxLength: 64 })),
           via: t.Union([
             t.Literal("open"),
             t.Literal("action"),
@@ -1518,6 +1520,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
           ]),
           deliveredAt: t.Optional(
             t.Record(
+              // @limit external: APNs' apns-collapse-id, 64 bytes (developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
               t.String({ minLength: 1, maxLength: 64 }),
               t.Number({ minimum: 0 })
             )

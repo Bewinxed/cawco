@@ -46,6 +46,7 @@
   const H = 90;
   /** Progress from a little under 0 to a little over 1, so an overshoot stands inside the box (a spring's past it is drawn past the box's edge). */
   const LOW = -0.25;
+  // @limit measured: the top of what the graph draws (yOf maps HIGH to its top edge), so a dragged point stays on the graph
   const HIGH = 1.25;
   const yOf = (p: number) => (H * (HIGH - p)) / (HIGH - LOW);
   /** The numbers while a point is held; the curve's own at rest. */

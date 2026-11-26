@@ -10,12 +10,17 @@ import {
 } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type { ControlPayload } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { controlWords } from "@cawco/core/words/controls";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 import type { z } from "zod";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
+import {
+  CONTROL_TIMEOUT_MS,
+  DISCARD_TIMEOUT_MS,
+  INSTALL_TIMEOUT_MS,
+} from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
 import { machineConnected, machineName } from "../stores/board.svelte";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "../unanswered";
@@ -63,7 +68,17 @@ export function askOf<T>(
       new Error(machineFaultWords(machineName(machineId), "offline"))
     );
   }
-  return ask(requestId, timeoutMs, dispatch, readAnswer);
+  return timed(ask(requestId, timeoutMs, dispatch, readAnswer), (ms) => {
+    // How long a machine took to answer a control held to one of the
+    // dashboard's shared waits (config.ts).
+    if (timeoutMs === CONTROL_TIMEOUT_MS) {
+      recordLimitReading("dashboard.control-ms", ms);
+    } else if (timeoutMs === DISCARD_TIMEOUT_MS) {
+      recordLimitReading("dashboard.discard-ms", ms);
+    } else if (timeoutMs === INSTALL_TIMEOUT_MS) {
+      recordLimitReading("dashboard.install-tool-ms", ms);
+    }
+  });
 }
 
 /**

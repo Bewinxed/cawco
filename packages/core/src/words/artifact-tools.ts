@@ -1,5 +1,6 @@
 import type { PageFault } from "../page-faults";
 import { artifactLink } from "../references";
+import { shortId } from "../short-id";
 import { cutShort } from "./helpers";
 
 /**
@@ -36,7 +37,7 @@ export const artifactToolWords = {
     at: string,
     why: string
   ) =>
-    `[artifacts] design ${name} (${tree.slice(0, 8)}): ${hop} (${at}) failed: ${why}`,
+    `[artifacts] design ${name} (${shortId(tree)}): ${hop} (${at}) failed: ${why}`,
   /** `artifact_read` of a design folder with story, state, render or verify, which read a states file's stories: the reads that serve its pages. */
   designFolderRead: (name: string) =>
     `${name} is a design folder: story, state, render and verify read a states file's stories, and its pages have none. artifact_read({ id: "${name}", png: true }) draws its first page, and artifact_browse({ id: "${name}" }) opens each page in your browser tool.`,

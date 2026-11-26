@@ -12,6 +12,7 @@ import type { ArtifactPick } from "@cawco/core/artifact-kinds";
 import { pinStandsOn } from "@cawco/core/comments/deliver";
 import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import { artifactLink } from "@cawco/core/references";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import {
   type CanvasSpec,
   type DesignMap,
@@ -53,10 +54,10 @@ import {
   ago,
   ahead,
   count,
-  handle,
   lines,
   listed,
   quote,
+  valueExcerpt,
   valueWords,
   verbatim,
 } from "./words";
@@ -174,7 +175,7 @@ const statusLine = (status: ArtifactStatus, now: number): string => {
     ...(status.madeByLink ? [`put here by ${status.madeByLink}`] : []),
     `changed ${ago(status.updatedAt, now)}`,
   ];
-  return `- ${named(status)}, ${status.does}: ${quote(status.ask, 140)} · ${facts.join(" · ")}`;
+  return `- ${named(status)}, ${status.does}: ${quote(status.ask)} · ${facts.join(" · ")}`;
 };
 
 /** `artifact_list`: a page of every artifact the session's tools act on, newest first. */
@@ -192,7 +193,7 @@ export const artifactListWords = (list: ArtifactList): string => {
 
 /** One choice's answer as a line. */
 const answerLine = (answer: DecisionAnswer, now: number): string => {
-  const asked = `${answer.id}${answer.question ? ` ${quote(answer.question, 100)}` : ""}`;
+  const asked = `${answer.id}${answer.question ? ` ${quote(answer.question)}` : ""}`;
   const note =
     answer.answer !== "open" && answer.answer !== "words" && answer.note
       ? `; note ${verbatim(answer.note)}`
@@ -205,7 +206,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
     case "open":
       return `- ${asked}: no pick yet${answer.note ? `; note ${verbatim(answer.note)}` : ""}`;
     case "picked":
-      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}${answer.from ? `. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}` : ""}`;
+      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}${answer.from ? `. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}` : ""}`;
     case "cleared":
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
     case "words":
@@ -367,7 +368,7 @@ const componentLines = (read: ComponentRead): string[] => {
           `Frames, as ${render.by} drew them:`,
           ...render.frames.map(
             (frame) =>
-              `- ${frame.direction} · ${frame.story}${frame.label ? ` ${quote(frame.label, 60)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
+              `- ${frame.direction} · ${frame.story}${frame.label ? ` ${quote(frame.label)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
           ),
           ...(render.cut ? [render.cut] : []),
           ...(render.unnamed.length > 0
@@ -391,7 +392,7 @@ const componentLines = (read: ComponentRead): string[] => {
           "Stories:",
           ...read.stories.map(
             (story) =>
-              `- ${story.name}${story.label ? ` ${quote(story.label, 60)}` : ""}: ${story.interactions.join(", ") || "not drawn"}${story.argsChanged.length > 0 ? `; sets ${story.argsChanged.join(", ")}` : ""}`
+              `- ${story.name}${story.label ? ` ${quote(story.label)}` : ""}: ${story.interactions.join(", ") || "not drawn"}${story.argsChanged.length > 0 ? `; sets ${story.argsChanged.join(", ")}` : ""}`
           ),
         ]
       : []),
@@ -406,17 +407,19 @@ const componentLines = (read: ComponentRead): string[] => {
       : []),
     ...(read.dials === undefined
       ? []
-      : [`The person's dials: ${valueWords(read.dials, 600)}`]),
+      : [`The person's dials: ${valueExcerpt(read.dials, 600)}`]),
     ...(read.tuned === undefined
       ? []
-      : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
+      : [`What they tuned: ${valueExcerpt(read.tuned, 600)}`]),
     ...pickedLines(read),
-    ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
+    ...(read.frame
+      ? [`The frame asked: ${valueExcerpt(read.frame, 2000)}`]
+      : []),
     ...(read.layout ? layoutWords.lines(read.layout) : []),
     ...(read.measured ? measureWords.lines(read.measured) : []),
     ...(read.story
       ? [
-          `Story ${read.story.name}: args ${valueWords(read.story.args, 1500)}; code ${valueWords(read.story.code, 1500)}`,
+          `Story ${read.story.name}: args ${valueExcerpt(read.story.args, 1500)}; code ${valueExcerpt(read.story.code, 1500)}`,
         ]
       : []),
     ...(read.weight
@@ -520,7 +523,7 @@ export const artifactReadWords = (
     canvasLines(read, now),
     writeLines(read),
     read.workspace &&
-      `It previews a server of workspace ${handle(read.workspace)}.`,
+      `It previews a server of workspace ${shortId(read.workspace)}.`,
     stageWords(read),
     "errors" in read && componentLines(read),
     read.program !== undefined &&
@@ -697,7 +700,7 @@ const componentChangedWords = (changed: ComponentChanged): string => {
   return lines(
     `Wrote ${changed.file}:${changed.lines.from}-${changed.lines.to}${changed.formatted ? `, formatted by ${changed.formatted}` : ""}.`,
     changed.story
-      ? `Story ${changed.story.name}: args ${valueWords(changed.story.args, 1500)}.`
+      ? `Story ${changed.story.name}: args ${valueExcerpt(changed.story.args, 1500)}.`
       : "The story it named is gone.",
     changed.render === "unseen"
       ? "No browser drew it within the wait: read with render: true."
@@ -738,10 +741,10 @@ export const artifactUpdatedWords = (updated: Updated): Presented => {
       return [
         updated.answer.title === undefined
           ? null
-          : `It is titled ${quote(updated.answer.title, 100)} now.`,
+          : `It is titled ${quote(updated.answer.title)} now.`,
         updated.answer.ask === undefined
           ? null
-          : `Its head now asks ${quote(updated.answer.ask, 200)}.`,
+          : `Its head now asks ${quote(updated.answer.ask)}.`,
         updated.answer.pick === undefined
           ? null
           : `Its pick is ${updated.answer.pick} now.`,
@@ -784,11 +787,11 @@ export const artifactBrowsedWords = (
 
 /** `artifact_promote`. */
 export const artifactPromotedWords = (promoted: Promoted): string =>
-  `Committed to ${promoted.path} in the project's folder (commit ${promoted.commit.slice(0, 8)}).`;
+  `Committed to ${promoted.path} in the project's folder (commit ${shortSha(promoted.commit)}).`;
 
 /** `artifact_delete`: what the panel shows now. */
 export const artifactRemovedWords = (removed: Removed): string => {
-  const what = `Removed ${quote(removed.removed.name, 120)} (${removed.removed.kind}).`;
+  const what = `Removed ${quote(removed.removed.name)} (${removed.removed.kind}).`;
   return removed.showing
     ? `${what} Your panel shows ${named(removed.showing)} now.`
     : `${what} Your panel shows nothing now.`;
@@ -835,7 +838,7 @@ const pinLines = (
     heading ?? `## ${pin.number}.`,
     ...facts.map((fact) =>
       fact.startsWith("- Inside the artifact ")
-        ? fact.replace(WHOLE_ID, (id) => handle(id))
+        ? fact.replace(WHOLE_ID, (id) => shortId(id))
         : fact
     ),
     ...(pin.inkBox
@@ -843,7 +846,7 @@ const pinLines = (
           `- Ink: ${Math.round(pin.inkBox.w)} × ${Math.round(pin.inkBox.h)} px at ${Math.round(pin.inkBox.x)}, ${Math.round(pin.inkBox.y)} in the page`,
         ]
       : []),
-    `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${handle(pin.id)}`,
+    `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${shortId(pin.id)}`,
     ...threadLines(pin.thread, now),
   ];
 };

@@ -193,6 +193,7 @@ const paceLine = (window: Clocked, now: number): number | null => {
   if (window.group !== "weekly" || opened === null || !span) {
     return null;
   }
+  // @limit external: a percentage runs from 0 to 100
   return Math.min(100, Math.max(0, (100 * (now - opened)) / span));
 };
 

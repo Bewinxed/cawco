@@ -26,6 +26,7 @@ import {
 } from "./artifact-kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
 import { isOneOf } from "./one-of";
+import { shortId, shortSha } from "./short-id";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
 import { type CarryRestored, INPUTS_DIR } from "./workspace/controls";
@@ -142,7 +143,7 @@ const handoffLine = (from: string, short: string): string =>
  * report names its delegate, so a reader can link, mark and relate the sender.
  */
 export const handoffMarker = (from: string, id: string): string =>
-  `${markerTag("handoff", { from, short: id.slice(0, 8) })}${handoffLine(from, id.slice(0, 8))}`;
+  `${markerTag("handoff", { from, short: shortId(id) })}${handoffLine(from, shortId(id))}`;
 
 /**
  * Where a hand-off's marker ends, its tag and its line and the whitespace
@@ -504,8 +505,8 @@ const INSTALL_AGAIN = "Run the repo's install before you build or test.";
  */
 const movedLine = (move: CheckoutMove): string =>
   move.kind === "recut"
-    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}${move.carry ? `, your own commits restored on top from the carry ${move.carry}, HEAD where you left it` : ""}${restoredWords(move.restored)}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
-    : `[CawCo] Your checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)}: the hub rebased your commits onto origin/${move.branch} as it landed them, so files main gained since are here and your installed dependencies may predate them. ${INSTALL_AGAIN}`;
+    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${shortSha(move.commit)} on ${move.branch}${move.carry ? `, your own commits restored on top from the carry ${move.carry}, HEAD where you left it` : ""}${restoredWords(move.restored)}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
+    : `[CawCo] Your checkout moved from ${shortSha(move.from)} to ${shortSha(move.to)}: the hub rebased your commits onto origin/${move.branch} as it landed them, so files main gained since are here and your installed dependencies may predate them. ${INSTALL_AGAIN}`;
 
 /**
  * `text` with {@link movedLine} right after any hand-off marker: the first

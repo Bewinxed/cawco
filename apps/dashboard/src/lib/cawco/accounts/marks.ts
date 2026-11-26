@@ -114,6 +114,7 @@ function lightness(colour: string): number | null {
   if (!HEX.test(hex)) {
     return null;
   }
+  // @limit external: CSS hex colour: six digits, two each for red, green and blue (CSS Color 4, section 5.2)
   const full =
     hex.length === 3
       ? [...hex].map((digit) => digit + digit).join("")

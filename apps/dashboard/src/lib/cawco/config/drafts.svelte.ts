@@ -8,8 +8,9 @@
  * (draft-store.ts): IndexedDB, one record per key, read back
  * before anything is written (the untouched form an editor opens with never
  * replaces what was stored), written at most every 250ms and at once when
- * the page goes away or the editor closes, and held under a byte cap by
- * dropping the drafts edited longest ago. It is its own database rather than
+ * the page goes away or the editor closes, and held by the browser's quota:
+ * a write it refuses (`QuotaExceededError`) drops the draft edited longest
+ * ago and is tried again. It is its own database rather than
  * a second store in the composer's: adding a store to that one is a version
  * upgrade, which a tab still open on the previous build blocks until it
  * reloads.
@@ -31,18 +32,48 @@ import type { ConfigStore } from "./store.svelte";
 const DB_NAME = "cawco-editors";
 const DB_VERSION = 1;
 const STORE = "drafts";
-/** The most the stored drafts may weigh together, in bytes. */
-const CAP_BYTES = 5 * 1024 * 1024;
 /** How long an edit waits to be written, so typing writes once. */
 const WRITE_MS = 250;
 
 interface DraftRecord {
   fields: unknown;
   path: string;
-  /** What the record weighs, for the cap: two bytes per character. */
-  size: number;
   /** When it was last written, for eviction. */
   updatedAt: number;
+}
+
+/** A read-write transaction on the drafts, and the promise of its commit. */
+const writing = (db: IDBDatabase): [IDBTransaction, Promise<void>] => {
+  const transaction = db.transaction(STORE, "readwrite");
+  return [
+    transaction,
+    new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+    }),
+  ];
+};
+
+/** Whether `error` is the browser refusing a write for want of room. */
+const isQuotaError = (error: unknown): boolean =>
+  error instanceof DOMException && error.name === "QuotaExceededError";
+
+/** The stored draft edited longest ago, other than a path in `changes`, dropped; its path, or null when there is none. */
+async function dropOldest(
+  db: IDBDatabase,
+  changes: readonly [string, unknown][]
+): Promise<string | null> {
+  const inFlight = new Set(changes.map(([path]) => path));
+  const [transaction, committed] = writing(db);
+  const store = transaction.objectStore(STORE);
+  const [oldest] = (await result<DraftRecord[]>(store.getAll()))
+    .filter((one) => !inFlight.has(one.path))
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+  if (oldest) {
+    store.delete(oldest.path);
+  }
+  await committed;
+  return oldest?.path ?? null;
 }
 
 let opening: Promise<IDBDatabase> | null = null;
@@ -147,7 +178,7 @@ class EditorDrafts {
     this.#timer ??= setTimeout(() => this.flush(), WRITE_MS);
   }
 
-  /** Writes every change waiting, then holds the store under the cap. */
+  /** Writes every change waiting, dropping the oldest drafts while the browser has no room for it. */
   flush(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
@@ -158,37 +189,33 @@ class EditorDrafts {
     this.#unwritten.clear();
     this.#writing = database().then(async (db) => {
       const dropped: string[] = [];
-      const transaction = db.transaction(STORE, "readwrite");
-      const committed = new Promise<void>((resolve, reject) => {
-        transaction.oncomplete = () => resolve();
-        transaction.onabort = () => reject(transaction.error);
-      });
-      const store = transaction.objectStore(STORE);
       const now = Date.now();
-      for (const [path, fields] of changes) {
-        if (fields === null) {
-          store.delete(path);
-        } else {
-          const record: DraftRecord = {
-            path,
-            fields,
-            size: 2 * JSON.stringify(fields).length,
-            updatedAt: now,
-          };
-          store.put(record);
+      for (;;) {
+        const [transaction, committed] = writing(db);
+        const store = transaction.objectStore(STORE);
+        for (const [path, fields] of changes) {
+          if (fields === null) {
+            store.delete(path);
+          } else {
+            const record: DraftRecord = { path, fields, updatedAt: now };
+            store.put(record);
+          }
         }
-      }
-      const all = await result<DraftRecord[]>(store.getAll());
-      let total = all.reduce((sum, each) => sum + each.size, 0);
-      for (const old of all.sort((a, b) => a.updatedAt - b.updatedAt)) {
-        if (total <= CAP_BYTES) {
+        try {
+          await committed;
           break;
+        } catch (error) {
+          // A write the browser refused for want of room drops the draft
+          // edited longest ago, not one being written now, and is tried again.
+          const old = isQuotaError(error)
+            ? await dropOldest(db, changes)
+            : null;
+          if (!old) {
+            throw error;
+          }
+          dropped.push(old);
         }
-        store.delete(old.path);
-        total -= old.size;
-        dropped.push(old.path);
       }
-      await committed;
       for (const path of dropped) {
         toast.info(transcriptWords.editorDraftDropped(path));
       }

@@ -569,6 +569,7 @@ const relaySeat = async (
 };
 
 /** The settings a container was made with, as its label carries them. */
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the settings one browser relay has held, so two collide after about 2^32 names
 const settingsHash = (
   args: RelayStartArgs,
   certified: boolean,

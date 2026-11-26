@@ -68,6 +68,7 @@ const twiceWeekdays = (timeZone: string) => {
   }
   return {
     nextRuns: runs.sort((a, b) => a - b),
+    nextRunsCut: false,
     words: `At 08:00 and 13:00, Monday through Friday (${timeZone})`,
   };
 };
@@ -97,6 +98,7 @@ const hub = (over: Partial<RoutineFormHub> = {}): RoutineFormHub => ({
     return cron.split(VALUES).length === 5
       ? Promise.resolve({
           nextRuns: runsOf(cron),
+          nextRunsCut: false,
           words: `At 09:00, Monday through Friday (${timeZone})`,
         })
       : Promise.reject(new Error(UNREADABLE));

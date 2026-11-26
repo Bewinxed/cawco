@@ -38,6 +38,8 @@ import {
   workerData,
 } from "node:worker_threads";
 import { parseSync } from "oxc-parser";
+import { handOnAsMachine } from "../packages/agent/src/limit-readings-hand-on";
+import { recordLimitReading } from "../packages/core/src/limit-readings";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
@@ -361,6 +363,11 @@ const files = repoFiles(ROOTS).filter(
     !SKIP.test(file) &&
     file !== "scripts/duplicate-lists-check.ts"
 );
+recordLimitReading(
+  "check.duplicate-lists-threads-wanted",
+  availableParallelism()
+);
+// @limit recording: check.duplicate-lists-threads-wanted until 2026-12-10
 const threads = Math.max(1, Math.min(8, availableParallelism()));
 const shares = Array.from({ length: threads }, (_, slot) =>
   files.filter((_file, index) => index % threads === slot)
@@ -468,8 +475,10 @@ if (unparsed.length > 0 || failures.length > 0) {
   console.error(
     `duplicate-lists: ${failures.length} repeated list(s), ${unparsed.length} file(s) unread, in ${took} ms`
   );
+  await handOnAsMachine();
   process.exit(1);
 }
 console.log(
   `duplicate-lists: ${owners.length} owners, ${lists.length - owners.length} other lists in ${files.length} files, none repeats an owner (${took} ms)`
 );
+await handOnAsMachine();

@@ -9,6 +9,7 @@
 
 import type { FilingStage } from "@cawco/core/context-filing";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { HOUR_MS } from "@cawco/core/time";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { WorkItemState } from "@cawco/core/work-items";
@@ -48,6 +49,7 @@ const STEPS_RECENT = 8;
 /** How many steps one page of a detailed look holds. */
 const STEPS_PAGE = 50;
 /** The fewest transcript pages read back for a look; past it the steps say they were cut. */
+// @limit measured: a page; the next page's cursor rides the answer. 40 is the rows one page returns
 export const PAGES_READ_MOST = 40;
 
 /** How long an ended item stays in a `live` read. */
@@ -456,7 +458,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       : { lastActivityAt: item.endedAt ?? item.createdAt, cacheWarm: false };
     return {
       instanceId: item.instanceId,
-      name: row ? sessionLabel(row).name : item.instanceId.slice(0, 8),
+      name: row ? sessionLabel(row).name : shortId(item.instanceId),
       title: item.title,
       state: item.state,
       machine: row ? deps.machineName(row.machineId) : "",
@@ -673,7 +675,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
           const label = row ? sessionLabel(row) : undefined;
           return [one.item.title, label?.name, label?.tag, row?.cwd];
         },
-        said: (one) => `${handleOf(one.item.instanceId)} “${one.item.title}”`,
+        said: (one) => `${shortId(one.item.instanceId)} “${one.item.title}”`,
       },
       "delegate of yours"
     );
@@ -696,5 +698,3 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
 
   return { read };
 };
-
-const handleOf = (id: string): string => id.slice(0, 8);

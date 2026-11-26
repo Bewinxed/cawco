@@ -3,9 +3,11 @@ import {
   RESUMABLE_CAWCO_TOOLS,
   TOOL_CALL_KEY_HEADER,
 } from "@cawco/core/binary-updates";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { portHolder } from "@cawco/core/live-processes";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
+import { shortId } from "@cawco/core/short-id";
 import { updatesWords } from "@cawco/core/words/updates";
 import type { BrowserPorts } from "./browser/browsers";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
@@ -339,6 +341,7 @@ function notStarted(body: ArrayBuffer | undefined): Response {
 }
 
 /** The most a restart fence may stand without being raised again; a longer ask is refused, not shortened. */
+// @limit recording: agent.restart-fence-asked-ms until 2026-12-26
 const RESTART_FENCE_MAX_MS = 5 * 60_000;
 
 /**
@@ -355,6 +358,9 @@ async function restartRoute(
   }
   if (request.method === "POST") {
     const ms = fieldOf(await request.json().catch(() => undefined), "ms");
+    if (typeof ms === "number") {
+      recordLimitReading("agent.restart-fence-asked-ms", ms);
+    }
     if (typeof ms === "number" && ms > RESTART_FENCE_MAX_MS) {
       return Response.json(
         {
@@ -449,7 +455,7 @@ async function hostedRoute(
   }
   const release = holdRestart(
     "tool-call",
-    `${call}#${crypto.randomUUID().slice(0, 8)}`
+    `${call}#${shortId(crypto.randomUUID())}`
   );
   try {
     return holdingUntilEnd(await answer(forward), release);
@@ -535,7 +541,7 @@ export const startMcpGateway = async (
         }
         const release = holdRestart(
           "tool-call",
-          `${call}#${crypto.randomUUID().slice(0, 8)}`
+          `${call}#${shortId(crypto.randomUUID())}`
         );
         try {
           return holdingUntilEnd(

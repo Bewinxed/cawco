@@ -402,6 +402,7 @@ const harnessConfigOf = (
  * How far back a memory document, a hook or a skill can be taken, each within
  * its own history. Deep enough to undo a bad day, not a log.
  */
+// @limit measured: a page; the next page's cursor rides the answer. 20 is the rows one page returns
 const HISTORY_LIMIT = 20;
 
 /** What a machine compares its own copy against — sha256 of the text's own bytes. */

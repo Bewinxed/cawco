@@ -95,6 +95,7 @@ import {
 import { detach, failureOf } from "@cawco/core/detach";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
 import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   INSPECT_CONFIG,
@@ -128,6 +129,8 @@ import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import {
   accountConfigDir,
   accountIds,
@@ -381,9 +384,6 @@ const signalOfExit = ({ code, signal }: ProcessExit): string | undefined => {
   )?.[0];
 };
 
-/** How much of what a CLI said on stderr its row quotes: its last lines, up to this many characters. Ours: a sentence or three. */
-const STDERR_QUOTED_CHARS = 600;
-
 /**
  * A session's CawCo MCP slot dialled again while it reads `failed`: from 1
  * s, doubling to 30 s, for as long as the child lives ({@link ClaudeSession.#dialCawco}).
@@ -400,7 +400,7 @@ const CAWCO_DIALS: BackoffPolicy = {
 /**
  * What a CLI that ended said last on stderr, as its row quotes it: the tail
  * its keeper kept (sessiond server.ts `STDERR_TAIL_BYTES`), its last lines
- * up to {@link STDERR_QUOTED_CHARS}, on one line, and redacted as everything
+ * up to {@link OUTPUT_TAIL_KEPT}, on one line, and redacted as everything
  * the agent says is (redaction.ts `redactText`). Undefined when it said
  * nothing there.
  */
@@ -412,13 +412,13 @@ const stderrSaid = (stderr: string | undefined): string | undefined => {
   const kept: string[] = [];
   let length = 0;
   for (const line of lines.reverse()) {
-    if (kept.length > 0 && length + line.length > STDERR_QUOTED_CHARS) {
+    if (kept.length > 0 && length + line.length > OUTPUT_TAIL_KEPT) {
       break;
     }
     kept.unshift(line);
     length += line.length + 1;
   }
-  const said = kept.join(" ").slice(-STDERR_QUOTED_CHARS);
+  const said = lastOutput(kept.join(" "));
   const cut = lines.join(" ").length - said.length;
   if (!said) {
     return undefined;
@@ -1341,9 +1341,6 @@ const shellCommandOf = (block: {
 const tempRootOf = (env: Record<string, string | undefined>): string =>
   env.CLAUDE_CODE_TMPDIR || env.TMPDIR || tmpdir();
 
-/** How much of a cut command's output is kept: its end, as a terminal shows the last of it. */
-const CUT_OUTPUT_CHARS = 4000;
-
 /**
  * The end of what task `taskId` of session `sessionId` printed, from the
  * CLI's spool under `root` (`claude-<uid>/<project>/<session>/tasks/`); empty
@@ -1360,8 +1357,8 @@ const spooledOutput = async (
     const file = join(user, project, sessionId, "tasks", `${taskId}.output`);
     const said = await readFile(file, "utf8").catch(() => undefined);
     if (said !== undefined) {
-      return said.length > CUT_OUTPUT_CHARS
-        ? `… (${said.length - CUT_OUTPUT_CHARS} chars cut) ${said.slice(-CUT_OUTPUT_CHARS)}`
+      return said.length > OUTPUT_TAIL_KEPT
+        ? `… (${said.length - OUTPUT_TAIL_KEPT} chars cut) ${lastOutput(said)}`
         : said;
     }
   }
@@ -1420,6 +1417,7 @@ class Turn {
   }
 }
 
+// @limit recording: agent.claude-settle-ms until 2026-12-10
 const SETTLE_TIMEOUT_MS = 5000;
 
 /** How soon a launch reads its CawCo slot again while it is still connecting. */
@@ -1448,6 +1446,7 @@ const CREDENTIAL_REFUSED_WORDS =
   "CawCo stopped this session: the hub no longer knows the credential its Claude Code was started with, so its CawCo tools (reports, handoffs, finishing its work) could not reach the hub. Its conversation is kept. Send it a message to start it again on a fresh credential.";
 
 /** How long the CLI waits on the `Stop` hook this adapter registers, in seconds. */
+// @limit recording: agent.stop-hook-ms until 2026-12-03
 const STOP_HOOK_TIMEOUT_S = 5;
 
 /**
@@ -1455,12 +1454,14 @@ const STOP_HOOK_TIMEOUT_S = 5;
  * adapter registers ({@link ClaudeSession}'s `#openItemsAfterCompaction`),
  * in seconds: one read of the hub's records.
  */
+// @limit recording: agent.open-items-hook-ms until 2026-12-03
 const OPEN_ITEMS_HOOK_TIMEOUT_S = 15;
 
 /** How long the hook waits on the hub's read: the CLI's limit less 3 s, so its answer is in before the CLI stops waiting ({@link OPEN_ITEMS_HOOK_TIMEOUT_S}). */
 const OPEN_ITEMS_READ_MS = (OPEN_ITEMS_HOOK_TIMEOUT_S - 3) * 1000;
 
 /** How long the CLI waits on the `PreToolUse` hook on CronCreate ({@link refuseDurableSchedule}), in seconds: it answers from the call alone. */
+// @limit recording: agent.schedule-hook-ms until 2026-12-03
 const SCHEDULE_HOOK_TIMEOUT_S = 5;
 
 /** What a session that hands its schedules to its parent hears when it asks for a durable CronCreate. */
@@ -1503,7 +1504,12 @@ const scheduleHooks = (toParent: boolean) =>
           {
             matcher: "CronCreate",
             timeout: SCHEDULE_HOOK_TIMEOUT_S,
-            hooks: [refuseDurableSchedule],
+            hooks: [
+              (input: HookInput) =>
+                timed(refuseDurableSchedule(input), (ms) =>
+                  recordLimitReading("agent.schedule-hook-ms", ms)
+                ),
+            ],
           },
         ],
       }
@@ -3014,7 +3020,9 @@ class ClaudeSession implements HarnessSession {
               hooks: [
                 // biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
                 async (stopping: unknown) => {
+                  const began = Date.now();
                   this.#wakeupsKnown(scheduledWakeups(stopping));
+                  recordLimitReading("agent.stop-hook-ms", Date.now() - began);
                   return {};
                 },
               ],
@@ -3022,7 +3030,10 @@ class ClaudeSession implements HarnessSession {
           ],
           ...compactionHooks(
             clean,
-            async () => await this.#openItemsAfterCompaction()
+            async () =>
+              await timed(this.#openItemsAfterCompaction(), (ms) =>
+                recordLimitReading("agent.open-items-hook-ms", ms)
+              )
           ),
           ...scheduleHooks(schedulesToParent),
         },
@@ -5178,8 +5189,9 @@ class ClaudeSession implements HarnessSession {
     await this.#handle.interrupt().catch(() => {});
     // The promise edge of the wait for the interrupted turn's end.
     await Effect.runPromise(
-      this.#turn
-        .settle(SETTLE_TIMEOUT_MS)
+      timedEffect(this.#turn.settle(SETTLE_TIMEOUT_MS), (ms) =>
+        recordLimitReading("agent.claude-settle-ms", ms)
+      )
         .pipe(
           Effect.catchTag("Unanswered", (unanswered) =>
             Effect.sync(() =>
@@ -5193,8 +5205,9 @@ class ClaudeSession implements HarnessSession {
     // The interrupted turn's end read the effort: it lands while the query
     // is open. A CLI that answers nothing within the turn's own wait gets
     // the close, and the read says it failed.
-    const read = await readWithin(SETTLE_TIMEOUT_MS, () =>
-      Promise.all(this.#effortReads)
+    const read = await timed(
+      readWithin(SETTLE_TIMEOUT_MS, () => Promise.all(this.#effortReads)),
+      (ms) => recordLimitReading("agent.claude-settle-ms", ms)
     );
     switch (read.kind) {
       case "answered":

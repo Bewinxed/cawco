@@ -240,10 +240,12 @@ export const accountRoutes = ({
           neverBackup: t.Optional(t.Boolean()),
           // Its week's floor, percent used; null: none.
           reservePct: t.Optional(
+            // @limit external: a percentage runs from 0 to 100
             t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
           ),
           // Its 5-hour window's floor, percent used; null: none.
           sessionReservePct: t.Optional(
+            // @limit external: a percentage runs from 0 to 100
             t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
           ),
           // At a plan limit with extra usage on: priced against moving, or

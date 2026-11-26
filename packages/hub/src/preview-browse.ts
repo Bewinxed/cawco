@@ -1,5 +1,6 @@
 import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   placeAtLink,
   previewEnterUrl,
@@ -29,6 +30,7 @@ const NAME_TAIL = /-+$/u;
  * Create and its discard share the longer git-plus-boundary budget; archive
  * may be queued behind the create it must remove.
  */
+// @limit recording: hub.workspace-control-ms until 2026-12-10
 export const WORKSPACE_TIMEOUT_MS = 60_000;
 
 export type PreviewBrowseContext = Pick<
@@ -96,6 +98,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
         : "diagram";
     const name = `${page.name}-${of}`
       .replaceAll(NAME_ENDS, "")
+      // @limit external: a DNS label, 63 characters (RFC 1035 §2.3.4)
       .slice(0, 63)
       .replace(NAME_TAIL, "");
     const made = await ctx.artifacts.create(instanceId, {
@@ -261,22 +264,25 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return entered;
     }
     const { address, path, entry } = entered;
-    const asked = await ctx.callAgent(
-      machineId,
-      ARTIFACT_PICTURE,
-      [
-        {
-          url: previewEnterUrl(
-            ctx.previewListeners.loopback(address.port),
-            entry.ticket,
-            link === undefined ? path : placeAtLink(path, link)
-          ),
-          width,
-          artifact: { id: row.id, kind: row.kind, name: row.name },
-          sync: `/__cawco/artifact/${row.id}`,
-        },
-      ],
-      PICTURE_LIMITS.askMs
+    const asked = await timed(
+      ctx.callAgent(
+        machineId,
+        ARTIFACT_PICTURE,
+        [
+          {
+            url: previewEnterUrl(
+              ctx.previewListeners.loopback(address.port),
+              entry.ticket,
+              link === undefined ? path : placeAtLink(path, link)
+            ),
+            width,
+            artifact: { id: row.id, kind: row.kind, name: row.name },
+            sync: `/__cawco/artifact/${row.id}`,
+          },
+        ],
+        PICTURE_LIMITS.askMs
+      ),
+      (ms) => recordLimitReading("hub.picture-ask-ms", ms)
     );
     switch (asked.kind) {
       case "unanswered":
@@ -326,11 +332,14 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
           "save keeps a picture in your workspace, and this session runs in none; read it without save.",
       });
     }
-    const asked = await ctx.callAgent(
-      instance.machineId,
-      CONTROL_WORKSPACE_SAVE,
-      [workspace, path, png],
-      WORKSPACE_TIMEOUT_MS
+    const asked = await timed(
+      ctx.callAgent(
+        instance.machineId,
+        CONTROL_WORKSPACE_SAVE,
+        [workspace, path, png],
+        WORKSPACE_TIMEOUT_MS
+      ),
+      (ms) => recordLimitReading("hub.workspace-control-ms", ms)
     );
     switch (asked.kind) {
       case "unanswered":

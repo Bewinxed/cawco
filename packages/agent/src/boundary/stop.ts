@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   forgetWorkspaceTmp,
   workspaceDoorDir,
@@ -124,7 +125,9 @@ export const stopBoundary = async (
     // besides, `--die-with-parent`), and its pid is not read again.
     if (!(host && (await goneWithin(procId, HOST_STOP_MS)))) {
       endSandbox(place, () => signalPid(listedPid(place.outer), "SIGKILL"));
-      await goneWithin(procId, STOP_TIMEOUT_MS);
+      await timed(goneWithin(procId, STOP_TIMEOUT_MS), (ms) =>
+        recordLimitReading("agent.boundary-stop-ms", ms)
+      );
     }
   }
   const left = await heldProc(procId);

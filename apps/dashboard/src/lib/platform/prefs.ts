@@ -23,6 +23,7 @@ export const RAIL_PREF = "cawco-rail-width";
  * `c-sidebar-w` token, the default's one source.
  */
 export const RAIL_MIN = 216;
+// @limit measured: the widest the sidebar rail draws, 520 px: the Shell's handle, the server's first paint and the first-paint script in app.html all hold to it
 export const RAIL_MAX = 520;
 
 /** A rail width held to the bounds, in whole pixels. */
@@ -80,13 +81,15 @@ export const KEPT: Readonly<Record<string, Pref>> = {
   "cawco-open-trees:rail-projects": "cawco-open-trees-rail-projects",
 };
 
-/** A year: these are preferences, kept until changed. */
-export const PREF_MAX_AGE = 31_536_000;
+/** 400 days, the longest a browser keeps a cookie: these are preferences, kept until changed. */
+// @limit external: browsers cap a cookie's Max-Age at 400 days (RFC 6265bis, cookie lifetime limits, https://www.ietf.org/archive/id/draft-ietf-httpbis-rfc6265bis-14.html#name-the-max-age-attribute)
+export const PREF_MAX_AGE = 34_560_000;
 
 /**
  * The most a pref's value may come to, URI-encoded: a browser keeps no
  * cookie past 4096 bytes, name and value together.
  */
+// @limit external: a browser ignores a cookie whose name and value pass 4,096 octets together (draft-ietf-httpbis-rfc6265bis, "The Set-Cookie Header Field" and "Storage Model", https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis); RFC 6265 section 6.1 has every browser take at least that
 export const PREF_VALUE_LIMIT = 3800;
 
 /**

@@ -34,6 +34,7 @@ import {
   type Law,
   type LawAbout,
 } from "@cawco/core/invariant";
+import { shortSha } from "@cawco/core/short-id";
 import { ElysiaStatus } from "elysia";
 import { hubActor, type Tasks } from "./tasks";
 
@@ -183,7 +184,7 @@ export const createLawTasks = (deps: LawTasksDeps) => {
     return {
       why:
         ours.length === 0
-          ? `no project on this hub has a checkout of CawCo's repository (root commit ${CAWCO_ROOT_COMMIT.slice(0, 10)}) among its places`
+          ? `no project on this hub has a checkout of CawCo's repository (root commit ${shortSha(CAWCO_ROOT_COMMIT)}) among its places`
           : `${ours.length} projects have a checkout of CawCo's repository (${ours.join(", ")}), and the hub files in one alone`,
     };
   };

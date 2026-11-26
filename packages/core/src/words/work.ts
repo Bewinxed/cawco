@@ -1,6 +1,8 @@
 /**
  * A work item's words: what the hub's report and Find say of how it ended.
  */
+
+import { quote } from "@cawco/providers/quote";
 export const workWords = {
   /** A delegate dismissed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
   notDismissedThen: "so the delegate was not dismissed.",
@@ -190,7 +192,7 @@ export const workWords = {
    * short: why the work it governs stops.
    */
   budgetUnread: (stored: string) =>
-    `its budget was stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, which does not read as dollars above 0 (usd) and whole numbers from 1 (turns, minutes), so the hub cannot tell what it may spend`,
+    `its budget was stored as “${quote(stored)}”, which does not read as dollars above 0 (usd) and whole numbers from 1 (turns, minutes), so the hub cannot tell what it may spend`,
   /** A live item stopped because its own budget does not read (`budgetUnread`). */
   budgetUnreadStopped: (why: string) =>
     `The hub stopped this item: ${why}. Start the work again with a budget that reads.`,
@@ -218,7 +220,7 @@ export const workWords = {
    * list as it was stored.
    */
   outputsUnreadRefused: (stored: string) =>
-    `Not landed: this item's outputs, stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, do not read, so the hub cannot tell which of its files are outputs to keep off the base branch, and it pushes nothing. Its outputs that read are collected; start the work again with its outputs named.`,
+    `Not landed: this item's outputs, stored as “${quote(stored)}”, do not read, so the hub cannot tell which of its files are outputs to keep off the base branch, and it pushes nothing. Its outputs that read are collected; start the work again with its outputs named.`,
   /** A routine's run skipped because its budget does not read (`budgetUnread`). */
   routineBudgetUnread: (why: string) =>
     `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,
@@ -228,7 +230,7 @@ export const workWords = {
    * column gained its schema, so no part of it is read as what it asked.
    */
   queuedRequestUnread: (stored: string) =>
-    `the call the hub kept for it while it waited, “${stored.length > 400 ? `${stored.slice(0, 400)}…` : stored}”, does not read as a delegate call, so the hub cannot tell what it asked: its brief, its limits, what it may start or the files it owns`,
+    `the call the hub kept for it while it waited, “${quote(stored)}”, does not read as a delegate call, so the hub cannot tell what it asked: its brief, its limits, what it may start or the files it owns`,
   /** Its parent told once that a queued delegate is held (`queuedRequestUnread`). */
   queuedHeld: (title: string, id: string, why: string) =>
     `Your queued delegate “${title}” (${id}) is held and will not start: ${why}. Withdraw it with stop_delegate and delegate the work again.`,
@@ -238,7 +240,7 @@ export const workWords = {
    * its schema, so it does not start as though it asked nothing.
    */
   queuedAskUnread: (stored: string) =>
-    `Queued start held: delegate ask unreadable (“${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”). Starting or moving the task replaces it.`,
+    `Queued start held: delegate ask unreadable (“${quote(stored)}”). Starting or moving the task replaces it.`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */

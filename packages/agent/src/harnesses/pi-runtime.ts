@@ -50,6 +50,7 @@ import type {
   SlashCommand,
 } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { withSkillMarkers } from "@cawco/core/skill-words";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
@@ -211,7 +212,7 @@ class PiShells {
   /** `exec` run so a send can move what it runs ({@link moveAll}). */
   exec(exec: BashExec): BashExec {
     return (command, cwd, options) => {
-      const taskId = `pi-shell-${crypto.randomUUID().slice(0, 8)}`;
+      const taskId = `pi-shell-${shortId(crypto.randomUUID())}`;
       const own = new AbortController();
       const parent = options.signal;
       let moved = false;
@@ -1935,6 +1936,7 @@ class PiSession implements HarnessSession {
       return Promise.resolve({
         totalTokens: total,
         maxTokens: window,
+        // @limit external: a percentage runs from 0 to 100
         percentage: Math.min(100, Math.round((total / window) * 100)),
         categories: [],
       });

@@ -84,7 +84,7 @@ const CellSchema = z.union([
 ]);
 type Cell = z.infer<typeof CellSchema>;
 
-const IDENTIFIER = z.string().min(1).max(200);
+const IDENTIFIER = z.string().min(1);
 
 /** Every row a forget took and every link it cut: what a restore puts back. */
 export const ProjectRowsSchema = z.object({

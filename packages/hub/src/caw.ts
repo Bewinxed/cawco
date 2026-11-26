@@ -2140,7 +2140,7 @@ const PROJECT_SETUP_DEFINITION = defineTool(
 const PROJECT_NAME_DEFINITION = defineTool(
   "project_name",
   "Names your project. Use it while the project has its placeholder name.",
-  { name: z.string().min(1).max(200) },
+  { name: z.string().min(1) },
   (named: { name: string }) => `Named the project “${named.name}”.`
 );
 

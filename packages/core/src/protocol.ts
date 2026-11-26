@@ -568,6 +568,12 @@ export interface HeartbeatPayload {
   homeStores?: string;
   instances: string[];
   /**
+   * The readings of the bounds still waiting on data the daemon took since
+   * its last beat, its sessiond's among them (core limit-readings.ts): on
+   * the 15s beat whenever there are any, absent when there are none.
+   */
+  limitReadings?: import("./limit-readings").LimitReading[];
+  /**
    * What the machine has installed (git, claude, opencode, pi, node, a
    * browser, a service manager) and at which version. Rides one beat per
    * connection, once its probe finishes, for the reason `harnesses` does:
@@ -788,6 +794,7 @@ export interface FsPayload {
  * The most an `fs media` read carries: one picture or video the transcript
  * card reads off a machine in a single frame (`send_to_user`, `show_image`).
  */
+// @limit measured: the largest media file the hub holds is 42.0 MiB of 30,389 (obelisk, 2026-11-26)
 export const MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 
 /**
@@ -1642,6 +1649,7 @@ export type DelegateEventPayload = DelegateEvent["payload"];
  * screen of cards, never a sweep of everything a parent ever ran. A reader
  * with more asks in batches of this size.
  */
+// @limit measured: a page; a reader with more asks again in batches of this size. 64 delegate cards are a screen of them, as the comment above says
 export const DELEGATE_SUMMARIES_LIMIT = 64;
 
 /**
@@ -1719,7 +1727,7 @@ export interface ArtifactSummary {
   shownAt: string | null;
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
-  /** What every surface names it by to the person, in the agent's plain words ({@link ARTIFACT_TITLE_LIMIT}). Empty on one made before titles were kept. */
+  /** What every surface names it by to the person, in the agent's plain words. Empty on one made before titles were kept. */
   title: string;
   updatedAt: string;
   /** What it waits on the person for ({@link pending}) stands: its card and its row wear the needs-you dot. */

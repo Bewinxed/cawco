@@ -94,8 +94,6 @@
   /** What a run can start, in the order the form offers them. */
   const TARGETS = ["delegate", "orchestrator"] as const;
 
-  /** The hub's limit on a name (hub work-items `SESSION_TITLE_MAX`). */
-  const NAME_MAX = 64;
   /** How long typing rests before the schedule is read back. */
   const PREVIEW_SETTLE_MS = 250;
 
@@ -248,6 +246,7 @@
       label,
       line: `${label} · ${nextRun}`,
       runs: preview.nextRuns,
+      cut: preview.nextRunsCut,
       /** The hub is still reading what the fields hold now. */
       reading: shownRead.key !== scheduleKey,
     };
@@ -260,9 +259,6 @@
   const shown = (field: keyof typeof touched) => attempted || touched[field];
   const nameProblem = $derived.by(() => {
     const name = draft.name.trim();
-    if (name.length > NAME_MAX) {
-      return words.nameTooLong(name.length, NAME_MAX);
-    }
     return name === "" && shown("name") ? words.needsName : undefined;
   });
   const promptProblem = $derived(
@@ -301,7 +297,6 @@
   );
   const ready = $derived(
     draft.name.trim() !== "" &&
-      draft.name.trim().length <= NAME_MAX &&
       draft.prompt.trim() !== "" &&
       cron !== "" &&
       !unread &&
@@ -544,7 +539,12 @@
           <MorphText text={readBack.line} wrap />
         </p>
         {#if readBack.runs.length > 0}
-          <ScheduleStrip label={readBack.label} {now} runs={readBack.runs} />
+          <ScheduleStrip
+            label={readBack.label}
+            {now}
+            runs={readBack.runs}
+            cut={readBack.cut}
+          />
         {/if}
       </div>
     {/if}

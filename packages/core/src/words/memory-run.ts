@@ -178,8 +178,8 @@ export const memoryRunWords = {
   duplicateOf:
     "A duplicate names the live lesson it says again in of: give its id, or corroborate that lesson instead.",
   secret: "The lesson holds what reads as a secret: leave it out.",
-  anchorUnfit: (cap: number) =>
-    `An anchor is a path inside the repository, from its root, and a literal string in that file on one line, at most ${cap} characters: name one that is.`,
+  anchorUnfit:
+    "An anchor is a path inside the repository, from its root, and a literal string in that file on one line: name one that is.",
   anchorGone: (path: string, match: string) =>
     `${path} does not hold \`${match}\`: name a file and a match that are there.`,
   checkHas: (id: string, task: string) =>
@@ -189,7 +189,6 @@ export const memoryRunWords = {
   jevFailed: (words: string) => `Jev did not answer: ${words}`,
   notRun:
     "memory_apply is the nightly memory run's: it changes nothing outside one.",
-  tooMany: (cap: number) => `Give at most ${cap} operations a call.`,
 
   /** The curator's brief, after the prompt. */
   briefMessages: (count: number) =>

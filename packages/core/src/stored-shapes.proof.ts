@@ -286,6 +286,7 @@ import type {
   NearMiss as NearMissType,
   SpacingRead as SpacingReadType,
 } from "./layout-guides";
+import type { LimitReading as LimitReadingType } from "./limit-readings";
 import type { MachinePath as MachinePathType } from "./machine-path";
 import type {
   MoveAsk as MoveAskType,
@@ -420,6 +421,7 @@ import type {
   SessiondLimit as SessiondLimitType,
   SessiondLine as SessiondLineType,
   SessiondProcInfo as SessiondProcInfoType,
+  SessiondReadings as SessiondReadingsType,
   SessiondServerMessage as SessiondServerMessageType,
   SessiondWelcome as SessiondWelcomeType,
 } from "./sessiond";
@@ -711,6 +713,7 @@ import type {
   LayoutGroupOutput,
   LayoutPlaceOutput,
   LayoutReadOutput,
+  LimitReadingOutput,
   LimitWindowOutput,
   LinkKindOutput,
   LinkModeOutput,
@@ -857,6 +860,7 @@ import type {
   SessiondLimitOutput,
   SessiondLineOutput,
   SessiondProcInfoOutput,
+  SessiondReadingsOutput,
   SessiondServerMessageOutput,
   SessiondWelcomeOutput,
   SessionEndIntentOutput,
@@ -1417,6 +1421,8 @@ prove<
     Same<SessiondLineOutput, SessiondLineType>,
     Same<ChildLimitOutput, ChildLimitType>,
     Same<SessiondLimitOutput, SessiondLimitType>,
+    Same<LimitReadingOutput, LimitReadingType>,
+    Same<SessiondReadingsOutput, SessiondReadingsType>,
     Same<CommandAckStageOutput, CommandAckStageType>,
     Same<SessiondAckOutput, SessiondAckType>,
     Same<SessiondServerMessageOutput, SessiondServerMessageType>,

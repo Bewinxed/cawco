@@ -38,6 +38,7 @@ export const fileViewerWords = {
     count === 1 ? "1 line" : `${count.toLocaleString("en")} lines`,
   /** Where in a page or picture a point stands, by thirds: "the top left", "the centre". */
   region: (x: number, y: number): string => {
+    // @limit measured: the last of three bands; ROWS and COLUMNS hold three words each (top, middle, bottom; left, centre, right)
     const third = (at: number) => Math.min(2, Math.max(0, Math.floor(at * 3)));
     const row = ROWS[third(y)];
     const column = COLUMNS[third(x)];

@@ -11,6 +11,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { boundedRead } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
   frontMatterBlock,
@@ -19,6 +20,7 @@ import {
   skillDescription,
 } from "@cawco/core/fleet";
 import { makeFolder } from "@cawco/core/folders";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -83,6 +85,7 @@ export interface UnresolvedSkill {
 }
 
 /** How long a download gets before the hub stops waiting on it. */
+// @limit recording: hub.skill-fetch-ms until 2026-12-26
 const FETCH_TIMEOUT_MS = 60_000;
 
 /*
@@ -110,9 +113,6 @@ const CONTAINERS = [
   ".agents/skills",
   ".cursor/skills",
 ];
-
-/** How far into a container a skill directory is looked for. */
-const MAX_DEPTH = 3;
 
 /** Directories no skill lives in, and every one of them is a big download. */
 const SKIP = SKILL_SKIPPED_DIRS;
@@ -327,21 +327,24 @@ const describe = (source: SkillSource): string => {
  * time. Not answered in time throws so, as every failure here is a sentence.
  */
 export const get = (url: string): Effect.Effect<Response, FetchFailed> =>
-  boundedRead(
-    FETCH_TIMEOUT_MS,
-    fetchStep(async (signal) => {
-      const response = await fetch(url, { signal });
-      return new Response(
-        [204, 205, 304].includes(response.status)
-          ? null
-          : await response.arrayBuffer(),
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        }
-      );
-    })
+  timedEffect(
+    boundedRead(
+      FETCH_TIMEOUT_MS,
+      fetchStep(async (signal) => {
+        const response = await fetch(url, { signal });
+        return new Response(
+          [204, 205, 304].includes(response.status)
+            ? null
+            : await response.arrayBuffer(),
+          {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }
+        );
+      })
+    ),
+    (ms) => recordLimitReading("hub.skill-fetch-ms", ms)
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }) =>
       Effect.fail(
@@ -392,6 +395,7 @@ const extract = async (
  * How long one `git` step of a repo download gets. A shallow fetch of a large
  * marketplace is tens of megabytes, which is more than a page fetch.
  */
+// @limit recording: hub.skill-git-ms until 2026-12-26
 const GIT_TIMEOUT_MS = 180_000;
 
 /**
@@ -423,27 +427,30 @@ export const downloadRepo = (
   // One `git` child per step, killed when the step is cut short: by its
   // deadline, or by whatever interrupts the fetch.
   const git = (step: string, args: string[]) =>
-    boundedRead(
-      GIT_TIMEOUT_MS,
-      Effect.acquireUseRelease(
-        Effect.sync(() =>
-          Bun.spawn(safeGitArgv([`--git-dir=${store}`, step, ...args]), {
-            env: { ...process.env, ...SAFE_GIT_ENV },
-            stdout: "ignore",
-            stderr: "pipe",
-          })
-        ),
-        (child) =>
-          fetchStep(() =>
-            Promise.all([child.exited, new Response(child.stderr).text()])
+    timedEffect(
+      boundedRead(
+        GIT_TIMEOUT_MS,
+        Effect.acquireUseRelease(
+          Effect.sync(() =>
+            Bun.spawn(safeGitArgv([`--git-dir=${store}`, step, ...args]), {
+              env: { ...process.env, ...SAFE_GIT_ENV },
+              stdout: "ignore",
+              stderr: "pipe",
+            })
           ),
-        (child) =>
-          Effect.sync(() => {
-            if (child.exitCode === null) {
-              child.kill();
-            }
-          })
-      )
+          (child) =>
+            fetchStep(() =>
+              Promise.all([child.exited, new Response(child.stderr).text()])
+            ),
+          (child) =>
+            Effect.sync(() => {
+              if (child.exitCode === null) {
+                child.kill();
+              }
+            })
+        )
+      ),
+      (ms) => recordLimitReading("hub.skill-git-ms", ms)
     ).pipe(
       Effect.catchTag("Unanswered", ({ after }) =>
         Effect.fail(
@@ -560,7 +567,7 @@ const npmRoot = (
   });
 
 /** Every directory under `container` that holds a `SKILL.md`, which is what a skill is. */
-const discover = async (container: string, depth = 1): Promise<string[]> => {
+const discover = async (container: string): Promise<string[]> => {
   const entries = await readdir(container, { withFileTypes: true }).catch(
     () => []
   );
@@ -572,8 +579,8 @@ const discover = async (container: string, depth = 1): Promise<string[]> => {
     const dir = join(container, entry.name);
     if (await Bun.file(join(dir, "SKILL.md")).exists()) {
       found.push(dir);
-    } else if (depth < MAX_DEPTH) {
-      found.push(...(await discover(dir, depth + 1)));
+    } else {
+      found.push(...(await discover(dir)));
     }
   }
   return found;

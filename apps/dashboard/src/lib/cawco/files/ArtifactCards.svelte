@@ -57,6 +57,7 @@
   import { reasonShort } from "@cawco/core/artifact-needs";
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { shortSha } from "@cawco/core/short-id";
   import { reasonLine } from "@cawco/core/words/artifact-needs";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { type Component, untrack } from "svelte";
@@ -445,7 +446,7 @@
     >{/if}{#if artifact.promoted}{#if lead || waiting?.pending[0]}<span
         aria-hidden="true">·</span
       >{/if}<span class="min-w-0 truncate" title={artifactWords.promotedTitle}
-      >{artifactWords.promoted(artifact.promoted.commit.slice(0, 7))}</span
+      >{artifactWords.promoted(shortSha(artifact.promoted.commit))}</span
     >{/if}
 {/snippet}
 

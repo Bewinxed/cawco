@@ -31,6 +31,7 @@ import {
 } from "node:readline";
 import type { BrowserKey } from "@cawco/core/browser";
 import { Effect } from "effect";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { detectPasskeyRelay } from "./passkey-detect";
 
 /** What `file` printed, given 5 s, or why it failed. */
@@ -59,6 +60,7 @@ const UUID_PREFIX_BYTES = 2;
 const CABLE_PAYLOAD_LENGTH = 20;
 
 /** How long a scan runs before it stops itself; the hub's own timeout is shorter. */
+// @limit recording: agent.passkey-scan-ms until 2026-12-26
 const SCAN_TIMEOUT_MS = 35_000;
 
 /** The macOS scanner prints `FIDO_ADVERT:<peripheral>:<base64 service data>:<rssi>` per advert. */
@@ -432,6 +434,8 @@ export class PasskeyScanner {
  */
 export class PasskeyCapture {
   readonly #keys = new Map<BrowserKey, ReturnType<typeof setTimeout>>();
+  /** When each key's scan began. */
+  readonly #began = new Map<BrowserKey, number>();
   readonly #onAdvert: (advert: CapturedAdvert) => void;
   #scanner: PasskeyScanner | undefined;
   #starting: Promise<void> | undefined;
@@ -448,6 +452,9 @@ export class PasskeyCapture {
   /** Scans for `key`'s phone advert. Throws if the scanner cannot start. */
   async start(key: BrowserKey): Promise<void> {
     clearTimeout(this.#keys.get(key));
+    if (!this.#began.has(key)) {
+      this.#began.set(key, Date.now());
+    }
     this.#keys.set(
       key,
       setTimeout(() => this.stop(key), SCAN_TIMEOUT_MS)
@@ -463,6 +470,12 @@ export class PasskeyCapture {
   /** Stops scanning for `key`; the scanner stops with its last key. */
   stop(key: BrowserKey): void {
     clearTimeout(this.#keys.get(key));
+    const began = this.#began.get(key);
+    if (began !== undefined) {
+      // How long a scan ran before the hub stopped it or its bound did.
+      recordLimitReading("agent.passkey-scan-ms", Date.now() - began);
+      this.#began.delete(key);
+    }
     this.#keys.delete(key);
     if (this.#keys.size === 0) {
       this.#scanner?.stop();

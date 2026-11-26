@@ -83,10 +83,16 @@ import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
+import {
+  keepLimitReadings,
+  LimitReadingSchema,
+} from "@cawco/core/limit-readings";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId } from "@cawco/core/short-id";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
@@ -103,7 +109,6 @@ import {
   PAGES_PATH,
   REPORT_PATH,
   type RenderAsk,
-  SERVE_COMMAND_LIMIT,
   type ServedPicture,
   type ServeSpec,
   type SheetWeight,
@@ -322,8 +327,6 @@ const RESTARTS: BackoffPolicy = {
 const LET_GO_POLL_MS = 500;
 /** How long a stopped stage's group has between TERM and KILL. */
 const KILL_GRACE_MS = 5000;
-/** How much of a host's stderr is kept to say why it ended. Ours. */
-const STDERR_KEPT = 2000;
 
 /** The toolchains a stage runs, by the config file that makes a dir their root; in this order where one dir has several (Astro and Nuxt run Vite inside). */
 const TOOLCHAINS: [RegExp, StageToolchain][] = [
@@ -653,7 +656,7 @@ const sendState = (stage: Stage) => {
 /** A change of the stage: logged, one line each, and told to the hub. */
 const tell = (stage: Stage) => {
   console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
+    `[stage] ${shortId(stage.workspace.id)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
   );
   sendState(stage);
 };
@@ -962,9 +965,9 @@ const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
 function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
   const workspace = tree.ref;
   const command = serve.command.trim();
-  if (command.length === 0 || command.length > SERVE_COMMAND_LIMIT) {
+  if (command.length === 0) {
     throw new StageRefusal(
-      `serve.command is the shell command that starts the server, at most ${SERVE_COMMAND_LIMIT} characters, like "bun run dev --port ${serve.port}".`
+      `serve.command is the shell command that starts the server, like "bun run dev --port ${serve.port}".`
     );
   }
   const root = resolve(tree.folder, serve.cwd || ".");
@@ -992,6 +995,7 @@ function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
 }
 
 /** The bridge into the workspace's network the daemon's own looks at a stage go through. */
+// @limit measured: 12 hex characters are 48 bits of SHA-256; the stages one machine holds, so two collide after about 2^24 names
 const bridgeName = (stage: Stage) =>
   `stage-${createHash("sha256").update(stage.key).digest("hex").slice(0, 12)}`;
 
@@ -1041,7 +1045,7 @@ const askStage = Effect.fnUntraced(function* <T>(
   const at =
     reached === "host"
       ? stageRenderWords.loopback(stage.port)
-      : stageRenderWords.bridged(stage.port, stage.boundary.id.slice(0, 8));
+      : stageRenderWords.bridged(stage.port, shortId(stage.boundary.id));
   const asked = attempt(async (signal) => {
     // An abort is the read's own deadline, which its bound answers.
     const cut = (error: unknown): never => {
@@ -1499,6 +1503,7 @@ function sleep(stage: Stage): void {
 const HostWordSchema = z.object({
   cawco: z.string(),
   errors: z.array(StageErrorSchema).optional(),
+  readings: z.array(LimitReadingSchema).optional(),
   message: z.string().optional(),
   restartsOn: z.array(z.string()).optional(),
 });
@@ -1542,6 +1547,9 @@ const up = Effect.fnUntraced(function* (stage: Stage, life: Scope.Scope) {
 
 /** What the host said, kept and told to the hub; whether it said it serves. */
 const heard = (stage: Stage, word: HostWord): boolean => {
+  if (word.readings) {
+    keepLimitReadings(word.readings);
+  }
   if (word.cawco === "ready") {
     stage.restartsOn = word.restartsOn ?? [];
     return true;
@@ -1829,7 +1837,7 @@ const hearing = (
       const tail = newTail();
       let fatal: string | undefined;
       const keep = (chunk: Buffer) => {
-        writeTail(tail, chunk.toString("utf8"), STDERR_KEPT);
+        writeTail(tail, chunk.toString("utf8"), OUTPUT_TAIL_KEPT);
       };
       let partial = "";
       // A server says nothing CawCo reads: its words are kept to say why it
@@ -2382,7 +2390,7 @@ export async function warmStage(
     );
   } catch (error) {
     console.warn(
-      `[stage] ${workspace.id.slice(0, 8)}: not warmed for ${warm.by}: ${error instanceof Error ? error.message : String(error)}`
+      `[stage] ${shortId(workspace.id)}: not warmed for ${warm.by}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
@@ -2506,7 +2514,7 @@ const used = (stage: Stage, by: string): void => {
   const quiet = Date.now() - stage.lastUse;
   if (quiet >= QUIET_SAID_MS) {
     console.info(
-      `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: used by ${by} after ${Math.round(quiet / 60_000)} min quiet`
+      `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: used by ${by} after ${Math.round(quiet / 60_000)} min quiet`
     );
   }
   stage.lastUse = Date.now();
@@ -2736,7 +2744,7 @@ function viewing(stage: Stage): () => void {
   stage.lookedAt = Date.now();
   // What keeps a stage awake, said as it changes.
   console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+    `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: ${stage.viewers} viewer(s)`
   );
   let released = false;
   return () => {
@@ -2745,7 +2753,7 @@ function viewing(stage: Stage): () => void {
       stage.viewers -= 1;
       stage.lastUse = Date.now();
       console.info(
-        `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+        `[stage] ${shortId(stage.workspace.id)} ${stage.dir}: ${stage.viewers} viewer(s)`
       );
     }
   };
@@ -2784,7 +2792,7 @@ export function stopServed(workspace: string, port: number): boolean {
     return false;
   }
   console.info(
-    `[stage] ${workspace.slice(0, 8)} ${stageWords(stage)}: stopped, as no artifact is served from it now`
+    `[stage] ${shortId(workspace)} ${stageWords(stage)}: stopped, as no artifact is served from it now`
   );
   stopOne(stage);
   return true;
@@ -2807,7 +2815,7 @@ export async function keepPins(moving: readonly string[]): Promise<number> {
   for (const design of await designsGone()) {
     await unpin(design).catch((error: unknown) =>
       console.warn(
-        `[stage] design ${design.slice(0, 8)}: its folder is gone, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+        `[stage] design ${shortId(design)}: its folder is gone, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
       )
     );
   }
@@ -2821,7 +2829,7 @@ export async function keepPins(moving: readonly string[]): Promise<number> {
       gone += 1;
     } catch (error) {
       console.warn(
-        `[stage] pin ${pin.slice(0, 8)}: the hub keeps its files now, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+        `[stage] pin ${shortId(pin)}: the hub keeps its files now, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

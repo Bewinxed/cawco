@@ -12,6 +12,8 @@
  * tool and no refusal names it.
  */
 
+import { derivedName } from "@cawco/providers/derived-name";
+
 /** CawCo's own repository, where usability feedback is filed. The hub's `CAWCO_FEEDBACK_REPO` names another, to try it without posting here. */
 export const FEEDBACK_REPO = "github.com/Bewinxed/cawco";
 
@@ -250,6 +252,7 @@ export const refusalIdentity = (
 };
 
 /** A fingerprint's length in hex digits. */
+// @limit measured: 12 hex characters are 48 bits of SHA-256; one fingerprint per problem a tool refuses with, so two collide after about 2^24 names
 const FINGERPRINT_DIGITS = 12;
 
 /** One problem's fingerprint: the tool and its {@link refusalIdentity}, hashed. */
@@ -273,8 +276,6 @@ export interface FeedbackReport {
   readonly workaround?: string;
 }
 
-/** A title's most characters. GitHub takes 256; the list shows about this many. */
-const TITLE_MAX = 90;
 const SPACES = /\s+/gu;
 const BACKTICKS = /`+/gu;
 
@@ -295,12 +296,7 @@ const fenced = (text: string): string => {
 /** The issue's title: the tool, then what the agent wanted, cut at a word. */
 export const feedbackTitle = (report: FeedbackReport): string => {
   const whole = `${report.tool}: ${report.wanted.replace(SPACES, " ").trim()}`;
-  if (whole.length <= TITLE_MAX) {
-    return whole;
-  }
-  const cut = whole.slice(0, TITLE_MAX - 1);
-  const space = cut.lastIndexOf(" ");
-  return `${space > report.tool.length + 2 ? cut.slice(0, space) : cut}…`;
+  return derivedName(whole);
 };
 
 /**

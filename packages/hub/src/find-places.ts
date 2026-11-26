@@ -52,6 +52,7 @@ export const placesQuery = (
 ): TranscriptPlacesQuery => ({
   sessions,
   words,
+  // @limit measured: a page; the next page's cursor rides the answer. 50 is the rows one page returns
   limit: PLACES_WINDOW,
   ...(window.whose === undefined ? {} : { kind: KIND[window.whose] }),
   ...(window.offset === undefined ? {} : { offset: Math.trunc(window.offset) }),

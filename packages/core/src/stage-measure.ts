@@ -44,7 +44,7 @@ export interface MeasureAsk {
   on?: MeasureOn;
   play?: true;
   press?: MeasurePress;
-  /** How many times the move repeats for the memory counters: {@link MEASURE_REPEATS} at least, and when left out. */
+  /** How many times the move repeats for the memory counters: 1 at least, and {@link MEASURE_REPEATS} when left out. */
   repeats?: number;
   speed?: MeasureSpeed;
   /** `type` only: the words typed, a key at a time. Its length is bounded by the stage's limit on a play (canvas stage.ts `PLAY_MS`), which refuses a press that types past it, as is `key`'s. */

@@ -450,8 +450,11 @@ export interface AtLimit {
 
 export const DEFAULT_AT_LIMIT: AtLimit = {
   move: true,
+  // @limit external: a wait the person adjusts in Settings before meeting it, over any range (WCAG 2.2 SC 2.2.1, https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)
   waitMinutes: 15,
+  // @limit external: a time limit longer than 20 hours, and adjustable in Settings (WCAG 2.2 SC 2.2.1, https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)
   staleAfterHours: 24,
+  // @limit external: 200k tokens is the smallest context window a Claude model has, so a smaller context fits whole on any target (https://platform.claude.com/docs/en/build-with-claude/context-windows)
   moveWholeUnderK: 200,
   compaction: DEFAULT_COMPACTION,
 };
@@ -474,7 +477,9 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
  */
 export const RESTRICTIVE_AT_LIMIT: AtLimit = {
   move: false,
+  // @limit measured: the stale cutoff counts whole hours, so one hour is the least Settings saves, and the wait is that hour in minutes
   waitMinutes: 60,
+  // @limit measured: the stale cutoff counts whole hours, so one hour is the least Settings saves
   staleAfterHours: 1,
   moveWholeUnderK: 0,
   compaction: {

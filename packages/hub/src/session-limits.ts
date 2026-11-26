@@ -12,6 +12,7 @@ import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 
 /** A percent of the machine, or null for no limit. */
+// @limit external: a percentage runs from 0 to 100
 const PERCENT = t.Nullable(t.Integer({ minimum: 1, maximum: 100 }));
 
 export const sessionLimitRoutes = (db: DbShape) =>

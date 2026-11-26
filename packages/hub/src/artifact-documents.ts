@@ -155,6 +155,7 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
     createHash("sha256")
       .update(JSON.stringify(fields))
       .digest("base64url")
+      // @limit measured: 22 base64url characters are 132 bits of a hash; one document's etags share the namespace, so two collide after about 2^66 names
       .slice(0, 22);
 
   /**

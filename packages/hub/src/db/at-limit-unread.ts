@@ -9,6 +9,7 @@
 import type { Database } from "bun:sqlite";
 import { COMPACT_METHODS } from "@cawco/core/accounts/kinds";
 import { HARNESSES } from "@cawco/core/harness/kinds";
+import { shown } from "./json-reads";
 
 /** One policy field as 0399 reads it: its JSON path, whether it reads there, and what it must be. */
 interface Field {
@@ -124,9 +125,6 @@ const why = (row: Unread): string => {
       : [`${name} is ${bad}, not ${field.wants}`];
   }).join("; ");
 };
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Every provider whose saved policy does not read, by provider. */
 const unreadPolicies = (

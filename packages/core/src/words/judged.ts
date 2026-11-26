@@ -4,14 +4,13 @@
  * work (hub dispatch.ts `attemptWork`), and how the task then shows that
  * attempt (hub tasks.ts `endedHowOf`).
  */
+import { shortSha } from "../short-id";
+
 /** A sentence's end. */
 const ENDED = /[.!?]$/u;
 
 /** The head of Jev's comment over the lines it did not show met. */
 const NOT_SHOWN_MET = "Not shown met:";
-
-/** How many characters of a commit name a sentence shows. */
-const SHA_SHOWN = 9;
 
 /** A signed count of lines: `+12`, `−3`. */
 const signed = (sign: "+" | "−", count: number): string => `${sign}${count}`;
@@ -74,10 +73,10 @@ export const judgedWords = {
   gitExited: (code: number): string => `git exited ${code}`,
   /** Why: origin, fetched, does not hold the landed commit. */
   notOnOrigin: (sha: string): string =>
-    `origin does not hold commit ${sha.slice(0, SHA_SHOWN)}`,
+    `origin does not hold commit ${shortSha(sha)}`,
   /** Why: a pushed branch shares no history with its base. */
   noSharedHistory: (sha: string, base: string): string =>
-    `commit ${sha.slice(0, SHA_SHOWN)} shares no history with origin/${base}`,
+    `commit ${shortSha(sha)} shares no history with origin/${base}`,
   /** The diff's heading: what was diffed, `from..sha`. */
   diffHead: (range: string): string => `The diff it landed (${range}):`,
   /** A landing that changed no file. */

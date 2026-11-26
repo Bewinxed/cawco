@@ -64,6 +64,7 @@ export const runtimeCommit =
  * agent whose range holds its own, and a joined machine installs only a
  * build whose range overlaps its hub's.
  */
+// @limit external: the wire protocol's own version
 export const protocolRange = { min: 10, max: 10 } as const;
 /**
  * The folder every build's runtime folder sits in, one per build by its

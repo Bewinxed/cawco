@@ -47,7 +47,12 @@
   import { IconSearch } from "#lib/icons.js";
   import { felt } from "#lib/platform/feel.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
-  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import {
+    dur,
+    ease,
+    motionOk,
+    numberOf,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { keyed } from "#lib/platform/motion/keyed.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -302,7 +307,10 @@
     if (off < 0) {
       return Math.max(0, 1 + off * 1.6);
     }
-    return 1 - FAINT * Math.min(depthRows, 4) * depthOf(up);
+    return (
+      1 -
+      FAINT * Math.min(depthRows, numberOf("--recall-depth-rows")) * depthOf(up)
+    );
   }
 
   /**
@@ -489,7 +497,12 @@
     }
     lastAt = 0;
     const step = (now: number) => {
-      const dt = lastAt ? Math.min(0.032, (now - lastAt) / 1000) : 1 / 60;
+      const dt = lastAt
+        ? Math.min(
+            /* @limit measured: two frames at 60 Hz; a longer gap is a stalled tab, not motion */ 0.032,
+            (now - lastAt) / 1000
+          )
+        : 1 / 60;
       lastAt = now;
       const goal = clamp(Math.round(target));
       speed += (STIFFNESS * (goal - pos) - DAMPING * speed) * dt;

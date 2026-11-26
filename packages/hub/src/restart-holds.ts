@@ -14,12 +14,14 @@ import {
   RESUMABLE_CAWCO_TOOLS,
   type RestartReadiness,
 } from "@cawco/core/binary-updates";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 
 const calls = new Map<symbol, string>();
 /** Until when new calls a restart would cut are refused; past it, none are. */
 let fenceUntil = 0;
 
 /** The most a fence may stand without being raised again; a longer ask is refused, not shortened. */
+// @limit recording: hub.fence-asked-ms until 2026-12-26
 export const FENCE_CAP_MS = 15 * 60_000;
 
 /**
@@ -56,6 +58,9 @@ export function hubRestartReadiness(): RestartReadiness & { fenced: boolean } {
 
 /** Raises the fence for `ms` from now (0 lowers it), then says what still holds. */
 export function fenceHub(ms: number): RestartReadiness & { fenced: boolean } {
+  if (ms > 0) {
+    recordLimitReading("hub.fence-asked-ms", ms);
+  }
   fenceUntil = ms > 0 ? Date.now() + ms : 0;
   return hubRestartReadiness();
 }

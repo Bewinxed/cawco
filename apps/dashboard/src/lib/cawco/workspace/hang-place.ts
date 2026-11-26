@@ -6,6 +6,7 @@
  * strip's box) and the room's margins. The room is the hang layer the card
  * stands in (hang-layer): the window in the app, a frame's box on a canvas.
  */
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { placeHang } from "#lib/platform/motion/hang-shape.js";
 
 /** Their corner (`radius-lg`) and the level run from a foot's tip to it. */
@@ -13,8 +14,6 @@ const HANG_CORNER = 12;
 const HANG_RUN = 4;
 /** Their margin to the room's edges. */
 const HANG_MARGIN = 12;
-/** The session card's width at most. */
-const CARD_W = 416;
 
 const flareOf = (anchor: HTMLElement) =>
   Number.parseFloat(
@@ -62,4 +61,4 @@ export function placeUnder(
 
 /** The session card's width: 416px, within the room less its margins. */
 export const cardWidthIn = (room: DOMRect) =>
-  Math.min(CARD_W, room.width - 2 * HANG_MARGIN);
+  Math.min(numberOf("--spacing-c-lead-card-w"), room.width - 2 * HANG_MARGIN);

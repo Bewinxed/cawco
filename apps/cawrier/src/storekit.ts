@@ -16,9 +16,6 @@ const APPLE_ROOT_CA_G3 = Buffer.from(
   "base64"
 );
 
-/** A real StoreKit transaction is about 5 KB. */
-const MAX_JWS_CHARS = 16_384;
-
 export type TransactionEnvironment = "Production" | "Sandbox";
 
 export type Purchase =
@@ -31,9 +28,6 @@ export type Purchase =
       readonly seat: string;
     }
   | { readonly ok: false; readonly error: string };
-
-/** A notification's signed payload carries a signed transaction and renewal info; real ones are well under this. */
-const MAX_NOTIFICATION_CHARS = 64_000;
 
 type Transaction = Awaited<
   ReturnType<SignedDataVerifier["verifyAndDecodeTransaction"]>
@@ -93,9 +87,6 @@ export const verifyNotification = async (
   env: Env,
   signedPayload: string
 ): Promise<Notification> => {
-  if (signedPayload.length > MAX_NOTIFICATION_CHARS) {
-    return { ok: false, error: "The notification is too big." };
-  }
   const data = unverifiedPayload(signedPayload).data as
     { environment?: unknown } | undefined;
   const environment = data?.environment;
@@ -156,10 +147,7 @@ export const verifyAppTransaction = async (
   env: Env,
   jws: string
 ): Promise<Purchase> => {
-  const receiptType =
-    jws.length <= MAX_JWS_CHARS
-      ? unverifiedPayload(jws).receiptType
-      : undefined;
+  const { receiptType } = unverifiedPayload(jws);
   if (receiptType === "Production") {
     return {
       ok: false,
@@ -210,10 +198,7 @@ export const verifyPurchase = async (
   env: Env,
   jws: string
 ): Promise<Purchase> => {
-  const environment =
-    jws.length <= MAX_JWS_CHARS
-      ? unverifiedPayload(jws).environment
-      : undefined;
+  const { environment } = unverifiedPayload(jws);
   if (!isEnvironment(environment)) {
     return {
       ok: false,

@@ -6,7 +6,7 @@
  * it is moving to can't take (limit-moves.ts `pickWithMove`), and a move the
  * hub refused, naming the account it stays on.
  */
-import { andList } from "./helpers";
+import { namedAndMore } from "@cawco/providers/names";
 
 /** What a waiting move waits on, as its line ends: core protocol `OwedMoveWait`, or its machine away. */
 export type MoveWait =
@@ -14,9 +14,6 @@ export type MoveWait =
   | { kind: "work" }
   | { kind: "machine"; host: string }
   | { kind: "now" };
-
-/** How many of an account's models a refused pick names. */
-const MODELS_NAMED = 6;
 
 /** "when this turn ends": the moment a waiting move goes, as its line ends. */
 const whenWords = (wait: MoveWait): string => {
@@ -75,7 +72,7 @@ export const owedMoveWords = {
     notOffered: (to: string, model: string, offered: readonly string[]) =>
       offered.length === 0
         ? `${to}, the account this session is moving to, lists no models`
-        : `${to}, the account this session is moving to, doesn't offer ${model}; it offers ${andList(offered.slice(0, MODELS_NAMED))}${offered.length > MODELS_NAMED ? ` and ${offered.length - MODELS_NAMED} more` : ""}`,
+        : `${to}, the account this session is moving to, doesn't offer ${model}; it offers ${namedAndMore(offered)}`,
     /** The account's catalog was never read, so the model can't be checked against it. */
     unread: (to: string, model: string, why: string | undefined): string =>
       `${to}'s models haven't been read${why ? ` (${why})` : ""}, so ${model} can't be checked against the account this session is moving to`,

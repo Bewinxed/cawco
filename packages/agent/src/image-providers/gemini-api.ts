@@ -36,6 +36,7 @@ const GOOGLE_PROVIDER = "google";
  * (https://aistudio.google.com/docs/image-generation.md, "Use up to 14
  * reference images", read 2026-11-05).
  */
+// @limit external: Gemini image models take up to 14 reference images (aistudio.google.com/docs/image-generation.md, read 2026-11-05)
 const MAX_REFERENCES = 14;
 
 /**

@@ -84,6 +84,7 @@
   import { land } from "#lib/platform/motion/share.svelte.js";
   import {
     integrate,
+    Release,
     type Sample,
     sampleAt,
   } from "#lib/platform/motion/spring.js";
@@ -1037,8 +1038,6 @@
   /** Past a held finger's slop (utils/longpress, 10px), so a pull is never also a hold. */
   const PULL_SLOP = 12;
   const PULL_OPEN = 24;
-  /** Release speed is read over this last stretch, ms. */
-  const PULL_WINDOW = 80;
   /** How far a release is carried along its speed, ms (as the Caw drawer's). */
   const PULL_PROJECT = 99;
 
@@ -1170,35 +1169,12 @@
     }
   };
 
-  /** Where a pull's finger was, px down from where it pressed, and when. */
-  interface PullSample {
-    t: number;
-    y: number;
-  }
-
   /** A press's travel so far: too short to say, a pull down, or not one. */
   function pullVerdict(dx: number, dy: number): "wait" | "pull" | "not" {
     if (Math.hypot(dx, dy) < PULL_SLOP) {
       return "wait";
     }
     return dy > 0 && dy > Math.abs(dx) ? "pull" : "not";
-  }
-
-  /** Keeps the samples of the last PULL_WINDOW, and at least two. */
-  function track(samples: PullSample[], y: number, t: number) {
-    samples.push({ y, t });
-    while (samples.length > 2 && t - (samples.at(0)?.t ?? t) > PULL_WINDOW) {
-      samples.shift();
-    }
-  }
-
-  /** The finger's speed down over the samples, px/ms. */
-  function pullSpeed(samples: PullSample[]): number {
-    const [first] = samples;
-    const last = samples.at(-1);
-    return first && last && last.t > first.t
-      ? (last.y - first.y) / (last.t - first.t)
-      : 0;
   }
 
   function pullMenu(
@@ -1214,7 +1190,7 @@
     let pulling = false;
     let el: HTMLElement | null = null;
     let dy = 0;
-    const samples: PullSample[] = [];
+    const hand = new Release();
     const move = (e: PointerEvent) => {
       dy = e.clientY - y0;
       if (!pulling) {
@@ -1242,7 +1218,7 @@
         return;
       }
       cancelAnimationFrame(pullFrame);
-      track(samples, dy, e.timeStamp);
+      hand.push(dy, e.timeStamp);
       el ??= openMenuEl();
       if (el) {
         drawPull(el, dy / (el.offsetHeight || 1));
@@ -1258,7 +1234,7 @@
         menuHeld = false;
         return;
       }
-      const speed = pullSpeed(samples);
+      const speed = hand.velocity();
       const h = shown.offsetHeight || 1;
       settlePull(
         shown,
@@ -1309,7 +1285,7 @@
     const y0 = event.clientY;
     let swiping = false;
     let dy = 0;
-    const samples: PullSample[] = [];
+    const hand = new Release();
     const h = () => el.offsetHeight || 1;
     const move = (e: PointerEvent) => {
       dy = e.clientY - y0;
@@ -1333,7 +1309,7 @@
         return;
       }
       cancelAnimationFrame(pullFrame);
-      track(samples, dy, e.timeStamp);
+      hand.push(dy, e.timeStamp);
       drawPull(el, 1 + Math.min(dy, 0) / h());
     };
     const up = () => {
@@ -1341,7 +1317,7 @@
       if (!(swiping && motionOk.current)) {
         return;
       }
-      const speed = pullSpeed(samples);
+      const speed = hand.velocity();
       settlePull(
         el,
         1 + Math.min(dy, 0) / h(),

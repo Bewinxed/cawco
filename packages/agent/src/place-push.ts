@@ -13,6 +13,7 @@
 
 import type { ControlArgs } from "@cawco/core/control-table";
 import { hubRepoOfUrl } from "@cawco/core/hub-repo";
+import { shortSha } from "@cawco/core/short-id";
 import {
   type CONTROL_PLACE_PUSH,
   type PlacePush,
@@ -114,7 +115,7 @@ export const placePush = async (
     `HEAD:refs/heads/${branch}`
   );
   console.info(
-    `[place-push] ${root}: ${branch} at ${commit.slice(0, 9)} pushed to ${remote}`
+    `[place-push] ${root}: ${branch} at ${shortSha(commit)} pushed to ${remote}`
   );
   return { ...read, pushed: true, hub };
 };

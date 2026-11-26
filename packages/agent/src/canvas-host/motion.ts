@@ -35,3 +35,7 @@ export const progressOf = (run: Animation): number =>
   run.playState === "finished"
     ? 1
     : (run.effect?.getComputedTiming().progress ?? 1);
+
+/** A token holding a plain number (`--zoom-fit-most` is 1.5). */
+export const tokenNumber = (token: string): number =>
+  Number.parseFloat(tokenValue(token)) || 0;

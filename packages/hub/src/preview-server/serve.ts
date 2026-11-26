@@ -40,6 +40,7 @@ import {
   PREVIEW_ENTER_PATH,
   PREVIEW_ERRORS_PATH,
   PREVIEW_PING_PATH,
+  PREVIEW_READINGS_PATH,
 } from "@cawco/core/preview/routes";
 import { sourceKeyOf, type Upstream } from "@cawco/core/preview/upstream";
 import { previewWords } from "@cawco/core/words/preview";
@@ -1152,6 +1153,7 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     }
     if (
       pathname === PREVIEW_ERRORS_PATH ||
+      pathname === PREVIEW_READINGS_PATH ||
       ARTIFACT_PATH.test(pathname) ||
       STORE_PATH.test(pathname) ||
       PAGE_SHAPE_PATH.test(pathname)
@@ -1237,6 +1239,7 @@ const EMBED_KEY = /"embedKey":"([^"]+)"/gu;
 
 /** A document's ETag, weak, naming everything it is made of (`parts`). */
 const documentEtag = (parts: unknown[]): string =>
+  // @limit measured: 27 base64url characters are 162 bits of a hash; one document's etags share the namespace, so two collide after about 2^81 names
   `W/"${createHash("sha256").update(JSON.stringify(parts)).digest("base64url").slice(0, 27)}"`;
 
 /** A weak validator's mark. */

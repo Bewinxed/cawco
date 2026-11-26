@@ -24,6 +24,7 @@ import {
   todoLink,
 } from "@cawco/core/references";
 import type { RoutineRunView } from "@cawco/core/routine-kinds";
+import { shortId } from "@cawco/core/short-id";
 import type {
   AttemptStart,
   StagesView,
@@ -35,6 +36,7 @@ import type {
 } from "@cawco/core/task-views";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { taskLinkWords } from "@cawco/core/words/task-links";
+import { derivedName } from "@cawco/providers/derived-name";
 import type { DuplicateOutcome } from "../jev-tasks";
 import { slotLabel } from "../routine-schedule";
 import type { TaskComment } from "../task-file";
@@ -43,11 +45,12 @@ import {
   ago,
   ahead,
   count,
-  handle,
+  excerpt,
   lasted,
   lines,
   listed,
   quote,
+  valueExcerpt,
   valueWords,
 } from "./words";
 
@@ -69,27 +72,16 @@ const NO_LINKS: LinkScope = { project: null, session: null };
 /** Tasks' titles by id, what an answer names other tasks by (task-tools.ts reads them with the answer). */
 type TaskTitles = Readonly<Record<string, string>>;
 
-/** Words cut at `max` characters, a link's label. */
-const cut = (text: string, max: number): string => {
-  const flat = text.replace(/\s+/gu, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-};
-
 /** A task by its link in the project, labelled by its title; with no project (discovery), its id and its words in quotes. */
-const taskName = (
-  links: LinkScope,
-  id: string,
-  title: string,
-  max: number
-): string =>
+const taskName = (links: LinkScope, id: string, title: string): string =>
   links.project
-    ? taskLink(links.project, id, cut(title, max))
-    : `${id} ${quote(title, max)}`;
+    ? taskLink(links.project, id, derivedName(title))
+    : `${id} ${quote(title)}`;
 
 /** A task an edge names, by its link when its title is known; else its id, the one name there is. */
 const edgeName = (links: LinkScope, id: string): string => {
   const title = links.titles?.[id];
-  return title === undefined ? id : taskName(links, id, title, 120);
+  return title === undefined ? id : taskName(links, id, title);
 };
 
 /** Tasks an edge names, in words. */
@@ -99,8 +91,8 @@ const edgesNamed = (links: LinkScope, ids: readonly string[]): string =>
 /** A wait's target by its link, labelled by its title, question or name; with no project (discovery), its words in quotes. */
 const waitLink = (wait: WaitState, links: LinkScope): string =>
   links.project && wait.href
-    ? markdownLink(cut(wait.label, 120), wait.href)
-    : quote(wait.label, 120);
+    ? markdownLink(derivedName(wait.label), wait.href)
+    : quote(wait.label);
 
 /**
  * One wait, as every answer says it: its link and where it stands (`open`,
@@ -181,7 +173,7 @@ const attemptWords = (
 
 /** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand), how it ended and its words. */
 const runLine = (run: RoutineRunView, zone: string, now: number): string =>
-  `  - ${slotLabel(run.slot, zone)} run ${handle(run.id)}: ${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${run.endedAt ? `, after ${lasted(run.endedAt - run.startedAt)}` : ""}${run.verdict ? `, ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
+  `  - ${slotLabel(run.slot, zone)} run ${shortId(run.id)}: ${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${run.endedAt ? `, after ${lasted(run.endedAt - run.startedAt)}` : ""}${run.verdict ? `, ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output)}` : ""}`;
 
 /** Why a routine stands in Needs you, in words. */
 const NEEDS: Record<NonNullable<TaskRoutine["needs"]>["why"], string> = {
@@ -197,10 +189,10 @@ const routineLines = (routine: TaskRoutine, now: number): string[] => {
     routine.schedule.timeZone ||
     Intl.DateTimeFormat().resolvedOptions().timeZone;
   return [
-    `Routine ${handle(routine.id)}: ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · target ${routine.target} · ${routine.stop ? `stops when: ${quote(routine.stop, 300)}` : "no stop condition, runs until ended"}${routine.deadline === null ? "" : ` · deadline ${ahead(routine.deadline, now)}`}`,
+    `Routine ${shortId(routine.id)}: ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · target ${routine.target} · ${routine.stop ? `stops when: ${quote(routine.stop)}` : "no stop condition, runs until ended"}${routine.deadline === null ? "" : ` · deadline ${ahead(routine.deadline, now)}`}`,
     ...(routine.needs
       ? [
-          `Needs the owner: ${NEEDS[routine.needs.why]}${routine.needs.said ? `: ${quote(routine.needs.said, 300)}` : ""}`,
+          `Needs the owner: ${NEEDS[routine.needs.why]}${routine.needs.said ? `: ${quote(routine.needs.said)}` : ""}`,
         ]
       : []),
     ...(routine.problem
@@ -218,7 +210,7 @@ const checkLines = (check: TaskRoutine["check"], now: number): string[] =>
         `Check: \`${check.command}\`${check.approved ? "" : " (changed since approved: it runs nothing until the owner approves it)"}`,
         ...check.machines.map(
           (one) =>
-            `  - ${one.machine}: ${one.checkedAt === null ? "not checked yet" : `${one.outcome ?? "checked"} ${ago(one.checkedAt, now)}`}${one.said ? `; ${quote(one.said, 300)}` : ""}${one.wokeAt === null ? "" : `, last woke it ${ago(one.wokeAt, now)}`}`
+            `  - ${one.machine}: ${one.checkedAt === null ? "not checked yet" : `${one.outcome ?? "checked"} ${ago(one.checkedAt, now)}`}${one.said ? `; ${quote(one.said)}` : ""}${one.wokeAt === null ? "" : `, last woke it ${ago(one.wokeAt, now)}`}`
         ),
       ]
     : [];
@@ -276,7 +268,7 @@ const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
     ...(task.problem ? [`its file: ${task.problem}`] : []),
     `changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}`,
   ];
-  return `- ${taskName(links, task.id, task.title, 120)} · ${facts.join(" · ")}`;
+  return `- ${taskName(links, task.id, task.title)} · ${facts.join(" · ")}`;
 };
 
 /** `task_read` without an id: the stages, then the board. */
@@ -337,7 +329,7 @@ const attemptLine = (
   title: string,
   now: number
 ): string =>
-  `- ${sessionLink(attempt.instanceId, cut(title, 120))} · ${attempt.state} · started ${ago(attempt.startedAt, now)}${attempt.endedAt ? ` · ended ${ago(attempt.endedAt, now)}` : ""}${attempt.endedHow ? ` · ${attempt.endedHow}` : ""}${attempt.headline ? `: ${quote(attempt.headline, 240)}` : ""}`;
+  `- ${sessionLink(attempt.instanceId, derivedName(title))} · ${attempt.state} · started ${ago(attempt.startedAt, now)}${attempt.endedAt ? ` · ended ${ago(attempt.endedAt, now)}` : ""}${attempt.endedHow ? ` · ${attempt.endedHow}` : ""}${attempt.headline ? `: ${quote(attempt.headline)}` : ""}`;
 
 const artifactWords = (artifact: ResultArtifact): string => {
   const shown = artifact.name ? `${artifact.name}: ` : "";
@@ -347,7 +339,7 @@ const artifactWords = (artifact: ResultArtifact): string => {
     case "artifact":
       return artifact.name
         ? artifactLink(artifact.artifactId, artifact.name)
-        : `artifact ${handle(artifact.artifactId)}`;
+        : `artifact ${shortId(artifact.artifactId)}`;
     case "file":
     case "post":
       return `${shown}${artifact.path}`;
@@ -356,7 +348,7 @@ const artifactWords = (artifact: ResultArtifact): string => {
 
 /** A handed-in result, in words. */
 const resultLines = (result: AttemptResult, now: number): string[] => [
-  `Result, handed in ${ago(result.at, now)}: ${quote(result.summary, 1200)}`,
+  `Result, handed in ${ago(result.at, now)}: ${excerpt(result.summary, 1200)}`,
   ...(result.check.length > 0 ? [`To check: ${result.check.join("; ")}`] : []),
   ...(result.artifacts.length > 0
     ? [`Made: ${result.artifacts.map(artifactWords).join("; ")}`]
@@ -365,8 +357,8 @@ const resultLines = (result: AttemptResult, now: number): string[] => [
 
 const commentLine = (comment: TaskComment, now: number): string =>
   comment.via
-    ? `- ${comment.via.author.login} on ${externalItemWords.source[comment.via.source]}, ${ago(comment.at, now)}: ${quote(comment.text, 600)} ${comment.via.url}`
-    : `- ${comment.author.name}, ${ago(comment.at, now)}: ${quote(comment.text, 600)}`;
+    ? `- ${comment.via.author.login} on ${externalItemWords.source[comment.via.source]}, ${ago(comment.at, now)}: ${excerpt(comment.text, 600)} ${comment.via.url}`
+    : `- ${comment.author.name}, ${ago(comment.at, now)}: ${excerpt(comment.text, 600)}`;
 
 /** One external item a task links: `GitHub issue #12 “Title”, Open, by bewinxed: <url>`, its record marked. */
 const linkLine = (link: ExternalRef): string => {
@@ -385,7 +377,7 @@ const builtOnLine = (task: TaskView): string =>
     ? task.builtOn
         .map(
           (moved) =>
-            `Built on ${markdownLink(cut(moved.label, 120), moved.href)}, ${moved.since} since: reopen it with task_update if that changes the work.`
+            `Built on ${markdownLink(derivedName(moved.label), moved.href)}, ${moved.since} since: reopen it with task_update if that changes the work.`
         )
         .join(" ")
     : "";
@@ -430,7 +422,7 @@ const fileLines = (task: TaskView, links: LinkScope): string[] =>
 /** A task's handed-in result, or that its attempts have handed in none. */
 const taskResultLine = (task: TaskView, now: number): string | false => {
   if (task.result) {
-    return `Result, handed in ${ago(task.result.at, now)} by work item ${handle(task.result.workItemId)}${task.result.headline ? `: ${quote(task.result.headline, 300)}` : ""}\n${task.result.report}`;
+    return `Result, handed in ${ago(task.result.at, now)} by work item ${shortId(task.result.workItemId)}${task.result.headline ? `: ${quote(task.result.headline)}` : ""}\n${task.result.report}`;
   }
   return task.attempts.length > 0 && "No result handed in yet.";
 };
@@ -497,7 +489,7 @@ const taskBody = (task: TaskAnswer, links: LinkScope): string => {
 const taskWords = (task: TaskAnswer, links: LinkScope = NO_LINKS): string => {
   const scope = scopeOf(task, links);
   return lines(
-    `${taskName(scope, task.id, task.title, 200)} · ${standsWords(task)}`,
+    `${taskName(scope, task.id, task.title)} · ${standsWords(task)}`,
     taskBody(task, scope)
   );
 };
@@ -515,7 +507,7 @@ const duplicateWords = (
   links: LinkScope
 ): string | false => {
   if ("candidates" in outcome) {
-    return `Possible duplicates, to act on: ${listed(outcome.candidates.map((one) => taskName(links, one.id, one.title, 120)))}. ${outcome.ask}${notComparedWords(outcome.notCompared)}`;
+    return `Possible duplicates, to act on: ${listed(outcome.candidates.map((one) => taskName(links, one.id, one.title)))}. ${outcome.ask}${notComparedWords(outcome.notCompared)}`;
   }
   if (outcome.duplicateOf !== null) {
     return `Judged a duplicate of ${edgeName(links, outcome.duplicateOf)} (${outcome.by}): it is dropped.`;
@@ -542,9 +534,9 @@ const filedWhere = (task: TaskAnswer, links: LinkScope): string =>
 const foundInName = (task: TaskAnswer, links: LinkScope): string => {
   const named = task.foundInNamed;
   if (named && links.project) {
-    return markdownLink(cut(named.label, 120), named.href);
+    return markdownLink(derivedName(named.label), named.href);
   }
-  return named ? quote(named.label, 120) : "";
+  return named ? quote(named.label) : "";
 };
 
 /**
@@ -558,14 +550,14 @@ export const taskCreatedWords = (
 ): string => {
   const scope = scopeOf(created, links);
   return lines(
-    `Filed ${taskName(scope, created.id, created.title, 200)}${filedWhere(created, scope)}.`,
+    `Filed ${taskName(scope, created.id, created.title)}${filedWhere(created, scope)}.`,
     waitsLine(created, scope),
     [
       readyWords(created, scope),
       created.duplicates ? duplicateWords(created.duplicates, scope) : "",
       created.suggest === undefined
         ? ""
-        : `Suggested, not set: ${valueWords(created.suggest, 600)}`,
+        : `Suggested, not set: ${valueExcerpt(created.suggest, 600)}`,
     ]
       .filter(Boolean)
       .join(" ")
@@ -592,7 +584,7 @@ const closedWords = (
 ): string => {
   const { closing } = task;
   const first = [
-    `${taskName(links, task.id, task.title, 200)} is ${task.kind === "dropped" ? `dropped, in ${task.stage}` : task.stage}.`,
+    `${taskName(links, task.id, task.title)} is ${task.kind === "dropped" ? `dropped, in ${task.stage}` : task.stage}.`,
     closing.unwaited.length > 0
       ? `It is out of the waits of ${edgesNamed(links, closing.unwaited)}.`
       : "",
@@ -621,7 +613,7 @@ export const taskChangedWords = (
     return closedWords({ ...task, closing: task.closing }, scope);
   }
   return lines(
-    `${taskName(scope, task.id, task.title, 200)} now: ${standsWords(task)}`,
+    `${taskName(scope, task.id, task.title)} now: ${standsWords(task)}`,
     taskBody(task, scope)
   );
 };
@@ -642,7 +634,7 @@ export const taskLinkedWords = (
   links: LinkScope = NO_LINKS
 ): string => {
   const scope = scopeOf(task, links);
-  const name = taskName(scope, task.id, task.title, 200);
+  const name = taskName(scope, task.id, task.title);
   const { linked } = task;
   if (linked.duplicateOf) {
     return `${name} closed as a duplicate of ${edgeName(scope, linked.duplicateOf)}.${linked.moved.length > 0 ? ` ${count(linked.moved.length, "wait")} moved to it: ${edgesNamed(scope, linked.moved)}.` : ""}`;
@@ -668,7 +660,7 @@ export const attemptStartWords = (start: AttemptStart): string =>
   lines(
     start.text,
     start.instanceId && start.workspaceId
-      ? `Its workspace ${handle(start.workspaceId)}; type ${start.type ?? "the hub's default"}.`
+      ? `Its workspace ${shortId(start.workspaceId)}; type ${start.type ?? "the hub's default"}.`
       : `It has no session yet: it waits for owned files; type ${start.type ?? "the hub's default"}; lands ${start.lands}.`
   );
 
@@ -705,7 +697,7 @@ export const todoWrittenWords = (
 ): string => {
   if ("steps" in written) {
     const plan = links.session
-      ? `Your plan, ${planLink(links.session, cut(planName(written), 120))}`
+      ? `Your plan, ${planLink(links.session, derivedName(planName(written)))}`
       : "Your plan";
     return lines(
       written.steps.length > 0 ? `${plan}:` : `${plan} has no steps.`,
@@ -721,7 +713,7 @@ export const todoWrittenWords = (
     );
   }
   return lines(
-    `The to-dos of ${taskName(links, written.id, written.title, 200)}:`,
+    `The to-dos of ${taskName(links, written.id, written.title)}:`,
     todoLines(written.todos, links, written.id)
   );
 };
@@ -733,7 +725,7 @@ export const taskCommentedWords = (
 ): string => {
   const now = Date.now();
   return lines(
-    `Commented on ${taskName(links, commented.id, commented.title, 200)}; its comments:`,
+    `Commented on ${taskName(links, commented.id, commented.title)}; its comments:`,
     commented.comments.map((comment) => commentLine(comment, now))
   );
 };
@@ -750,7 +742,7 @@ export const taskArchivedWords = (
   archived: TaskNamed & { archivedAt: number | null; path: string },
   links: LinkScope = NO_LINKS
 ): string => {
-  const name = taskName(links, archived.id, archived.title, 200);
+  const name = taskName(links, archived.id, archived.title);
   return archived.archivedAt === null
     ? `${name} is back on the board, at ${archived.path}.`
     : `Archived ${name} to ${archived.path}.`;

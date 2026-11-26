@@ -12,6 +12,7 @@ import type { PageFaultReport } from "@cawco/core/page-faults";
 import {
   PREVIEW_ENTER_PATH,
   PREVIEW_ERRORS_PATH,
+  PREVIEW_READINGS_PATH,
 } from "@cawco/core/preview/routes";
 import type { Upstream } from "@cawco/core/preview/upstream";
 import { unhandled } from "@cawco/core/unhandled";
@@ -31,11 +32,13 @@ import {
   type storeSocket,
 } from "./artifacts/sync";
 import { takeErrorReport } from "./dashboard-errors";
+import type { LimitReadingsDb } from "./db/limit-readings";
 import type { StoreKey } from "./db/page-stores";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import type { PreviewsDb } from "./db/previews";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
+import { takeBrowserReadings } from "./limit-readings";
 import { PICK_WORDS } from "./person-acts";
 import type { PreviewListeners, PreviewServerHand } from "./preview";
 import { enter, lockedResponse, type PassLock } from "./preview-access";
@@ -105,11 +108,15 @@ export interface PreviewOriginDeps {
 export interface PreviewControlDeps {
   documents: ArtifactDocuments;
   listeners: PreviewListeners;
+  /** The hub's machine, once read: where the preview server's own readings are kept. */
+  machine: () => string | undefined;
   origin: PreviewOriginDeps;
   passes: PreviewPassesDb;
   previews: Pick<PreviewsDb, "used">;
   /** Where machine origin `key`'s preview is served now, its listener started when none serves it (preview-service.ts `reach`); undefined for an origin no machine serves. */
   reach: (key: string) => Promise<UpstreamAnswer> | undefined;
+  /** Where a page's readings of the bounds waiting on data are kept (limit-readings.ts). */
+  readings: LimitReadingsDb;
   /**
    * The workspace machine origin `key`'s preview is served from, which its
    * machine said is gone, cut again (server.ts `reviveServed`, workspaces.ts
@@ -415,6 +422,9 @@ export const previewControlRoutes = (
     if (!key) {
       return new Response("Not found", { status: 404 });
     }
+    if (pathname === PREVIEW_READINGS_PATH && sent.method === "POST") {
+      return takeBrowserReadings(sent, deps.readings);
+    }
     if (pathname === PREVIEW_ERRORS_PATH) {
       // A fault is kept only for an artifact this origin serves.
       return takeErrorReport(sent, (report) => {
@@ -466,6 +476,14 @@ export const previewControlRoutes = (
           case "unreachable":
             deps.unreachable(said.key, said.upstream);
             return;
+          case "readings": {
+            // The preview server runs on the hub's machine.
+            const machine = deps.machine();
+            if (machine) {
+              deps.readings.keep(machine, said.readings);
+            }
+            return;
+          }
           default:
             unhandled("what the preview server said", said);
         }

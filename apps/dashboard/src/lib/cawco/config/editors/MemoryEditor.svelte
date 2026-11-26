@@ -8,6 +8,7 @@
     scopeKey,
   } from "@cawco/core/fleet";
   import { machineLabel } from "@cawco/core/machine-names";
+  import { shortId } from "@cawco/core/short-id";
   import { memoryWords as words } from "@cawco/core/words/memory";
   import { untrack } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -23,7 +24,6 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
-
   import {
     adoptMemory,
     adoptMemoryDoc,
@@ -75,6 +75,7 @@
 
   const store = configStore();
   const HUE = "var(--color-mark-6)";
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const LATEST = 5;
   const main = untrack(() => path === MAIN);
 
@@ -468,9 +469,7 @@
             formatDistanceToNow(new Date(saved.updatedAt))
           )}</span
         >
-        <span class="type-code" title={saved.hash}
-          >{saved.hash.slice(0, 8)}</span
-        >
+        <span class="type-code" title={saved.hash}>{shortId(saved.hash)}</span>
       {:else}
         <span>{words.notWritten}</span>
       {/if}
@@ -580,7 +579,7 @@
                 <span
                   data-slot="note"
                   class="type-meta max-w-c-measure text-ink-muted"
-                  title={row.hash}>{row.hash.slice(0, 8)}</span
+                  title={row.hash}>{shortId(row.hash)}</span
                 >
                 <span
                   data-slot="note"

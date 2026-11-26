@@ -9,6 +9,7 @@
  * commit this clone lacks is fetched by its id.
  */
 
+import { gitShort } from "@cawco/core/git-short";
 import { DAY_MS } from "@cawco/core/time";
 
 /**
@@ -225,14 +226,14 @@ export const nightliesAhead = (
     if (run.exitCode === 1) {
       ahead.push(nightly);
     } else if (run.exitCode !== 0) {
-      unread.push(`${nightly.label} (${nightly.commit.slice(0, 10)})`);
+      unread.push(`${nightly.label} (${gitShort(cwd, nightly.commit)})`);
     }
   }
   const [newest] = ahead;
   return {
     ahead,
     ...(newest && {
-      behind: `This branch is older than ${newest.label} (${newest.commit.slice(0, 10)}): rebase onto origin/main, then run the check again.`,
+      behind: `This branch is older than ${newest.label} (${gitShort(cwd, newest.commit)}): rebase onto origin/main, then run the check again.`,
     }),
     ...(unread.length > 0 && {
       unknown: `Whether the branch descends from ${unread.join(", ")} could not be read here, so ${unread.length === 1 ? "it is" : "they are"} compared as before.`,

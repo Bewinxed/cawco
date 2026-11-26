@@ -1,14 +1,9 @@
 /**
- * The few rules a word may call besides its own expression. Each has its
- * Swift twin written by scripts/words-swift.ts (`HELPERS` there), which
- * refuses a word that calls anything else.
+ * The few rules a word may call besides its own expression, and `andList` in
+ * `@cawco/providers/names`. Each has its Swift twin written by
+ * scripts/words-swift.ts (`HELPERS` there), which refuses a word that calls
+ * anything else.
  */
-
-/** "obelisk", "obelisk and mac", "a, b and c": names as a sentence lists them. */
-export const andList = (names: readonly string[]): string =>
-  names.length < 2
-    ? (names[0] ?? "")
-    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 /**
  * How many need whom: "1 needs you", and with what they are, "6 tasks

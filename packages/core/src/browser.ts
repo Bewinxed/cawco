@@ -389,6 +389,7 @@ export interface TakeoverFocus {
 }
 
 /** The most device px a phone layout draws each CSS px at: a phone's 3x. */
+// @limit recording: dashboard.device-pixel-ratio until 2026-12-10
 export const TAKEOVER_SCALE_MOST = 3;
 
 /** What a hand-back answers: the front page's origin, and nothing else of it. */
@@ -533,6 +534,7 @@ export interface PasskeyAdvertFrame extends BrowserPasskeyAdvertArgs {
 }
 
 /** How old a relayed advert may be before the inject end drops it. */
+// @limit recording: core.passkey-advert-age-ms until 2026-12-10
 export const PASSKEY_ADVERT_MAX_AGE_MS = 5000;
 
 // ---------------------------------------------------------------------------

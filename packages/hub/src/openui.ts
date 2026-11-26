@@ -22,6 +22,7 @@
  *   sentence, so Caw fixes it rather than the view losing a part silently.
  */
 
+import { listWithin, TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import { unhandled } from "@cawco/core/unhandled";
 import { VIEW_TOOLS, type ViewToolName } from "@cawco/core/views";
 import { viewToolArgsFaults } from "@cawco/core/views-library";
@@ -43,10 +44,10 @@ process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
 
 /** The longest program a view may be. */
+// @limit measured: the largest update of a component artifact is 14.1 MiB, an upper bound for the view source field (artifact_updates on obelisk, 2026-11-26)
 const VIEW_SOURCE_MAX = 64 * 1024;
 /** The soonest a Query may refresh itself, in seconds: a view polls the hub no faster. */
 const REFRESH_MIN_S = 30;
-const MAX_PROBLEMS = 8;
 
 const parser = createParser(spec.schema, spec.root);
 
@@ -73,7 +74,7 @@ const unfit = (problems: string[]) =>
     detail:
       problems.length === 1
         ? (problems[0] ?? "")
-        : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+        : `The view has ${problems.length} problems:\n- ${listWithin(problems, TOOL_ANSWER_CHARS, "\n- ")}`,
   });
 
 /** Its strings, action steps and functions that would run code or reach out. */

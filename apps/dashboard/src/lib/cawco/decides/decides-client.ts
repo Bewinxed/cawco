@@ -5,7 +5,12 @@
  * Every refusal throws the hub's sentence (hub-read.ts `refusedOrUnreached`).
  */
 
-import type { CawPoseId, FleetDecides, Hear } from "@cawco/core/decides";
+import type {
+  CawPoseId,
+  FleetDecides,
+  Hear,
+  MarkHue,
+} from "@cawco/core/decides";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
@@ -64,7 +69,7 @@ export interface AgentBody {
 export const addMember = (body: {
   agent: AgentBody;
   hear: Hear;
-  hue: number;
+  hue: MarkHue;
   job: string;
   name: string;
 }) => hubData(hub.api.decides.members.post(body), refusedOrUnreached);
@@ -72,13 +77,13 @@ export const addMember = (body: {
 /** Saves an agent member's settings (the built-ins' too: their type and how he hears). */
 export const saveMember = (
   id: string,
-  body: { agent: AgentBody; hear: Hear; hue?: number; job?: string }
+  body: { agent: AgentBody; hear: Hear; hue?: MarkHue; job?: string }
 ) => hubData(hub.api.decides.members({ id }).put(body), refusedOrUnreached);
 
 /** A flock member's pose, or an added member's identity hue. */
 export const setPicture = (
   id: string,
-  picture: { pose: CawPoseId } | { hue: number }
+  picture: { pose: CawPoseId } | { hue: MarkHue }
 ) =>
   hubData(
     hub.api.decides.members({ id }).picture.put(picture),

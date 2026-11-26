@@ -218,7 +218,12 @@
     const newest = holder.querySelector<HTMLElement>(
       '[data-slot="thread"] > li:last-child'
     );
-    if ((fromChip && pin.thread.length <= 2) || pin.thread.length < 2) {
+    if (
+      (fromChip &&
+        pin.thread.length <=
+          /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 2) ||
+      pin.thread.length < 2
+    ) {
       holder.scrollTop = 0;
     } else {
       holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;

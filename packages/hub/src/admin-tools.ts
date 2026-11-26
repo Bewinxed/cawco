@@ -27,6 +27,7 @@ import {
 } from "@cawco/core/fleet";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
+import { shortId } from "@cawco/core/short-id";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
@@ -131,11 +132,7 @@ const marketplaceAction = async (
 const adminTool = toolOn<AdminCalls>();
 
 /** Every write's reason, which the person reads first on the approval (asks.ts `askRefusal`). */
-const reason = z
-  .string()
-  .max(300)
-  .optional()
-  .describe("Required: why, for which task.");
+const reason = z.string().optional().describe("Required: why, for which task.");
 
 /** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
 const keptMemory = (
@@ -193,7 +190,7 @@ const listedNamed = <T extends Listed>(
     {
       id: (row) => row.id,
       names: (row) => [row.name],
-      said: (row) => `${row.name} (${row.id.slice(0, 8)})`,
+      said: (row) => `${row.name} (${shortId(row.id)})`,
     },
     what
   );

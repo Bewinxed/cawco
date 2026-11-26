@@ -37,6 +37,7 @@ const judgeSource = (): string =>
  * The gate form a host of `harness` started by this build runs. For OpenCode,
  * `plugin` is the bridge plugin's source this agent writes.
  */
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the gate forms one session holds, so two collide after about 2^32 names
 export const gateForm = (harness: HookHarness, plugin = ""): string =>
   createHash("sha256")
     .update([harness, judgeSource(), plugin].join("\0"))

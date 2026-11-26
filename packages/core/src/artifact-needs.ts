@@ -220,9 +220,11 @@ export const artifactStopOf = (value: string | null): ArtifactPlace => {
       return { pin };
     }
   }
+  // @limit external: CawCo's own reference form "card:<id>": the prefix is 5 characters, so a longer value holds an id
   if (value?.startsWith("card:") && value.length > 5) {
     return { card: value.slice(5) };
   }
+  // @limit external: CawCo's own reference form "change:<id>": the prefix is 7 characters, so a longer value holds an id
   if (value?.startsWith("change:") && value.length > 7) {
     return { change: value.slice(7) };
   }

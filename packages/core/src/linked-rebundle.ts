@@ -25,6 +25,7 @@ export function linkedFolder(from: string, name: string): string | null {
 const packageName = (specifier: string): string =>
   specifier
     .split("/")
+    // @limit external: an npm package name is one segment, or two when scoped (@scope/name) (docs.npmjs.com/cli/configuring-npm/package-json#name)
     .slice(0, specifier.startsWith("@") ? 2 : 1)
     .join("/");
 
@@ -59,6 +60,7 @@ const filesDigest = (folders: readonly string[]): string => {
       hash.update(`${dir}\0${relative(dir, file)}\0${size}\0${mtimeMs}\n`);
     }
   }
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; one fingerprint per rebuild of the linked folders on a machine, so two collide after about 2^32 names
   return hash.digest("hex").slice(0, 16);
 };
 

@@ -16,6 +16,7 @@ import { cp, mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+// @limit measured: 5 builds of at most 3 GB each (a nightly's whole output, scripts/release/steps/promote.ts, 2026-10-26) fit in 15 GB, 0.8% of obelisk's 1.8 TB disk (df, 2026-11-26)
 const KEPT = 5;
 const DASHBOARD = "apps/dashboard";
 
@@ -86,6 +87,7 @@ const keyFor = async (root: string, closure: string[]) => {
     paths.map((path) => git(root, ["rev-parse", `HEAD:${path}`]))
   );
   const input = [...hashes, Bun.version].join("\n");
+  // @limit measured: 32 hex characters are 128 bits of SHA-256; the dashboard builds one machine caches, so two collide after about 2^64 names
   return createHash("sha256").update(input).digest("hex").slice(0, 32);
 };
 

@@ -13,10 +13,12 @@ import {
 } from "@cawco/core/fleet";
 import type { ConnectAccess, ConnectAccessSet } from "@cawco/core/frames";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { mcpWords } from "@cawco/core/words/mcp";
+import { quote } from "@cawco/providers/quote";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -133,6 +135,7 @@ const identityOf = (tokens: { id_token?: unknown }): string | null => {
   );
   return said?.trim() ?? null;
 };
+// @limit recording: hub.mcp-discovery-ms until 2026-12-10
 const DISCOVERY_TIMEOUT_MS = 15_000;
 /**
  * Re-probes of a server the hub could not reach: from 30 s, doubling to 15
@@ -151,6 +154,7 @@ const REPROBES: BackoffPolicy = {
  * so an answer let go at a short deadline loses the only refresh token
  * that still works, and the next refresh spends the old one and is refused.
  */
+// @limit recording: hub.mcp-token-ms until 2026-12-10
 const TOKEN_DEADLINE_MS = 120_000;
 /** How long a request waits on a refresh before it is answered 502 to retry; the refresh itself goes on. */
 const REFRESH_WAIT_MS = 20_000;
@@ -182,8 +186,6 @@ const EXPIRY_MARGIN_MS = 5000;
 const FRESH_TOKEN_MS = 10_000;
 /** The token endpoint's errors that end a sign-in (RFC 6749 §5.2, RFC 6750 §3.1). */
 const ENDING = new Set(["invalid_grant", "invalid_token"]);
-/** How much of a provider's error words a log line and Show details carry. */
-const WORDS_MAX = 400;
 type OAuthRow = NonNullable<ReturnType<DbShape["getMcpOauth"]>>;
 type McpServerRow = NonNullable<ReturnType<DbShape["getMcpServer"]>>;
 
@@ -283,8 +285,7 @@ export interface SignInPorts {
 const TRAILING_STOP = /\.$/u;
 
 /** A provider's words, cut to what a log line and a Show details carry. */
-const cut = (words: string): string =>
-  words.length > WORDS_MAX ? `${words.slice(0, WORDS_MAX)}…` : words;
+const cut = (words: string): string => quote(words);
 
 /**
  * A token endpoint's refusal in its own words: the OAuth error code and its
@@ -344,6 +345,7 @@ const reachWithin = async (
   take: (response: Response) => Promise<Response>,
   deadline = DISCOVERY_TIMEOUT_MS
 ): Promise<Response> => {
+  const asked = Date.now();
   const reached = await readWithin(deadline, async (signal) => {
     let response: Response;
     try {
@@ -357,6 +359,11 @@ const reachWithin = async (
     }
     return await take(response);
   });
+  if (deadline === TOKEN_DEADLINE_MS) {
+    recordLimitReading("hub.mcp-token-ms", Date.now() - asked);
+  } else {
+    recordLimitReading("hub.mcp-discovery-ms", Date.now() - asked);
+  }
   switch (reached.kind) {
     case "answered":
       return reached.value;

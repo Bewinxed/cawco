@@ -18,6 +18,7 @@
 
 import { join } from "node:path";
 import { workspacesDirUnder } from "@cawco/core/paths/workspace";
+import { shortId } from "@cawco/core/short-id";
 import { previewWords } from "@cawco/core/words/preview";
 import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
@@ -92,12 +93,12 @@ export const createFolderMove = (deps: FolderMoveDeps) => {
         if (files.status !== REFUSED) {
           // Away, silent or failing: the next register tries again.
           console.warn(
-            `[artifacts] folder preview ${id.slice(0, 8)}'s files were not moved in from ${deps.machineName(machineId)} now: ${String(files.response.detail)}`
+            `[artifacts] folder preview ${shortId(id)}'s files were not moved in from ${deps.machineName(machineId)} now: ${String(files.response.detail)}`
           );
           break;
         }
         console.warn(
-          `[artifacts] folder preview ${id.slice(0, 8)} can't be shown again: its pin ${pin.slice(0, 8)} on ${deps.machineName(machineId)} wasn't read (${String(files.response.detail)})`
+          `[artifacts] folder preview ${shortId(id)} can't be shown again: its pin ${shortId(pin)} on ${deps.machineName(machineId)} wasn't read (${String(files.response.detail)})`
         );
         deps.gone(
           id,

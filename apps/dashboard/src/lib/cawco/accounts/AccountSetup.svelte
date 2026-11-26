@@ -842,7 +842,7 @@
 
 {#snippet pick()}
   <section class="flex min-w-0 flex-col">
-    {#if choices.length > 8}
+    {#if choices.length > /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 8}
       <Input
         data-search
         aria-label={words.search}

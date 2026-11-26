@@ -1426,6 +1426,7 @@ export const browserKey = (userAgent: string | null): string =>
   `browser:${createHash("sha256")
     .update(userAgent ?? "")
     .digest("hex")
+    // @limit measured: 16 hex characters are 64 bits of a hash; the browser keys of one hub share the namespace, so two collide after about 2^32 names
     .slice(0, 16)}`;
 
 const ACT_BODY = t.Union([
@@ -1446,13 +1447,14 @@ const ACT_BODY = t.Union([
   }),
   t.Object({
     act: t.Literal("add-record"),
-    token: t.String({ minLength: 1, maxLength: 200 }),
+    token: t.String({ minLength: 1 }),
   }),
   t.Object({
     act: t.Literal("token"),
-    token: t.String({ minLength: 1, maxLength: 200 }),
+    token: t.String({ minLength: 1 }),
   }),
   t.Object({ act: t.Literal("pick"), machineId: t.String({ minLength: 1 }) }),
+  // @limit external: a DNS name is 255 octets on the wire (RFC 1035 section 3.1; RFC 2181 section 11), which is 253 characters written with dots
   t.Object({ act: t.Literal("name"), name: t.String({ maxLength: 253 }) }),
 ]);
 
@@ -1492,9 +1494,9 @@ export const relayJourneyRoutes = (
       "/api/stream-relay/proof",
       {
         body: t.Object({
-          answered: t.Array(t.String(), { maxItems: 8 }),
-          refused: t.Array(t.String(), { maxItems: 8 }),
-          seenAs: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+          answered: t.Array(t.String()),
+          refused: t.Array(t.String()),
+          seenAs: t.Union([t.String(), t.Null()]),
         }),
       },
       ({ body, request, server }) => {

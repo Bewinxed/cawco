@@ -50,27 +50,14 @@ interface TunedMove {
   records: TunedRecord[];
 }
 
-/** The map's bounds. Ours: far past any move a person tunes, short of a doc a phone can't hold. */
-const TUNED_LIMITS = {
-  /** Moves a canvas keeps tuned. */
-  moves: 200,
-  /** Records one move keeps: its animations, a morphed text's letters each. */
-  records: 2000,
-  /** The longest words a record holds (a move's or an animation's name, an easing, a value). */
-  text: 400,
-  /** Legs one record names, and values. */
-  parts: 50,
-} as const;
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const isText = (value: unknown): value is string =>
-  typeof value === "string" && value.length <= TUNED_LIMITS.text;
+const isText = (value: unknown): value is string => typeof value === "string";
 const isFigure = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const REPEATS = new Set(["once", "repeat", "mirror"]);
 
-/** Whether `value` is one record within the bounds. */
+/** Whether `value` is one record. */
 const recordOk = (value: unknown): boolean => {
   if (!isRecord(value)) {
     return false;
@@ -84,13 +71,9 @@ const recordOk = (value: unknown): boolean => {
     isFigure(value.duration) &&
     typeof value.offTokens === "boolean" &&
     (value.repeat === undefined || REPEATS.has(String(value.repeat))) &&
-    (legs === undefined ||
-      (Array.isArray(legs) &&
-        legs.length <= TUNED_LIMITS.parts &&
-        legs.every(isFigure))) &&
+    (legs === undefined || (Array.isArray(legs) && legs.every(isFigure))) &&
     (values === undefined ||
       (Array.isArray(values) &&
-        values.length <= TUNED_LIMITS.parts &&
         values.every(
           (one) =>
             isRecord(one) &&
@@ -103,16 +86,12 @@ const recordOk = (value: unknown): boolean => {
 
 /**
  * Why the `tuned` map after a write may not be kept; null when it may:
- * `moves`, the moves it holds after it, and `changed`, each move it wrote.
- * A move it left stood within these bounds already.
+ * `changed`, each move it wrote. A move it left stood within these checks
+ * already.
  */
 export function tunedProblem(
-  moves: number,
   changed: Iterable<[string, unknown]>
 ): string | null {
-  if (moves > TUNED_LIMITS.moves) {
-    return `A canvas keeps at most ${TUNED_LIMITS.moves} tuned moves.`;
-  }
   for (const [move, kept] of changed) {
     const one = isRecord(kept) ? kept : null;
     if (!(
@@ -125,11 +104,8 @@ export function tunedProblem(
     )) {
       return `Tuned move ${cutShort(move, 80)} holds at, pageHash and records.`;
     }
-    if (one.records.length > TUNED_LIMITS.records) {
-      return `A tuned move keeps at most ${TUNED_LIMITS.records} records.`;
-    }
     if (!one.records.every(recordOk)) {
-      return `A record of tuned move ${cutShort(move, 80)} is not a tuned timing: it holds move, animation, delay, duration, easing and offTokens, each within ${TUNED_LIMITS.text} characters.`;
+      return `A record of tuned move ${cutShort(move, 80)} is not a tuned timing: it holds move, animation, delay, duration, easing and offTokens.`;
     }
   }
   return null;

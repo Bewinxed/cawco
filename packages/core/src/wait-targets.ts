@@ -133,6 +133,7 @@ const offsetMs = (zone: string | undefined): number => {
     return 0;
   }
   const digits = zone.slice(1).replace(":", "");
+  // @limit external: RFC 3339 section 5.6: time-numoffset is a sign, two hour digits, ":" and two minute digits
   const minutes = Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2));
   return (zone[0] === "-" ? -1 : 1) * minutes * 60_000;
 };

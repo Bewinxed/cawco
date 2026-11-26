@@ -18,6 +18,13 @@
  *   to a stated length and every list to a stated count before it is sent.
  */
 
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import {
+  fitItems,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+  shareOut,
+} from "@cawco/core/prompt-budget";
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
 import type {
@@ -36,6 +43,7 @@ import {
   type StarterInputs,
   subjectsOf,
 } from "./starter-asks";
+import { CRITERIA_MAX } from "./task-file";
 
 /** The table's rows, by the words a log line uses. */
 const ROWS = {
@@ -61,6 +69,7 @@ const ROWS = {
 export type PlacementRow = keyof typeof ROWS;
 
 /** A placement question is asked inside a hub action, so it is asked briefly. Our own call. */
+// @limit recording: hub.jev-placement-ms until 2026-12-10
 const PLACEMENT_TIMEOUT_MS = 20_000;
 
 /**
@@ -103,6 +112,7 @@ export async function askRow<
   const named = (Array.isArray(rows) ? rows : [rows])
     .map((row) => ROWS[row])
     .join(" + ");
+  const asked = Date.now();
   const asking = await askJev(access, state, questions, {
     timeoutMs: PLACEMENT_TIMEOUT_MS,
   }).catch((error: unknown) => {
@@ -114,6 +124,7 @@ export async function askRow<
       cause: error,
     });
   });
+  recordLimitReading("hub.jev-placement-ms", Date.now() - asked);
   switch (asking.kind) {
     case "answered":
       console.log(
@@ -228,8 +239,8 @@ export interface DispatchJudgement {
   readyScore: number;
 }
 
-/** The most frontier tasks one look asks about: the project's attempt cap is at most 20. */
-export const DISPATCH_ASKED_MAX = 20;
+/** What Jev reads in one call, in characters: its window less what it writes. */
+export const JEV_BUDGET_CHARS = promptBudgetChars(JEV_WINDOW_TOKENS);
 
 const READY_LEVELS = [
   "Not ready: what to do, or how to tell it is done, is unclear",
@@ -264,35 +275,19 @@ export async function jevDispatch(
   projectId: string,
   candidates: DispatchCandidate[]
 ): Promise<Map<string, DispatchJudgement>> {
-  const asked = candidates.slice(0, DISPATCH_ASKED_MAX);
-  const state = {
-    tasks: Object.fromEntries(
-      asked.map((task) => [
-        task.id,
-        {
-          title: head(task.title, 200),
-          description: head(task.description, 1500),
-          acceptance: head(task.acceptance, 1000),
-          checks: task.checks.slice(0, 10).map((check) => head(check, 200)),
-          todos: task.todos.slice(0, 20).map((todo) => head(todo, 200)),
-          waitedOn: task.waitedOn.slice(0, 10).map((wait) => head(wait, 200)),
-          waiting: task.waiting,
+  const entries = candidates.map((task) => {
+    const questions: Record<
+      string,
+      Extract<Experimental_DecisionQuestion, { type: "score" }>
+    > = {
+      [`${task.id}:ready`]: {
+        type: "score",
+        instructions: {
+          task: task.id,
+          question: `Is \`tasks["${task.id}"]\` ready for an agent to start now? Everything in its \`waitedOn\` has settled, so nothing it waits for holds it any more.`,
         },
-      ])
-    ),
-  };
-  const questions: Record<
-    string,
-    Extract<Experimental_DecisionQuestion, { type: "score" }>
-  > = {};
-  for (const task of asked) {
-    questions[`${task.id}:ready`] = {
-      type: "score",
-      instructions: {
-        task: task.id,
-        question: `Is \`tasks["${task.id}"]\` ready for an agent to start now? Everything in its \`waitedOn\` has settled, so nothing it waits for holds it any more.`,
+        criteria: READY_LEVELS,
       },
-      criteria: READY_LEVELS,
     };
     for (const [name, score] of Object.entries(ORDER_SCORES)) {
       questions[`${task.id}:${name}`] = {
@@ -304,6 +299,42 @@ export async function jevDispatch(
         criteria: score.levels,
       };
     }
+    return {
+      task,
+      questions,
+      state: {
+        title: head(task.title, 200),
+        description: head(task.description, 1500),
+        acceptance: head(task.acceptance, 1000),
+        checks: task.checks.map((check) => head(check, 200)),
+        todos: task.todos.map((todo) => head(todo, 200)),
+        waitedOn: task.waitedOn.map((wait) => head(wait, 200)),
+        waiting: task.waiting,
+      },
+    };
+  });
+  const fitting = fitItems(
+    entries,
+    JEV_BUDGET_CHARS,
+    (entry) => JSON.stringify([entry.state, entry.questions]).length
+  );
+  if (fitting.length < entries.length) {
+    console.log(
+      `[dispatch] Jev asked about ${fitting.length} of ${entries.length} frontier tasks: the rest did not fit its window`
+    );
+  }
+  const asked = fitting.map((entry) => entry.task);
+  const state = {
+    tasks: Object.fromEntries(
+      fitting.map((entry) => [entry.task.id, entry.state])
+    ),
+  };
+  const questions: Record<
+    string,
+    Extract<Experimental_DecisionQuestion, { type: "score" }>
+  > = {};
+  for (const entry of fitting) {
+    Object.assign(questions, entry.questions);
   }
   const result = await askRow(
     ["ready", "order"],
@@ -397,9 +428,6 @@ export async function jevTriage(
 
 /** A yes probability (kept as `noul`) at or above this marks a duplicate. Our own call: dropping a task needs confidence. */
 const DUPLICATE_THRESHOLD = 0.8;
-/** The most open tasks a new one is compared with: the nearest by title words (jev-tasks.ts `openTasks`). */
-export const DUPLICATE_CANDIDATES_MAX = 30;
-
 /** A task as Duplicates compares it. */
 export interface DuplicateBrief {
   checks: string[];
@@ -410,23 +438,29 @@ export interface DuplicateBrief {
   title: string;
 }
 
-/** Duplicates with Jev on: one yes/no per candidate; the likeliest yes over the threshold. */
+/** What `jevDuplicate` reads of a task: its brief. */
+export const duplicateBriefSize = (task: DuplicateBrief): number =>
+  JSON.stringify(duplicateBrief(task)).length;
+
+const duplicateBrief = (task: DuplicateBrief) => ({
+  title: head(task.title, 200),
+  description: head(task.description, 600),
+  checks: task.checks,
+  files: task.files,
+});
+
+/** Duplicates with Jev on: one yes/no per candidate, the candidates already fitted to Jev's window ({@link JEV_BUDGET_CHARS}); the likeliest yes over the threshold. */
 export async function jevDuplicate(
   access: JevAccess,
   projectId: string,
   filed: DuplicateBrief,
   candidates: DuplicateBrief[]
 ): Promise<{ id: string; noul: number } | undefined> {
-  const asked = candidates.slice(0, DUPLICATE_CANDIDATES_MAX);
+  const asked = candidates;
   if (asked.length === 0) {
     return;
   }
-  const brief = (task: DuplicateBrief) => ({
-    title: head(task.title, 200),
-    description: head(task.description, 600),
-    checks: task.checks.slice(0, 10),
-    files: task.files.slice(0, 20),
-  });
+  const brief = duplicateBrief;
   const result = await askRow(
     "duplicates",
     projectId,
@@ -532,9 +566,6 @@ export async function jevRoute(
 
 // --- Delegate type (choice) --------------------------------------------------------
 
-/** The most types one choice offers. */
-const TYPES_ASKED_MAX = 50;
-
 /**
  * Delegate type with Jev on: for work nothing named a type for, the one of
  * the project's catalog (its own types, then the fleet's) it is for.
@@ -545,7 +576,16 @@ export async function jevType(
   work: { text: string; title: string },
   types: { description: string; name: string }[]
 ): Promise<string> {
-  const offered = types.slice(0, TYPES_ASKED_MAX);
+  const offered = fitItems(
+    types,
+    JEV_BUDGET_CHARS,
+    (type) => type.name.length + head(type.description, 300).length
+  );
+  if (offered.length < types.length) {
+    console.log(
+      `[jev] delegate type: offered ${offered.length} of ${types.length} types: the rest did not fit its window`
+    );
+  }
   const result = await askRow(
     "type",
     projectId,
@@ -569,22 +609,31 @@ export async function jevType(
 /** A yes probability (kept as `noul`) at or above this meets a criterion. Our own call, as a meaning rule fires. */
 const JUDGED_THRESHOLD = 0.8;
 /**
- * The most of a landed attempt's diff the judge reads (dispatch.ts
- * `attemptWork` cuts it file by file to this): Jev's context is 32,000
- * tokens (.design-foundations/plans/2026-09-23-jev-typesafe.md, from
- * OpenRouter's page), and a diff runs near three characters a token, so
- * this leaves room for the task, the criteria and the caveats.
+ * What a judgement reads, dealt out of Jev's window ({@link JEV_BUDGET_CHARS})
+ * in the proportion the cuts had: the landed diff (dispatch.ts `attemptWork`
+ * cuts it file by file to its share), an attempt's report when it landed
+ * nothing, the caveats, the work's heading and the line naming what its cut
+ * left out, and the task and its criteria at their longest.
  */
-export const JUDGED_DIFF_MAX = 48_000;
+const JUDGED_SHARES = shareOut(JEV_BUDGET_CHARS, {
+  diff: 48_000,
+  report: 6000,
+  notes: 4000,
+  heading: 4000,
+  task: 200 + 2000 + CRITERIA_MAX * 500,
+});
+/** The most of a landed attempt's diff the judge reads. */
+export const JUDGED_DIFF_MAX = JUDGED_SHARES.diff;
 /** The most of an attempt's report the judge reads when it landed nothing: its end. */
-export const JUDGED_REPORT_MAX = 6000;
+export const JUDGED_REPORT_MAX = JUDGED_SHARES.report;
 /** The most of everything else the work says (its caveats) the judge reads. */
-export const JUDGED_NOTES_MAX = 4000;
+export const JUDGED_NOTES_MAX = JUDGED_SHARES.notes;
 /**
  * The whole of the work the judge reads: the diff, its heading and the
  * line naming what its cut left out, then the caveats.
  */
-const JUDGED_WORK_MAX = JUDGED_DIFF_MAX + JUDGED_NOTES_MAX + 4000;
+const JUDGED_WORK_MAX =
+  JUDGED_SHARES.diff + JUDGED_SHARES.notes + JUDGED_SHARES.heading;
 /**
  * Judged checks with Jev on: one yes/no per criterion (task-file.ts
  * `criteriaOf`), over the attempt's work as dispatch.ts `attemptWork` writes
@@ -644,9 +693,6 @@ const PHONE_ACTIONS = {
 } as const;
 export type PhoneAction = keyof typeof PHONE_ACTIONS;
 
-/** The most open tasks a phone request picks from when it names none. */
-const PHONE_TASKS_MAX = 50;
-
 /**
  * Phone requests with Jev on: the action (choice) and what it fills (the
  * stage it moves to; the task, when the push named none), in one call.
@@ -662,7 +708,16 @@ export async function jevPhone(
     tasks: { id: string; stage: string; title: string }[];
   }
 ): Promise<{ action: PhoneAction; stage?: string; task?: string }> {
-  const tasks = options.tasks.slice(0, PHONE_TASKS_MAX);
+  const tasks = fitItems(
+    options.tasks,
+    JEV_BUDGET_CHARS,
+    (task) => task.id.length + head(task.title, 200).length + task.stage.length
+  );
+  if (tasks.length < options.tasks.length) {
+    console.log(
+      `[jev] phone request: offered ${tasks.length} of ${options.tasks.length} open tasks: the rest did not fit its window`
+    );
+  }
   const result = await askRow(
     "phone",
     projectId,

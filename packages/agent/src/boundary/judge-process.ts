@@ -116,6 +116,7 @@ export const judgeFor = async (
   // another place (the state dir, before be056a0e) listens where this hook
   // would not look. Its form differs, so this build's starts at once beside
   // it, and the hook names a judge that answers.
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the judge processes one machine holds, so two collide after about 2^32 names
   const form = createHash("sha256")
     .update(
       [

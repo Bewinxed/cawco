@@ -5,6 +5,8 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { shortId } from "@cawco/core/short-id";
 import type {
   TranscriptBlock,
   TranscriptPage,
@@ -51,6 +53,7 @@ import {
  * aborted and made once more ({@link readPage}); a phone on a flaky link
  * otherwise leaves a request hanging, and the pane waiting on it, forever.
  */
+// @limit recording: dashboard.transcript-page-ms until 2026-12-10
 const TRANSCRIPT_READ_LIMIT_MS = 30_000;
 
 /** What a read past {@link TRANSCRIPT_READ_LIMIT_MS} says of itself. */
@@ -458,11 +461,18 @@ async function requestPage(
     timedOut = true;
     request.abort(late);
   }, TRANSCRIPT_READ_LIMIT_MS);
+  const asked = performance.now();
   try {
     return await askPage(viewId, page, request.signal);
   } catch (error) {
     throw timedOut ? late : error;
   } finally {
+    if (!cancel?.aborted) {
+      recordLimitReading(
+        "dashboard.transcript-page-ms",
+        performance.now() - asked
+      );
+    }
     clearTimeout(timer);
     cancel?.removeEventListener("abort", stop);
   }
@@ -743,7 +753,7 @@ async function readNewestPage(
     });
     trackWorking(target);
     console.info(
-      `[cawco] read ${viewId.slice(0, 8)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`
+      `[cawco] read ${shortId(viewId)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`
     );
   } catch (error) {
     if (cancel.aborted) {
@@ -770,7 +780,11 @@ async function olderPage(
   try {
     const asked = await readPage(
       viewId,
-      { cursor, limit: TRANSCRIPT_OLDER_PAGE },
+      {
+        cursor,
+        // @limit measured: a page; the pane asks for the next older page as the person scrolls up, so its size sets one read's weight and no limit on what can be read
+        limit: TRANSCRIPT_OLDER_PAGE,
+      },
       cancel
     );
     if (asked.ok) {

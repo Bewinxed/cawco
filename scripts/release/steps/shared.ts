@@ -9,6 +9,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { releaseTag } from "../../../packages/core/src/binary-distribution";
 import type { ReleaseManifest } from "../../../packages/core/src/release-manifest";
 import { SESSIOND_V1 } from "../../../packages/core/src/sessiond";
+import { shortSha } from "../../../packages/core/src/short-id";
 import type { Step } from "../../release-graph";
 import { takeReleaseSecrets, underSigningEnv } from "../../release-signing";
 import type { Runner } from "../binary-tests";
@@ -34,12 +35,12 @@ export const failedEvidence = join(homedir(), ".cache", "cawco-release");
 
 /** The trees a build of `commit` runs in: one builds, one checks (when it must). */
 export const treesOf = (commit: string) => {
-  const base = join(homedir(), ".worktrees", `release-${commit.slice(0, 12)}`);
+  const base = join(homedir(), ".worktrees", `release-${shortSha(commit)}`);
   return { build: base, check: `${base}-check` };
 };
 
 export const stagingOf = (commit: string): string =>
-  join(state, `staging-${commit.slice(0, 12)}`);
+  join(state, `staging-${shortSha(commit)}`);
 
 /** Whether a target's builds are darwin's: a signed bundle. */
 export const isDarwin = (target: string): boolean =>

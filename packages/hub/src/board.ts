@@ -22,6 +22,7 @@
  */
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { BoardChanges, BoardKeyed } from "@cawco/core/frames";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { syncSection } from "@cawco/core/loop-watch";
 import type {
   AgentRow,
@@ -93,6 +94,7 @@ export type BoardContext = Pick<
 >;
 
 /** How many removals a collection keeps the version of, for a page that reconnects. */
+// @limit recording: hub.board-removals-since until 2026-12-03
 const REMOVALS_KEPT = 10_000;
 
 /**
@@ -157,6 +159,7 @@ class Keyed<Entry> {
         removed.push(key);
       }
     }
+    recordLimitReading("hub.board-removals-since", removed.length);
     return { upserts, removed };
   }
 }

@@ -9,8 +9,9 @@
  * row. The app draws none of it, so these are not written into it
  * (scripts/words-swift.ts).
  */
+
+import { andList } from "@cawco/providers/names";
 import type { WorkspaceTool } from "../capabilities";
-import { andList } from "./helpers";
 
 /** How every refusal of these begins: the hub knows one by it (workspaces.ts `openWorkspace`). */
 const WORKSPACE_NEEDS_LEAD = "This machine is missing";

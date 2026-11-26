@@ -3,7 +3,7 @@
  * Project a project's board syncs with (hub sync.ts): under the tie's
  * row in the project's settings, the options it added last.
  */
-import { andList } from "./helpers";
+import { andList } from "@cawco/providers/names";
 
 export const boardStatusWords = {
   /** The line: the options added, and the Project. */

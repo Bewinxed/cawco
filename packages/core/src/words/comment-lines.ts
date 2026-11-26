@@ -29,10 +29,6 @@ export const commentsFull = (
 export const notedLine = (text: string): string =>
   `- My note with these comments: ${JSON.stringify(text)}`;
 
-/** A delivery's line for the marks whose picture the message had no room for: its crops stop at `room`. */
-export const noCropLine = (room: number, marks: string[]): string =>
-  `- A message carries ${room} pictures of marks, so these marks have none: ${marks.join(", ")}.`;
-
 /** A delivery's line for what an update changed under a comment the agent didn't answer: its element, before and after. */
 export const askedAgainLine = (item: ChangedItem): string =>
   `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.after ?? item.label)}${item.moved ? ", and moved it" : ""}.`;
@@ -40,15 +36,3 @@ export const askedAgainLine = (item: ChangedItem): string =>
 /** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
 export const wroteLine = (text: string): string =>
   `- I wrote: ${JSON.stringify(text)}`;
-
-/** A pictures post whose body passed `most` characters. */
-export const picturesBodyTooLong = (most: number): string =>
-  `A pictures post is at most ${most} characters.`;
-
-/** A seen map's revision with more than `most` anchors. */
-export const seenTooManyAnchors = (most: number): string =>
-  `A look names at most ${most} anchors.`;
-
-/** A seen map's anchor longer than `most` characters. */
-export const seenAnchorTooLong = (most: number): string =>
-  `An anchor holds at most ${most} characters.`;

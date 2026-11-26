@@ -16,7 +16,7 @@ socket.onmessage = (event) => {
       payload?: { kind?: string; message?: string };
     };
     if (frame.instanceId === instanceId && frame.payload?.kind === "error") {
-      refused.push(frame.payload.message ?? text.slice(0, 300));
+      refused.push(frame.payload.message ?? text);
     }
   } catch (error) {
     // Not a frame (no JSON): nothing to read here.

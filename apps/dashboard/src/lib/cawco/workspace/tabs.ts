@@ -34,6 +34,7 @@ const NOT_A_PROJECT = new Set(["new", "forgotten"]);
  */
 export function tabOfPath(pathname: string): string | null | undefined {
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  // @limit external: this app's route /session/<id>: two path segments
   if (parts[0] === "session" && parts.length <= 2) {
     return parts[1] ?? null;
   }

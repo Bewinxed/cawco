@@ -91,6 +91,7 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths/roots";
@@ -147,8 +148,10 @@ const stampingOf = (method: string, path: string): Stamping | undefined =>
     ? STAMPED.find(([pattern]) => pattern.test(path))?.[1]
     : undefined;
 /** The most a request's head may hold before its end. */
+// @limit external: the engine's API server is Go's net/http, whose DefaultMaxHeaderBytes is 1 << 20, 1 MB (https://pkg.go.dev/net/http#pkg-constants)
 const HEAD_MAX = 1024 * 1024;
 /** The most a stamped body may hold: a spec or a kube YAML, never a payload. */
+// @limit recording: agent.container-create-bytes until 2026-12-26
 const CREATE_MAX = 16 * 1024 * 1024;
 const HEAD_END = Buffer.from("\r\n\r\n");
 const CRLF = Buffer.from("\r\n");
@@ -333,6 +336,7 @@ const owner = async (): Promise<{ hub: string; machine: string }> => ({
 
 /** What a Kubernetes label value holds (a kube play's pod labels are one): 63 of `[A-Za-z0-9_.-]`. */
 const LABEL_UNSAFE = /[^A-Za-z0-9_.-]/gu;
+// @limit external: a DNS label, 63 characters (RFC 1035)
 const labelValue = (value: string): string =>
   value.replace(LABEL_UNSAFE, "_").slice(0, 63);
 
@@ -720,6 +724,7 @@ const serveConnection = (
           continue;
         }
       }
+      recordLimitReading("agent.container-create-bytes", create.size);
       if (create.size > CREATE_MAX) {
         refuse("a create whose body is over 16 MiB");
         return;
@@ -881,6 +886,7 @@ const ListedContainer = z.object({
 type ListedContainer = z.infer<typeof ListedContainer>;
 
 /** One container a session's end reached, in words: `` `name` (image) ``. */
+// @limit external: Docker's short container id, 12 hex characters
 const namedContainer = (container: ListedContainer): string =>
   `\`${container.Names[0]?.replace(NAME_SLASH, "") ?? container.Id.slice(0, 12)}\` (${container.Image})`;
 
@@ -1023,6 +1029,7 @@ const madeBy = async (
     ]);
     for (const made of [...pods, ...containers]) {
       if (!ours(made.Labels)) {
+        // @limit external: Docker's short container id, 12 hex characters
         console.warn(
           `[containers] ${instanceId}: ${made.Id.slice(0, 12)} on ${socketPath} carries the session's label but another owner's (${MACHINE_LABEL}=${made.Labels?.[MACHINE_LABEL]}, ${HUB_LABEL}=${made.Labels?.[HUB_LABEL]}; this agent is ${own.machine}, ${own.hub}): it is left`
         );

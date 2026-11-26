@@ -67,12 +67,14 @@ const NEXT_RUNS_SPAN_MS = 7 * DAY_MS;
  * fine as that; a finer one (every minute) is told its next 288, the strip
  * spanning to the last of them. An hourly routine's week (168) is whole.
  */
+// @limit measured: one day of a routine that runs every five minutes, 12 an hour × 24 hours; the answer says when the runs told stop before the week's end
 const NEXT_RUNS_MAX = 288;
 
 /**
  * A routine's runs ahead of `now`, as the scheduler will start them: Effect's
  * `Cron.sequence` on the same parsed cron and zone the hub runs it by
- * (`cronOf`), over the next week and at most `NEXT_RUNS_MAX`, epoch ms.
+ * (`cronOf`), over the next week and at most `NEXT_RUNS_MAX`, epoch ms; and
+ * whether they were cut, that is, stop before the week's end.
  */
 export const nextRunsOf = (cron: string, timeZone: string, now: number) => {
   const parsed = cronOf(cron, timeZone);
@@ -80,14 +82,19 @@ export const nextRunsOf = (cron: string, timeZone: string, now: number) => {
     return parsed;
   }
   const runs: number[] = [];
+  let cut = false;
   for (const at of Cron.sequence(parsed, new Date(now))) {
     const time = at.getTime();
-    if (time >= now + NEXT_RUNS_SPAN_MS || runs.length >= NEXT_RUNS_MAX) {
+    if (time >= now + NEXT_RUNS_SPAN_MS) {
+      break;
+    }
+    if (runs.length >= NEXT_RUNS_MAX) {
+      cut = true;
       break;
     }
     runs.push(time);
   }
-  return runs;
+  return { cut, runs };
 };
 
 /** `09:00`, a slot's time in the routine's zone; `test`, `by hand` for the others. */

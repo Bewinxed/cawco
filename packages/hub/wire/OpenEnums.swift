@@ -7229,7 +7229,6 @@ public enum OpenEnums {
         case folderLinkOutside
         case folderListedFile
         case folderMessageMissing
-        case folderMessageTooLong
         case folderPathAbsolute
         case folderPathBackslash
         case folderPathControl
@@ -7251,7 +7250,6 @@ public enum OpenEnums {
         case lfsRefused
         case nameNeeded
         case nameOneLine
-        case nameTooLong
         case noAccount
         case noArea
         case noProject
@@ -7296,7 +7294,6 @@ public enum OpenEnums {
             case "folder-link-outside": self = .folderLinkOutside
             case "folder-listed-file": self = .folderListedFile
             case "folder-message-missing": self = .folderMessageMissing
-            case "folder-message-too-long": self = .folderMessageTooLong
             case "folder-path-absolute": self = .folderPathAbsolute
             case "folder-path-backslash": self = .folderPathBackslash
             case "folder-path-control": self = .folderPathControl
@@ -7318,7 +7315,6 @@ public enum OpenEnums {
             case "lfs-refused": self = .lfsRefused
             case "name-needed": self = .nameNeeded
             case "name-one-line": self = .nameOneLine
-            case "name-too-long": self = .nameTooLong
             case "no-account": self = .noAccount
             case "no-area": self = .noArea
             case "no-project": self = .noProject
@@ -7364,7 +7360,6 @@ public enum OpenEnums {
             case .folderLinkOutside: "folder-link-outside"
             case .folderListedFile: "folder-listed-file"
             case .folderMessageMissing: "folder-message-missing"
-            case .folderMessageTooLong: "folder-message-too-long"
             case .folderPathAbsolute: "folder-path-absolute"
             case .folderPathBackslash: "folder-path-backslash"
             case .folderPathControl: "folder-path-control"
@@ -7386,7 +7381,6 @@ public enum OpenEnums {
             case .lfsRefused: "lfs-refused"
             case .nameNeeded: "name-needed"
             case .nameOneLine: "name-one-line"
-            case .nameTooLong: "name-too-long"
             case .noAccount: "no-account"
             case .noArea: "no-area"
             case .noProject: "no-project"
@@ -7404,7 +7398,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .lfsRefused, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .pageUnheard, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
+        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .lfsRefused, .nameNeeded, .nameOneLine, .noAccount, .noArea, .noProject, .notAllowed, .pageUnheard, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

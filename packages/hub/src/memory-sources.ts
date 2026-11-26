@@ -97,9 +97,6 @@ export const rootOf = (
   return at.id;
 };
 
-/** The longest literal match an anchor may name: a symbol, a command or a config key, not a passage. */
-export const ANCHOR_MATCH = 120;
-
 /** What a machine's file read came to: its text, not there, or no answer (the machine away, or it refused). */
 export type MachineRead =
   { kind: "text"; text: string } | { kind: "missing" } | { kind: "unread" };

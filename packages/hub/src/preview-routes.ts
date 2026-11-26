@@ -27,7 +27,7 @@ const NO_SUCH_ARTIFACT = "This session has no such artifact.";
 export const previewSettingsBody = t.Object({
   mode: t.Union([t.Literal("port"), t.Literal("host")]),
   // A host name's 253, its scheme and a port.
-  pattern: t.Optional(t.String({ maxLength: 270 })),
+  pattern: t.Optional(t.String()),
 });
 
 /**
@@ -98,7 +98,7 @@ export const previewRoutes = (deps: {
       // fails.
       .get(
         "/api/preview-reach",
-        { query: t.Object({ origin: t.String({ maxLength: 300 }) }) },
+        { query: t.Object({ origin: t.String() }) },
         ({ query }) => deps.listeners.reach(query.origin)
       )
       // A session's preview origin, its listener started when it has none.

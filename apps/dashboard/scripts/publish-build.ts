@@ -13,6 +13,8 @@
  * records them (precompress-adapter.ts), never here.
  */
 import { rename, rm, stat } from "node:fs/promises";
+import { handOnAsMachine } from "@cawco/agent/limit-readings-hand-on";
+import { takeBuildReadings } from "../precompress-adapter";
 
 const root = new URL("..", import.meta.url);
 const build = new URL("build", root);
@@ -32,3 +34,6 @@ await rename(build, old).catch((error) => {
   }
 });
 await rename(next, build);
+// What the build read of the bounds waiting on data goes to this machine's hub.
+await takeBuildReadings();
+await handOnAsMachine();

@@ -410,6 +410,7 @@ const timeState = (
     target: waitHandle(target),
     kind: target.kind,
     href: "",
+    // @limit external: RFC 3339 section 5.6: full-date is YYYY-MM-DD, a timestamp's first 10 characters
     label: taskLinkWords.dateLabel(iso.slice(0, 10), iso.slice(11, 16)),
     settled: passed,
     state: passed ? taskLinkWords.datePassed : taskLinkWords.dateNotYet,

@@ -5,6 +5,7 @@ import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
 import { withFetchCap } from "../../packages/core/src/fetch-cap";
+import { recordLimitReading } from "../../packages/core/src/limit-readings";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -163,7 +164,7 @@ async function tail(path: string) {
   if (!(await file.exists())) {
     return "";
   }
-  return (await file.text()).trimEnd().split("\n").slice(-20).join("\n");
+  return (await file.text()).trimEnd();
 }
 function watchChild(name: string, verb: string, child: Bun.Subprocess) {
   return {
@@ -214,6 +215,7 @@ const watchUnit: Watched = {
     ]).catch((error: unknown) => String(error)),
 };
 /** The safety deadline: a busy machine is slow, never wrong (nightly e83078b6d). */
+// @limit recording: smoke.ready-ms until 2026-12-10
 const READY_DEADLINE_MS = 120_000;
 /** The test's hub, on its own port. */
 const HUB = "http://127.0.0.1:43456";
@@ -227,7 +229,8 @@ async function poll<T>(
   attempt: () => Promise<T | undefined>
 ): Promise<T> {
   let unanswered = "nothing yet";
-  for (const end = Date.now() + READY_DEADLINE_MS; Date.now() < end;) {
+  const began = Date.now();
+  for (const end = began + READY_DEADLINE_MS; Date.now() < end;) {
     const exited = await on.exited();
     if (exited !== undefined) {
       throw new Error(
@@ -237,6 +240,7 @@ async function poll<T>(
     try {
       const found = await attempt();
       if (found !== undefined) {
+        recordLimitReading("smoke.ready-ms", Date.now() - began);
         return found;
       }
     } catch (error) {

@@ -28,11 +28,11 @@
  */
 import type { EndedBy } from "@cawco/core/accounts";
 import type { InstanceStatus } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { workWords } from "@cawco/core/words/work";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { TreeStopRow } from "./db/tree-stops";
-import { handle } from "./presenters/words";
 import { isHubParent, isLive } from "./work-item-state";
 import type { WorkItems } from "./work-items";
 
@@ -151,7 +151,7 @@ export const createTreeStops = ({ db, end, workItems }: TreeStopDeps) => {
             ? "background work: it runs on"
             : undefined);
         return [
-          `${"  ".repeat(depth)}- ${item.title} (work item ${handle(item.id)}): ${item.state}${said ? ` — ${said}` : ""}`,
+          `${"  ".repeat(depth)}- ${item.title} (work item ${shortId(item.id)}): ${item.state}${said ? ` — ${said}` : ""}`,
           ...(item.background
             ? []
             : outcomes(item.instanceId, since, depth + 1)),
@@ -175,7 +175,7 @@ export const createTreeStops = ({ db, end, workItems }: TreeStopDeps) => {
         ...(lines.length > 0
           ? [`${workWords.stoppedDelegates}\n${lines.join("\n")}`]
           : []),
-        `[Work item ${handle(item.id)} is ${item.state} in workspace ${handle(item.workspaceId)}.]`,
+        `[Work item ${shortId(item.id)} is ${item.state} in workspace ${shortId(item.workspaceId)}.]`,
       ].join("\n\n"),
       headline
     );

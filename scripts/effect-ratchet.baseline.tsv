@@ -135,6 +135,8 @@ hand-promise	new Promise	packages/hub/src/favicon.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-fetches.ts	1
 hand-promise	new Promise	packages/hub/src/fleet-watch.ts	1
 hand-promise	new Promise	packages/hub/src/folder-move-relay.ts	2
+hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
+hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/host-build.ts	1
 hand-promise	new Promise	packages/hub/src/installs.ts	1
 hand-promise	new Promise	packages/hub/src/law-tasks.ts	1
@@ -159,6 +161,7 @@ promise-chain	building	packages/hub/src/artifact-documents.ts	2
 promise-chain	standing	packages/hub/src/preview-server/listeners.ts	1
 promise-chain	state.queue	packages/hub/src/fleet-mcp-relay.ts	1
 promise-chain	sync.running	packages/hub/src/account-probes.ts	1
+per-key-chain	this.#marks	packages/agent/src/browser/gate.ts	1
 promise-chain	this.#healing	packages/agent/src/fleet-converger.ts	1
 promise-map	#clients	packages/agent/src/keepers.ts	1
 promise-chain	writing	packages/hub/src/decisions.ts	1

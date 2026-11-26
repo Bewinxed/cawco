@@ -40,6 +40,7 @@ import {
 } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -70,6 +71,7 @@ import {
 } from "@cawco/core/harness/opencode-wire";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -103,6 +105,7 @@ import type {
   StoredRun,
 } from "@cawco/core/session-messages";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { shortId } from "@cawco/core/short-id";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
@@ -297,6 +300,11 @@ interface RecoveryWave {
 /** How long the 1.x cutover waits before it asks a 1.x server still running to retire again. Ours. */
 const V1_RETIRE_LOOK_MS = 5000;
 
+/** A config's revision as a status line or a log line names it: the first 8 hex characters of its digest. */
+const revisionOf = (hash: string | null | undefined): string | undefined =>
+  // @limit measured: 8 hex characters are 32 bits of SHA-256; a revision is named in a status line or a log line, never looked up, so two collide after about 2^16 revisions
+  hash?.slice(0, 8);
+
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
 const OPENCODE_SIDECAR = opencodeRecordFile("fleet.json");
 
@@ -404,6 +412,7 @@ const serverLaunch = async (
   flags: {
     [GATE_FORM_ENV]: gateForm("opencode", pluginSource(await buildPlugin())),
     [PLUGIN_FLAG]: pluginDir,
+    // @limit measured: 16 hex characters are 64 bits of SHA-256; the configs one machine's server has run, so two collide after about 2^32 names
     [CONFIG_FLAG]: `${diskHash ?? "none"}/${createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 16)}`,
   },
 });
@@ -556,6 +565,7 @@ const cawcoMcp = () => ({
  * child boots through the keeper, on a cold machine maybe, and a false
  * timeout here starts a second server.
  */
+// @limit recording: agent.opencode-announce-ms until 2026-12-10
 const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 
 /**
@@ -564,6 +574,7 @@ const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
  * its plugin's load (30 s, `PLUGIN_LOAD_TIMEOUT_MS`) and its verification.
  * Ours, with margin.
  */
+// @limit recording: agent.opencode-config-settle-ms until 2026-12-10
 const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
 /** How long a fleet report's wait lets the config rest between two looks. Ours. */
 const CONFIG_LOOK_MS = 250;
@@ -635,6 +646,7 @@ const configHash = (config: unknown): string =>
  */
 const fleetDigest = (config: Record<string, unknown>): string => {
   const { cawco: _own, ...fleet } = recordOf(recordOf(config.mcp).servers);
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the configs one machine's server has run, so two collide after about 2^32 names
   return createHash("sha256")
     .update(canonicalJson(fleet))
     .digest("hex")
@@ -729,7 +741,7 @@ const writeOpencodeConfig = async (
 ): Promise<void> => {
   await writeJson(OPENCODE_CONFIG, config);
   console.info(
-    `[opencode] config written by ${writer} hash=${configHash(config).slice(0, 8)}`
+    `[opencode] config written by ${writer} hash=${revisionOf(configHash(config))}`
   );
 };
 
@@ -866,7 +878,11 @@ const serverAnnounced = Effect.fnUntraced(function* (
       stop?.();
     });
   });
-  return yield* boundedRead(timeoutMs, announced).pipe(
+  return yield* timedEffect(boundedRead(timeoutMs, announced), (ms) => {
+    if (timeoutMs === SERVER_ANNOUNCE_TIMEOUT_MS) {
+      recordLimitReading("agent.opencode-announce-ms", ms);
+    }
+  }).pipe(
     Effect.catch((error) =>
       Effect.fail(
         error instanceof UnansweredRead
@@ -889,6 +905,7 @@ const serverAnnounced = Effect.fnUntraced(function* (
  * Code gets, so a slow server reads the same in either harness.
  */
 const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
+  // @limit measured: startup and catalog take the fleet's MCP connect window (mcp-status.ts MCP_CONNECT_MS), the one Claude Code gets
   const timeout = { startup: MCP_CONNECT_MS, catalog: MCP_CONNECT_MS };
   return "url" in config
     ? {
@@ -1034,6 +1051,7 @@ const serversByPlace = (
       });
     }
   }
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the configs one machine's server has run, so two collide after about 2^32 names
   return Object.fromEntries(
     [...byPlace].map(([cwd, servers]) => [
       cwd,
@@ -1088,6 +1106,7 @@ const placeOpencodeMcp = async (
     const revision = await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(
       () => ""
     );
+    // @limit measured: 16 hex characters are 64 bits of SHA-256; the configs one machine's server has run, so two collide after about 2^32 names
     await writeStateFile(
       OPENCODE_PLACED_REVISION,
       createHash("sha256")
@@ -1449,6 +1468,7 @@ const allSessions = async (
     const read = await askOpencode((options) =>
       client.session.list(
         {
+          // @limit external: OpenCode's page size for session.list, a list its server pages by a cursor
           limit: 200,
           parentID: query.parentID ?? "null",
           ...(query.directory ? { directory: query.directory } : {}),
@@ -1482,6 +1502,7 @@ const allMessages = async (
       client.message.list(
         {
           sessionID,
+          // @limit external: OpenCode's page size for session.messages, a list its server pages by a cursor
           limit: 200,
           ...(from ? { cursor: from } : { order: "asc" as const }),
         },
@@ -1506,6 +1527,7 @@ const messagePage = async (
     client.message.list(
       {
         sessionID,
+        // @limit external: OpenCode's page size for session.messages, a list its server pages by a cursor
         limit: MESSAGE_PAGE,
         ...(cursor ? { cursor } : { order }),
       },
@@ -1975,6 +1997,7 @@ const SIGN_IN_FAULTS = opencodeRecordFile("sign-in-faults.json");
 const SIGN_IN_CHECK_MS = HOUR_MS;
 
 /** How long a key's check request may take. Ours: a list of models answers in well under a second; past this it says nothing. */
+// @limit recording: agent.opencode-key-check-ms until 2026-12-26
 const KEY_CHECK_TIMEOUT_MS = 20_000;
 
 /** Anthropic's API, where OpenCode's Anthropic provider sends when its config names no other (`@ai-sdk/anthropic`'s default). */
@@ -2721,7 +2744,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       JSON.stringify({
         type: "config-convergence",
         state: "pending",
-        detail: `new revision ${hash.slice(0, 8)}… vs applied ${this.#appliedHash?.slice(0, 8) ?? "unknown"}; binary ${version} vs running ${this.#appliedVersion ?? "unknown"}`,
+        detail: `new revision ${revisionOf(hash)}… vs applied ${revisionOf(this.#appliedHash) ?? "unknown"}; binary ${version} vs running ${this.#appliedVersion ?? "unknown"}`,
         at: Date.now(),
       })
     );
@@ -2784,7 +2807,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         JSON.stringify({
           type: "config-convergence",
           state: "pending",
-          detail: `revision ${this.#desiredHash?.slice(0, 8)}… left for the next need: nothing runs on the machine's server ${this.#serverOwner.active?.procId ?? "(none)"}`,
+          detail: `revision ${revisionOf(this.#desiredHash)}… left for the next need: nothing runs on the machine's server ${this.#serverOwner.active?.procId ?? "(none)"}`,
           at: Date.now(),
         })
       );
@@ -3680,7 +3703,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         JSON.stringify({
           type: "config-convergence",
           state: "applying",
-          detail: `target ${targetHash?.slice(0, 8)}…, binary ${targetVersion}, restarting server`,
+          detail: `target ${revisionOf(targetHash)}…, binary ${targetVersion}, restarting server`,
           at: Date.now(),
         })
       );
@@ -3740,7 +3763,7 @@ class OpencodeHarness implements Harness<"opencode"> {
           JSON.stringify({
             type: "config-convergence",
             state: "applied",
-            detail: `revision ${targetHash?.slice(0, 8)}… applied via process restart`,
+            detail: `revision ${revisionOf(targetHash)}… applied via process restart`,
             at: Date.now(),
           })
         );
@@ -3812,7 +3835,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       const diskHash = await this.#hashConfig();
       if (targetHash && diskHash !== targetHash) {
         throw new Error(
-          `config verification failed: disk hash ${diskHash?.slice(0, 8) ?? "null"}… differs from target ${targetHash.slice(0, 8)}… — concurrent modification`
+          `config verification failed: disk hash ${revisionOf(diskHash) ?? "null"}… differs from target ${revisionOf(targetHash)}… — concurrent modification`
         );
       }
     }
@@ -4155,25 +4178,28 @@ class OpencodeHarness implements Harness<"opencode"> {
     this.#keyAsked.set(id, { at: Date.now(), value: hash });
     let checked: Bounded<{ message: string; ok: boolean; status: number }>;
     try {
-      checked = await readWithin(KEY_CHECK_TIMEOUT_MS, async (signal) => {
-        const response = await fetch(request.url, {
-          headers: request.headers,
-          signal,
-        });
-        if (response.status !== 401 && response.status !== 403) {
-          return { ok: response.ok, status: response.status, message: "" };
-        }
-        const body: unknown = await response.json().catch(() => undefined);
-        const error = isRecord(body) ? body.error : undefined;
-        return {
-          ok: false,
-          status: response.status,
-          message:
-            isRecord(error) && typeof error.message === "string"
-              ? error.message
-              : "",
-        };
-      });
+      checked = await timed(
+        readWithin(KEY_CHECK_TIMEOUT_MS, async (signal) => {
+          const response = await fetch(request.url, {
+            headers: request.headers,
+            signal,
+          });
+          if (response.status !== 401 && response.status !== 403) {
+            return { ok: response.ok, status: response.status, message: "" };
+          }
+          const body: unknown = await response.json().catch(() => undefined);
+          const error = isRecord(body) ? body.error : undefined;
+          return {
+            ok: false,
+            status: response.status,
+            message:
+              isRecord(error) && typeof error.message === "string"
+                ? error.message
+                : "",
+          };
+        }),
+        (ms) => recordLimitReading("agent.opencode-key-check-ms", ms)
+      );
     } catch {
       return { state: "unknown" };
     }
@@ -4428,7 +4454,7 @@ class OpencodeHarness implements Harness<"opencode"> {
                 JSON.stringify({
                   type: "config-convergence",
                   state: "applied",
-                  detail: `${origin}, verified baseline ${initialHash.slice(0, 8)}…`,
+                  detail: `${origin}, verified baseline ${revisionOf(initialHash)}…`,
                   at: Date.now(),
                 })
               );
@@ -4555,7 +4581,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       const { client } = slot;
       if (!client) {
         throw new Error(
-          `Workspace ${view.slice(0, 8)}'s OpenCode server went away.`
+          `Workspace ${shortId(view)}'s OpenCode server went away.`
         );
       }
       console.info(
@@ -6055,7 +6081,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         });
       }
       console.info(
-        `[opencode] workspace ${view.slice(0, 8)}: archived, and no session is in its view's server's database: that server's record and data home are gone`
+        `[opencode] workspace ${shortId(view)}: archived, and no session is in its view's server's database: that server's record and data home are gone`
       );
     }
   }
@@ -7129,9 +7155,12 @@ class OpencodeHarness implements Harness<"opencode"> {
     });
     // The promise edge of the wait, one bounded read.
     return await Effect.runPromise(
-      boundedRead(
-        CONFIG_SETTLE_TIMEOUT_MS,
-        lookUntil({ every: CONFIG_LOOK_MS }, look)
+      timedEffect(
+        boundedRead(
+          CONFIG_SETTLE_TIMEOUT_MS,
+          lookUntil({ every: CONFIG_LOOK_MS }, look)
+        ),
+        (ms) => recordLimitReading("agent.opencode-config-settle-ms", ms)
       ).pipe(
         Effect.map((looked) =>
           looked.kind === "found" ? looked.value.state : undefined
@@ -7595,7 +7624,7 @@ async function putSlotCredential(
           {
             id: credential.id,
             integrationID: credential.integrationID,
-            label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
+            label: `The machine's own sign-in, for workspace ${slot.view && shortId(slot.view)}`,
             value: opencodeCredentialValue(credential.value),
             activate: true,
           },
@@ -7694,7 +7723,7 @@ async function settledMcpList(client: OpencodeClient, names: string[]) {
 function homeName(home: string): string {
   const { account, view } = homeParts(home);
   if (view !== undefined) {
-    return `workspace ${view.slice(0, 8)}'s view's`;
+    return `workspace ${shortId(view)}'s view's`;
   }
   return account === undefined ? "the machine's" : `account ${account}'s`;
 }
@@ -7735,6 +7764,7 @@ async function putCredential(
   const wanted = (held ? opencodeCredentialsOf(held) : []).map(
     (credential) => ({
       credential,
+      // @limit measured: 16 hex characters are 64 bits of SHA-256; the credentials one machine's server has held, so two collide after about 2^32 names
       id: `${CREDENTIAL_PREFIX}${createHash("sha256").update(JSON.stringify(credential)).digest("hex").slice(0, 16)}`,
     })
   );
@@ -7845,7 +7875,7 @@ async function ownCredentials(): Promise<OpencodeOwnCredential[]> {
 /** A slot's server in words, for the log. */
 function slotName(slot: ServerSlot): string {
   if (slot.view !== undefined) {
-    return `workspace ${slot.view.slice(0, 8)}'s view's`;
+    return `workspace ${shortId(slot.view)}'s view's`;
   }
   return slot.account === undefined
     ? "the machine's"

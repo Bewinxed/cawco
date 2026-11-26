@@ -11,6 +11,7 @@
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
 import { storyWords } from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
+import { quote } from "@cawco/providers/quote";
 
 const KIND: Record<string, string> = {
   a: "Link",
@@ -36,17 +37,12 @@ const CONTROLS: ReadonlySet<string> = new Set(["a", ...FORM_CONTROLS]);
 
 const SPACES = /\s+/gu;
 const SEPARATORS = /[-_]+/gu;
-/** The most words a name quotes. */
-const QUOTED = 28;
 
 /** The element's first words, white space run together. */
 export const wordsOf = (el: Element): string =>
   (el.textContent ?? "").replace(SPACES, " ").trim();
 
-const quoted = (text: string): string =>
-  text.length > QUOTED
-    ? `“${text.slice(0, QUOTED - 1).trimEnd()}…”`
-    : `“${text}”`;
+const quoted = (text: string): string => `“${quote(text)}”`;
 
 /** Its words a reader is told: every text inside it but what an `aria-hidden` part holds. */
 function saidOf(el: Element): string {

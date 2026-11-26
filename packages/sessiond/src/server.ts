@@ -33,6 +33,11 @@ import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { makeFolder } from "@cawco/core/folders";
 import type { ChildLimit } from "@cawco/core/harness";
+import {
+  READINGS_HANDED_EVERY_MS,
+  recordLimitReading,
+  takeLimitReadings,
+} from "@cawco/core/limit-readings";
 import { LineSplitter } from "@cawco/core/lines";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { PacedWriter } from "@cawco/core/paced-write";
@@ -54,6 +59,7 @@ import {
   type SessiondServerMessage,
   type SessiondWelcome,
 } from "@cawco/core/sessiond";
+import { shortId } from "@cawco/core/short-id";
 import {
   listedPid,
   type Pid,
@@ -107,6 +113,7 @@ const RING_BYTES = 8 * 1024 * 1024;
  * for a stack trace's head and the sentence under it, and nothing a chatty
  * child's long life can grow.
  */
+// @limit recording: sessiond.child-stderr-bytes until 2026-12-03
 const STDERR_TAIL_BYTES = 4096;
 
 /** What every welcome says this keeper speaks: the protocol, and `release`. */
@@ -120,6 +127,7 @@ const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
  * https://www.freedesktop.org/software/systemd/man/latest/systemd-system.conf.html;
  * core run-captured.ts quotes it).
  */
+// @limit external: systemd's DefaultTimeoutStopSec, 90 s in the user manager (https://www.freedesktop.org/software/systemd/man/latest/systemd-system.conf.html)
 const STOP_TIMEOUT_MS = 90_000;
 
 /**
@@ -137,6 +145,7 @@ const DRAIN_KILL_MS = 30_000;
  * transcript on a loaded machine is not killed mid-write while the manager
  * has not yet run out.
  */
+// @limit measured: STOP_TIMEOUT_MS less DRAIN_KILL_MS, so a drain ends before the manager's stop does
 const DRAIN_TIMEOUT_MS = STOP_TIMEOUT_MS - DRAIN_KILL_MS;
 
 /**
@@ -166,6 +175,7 @@ const SURVEY_INTERVAL_MS = 30_000;
  * and two seconds is soon enough that the operator reads it while the
  * session is still in the turn that ran it.
  */
+// @limit recording: sessiond.limit-watch-changes until 2026-12-10
 const LIMIT_WATCH_MS = 2000;
 
 /** A child's cgroup, watched for its limits until it is empty and removed ({@link SessiondServer.watchGroups}). */
@@ -364,6 +374,8 @@ export class SessiondServer {
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link survey}). */
   #surveying: ReturnType<typeof setInterval> | undefined;
+  /** The clock this keeper's readings of the bounds waiting on data are handed on by ({@link #handOnReadings}). */
+  #handing: ReturnType<typeof setInterval> | undefined;
   readonly #build: BuildInfo;
   #server: Server | undefined;
   #endpoint: string | undefined;
@@ -422,6 +434,10 @@ export class SessiondServer {
     await chmod(endpoint, 0o600);
     this.#endpoint = endpoint;
     this.#socketInode = (await stat(endpoint)).ino;
+    this.#handing = setInterval(
+      () => this.#handOnReadings(),
+      READINGS_HANDED_EVERY_MS
+    );
     this.#surveying = setInterval(() => {
       if (
         this.#surveyInFlight ||
@@ -482,10 +498,12 @@ export class SessiondServer {
     const readings = await Promise.all(
       watched.map(([path]) => readGroup(path))
     );
+    let changed = 0;
     for (const [index, [path, watch]] of watched.entries()) {
       const reading = readings[index];
       for (const limit of LIMITS) {
         const rose = reading[limit] > watch.seen[limit];
+        changed += rose ? 1 : 0;
         // A run of refusals is said once; one not said (a limit above the
         // child's own) leaves the next reading to say it, should the child
         // reach its own limit within the same run.
@@ -502,6 +520,20 @@ export class SessiondServer {
         this.#groups.delete(path);
       }
     }
+    // How often what LIMIT_WATCH_MS polls changed between two readings.
+    recordLimitReading("sessiond.limit-watch-changes", changed);
+  }
+
+  /** This keeper's readings of the bounds waiting on data, to one attached agent, which carries them on its beat. */
+  #handOnReadings(): void {
+    const [conn] = this.#conns;
+    if (!conn) {
+      return;
+    }
+    const readings = takeLimitReadings();
+    if (readings.length > 0) {
+      send(conn, { type: "limit.readings", readings });
+    }
   }
 
   #reportLimit(
@@ -512,6 +544,13 @@ export class SessiondServer {
   ): boolean {
     const { group, proc } = watch;
     const max = limit === "tasks" ? group.limits.tasks : group.limits.memory;
+    if (limit === "tasks") {
+      // How full of its own task limit a group reads at a refused fork.
+      recordLimitReading(
+        "sessiond.refused-fork-share",
+        current / group.limits.tasks
+      );
+    }
     if (limit === "tasks" && current < group.limits.tasks * OWN_LIMIT_SHARE) {
       // Refused by a limit above it (the keeper's pool, the user's): not this
       // child's own, and not said as one (cgroup.ts GroupReading.tasks).
@@ -821,7 +860,7 @@ export class SessiondServer {
         group = await openChildGroup(
           this.#children,
           procId,
-          `${this.epoch.slice(0, 8)}-${this.#groupSerial}`,
+          `${shortId(this.epoch)}-${this.#groupSerial}`,
           this.#limits,
           spec.workspace === true
         );
@@ -1186,6 +1225,10 @@ export class SessiondServer {
     if (this.#procs.get(proc.procId) !== proc) {
       return;
     }
+    recordLimitReading(
+      "sessiond.child-stderr-bytes",
+      proc.stderrCut + proc.stderr.length
+    );
     for (const conn of this.#conns) {
       send(conn, {
         type: "proc.exit",
@@ -1310,6 +1353,7 @@ export class SessiondServer {
   async close(): Promise<void> {
     clearInterval(this.#surveying);
     clearInterval(this.#watching);
+    clearInterval(this.#handing);
     this.#listenerClosed ??= this.#closeListener();
     for (const conn of this.#conns) {
       conn.socket.destroy();

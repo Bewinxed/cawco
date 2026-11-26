@@ -1163,15 +1163,6 @@ export const sectionPlansOf = (value: unknown): Record<string, SectionPlan> =>
       )
     : {};
 
-/** The bounds a canvas spec keeps. Ours. */
-export const CANVAS_SPEC_LIMITS = {
-  dials: 24,
-  /** A direction's line, characters: one line. */
-  directionLine: 200,
-  edges: 100,
-  label: 80,
-} as const;
-
 /** Where the daemon reads a sheet's stories next to the stage; never through the hub. */
 export const STORIES_PATH = "/__cawco/stories";
 
@@ -1316,9 +1307,6 @@ export interface ServeSpec {
   port: number;
 }
 
-/** The longest command a preview's server takes. Our bound. */
-export const SERVE_COMMAND_LIMIT = 2000;
-
 /** The daemon's control method that starts a preview's server or wakes it ({@link ServeSpec}) in the workspace or place its ref names, answering its state. */
 export const STAGE_SERVE = "stageServe";
 
@@ -1375,7 +1363,12 @@ export const STAGE_CLONE_GIT_MS = 60_000;
  * (2026-11-22); this holds about four times that, and stays near 2% of the
  * 42 GB the hub's disk had free that day.
  */
-export const STAGE_COPY_LIMIT = { bytes: 1024 ** 3, files: 50_000 } as const;
+export const STAGE_COPY_LIMIT = {
+  // @limit measured: the largest place the fleet works in tracks 7,116 files of 238 MiB (cockpit, 2026-11-26)
+  bytes: 1024 ** 3,
+  // @limit measured: the largest place the fleet works in tracks 7,116 files of 238 MiB (cockpit, 2026-11-26)
+  files: 50_000,
+} as const;
 
 /** How long a stage's install of its project inside its boundary may take (agent `stage-install.ts` `installProject`), before it starts. Ours. */
 export const STAGE_INSTALL_MS = 180_000;
@@ -1767,9 +1760,6 @@ export interface DesignQuery {
   limit?: number;
   query?: string;
 }
-
-/** A design map's page bounds. The design's numbers. */
-export const DESIGN_MAP_LIMITS = { limit: 50, max: 200 } as const;
 
 /** Where a component is used, or what it renders: the other component, and the call site when a draw saw it. */
 export interface DesignLink {

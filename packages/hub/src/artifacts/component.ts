@@ -10,8 +10,8 @@
 
 import type { DrawnKept } from "@cawco/core/doc-meta";
 import { nameSlug } from "@cawco/core/name-slug";
+import { answerShare } from "@cawco/core/prompt-budget";
 import {
-  CANVAS_SPEC_LIMITS,
   type CanvasDial,
   type CanvasDirection,
   type CanvasEdge,
@@ -205,12 +205,6 @@ export function canvasProblem(
     if (misfit) {
       return misfit;
     }
-  }
-  if ((input.edges?.length ?? 0) > CANVAS_SPEC_LIMITS.edges) {
-    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
-  }
-  if ((input.dials?.length ?? 0) > CANVAS_SPEC_LIMITS.dials) {
-    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.dials} dials.`;
   }
   for (const dial of input.dials ?? []) {
     const { target } = dial;
@@ -436,6 +430,7 @@ const directionNamed = (spec: CanvasSpec | undefined, file: string): string =>
   directionOf(spec, file)?.name ?? file;
 
 /** At most this many frames an answer lists; past it, the count and how to read one. Ours: a canvas's first screenful. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const FRAMES_LISTED = 60;
 
 /** One frame as an answer lists it: never its args, its delta or its chain. */
@@ -724,7 +719,7 @@ export interface ErrorSaid {
 }
 
 /** The most of a code frame an answer carries: a frame is a few lines around the place, and one of minified code is a line this long or longer. */
-const FRAME_MAX = 1200;
+const FRAME_MAX = answerShare(1200);
 
 /**
  * Each section's problem as an answer says it: its kind (optional on the

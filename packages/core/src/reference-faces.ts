@@ -33,9 +33,6 @@ export const REFERENCE_FACES = "cawco:reference-faces";
 /** The page's ask to open one. */
 export const OPEN_REFERENCE_ASK = "cawco/open-reference";
 
-/** The longest destination a reference is followed by. Our call: an id is short. */
-const REFERENCE_HREF_MOST = 400;
-
 /** A reference's mark before its words. */
 export type ReferenceMark =
   /** A session's: its sprite seeded by `seed`, on the hue `place` seeds (dashboard mark.ts). */
@@ -117,9 +114,7 @@ function faceOf(value: unknown): ReferenceFace | null {
 
 /** Whether `href` is a destination a page may ask a face of, or to open. */
 export const isReferenceHref = (href: unknown): href is string =>
-  typeof href === "string" &&
-  href.length <= REFERENCE_HREF_MOST &&
-  href.startsWith("cawco:");
+  typeof href === "string" && href.startsWith("cawco:");
 
 /** The faces a host said, each one whole; any other entry left out. */
 export function referenceFacesOf(
@@ -202,9 +197,6 @@ export interface PageLinks {
   references: string[];
 }
 
-/** The longest artifact id taken. Our call: an id is a UUID. */
-const ARTIFACT_ID_MOST = 100;
-
 /** A page's links as the hub said them, each entry whole; anything else left out. */
 export function pageLinksOf(value: unknown): PageLinks {
   const raw: Record<string, unknown> = isRecord(value) ? value : {};
@@ -216,10 +208,7 @@ export function pageLinksOf(value: unknown): PageLinks {
       ? [
           ...new Set(
             raw.artifacts.filter(
-              (one): one is string =>
-                typeof one === "string" &&
-                one.length > 0 &&
-                one.length <= ARTIFACT_ID_MOST
+              (one): one is string => typeof one === "string" && one.length > 0
             )
           ),
         ]

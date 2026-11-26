@@ -126,7 +126,7 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
   const refusal = heard
     .map((text) => refusalOf(text, id))
     .find((one) => one !== undefined);
-  const answer = heard.map((text) => text.slice(0, 160)).join(" | ");
+  const answer = heard.map((text) => text).join(" | ");
   return {
     answer: refusal
       ? `refused: ${refusal}`

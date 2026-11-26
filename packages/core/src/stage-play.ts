@@ -10,6 +10,8 @@
  * Testing Library's queries.
  */
 
+import { quote } from "@cawco/providers/quote";
+
 const settle = () =>
   new Promise<void>((done) => requestAnimationFrame(() => done()));
 
@@ -208,7 +210,7 @@ const WHITESPACE = /\s+/gu;
 /** An element as a refusal lists it: its role, else its tag, and its name. */
 export const elementSaid = (el: Element): string => {
   const name = nameOf(el).replace(WHITESPACE, " ");
-  return `${roleOf(el) ?? el.localName}${name ? ` “${name.length > 40 ? `${name.slice(0, 39)}…` : name}”` : ""}`;
+  return `${roleOf(el) ?? el.localName}${name ? ` “${quote(name)}”` : ""}`;
 };
 
 export interface CanvasQueries {

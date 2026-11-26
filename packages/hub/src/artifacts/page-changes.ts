@@ -20,15 +20,13 @@
 import { createHash } from "node:crypto";
 import type { CanvasElement, CanvasEntry } from "@cawco/core/canvas";
 import { ANCHOR_IDENTITIES, generatedId } from "@cawco/core/comments/anchor";
-import { CHANGE_WORDS_MOST, CHANGES_LIMIT } from "@cawco/core/comments/model";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem } from "@cawco/core/doc-meta";
 import { elementName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import { derivedName } from "@cawco/providers/derived-name";
 
 /** Elements whose insides are no part of what the person sees. */
 const UNSEEN: ReadonlySet<string> = new Set([...UNSHOWN_ELEMENTS, "head"]);
-/** Words a label keeps. Our call. */
-const LABEL_CHARS = 60;
 const SPACES = /\s+/gu;
 
 /** One element of a page, as the diff reads it. */
@@ -246,27 +244,13 @@ function wordsOf(node: Node): string {
   return words;
 }
 
-/**
- * A changed element's words whole, as a change line reads them before and
- * after (core `ChangedItem.before`, `after`): every word it says, up to core
- * `CHANGE_WORDS_MOST`; empty for one that says nothing.
- */
-const wholeWordsOf = (node: Node): string => {
-  const words = wordsOf(node);
-  return words.length > CHANGE_WORDS_MOST
-    ? `${words.slice(0, CHANGE_WORDS_MOST - 1).trimEnd()}…`
-    : words;
-};
-
 /** A changed element's label: its first words, else what it is. */
 const labelOf = (node: Node): string => {
   const words = wordsOf(node);
   if (!words) {
     return node.tag;
   }
-  return words.length > LABEL_CHARS
-    ? `${words.slice(0, LABEL_CHARS - 1).trimEnd()}…`
-    : words;
+  return derivedName(words);
 };
 
 /** The places of `before` and `after` that read the same, in order: their longest common run by fingerprint. */
@@ -542,13 +526,13 @@ export function htmlChanges(
       kind: "element",
       anchor: selectorOf(node),
       label: labelOf(node),
-      after: wholeWordsOf(node) || labelOf(node),
+      after: wordsOf(node) || labelOf(node),
       element: nameOf(node),
-      ...(old ? { before: wholeWordsOf(old) || labelOf(old) } : {}),
+      ...(old ? { before: wordsOf(old) || labelOf(old) } : {}),
       ...(move ? { moved: move } : {}),
     };
   });
-  return [...items, ...removed].slice(0, CHANGES_LIMIT);
+  return [...items, ...removed];
 }
 
 /** An element's fields that move with no change the person would see: its version stamps. */
@@ -607,9 +591,7 @@ export function sceneChanges(
     if (!words) {
       return SCENE_WORDS[el.type] ?? "Element";
     }
-    return words.length > LABEL_CHARS
-      ? `${words.slice(0, LABEL_CHARS - 1).trimEnd()}…`
-      : words;
+    return derivedName(words);
   };
   const told = new Set<string>();
   const items: ChangedItem[] = [];
@@ -643,7 +625,7 @@ export function sceneChanges(
       });
     }
   }
-  return items.slice(0, CHANGES_LIMIT);
+  return items;
 }
 
 /** A file's bytes as a fingerprint: what tells a picture drawn again from the same one. */
@@ -702,5 +684,5 @@ export function cardChanges(
       });
     }
   }
-  return items.slice(0, CHANGES_LIMIT);
+  return items;
 }

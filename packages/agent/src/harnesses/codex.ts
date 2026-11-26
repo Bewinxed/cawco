@@ -114,6 +114,7 @@ const CODEX_PROVIDERS = ["openai-codex", "openai"] as const;
  */
 const modelCatalog = (): Promise<ModelInfo[]> =>
   inStore(async (peer) => {
+    // @limit external: Codex app-server's page size for model/list (codex-protocol/v2.gen.ts ModelListParams.limit)
     const listed = await peer.request("model/list", { limit: 100 });
     return listed.data
       .filter((model) => !model.hidden)

@@ -42,7 +42,7 @@ if (has("asks", "record")) {
   );
   for (const ask of unread) {
     console.log(
-      `  restrictive: ${ask.id} (${ask.state}, session ${ask.instanceId}): ${JSON.stringify(ask.raw.slice(0, 160))}: ${ask.reading.why}; placed ${ask.reading.placed.join(", ") || "none"}`
+      `  restrictive: ${ask.id} (${ask.state}, session ${ask.instanceId}): ${JSON.stringify(ask.raw)}: ${ask.reading.why}; placed ${ask.reading.placed.join(", ") || "none"}`
     );
   }
 } else {

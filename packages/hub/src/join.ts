@@ -26,7 +26,6 @@
 import { hostname, networkInterfaces } from "node:os";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
-import { DRAFT_LIMITS } from "@cawco/core/install";
 import {
   generateInstallScript,
   type InstallJoin,
@@ -157,20 +156,20 @@ const SIGN_IN = t.Union([
   t.Literal("by-hand"),
 ]);
 
-/** The draft's fields an edit may carry (core InstallDraftEdit), each as long as the window's field takes. */
+/** The draft's fields an edit may carry (core InstallDraftEdit). */
 const DRAFT_FIELDS = t.Partial(
   t.Object({
     route: t.Union([t.Literal("ssh"), t.Literal("command"), t.Null()]),
-    target: t.String({ maxLength: DRAFT_LIMITS.target }),
-    port: t.String({ maxLength: DRAFT_LIMITS.port }),
+    target: t.String(),
+    port: t.String(),
     signIn: SIGN_IN,
-    address: t.Union([t.String({ maxLength: DRAFT_LIMITS.address }), t.Null()]),
+    address: t.Union([t.String(), t.Null()]),
   })
 );
 
 /** Which page made a draft edit, and its place in that page's order (core DraftStamp). */
 const STAMP = t.Object({
-  page: t.String({ minLength: 1, maxLength: 100 }),
+  page: t.String({ minLength: 1 }),
   seq: t.Integer({ minimum: 1 }),
 });
 
@@ -251,15 +250,16 @@ export const joinRoutes = ({
         body: t.Union([
           t.Object({
             route: t.Literal("ssh"),
-            target: t.String({ maxLength: DRAFT_LIMITS.target }),
+            target: t.String(),
+            // @limit external: a TCP port is 16 bits, 1 to 65,535 (RFC 9293 §3.1)
             port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
             signIn: SIGN_IN,
-            password: t.Optional(t.String({ maxLength: 4096 })),
+            password: t.Optional(t.String()),
             stamp: t.Optional(STAMP),
           }),
           t.Object({
             route: t.Literal("command"),
-            address: t.String({ maxLength: DRAFT_LIMITS.address }),
+            address: t.String(),
             stamp: t.Optional(STAMP),
           }),
         ]),
@@ -311,7 +311,7 @@ export const joinRoutes = ({
       "/api/installs/:id/retry",
       {
         body: t.Object({
-          password: t.Optional(t.String({ maxLength: 4096 })),
+          password: t.Optional(t.String()),
         }),
       },
       ({ params, body }) => {
@@ -350,8 +350,8 @@ export const joinRoutes = ({
       {
         body: t.Object({
           status: t.Numeric(),
-          said: t.Optional(t.String({ maxLength: 2000 })),
-          host: t.Optional(t.String({ maxLength: 255 })),
+          said: t.Optional(t.String()),
+          host: t.Optional(t.String()),
         }),
       },
       ({ params, body }) =>
@@ -372,6 +372,7 @@ export const joinRoutes = ({
       {
         body: t.Object({
           target: t.String(),
+          // @limit external: a TCP port is 16 bits, 1 to 65,535 (RFC 9293 §3.1)
           port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
           // Unread: the machine reaches the hub through the hub's own
           // connection. Shipped apps still send the address they picked.

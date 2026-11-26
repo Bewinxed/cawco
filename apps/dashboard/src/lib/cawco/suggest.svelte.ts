@@ -81,22 +81,6 @@ export async function askSuggestions(
 
 /** How long the composer waits after the last keystroke before asking. */
 export const SUGGEST_PAUSE_MS = 1500;
-/**
- * The most of a candidate's description Jev is sent. At 150 a description lost
- * the noun saying what it is for (impeccable's "…improve a frontend
- * interface"), and Jev matched on its verb list instead.
- */
-const SUGGEST_DESC_CHARS = 300;
-
-/** Cut to {@link SUGGEST_DESC_CHARS} at a word boundary, with an ellipsis. */
-export function clip(text: string): string {
-  if (text.length <= SUGGEST_DESC_CHARS) {
-    return text;
-  }
-  const cut = text.slice(0, SUGGEST_DESC_CHARS - 1);
-  const space = cut.lastIndexOf(" ");
-  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
-}
 
 /** How the chip's text reads once it is in the prompt. */
 export const suggestionLine = (candidate: SuggestCandidate): string => {

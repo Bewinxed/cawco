@@ -16,8 +16,7 @@
  * heading. What it is comes from its role, else its tag.
  */
 
-/** The longest name, in characters, before it is cut at a word with an ellipsis. Our call: about what a row's headline holds on one line. */
-const MOST = 48;
+import { derivedName } from "@cawco/providers/derived-name";
 
 /** What an element is, by its role or tag, in a person's word. */
 const KIND: Record<string, string> = {
@@ -100,17 +99,6 @@ const HEADING = "h1, h2, h3, h4, h5, h6, [role='heading'], legend, caption";
 
 const SPACES = /\s+/gu;
 
-/** `words` run together and cut at a word past {@link MOST}, with an ellipsis. */
-function short(words: string): string {
-  const text = words.replace(SPACES, " ").trim();
-  if (text.length <= MOST) {
-    return text;
-  }
-  const cut = text.slice(0, MOST);
-  const at = cut.lastIndexOf(" ");
-  return `${(at > MOST / 2 ? cut.slice(0, at) : cut).trimEnd()}…`;
-}
-
 /** The element's own words, read as the page shows them. */
 const wordsOf = (el: Element): string =>
   (el instanceof HTMLElement ? el.innerText : el.textContent) ?? "";
@@ -168,7 +156,7 @@ export function spotName(el: Element): string {
       label = labelOf(heading) || wordsOf(heading);
     }
   }
-  label = short(label);
+  label = derivedName(label);
   if (!label) {
     return kind ? kind[0].toUpperCase() + kind.slice(1) : "";
   }

@@ -11,6 +11,7 @@ import type {
   CawPoseId,
   DecidesTable,
   Kind,
+  MarkHue,
   Member,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
@@ -727,7 +728,7 @@ export class WhoDecides {
    * its draft. The picker folds.
    */
   pickPicture = async (
-    picture: { pose: CawPoseId } | { hue: number }
+    picture: { pose: CawPoseId } | { hue: MarkHue }
   ): Promise<void> => {
     const { setup } = this;
     if (!setup) {

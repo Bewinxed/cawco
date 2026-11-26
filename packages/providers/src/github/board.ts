@@ -39,6 +39,7 @@ import { graphqlErrorsOf, type RefusalCode, refusalWords } from "./answer";
 const STATUS_FIELD = "Status";
 const PER_PAGE = 100;
 /** Pages of a Project's items one read takes at most. Our choice: 2,000 items. */
+// @limit measured: pages of 100 (PER_PAGE), the most a GitHub GraphQL connection takes (docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api); 20 of them are 2,000 items, and the read's `complete` says when more stood
 const MAX_PAGES = 20;
 /** Projects a binding's form lists from the owner and the repository each. Our choice. */
 const PROJECTS_FIRST = 50;

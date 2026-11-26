@@ -4,17 +4,17 @@
  * when a step of it fails. In the card's register (words/project-details.ts):
  * agents, computers, folders and files; no word of the product's own model.
  */
+
+import { namedAndMore } from "@cawco/providers/names";
 import type { FolderMoveBlock, FolderMoveLeft } from "../folder-move";
 import { moveSize } from "../move";
+import { shortSha } from "../short-id";
 
 const count = (n: number, one: string, many: string): string =>
   `${n.toLocaleString("en")} ${n === 1 ? one : many}`;
 
 /** A list of paths as a line names them: the first few, and how many more. */
-const named = (paths: readonly string[]): string => {
-  const first = paths.slice(0, 3).join(", ");
-  return paths.length > 3 ? `${first} and ${paths.length - 3} more` : first;
-};
+const named = (paths: readonly string[]): string => namedAndMore(paths);
 
 /** What stands in a move's way, and what to do about it. */
 export const blockWords = (
@@ -191,9 +191,9 @@ export const folderMoveWords = {
     copied: { files: number; bytes: number; head: string | null },
     machine: string
   ) =>
-    `${count(copied.files, "file", "files")}, ${moveSize(copied.bytes)}, checked on ${machine}.${copied.head ? ` The code stands at ${copied.head.slice(0, 7)}.` : ""}`,
+    `${count(copied.files, "file", "files")}, ${moveSize(copied.bytes)}, checked on ${machine}.${copied.head ? ` The code stands at ${shortSha(copied.head)}.` : ""}`,
   renamed: (destination: string, machine: string, head: string | null) =>
-    `Renamed to ${destination} on ${machine}.${head ? ` The code stands at ${head.slice(0, 7)}.` : ""}`,
+    `Renamed to ${destination} on ${machine}.${head ? ` The code stands at ${shortSha(head)}.` : ""}`,
   calledOff: (folders: string) => `Called off. ${folders}`,
   calledOffUntouched: "The old folder is untouched and still this project's.",
   resumedSummary: (tool: string) => `continues from a summary on ${tool}`,

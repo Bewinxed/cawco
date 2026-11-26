@@ -21,9 +21,11 @@ import {
 } from "@cawco/core/accounts";
 import { boundedRead, Gone, Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -38,6 +40,7 @@ import {
 } from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import type { Subprocess } from "bun";
@@ -102,6 +105,7 @@ const envFor = (account: string): Record<string, string | undefined> => ({
  * command such as `claude auth status` … exited in the middle of a token
  * refresh"), so it runs on nothing older ({@link claudeToStart}).
  */
+// @limit recording: agent.auth-status-ms until 2026-12-26
 const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 /**
@@ -247,9 +251,9 @@ export const authStatus = Effect.fn("authStatus")(function* (
       why: authStatusNotRun(dir, executable.refused),
     } satisfies AuthStatus;
   }
-  return yield* boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
-    statusOfDir(executable, env, dir)
+  return yield* timedEffect(
+    boundedRead(AUTH_STATUS_TIMEOUT_MS, statusOfDir(executable, env, dir)),
+    (ms) => recordLimitReading("agent.auth-status-ms", ms)
   ).pipe(
     Effect.catchTag("Unanswered", (none) =>
       Effect.succeed<AuthStatus>({
@@ -520,6 +524,7 @@ export const keychainService = (account: string): string =>
 export const HOME_SERVICE = "Claude Code-credentials";
 
 /** The Keychain service of the dir `CLAUDE_CONFIG_DIR` names, or of the default dir when it names none ({@link keychainService}). */
+// @limit measured: 8 hex characters are 32 bits of SHA-256; the service names of one machine's accounts, so two collide after about 2^16 names
 const serviceOf = (configDir: string | undefined): string =>
   configDir === undefined
     ? HOME_SERVICE
@@ -587,9 +592,9 @@ const lockReads = makeJoin<"login", boolean, Gone | LockUnread>();
 
 const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
   "login",
-  boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
-    keychainLockState(loginKeychainPath())
+  timedEffect(
+    boundedRead(AUTH_STATUS_TIMEOUT_MS, keychainLockState(loginKeychainPath())),
+    (ms) => recordLimitReading("agent.auth-status-ms", ms)
   ).pipe(
     // The account read waiting on it ends unanswered with it.
     Effect.catchTag("Unanswered", ({ reason, after }) =>
@@ -679,6 +684,7 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
 };
 
 /** How long a probe may take to be answered at initialize. */
+// @limit recording: agent.account-probe-ms until 2026-12-26
 const PROBE_TIMEOUT_MS = 60_000;
 
 /** Why an account dir's Claude Code is not started, in a sentence. */
@@ -696,9 +702,9 @@ export const startable = Effect.fn("startable")(function* (
   account: string,
   done: string
 ) {
-  const away = yield* boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
-    lockedAway(keychainService(account))
+  const away = yield* timedEffect(
+    boundedRead(AUTH_STATUS_TIMEOUT_MS, lockedAway(keychainService(account))),
+    (ms) => recordLimitReading("agent.auth-status-ms", ms)
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }: Unanswered) =>
       Effect.fail(
@@ -716,6 +722,7 @@ export const startable = Effect.fn("startable")(function* (
 });
 
 /** How long a check's one turn may take to end. */
+// @limit recording: agent.account-check-ms until 2026-12-26
 const CHECK_TIMEOUT_MS = 90_000;
 
 /**
@@ -766,9 +773,12 @@ const heldQuery = (
 
 /** A held session's initialize response within {@link PROBE_TIMEOUT_MS}; past it, `late` is the failure. */
 const initialized = (handle: ReturnType<typeof query>, late: string) =>
-  boundedRead(
-    PROBE_TIMEOUT_MS,
-    asIs(() => handle.initializationResult())
+  timedEffect(
+    boundedRead(
+      PROBE_TIMEOUT_MS,
+      asIs(() => handle.initializationResult())
+    ),
+    (ms) => recordLimitReading("agent.account-probe-ms", ms)
   ).pipe(
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(new ClaudeUnanswered({ message: late }))
@@ -790,12 +800,14 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
       persistSession: false,
       model: "haiku",
       tools: [],
+      // @limit measured: one turn, the answer to a single question with tools off (tools: [] above)
       maxTurns: 1,
       thinking: { type: "disabled" },
       systemPrompt: CHECK_PROMPT,
     },
   });
-  return yield* boundedRead(
+  return yield* timedEffect(
+    boundedRead(
     CHECK_TIMEOUT_MS,
     asIs(async (): Promise<AccountCheck> => {
       for await (const message of handle) {
@@ -816,13 +828,12 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
           if (message.subtype === "success" && !message.is_error) {
             return { kind: "answered" };
           }
-          throw new Error(
-            `Claude Code ended the check's turn without an answer (${message.subtype})`
-          );
         }
       }
       throw new Error("Claude Code ended before the check's turn did");
     })
+    ),
+    (ms) => recordLimitReading("agent.account-check-ms", ms)
   ).pipe(
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(
@@ -1090,7 +1101,7 @@ const shareDirNow = async (
   }
   await makeFolder(target);
   if (there) {
-    const id8 = account.slice(0, 8);
+    const id8 = shortId(account);
     for (const name of await readdir(path)) {
       const from = join(path, name);
       const into = join(target, name);

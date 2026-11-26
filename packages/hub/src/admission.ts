@@ -1,5 +1,6 @@
 import { accountNameAmong, modelScope } from "@cawco/core/accounts";
 import { OVER_STATUSES } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
   bearing,
@@ -144,7 +145,7 @@ export const createAdmission = (db: DbShape) => {
     charges.delete(id);
     const [row] = db.getInstancesByIds([id]);
     console.info(
-      `[admission] ${row?.title ? `${row.title} (${id.slice(0, 8)})` : id.slice(0, 8)}: its charge on ${nameOf(charge.accountId)} goes, ${why}.`
+      `[admission] ${row?.title ? `${row.title} (${shortId(id)})` : shortId(id)}: its charge on ${nameOf(charge.accountId)} goes, ${why}.`
     );
   };
 

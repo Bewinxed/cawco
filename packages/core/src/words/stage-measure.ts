@@ -4,6 +4,8 @@
  * each refusal, naming the read to send instead; each fault, naming what,
  * where and what to do next; and the read's lines.
  */
+
+import { firstNames } from "@cawco/providers/names";
 import type {
   ForcedLayout,
   FrameCall,
@@ -44,15 +46,13 @@ const callSaid = (call: FrameCall): string =>
 
 /** What a costly frame held, as one line: its longest tasks with the call each began with, the functions that took its script time, its restyles. */
 const workSaid = (one: FrameWork): string => {
-  const tasks = one.tasks
-    .slice(0, 3)
-    .map(
-      (task) =>
-        `${task.for} ${task.ms} ms${task.calls?.[0] ? ` (${callSaid(task.calls[0])})` : ""}`
-    );
-  const script = one.script
-    .slice(0, 3)
-    .map((fn) => `${fn.name} at ${fn.at} ${fn.ms} ms`);
+  const tasks = firstNames(one.tasks).shown.map(
+    (task) =>
+      `${task.for} ${task.ms} ms${task.calls?.[0] ? ` (${callSaid(task.calls[0])})` : ""}`
+  );
+  const script = firstNames(one.script).shown.map(
+    (fn) => `${fn.name} at ${fn.at} ${fn.ms} ms`
+  );
   const elements = one.restyles.reduce((sum, r) => sum + r.elements, 0);
   return `${one.frame === "longest" ? "The longest frame" : "A dropped frame"} on the sampled play, at ${one.at} ms, ${one.ms} ms: ${tasks.length > 0 ? `tasks ${tasks.join("; ")}` : "no task of the page's"}${script.length > 0 ? `; script in ${script.join(", ")}` : ""}${one.restyles.length > 0 ? `; ${plural(one.restyles.length, "restyle")} of ${elements} elements` : ""}.`;
 };

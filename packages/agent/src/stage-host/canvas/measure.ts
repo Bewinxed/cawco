@@ -6,6 +6,7 @@
  */
 
 import { fnv1a } from "@cawco/core/fnv1a";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   type AnimationRead,
   MODULES_PATH,
@@ -15,6 +16,7 @@ import {
   unkeyedPath,
 } from "@cawco/core/stage";
 import { cutShort } from "@cawco/core/words/helpers";
+import { derivedName } from "@cawco/providers/derived-name";
 import { ownPlace } from "./own";
 
 /** Svelte's dev stack on an element (a dev compile's `__svelte_meta`). */
@@ -53,15 +55,17 @@ export const fromRoot = (file: string, root: string): string => {
 const nameOfFile = (file: string): string =>
   file.replace(DIR, "").replace(EXTENSION, "");
 
-/** An element as a selector a person reads: its tag, id and first two classes the project wrote. */
+/** An element as a selector a person reads: its tag, id and the classes the project wrote, as one derived name. */
 export function describe(el: Element | null): string {
   if (!el) {
     return "?";
   }
-  const classes = [...el.classList]
-    .filter((one) => !(HASH_CLASS.test(one) || one.startsWith("cawco-")))
-    .slice(0, 2);
-  return `${el.localName}${el.id ? `#${el.id}` : ""}${classes.map((one) => `.${one}`).join("")}`;
+  const classes = [...el.classList].filter(
+    (one) => !(HASH_CLASS.test(one) || one.startsWith("cawco-"))
+  );
+  return derivedName(
+    `${el.localName}${el.id ? `#${el.id}` : ""}${classes.map((one) => `.${one}`).join("")}`
+  );
 }
 
 /** Where an element is written, `file:line:column`, when the dev build marks it. */
@@ -78,10 +82,14 @@ export function sourceOf(el: Element, root: string): string | null {
 }
 
 /** The elements of a frame's body a reading walks: at most this many. Ours: a screen's first screenful. */
+// @limit recording: agent.measure-elements until 2026-12-10
 const ELEMENTS_READ = 600;
 
-const elementsOf = (body: Element): Element[] =>
-  [...body.querySelectorAll("*")].slice(0, ELEMENTS_READ);
+const elementsOf = (body: Element): Element[] => {
+  const all = [...body.querySelectorAll("*")];
+  recordLimitReading("agent.measure-elements", all.length);
+  return all.slice(0, ELEMENTS_READ);
+};
 
 /** How many elements the body held and how many a reading walks of them, when it holds more than it walks. */
 export const elementsUnread = (
@@ -167,11 +175,12 @@ export function drew(body: HTMLElement): boolean {
   });
 }
 
-/** A body's first words, at most 80 characters, on one line. */
+/** A body's first words, on one line. */
 export const firstWords = (body: HTMLElement): string =>
-  (body.innerText ?? "").replaceAll(/\s+/gu, " ").trim().slice(0, 80);
+  derivedName(body.innerText ?? "");
 
 /** The most elements a frame's look reads; past it the frame has none. Ours: well past a whole settings page. */
+// @limit recording: agent.look-elements until 2026-12-10
 const LOOK_LIMIT = 6000;
 
 /** What a reading of the engine can't see the picture of: moving pictures, a page of its own. A 2D canvas is read by its pixels ({@link canvasPixels}). */
@@ -229,6 +238,7 @@ function controlState(el: Element): string {
  */
 export function lookOf(body: HTMLElement): string | null {
   const elements = [...body.querySelectorAll("*")];
+  recordLimitReading("agent.look-elements", elements.length);
   if (
     elements.length > LOOK_LIMIT ||
     body.querySelector(UNREAD_LOOK) ||
@@ -332,6 +342,7 @@ export function snapshot(body: Element): Snapshot {
 }
 
 /** The deltas between two snapshots of the same elements: at most this many elements. */
+// @limit recording: agent.measure-deltas until 2026-12-03
 const DELTAS_KEPT = 24;
 
 export function deltaOf(
@@ -355,6 +366,7 @@ export function deltaOf(
       }
     });
     if (Object.keys(changed).length > 0) {
+      recordLimitReading("agent.measure-deltas", deltas.length + more + 1);
       if (deltas.length >= DELTAS_KEPT) {
         more += 1;
         continue;

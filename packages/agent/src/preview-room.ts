@@ -21,6 +21,7 @@ import { membershipName } from "./boundary-policy";
 import { leastRoom } from "./machine-room";
 
 /** The most previews live at once on one machine, whatever its memory: the owner's pick. */
+// @limit asked: cawco:session/05ac0229-deca-496e-97f9-3717c46cc929 (the owner's pick on "What stays running on a machine", 2026-11-19: "Up to 8, oldest put to sleep")
 export const MAX_LIVE = 8;
 
 /**
@@ -34,6 +35,7 @@ export const MAX_LIVE = 8;
 const STARTING_BYTES = 1024 ** 3;
 
 /** The share of the machine's memory kept free: earlyoom's line, `-m` "default 10 %" of MemAvailable, under which it starts killing (github.com/rfjakob/earlyoom README). */
+// @limit external: earlyoom's default, 10 percent of available memory (https://github.com/rfjakob/earlyoom)
 const KEPT_SHARE = 0.1;
 
 /**

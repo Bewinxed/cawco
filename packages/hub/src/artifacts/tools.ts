@@ -9,22 +9,16 @@ import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ARTIFACT_PICKS,
-  ARTIFACT_TITLE_LIMIT,
-  ASK_LIMIT,
   MADE_ARTIFACT_KINDS,
 } from "@cawco/core/artifact-kinds";
 import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
-import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
-import { CHOICE_LIMITS } from "@cawco/core/choices";
+import { SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
-  CANVAS_SPEC_LIMITS,
-  DESIGN_MAP_LIMITS,
   DESIGN_MARKS,
   GRAPH_WIDTHS_SAID,
   INTERACTIONS,
-  SERVE_COMMAND_LIMIT,
   STATES_ENTRY,
   STORY_FILE,
   STORY_NAME,
@@ -40,9 +34,6 @@ import { z } from "zod";
 import { QUESTION_SHAPE } from "../ask-fields";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
-
-/** The longest name, handle or id an artifact tool takes. */
-const ARTIFACT_REF_MAX = 100;
 
 /** A workspace id, or the 8-character prefix delegate reports. */
 export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/u;
@@ -72,43 +63,35 @@ export const isStateStory = (name: string): boolean => {
     STORY_NAME.test(story) && (file === undefined || STORY_FILE.test(file))
   );
 };
-/** Args one write may set. Our bound: a component's props. */
-export const ARGS_LIMIT = 100;
 
 /** A story's name in a tool's input: its pattern is the route's and the stage's to check, which say why. */
 const story = z.string();
 const argValues = z.record(z.string(), z.unknown());
 
-const id = z
-  .string()
-  .min(1)
-  .max(ARTIFACT_REF_MAX)
-  .describe("Its name, handle or id.");
+const id = z.string().min(1).describe("Its name, handle or id.");
 
 /** An Excalidraw element skeleton: its type, an id you choose, and Excalidraw's own fields. */
 const skeleton = z.looseObject({
   type: z.enum(SKELETON_TYPES),
-  id: z.string().min(1).max(100).optional(),
+  id: z.string().min(1).optional(),
 });
 
 /** A canvas's skeleton elements, as create and update take them. */
 const elements = z
   .array(skeleton)
   .min(1)
-  .max(CANVAS_LIMITS.elementsPerCall)
   .optional()
   .describe(
     'Excalidraw skeletons, like {"type":"rectangle","id":"api","x":0,"y":0,"width":160,"height":60,"label":{"text":"API"}}; an arrow binds with "start":{"id":"api"}; text wraps at its "width"; a childless frame takes what it covers.'
   );
 
 /** A story on a canvas: its export, or `file:Story` across states files. */
-const storyRef = z.string().min(1).max(1100);
+const storyRef = z.string().min(1);
 
 const does = z.enum(ARTIFACT_DOES);
 const ask = z
   .string()
   .min(1)
-  .max(ASK_LIMIT)
   .describe(
     'The line that heads the panel until they act: the act and its object in their words, like "Pick the head for the phone project page".'
   );
@@ -123,7 +106,6 @@ const title = z
       issue.input === undefined ? artifactToolWords.titleMissing : undefined,
   })
   .min(1)
-  .max(ARTIFACT_TITLE_LIMIT)
   .describe('What names it to the person everywhere, like "Title bars close".');
 
 /** A design graph's edges, groups and dials, as create and update take them. */
@@ -133,10 +115,9 @@ const canvasFields = {
       z.object({
         from: storyRef,
         to: storyRef,
-        label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
+        label: z.string().optional(),
       })
     )
-    .max(CANVAS_SPEC_LIMITS.edges)
     .optional()
     .describe('Like [{"from":"Waiting","to":"Scanning"}].'),
   group: z
@@ -146,22 +127,21 @@ const canvasFields = {
   dials: z
     .array(
       z.object({
-        name: z.string().max(60),
-        label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
+        name: z.string(),
+        label: z.string().optional(),
         kind: z.enum(["number", "color", "select", "toggle", "text", "action"]),
         group: z.string().optional(),
         min: z.number().optional(),
         max: z.number().optional(),
         step: z.number().positive().optional(),
-        unit: z.string().max(10).optional(),
-        options: z.array(z.string().max(100)).max(24).optional(),
+        unit: z.string().optional(),
+        options: z.array(z.string()).optional(),
         target: z.union([
           z.object({ cssVar: z.string().regex(/^--[\w-]+$/u) }),
-          z.object({ arg: z.string().min(1).max(100) }),
+          z.object({ arg: z.string().min(1) }),
         ]),
       })
     )
-    .max(CANVAS_SPEC_LIMITS.dials)
     .optional()
     .describe(
       'Like [{"name":"radius","kind":"number","unit":"px","target":{"cssVar":"--radius"}}].'
@@ -172,11 +152,11 @@ const canvasFields = {
 const designDirections = z
   .array(
     z.object({
-      file: z.string().max(1000).optional(),
+      file: z.string().optional(),
       html: z.string().optional(),
       dir: z.string().optional(),
-      name: z.string().max(CANVAS_SPEC_LIMITS.label),
-      line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
+      name: z.string(),
+      line: z.string(),
     })
   )
   .optional();
@@ -192,7 +172,6 @@ const designMark = z
 const mermaid = z
   .string()
   .min(1)
-  .max(CANVAS_LIMITS.mermaid)
   .optional()
   .describe('Mermaid, like "flowchart LR; A --> B".');
 
@@ -234,8 +213,8 @@ export const artifactCreate = {
       .describe("A page's whole document."),
     file: z
       .union([
-        z.string().min(1).max(1000).regex(STATES_ENTRY),
-        z.array(z.string().min(1).max(1000).regex(STATES_ENTRY)).min(1),
+        z.string().min(1).regex(STATES_ENTRY),
+        z.array(z.string().min(1).regex(STATES_ENTRY)).min(1),
       ])
       .optional()
       .describe("Each story they judge, `path:Story`; whole with reading."),
@@ -246,25 +225,25 @@ export const artifactCreate = {
     pick: pick.describe(
       `Required with directions or a decision page's cards. ${artifactToolWords.pickJudged}`
     ),
+    // @limit external: Linux PATH_MAX, 4,096 bytes (limits.h)
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     content: designMark,
     port: z
       .number()
       .int()
       .min(1)
+      // @limit external: a TCP port is 16 bits, 1 to 65,535 (RFC 9293 §3.1)
       .max(65_535)
       .optional()
       .describe("A dev server's port."),
     path: z
       .string()
       .regex(PREVIEW_START_PATH)
-      .max(2000)
       .optional()
       .describe("Its start page, like /settings."),
     machine: z
       .string()
       .min(1)
-      .max(200)
       .optional()
       .describe("A `dir`'s machine; default yours."),
     workspace: z
@@ -274,10 +253,9 @@ export const artifactCreate = {
       .describe("Whose server the port is: yours (default) or a delegate's."),
     serve: z
       .object({
-        command: z.string().min(1).max(SERVE_COMMAND_LIMIT),
+        command: z.string().min(1),
         cwd: z
           .string()
-          .max(1000)
           .optional()
           .describe("The app's folder: absolute, or from yours (default)."),
       })
@@ -328,9 +306,8 @@ export const artifactUpdate = {
       .optional()
       .describe("Adds, duplicates, removes or moves a component's story."),
     delete: z
-      .array(z.string().min(1).max(100))
+      .array(z.string().min(1))
       .min(1)
-      .max(CANVAS_LIMITS.deletePerCall)
       .optional()
       .describe("A canvas's element ids to remove."),
     statements: z
@@ -354,6 +331,7 @@ export const artifactUpdate = {
     dir: z
       .string()
       .startsWith("/")
+      // @limit external: Linux PATH_MAX, 4,096 bytes (limits.h)
       .max(4096)
       .optional()
       .describe("A folder preview's or design folder's dir again."),
@@ -366,14 +344,14 @@ export const artifactUpdate = {
         z.union([
           z.object({
             op: z.enum(["add", "replace", "test"]),
-            path: z.string().max(1000),
+            path: z.string(),
             value: z.unknown(),
           }),
-          z.object({ op: z.literal("remove"), path: z.string().max(1000) }),
+          z.object({ op: z.literal("remove"), path: z.string() }),
           z.object({
             op: z.enum(["move", "copy"]),
-            from: z.string().max(1000),
-            path: z.string().max(1000),
+            from: z.string(),
+            path: z.string(),
           }),
         ])
       )
@@ -398,12 +376,12 @@ export const measureAsk = z.object({
   on: z
     .union([
       z.object({
-        role: z.string().min(1).max(100),
-        name: z.string().max(200).optional(),
+        role: z.string().min(1),
+        name: z.string().optional(),
       }),
-      z.object({ text: z.string().min(1).max(200) }),
-      z.object({ testId: z.string().min(1).max(200) }),
-      z.object({ selector: z.string().min(1).max(500) }),
+      z.object({ text: z.string().min(1) }),
+      z.object({ testId: z.string().min(1) }),
+      z.object({ selector: z.string().min(1) }),
     ])
     .optional()
     .describe(
@@ -418,10 +396,10 @@ export const measureAsk = z.object({
   repeats: z
     .number()
     .int()
-    .min(MEASURE_REPEATS)
+    .min(1)
     .optional()
     .describe(
-      `Memory repeats; ${MEASURE_REPEATS} when left out, 13 when a counter grows with fit under 0.9.`
+      `Memory repeats; ${MEASURE_REPEATS} when left out, as fuite repeats; 13 when a counter grows with fit under 0.9.`
     ),
   speed: z
     .enum(MEASURE_SPEEDS)
@@ -512,7 +490,6 @@ export const artifactList = {
   input: {
     cursor: z
       .string()
-      .max(60)
       .optional()
       .describe(
         `A page's next_cursor, for the older ones; ${LIST_PAGE} a page.`
@@ -559,23 +536,22 @@ export const designMap = {
     dir: z
       .string()
       .min(1)
-      .max(1000)
       .optional()
       .describe("From your workspace's root; default its source folder."),
-    query: z.string().min(1).max(100).optional(),
+    query: z.string().min(1).optional(),
     component: z
       .string()
       .min(1)
-      .max(1000)
       .optional()
       .describe(
         "A component's file: answers its card, with props, stories, moves and call sites."
       ),
-    limit: z.number().int().min(1).max(DESIGN_MAP_LIMITS.max).optional(),
-    cursor: z.string().max(20).optional(),
+    limit: z.number().int().min(1).optional(),
+    cursor: z.string().optional(),
   },
 };
 
+// @limit external: pin is a handle of 6 or more characters (handles.ts) or a UUID of 36
 const pin = z.string().min(6).max(36).describe("Its handle or id.");
 
 export const commentRead = {
@@ -604,7 +580,6 @@ export const commentReply = {
     text: z
       .string()
       .min(1)
-      .max(COMMENT_LIMITS.text)
       .describe("Your reply, as they read it in the thread."),
     files: z
       .array(z.string().min(1).max(COMMENT_LIMITS.file))
@@ -624,7 +599,6 @@ export const commentResolve = {
     text: z
       .string()
       .min(1)
-      .max(COMMENT_LIMITS.text)
       .optional()
       .describe("A last line in its thread, when it helps."),
   },
@@ -638,7 +612,6 @@ export const questionClose = {
     question: z
       .string()
       .min(1)
-      .max(400)
       .describe(
         "A card's link from open_items or <page>#<card>, or a question's request id (ask_…)."
       ),
@@ -650,14 +623,12 @@ export const questionClose = {
     why: z
       .string()
       .min(1)
-      .max(CHOICE_LIMITS.why)
       .describe(
         "taken: his words you acted on, quoted. withdrawn: what overtook it."
       ),
     evidence: z
       .string()
       .min(1)
-      .max(400)
       .optional()
       .describe(
         "Another session's question: its task closed (tsk-12), its to-do ticked (link), step (its step ticked), or a newer ask_…."
@@ -672,17 +643,14 @@ export const recordPick = {
   input: {
     card: z
       .string()
-      .min(3)
-      .max(ARTIFACT_REF_MAX + CHOICE_LIMITS.id + 1)
       .describe("<page>#<card>, or a question's request id (ask_…)."),
     options: z
-      .array(z.string().min(1).max(CHOICE_LIMITS.option))
+      .array(z.string().min(1))
       .min(1)
-      .max(CHOICE_LIMITS.options)
       .optional()
       .describe("A card: the option ids his words pick."),
     answers: z
-      .record(z.string(), z.string().min(1).max(CHOICE_LIMITS.quote))
+      .record(z.string(), z.string().min(1))
       .optional()
       .describe(
         "A question: each question's exact text → the label he picks, or his words."
@@ -691,13 +659,11 @@ export const recordPick = {
     message: z
       .string()
       .min(1)
-      .max(200)
       .optional()
       .describe("His message: a find hit's ref, or its id."),
     quote: z
       .string()
       .min(1)
-      .max(CHOICE_LIMITS.quote)
       .describe("His words that answer it, copied as written."),
   },
 };
@@ -707,20 +673,11 @@ export const settle = {
   description:
     "Picks an option on a decision card that the project's Who decides gives you as a member. Use it on a card of yours whose kind goes to the agent that asked, or on a card the hub sent you to settle.",
   input: {
-    card: z
-      .string()
-      .min(3)
-      .max(ARTIFACT_REF_MAX + CHOICE_LIMITS.id + 1)
-      .describe("<page>#<card>."),
-    option: z.string().min(1).max(CHOICE_LIMITS.option).describe("Its id."),
-    why: z
-      .string()
-      .min(1)
-      .max(CHOICE_LIMITS.why)
-      .describe("One sentence: the fact that decides it."),
+    card: z.string().describe("<page>#<card>."),
+    option: z.string().min(1).describe("Its id."),
+    why: z.string().min(1).describe("One sentence: the fact that decides it."),
     sources: z
-      .array(z.string().min(1).max(CHOICE_LIMITS.source))
-      .max(CHOICE_LIMITS.sources)
+      .array(z.string().min(1))
       .describe(
         "Links or repository paths it rests on; common practice names an https link."
       ),

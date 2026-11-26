@@ -218,7 +218,7 @@ const RECORD = ".json";
  */
 const RECORD_WRITE = { exclusive: true, mode: 0o600 } as const;
 /** Rows held back are written over their entry's record, which held them: read by the hub alone, as it is. */
-const HELD_WRITE = { mode: 0o600 } as const;
+const OWNER_ONLY_WRITE = { mode: 0o600 } as const;
 /** The line every commit a fold made carries (tasks.ts `adopt`, project-merge.ts). */
 const MERGE_LINE = `${TRAILERS.change}: ${CHANGES.merge}`;
 
@@ -738,7 +738,7 @@ const keepHeld = async (
       rows: put.kept,
       held: put.held,
     } satisfies EntryRecord),
-    HELD_WRITE
+    OWNER_ONLY_WRITE
   );
   for (const one of put.held) {
     console.log(

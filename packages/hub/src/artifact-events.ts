@@ -6,7 +6,6 @@ import {
   isImageMediaType,
   type TurnImage,
 } from "@cawco/core/attachments";
-import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import type { HubEnvelope } from "@cawco/core/envelopes";
@@ -23,6 +22,7 @@ import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
+import { shortId } from "@cawco/core/short-id";
 import {
   STAGE_CLONE_MS,
   STAGE_INSTALL_MS,
@@ -60,7 +60,6 @@ import { ARTIFACT_HANDED_ORIGIN } from "./hub-words";
 import type { HubTimer } from "./lifetime";
 import { awayProblem, silentProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
-import { handle as idHandle } from "./presenters/words";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive } from "./work-item-state";
@@ -530,10 +529,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
               (_, n: string) => `(picture ${Number(n) + before} of this message`
             ),
           ]);
-    const pictures = [
-      ...withdrawn.flatMap((one) => one.images),
-      ...images,
-    ].slice(0, COMMENT_LIMITS.pictures);
+    const pictures = [...withdrawn.flatMap((one) => one.images), ...images];
     const carried = [
       ...withdrawn.flatMap((one) => one.attachments),
       ...attachments,
@@ -820,10 +816,10 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   /** Why the tree `named` (a workspace, place or design folder id) can't run a stage: it is gone ({@link stageWhere}). */
   const goneWords = (named: string): string =>
     workspaceIdKindOf(named) === undefined
-      ? `${named.slice(0, 8)} names no workspace, so no stage runs there.`
+      ? `${shortId(named)} names no workspace, so no stage runs there.`
       : byWorkspaceIdKind(named, {
-          clone: `The workspace ${named.slice(0, 8)} it was made in is gone, so its stage can't run.`,
-          design: `The design folder ${named.slice(0, 8)} is gone, so its stage can't run.`,
+          clone: `The workspace ${shortId(named)} it was made in is gone, so its stage can't run.`,
+          design: `The design folder ${shortId(named)} is gone, so its stage can't run.`,
           place:
             "No session works in the folder it was made in any more, so CawCo can't find that folder to run its stage in.",
         });
@@ -858,7 +854,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       return here;
     }
     const gone = goneDownOf(revived.why);
-    const named = idHandle(retired.id);
+    const named = shortId(retired.id);
     return gone.down === "machine"
       ? awayProblem(
           retired.machineId,
@@ -899,7 +895,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     if (machineId === undefined) {
       return problem(409, {
         code: "stage-workspace-unplaced",
-        detail: `The workspace ${workspace.id.slice(0, 8)} it was made in is on no machine the hub knows, so its stage can't run.`,
+        detail: `The workspace ${shortId(workspace.id)} it was made in is on no machine the hub knows, so its stage can't run.`,
       });
     }
     // A stage installs its project first when its lockfile moved (agent
@@ -1009,8 +1005,8 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     ctx.workspaceArchived(workspace);
     return `${
       carry
-        ? `Discarded workspace ${idHandle(workspace.id)}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
-        : `Archived workspace ${idHandle(workspace.id)}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
+        ? `Discarded workspace ${shortId(workspace.id)}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
+        : `Archived workspace ${shortId(workspace.id)}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
     }${ctx.leftoverWords(workspace.id, from)}`;
   };
 

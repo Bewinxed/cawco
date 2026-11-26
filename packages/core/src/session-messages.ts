@@ -799,6 +799,7 @@ export const MCP_NOT_CONNECTED = "mcp_not_connected";
 export const REPEATED_FAILURE = "repeated_failure";
 
 /** How many identical failures in a row stop a session ({@link REPEATED_FAILURE}). */
+// @limit external: three identical failures mark a loop, as OpenCode's doom_loop counts them (https://opencode.ai/docs/permissions)
 export const REPEATED_FAILURE_LIMIT = 3;
 
 /**

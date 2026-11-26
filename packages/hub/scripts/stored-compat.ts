@@ -35,6 +35,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { gitShort } from "@cawco/core/git-short";
 import { z } from "zod";
 import { baseRefOf } from "./openapi-inputs";
 import { newestNightly, nightliesAhead } from "./shipped";
@@ -353,10 +354,7 @@ const unionNarrowings = (
   // The branch with `was`'s tag is the one its rows were meant for: say why it fails them.
   const meant = tries.find((_, i) => shown(branches[i] ?? {}) === shown(was));
   const closest = tries.toSorted((a, b) => a.length - b.length)[0] ?? [];
-  return [
-    `${said}no longer takes ${shown(was)}`,
-    ...(meant ?? (branches.length > 1 && closest.length > 3 ? [] : closest)),
-  ];
+  return [`${said}no longer takes ${shown(was)}`, ...(meant ?? closest)];
 };
 
 const requiredOf = (schema: Schema): string[] =>
@@ -565,6 +563,7 @@ const unquote = (name: string): string => name.replaceAll('"', "");
 const renamed = (key: string, tags: readonly string[]): string => {
   let [table = "", column = ""] = key.split(".");
   for (const tag of tags) {
+    // @limit external: format: a migration tag's four-digit number, NNNN_name (drizzle's journal)
     const snapshot = join(ROOT, SNAPSHOTS, `${tag.slice(0, 4)}_snapshot.json`);
     if (!existsSync(snapshot)) {
       continue;
@@ -646,7 +645,9 @@ for (const base of [
   if (!byCommit.has(commit)) {
     byCommit.set(
       commit,
-      base.label === "the base" ? `the base ${commit.slice(0, 12)}` : base.label
+      base.label === "the base"
+        ? `the base ${gitShort(HUB, commit)}`
+        : base.label
     );
   }
 }

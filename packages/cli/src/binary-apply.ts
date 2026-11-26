@@ -99,6 +99,7 @@ import {
   machineEndpoint,
   publishKeeper,
 } from "@cawco/core/keepers";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import { unknownMigrations } from "@cawco/core/migration-state";
 import {
@@ -130,7 +131,9 @@ import { installedHubDbPath, type ServiceAction, service } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
-const MIGRATION_CAP_MS = 30 * 60_000;
+// @limit measured: an update's swap to a healthy hub, migrations included, p99 40.6 s, longest 168 s over 547 updates on obelisk (apply.log, 2026-10-06 to 2026-11-26); three times the longest
+const MIGRATION_CAP_MS = 504_000;
+// @limit recording: cli.service-ms until 2026-12-10
 const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a build has to become healthy, from the swap or from a resumed helper's start, before it is rolled back (core {@link UPDATE_TRIAL_MS}). */
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
@@ -207,18 +210,21 @@ const svc = async (
   action: Extract<ServiceAction, "install" | "restart" | "uninstall">,
   ids: readonly ServiceId[]
 ): Promise<void> => {
-  const done = await readWithin(SERVICE_TIMEOUT_MS, () =>
-    service(action, {
-      ids,
-      mode: "prod",
-      follow: false,
-      // The fence has already answered; this is the service manager's turn.
-      force: true,
-      whenIdle: false,
-      note: (line) => console.log(`update: ${line}`),
-      // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
-      binaryLayout: binaryLayout(runtimeVersion),
-    })
+  const done = await timed(
+    readWithin(SERVICE_TIMEOUT_MS, () =>
+      service(action, {
+        ids,
+        mode: "prod",
+        follow: false,
+        // The fence has already answered; this is the service manager's turn.
+        force: true,
+        whenIdle: false,
+        note: (line) => console.log(`update: ${line}`),
+        // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
+        binaryLayout: binaryLayout(runtimeVersion),
+      })
+    ),
+    (ms) => recordLimitReading("cli.service-ms", ms)
   );
   switch (done.kind) {
     case "answered":
@@ -1146,7 +1152,7 @@ class TrialWatch {
       this.#migrating = running;
       await say(
         running
-          ? `verify ${this.trial.version}: the hub is migrating its database; the deadline moves with it (at most ${MIGRATION_CAP_MS / 60_000} minutes)`
+          ? `verify ${this.trial.version}: the hub is migrating its database; the deadline moves with it (at most ${MIGRATION_CAP_MS / 1000} seconds)`
           : `verify ${this.trial.version}: the migration ended at ${this.#elapsed()}`
       );
     }
@@ -1154,7 +1160,7 @@ class TrialWatch {
       return undefined;
     }
     if (this.#awake.awakeNow() > this.#started + MIGRATION_CAP_MS) {
-      return "The hub's migration did not end in 30 minutes";
+      return `The hub's migration did not end in ${MIGRATION_CAP_MS / 1000} seconds`;
     }
     const decideBy = Math.floor(this.#awake.now() / 1000) + TRIAL_WINDOW_S;
     if (decideBy - (this.trial.decideBy ?? 0) >= 10) {
@@ -1439,7 +1445,10 @@ function putBackPins(
 
 /** One stop of the hub's unit, said; one that failed or did not answer is said and waited past by the lock. */
 async function stopHub(version: string): Promise<void> {
-  await readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub"))
+  await timed(
+    readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub")),
+    (ms) => recordLimitReading("cli.service-ms", ms)
+  )
     .then((stopped) => {
       switch (stopped.kind) {
         case "answered":

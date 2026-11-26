@@ -60,6 +60,7 @@
 
 import type { Octokit } from "@octokit/rest";
 import { Effect, Result, Schema } from "effect";
+import { CONNECTOR_MIN_S } from "../connection/descriptor";
 import { eventKeys } from "../event-keys";
 import type {
   ExternalActor,
@@ -132,8 +133,8 @@ export type GitHubKind =
   | "discussion"
   | "discussion_comment";
 
-/** GitHub every 60 s (Projects spec §5.5). */
-const EVERY_MS = 60_000;
+/** GitHub every poll of the one loop (Projects spec §5.5). */
+const EVERY_MS = CONNECTOR_MIN_S * 1000;
 /** The edge of the window read again each poll: late-visible changes are not missed. Our choice. */
 const OVERLAP_MS = 2 * 60_000;
 const PER_PAGE = 100;

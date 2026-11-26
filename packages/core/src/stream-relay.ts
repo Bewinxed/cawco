@@ -11,8 +11,9 @@
  * that draws it says alike: the dashboard's card,
  * Caw's setup card, and later the iOS app.
  */
-import { getDomain } from "tldts";
+
 import type { BrowserState } from "./browser";
+import { registrableDomain } from "./registrable-domain";
 
 /**
  * The ports the relay takes: TURN's own, every one above 1024, so no machine
@@ -460,7 +461,7 @@ export interface RelayJourneyFrame {
  * for relay.northwind.co.uk. Null for an address or a name under no public
  * suffix (localhost, a .local name), which no DNS host serves.
  */
-export const zoneOf = (name: string): string | null => getDomain(name);
+export const zoneOf = registrableDomain;
 
 /** "turn.bewinxed.com" from "outpost.bewinxed.com": the name suggested under the domain the person came in by; null when it has no zone. */
 export const suggestedName = (domain: string): string | null => {

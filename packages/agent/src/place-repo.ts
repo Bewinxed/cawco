@@ -31,8 +31,10 @@ import { join, resolve } from "node:path";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
+import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortSha } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   PLACE_REPO_LIMIT_BYTES,
@@ -41,6 +43,7 @@ import {
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
+import { namedAndMore } from "@cawco/providers/names";
 import type { Subprocess } from "bun";
 import { Effect, Schema } from "effect";
 import { repoTop } from "./repo-top";
@@ -63,9 +66,6 @@ const mb = (bytes: number): string => `${(bytes / MB).toFixed(1)} MB`;
 /** What a `.gitignore` pattern reads as a glob or a comment, escaped to name a path exactly. */
 const IGNORE_SPECIAL = /[\\*?[\]!#]/gu;
 const TRAILING_SPACE = / $/u;
-
-/** How many of a place's heaviest folders a refusal names. */
-const HEAVIEST = 3;
 
 /** One `.gitignore` line naming `path` exactly, from the root: git's glob and comment characters escaped. */
 const ignoreLine = (path: string): string =>
@@ -181,16 +181,10 @@ const nulList = (text: string): string[] => text.split("\0").filter(Boolean);
 
 /** How much of a file the credential scan reads at a time. */
 const SCAN_READ = 1024 * 1024;
-/**
- * How much of what it read last the scan carries into the next read: more
- * than any credential's shape needs to be seen whole (agent secret-text.ts),
- * so one across two reads is found.
- */
-const SCAN_CARRY = 4096;
 
 /**
  * The credential scan of one file's bytes as they arrive, holding no more
- * than one read and {@link SCAN_CARRY} of the last: a file is never held
+ * than one read and {@link OUTPUT_TAIL_KEPT} of the last: a file is never held
  * whole. `found` is what the first credential reads as; a file with a NUL in
  * its first {@link BINARY_PROBE} bytes is binary, and holds none.
  */
@@ -221,7 +215,7 @@ class CredentialScan {
     const text = this.#carry + this.#decoder.decode(bytes, { stream: true });
     this.found = credentialIn(text);
     this.done = this.found !== undefined;
-    this.#carry = text.slice(-SCAN_CARRY);
+    this.#carry = lastOutput(text);
   }
 }
 
@@ -551,14 +545,11 @@ const heaviest = (plan: Plan): string => {
     const top = slash === -1 ? path : path.slice(0, slash + 1);
     byTop.set(top, (byTop.get(top) ?? 0) + bytes);
   }
-  const named = [...byTop]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, HEAVIEST)
-    .map(([top, bytes]) => `${top} (${mb(bytes)})`)
-    .join(", ");
-  return byTop.size > HEAVIEST
-    ? `${named}, and ${byTop.size - HEAVIEST} more`
-    : named;
+  return namedAndMore(
+    [...byTop]
+      .sort((a, b) => b[1] - a[1])
+      .map(([top, bytes]) => `${top} (${mb(bytes)})`)
+  );
 };
 
 /** The place's `.gitignore` as the first commit has it: the folder's own, then CawCo's block. */
@@ -776,7 +767,7 @@ const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
     );
   });
   console.info(
-    `[place-repo] ${root}: a git repository now, first commit ${made.commit.slice(0, 9)} with ${made.plan.staged.length + 1} files; ${made.plan.leftOut.length} paths left out`
+    `[place-repo] ${root}: a git repository now, first commit ${shortSha(made.commit)} with ${made.plan.staged.length + 1} files; ${made.plan.leftOut.length} paths left out`
   );
   return {
     state: "made",

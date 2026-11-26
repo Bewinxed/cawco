@@ -40,7 +40,10 @@
  *   (asks.ts). A retried call makes one project (call-keys.ts).
  */
 
-import { PROJECT_NAME_LENGTH } from "@cawco/core/forgotten-project";
+import {
+  CLAUDE_WINDOW_TOKENS,
+  promptBudgetChars,
+} from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { projectLink, sessionLink } from "@cawco/core/references";
 import { ElysiaStatus } from "elysia";
@@ -56,7 +59,7 @@ import type { NewProject } from "./project-making";
 export const PROJECT_CREATE = "project_create";
 
 /** As long as the words New project's composer sends (`POST /api/projects` `prompt`). */
-const WORDS_MAX = 20_000;
+const WORDS_MAX = promptBudgetChars(CLAUDE_WINDOW_TOKENS);
 
 /** A project `project_create` made, and its conversation once started. */
 export interface ProjectCreated {
@@ -103,7 +106,6 @@ export const PROJECT_CREATE_DEFINITION = defineTool(
     name: z
       .string()
       .min(1)
-      .max(PROJECT_NAME_LENGTH)
       .describe("The person's name for it, else a short one from their words."),
     words: z
       .string()

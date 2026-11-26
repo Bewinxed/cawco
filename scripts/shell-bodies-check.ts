@@ -665,7 +665,7 @@ const bodyProblems = (send: Send, body: Word, matched: Route[]): string[] => {
   const value = bodyOf(body.text);
   if (value === null) {
     return [
-      `${where}: ${shown} sends a body this cannot read as JSON: ${shownText(body.text).slice(0, 120)}`,
+      `${where}: ${shown} sends a body this cannot read as JSON: ${shownText(body.text)}`,
     ];
   }
   return matched.flatMap((route) => {
@@ -683,7 +683,7 @@ const bodyProblems = (send: Send, body: Word, matched: Route[]): string[] => {
 if (process.argv.includes("--list")) {
   for (const send of sends) {
     console.log(
-      `${send.file}:${send.line} ${send.method} ${send.path.replaceAll(SUB, "*")} ${send.body.only ? `$${send.body.only}` : shownText(send.body.text).slice(0, 90)}`
+      `${send.file}:${send.line} ${send.method} ${send.path.replaceAll(SUB, "*")} ${send.body.only ? `$${send.body.only}` : shownText(send.body.text)}`
     );
   }
 }
@@ -713,7 +713,7 @@ const toolFailures = toolSends.flatMap((send) => {
   const value = bodyOf(send.text);
   if (value === null) {
     return [
-      `${where}: cawco tool ${send.tool}'s arguments are no JSON this can read: ${shownText(send.text).slice(0, 120)}`,
+      `${where}: cawco tool ${send.tool}'s arguments are no JSON this can read: ${shownText(send.text)}`,
     ];
   }
   const fields = fieldsNotTaken(input, value);

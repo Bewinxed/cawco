@@ -353,6 +353,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
             .from(sentMessageBodies)
             .where(gt(sentMessageBodies.uuid, after))
             .orderBy(sentMessageBodies.uuid)
+            // @limit measured: a page; the next page's cursor rides the answer. 500 is the rows one page returns
             .limit(MIGRATE_BATCH)
             .all();
           for (const send of batch) {
@@ -625,6 +626,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
               )
             )
             .orderBy(desc(sentMessages.acceptedAt))
+            // @limit measured: a page; the next page's cursor rides the answer. 20 is the rows one page returns
             .limit(SAID_LAST_LOOK)
             .all()
             .flatMap((said) => {

@@ -102,6 +102,7 @@ const TH_HALTED = 5;
  */
 const MACH_STATE_TABLE = " RUSITH?";
 /** `mach_state_order`'s worst, and what a process whose threads cannot be read shows. */
+// @limit external: macOS ps's mach_state_order tops out at 7, an index into its 8-letter mach_state_table (adv_cmds ps/tasks.c)
 const STATE_MAX = 7;
 /** A thread waiting longer than this many seconds is idle (I), not sleeping (S) (`sleep_time > 20`). */
 const MAXSLP = 20;

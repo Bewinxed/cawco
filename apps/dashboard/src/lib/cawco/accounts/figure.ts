@@ -321,12 +321,13 @@ const TAGGED_PITCH = 56;
 const ROW = 24;
 const GUTTER = 14;
 const SLOT = 13;
+// @limit measured: the figure's dock draws five chips, SLOT (13 px) apart, in the gutter before the bar; a lane's later sessions share the last slot
 const SLOTS = 5;
 const CHIP = 10;
 /** Room for the caption under the lanes: one line, and a line more per wrap. */
-const CAP_GAP = 6;
-const CAP_LINE = 16;
-const CAP_FOOT = 8;
+const CAPTION_GAP = 6;
+const CAPTION_LINE = 16;
+const CAPTION_FOOT = 8;
 
 /** A board's lane pitch. */
 const pitchOf = (board: Board): number =>
@@ -350,7 +351,7 @@ export const figureHeight = (
 ): number =>
   PAD +
   lanes * pitchOf(board) +
-  (lines > 0 ? CAP_GAP + lines * CAP_LINE + CAP_FOOT : 0);
+  (lines > 0 ? CAPTION_GAP + lines * CAPTION_LINE + CAPTION_FOOT : 0);
 
 /**
  * Lays the lanes out in `stage` and returns the API a storyboard writes its
@@ -940,7 +941,7 @@ export function buildFigure(stage: HTMLElement, spec: FigureSpec): Timeline {
     ...stage.querySelectorAll<HTMLElement>('[data-slot="figure-cap"]'),
   ];
   const tallest = Math.max(0, ...caps.map((cap) => cap.scrollHeight));
-  stage.style.height = `${figureHeight(spec.board, spec.lanes.length, Math.ceil(tallest / CAP_LINE))}px`;
+  stage.style.height = `${figureHeight(spec.board, spec.lanes.length, Math.ceil(tallest / CAPTION_LINE))}px`;
   F.tl.rest();
   return F.tl;
 }

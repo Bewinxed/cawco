@@ -23,6 +23,7 @@ import {
 
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
@@ -144,7 +145,7 @@ export const createAskPresenter = (
     if (row) {
       return sessionAsker(row);
     }
-    return { asker: instanceId ? instanceId.slice(0, 8) : "A session" };
+    return { asker: instanceId ? shortId(instanceId) : "A session" };
   };
 
   /** A session as an ask names it: as the board does, with its project. */

@@ -51,6 +51,8 @@
  */
 
 import { spawn } from "node:child_process";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
+import { shortId } from "@cawco/core/short-id";
 import { type Pid, spawnedPid } from "@cawco/core/signal";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { endGroup, holdCommand } from "./awake-hold";
@@ -66,9 +68,6 @@ import { toolEnv } from "./tools";
  * comes well inside it.
  */
 const LOOK_MS = 10_000;
-
-/** The most of a refusing hold's stderr its line quotes. */
-const STDERR_KEPT = 2000;
 
 /** The hold while it stands: its process group's leader, and whether the agent ended it. */
 interface Hold {
@@ -108,13 +107,13 @@ export const keepAwakeWhileWorking = (
       ...(running.length > 0
         ? [
             // OpenCode's own words (`opencode:pending-operations`) stay whole; a session's id goes short.
-            `a turn in session ${named(running.map((id) => (id.includes(":") ? id : id.slice(0, 8))))}`,
+            `a turn in session ${named(running.map((id) => (id.includes(":") ? id : shortId(id))))}`,
           ]
         : []),
       ...commands,
       ...(workspaces.length > 0
         ? [
-            `a command in workspace ${named(workspaces.map((id) => id.slice(0, 8)))}`,
+            `a command in workspace ${named(workspaces.map((id) => shortId(id)))}`,
           ]
         : []),
       ...runs.map((run) => `the run ${run}`),
@@ -139,7 +138,7 @@ export const keepAwakeWhileWorking = (
     });
     const stderr = newTail();
     child.stderr?.on("data", (chunk: Buffer) => {
-      writeTail(stderr, chunk.toString("utf8"), STDERR_KEPT);
+      writeTail(stderr, chunk.toString("utf8"), OUTPUT_TAIL_KEPT);
     });
     const leader = spawnedPid(child);
     const mine: Hold | undefined = leader

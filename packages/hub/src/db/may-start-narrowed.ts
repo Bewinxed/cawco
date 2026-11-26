@@ -8,6 +8,7 @@
  * many and alike, are one line with their count.
  */
 import type { Database } from "bun:sqlite";
+import { shown } from "./json-reads";
 
 /** A value 0397 reads as no value: SQL null, or JSON `null`. */
 const unset = (x: string) =>
@@ -46,10 +47,6 @@ ORDER BY i.created_at`;
 
 /** A trash entry 0397 reads as one old type row. */
 const TRASHED_ROW = `CASE WHEN json_valid(t.rows) THEN json_type(t.rows) = 'array' AND json_array_length(t.rows) = 1 AND json_extract(t.rows, '$[0].table') = 'delegate_types' AND json_array_length(t.rows, '$[0].rows') = 1 AND json_type(t.rows, '$[0].rows[0].name') = 'text' AND json_type(t.rows, '$[0].rows[0].description') = 'text' AND json_type(t.rows, '$[0].rows[0].harness') = 'text' AND json_type(t.rows, '$[0].rows[0].model') = 'text' ELSE 0 END`;
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string | null): string =>
-  JSON.stringify((raw ?? "").slice(0, 120));
 
 /** The lines, each `[migrations] 0397: …`, for what 0397 places narrow. */
 const narrowedLines = (client: Database): string[] => {

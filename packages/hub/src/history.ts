@@ -18,6 +18,7 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
 import type { SendRecord, SessionMessage } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { SessionMessageSchema } from "@cawco/core/stored-shapes";
 import type { ToolStatus } from "@cawco/core/tools";
 import type {
@@ -489,7 +490,7 @@ export const createHistory = (ctx: HistoryContext) => {
     const done = Date.now();
     if (done - began >= SLOW_HISTORY_MS) {
       console.info(
-        `[transcripts] ${instanceId.slice(0, 8)}'s newest window: ${stored.length} entries read in ${read - began} ms, put together here in ${done - read} ms`
+        `[transcripts] ${shortId(instanceId)}'s newest window: ${stored.length} entries read in ${read - began} ms, put together here in ${done - read} ms`
       );
     }
     return { entries: transcript, lines, records, where, older };
@@ -535,8 +536,16 @@ export const createHistory = (ctx: HistoryContext) => {
     const window = await storedWindow(
       where,
       cursor.before === null
-        ? { end: "newest", limit: HISTORY_WINDOW }
-        : { before: cursor.before, limit: HISTORY_WINDOW }
+        ? {
+            end: "newest",
+            /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
+              HISTORY_WINDOW,
+          }
+        : {
+            before: cursor.before,
+            /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
+              HISTORY_WINDOW,
+          }
     );
     if ("fault" in window) {
       return window;
@@ -661,8 +670,16 @@ export const createHistory = (ctx: HistoryContext) => {
     const window = await storedWindow(
       where,
       cut
-        ? { through: cut, limit: HISTORY_WINDOW }
-        : { end: "newest", limit: HISTORY_WINDOW }
+        ? {
+            through: cut,
+            /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
+              HISTORY_WINDOW,
+          }
+        : {
+            end: "newest",
+            /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
+              HISTORY_WINDOW,
+          }
     );
     if ("fault" in window) {
       return window;

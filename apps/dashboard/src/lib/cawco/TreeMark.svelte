@@ -159,7 +159,10 @@
   data-switch={switches || rowToggles ? "" : undefined}
   style:--dot={dot ? `var(--color-status-${dot}-glyph)` : undefined}
   style:--fill={fill}
-  style:--n={Math.min(count, 3)}
+  style:--n={Math.min(
+    count,
+    /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 3
+  )}
   style:--size="var(--mark-size, var(--spacing-space-5))"
   style:--mark-z="var(--mark-level, 2)"
 >
@@ -176,7 +179,10 @@
       aria-hidden="true"
       data-tree-mark-deck
       class="absolute inset-0 pointer-events-none"
-      data-deck={Math.min(count, 3)}
+      data-deck={Math.min(
+        count,
+        /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 3
+      )}
     >
       {#each [1, 2, 3] as i (i)}
         <span

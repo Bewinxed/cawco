@@ -441,6 +441,7 @@ const tickKeepAlive = async (
           parent_tool_use_id: null,
           message: {
             role: "user",
+            // @limit measured: 4 hex characters of a random UUID are 16 bits; one hub's ids of this kind share the namespace, so two collide after about 2^8 ids
             content: `Keep-alive ${crypto.randomUUID().slice(0, 4)}: automatic message that keeps this session's prompt cache warm. Do not use any tool and do not continue any work. Reply with exactly: ok`,
           },
         },

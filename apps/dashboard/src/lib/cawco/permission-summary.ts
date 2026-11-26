@@ -10,9 +10,6 @@ import {
  * permission-presentation.ts). This file keeps only the standing grant's words.
  */
 
-/** How much of a rule the card's "always allow" label carries before it is cut. */
-const RULE_LABEL_MAX = 30;
-
 /**
  * One suggestion as a rule, written the way the SDK writes them:
  * `Bash(git status:*)`. A suggestion is the provider's own value, so this
@@ -57,11 +54,7 @@ export function suggestedRule(
     if (!full) {
       continue;
     }
-    const short =
-      full.length > RULE_LABEL_MAX
-        ? `${full.slice(0, RULE_LABEL_MAX - 1)}…`
-        : full;
-    return { short, full, scope: scopeOf(update.destination) };
+    return { short: full, full, scope: scopeOf(update.destination) };
   }
   return null;
 }

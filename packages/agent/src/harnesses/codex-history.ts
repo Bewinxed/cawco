@@ -87,6 +87,7 @@ export const listCodexThreads = (dir?: string): Promise<NeutralSessionInfo[]> =>
     do {
       const page: V2.ThreadListResponse = await peer.request("thread/list", {
         ...(dir ? { cwd: dir } : {}),
+        // @limit external: Codex app-server's page size for thread/list (codex-protocol/v2.gen.ts ThreadListParams.limit); the answer's nextCursor reads the next page
         limit: 100,
         cursor,
         // Every provider's: a listing names only its home's own provider's
@@ -129,6 +130,7 @@ const turnsOf = async (
       {
         threadId,
         cursor,
+        // @limit external: Codex app-server's page size for thread/turns/list (codex-protocol/v2.gen.ts ThreadTurnsListParams.limit); the answer's nextCursor reads the next page
         limit: 50,
         sortDirection: "asc",
         itemsView: "full",

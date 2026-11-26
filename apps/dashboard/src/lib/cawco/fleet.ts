@@ -28,6 +28,7 @@ import type {
 } from "@cawco/core/fleet-secrets";
 import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
 import type { FsEntry } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
@@ -727,12 +728,12 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
 
 /**
  * What a copy is called: the version it declares, else its content hash's
- * first seven characters.
+ * first eight characters.
  */
 export const versionLabel = (
   version: string | undefined,
   hash: string | undefined
-): string => version ?? hash?.slice(0, 7) ?? "";
+): string => version ?? (hash && shortId(hash)) ?? "";
 
 /**
  * Two copies' names side by side: their versions where those tell them

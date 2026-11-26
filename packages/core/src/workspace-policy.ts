@@ -74,6 +74,7 @@ import {
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
+import { recordLimitReading } from "./limit-readings";
 import { alternatesText, copiedFolderSync, recordedPool } from "./object-pool";
 import {
   accountConfigDir,
@@ -198,6 +199,7 @@ export const excludedPaths = (
 export const stageCloneId = (placeId: string): string => {
   const hex = createHash("sha256").update(`stage\0${placeId}`).digest("hex");
   return [
+    // @limit external: RFC 9562 section 4: a UUID is 8-4-4-4-12 hex digits, and this is its first group
     hex.slice(0, 8),
     hex.slice(8, 12),
     hex.slice(12, 16),
@@ -207,6 +209,7 @@ export const stageCloneId = (placeId: string): string => {
 };
 
 /** The most `find` writes about a place: every path it names, NUL-separated. */
+// @limit recording: core.place-find-output-chars until 2026-12-10
 const FIND_OUTPUT_MAX = 64 * 1024 * 1024;
 
 /**
@@ -238,6 +241,7 @@ const findIn = (
           );
           return;
         }
+        recordLimitReading("core.place-find-output-chars", out.length);
         done(out.split("\0").filter(Boolean));
       }
     );
@@ -258,6 +262,7 @@ const gitIn = (
         env: { ...process.env, ...SAFE_GIT_ENV, LC_ALL: "C" },
       },
       (error, out, err) => {
+        recordLimitReading("core.place-find-output-chars", out.length);
         if (!error) {
           done({ code: 0, out, err });
           return;
@@ -457,6 +462,7 @@ const ownerOnlyIn = (root: string): Promise<string[]> =>
  * path takes of it: "each path takes about three arguments" (its
  * `too_many_arguments` refusal), `--ro-bind <path> <path>`.
  */
+// @limit external: srt's cap on the words of one bwrap profile, BWRAP_MAX_ARGS = 9000 (srt 0.0.81 linux-sandbox-utils.js)
 const BWRAP_MAX_ARGS = 9000;
 const BWRAP_ARGS_PER_PATH = 3;
 /** The paths srt's cap holds: 3,000. */
@@ -765,6 +771,7 @@ const workspaceWritten = async (home: string): Promise<string[]> => {
 };
 
 /** The most links one {@link resolverOutside} resolution follows: Linux's own limit ("a maximum of 40 symbolic links", path_resolution(7)). */
+// @limit external: Linux's own limit, "a maximum of 40 symbolic links" (path_resolution(7))
 const MAX_LINKS = 40;
 
 /**

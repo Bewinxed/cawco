@@ -6,13 +6,13 @@ import { readPins } from "@cawco/core/comments/model";
 import { getMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
 import type { ArtifactUnnamed } from "../decision-program";
 import { byHandle, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
-
 import { isSetupPage } from "../setup";
 import type { ArtifactServiceDeps } from "./deps";
 
@@ -24,7 +24,7 @@ const ARTIFACT_KEYS: Handled<{
 }> = {
   id: (row) => row.id,
   names: (row) => [row.name],
-  said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+  said: (row) => `${row.name} (${row.kind} ${shortId(row.id)})`,
 };
 
 /** The id of the one artifact among `rows` that `asked` names; thrown when it names none or several. */
@@ -229,7 +229,7 @@ export const createAccess = (ctx: AccessContext) => {
         code: "artifact-others",
         detail: artifactToolWords.othersArtifact(
           `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`,
-          row.instanceId?.slice(0, 8) ?? ""
+          row.instanceId ? shortId(row.instanceId) : ""
         ),
       });
     }

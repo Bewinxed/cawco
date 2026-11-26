@@ -3,6 +3,7 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import MiddleClip from "#lib/components/ui/middle-clip/middle-clip.svelte";
   /**
    * Location as a composer chip: where the session works, a repository
    * cloned for it or an existing folder, named on the chip and chosen in its
@@ -46,11 +47,6 @@
     onclosefocus: () => boolean;
   } & LocationFields = $props();
 
-  /** The last two segments are what tells two checkouts apart. */
-  const short = (path: string) => {
-    const parts = path.split("/").filter(Boolean);
-    return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
-  };
   const picked = $derived(isGitUrl(repo) ? repo.trim() : "");
   const onGithub = $derived(
     !picked || repoIdentity(picked).startsWith("github.com/")
@@ -59,7 +55,7 @@
     if (mode === "repo") {
       return picked ? repoPath(picked) : spawnWords.location.chooseRepo;
     }
-    return dir.trim() ? short(dir.trim()) : spawnWords.location.chooseFolder;
+    return dir.trim() || spawnWords.location.chooseFolder;
   });
   const empty = $derived(mode === "repo" ? !picked : !dir.trim());
 </script>
@@ -95,7 +91,10 @@
       class="data-mono:font-(family-name:--font-mono)"
       data-mono={(mode === "dir" && !empty) || undefined}
       title={mode === "repo" ? picked : dir}
-      {@attach morph({ width: true, on: ["data-mono"] })}>{label}</span
+      {@attach morph({ width: true, on: ["data-mono"] })}
+      >{#if mode === "dir" && !empty}<MiddleClip
+          text={label}
+        />{:else}{label}{/if}</span
     >
     <Down data-slot="chevron" />
   {/snippet}

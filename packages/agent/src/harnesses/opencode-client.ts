@@ -20,7 +20,9 @@ import {
   Unanswered as UnansweredRead,
 } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { SlashCommand } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
@@ -230,6 +232,7 @@ export const errorText = (error: unknown): string => {
  * then the plugin active ~0.2 s later). Ours: a cold machine's import of the
  * plugin module, with margin.
  */
+// @limit recording: agent.opencode-plugin-load-ms until 2026-12-10
 const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
 
 /**
@@ -280,9 +283,13 @@ const pluginLoaded = Effect.fnUntraced(function* (
       return Effect.succeed(undefined);
     })
   );
-  yield* boundedRead(
-    timeoutMs,
-    lookUntil({ every: PLUGIN_LOOK_MS }, look)
+  yield* timedEffect(
+    boundedRead(timeoutMs, lookUntil({ every: PLUGIN_LOOK_MS }, look)),
+    (ms) => {
+      if (timeoutMs === PLUGIN_LOAD_TIMEOUT_MS) {
+        recordLimitReading("agent.opencode-plugin-load-ms", ms);
+      }
+    }
   ).pipe(
     Effect.catch((error) =>
       Effect.fail(
@@ -302,6 +309,7 @@ const pluginLoaded = Effect.fnUntraced(function* (
  * (opencode.ai/v2/docs/mcp-servers "Timeouts", `startup` default), and the
  * servers connect in parallel; one more 30 s covers a cold machine.
  */
+// @limit recording: agent.opencode-mcp-connect-ms until 2026-12-10
 const MCP_CONNECT_TIMEOUT_MS = 60_000;
 
 /** CawCo's own MCP server, as every server's launch config names it (`mcp.servers.cawco`). */
@@ -462,22 +470,29 @@ const mcpSettled = Effect.fnUntraced(function* (
   });
   // Read at once, then again MCP_LOOK_MS after each read, or MCP_REDIAL_MS
   // after CawCo's server was dialled again.
-  const settled = yield* boundedRead(
-    timeoutMs,
-    look.pipe(
-      Effect.repeat(
-        Schedule.spaced(MCP_LOOK_MS).pipe(
-          Schedule.setInputType<McpLook>(),
-          Schedule.passthrough,
-          Schedule.while(({ input }) => input.kind !== "settled"),
-          Schedule.modifyDelay(({ input, duration }) =>
-            Effect.succeed(
-              input.kind === "redialled" ? MCP_REDIAL_MS : duration
+  const settled = yield* timedEffect(
+    boundedRead(
+      timeoutMs,
+      look.pipe(
+        Effect.repeat(
+          Schedule.spaced(MCP_LOOK_MS).pipe(
+            Schedule.setInputType<McpLook>(),
+            Schedule.passthrough,
+            Schedule.while(({ input }) => input.kind !== "settled"),
+            Schedule.modifyDelay(({ input, duration }) =>
+              Effect.succeed(
+                input.kind === "redialled" ? MCP_REDIAL_MS : duration
+              )
             )
           )
         )
       )
-    )
+    ),
+    (ms) => {
+      if (timeoutMs === MCP_CONNECT_TIMEOUT_MS) {
+        recordLimitReading("agent.opencode-mcp-connect-ms", ms);
+      }
+    }
   ).pipe(
     Effect.map((answer): McpNotConnected[] | undefined =>
       answer.kind === "settled" ? answer.unconnected : undefined

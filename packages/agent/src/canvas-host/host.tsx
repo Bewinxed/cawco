@@ -11,6 +11,7 @@
  */
 
 import { docMeta } from "@cawco/core/doc-meta";
+import { carryPageReadings } from "@cawco/core/limit-readings-page";
 import { frameSaid } from "@cawco/core/page-wire";
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { themeVariablesCss } from "@cawco/core/theme-css";
@@ -74,6 +75,9 @@ const UI_OPTIONS = {
 // The kit's tokens as written (a text import, which no CSS compiler
 // touches), ahead of the page's stylesheet: their `light-dark()`s follow
 // the host's `color-scheme` (`scheme` below).
+// What the page reads of the bounds still waiting on data reaches the hub.
+carryPageReadings();
+
 const tokenSheet = document.createElement("style");
 tokenSheet.textContent = themeVariablesCss();
 document.head.prepend(tokenSheet);

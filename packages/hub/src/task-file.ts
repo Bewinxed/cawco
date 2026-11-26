@@ -335,8 +335,9 @@ const ID_PREFIX = /^tsk-\d+-?/u;
 /** A dollar sign a cap may open with. */
 const DOLLAR = /^\$/u;
 
-/** The longest slug a file name takes. */
-const SLUG_LIMIT = 48;
+/** The slug's room in a file name: what `tsk-<number>-<slug>.md` leaves of a file name's 255 bytes after the longest id (9 digits, as {@link FILE_NAME} reads) and the extension. */
+// @limit external: a file name holds 255 bytes on Linux (NAME_MAX, limits.h); this part is what the name's id and extension leave
+const SLUG_LIMIT = 255 - "tsk-".length - 9 - "-".length - ".md".length;
 
 // --- ids --------------------------------------------------------------------
 
@@ -1154,6 +1155,7 @@ const commentHeading = (
   }
   const name = parts[0] ?? "";
   const mover = parts[1] ?? "";
+  // @limit external: format: a comment heading's fields are name, mover, an optional id and the date; an id makes four
   const id = parts.length > 3 ? (parts[2] ?? null) : null;
   const via = parts.length === 4 ? viaOf(name, mover, id ?? "", at) : null;
   return {
@@ -1322,6 +1324,7 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
 };
 
 /** The most acceptance criteria one task states: one judgement reads that many (jev-placement.ts `jevJudged`), so a task past it is refused when written (tasks.ts `acceptanceOf`). */
+// @limit recording: hub.task-criteria until 2026-12-10
 export const CRITERIA_MAX = 20;
 
 /** A task's acceptance criteria, one each: its list items, else the whole text as one. */

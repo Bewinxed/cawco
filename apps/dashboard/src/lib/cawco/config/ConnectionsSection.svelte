@@ -250,6 +250,7 @@
       const project = projectsStore.projects.find((each) => each.id === id);
       return project ? [project.name] : [];
     });
+    // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
     return { chips: names.slice(0, 2), more: names.length - 2 };
   };
 

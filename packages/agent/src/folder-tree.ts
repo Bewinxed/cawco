@@ -36,6 +36,7 @@ import type { FolderMoveBlock, FolderWalk } from "@cawco/core/folder-move";
 import { makeFolder } from "@cawco/core/folders";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { shortSha } from "@cawco/core/short-id";
 import { folderStepWords } from "@cawco/core/words/folder-move";
 import { Schema } from "effect";
 import type { z } from "zod";
@@ -435,7 +436,7 @@ export const gitFacts = async (dir: string): Promise<GitFacts | null> => {
 /** Where two repositories' states differ, in git's terms; none when they agree. */
 const gitDiffers = (a: GitFacts, b: GitFacts): string | undefined => {
   if (a.head !== b.head) {
-    return `HEAD ${a.head?.slice(0, 7) ?? "unborn"} against ${b.head?.slice(0, 7) ?? "unborn"}`;
+    return `HEAD ${a.head ? shortSha(a.head) : "unborn"} against ${b.head ? shortSha(b.head) : "unborn"}`;
   }
   if (a.refs !== b.refs) {
     return "its branches and tags";

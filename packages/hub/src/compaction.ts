@@ -14,6 +14,7 @@ import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { NeutralSystemMessage } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
@@ -397,7 +398,7 @@ export const createCompaction = (ctx: CompactionContext) => {
         return;
       }
       console.info(
-        `[at-limit] ${plan.instanceId.slice(0, 8)}: ${why}. It moves to ${ctx.accountWords(plan.move.to.id)} now.`
+        `[at-limit] ${shortId(plan.instanceId)}: ${why}. It moves to ${ctx.accountWords(plan.move.to.id)} now.`
       );
       ctx.lifetime.fork(
         "move after compaction",
@@ -739,7 +740,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       ctx.transcripts.removeLine(row.id, `limit-${plan.lineId}`);
     }
     console.info(
-      `[at-limit] ${row.id.slice(0, 8)}: its ${stepWords(plan.stage)} ends unfinished, as it goes on as ${to.slice(0, 8)}: that continuation is its move, and nothing moves it again.`
+      `[at-limit] ${shortId(row.id)}: its ${stepWords(plan.stage)} ends unfinished, as it goes on as ${shortId(to)}: that continuation is its move, and nothing moves it again.`
     );
   };
 
@@ -924,7 +925,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     }
     ctx.transcripts.line(row.id, contextLine(row, kept), row.harness);
     console.info(
-      `[context] ${row.id.slice(0, 8)}: ${contextWords.line(line).title}`
+      `[context] ${shortId(row.id)}: ${contextWords.line(line).title}`
     );
   };
 
@@ -990,7 +991,7 @@ export const createCompaction = (ctx: CompactionContext) => {
   ): Promise<void> => {
     const unread = (why: string) => {
       console.warn(
-        `[context] ${plan.instanceId.slice(0, 8)}: what its filing wrote could not be read: ${why}`
+        `[context] ${shortId(plan.instanceId)}: what its filing wrote could not be read: ${why}`
       );
       return null;
     };

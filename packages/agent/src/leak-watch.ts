@@ -57,6 +57,7 @@ import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { LeakFound } from "@cawco/core/harness";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   commandLine,
   cpuTimeUsed,
@@ -65,8 +66,10 @@ import {
   processLineage,
   residentBytes,
 } from "@cawco/core/process-identity";
+import { shortId } from "@cawco/core/short-id";
 import { cutShort } from "@cawco/core/words/helpers";
 import { leakWords } from "@cawco/core/words/leaks";
+import { firstNames } from "@cawco/providers/names";
 import { keeperChildren } from "./sessiond-client";
 
 const GIB = 1024 ** 3;
@@ -106,8 +109,6 @@ const ORPHAN_GRACE_MS = 10_000;
  * still sum above a quarter over {@link LOOK_MS}.
  */
 const WORKING_SHARE = 0.25;
-/** The most leftovers one message names; the rest are counted. */
-const NAMED = 8;
 /** Where the cgroup v2 hierarchy is mounted. */
 const CGROUP_ROOT = "/sys/fs/cgroup";
 /** The keeper's groups of its children's own groups: `children`, and `children/workspaces` for a workspace's own processes (sessiond cgroup.ts `CHILDREN_GROUP`, `WORKSPACES_GROUP`). */
@@ -219,7 +220,7 @@ const commandOf = async (pid: number): Promise<string> => {
 /** Where a child's process runs, in words: its workspace, else this machine and its directory. */
 const whereOf = async (target: LeakTarget, pid: number): Promise<string> => {
   if (target.workspace) {
-    return `in workspace ${target.workspace.slice(0, 8)}`;
+    return `in workspace ${shortId(target.workspace)}`;
   }
   const cwd =
     process.platform === "linux"
@@ -231,6 +232,8 @@ const whereOf = async (target: LeakTarget, pid: number): Promise<string> => {
 /** One process's memory over the last readings, and the threshold multiple last told. */
 interface Climb {
   readings: number[];
+  /** Readings in a row its resident size has risen. */
+  rising?: number;
   told: number;
 }
 
@@ -322,6 +325,14 @@ interface Told {
  * A climb read once more: the words to tell when it is a leak not yet told
  * at this height, else nothing.
  */
+/** How many readings in a row a process's resident size has risen, recorded as it grows: what {@link WINDOW} must see of a leak. */
+const climbStreak = (climb: Climb, resident: number): void => {
+  const last = climb.readings.at(-1);
+  climb.rising =
+    last !== undefined && resident > last ? (climb.rising ?? 0) + 1 : 0;
+  recordLimitReading("agent.leak-climb-readings", climb.rising);
+};
+
 const climbed = async (
   row: ProcessLineage,
   resident: number,
@@ -332,6 +343,8 @@ const climbed = async (
   const key = keyOf(row);
   const climb = watching.climbs.get(key) ?? { readings: [], told: 0 };
   watching.climbs.set(key, climb);
+  climbStreak(climb, resident);
+  // @limit recording: agent.leak-climb-readings until 2026-12-10
   climb.readings = [...climb.readings, resident].slice(-(WINDOW + 1));
   const { readings } = climb;
   const first = readings[0] ?? 0;
@@ -458,7 +471,7 @@ const leftovers = async (
     watching.told.add(keyOf(row));
   }
   const named = await Promise.all(
-    due.slice(0, NAMED).map(async (row) => {
+    firstNames(due).shown.map(async (row) => {
       const [command, pid] = await Promise.all([
         commandOf(row.pid),
         shownPid(row.pid),
@@ -623,7 +636,7 @@ const lookAtChild = async (
   if (!cpu || cpu.share < WORKING_SHARE) {
     return;
   }
-  return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => id.slice(0, 8)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
+  return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => shortId(id)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
 };
 
 /**

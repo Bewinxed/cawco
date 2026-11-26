@@ -27,6 +27,7 @@ import type {
 import { IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core/image-generation";
 import type { LandsMode } from "@cawco/core/injected";
 import { handoffMarker, withInputsLine } from "@cawco/core/injected";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   machineCalled,
   machineLabel,
@@ -38,6 +39,7 @@ import { QUESTION_DISMISSED } from "@cawco/core/question";
 import { sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { secondsOf } from "@cawco/core/time";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { contextWords } from "@cawco/core/words/context";
@@ -62,7 +64,6 @@ import { byId, handleId, isHandle, mentioned } from "./handles";
 import { type KeepAliveRow, provenCold, type TurnReading } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import type { HubLifetimeShape } from "./lifetime";
-import { handle as idHandle } from "./presenters/words";
 import type { ProblemsOf } from "./refusal";
 import type {
   SendDelivery,
@@ -404,7 +405,7 @@ const continuesWords = (
   if (!followed) {
     return "";
   }
-  const former = followed.former.slice(0, 8);
+  const former = shortId(followed.former);
   return followed.continued
     ? ` (the continuation of ${former}, which never runs again)`
     : ` (once ${former})`;
@@ -472,6 +473,7 @@ function named(peers: Peer[], target: string): Peer[] {
  * How many sessions a refused name lists by id. A directory's name can match
  * hundreds of sessions that ever ran there; the rest are counted.
  */
+// @limit measured: a page; the next page's cursor rides the answer. 12 is the rows one page returns
 const LISTED_AT_MOST = 12;
 
 /** How a session with no process is listed: asleep on its conversation, or never started. */
@@ -537,7 +539,7 @@ const startedText = ({
   `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
   `in ${permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
   "It is in the sidebar now, under this session, and the user can open its transcript. " +
-  `Hand it more work later with handoff("${leafOf(folder)}#${id.slice(0, 8)}", ...).`;
+  `Hand it more work later with handoff("${leafOf(folder)}#${shortId(id)}", ...).`;
 
 /** `body` from session `from` (called `name`) into session `to`. */
 const peerSend = (
@@ -1119,7 +1121,7 @@ const forkOwner = (
 
 /** Why a fork may not act on its origin's delegate. */
 const forkOwnedWords = (peer: Peer, owner: ForkOrigin): string =>
-  `${peer.label} (“${peer.title}”) is a delegate of “${owner.title}” (${idHandle(owner.id)}), the session this one was forked from. It stays that session's: its reports and asks go there, and only that session hands it work, stops, interrupts or answers it. Nothing was done. Delegate the work yourself if this session needs it.`;
+  `${peer.label} (“${peer.title}”) is a delegate of “${owner.title}” (${shortId(owner.id)}), the session this one was forked from. It stays that session's: its reports and asks go there, and only that session hands it work, stops, interrupts or answers it. Nothing was done. Delegate the work yourself if this session needs it.`;
 
 /**
  * Resolves a target among the caller's own delegates, and the work items of
@@ -1197,14 +1199,14 @@ function jevVerdict(
   if ("error" in jev) {
     return problem(502, {
       code: "cold-jev-unanswered",
-      detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and ${jev.error} Nothing was sent.`,
+      detail: `Refused: "${title}" (${shortId(row.id)}) is cold, and ${jev.error} Nothing was sent.`,
     });
   }
   return jev.attach
     ? undefined
     : problem(409, {
         code: "cold-fresh-fits",
-        detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`,
+        detail: `Refused: "${title}" (${shortId(row.id)}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`,
       });
 }
 
@@ -1224,7 +1226,9 @@ function repeatOfRefused(
     coldRefusals.delete(key);
     return true;
   }
+  recordLimitReading("hub.cold-refusals-held", coldRefusals.size);
   // Bound warnings in memory; a newer turn also invalidates an unused repeat.
+  // @limit recording: hub.cold-refusals-held until 2026-12-03
   if (coldRefusals.size >= 256) {
     const oldest = coldRefusals.keys().next().value;
     if (oldest !== undefined) {
@@ -1249,7 +1253,7 @@ function stoppedHoldWords(
   workspaceId: string,
   unlanded: Unlanded | { error: string } | null
 ): string {
-  const ws = idHandle(workspaceId);
+  const ws = shortId(workspaceId);
   if (!unlanded) {
     return workWords.stopGone(ws);
   }
@@ -1273,7 +1277,7 @@ function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   const commits = `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"}`;
   const stop = unlanded.live ? "stop its item with stop_delegate, then " : "";
-  return `Refused: "${title}" (${idHandle(row.id)}) is cold, and its workspace ${idHandle(unlanded.workspaceId)} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${idHandle(unlanded.workspaceId)}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
+  return `Refused: "${title}" (${shortId(row.id)}) is cold, and its workspace ${shortId(unlanded.workspaceId)} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${shortId(unlanded.workspaceId)}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
 }
 
 /**
@@ -1361,7 +1365,7 @@ function unlandedVerdict(
     const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
     return problem(502, {
       code: "cold-unlanded-unread",
-      detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`,
+      detail: `Refused: "${title}" (${shortId(row.id)}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`,
     });
   }
   if (unlanded.changed > 0) {
@@ -1462,7 +1466,7 @@ function coldRefusalText(
     row.contextTokens === null
       ? "size not recorded"
       : `about ${(Math.round(row.contextTokens / 1000) * 1000).toLocaleString("en-US")} tokens as of its last request`;
-  return `Refused: "${title}" (${idHandle(row.id)}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`;
+  return `Refused: "${title}" (${shortId(row.id)}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`;
 }
 
 type ContinueSessionInput = Parameters<HandoffActions["continueSession"]>[0];

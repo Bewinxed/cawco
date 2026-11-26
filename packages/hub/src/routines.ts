@@ -75,11 +75,13 @@ import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { outsideFences } from "@cawco/core/markdown-code";
 import type {
   RoutineMadeBy,
   RoutineSchedule,
 } from "@cawco/core/project-conversation";
+import { answerShare } from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink, taskLink } from "@cawco/core/references";
 import type {
@@ -94,6 +96,7 @@ import type {
   NeutralMessage,
   NeutralOrigin,
 } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import type { TaskRoutine } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import type { StageKind } from "@cawco/core/views";
@@ -189,7 +192,7 @@ const MIN_GAP_MS = 500;
 /** Runs a routine's read carries, and a page of `/api/routines/:id/runs` holds: the newest; its `runsTotal` says how many it has had. */
 const RUNS_SHOWN = 20;
 /** The longest delivered output its line on the routine's thread carries. */
-const NOTE_MAX = 4000;
+const NOTE_MAX = answerShare(4000);
 
 /** A heading at or above a comment entry's own `###` (tasks.ts `commentText` refuses `##` and `###`). */
 const ENTRY_HEADING = /^#{1,3}(?=\s)/u;
@@ -386,18 +389,21 @@ const scheduleOf = (
 /** A schedule read back before it is kept: its runs ahead and its words. */
 export interface SchedulePreview {
   nextRuns: number[];
+  /** The runs stop before the week's end: the schedule runs more than they tell. */
+  nextRunsCut: boolean;
   words: string;
 }
 
 /** A schedule as a new routine would run it, before it is made (the dashboard's routine form). */
 const schedulePreview = (cron: string, timeZone: string) => {
   const [expression, zone] = [cron.trim(), timeZone.trim()];
-  const nextRuns = nextRunsOf(expression, zone, Date.now());
-  if (nextRuns instanceof ElysiaStatus) {
-    return nextRuns;
+  const ahead = nextRunsOf(expression, zone, Date.now());
+  if (ahead instanceof ElysiaStatus) {
+    return ahead;
   }
   const preview: SchedulePreview = {
-    nextRuns,
+    nextRuns: ahead.runs,
+    nextRunsCut: ahead.cut,
     words: scheduleWords(expression, zone),
   };
   return preview;
@@ -456,7 +462,7 @@ const CREATE_CALL = /(?:^|__|_)task_create$/u;
 const PARAGRAPHS = /\n\s*\n/u;
 
 /** The longest reason a run keeps: the owner's "Failed: …" line, not a transcript. */
-const REASON_MAX = 500;
+const REASON_MAX = answerShare(500);
 
 /** A reason clipped to {@link REASON_MAX}, on its word. */
 const clipReason = (words: string): string => {
@@ -778,7 +784,7 @@ export const createRoutines = ({
     const label = slotLabel(run.slot, zoneOf(routine));
     onThread(
       routine,
-      `its run ${run.id.slice(0, 8)} (${label})`,
+      `its run ${shortId(run.id)} (${label})`,
       title(label),
       body
     );
@@ -1051,11 +1057,11 @@ export const createRoutines = ({
     }
     const began = Date.now();
     try {
-      const result = await runOnHost(
-        placed.machineId,
-        hostCommand(command),
-        CHECK_LIMIT_MS,
-        { noWait: true }
+      const result = await timed(
+        runOnHost(placed.machineId, hostCommand(command), CHECK_LIMIT_MS, {
+          noWait: true,
+        }),
+        (took) => recordLimitReading("hub.routine-check-ms", took)
       );
       return answerOf(machine, result, CHECK_LIMIT_MS, Date.now() - began);
     } catch (error) {
@@ -1556,7 +1562,7 @@ export const createRoutines = ({
         projectId,
         taskId,
         done,
-        hubActor(`its run ${run.id.slice(0, 8)} said stop: ${evidence}`),
+        hubActor(`its run ${shortId(run.id)} said stop: ${evidence}`),
         evidence || undefined
       );
       return moved instanceof ElysiaStatus ? moved.response.detail : undefined;
@@ -1715,7 +1721,7 @@ export const createRoutines = ({
     }
     if (watched && HUB_DEBUG) {
       console.log(
-        `[routines] frame ${instanceId.slice(0, 8)} ${neutral.type} armed=${armed.has(instanceId)}`
+        `[routines] frame ${shortId(instanceId)} ${neutral.type} armed=${armed.has(instanceId)}`
       );
     }
     if (neutral.type === "result") {
@@ -3207,7 +3213,7 @@ export const createRoutines = ({
   const commandChanged = (routine: RoutineRow, by: InstanceRow): void => {
     onThread(
       routine,
-      `${by.id.slice(0, 8)} changed its check`,
+      `${shortId(by.id)} changed its check`,
       checkWords.changedNote,
       checkWords.changedBody(routine.command ?? "")
     );
@@ -3401,10 +3407,10 @@ export const createRoutines = ({
 
   /** What a routine's view says of its trigger, as its task stands: its ids, name and schedule, its runs ahead (none once its task ended it, whose next slot is gone). */
   const triggerView = (row: RoutineRow) => {
-    const nextRuns =
+    const ahead =
       row.cron && row.timeZone && row.nextSlot
         ? nextRunsOf(row.cron, row.timeZone, Date.now())
-        : [];
+        : { cut: false, runs: [] };
     return {
       id: row.id,
       taskId: row.taskId,
@@ -3413,7 +3419,8 @@ export const createRoutines = ({
       cron: row.cron ?? "",
       timeZone: row.timeZone ?? "",
       target: row.target ?? "delegate",
-      nextRuns: nextRuns instanceof ElysiaStatus ? [] : nextRuns,
+      nextRuns: ahead instanceof ElysiaStatus ? [] : ahead.runs,
+      nextRunsCut: ahead instanceof ElysiaStatus ? false : ahead.cut,
       nextSlot: row.nextSlot?.getTime() ?? 0,
     };
   };

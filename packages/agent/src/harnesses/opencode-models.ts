@@ -57,6 +57,7 @@ const REFRESH_MS = 5 * 60_000;
  * missed on obelisk several times a day (its log, 2026-10-13/14); a minute
  * outlasts a slow link without holding a session's start for long.
  */
+// @limit measured: OpenCode's own 10 s missed the 5.6 MB catalog on obelisk several times a day (its log, 2026-10-13 and 14)
 const FETCH_TIMEOUT_MS = 60_000;
 
 /** One refresh's reads: three, the later ones after a moment (2–4 s, then 4–8 s). Ours. */
@@ -240,6 +241,7 @@ class OpencodeModels {
     const entries = Object.fromEntries(
       ids.map((id) => [id, catalog[id] ?? null])
     );
+    // @limit measured: 16 hex characters are 64 bits of SHA-256; the model lists one machine holds, so two collide after about 2^32 names
     const value = createHash("sha256")
       .update(canonicalJson(entries))
       .digest("hex")

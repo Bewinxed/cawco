@@ -67,6 +67,7 @@ import {
   type PasskeyQrFrame,
   type PasskeyRelayCapability,
 } from "@cawco/core/browser";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   BrowserHostKindSchema,
@@ -762,6 +763,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         return;
       }
       const age = Date.now() - args.capturedAt;
+      recordLimitReading("core.passkey-advert-age-ms", age);
       if (age > PASSKEY_ADVERT_MAX_AGE_MS) {
         console.warn(
           `[browser] passkey advert from ${from}: ${age} ms old, dropped (max ${PASSKEY_ADVERT_MAX_AGE_MS} ms)`

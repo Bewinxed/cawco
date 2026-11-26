@@ -29,6 +29,7 @@
  * xb(e,n).source!=="auto"}`). A 1M window handed 1,000,000 compacts at
  * 967,000, a 200K one at 167,000.
  */
+// @limit measured: read off Claude Code 2.1.318's bundle: `var r9r=20000`; no document states it
 const CLAUDE_OUTPUT_RESERVE_CAP = 20_000;
 const CLAUDE_AUTO_COMPACT_MARGIN = 13_000;
 
@@ -44,6 +45,7 @@ export const claudeCompactsAt = (
 
 /** The least and most auto-compact window Claude Code takes (`cI=1e5`, `FN=1e6`). */
 const CLAUDE_WINDOW_MIN = 100_000;
+// @limit external: the largest context window a Claude model has, 1M tokens (https://platform.claude.com/docs/en/build-with-claude/context-windows)
 const CLAUDE_WINDOW_MAX = 1_000_000;
 /** What a `k` or an `m` at the end of a window's count multiplies it by. */
 const CLAUDE_WINDOW_SUFFIX: Partial<Record<string, number>> = {

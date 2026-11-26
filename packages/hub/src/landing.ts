@@ -52,9 +52,11 @@
 
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { outputTail } from "@cawco/core/output-tail";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { Cause, Duration, Effect, Schedule, Schema } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
+import { shortSha } from "@cawco/core/short-id";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
@@ -419,12 +421,11 @@ const refusal = (step: Refusal["step"], result: CommandResult): Refusal => ({
 export const failedWith = (result: CommandResult): string =>
   (result.stderr || result.stdout).trim() || `exit ${result.exitCode}`;
 
-/** The end of a failed command, as one paragraph a person can read. */
+/** The end of a failed command, where its error is (core output-tail.ts). */
 const detailOf = (result: CommandResult): string =>
-  (result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`)
-    .split("\n")
-    .slice(-12)
-    .join("\n");
+  outputTail(
+    result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`
+  );
 
 /**
  * The command that lists uncommitted work, passing over `skip`: an output
@@ -886,7 +887,7 @@ const cutOff = (pushed: CommandResult, ref: string, sha: string): Refusal => ({
   kind: "refused",
   step: "push",
   cause: "cut-off",
-  detail: `The push was cut off before it answered (exit ${CUT_OFF}: the workspace's boundary stopped), and origin's ${ref} does not hold ${sha.slice(0, 9)} when read after it.${pushed.stderr.trim() || pushed.stdout.trim() ? `\n${detailOf(pushed)}` : ""}`,
+  detail: `The push was cut off before it answered (exit ${CUT_OFF}: the workspace's boundary stopped), and origin's ${ref} does not hold ${shortSha(sha)} when read after it.${pushed.stderr.trim() || pushed.stdout.trim() ? `\n${detailOf(pushed)}` : ""}`,
 });
 
 /**
@@ -1015,7 +1016,7 @@ const taken = (
         kind: "refused",
         step,
         cause: "taken",
-        detail: `origin's ${branch} is at ${there.slice(0, 9)}, ${last ? `not at ${last.slice(0, 9)}, the commit the hub last pushed there` : "and the hub has never pushed there"}: someone else moved it, so the hub left it as it is.`,
+        detail: `origin's ${branch} is at ${shortSha(there)}, ${last ? `not at ${shortSha(last)}, the commit the hub last pushed there` : "and the hub has never pushed there"}: someone else moved it, so the hub left it as it is.`,
       };
 
 /** What pushing a workspace's HEAD to a branch of its own came to. */

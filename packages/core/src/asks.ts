@@ -20,6 +20,7 @@ import { z } from "zod";
 import { canonicalJson } from "./canonical-json";
 import { everyOf } from "./every-of";
 import { markerTag, readMarkerTag } from "./injected";
+import { answerShare } from "./prompt-budget";
 import { sessionLink } from "./references";
 import type { UserAnswers, UserQuestion } from "./session-messages";
 
@@ -407,7 +408,7 @@ export const askAnsweredText = (ask: AskRecord): string => {
 };
 
 /** The longest input a permit's answer quotes; a longer one is the call in the session's own conversation. */
-const PERMIT_INPUT_MAX = 2000;
+const PERMIT_INPUT_MAX = answerShare(2000);
 
 /** A permit's answer, in words: the call granted once, or declined. */
 const permitAnsweredText = (ask: AskRecord, asked: AskedPermit): string => {

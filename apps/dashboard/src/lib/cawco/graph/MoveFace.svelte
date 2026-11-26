@@ -111,10 +111,10 @@
     lengthOf,
     type Part,
     partsOf,
-    RUN_STEP,
     type Run,
     releg,
     retimeRun,
+    runStep,
     type Track,
     tracksOf,
     untune,
@@ -263,7 +263,7 @@
     }
   });
   /** The most the lanes zoom in: a tenth of a second across, or eight times, whichever is more. */
-  const zoomMost = $derived(Math.max(8, scale / (10 * RUN_STEP)));
+  const zoomMost = $derived(Math.max(8, scale / (10 * runStep())));
   /** The part of the move the lanes show, ms: the whole of it unzoomed. */
   const viewSpan = $derived(scale / Math.min(zoom, zoomMost));
   const viewFrom = $derived(
@@ -601,13 +601,13 @@
   const setLoopFrom = (t: number) =>
     onloopfrom(
       Math.min(
-        Math.max(0, length - RUN_STEP),
-        Math.max(0, Math.round(t / RUN_STEP) * RUN_STEP)
+        Math.max(0, length - runStep()),
+        Math.max(0, Math.round(t / runStep()) * runStep())
       )
     );
   /** The repeat mark's keys: the arrows 10 ms, Shift a mark, Home and End. */
   const loopKey = (event: KeyboardEvent) => {
-    const big = event.shiftKey ? step : RUN_STEP;
+    const big = event.shiftKey ? step : runStep();
     const by: Record<string, number> = {
       ArrowRight: big,
       ArrowUp: big,

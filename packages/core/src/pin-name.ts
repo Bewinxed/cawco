@@ -1,3 +1,4 @@
+import { derivedName } from "@cawco/providers/derived-name";
 import { wholePage } from "./comments/anchor";
 import { fileSpotName, readFileSpot } from "./file-spot";
 import { isRecord } from "./is-record";
@@ -119,19 +120,6 @@ export function elementName(element: ElementNamed): string {
   return (named && words(named)) || kind || "Element";
 }
 
-/** The most of an element's text a name keeps, in characters, cut at a word: about one headline line. Our call. */
-const TEXT_MOST = 48;
-
-/** `text` cut at a word past {@link TEXT_MOST}, with an ellipsis. */
-function shortText(text: string): string {
-  if (text.length <= TEXT_MOST) {
-    return text;
-  }
-  const cut = text.slice(0, TEXT_MOST);
-  const at = cut.lastIndexOf(" ");
-  return `${(at > TEXT_MOST / 2 ? cut.slice(0, at) : cut).trimEnd()}…`;
-}
-
 /**
  * What a pin stands on, in words, as its row and its card name it: what a
  * person calls the spot (`anchor.name`, read by the overlay as the pin was
@@ -165,7 +153,7 @@ export function pinName(pin: Named): string {
       ? anchor.text.replace(SPACES, " ").trim()
       : undefined;
   if (text) {
-    return shortText(text);
+    return derivedName(text);
   }
   const [first] = pin.elements;
   return elementWords(isElementNamed(first) ? first : undefined);

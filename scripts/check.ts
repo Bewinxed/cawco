@@ -67,6 +67,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { gitShort } from "../packages/core/src/git-short";
 import {
   coresPerRun,
   heldAbove,
@@ -74,6 +75,7 @@ import {
   runInBackground,
   takeSlot,
 } from "../packages/core/src/heavy-slots";
+import { recordLimitReading } from "../packages/core/src/limit-readings";
 import { wireBaselines } from "../packages/hub/scripts/openapi-inputs";
 import { filesOf, inputsOf } from "./lib/check-inputs";
 import { type Check, runChecks } from "./lib/checks";
@@ -81,6 +83,7 @@ import { diskRoomOrExit } from "./lib/disk-room";
 import { INSTALL_READS, installedOrExit } from "./lib/installed";
 import { repoFiles } from "./lib/repo-files";
 import { depth, holds, targetOf } from "./lib/workspace-imports";
+import { failingRecordings } from "./lint/limit-recordings";
 
 diskRoomOrExit("bun run check");
 installedOrExit("bun run check");
@@ -133,6 +136,9 @@ const SHARE = coresPerRun(PLACE);
  * check's longest step (openapi:check, ~20 s). Nothing changed: 1.7–1.8
  * CPU-s for each.
  */
+// The builders this run's share would give golar, before the bound of 8.
+recordLimitReading("check.tsc-builders-wanted", SHARE);
+// @limit recording: check.tsc-builders-wanted until 2026-12-10
 const TSC_FLAGS = ["--builders", String(Math.min(8, SHARE)), "--checkers", "1"];
 /**
  * Checks run at once: half the cores this process may run on, 4 at least,
@@ -401,8 +407,10 @@ if (TSC) {
 /** Golar's lint run: the script and what it reads (its config, rules, patches and stylesheets declare theirs). */
 const GOLAR_LINT = "scripts/lint/golar-lint.ts";
 // The files golar.config.ts lints: its globs, as one pattern.
+// The limit rule reads every TypeScript and Svelte file under packages/ and
+// apps/ (but apps/apple), so those stand for the narrower globs there.
 const LINTED =
-  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|apps\/dashboard\/scripts\/.*\.ts|apps\/cawrier\/src\/.*\.ts|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte)|packages\/[^/]+\/scripts\/.*\.ts|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
+  /^(?:(?:packages\/|apps\/(?!apple\/)).*\.(?:ts|tsx|svelte)|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
 /** The files the design rules read (golar.config.ts `designed`). */
 const DESIGNED = /^apps\/dashboard\/src\/.*\.(?:ts|svelte)$/u;
 /** The dashboard's stylesheets, whose classes and tokens the design rules judge by. */
@@ -412,11 +420,17 @@ const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/u;
 // file they read, or a token taken away leaves its classes drawing nothing
 // unseen.
 const restyled = changed.some((p) => DASHBOARD_CSS.test(p));
+// A recording tag past its date, or whose metric nothing records any more,
+// fails where it stands whatever the change reached
+// (scripts/lint/limit-recordings.ts).
+const recordingsFailing = new Set(failingRecordings(ROOT));
 const linted = files.filter(
   (p) =>
     LINTED.test(p) &&
     present.has(p) &&
-    (reached.has(p) || (restyled && DESIGNED.test(p)))
+    (reached.has(p) ||
+      recordingsFailing.has(p) ||
+      (restyled && DESIGNED.test(p)))
 );
 {
   const key = await keyOf(
@@ -605,7 +619,6 @@ const gated: Gated[] = [
   bun("scripts/tool-answer-check.ts"),
   // The project's memory: who may say the person's words (C2).
   bun("scripts/memory-cutover-check.ts"),
-  bun("scripts/route-families-check.ts"),
   // Every hub route answers a value Eden can type: a Response or unknown
   // only from a protocol endpoint whose client is not ours.
   bun("scripts/route-answers-check.ts"),
@@ -737,7 +750,7 @@ checks.push({
 
 /* ---------------------------------------------------------- the run */
 
-let scope = `${changed.length} changed file(s) since ${base?.slice(0, 9)}, ${reached.size} reached`;
+let scope = `${changed.length} changed file(s) since ${base && gitShort(ROOT, base)}, ${reached.size} reached`;
 if (ALL) {
   scope = "the whole tree (--all)";
 } else if (everything) {

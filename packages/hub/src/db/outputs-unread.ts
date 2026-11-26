@@ -10,6 +10,7 @@
  */
 import type { Database } from "bun:sqlite";
 import type { TaskField } from "../task-file";
+import { shown } from "./json-reads";
 
 /**
  * A list 0404 reads whole: a JSON list whose every entry is text. Each JSON
@@ -37,9 +38,6 @@ const LINE_UNREAD = [
   // A wait that names no target, in the reader's words: it holds every attempt too.
   "problem LIKE '%waits_on: “%” is not a task, card, pin%'",
 ].join(" OR ");
-
-/** A stored value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Why a list does not read, in a clause: what is wrong with it. */
 const why = (raw: string): string => {

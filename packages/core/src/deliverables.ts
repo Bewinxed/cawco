@@ -97,6 +97,7 @@ export function parsePost(
 }
 
 /** A post's limit on X for an account without Premium. */
+// @limit external: X's post length for an account without Premium, 280 characters (developer.x.com/en/docs/counting-characters)
 export const POST_LIMIT = 280;
 /** Every link counts as this many characters on X (t.co), however long it is. */
 const LINK_WEIGHT = 23;

@@ -12,6 +12,7 @@ import { stat } from "node:fs/promises";
 import type { TranscriptDoc } from "./text.ts";
 import type { LocatedRecord } from "./types.ts";
 import { runTask, type WorkerFileResult, type WorkerMessage, type WorkerTask } from "./worker.ts";
+import { recordLimitReading } from "./limit-readings.ts";
 const STANDALONE = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 
 export interface ParseManyOptions extends Omit<WorkerTask, "files"> {
@@ -64,6 +65,9 @@ function defaultWorkerCount(fileCount: number): number {
     typeof navigator !== "undefined" && navigator.hardwareConcurrency
       ? navigator.hardwareConcurrency
       : 4;
+  // The workers the files and cores would take, before the bound.
+  recordLimitReading("parser.pool-workers-wanted", Math.min(fileCount, cores - 2));
+  // @limit recording: parser.pool-workers-wanted until 2026-12-10
   return Math.max(1, Math.min(16, fileCount, cores - 2));
 }
 

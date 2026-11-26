@@ -17,6 +17,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { MCP_PLATFORMS } from "@cawco/core/fleet";
+import { shown } from "./json-reads";
 import { DECIDES_ID } from "./schema";
 
 /** The platforms a server can be scoped to, as an SQL list. */
@@ -82,9 +83,6 @@ interface Row {
   reads: number;
   shaped: number;
 }
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** What a value's entries must be: one, and several. */
 interface Wants {

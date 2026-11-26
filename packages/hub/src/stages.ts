@@ -103,7 +103,6 @@ const MOVE_WHO = /^(\s*\S+?\s*(?:→|->)\s*\S+\s+)([^#]*?)(?=\s*(?:#|$))/u;
 /** A stage line's `by:` hook and its value. */
 const BY_HOOK = /\bby:\s*(\S+)/u;
 const INDENTED = /^\s/u;
-const STAGES_LIMIT = 32;
 
 const MS: Record<string, number> = {
   m: 60_000,
@@ -424,11 +423,6 @@ export const readStages = (content: string): StagesReading => {
   if (reader.stages.length === 0) {
     reader.problems.push(
       "stages.md names no stage; write one per line, like “ready  todo”."
-    );
-  }
-  if (reader.stages.length > STAGES_LIMIT) {
-    reader.problems.push(
-      `stages.md names ${reader.stages.length} stages; a project takes up to ${STAGES_LIMIT}.`
     );
   }
   checkMoves(reader, moveLines);

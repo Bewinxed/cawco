@@ -329,7 +329,7 @@ const castsThroughUnknown = async (paths: string[]): Promise<void> => {
     JSON.stringify({
       root: true,
       vcs: { enabled: false },
-      files: { ignoreUnknown: true, includes: ["**"], maxSize: 2_097_152 },
+      files: { ignoreUnknown: true, includes: ["**"] },
       plugins: [join(ROOT, "scripts/lint/as-unknown-as.grit")],
       linter: { rules: { preset: "none" } },
       assist: { enabled: false },

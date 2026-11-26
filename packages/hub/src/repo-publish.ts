@@ -28,6 +28,7 @@ import { boundedRead } from "@cawco/core/effect/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { shortSha } from "@cawco/core/short-id";
 import { secondsOf } from "@cawco/core/time";
 import { CONTROL_PLACE_PUSH } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
@@ -366,7 +367,7 @@ export const createRepoPublish = ({
     }
     await lifetime.run(pushFromHub(hub, pushed.branch, made.cloneUrl, token));
     console.log(
-      `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.fullName}`
+      `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${shortSha(pushed.commit)} published to ${made.fullName}`
     );
     const done: Published = { full: made.fullName, from: hub };
     return done;

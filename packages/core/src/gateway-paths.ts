@@ -23,4 +23,5 @@ export const GATE_PREFIX = "/mcp/gate/";
  * location's `directory`).
  */
 export const folderGateId = (directory: string): string =>
+  // @limit measured: 24 hex characters are 96 bits of SHA-256; one gate id per folder an OpenCode location runs in on one machine, so two collide after about 2^48 names
   `dir-${createHash("sha256").update(directory).digest("hex").slice(0, 24)}`;

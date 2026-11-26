@@ -16,6 +16,8 @@
  * Then the person's ink is filled over it from the ink layer's own paths,
  * which stand in the page's px.
  */
+
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { FORM_CONTROLS, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { createContext, destroyContext, domToCanvas } from "modern-screenshot";
 import { type Box, meets } from "./frames";
@@ -24,6 +26,7 @@ import { NON_INHERITED } from "./non-inherited";
 /** The pixels a picture may hold, so its PNG stays inside a send's bound. Our call. */
 const PICTURE_AREA = 1_200_000;
 /** Parts drawn whole in one picture at most; past it, the rest are their boxes alone. Our call. */
+// @limit recording: overlay.picture-wholes until 2026-12-10
 const PARTS_MAX = 60;
 /**
  * The styles a thumbnail's parts are drawn with: what lays a box out and
@@ -975,6 +978,7 @@ function stepsIn(doc: Document, box: Box, scale: number): Step[] {
         drawnWhole(child, at, box)
       ) {
         wholes += 1;
+        recordLimitReading("overlay.picture-wholes", wholes);
         steps.push({ el: child, box: at, whole: true });
         continue;
       }
@@ -1112,6 +1116,7 @@ export async function cropPicture(
   }
 ): Promise<string | null> {
   const box = onPage(view, wanted);
+  // @limit measured: 2 is a retina screen's device pixel ratio; a picture drawn above it costs 4 times the pixels for no sharper look
   const scale = Math.min(
     2,
     view.devicePixelRatio || 1,

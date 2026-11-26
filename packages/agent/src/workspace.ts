@@ -34,6 +34,7 @@ import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { processesWithin } from "@cawco/core/live-processes";
 import {
   type CreateRecord,
@@ -61,6 +62,7 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import {
   isDamagedRecord,
@@ -99,6 +101,8 @@ import {
 } from "@cawco/core/workspace-needs";
 import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
 import { Effect } from "effect";
+import { namedAndMore } from "@cawco/providers/names";
+import { quote } from "@cawco/providers/quote";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
 import { ensureBoundary } from "./boundary/ensure";
@@ -689,7 +693,7 @@ const clearUnmarked = async (id: string): Promise<void> => {
     return;
   }
   const path = await createdAt(id);
-  const id8 = id.slice(0, 8);
+  const id8 = shortId(id);
   const name = path ? basename(path) : "";
   if (
     !path ||
@@ -976,7 +980,7 @@ const cutClone = async (
   );
   const remoteEnv = hub ? hubGitEnv(hub) : hostEnvironment();
   const authed = hub ? gitUntil(deadline, remoteEnv) : plain;
-  const id8 = id.slice(0, 8);
+  const id8 = shortId(id);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
   const branch = `ws/${id8}`;
   const state = join(workspacesDir(), id);
@@ -1059,6 +1063,7 @@ const cutClone = async (
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);
+    recordLimitReading("agent.workspace-cut-ms", Date.now() - started);
     console.info(
       `[workspace] ${id}: cut from ${repoRoot} (a clone) at ${path} on ${branch} in ${Date.now() - started} ms`
     );
@@ -1100,7 +1105,7 @@ const makeFolderLayer = async (
   const path =
     process.platform === "linux"
       ? folder
-      : expandHome(`~/.worktrees/${basename(folder)}-${id.slice(0, 8)}`);
+      : expandHome(`~/.worktrees/${basename(folder)}-${shortId(id)}`);
   const state = join(workspacesDir(), id);
   await clearStaleLayer(id, path, Boolean(cut));
   try {
@@ -1217,9 +1222,6 @@ const startOf = (
   base: string
 ): string => carried?.commits?.head ?? cut?.commit ?? `origin/${base}`;
 
-/** How many of `git apply`'s lines a refusal names. */
-const APPLY_LINES = 12;
-
 /**
  * A carry's uncommitted diff (`patch`, carry.ts: every changed, deleted and
  * untracked file against its HEAD) laid on the clone cut again at that HEAD:
@@ -1259,11 +1261,13 @@ const applyCarried = async (
       return { applied: patch };
     }
     const why =
-      (applied.stderr || applied.stdout)
-        .trim()
-        .split("\n")
-        .slice(0, APPLY_LINES)
-        .join("; ") || `git apply exited ${applied.exitCode}`;
+      namedAndMore(
+        (applied.stderr || applied.stdout)
+          .trim()
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .map(quote)
+      ) || `git apply exited ${applied.exitCode}`;
     console.warn(
       `[workspace] ${workspace.id}: its carry's uncommitted diff ${patch} did not apply, and stays in the carry: ${why}`
     );
@@ -1310,7 +1314,7 @@ const fetchCut = async (
 ): Promise<void> => {
   const gone = (cause: Error, why: string) =>
     new CutCommitGone(
-      `workspace ${id} is not cut again: ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, is not on origin (${why}), and a cut anywhere else would leave its commits behind`,
+      `workspace ${id} is not cut again: ${shortSha(cut.commit)}, the commit its clone was on when it retired, is not on origin (${why}), and a cut anywhere else would leave its commits behind`,
       { cause }
     );
   if (cut.branch !== base) {
@@ -1386,6 +1390,7 @@ export const copyOwnSecrets = async (
 };
 
 /** The largest bundle of a workspace's commits another machine takes. */
+// @limit measured: the largest pack of a landed workspace's commits is 2.2 MiB of 258 (cockpit, 2026-11-26)
 const BUNDLE_LIMIT = 256 * 1024 * 1024;
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 
@@ -1506,7 +1511,7 @@ export const workspaceAt = async (
   const own = await ownConfigChanges(workspace, [head]);
   if (own.length > 0) {
     throw new Error(
-      `workspace ${workspace.id} was not moved to ${head.slice(0, 9)}, the commit of workspace ${String(source)}: ${ownConfigWords(own)}`
+      `workspace ${workspace.id} was not moved to ${shortSha(head)}, the commit of workspace ${String(source)}: ${ownConfigWords(own)}`
     );
   }
   const large =
@@ -1531,7 +1536,7 @@ export const workspaceAt = async (
     await git("git lfs pull");
   }
   console.info(
-    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}`
+    `[workspace] ${workspace.id}: at ${shortSha(head)}, the commit of workspace ${String(source)}`
   );
 };
 
@@ -1926,7 +1931,7 @@ const headOnOrigin = async (
     ));
   if (!(base && tip)) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
+      `Workspace ${workspace.id} was not archived: its HEAD ${shortSha(commit)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
     );
   }
   return { branch: base, commit: tip };
@@ -2301,10 +2306,7 @@ const whoseLeft = async (
 };
 
 /** A command's first three words, with "…" where more followed. */
-const firstWords = (cmd: string): string => {
-  const words = cmd.split(" ");
-  return words.length > 3 ? `${words.slice(0, 3).join(" ")}…` : cmd;
-};
+const firstWords = (cmd: string): string => quote(cmd);
 
 /** Processes in words: `pid 12 (vite preview)`, each command cut short. */
 const processWords = (left: readonly LeftInside[]): string =>
@@ -2651,7 +2653,7 @@ const readAndClose = async (
   // fleet's moves for an archive.
   await Promise.all([...cached.map(removeTree), dropPlaceSet(workspace.path)]);
   console.info(
-    `[workspace] ${request.id}: archived; its ${goneFolder(layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
+    `[workspace] ${request.id}: archived; its ${goneFolder(layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${shortSha(head.commit)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );
   return head ? { carry, head } : { carry };
 };

@@ -202,6 +202,7 @@ const questionLines = (
   detailed: boolean
 ): string[] => {
   const { answer } = question;
+  // @limit external: RFC 3339 section 5.6: a timestamp's first 16 characters are its date, "T" and hour and minute, YYYY-MM-DDTHH:MM
   const head =
     (question.state === "answered" || question.state === "dismissed") && answer
       ? `${question.state}${answer.by === "words" ? " " : ", "}${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`

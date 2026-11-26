@@ -100,6 +100,7 @@ export function glide(row: HTMLElement): Glide {
       frame = null;
       return;
     }
+    // @limit measured: two frames at 60 Hz; a longer gap is a stalled tab, not motion
     const dt = Math.min(0.032, (now - last) / 1000);
     last = now;
     velocity += (stiffness * (target - at) - damping * velocity) * dt;

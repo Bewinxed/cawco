@@ -28,6 +28,7 @@ import { COMPACT_AT, COMPACT_QUIET_MS, IDLE_MS } from "./docs";
  * hub's first answer to a joining page (its sync step 2, the whole doc)
  * and each hop of the preview server's relay must fit in.
  */
+// @limit measured: the largest update of a component artifact is 14.1 MiB, an upper bound for one store (artifact_updates on obelisk, 2026-11-26)
 const STORE_LIMITS = { bytes: 8 * 1024 * 1024 } as const;
 
 /** A page joined to a store: the hub sends it every update another made. */

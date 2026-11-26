@@ -43,6 +43,7 @@ const PACKAGES = "npm";
  * changed module is a new file and a server that imported the old one keeps
  * it, as a new one imports the new.
  */
+// @limit measured: 12 hex characters are 48 bits of SHA-256; one machine's harness config folders, so two collide after about 2^24 names
 const moduleDir = (row: FleetHarnessConfig, source: string): string =>
   join(
     fleetPlacedDir(),

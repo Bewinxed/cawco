@@ -6,6 +6,8 @@
  * any other scheme is said, since it is the exception a person should see.
  */
 
+import { registrableDomain } from "@cawco/core/registrable-domain";
+
 /** An origin as the address draws it. */
 export interface Place {
   /** The registrable domain and its port (`northwind.dev`, `localhost:5173`), whole. */
@@ -16,9 +18,6 @@ export interface Place {
   scheme: string;
 }
 
-/** A second-level label short enough to be a public suffix's (`co.uk`, `com.au`), so the domain takes one label more. */
-const SHORT_SECOND = 3;
-const SHORT_COUNTRY = 2;
 const IP = /^[\d.]+$|^\[/u;
 
 /** The place an origin names; an origin that does not parse is its words whole. */
@@ -32,20 +31,13 @@ export function placeOf(origin: string): Place {
   const scheme = url.protocol === "https:" ? "" : `${url.protocol}//`;
   const port = url.port ? `:${url.port}` : "";
   const host = url.hostname;
-  const labels = host.split(".");
-  if (IP.test(host) || labels.length <= 2) {
-    return { scheme, lead: "", domain: `${host}${port}` };
-  }
-  const last = labels.at(-1) ?? "";
-  const second = labels.at(-2) ?? "";
-  const keep =
-    last.length <= SHORT_COUNTRY && second.length <= SHORT_SECOND ? 3 : 2;
-  if (labels.length <= keep) {
+  const domain = IP.test(host) ? null : registrableDomain(host);
+  if (!domain || domain === host) {
     return { scheme, lead: "", domain: `${host}${port}` };
   }
   return {
     scheme,
-    lead: `${labels.slice(0, -keep).join(".")}.`,
-    domain: `${labels.slice(-keep).join(".")}${port}`,
+    lead: host.slice(0, host.length - domain.length),
+    domain: `${domain}${port}`,
   };
 }

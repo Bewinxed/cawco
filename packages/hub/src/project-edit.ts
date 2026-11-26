@@ -29,8 +29,6 @@ import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { DispatchConfigure } from "./dispatch-shapes";
 
-/** As long as a name `POST /api/projects` takes. */
-const PROJECT_NAME_LIMIT = 200;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: a name is one line of text, so control characters are what it refuses
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 
@@ -67,12 +65,6 @@ export const projectName = (raw: string) => {
     return problem(400, {
       code: "name-one-line",
       detail: "A project's name is one line of text.",
-    });
-  }
-  if (name.length > PROJECT_NAME_LIMIT) {
-    return problem(400, {
-      code: "name-too-long",
-      detail: `A project's name is at most ${PROJECT_NAME_LIMIT} characters; this one is ${name.length}.`,
     });
   }
   return name;

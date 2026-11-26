@@ -24,6 +24,8 @@ import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
+import { timedEffect } from "@cawco/core/effect/timed";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { isPublicDestination } from "@cawco/core/public-address";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
@@ -38,10 +40,14 @@ const DIR = join(dirname(DB_PATH), "favicons");
 
 const ICON_KEPT_MS = 7 * DAY_MS;
 const MISS_KEPT_MS = DAY_MS;
+// @limit recording: hub.favicon-get-ms until 2026-12-10
 const TIMEOUT_MS = 5000;
+// @limit recording: hub.favicon-page-bytes until 2026-12-10
 const PAGE_CAP = 256 * 1024;
+// @limit measured: the largest favicon kept is 16.6 KiB of 27 (obelisk, 2026-11-26)
 const ICON_CAP = 128 * 1024;
-const MAX_HOPS = 3;
+// @limit external: the Fetch standard follows at most 20 redirects (https://fetch.spec.whatwg.org/#http-redirect-fetch)
+const MAX_HOPS = 20;
 
 /** A DNS name: dot-separated labels, no port, no address literal. */
 const HOST =
@@ -104,7 +110,9 @@ const getOnce = (
   cap: number,
   accept: string
 ): Effect.Effect<Answer | undefined, Unanswered> =>
-  boundedRead(TIMEOUT_MS, fetchOnce(url, cap, accept));
+  timedEffect(boundedRead(TIMEOUT_MS, fetchOnce(url, cap, accept)), (ms) =>
+    recordLimitReading("hub.favicon-get-ms", ms)
+  );
 
 /** One GET, as {@link getOnce} has it read; interrupted, the request is let go. */
 const fetchOnce = (
@@ -115,6 +123,12 @@ const fetchOnce = (
   Effect.callback<Answer | undefined>((resume, signal) => {
     const done = (answer: Answer | undefined): void => {
       resume(Effect.succeed(answer));
+    };
+    /** A site's home page's size, read where it is known: whole, by its header, or where a read past the cap stopped. */
+    const sized = (bytes: number): void => {
+      if (accept === "text/html") {
+        recordLimitReading("hub.favicon-page-bytes", bytes);
+      }
     };
     const request = httpsGet(
       url,
@@ -131,6 +145,9 @@ const fetchOnce = (
           done({ kind: "redirect", location });
           return;
         }
+        if (code === 200 && response.headers["content-length"]) {
+          sized(Number(response.headers["content-length"]));
+        }
         if (
           code !== 200 ||
           Number(response.headers["content-length"] ?? 0) > cap
@@ -144,19 +161,23 @@ const fetchOnce = (
         response.on("data", (chunk: Buffer) => {
           size += chunk.byteLength;
           if (size > cap) {
+            sized(size);
             response.destroy();
             done(undefined);
             return;
           }
           chunks.push(chunk);
         });
-        response.on("end", () =>
+        response.on("end", () => {
+          if (!response.headers["content-length"]) {
+            sized(size);
+          }
           done({
             kind: "body",
             bytes: Buffer.concat(chunks),
             type: response.headers["content-type"] ?? "",
-          })
-        );
+          });
+        });
         response.on("error", () => done(undefined));
       }
     );
@@ -277,6 +298,8 @@ const fetchIcon = (host: string): Effect.Effect<Icon | undefined, Unanswered> =>
       : [];
     candidates.push(new URL("/favicon.ico", page?.url ?? home));
     const tried = new Set<string>();
+    recordLimitReading("hub.favicon-candidates", candidates.length);
+    // @limit recording: hub.favicon-candidates until 2026-12-10
     for (const candidate of candidates.slice(0, 4)) {
       if (tried.has(candidate.href)) {
         continue;
@@ -380,6 +403,7 @@ const iconFor = (host: string): Effect.Effect<Icon | null, Unanswered> =>
 export const faviconRoutes = (lifetime: HubLifetimeShape) =>
   new Elysia().get(
     "/api/favicon",
+    // @limit external: a DNS name is 255 octets on the wire (RFC 1035 section 3.1; RFC 2181 section 11), which is 253 characters written with dots
     { query: t.Object({ host: t.String({ minLength: 1, maxLength: 253 }) }) },
     async ({ query, set }) => {
       const host = query.host.trim().toLowerCase().replace(TRAILING_DOT, "");

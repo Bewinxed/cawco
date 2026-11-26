@@ -31,6 +31,7 @@ export const testInputsKey = async (
   if ((await listed.exited) !== 0 || !text) {
     throw new Error(`git ls-tree of the test inputs at ${rev} failed`);
   }
+  // @limit measured: 24 hex characters are 96 bits of SHA-256; the test inputs one machine caches, so two collide after about 2^48 names
   return new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 24);
 };
 

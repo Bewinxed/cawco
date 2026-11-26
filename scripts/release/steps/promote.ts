@@ -31,6 +31,7 @@ import {
  * without building it again. Unbounded, 75 nightlies of about 3 GB each filled the hub
  * machine's disk on 2026-10-26.
  */
+// @limit measured: kept unbounded, 75 nightlies of about 3 GB each filled the hub machine's disk on 2026-10-26
 const KEPT_OUTPUTS = 2;
 
 /**

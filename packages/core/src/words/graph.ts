@@ -4,7 +4,7 @@
  * its states, with the moves between them and their timing. Plain words,
  * DESIGN.md's Voice: a state is named as the product talks of it.
  */
-import { andList } from "./helpers";
+import { andList, firstNames } from "@cawco/providers/names";
 
 /**
  * A number as the page's language writes it (dashboard graph/figures.ts
@@ -107,8 +107,7 @@ export const graphWords = {
       if (these.length === 0) {
         return null;
       }
-      const shown = these.slice(0, 3).map((one) => `"${one.head}"`);
-      const more = these.length - shown.length;
+      const { shown, more } = firstNames(these.map((one) => `"${one.head}"`));
       return `${label} past ${bound}: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
     };
     return `The graph left out what was too long to read: ${[

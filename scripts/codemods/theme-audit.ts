@@ -74,7 +74,7 @@ const edit = (file: string, find: string, replace: string) => {
     write(file, next);
     changed.add(file);
     say(
-      `${file}: ${JSON.stringify(find.trim().slice(0, 70))} -> ${JSON.stringify(replace.trim().slice(0, 70))}`
+      `${file}: ${JSON.stringify(find.trim())} -> ${JSON.stringify(replace.trim())}`
     );
   }
 };

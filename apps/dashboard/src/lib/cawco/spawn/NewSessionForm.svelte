@@ -1245,15 +1245,12 @@
     }
     return held === failure ? "" : held;
   });
-  /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
+  /** The source as the prompt's opening chip; a session title is often its first prompt, so the chip truncates it. */
   const sourceChip = $derived<LeadChip | undefined>(
     continueFrom && {
       key: "continue-source",
       harness: continueFrom.harness,
-      label:
-        continueFrom.title.length > 28
-          ? `${continueFrom.title.slice(0, 27).trimEnd()}…`
-          : continueFrom.title,
+      label: continueFrom.title,
       title: continueFrom.title,
     }
   );

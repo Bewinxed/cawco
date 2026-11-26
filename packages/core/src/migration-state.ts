@@ -147,6 +147,7 @@ export const unknownWords = (
       .map((row) =>
         hubDatabaseWords.migration(
           new Date(row.createdAt).toISOString(),
+          // @limit measured: 12 hex characters are 48 bits of the migration's SHA-256; one name per migration a hub database applied, so two collide after about 2^24 names
           row.hash.slice(0, 12)
         )
       ),

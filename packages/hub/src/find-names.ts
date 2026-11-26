@@ -14,8 +14,10 @@ import type {
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
 import { machineLabel } from "@cawco/core/machine-names";
 import { fencedBlocks } from "@cawco/core/markdown-code";
+import { answerShare } from "@cawco/core/prompt-budget";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { StageKind } from "@cawco/core/views";
@@ -26,6 +28,9 @@ import type {
   FindWorkItemRow,
 } from "./db/find";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
+
+/** What the index keeps of a session's first prompt or a routine's prompt as its `purpose`: a hit's share of an answer. */
+const PURPOSE_CHARS = answerShare(400);
 
 /** One thing the names part can answer with, before a query scores it. */
 export interface Entry extends MatchEntry {
@@ -318,7 +323,7 @@ export const storedEntry = (
     info.summary?.trim() ||
     first ||
     dir ||
-    info.sessionId.slice(0, 8);
+    shortId(info.sessionId);
   const result: FindConversation = {
     kind: "conversation",
     id: `${machine.id}:${info.sessionId}`,
@@ -351,7 +356,7 @@ export const storedEntry = (
       ...field("title", title),
       ...field(
         "purpose",
-        [info.firstPrompt?.slice(0, 400), info.gitBranch]
+        [info.firstPrompt?.slice(0, PURPOSE_CHARS), info.gitBranch]
           .filter(Boolean)
           .join("\n")
       ),
@@ -408,7 +413,7 @@ export const routineEntry = (
   kin: 0,
   fields: [
     ...field("title", routine.name),
-    ...field("purpose", routine.prompt.slice(0, 400)),
+    ...field("purpose", routine.prompt.slice(0, PURPOSE_CHARS)),
     ...field("project", project?.name),
   ],
   result: {

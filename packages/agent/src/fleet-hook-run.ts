@@ -21,6 +21,7 @@ import {
   hookUnsupported,
   hookVerdict,
 } from "@cawco/core/hooks";
+import { lastOutput } from "@cawco/core/output-tail";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { Effect } from "effect";
@@ -28,6 +29,7 @@ import { commandLineOf } from "./fleet-hook-guard";
 import type { SetHook } from "./fleet-set-rows";
 
 /** Claude Code's own default for a command hook: "`command`, `http`, `mcp_tool`: 10 minutes" (code.claude.com/docs/en/hooks-guide). */
+// @limit external: Claude Code's default for a command hook, 10 minutes (https://code.claude.com/docs/en/hooks-guide)
 const DEFAULT_TIMEOUT_S = 600;
 
 /** What one command hook's run printed and how it ended; `exit` null when it was killed. */
@@ -180,7 +182,7 @@ export const runFleetHooks = async (
       const ran = await running;
       if (ran.exit !== 0 && ran.exit !== 2) {
         console.warn(
-          `[${harness}] fleet hook ${hook.name} on ${event} ended ${ran.exit ?? "killed"}: ${ran.stderr.trim().slice(-400)}`
+          `[${harness}] fleet hook ${hook.name} on ${event} ended ${ran.exit ?? "killed"}: ${lastOutput(ran.stderr.trim())}`
         );
       }
       finished.push(hookVerdict(event, ran));

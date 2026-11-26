@@ -45,11 +45,9 @@ const say = (line: string): void => {
 };
 
 const WHITESPACE = /\s+/gu;
-const SHAPE_LENGTH = 72;
 
-/** A shape as the baseline holds it: one line, no tab, bounded. */
-const shapeOf = (text: string): string =>
-  text.replace(WHITESPACE, " ").trim().slice(0, SHAPE_LENGTH);
+/** A shape as the baseline holds it: one line, no tab. */
+const shapeOf = (text: string): string => text.replace(WHITESPACE, " ").trim();
 
 const keyOf = (rule: string, shape: string, file: string): string =>
   `${rule}\t${shape}\t${file}`;

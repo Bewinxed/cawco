@@ -408,7 +408,7 @@ const lineOf = () => {
 const leave = (reason: string, body: string) => {
   stats.left += 1;
   lefts.push({
-    example: `${currentFile}:${lineOf()}  ${body.trim().replace(/\s+/gu, " ").slice(0, 110)}`,
+    example: `${currentFile}:${lineOf()}  ${body.trim().replace(/\s+/gu, " ")}`,
     reason,
   });
 };
@@ -974,7 +974,7 @@ for (const [reason, list] of [...byReason].sort(
   (a, b) => b[1].length - a[1].length
 )) {
   say(`- ${reason}: ${list.length}`);
-  for (const l of list.slice(0, 3)) {
+  for (const l of list) {
     say(`    ${l.example}`);
   }
 }

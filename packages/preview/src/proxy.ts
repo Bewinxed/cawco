@@ -5,6 +5,7 @@ import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
 import { fileViewerPage, fileViewOf } from "@cawco/core/file-viewer";
 import type { ControlRefusal } from "@cawco/core/frames";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
   PREVIEW_DOWN_META,
@@ -15,6 +16,7 @@ import {
 import { OVERLAY_PATH } from "@cawco/core/preview/routes";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
+import { quote } from "@cawco/providers/quote";
 import type { Server, WebSocketHandler } from "bun";
 import { z } from "zod";
 import { downPage, HTML_ESCAPES } from "./down-page";
@@ -117,6 +119,7 @@ async function overlayKey(parents: readonly string[]): Promise<string> {
   const text = await overlayText(parents);
   if (keyed?.text !== text) {
     const hex = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    // @limit measured: 24 hex characters are 96 bits of SHA-256; the pages one preview proxy has keyed, so two collide after about 2^48 names
     keyed = { text, key: BigInt(`0x${hex.slice(0, 24)}`).toString(36) };
   }
   return keyed.key;
@@ -282,8 +285,6 @@ export function downOf(
   };
 }
 
-/** The longest line of a page's error a preview's error page quotes. Our call: one sentence of a stack's head. */
-const ERROR_LINE_CHARS = 240;
 /** Vite's own error page (vite 8.3.5 `errorMiddleware`): "const error = ${JSON.stringify(prepareError(err))…}", on one line. */
 const VITE_ERROR = /const error = (\{.*\})\s*$/mu;
 /** The part of Vite's error object read: its message. */
@@ -348,9 +349,7 @@ const errorLineOf = (body: string): string | null => {
   if (!said) {
     return null;
   }
-  return said.length > ERROR_LINE_CHARS
-    ? `${said.slice(0, ERROR_LINE_CHARS - 1)}…`
-    : said;
+  return quote(said);
 };
 
 /**
@@ -685,11 +684,13 @@ const gzippedHeaders = (answer: Response): Headers => {
 const kept = new Map<string, Uint8Array<ArrayBuffer>>();
 let keptBytes = 0;
 /** What the hub keeps of them at most. Our call: a few canvases' graphs, gzipped. */
+// @limit recording: preview.gzip-kept-bytes until 2026-12-10
 const KEPT_BYTES = 64 * 1024 * 1024;
 
 const keep = (address: string, body: Uint8Array<ArrayBuffer>): void => {
   kept.set(address, body);
   keptBytes += body.byteLength;
+  recordLimitReading("preview.gzip-kept-bytes", keptBytes);
   for (const [old, bytes] of kept) {
     if (keptBytes <= KEPT_BYTES) {
       break;
@@ -772,12 +773,17 @@ export async function fileViewerOf(
   const type = headers.get("content-type");
   const length = Number(headers.get("content-length"));
   const name = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+  const known = size ?? (Number.isFinite(length) && length > 0 ? length : null);
+  const view = await fileViewOf(type, body);
+  if (view.kind === "text" && known !== null) {
+    recordLimitReading("preview.viewed-text-bytes", known);
+  }
   const page = fileViewerPage({
     name: name || url.hostname,
     src: `${url.pathname}${url.search}`,
     type,
-    size: size ?? (Number.isFinite(length) && length > 0 ? length : null),
-    view: await fileViewOf(type, body),
+    size: known,
+    view,
   });
   for (const header of FILE_ONLY_HEADERS) {
     headers.delete(header);
@@ -813,6 +819,7 @@ export async function folderKey(root: string): Promise<string> {
   for (const { name, size, mtimeMs } of await folderFiles(root)) {
     hasher.update(`${name}\0${size}\0${mtimeMs}\n`);
   }
+  // @limit measured: 24 hex characters are 96 bits of SHA-256; the pages one preview proxy has keyed, so two collide after about 2^48 names
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
 }
 

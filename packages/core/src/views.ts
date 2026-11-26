@@ -238,8 +238,10 @@ interface ViewRoutine {
   id: string;
   lastSlot: number | null;
   name: string;
-  /** Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms. */
+  /** Its runs ahead, as the hub's scheduler will start them: the next week's, epoch ms. */
   nextRuns: number[];
+  /** `nextRuns` stop before the week's end: the scheduler starts more than they tell. */
+  nextRunsCut: boolean;
   nextSlot: number;
   /** Newest first. */
   runs: ViewRoutineRun[];

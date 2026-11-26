@@ -7,6 +7,8 @@
  * predicate, over the JSON `gate_passes` column as it stands before it.
  */
 import type { Database } from "bun:sqlite";
+import { quote } from "@cawco/providers/quote";
+import { shown } from "./json-reads";
 
 /** One pass 0401 places: an object whose command and stage are text. */
 const PASS_READS =
@@ -28,9 +30,6 @@ interface Row {
   raw: string;
   state: string;
 }
-
-/** A stored value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** A pass that reads, as 0401 reads it. */
 const passReads = (pass: unknown): boolean =>
@@ -58,14 +57,14 @@ const why = (raw: string): string => {
       .flatMap(([key, passes]) => {
         if (!Array.isArray(passes)) {
           return [
-            `${key.slice(0, 80)} holds ${shown(JSON.stringify(passes))}, not a list of passes`,
+            `${quote(key)} holds ${shown(JSON.stringify(passes))}, not a list of passes`,
           ];
         }
         return passes.flatMap((pass, n) =>
           passReads(pass)
             ? []
             : [
-                `${key.slice(0, 80)}'s pass ${n + 1} is ${shown(JSON.stringify(pass))}, not a command and a stage`,
+                `${quote(key)}'s pass ${n + 1} is ${shown(JSON.stringify(pass))}, not a command and a stage`,
               ]
         );
       })

@@ -10,6 +10,7 @@ import type { BinaryUpdateState } from "./binary-updates";
 import type { NamedMachineCapabilities } from "./capabilities";
 import type { FleetHeld } from "./fleet";
 import type { ReportedHarness } from "./harness";
+import type { LimitReading } from "./limit-readings";
 import type { ServingPreview } from "./preview/upstream";
 import type {
   BuildInfo,
@@ -115,6 +116,8 @@ export interface HeartbeatReads
   harnesses: ReportedHarness[] | undefined;
   /** The sessions the daemon has running. */
   instances: string[];
+  /** The readings of the bounds still waiting on data the beat carries; empty from one that carries none. */
+  limitReadings: LimitReading[];
   /** What the machine has installed, on its own beat once its probe has asked every tool. */
   machineCapabilities: NamedMachineCapabilities | undefined;
   /**

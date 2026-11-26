@@ -7,10 +7,10 @@ import {
 import {
   activityLines,
   activityOf,
+  activityRoom,
   answerChanges,
   answeredLines,
   bindChanges,
-  CHANGES_LIMIT,
   carryChanges,
   isObject,
   keptActivity,
@@ -286,7 +286,10 @@ export const createPageKind = (ctx: PageKindContext) => {
     }
     meta.set("changes", { ...changes, items });
     const activity = activityOf(doc);
-    activity.set(pin, answeredLines(activity.get(pin) ?? [], bound, at));
+    activity.set(
+      pin,
+      answeredLines(activity.get(pin) ?? [], bound, at, activityRoom(doc, pin))
+    );
   };
   /**
    * What an agent's update changed (`items`, page-changes.ts), marked in the
@@ -326,7 +329,10 @@ export const createPageKind = (ctx: PageKindContext) => {
       for (const [pin, lines] of activityLines(fresh, at)) {
         activity.set(
           pin,
-          keptActivity([...(activity.get(pin) ?? []), ...lines])
+          keptActivity(
+            [...(activity.get(pin) ?? []), ...lines],
+            activityRoom(doc, pin)
+          )
         );
       }
     });
@@ -356,7 +362,7 @@ export const createPageKind = (ctx: PageKindContext) => {
   };
   /** Page `row`'s revision changed `items`: marked under its revision ({@link markRevision}). */
   const markChanges = (row: ArtifactRow, items: ChangedItem[]): ChangedItem[] =>
-    markRevision(row, items.slice(0, CHANGES_LIMIT), () => row.revision);
+    markRevision(row, items, () => row.revision);
   /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
   const programOf = (row: ArtifactRow): string | undefined =>
     row.kind === "page" ? store.program(row.id) : undefined;

@@ -69,6 +69,7 @@ import {
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
@@ -425,6 +426,7 @@ const builtPath = (name: string) => `decisions/${name}/index.html`;
 const programPath = (name: string) => `decisions/${name}/${PROGRAM_FILE}`;
 
 /** Programs whose reads are kept, by hash. Our bound: a project's pages and their recent revisions, a few KiB each. */
+// @limit recording: hub.decision-program-reads until 2026-12-03
 const PROGRAM_READS = 512;
 
 /** A page's picks and notes. */
@@ -736,6 +738,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     const { title, cards, setup } = readKept(program);
     const read = { title, cards, setup: setup !== null };
     programReads.set(hash, read);
+    recordLimitReading("hub.decision-program-reads", programReads.size);
     if (programReads.size > PROGRAM_READS) {
       const [oldest] = programReads.keys();
       programReads.delete(oldest);
@@ -1674,7 +1677,7 @@ export const decisionRoutes = (decisions: Decisions) =>
       "/api/projects/:id/decisions/:name/send",
       {
         body: t.Object({
-          text: t.Optional(t.String({ maxLength: 2000 })),
+          text: t.Optional(t.String()),
           writes: t.Optional(
             t.String({
               maxLength: SEND_WRITES_MAX,

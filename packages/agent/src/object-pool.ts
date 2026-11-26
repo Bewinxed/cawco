@@ -54,6 +54,7 @@ import { lockBy, openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   alternatesText,
   type CreateRecord,
@@ -104,6 +105,7 @@ export const poolGitEnv = (
 const MAKING = /\.making$/u;
 
 /** Past this many packs a pool is repacked ({@link repackWhenMany}). */
+// @limit recording: agent.object-pool-packs until 2026-12-03
 const MANY_PACKS = 30;
 
 /** How old a pool's newest pack is before a pool no record names goes ({@link reclaimPools}). */
@@ -312,6 +314,7 @@ const geometric = async (run: Git): Promise<boolean> => {
  */
 const repackWhenMany = async (pool: string, run: Git): Promise<void> => {
   const packs = await packsIn(join(pool, "objects", "pack"));
+  recordLimitReading("agent.object-pool-packs", packs.length);
   if (packs.length <= MANY_PACKS) {
     return;
   }

@@ -22,6 +22,7 @@
  * what a compaction forgot about files is still there.
  */
 import { isRecord } from "./is-record";
+import { recordLimitReading } from "./limit-readings";
 import {
   isHarnessBlock,
   type NeutralContentBlock,
@@ -113,6 +114,13 @@ const TOOL_ARGUMENT_CHARS = 300;
 const FILES_CHANGED_SHOWN = 30;
 const FILES_READ_SHOWN = 30;
 const COMMANDS_SHOWN = 40;
+
+/** The last {@link COMMANDS_SHOWN} of a session's commands, how many it ran recorded. */
+const commandsShown = (commands: readonly string[]): string[] => {
+  recordLimitReading("core.continuation-commands", commands.length);
+  // @limit recording: core.continuation-commands until 2026-12-03
+  return commands.slice(-COMMANDS_SHOWN);
+};
 /** Read tools by every harness's name, lowercased, as the transcript reads them (tool-names.ts); {@link FILE_CHANGE_TOOLS} the ones that change files. */
 const READ_TOOLS = toolNamesOf("read");
 /**
@@ -347,7 +355,7 @@ function artifactIndex(entries: SessionMessage[]): string {
     "",
     ...section(
       `Commands run (last ${COMMANDS_SHOWN}, oldest first)`,
-      artifacts.commands.slice(-COMMANDS_SHOWN)
+      commandsShown(artifacts.commands)
     ),
   ].join("\n");
 }

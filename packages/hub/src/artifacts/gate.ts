@@ -35,7 +35,6 @@
  */
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
-  CHOICE_LIMITS,
   type ChoiceEntry,
   choiceEntryProblem,
   hubRecordWriteProblem,
@@ -64,6 +63,7 @@ import {
   metaWriter,
 } from "@cawco/core/doc-meta";
 import { inkProblem } from "@cawco/core/ink";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import {
   AbstractType,
@@ -595,15 +595,15 @@ const filesProblem = (change: Change): string | null => {
   if (keysOf(change, "files").size === 0) {
     return null;
   }
-  if (change.ledger.sizeAfter("files", change.moved) > CANVAS_LIMITS.files) {
-    return `A canvas keeps at most ${CANVAS_LIMITS.files} files.`;
-  }
   const before = change.before.getMap("files");
-  const large = written(change, "files").some(
-    ([key, file]) =>
-      !same(file, before.get(key)) &&
-      JSON.stringify(file).length > CANVAS_LIMITS.fileBytes
-  );
+  const large = written(change, "files").some(([key, file]) => {
+    if (same(file, before.get(key))) {
+      return false;
+    }
+    const bytes = JSON.stringify(file).length;
+    recordLimitReading("hub.canvas-file-bytes", bytes);
+    return bytes > CANVAS_LIMITS.fileBytes;
+  });
   return large
     ? `A canvas's file is at most ${CANVAS_LIMITS.fileBytes / 1024 / 1024} MB.`
     : null;
@@ -624,7 +624,6 @@ const inkMapsProblem = (change: Change): string | null => {
   const touches = (name: string) => keysOf(change, name).size > 0;
   if (touches("ink") || touches("moved")) {
     const problem = inkProblem(
-      ledger.sizeAfter("ink", moved) + ledger.sizeAfter("moved", moved),
       [...written(change, "ink"), ...written(change, "moved")].map(
         ([, group]) => group
       )
@@ -637,8 +636,7 @@ const inkMapsProblem = (change: Change): string | null => {
     const problem = goneProblem(
       goneOf(change.before),
       goneOf(change.after),
-      keysOf(change, "gone"),
-      ledger.sizeAfter("gone", moved)
+      keysOf(change, "gone")
     );
     if (problem) {
       return problem;
@@ -664,9 +662,6 @@ const canvasProblem = (change: Change): string | null => {
   );
   if (untouched) {
     return untouched;
-  }
-  if (elementsOf(change.after).length > CANVAS_LIMITS.elements) {
-    return `A canvas keeps at most ${CANVAS_LIMITS.elements} elements.`;
   }
   const entries = [...change.moved.added, ...change.moved.changed];
   return (
@@ -719,10 +714,7 @@ const stateProblem = (change: Change): string | null => {
     metaProblem(change, false) ??
     inkMapsProblem(change) ??
     (component && keysOf(change, TUNED_MAP).size > 0
-      ? tunedProblem(
-          change.ledger.sizeAfter(TUNED_MAP, change.moved),
-          written(change, TUNED_MAP)
-        )
+      ? tunedProblem(written(change, TUNED_MAP))
       : null);
   if (ink) {
     return ink;
@@ -735,11 +727,6 @@ const stateProblem = (change: Change): string | null => {
   }
   if (keysOf(change, "state").size === 0) {
     return null;
-  }
-  if (
-    change.ledger.sizeAfter("state", change.moved) > CHOICE_LIMITS.perArtifact
-  ) {
-    return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
   }
   // What the doc keeps is a choice entry: this check let it in.
   const before = change.before.getMap<ChoiceEntry>("state");

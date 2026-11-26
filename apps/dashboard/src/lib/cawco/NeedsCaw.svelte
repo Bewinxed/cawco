@@ -148,6 +148,7 @@
    */
   const ARC = 30;
   const ARC_GAP = 8;
+  // @limit measured: nine arcs of 30° with 8° between take 342° of the rim and a tenth does not fit; past nine the same arcs refill in a second ink, as the owner asked ("for more than 9 dashes we can refill again with another color")
   const ARCS = 9;
   /** The ring's box: his circle, in px (`--spacing-c-btn-h`). */
   const RING_BOX = 36;

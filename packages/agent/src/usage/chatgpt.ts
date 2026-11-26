@@ -1,4 +1,6 @@
 import { boundedRead } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { secondsOf } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { Effect } from "effect";
@@ -29,6 +31,7 @@ import { z } from "zod";
  */
 
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
+// @limit recording: agent.chatgpt-usage-ms until 2026-12-10
 const TIMEOUT_MS = 10_000;
 
 const TRAILING_SLASHES = /\/+$/u;
@@ -130,6 +133,7 @@ export const chatgptUsage = Effect.fn("chatgptUsage")(
     accessToken: string,
     chatgptAccountId: string
   ): Effect.Effect<ChatgptUsageRead> =>
+    timedEffect(
     boundedRead(
       TIMEOUT_MS,
       Effect.tryPromise({
@@ -164,6 +168,8 @@ export const chatgptUsage = Effect.fn("chatgptUsage")(
           error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
         }),
       })
+    ),
+    (ms) => recordLimitReading("agent.chatgpt-usage-ms", ms)
     ).pipe(
       Effect.catchTag("Unanswered", ({ after }) => {
         // No reading: the caller keeps the last one it holds.

@@ -59,9 +59,9 @@ import {
 } from "@cawco/core/comments/anchor";
 import { buryPin, newId, readPins } from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
-import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
+import type { InkGroup, InkPoint } from "@cawco/core/ink";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { boxOf } from "@cawco/core/shapes";
-import { previewWords } from "@cawco/core/words/preview";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
@@ -100,8 +100,6 @@ const STROKE = {
   last: true,
 } as const;
 
-/** Elements a group names it marks, at most (core `INK_LIMITS`). */
-const MARKED_MAX = INK_LIMITS.elementsPerGroup;
 /** A stroke whose ends come this close, as a share of its box's longer side, is a loop. Our call. */
 const LOOP_GAP = 0.35;
 /** A loop's box is at least this big each way, px; a smaller one is a line or a tap. Our call. */
@@ -119,6 +117,7 @@ const ENCLOSE_SLACK = 8;
 /** How far either side of a line an element may reach and still be crossed whole, px: about a line of text. Our call. */
 const LINE_REACH = 24;
 /** A container of the marked elements anchors them while its box is at most this many times their reach's. Our call. */
+// @limit recording: overlay.ink-container-ratio until 2026-12-10
 const CONTAINER_MOST = 2;
 /** A pen's pressure when it reports none (a pen that does not measure it). */
 const NO_PRESSURE = 0.5;
@@ -750,7 +749,6 @@ export function startInk(deps: InkDeps): Ink {
         );
         if (left.length > 0) {
           const kept = regroup(group, left, at);
-          sayLeftOut(left.at(-1)?.points.at(-1) as Point);
           ink.set(id, {
             ...kept,
             ...(group.sentAt ? { sentAt: group.sentAt } : {}),
@@ -943,22 +941,7 @@ export function startInk(deps: InkDeps): Ink {
     return (past === -1 ? holders.at(-1) : holders[past - 1]) ?? el;
   };
 
-  /** How many elements the last read of marks left out past what a group names. */
-  let leftOut = 0;
-
-  /** Says what the last regroup left out past what a group names, at `at` (the page's px). */
-  const sayLeftOut = (at: Point) => {
-    if (leftOut > 0) {
-      chrome.say(
-        previewWords.inkMarksLeftOut(MARKED_MAX, leftOut),
-        at[0] - scrollX,
-        at[1] - scrollY
-      );
-    }
-  };
-
   const marksOf = (strokes: Point[][], named: Element[][]): Marks | null => {
-    leftOut = 0;
     const boxes = new Map<Element, Box>();
     const boxed = (el: Element) => {
       const known = boxes.get(el);
@@ -990,10 +973,14 @@ export function startInk(deps: InkDeps): Ink {
       const el = overNothing(centre, x, y);
       return { anchor: el, onOwnScroll: scrollsContent(el), over: [el] };
     }
-    const marked = over.slice(0, MARKED_MAX);
-    leftOut = over.length - marked.length;
-    const first = marked[0] as Element;
-    const common = marked.length > 1 ? containerOf(marked) : null;
+    const first = over[0] as Element;
+    const common = over.length > 1 ? containerOf(over) : null;
+    if (common) {
+      recordLimitReading(
+        "overlay.ink-container-ratio",
+        area(boxed(common)) / Math.max(1, area(reach))
+      );
+    }
     const anchor =
       common &&
       movesWith(common, first) &&
@@ -1004,7 +991,7 @@ export function startInk(deps: InkDeps): Ink {
     return {
       anchor,
       onOwnScroll: !enclosed.has(anchor) && scrollsContent(anchor),
-      over: marked,
+      over,
     };
   };
 
@@ -1032,24 +1019,6 @@ export function startInk(deps: InkDeps): Ink {
       holder.ownerDocument === el.ownerDocument &&
       (!scroller || (holder !== scroller && scroller.contains(holder)))
     );
-  };
-
-  /** Why a stroke may not be kept (DESIGN.md's error formula), or null: the bounds the hub keeps. */
-  const refusal = (
-    points: Point[],
-    open: InkGroup | undefined
-  ): string | null => {
-    if (points.length > INK_LIMITS.pointsPerStroke) {
-      return `This stroke has more than ${INK_LIMITS.pointsPerStroke.toLocaleString()} points, so it wasn't kept. Draw it as two strokes.`;
-    }
-    const { ink, moved } = maps();
-    if (!open && ink.size + moved.size >= INK_LIMITS.groups) {
-      return `This artifact keeps ${INK_LIMITS.groups} stroke groups, so this stroke wasn't kept. Erase a group, then draw again.`;
-    }
-    if (open && open.strokes.length >= INK_LIMITS.strokesPerGroup) {
-      return `This group keeps ${INK_LIMITS.strokesPerGroup} strokes, so this stroke wasn't kept. Start a new group away from it.`;
-    }
-    return null;
   };
 
   /** The group `open` with `points` added (a new one when there is none). */
@@ -1182,7 +1151,6 @@ export function startInk(deps: InkDeps): Ink {
       }
       const page = strokesInPage(now);
       const moved = regroup(now, page, now.at, inside);
-      sayLeftOut(page.at(-1)?.points.at(-1) as Point);
       doc.transact(
         () =>
           ink.set(id, {
@@ -1209,14 +1177,8 @@ export function startInk(deps: InkDeps): Ink {
       recent && recentBox && touches(recentBox, strokeBox(points))
         ? recent
         : undefined;
-    const refused = refusal(points, open);
-    if (refused) {
-      chrome.say(refused, end[0] - scrollX, end[1] - scrollY);
-      return;
-    }
     const group = groupOf(open, points, new Date(now).toISOString());
     doc.transact(() => ink.set(group.id, group));
-    sayLeftOut(end);
     last = { id: group.id, at: now };
     deps.ended(group.id);
     reachIn(group.id);
@@ -1772,9 +1734,7 @@ export function startInk(deps: InkDeps): Ink {
     const marked = (group.over ?? [])
       .map((anchor) => deps.locate(anchor)?.el ?? null)
       .filter((el): el is Element => el !== null);
-    return (marked.length > 0 ? marked : [at.anchor])
-      .slice(0, MARKED_MAX)
-      .map(deps.describe);
+    return (marked.length > 0 ? marked : [at.anchor]).map(deps.describe);
   };
 
   /** What a pick does to the group `id`. */
@@ -1813,15 +1773,7 @@ export function startInk(deps: InkDeps): Ink {
     if (!(onCanvas() && artifact.keeps() && detail?.id)) {
       return;
     }
-    const { doc, ink, moved } = maps();
-    if (!ink.has(detail.id) && ink.size + moved.size >= INK_LIMITS.groups) {
-      chrome.say(
-        `This canvas keeps ${INK_LIMITS.groups} stroke groups, so this stroke has no options. Erase a group, then draw again.`,
-        detail.x,
-        detail.y
-      );
-      return;
-    }
+    const { doc, ink } = maps();
     const at = new Date().toISOString();
     doc.transact(() =>
       ink.set(detail.id, {

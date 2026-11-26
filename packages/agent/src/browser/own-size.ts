@@ -35,6 +35,7 @@
  */
 import { lookUntil } from "@cawco/core/effect/poll";
 import { Effect } from "effect";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 
@@ -68,6 +69,7 @@ const SETTLE_MS = 1000;
 /** How often a page's width is read while it settles. */
 const SETTLE_STEP_MS = 25;
 /** How many times a window is moved off its bounds and back before a page still off its width is loaded again. Our call. */
+// @limit recording: agent.window-settle-moves until 2026-12-10
 const MOVES_MOST = 3;
 
 /** What {@link restoreWindows} did, by page URL: for the run that drives it to tell a heal from a second move from a load. */
@@ -203,6 +205,11 @@ const settleWindow = async (
     }
     off = still;
   }
+  // The move that settled the window; one more than were made when none did.
+  recordLimitReading(
+    "agent.window-settle-moves",
+    off.length === 0 ? moves : moves + 1
+  );
   return { moves, off };
 };
 

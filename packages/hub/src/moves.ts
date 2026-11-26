@@ -27,6 +27,7 @@ import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -148,10 +149,13 @@ export interface MovesDeps {
 
 /** How long a step may take before the hub stops waiting on its answer. */
 const STEP_TIMEOUT_MS = DAY_MS;
+// @limit recording: hub.move-inspect-ms until 2026-12-26
 const INSPECT_TIMEOUT_MS = 60_000;
 /** How long a started or cancelled job is kept for a screen that was away. */
+// @limit recording: hub.move-settled-read-age-ms until 2026-12-26
 const SETTLED_KEPT_MS = 10 * 60 * 1000;
 /** Progress is written to the record at most this often; frames go out at most every quarter second. */
+// @limit recording: hub.move-progress-gap-ms until 2026-12-26
 const PROGRESS_KEPT_EVERY_MS = 2000;
 const PUBLISH_EVERY_MS = 250;
 
@@ -247,6 +251,8 @@ export const createMoves = (deps: MovesDeps) => {
       progress?: MoveJob["progress"];
       lfsFile?: MoveJob["lfsFile"];
       keptAt: number;
+      /** When its last progress frame came. */
+      heardAt: number;
     }
   >();
   /** The jobs this process is moving right now: each advances once at a time. */
@@ -321,6 +327,20 @@ export const createMoves = (deps: MovesDeps) => {
 
   /** Every job, as every screen is handed it. */
   const table = (): MoveJob[] => db.moveRows().map(jobOf);
+
+  /** {@link table}, as a screen asks for it (`GET /api/moves`): how long after it settled each settled job is read. */
+  const tableAsked = (): MoveJob[] => {
+    const rows = db.moveRows();
+    for (const row of rows) {
+      if (row.stage === "started" || row.stage === "cancelled") {
+        recordLimitReading(
+          "hub.move-settled-read-age-ms",
+          Date.now() - row.updatedAt.getTime()
+        );
+      }
+    }
+    return rows.map(jobOf);
+  };
 
   let publishTimer: ReturnType<HubLifetimeShape["after"]> | undefined;
   let publishedAt = 0;
@@ -493,17 +513,23 @@ export const createMoves = (deps: MovesDeps) => {
     stage: MoveStep
   ): Promise<MoveRemoteAuth> =>
     readsCredential(row, stage)
-      ? await deps.call(
-          row.state.sourceMachineId,
-          CONTROL_MOVE_REMOTE_CREDENTIAL,
-          [row.state.sourcePath],
-          INSPECT_TIMEOUT_MS
+      ? await timed(
+          deps.call(
+            row.state.sourceMachineId,
+            CONTROL_MOVE_REMOTE_CREDENTIAL,
+            [row.state.sourcePath],
+            INSPECT_TIMEOUT_MS
+          ),
+          (ms) => recordLimitReading("hub.move-inspect-ms", ms)
         )
       : {};
 
   /** A machine's inspection of `path`, as its type (core control-replies.ts): its large files, LFS and ignores are kept in the move's record. */
   const inspect = (machineId: string, path: string): Promise<MoveInspection> =>
-    deps.call(machineId, CONTROL_MOVE_INSPECT, [path], INSPECT_TIMEOUT_MS);
+    timed(
+      deps.call(machineId, CONTROL_MOVE_INSPECT, [path], INSPECT_TIMEOUT_MS),
+      (ms) => recordLimitReading("hub.move-inspect-ms", ms)
+    );
 
   /** Whether the hub's repository `key` already holds `commit` on a branch. */
   const onHub = async (key: HubRepoKey, commit: string): Promise<boolean> => {
@@ -973,6 +999,7 @@ export const createMoves = (deps: MovesDeps) => {
             ])
           )
           .digest("hex")
+          // @limit measured: 32 hex characters are 128 bits of a hash; one machine's moves share the namespace, so two collide after about 2^64 names
           .slice(0, 32)
       : undefined;
     return {
@@ -1544,7 +1571,10 @@ export const createMoves = (deps: MovesDeps) => {
         `move ${id} cancel`,
         Effect.tryPromise({
           try: () =>
-            deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS),
+            timed(
+              deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS),
+              (ms) => recordLimitReading("hub.move-inspect-ms", ms)
+            ),
           catch: (cause) => new MoveJobFailed({ cause }),
         })
       );
@@ -1622,7 +1652,16 @@ export const createMoves = (deps: MovesDeps) => {
       progress: { bytes: frame.bytes, total: frame.total },
       lfsFile: frame.file,
       keptAt: before?.keptAt ?? 0,
+      heardAt: Date.now(),
     };
+    if (before) {
+      // How often a move's progress moves: what a write every
+      // PROGRESS_KEPT_EVERY_MS keeps of it.
+      recordLimitReading(
+        "hub.move-progress-gap-ms",
+        now.heardAt - before.heardAt
+      );
+    }
     live.set(row.id, now);
     if (Date.now() - now.keptAt >= PROGRESS_KEPT_EVERY_MS) {
       now.keptAt = Date.now();
@@ -1641,11 +1680,14 @@ export const createMoves = (deps: MovesDeps) => {
           `move ${row.id} cancel`,
           Effect.tryPromise({
             try: () =>
-              deps.call(
-                machineId,
-                CONTROL_MOVE_CANCEL,
-                [row.id],
-                INSPECT_TIMEOUT_MS
+              timed(
+                deps.call(
+                  machineId,
+                  CONTROL_MOVE_CANCEL,
+                  [row.id],
+                  INSPECT_TIMEOUT_MS
+                ),
+                (ms) => recordLimitReading("hub.move-inspect-ms", ms)
               ),
             catch: (cause) => new MoveJobFailed({ cause }),
           })
@@ -1729,5 +1771,6 @@ export const createMoves = (deps: MovesDeps) => {
     retry,
     start,
     table,
+    tableAsked,
   };
 };

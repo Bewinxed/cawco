@@ -4,6 +4,7 @@ import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import type { InstanceRow, InstanceStatus } from "@cawco/core/protocol";
@@ -12,6 +13,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { knowsNotControl } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import {
   STAGE_CLONE_MS,
   STAGE_READY_MS,
@@ -48,6 +50,7 @@ import {
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
 import { Deferred, Effect } from "effect";
+import { namedAndMore } from "@cawco/providers/names";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -68,7 +71,6 @@ import {
 } from "./machine-answers";
 import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
-import { handle } from "./presenters/words";
 import { makeProjectFolder, writeFolderFiles } from "./project-folder";
 import { LIVE, type Parent } from "./work-item-state";
 
@@ -128,14 +130,9 @@ export interface ArchivedWorkspace {
   workspace: WorkspaceRow;
 }
 
-/** How many of a held workspace's excluded paths are named in words; the rest are counted. */
-const EXCLUDED_NAMED = 20;
-
 /** A held workspace's excluded paths in words ("a, b and 3 more"), or "" when it has none. */
 export const excludedNamed = (excluded: readonly string[] = []): string =>
-  excluded.length > EXCLUDED_NAMED
-    ? `${excluded.slice(0, EXCLUDED_NAMED).join(", ")} and ${excluded.length - EXCLUDED_NAMED} more`
-    : excluded.join(", ");
+  namedAndMore(excluded);
 
 /**
  * What an archive says when the clone holds work that is nowhere else: it
@@ -147,13 +144,13 @@ const holdsWorkWords = (held: HeldWork): string => {
   const named = excludedNamed(held.excluded);
   return held.refused
     ? workWords.refusedHeld(
-        handle(held.workspaceId),
+        shortId(held.workspaceId),
         held.machine,
         held.refused,
         held.size,
         held.path
       )
-    : `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`;
+    : `Workspace ${shortId(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`;
 };
 
 /**
@@ -251,13 +248,14 @@ export const isFolderOverlay = (row: WorkspaceRow): boolean =>
 export const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
   if (isHostFolder(workspace)) {
     throw new Error(
-      `workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}: no clone and no boundary to act on`
+      `workspace ${shortId(workspace.id)} is a host-scope delegate's folder ${workspace.path}: no clone and no boundary to act on`
     );
   }
   return { id: workspace.id, path: workspace.path };
 };
 
 /** How long the report's git reads may take. */
+// @limit recording: hub.workspace-git-ms until 2026-12-10
 export const GIT_TIMEOUT_MS = 60_000;
 
 /** Runs of whitespace between the counts a git read prints. */
@@ -265,7 +263,7 @@ export const SPACES = /\s+/u;
 
 /** What an item's branch and its assets folder are named by: its task, else its own short id. */
 export const landingKey = (item: Pick<WorkItemRow, "id" | "taskId">): string =>
-  item.taskId ?? item.id.slice(0, 8);
+  item.taskId ?? shortId(item.id);
 
 /**
  * Where an item's outputs land in its project's folder: `assets/tsk-12/`
@@ -615,22 +613,22 @@ export const createWorkspaces = ({
       if (work.refused) {
         return {
           text: workWords.refusedNotice(
-            handle(workspace.id),
+            shortId(workspace.id),
             latest.title,
             work.machine,
             work.refused,
             work.size,
             workspace.path
           ),
-          headline: workWords.refusedHeadline(workspace.id.slice(0, 8)),
+          headline: workWords.refusedHeadline(shortId(workspace.id)),
         };
       }
       const named = work.excluded?.length
         ? ` Kept out of git by its own excludes: ${work.excluded.join(", ")}.`
         : "";
       return {
-        text: `Workspace ${handle(workspace.id)} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${handle(workspace.id)}", or with from: "${handle(workspace.id)}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${handle(workspace.id)}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
-        headline: `Workspace ${workspace.id.slice(0, 8)} holds ${work.holds}: continue it or discard it.`,
+        text: `Workspace ${shortId(workspace.id)} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${shortId(workspace.id)}", or with from: "${shortId(workspace.id)}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${shortId(workspace.id)}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
+        headline: `Workspace ${shortId(workspace.id)} holds ${work.holds}: continue it or discard it.`,
       };
     });
   };
@@ -696,28 +694,28 @@ export const createWorkspaces = ({
       copy
         ? {
             text: carryWords.folderNotice(
-              handle(workspace.id),
+              shortId(workspace.id),
               latest.title,
               carry,
               machine,
               copy
             ),
             headline: carryWords.folderHeadline(
-              workspace.id.slice(0, 8),
+              shortId(workspace.id),
               carry,
               machine
             ),
           }
         : {
             text: workWords.carriedNotice(
-              handle(workspace.id),
+              shortId(workspace.id),
               latest.title,
               carry,
               machine,
               workspace.path
             ),
             headline: workWords.carriedHeadline(
-              workspace.id.slice(0, 8),
+              shortId(workspace.id),
               carry,
               machine
             ),
@@ -760,7 +758,7 @@ export const createWorkspaces = ({
       }
       const written = await writeFolderFiles(item.projectId, files, {
         author: { name: item.title },
-        message: `assets: ${SCRATCH_OUTPUTS} of work item ${item.id.slice(0, 8)}, kept as its workspace closed`,
+        message: `assets: ${SCRATCH_OUTPUTS} of work item ${shortId(item.id)}, kept as its workspace closed`,
       });
       if (written instanceof ElysiaStatus) {
         return problem(written.status, {
@@ -769,7 +767,7 @@ export const createWorkspaces = ({
         });
       }
       console.log(
-        `[workspaces] ${workspace.id}: ${SCRATCH_OUTPUTS} copied into ${folder}/ before it closed ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}: ${written.paths.join(", ")}`
+        `[workspaces] ${workspace.id}: ${SCRATCH_OUTPUTS} copied into ${folder}/ before it closed ${written.changed ? `at ${shortSha(written.sha)}` : "(already there, unchanged)"}: ${written.paths.join(", ")}`
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -919,7 +917,7 @@ export const createWorkspaces = ({
     if (!ours) {
       return problem(403, {
         code: "workspace-discard-not-yours",
-        detail: `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`,
+        detail: `Workspace ${shortId(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`,
       });
     }
     return workspace;
@@ -1025,7 +1023,7 @@ export const createWorkspaces = ({
       ? problem(409, {
           code: "workspace-serves-waiting",
           detail: refused(
-            handle(workspace.id),
+            shortId(workspace.id),
             waiting.map((row) => artifactLink(row.id, row.title))
           ),
         })
@@ -1118,7 +1116,7 @@ export const createWorkspaces = ({
   ): boolean =>
     clones !== undefined &&
     ownCopy(workspace) &&
-    workspace.path.endsWith(`-${workspace.id.slice(0, 8)}`) &&
+    workspace.path.endsWith(`-${shortId(workspace.id)}`) &&
     !clones.has(workspace.path);
   /** What a workspace's ended items hold it by ({@link holdsOf}): an item's landing, then its sessions'. */
   const heldByItems = (items: readonly WorkItemRow[]): WorkspaceHold[] => {
@@ -1268,13 +1266,13 @@ export const createWorkspaces = ({
       );
       workspaceNotice(workspace, (latest) => ({
         text: workWords.notRetiredNotice(
-          handle(workspace.id),
+          shortId(workspace.id),
           latest.title,
           machine,
           count,
           reason
         ),
-        headline: workWords.notRetiredHeadline(workspace.id.slice(0, 8)),
+        headline: workWords.notRetiredHeadline(shortId(workspace.id)),
       }));
     }
     settleFailures.set(workspace.id, failure);
@@ -1947,13 +1945,16 @@ export const createWorkspaces = ({
         `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
       // The counts on the first three lines; then, each after a line of its
       // own, the newest commit subjects on no remote and the outputs folder.
-      const read = await command(
-        workspace.machineId,
-        workspace.path,
-        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
-        GIT_TIMEOUT_MS,
-        refOf(workspace),
-        { noWait: true }
+      const read = await timed(
+        command(
+          workspace.machineId,
+          workspace.path,
+          `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
+          GIT_TIMEOUT_MS,
+          refOf(workspace),
+          { noWait: true }
+        ),
+        (ms) => recordLimitReading("hub.workspace-git-ms", ms)
       );
       const [counts = "", subjects = "", outputs = ""] = read.stdout.split(
         `${READ_PART}\n`
@@ -1995,14 +1996,14 @@ export const createWorkspaces = ({
     if (live) {
       return problem(409, {
         code: "workspace-archive-live",
-        detail: `Workspace ${handle(workspace.id)} has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. Stop it before archiving the workspace.`,
+        detail: `Workspace ${shortId(workspace.id)} has a live work item: ${live.title} (${shortId(live.id)}) is ${live.state}. Stop it before archiving the workspace.`,
       });
     }
     const places = placesIn(workspace);
     if (places) {
       return problem(409, {
         code: "workspace-archive-holds-places",
-        detail: `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`,
+        detail: `Workspace ${shortId(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`,
       });
     }
     return stoppedWhileWaiting(workspace, refused);
@@ -2021,14 +2022,14 @@ export const createWorkspaces = ({
     if (workspace.state === "archived") {
       return problem(409, {
         code: "workspace-archived-already",
-        detail: `Workspace ${handle(workspace.id)} is already archived.`,
+        detail: `Workspace ${shortId(workspace.id)} is already archived.`,
       });
     }
     const member = workspaceOf(workspace);
     if (member.kind === "hostFolder") {
       return problem(409, {
         code: "workspace-archive-host-folder",
-        detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`,
+        detail: `Workspace ${shortId(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`,
       });
     }
     const blocked = archiveBlocked(workspace, refused);
@@ -2055,7 +2056,7 @@ export const createWorkspaces = ({
     if (unconfirmed.length > 0) {
       return problem(409, {
         code: "workspace-archive-unconfirmed",
-        detail: `Workspace ${handle(workspace.id)} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`,
+        detail: `Workspace ${shortId(workspace.id)} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`,
       });
     }
     const closed = await closeWorkspace(
@@ -2105,18 +2106,18 @@ export const createWorkspaces = ({
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
   const archivedWords = (workspace: WorkspaceRow): string => {
     if (workspace.carry) {
-      return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(db, workspace.machineId)}, and its clone is gone.`;
+      return `its workspace ${shortId(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(db, workspace.machineId)}, and its clone is gone.`;
     }
     const taker = db
       .workspacesCutFrom(workspace.id)
       .find((cut) => cut.cutFromLanded === true);
     if (taker) {
-      return `its workspace ${handle(workspace.id)} retired: its work went on in workspace ${handle(taker.id)}, cut from it, which landed it, so it is not cut again; workspace ${handle(taker.id)} is where that work goes on.`;
+      return `its workspace ${shortId(workspace.id)} retired: its work went on in workspace ${shortId(taker.id)}, cut from it, which landed it, so it is not cut again; workspace ${shortId(taker.id)} is where that work goes on.`;
     }
     if (workspace.headUnread !== null) {
-      return workWords.headUnread(handle(workspace.id));
+      return workWords.headUnread(shortId(workspace.id));
     }
-    return `its workspace ${handle(workspace.id)} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
+    return `its workspace ${shortId(workspace.id)} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
   };
   /**
    * Cuts a workspace on `machineId` ({@link CONTROL_WORKSPACE_CREATE}, its
@@ -2225,7 +2226,7 @@ export const createWorkspaces = ({
     head: WorkspaceCut | null
   ): string =>
     head
-      ? `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
+      ? `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: cut again at ${workspace.path}, at ${shortSha(head.commit)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
       : `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
   /**
    * A settled host-scope workspace ({@link settleHost}) filed active again
@@ -2262,7 +2263,7 @@ export const createWorkspaces = ({
     ) {
       return Promise.reject(
         new Error(
-          `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
+          `workspace ${shortId(workspace.id)}: ${archivedWords(workspace)}`
         )
       );
     }
@@ -2302,7 +2303,7 @@ export const createWorkspaces = ({
       const path = cutPath(workspace.machineId, checkout.path);
       if (path !== workspace.path) {
         throw new Error(
-          `workspace ${handle(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
+          `workspace ${shortId(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
         );
       }
       const again =
@@ -2560,7 +2561,7 @@ export const createWorkspaces = ({
     if (member.kind === "hostFolder") {
       return problem(409, {
         code: "workspace-continue-host-folder",
-        detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`,
+        detail: `Workspace ${shortId(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`,
       });
     }
     const items = db.workItemsIn(workspace.id);
@@ -2568,7 +2569,7 @@ export const createWorkspaces = ({
     if (live) {
       return problem(409, {
         code: "workspace-continue-live",
-        detail: `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`,
+        detail: `Workspace ${shortId(workspace.id)} already has a live work item: ${live.title} (${shortId(live.id)}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`,
       });
     }
     const claimed: {
@@ -2665,7 +2666,7 @@ export const createWorkspaces = ({
     const failed = `Workspace create on ${machineName(db, machineId)} failed after ${waited}s: ${reason}.`;
     return pending
       ? `${failed} Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`
-      : `${failed} Workspace ${id.slice(0, 8)} was discarded; no clone or boundary was left.`;
+      : `${failed} Workspace ${shortId(id)} was discarded; no clone or boundary was left.`;
   };
   /**
    * A new workspace: the project's folder made ({@link cutOn}), then its
@@ -2814,7 +2815,7 @@ export const createWorkspaces = ({
     ) {
       return problem(403, {
         code: "workspace-from-not-yours",
-        detail: `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`,
+        detail: `Workspace ${shortId(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`,
       });
     }
     const member = workspaceOf(source);
@@ -2825,14 +2826,14 @@ export const createWorkspaces = ({
           : "it is archived, its clone gone";
       return problem(409, {
         code: "workspace-from-no-branch",
-        detail: `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`,
+        detail: `Workspace ${shortId(source.id)} has no branch to cut from: ${why}. Delegate without from.`,
       });
     }
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
       return problem(409, {
         code: "workspace-from-live",
-        detail: `Workspace ${handle(source.id)} has a live work item, ${live.title} (${handle(live.id)}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`,
+        detail: `Workspace ${shortId(source.id)} has a live work item, ${live.title} (${shortId(live.id)}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`,
       });
     }
     return source;
@@ -2892,7 +2893,7 @@ export const createWorkspaces = ({
         closed instanceof ElysiaStatus
           ? ` It stays, its outputs not kept: ${closed.response.detail}`
           : "";
-      return `Workspace ${handle(workspace.id)} could not be cut from workspace ${handle(source.id)}, so it was archived: ${why}${left}`;
+      return `Workspace ${shortId(workspace.id)} could not be cut from workspace ${shortId(source.id)}, so it was archived: ${why}${left}`;
     };
     try {
       const made = await bundleOf(source.id);
@@ -2909,15 +2910,18 @@ export const createWorkspaces = ({
         source.id,
       ]);
       const branch = shellQuote(workspace.branch);
-      const set = await command(
-        workspace.machineId,
-        workspace.path,
-        `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
-        GIT_TIMEOUT_MS,
-        refOf(workspace),
-        // A checkout: one that left a path the boundary keeps other than
-        // the commit has it fails, never passes with it dropped.
-        { moves: made.head }
+      const set = await timed(
+        command(
+          workspace.machineId,
+          workspace.path,
+          `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
+          GIT_TIMEOUT_MS,
+          refOf(workspace),
+          // A checkout: one that left a path the boundary keeps other than
+          // the commit has it fails, never passes with it dropped.
+          { moves: made.head }
+        ),
+        (ms) => recordLimitReading("hub.workspace-git-ms", ms)
       );
       if (set.exitCode !== 0) {
         throw new Error(
@@ -2948,13 +2952,16 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     at: string
   ): Promise<void> => {
-    const moved = await command(
-      workspace.machineId,
-      workspace.path,
-      `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
-      GIT_TIMEOUT_MS,
-      refOf(workspace),
-      { moves: at }
+    const moved = await timed(
+      command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace),
+        { moves: at }
+      ),
+      (ms) => recordLimitReading("hub.workspace-git-ms", ms)
     ).catch((error: unknown) => ({
       exitCode: 1,
       stdout: "",
@@ -2969,7 +2976,7 @@ export const createWorkspaces = ({
         ? ` It stays, its outputs not kept: ${closed.response.detail}`
         : "";
     throw new Error(
-      `Workspace ${handle(workspace.id)} could not be moved to ${at.slice(0, 9)}, so it was archived: ${(moved.stderr || moved.stdout).trim() || `exit ${moved.exitCode}`}${left}`
+      `Workspace ${shortId(workspace.id)} could not be moved to ${shortSha(at)}, so it was archived: ${(moved.stderr || moved.stdout).trim() || `exit ${moved.exitCode}`}${left}`
     );
   };
 

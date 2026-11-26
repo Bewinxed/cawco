@@ -7,6 +7,7 @@
  * predicates, over the JSON `budget` columns as they stand before it.
  */
 import type { Database } from "bun:sqlite";
+import { shown } from "./json-reads";
 
 /** The limits a budget names, as 0398 places them. */
 const LIMITS = ["usd", "turns", "minutes"] as const;
@@ -71,9 +72,6 @@ const TASK_BUDGET_UNREAD = "problem LIKE '%budget: “%'";
 
 /** A work item's live states (work-item-state.ts `LIVE`): the ones the hub stops. */
 const LIVE = ["starting", "running"];
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 120));
 
 /** The rows of `table` whose budget does not read, oldest first. */
 const unread = (client: Database, table: string, label: string): Unread[] =>

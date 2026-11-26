@@ -269,7 +269,7 @@ const readSource = async (
     path,
     head,
     links: found.inward,
-    namesByCase: found.namesByCase.slice(0, 20),
+    namesByCase: found.namesByCase,
     walk: found.walk,
     ...(copyBlock ? { copyBlock } : {}),
   };

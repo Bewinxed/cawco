@@ -8,6 +8,7 @@
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { taskLink } from "@cawco/core/references";
 import type { RelayView } from "@cawco/core/relays";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { routineToolWords } from "@cawco/core/words/routines";
 import type {
@@ -22,11 +23,11 @@ import {
   ago,
   ahead,
   count,
-  handle,
+  excerpt,
   lines,
   listed,
   quote,
-  valueWords,
+  valueExcerpt,
 } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
@@ -57,8 +58,8 @@ export const folderWrittenWords = (
     | { id: string; path: string; waiting: string }
 ): string =>
   "sha" in written
-    ? `Committed ${written.path} (commit ${written.sha.slice(0, 8)}).`
-    : `Proposed: ${valueWords(written, 600)}`;
+    ? `Committed ${written.path} (commit ${shortSha(written.sha)}).`
+    : `Proposed: ${valueExcerpt(written, 600)}`;
 
 /** `view_draft`. */
 export const viewDraftedWords = (drafted: {
@@ -99,7 +100,7 @@ export const memoryNotedWords = (noted: Noted): string => {
 export const memoryWithdrawnWords = (gone: {
   text: string;
   withdrawn: string;
-}): string => memoryRunWords.withdrawn(gone.withdrawn, quote(gone.text, 300));
+}): string => memoryRunWords.withdrawn(gone.withdrawn, quote(gone.text));
 
 /** `memory_apply`: one line per operation, what it committed or why it was refused. */
 export const memoryAppliedWords = (applied: { lines: string[] }): string =>
@@ -121,7 +122,7 @@ export const memoryReadWords = (
         : `${count(read.inbox.length, "note")} waiting:`,
       read.inbox.map(
         (note) =>
-          `- ${note.id} from ${note.from}${note.since ? ` (since ${note.since})` : ""}: ${quote(note.text, 600)}`
+          `- ${note.id} from ${note.from}${note.since ? ` (since ${note.since})` : ""}: ${excerpt(note.text, 600)}`
       ),
       read.files.length > 0
         ? `Memory files: ${listed(read.files)}.`
@@ -140,10 +141,10 @@ export const deletedWords =
       : `There was no such ${what} to delete.`;
 
 const routeLine = (route: EventRouteView, now: number): string =>
-  `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
+  `- ${shortId(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${shortId(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
 
 const pollLine = (poll: ConnectorPollView, now: number): string =>
-  `- ${handle(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
+  `- ${shortId(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
 
 /** `event_route_list`: GitHub, GitLab and Gitea polling, the routes, the polls, the newest events. */
 export const ingressWords = (view: IngressView): string => {
@@ -174,7 +175,7 @@ export const ingressWords = (view: IngressView): string => {
             : "Newest inbound events:",
           view.events.map(
             (event) =>
-              `- ${event.kind} from ${event.source} ${ago(event.receivedAt, now)} · ${event.routedTo ? `to routine ${handle(event.routedTo)}` : "routed to no routine"}${event.handledAt === null ? ", not handled yet" : ""}`
+              `- ${event.kind} from ${event.source} ${ago(event.receivedAt, now)} · ${event.routedTo ? `to routine ${shortId(event.routedTo)}` : "routed to no routine"}${event.handledAt === null ? ", not handled yet" : ""}`
           )
         )
   );
@@ -200,7 +201,7 @@ export const pollWords = (poll: ConnectorPollView): string =>
   pollLine(poll, Date.now()).replace(LIST_MARK, "Poll ");
 
 const actionLine = (action: ApprovedActionView, now: number): string =>
-  `- ${handle(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
+  `- ${shortId(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${quote(action.args)} · ${quote(action.reason)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result)}` : ""} · proposed ${ago(action.createdAt, now)}`;
 
 /** `action_list`. */
 export const actionListWords = ({
@@ -228,14 +229,14 @@ export const actionProposedWords = (proposed: {
   id: string;
   said: string;
   state: string;
-}): string => `Proposed ${handle(proposed.id)}: ${proposed.said}`;
+}): string => `Proposed ${shortId(proposed.id)}: ${proposed.said}`;
 
 /** `action_cancel`. */
 export const actionWords = (action: ApprovedActionView): string =>
   actionLine(action, Date.now()).replace(LIST_MARK, "Action ");
 
 const relayLine = (relay: RelayView, now: number): string =>
-  `- ${handle(relay.id)} · ${relay.provider}${relay.repo ? ` ${relay.repo}` : ""} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
+  `- ${shortId(relay.id)} · ${relay.provider}${relay.repo ? ` ${relay.repo}` : ""} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
 
 /** `relay_list`. */
 export const relayListWords = (relays: RelayView[]): string => {
@@ -253,7 +254,7 @@ export const relayCreatedWords = (created: RelayCreated): string =>
   lines(
     relayLine(created.relay, Date.now()).replace(LIST_MARK, "Relay "),
     created.suggestedRoutes.routines.length > 0
-      ? `${created.suggestedRoutes.note} Routes to propose (event_route_create) for ${created.suggestedRoutes.source}: ${listed(created.suggestedRoutes.routines.map((routine) => `${routine.name} ${handle(routine.id)}`))}.`
+      ? `${created.suggestedRoutes.note} Routes to propose (event_route_create) for ${created.suggestedRoutes.source}: ${listed(created.suggestedRoutes.routines.map((routine) => `${routine.name} ${shortId(routine.id)}`))}.`
       : created.suggestedRoutes.note
   );
 

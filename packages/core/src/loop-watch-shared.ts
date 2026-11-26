@@ -57,6 +57,7 @@ export const LEFT = 2;
  * The bytes the work the loop started last is named in (`doing`), its
  * length first (a 32-bit count), then its UTF-8; a longer name is cut.
  */
+// @limit recording: core.loop-doing-chars until 2026-12-10
 export const DOING_BYTES = 1024;
 
 /** The name the loop wrote last into `doing`'s memory. */

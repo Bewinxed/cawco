@@ -40,6 +40,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, relative, resolve } from "node:path";
+import { gitShort } from "@cawco/core/git-short";
 import { z } from "zod";
 import {
   AGENT_SOURCE,
@@ -1583,7 +1584,7 @@ const ahead = new Set(ancestry.ahead.map((nightly) => nightly.commit));
 // built there is the reader that counts: it has no protocol way through.
 const byCommit = new Map<string, Baseline>();
 for (const base of [
-  { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef } as Baseline,
+  { label: `the base ${gitShort(HUB, baseRef)}`, commit: baseRef } as Baseline,
   ...shippedBaselines(HUB).filter(
     (shipped) => shipped.app || !ahead.has(shipped.commit)
   ),
@@ -1728,7 +1729,7 @@ for (const nightly of agents.filter(({ commit }) => !ahead.has(commit))) {
   const calls = agentCalls(agentSourceAt(HUB, nightly.commit));
   if (calls.size === 0) {
     throw new Error(
-      `No hub call was read from the agent of ${nightly.label} (${nightly.commit.slice(0, 12)}): agent-calls.ts found no source under its ${AGENT_SOURCE}`
+      `No hub call was read from the agent of ${nightly.label} (${gitShort(HUB, nightly.commit)}): agent-calls.ts found no source under its ${AGENT_SOURCE}`
     );
   }
   const lost = [...calls].filter(

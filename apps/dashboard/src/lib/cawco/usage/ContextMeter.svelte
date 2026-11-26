@@ -38,6 +38,7 @@
   let { reading }: { reading: ContextReading } = $props();
 
   const share = $derived(
+    // @limit external: a percentage runs from 0 to 100
     reading.kind === "read" ? Math.min(100, Math.max(0, reading.used)) : 0
   );
 </script>

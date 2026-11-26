@@ -1,4 +1,4 @@
-import { andList } from "./helpers";
+import { andList } from "@cawco/providers/names";
 
 /**
  * What a picture is refused with where it enters (the composer's attach, the

@@ -12,6 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 
+import { quote } from "@cawco/providers/quote";
 import { z } from "zod";
 import type { ProjectAtLimit } from "./accounts";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
@@ -502,7 +503,6 @@ const CAWCO_ADMIN_WRITE = /^(?:mcp__cawco__|cawco_)?admin_([a-z_]+)_write$/u;
 const WORD_BREAK = /[_-]+/gu;
 const CAMEL = /([a-z\d])([A-Z])/gu;
 const SPACES = /\s+/gu;
-const COMMAND_CAP = 120;
 
 /** A JSON object, as a call's input holds one. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -647,7 +647,7 @@ function mcpTarget(config: Record<string, unknown>): string | undefined {
   const args = Array.isArray(config.args)
     ? config.args.filter((arg): arg is string => typeof arg === "string")
     : [];
-  return cut([command, ...args].join(" "), COMMAND_CAP);
+  return quote([command, ...args].join(" "));
 }
 
 const COUNT = new Intl.NumberFormat("en");
@@ -714,6 +714,7 @@ function sourceFields(
         key: "files",
         value: `${plural(source.skill.files.length, "file")}: ${source.skill.files.map((file) => file.path).join(", ")}`,
       },
+      // @limit measured: 12 hex characters are 48 bits of the skill's SHA-256; a prompt shows the skills of one session, so two collide after about 2^24 names
       { key: "content", value: source.skill.hash.slice(0, 12) }
     );
   }

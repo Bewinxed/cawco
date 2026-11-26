@@ -36,10 +36,19 @@
  */
 import { dirname } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import {
+  type LimitReading,
+  recordLimitReading,
+  takeLimitReadings,
+} from "@cawco/core/limit-readings";
 import { transcriptIndexPath } from "@cawco/core/paths/cawco";
 import { listClaudeFiles, listPiFiles } from "@cawco/core/paths/claude";
 import { opencodeDatabases } from "@cawco/core/paths/harnesses";
-import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
+import {
+  recordLimitReadingsWith,
+  type TranscriptDoc,
+  type TranscriptFile,
+} from "@cawco/jsonl-parser";
 import {
   type ListOptions,
   matchQueries,
@@ -121,13 +130,19 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
 const readOps = (index: TranscriptIndex) => ({
   turns: (options: TurnsOptions) => Promise.resolve(index.turns(options)),
   places: (options: PlacesOptions) => Promise.resolve(index.places(options)),
-  listed: (options: ListOptions) => Promise.resolve(index.listed(options)),
-  search: (args: { query: string; options: SearchOptions }) =>
-    Promise.resolve({
-      conversations: index.search(args.query, args.options),
+  listed: (options: ListOptions) => {
+    const { hits, matched } = index.listed(options);
+    return Promise.resolve({ conversations: hits, matched });
+  },
+  search: (args: { query: string; options: SearchOptions }) => {
+    const { hits, matched } = index.search(args.query, args.options);
+    return Promise.resolve({
+      conversations: hits,
+      matched,
       // The word a typed query left out ({@link matchQueries}), for the answer to say.
       dropped: matchQueries(args.query, args.options.submitted).dropped,
-    }),
+    });
+  },
 });
 
 /** A search process's role: the index's one writer, or a reader beside it. */
@@ -170,7 +185,7 @@ const runOp = <K extends SearchOp>(
 export type SearchSaid =
   | { kind: "ready"; through: number }
   | { kind: "unopened"; message: string }
-  | { kind: "beat" }
+  | { kind: "beat"; readings?: LimitReading[] }
   | { id: number; kind: "told"; value: unknown }
   | { id: number; kind: "answer"; value: unknown }
   | { code?: string; id: number; kind: "failed"; message: string };
@@ -246,7 +261,13 @@ const serve = async (): Promise<void> => {
 // The agent's channel closed (it ended, or let this process go): nothing is
 // left to answer.
 process.on("disconnect", () => process.exit(0));
-setInterval(() => say({ kind: "beat" }), BEAT_MS);
+// The parser's readings of the bounds waiting on data are this process's,
+// and ride its beat to the agent, which carries them to the hub.
+recordLimitReadingsWith(recordLimitReading);
+setInterval(() => {
+  const readings = takeLimitReadings();
+  say(readings.length > 0 ? { kind: "beat", readings } : { kind: "beat" });
+}, BEAT_MS);
 serve().catch((error: unknown) => {
   say({ kind: "unopened", ...failure(error) });
   // Ended once the line has gone out; the agent fails what waits with it.

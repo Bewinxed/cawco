@@ -1649,6 +1649,7 @@ export const SKILL_SKIPPED_DIRS: readonly string[] = [
  * a skill is instructions and the scripts and pictures they name, and a
  * folder past this is a project, not a skill. Our call.
  */
+// @limit measured: the largest skill the fleet holds is 4.0 MiB (HIGAgentSkills, skill_files, 2026-11-26)
 export const SKILL_FOLDER_LIMIT_BYTES = 16 * 1024 * 1024;
 
 /** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */

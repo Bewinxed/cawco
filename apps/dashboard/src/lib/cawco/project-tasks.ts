@@ -13,6 +13,7 @@
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ExternalComment, ExternalRef } from "@cawco/core/external-items";
 import type { LandsMode } from "@cawco/core/injected";
+import { shortSha } from "@cawco/core/short-id";
 import type {
   ProjectStarter,
   StarterGlyph,
@@ -146,7 +147,7 @@ export function landedOf(
 ): string[] {
   const said = [task.description, ...task.comments.map((entry) => entry.text)];
   const shas = said.flatMap((text) =>
-    [...text.matchAll(LANDED)].map((match) => (match[1] ?? "").slice(0, 9))
+    [...text.matchAll(LANDED)].map((match) => shortSha(match[1] ?? ""))
   );
   return [...new Set(shas)];
 }

@@ -70,6 +70,7 @@
   type Group = "open" | "sent" | "decided";
 
   /** How many rows Sent and Decided show before their reveal. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const SHOWN = 6;
   /** The list's four edges: mark, title, fact, age; in a narrow pane the fact goes under the title. */
   const COLS =
@@ -90,7 +91,10 @@
     q
       ? [...new Set([...page.questions, ...page.answers])]
           .filter(has)
-          .slice(0, 3)
+          .slice(
+            0,
+            /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ 3
+          )
       : [];
   const found = (page: DecisionPageSummary) =>
     !q || has(page.title) || hitsOf(page).length > 0;

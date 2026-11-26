@@ -5,12 +5,14 @@ import "#lib/platform/frame-observer.js";
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 import { reportError, reportErrorsTo } from "#lib/cawco/error-report.js";
 import { holdReadsWhileLeaving } from "#lib/cawco/leaving.js";
+import { carryLimitReadings } from "#lib/cawco/limit-readings.js";
 import { claimRegionDrop } from "#lib/cawco/region-held.js";
 import { version } from "$app/env";
 
 export const init: ClientInit = () => {
   holdReadsWhileLeaving();
   reportErrorsTo("dashboard", version);
+  carryLimitReadings();
 };
 
 /**

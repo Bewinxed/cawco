@@ -74,33 +74,6 @@ export interface SettledBy {
 /** A member's id, as `settled.by` names it (core decides.ts `DECIDES_ID`). */
 const MEMBER_ID = /^[a-z][a-z0-9-]{0,62}$/u;
 
-/**
- * The bridge's bounds, the same at both ends: the pane checks what the page
- * posts (wire.ts) and the hub checks what the pane sends. An id is refused
- * past its bound, never cut, since a cut id would be another id.
- */
-export const CHOICE_LIMITS = {
-  /** A choice's id, or a key `cawco.set` writes. */
-  id: 200,
-  option: 200,
-  /** Options one multiple choice can hold at once. */
-  options: 50,
-  note: 2000,
-  /** A set value, as JSON. */
-  value: 2000,
-  /** A settled pick's why. */
-  why: 2000,
-  /** A settled pick's member name, and what it ran on. */
-  name: 80,
-  runs: 200,
-  /** A settled pick's sources, and each one's length. */
-  sources: 20,
-  source: 2000,
-  /** The person's words a recorded pick quotes. */
-  quote: 500,
-  /** Ids one artifact's `state` keeps. */
-  perArtifact: 500,
-} as const;
 /** An id or option: no control characters, no spaces at either end. */
 const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
 export const PAGE_HASH = /^[0-9a-f]{64}$/u;
@@ -155,20 +128,20 @@ export const answersIn = <Entry>(
     Object.entries(state).filter(([key]) => !TRIAL_KEYS.has(key))
   );
 
-const isChoiceId = (value: unknown, max: number): value is string =>
-  typeof value === "string" && value.length <= max && CHOICE_ID.test(value);
+const isChoiceId = (value: unknown): value is string =>
+  typeof value === "string" && CHOICE_ID.test(value);
 
 /**
  * Why `entry` is not an entry an artifact's `state` may hold under `key`, or
- * null when it is: the bounds of {@link CHOICE_LIMITS}, checked by the pane
- * before it writes and by the hub before it keeps a write.
+ * null when it is: checked by the pane before it writes and by the hub
+ * before it keeps a write.
  */
 export const choiceEntryProblem = (
   key: string,
   entry: unknown
 ): string | null => {
-  if (!isChoiceId(key, CHOICE_LIMITS.id)) {
-    return `A choice's id must be 1 to ${CHOICE_LIMITS.id} characters, with no control characters and no spaces at either end.`;
+  if (!isChoiceId(key)) {
+    return "A choice's id must be 1 or more characters, with no control characters and no spaces at either end.";
   }
   if (
     entry === null ||
@@ -188,17 +161,8 @@ export const choiceEntryProblem = (
   if (!PAGE_HASH.test(entry.pageHash)) {
     return `${key}'s pageHash must be the page's sha256, hex.`;
   }
-  if (entry.options.length > CHOICE_LIMITS.options) {
-    return `A choice holds at most ${CHOICE_LIMITS.options} options.`;
-  }
-  if (!entry.options.every((one) => isChoiceId(one, CHOICE_LIMITS.option))) {
-    return `An option must be 1 to ${CHOICE_LIMITS.option} characters, with no control characters and no spaces at either end.`;
-  }
-  if ((entry.note ?? "").length > CHOICE_LIMITS.note) {
-    return `A note stops at ${CHOICE_LIMITS.note} characters.`;
-  }
-  if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
-    return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
+  if (!entry.options.every((one) => isChoiceId(one))) {
+    return "An option must be 1 or more characters, with no control characters and no spaces at either end.";
   }
   return (
     dismissedProblem(key, entry, entry.options) ??
@@ -282,8 +246,8 @@ const fromProblem = (given: unknown): string | null => {
   ) {
     return "from holds quote, session, and one of pin or message.";
   }
-  return given.quote.length === 0 || given.quote.length > CHOICE_LIMITS.quote
-    ? `A recorded pick's quote is 1 to ${CHOICE_LIMITS.quote} characters.`
+  return given.quote.length === 0
+    ? "A recorded pick's quote is 1 or more characters."
     : null;
 };
 
@@ -314,28 +278,19 @@ const settledProblem = (given: unknown): string | null => {
   ) {
     return "settled holds by (a member's id), name, runs, session, why and sources.";
   }
-  if (given.name.length === 0 || given.name.length > CHOICE_LIMITS.name) {
-    return `A settled pick's name is 1 to ${CHOICE_LIMITS.name} characters.`;
+  if (given.name.length === 0) {
+    return "A settled pick's name is 1 or more characters.";
+  }
+  if (given.runs !== null && given.runs.length === 0) {
+    return "A settled pick's runs is null or 1 or more characters.";
+  }
+  if (given.why.length === 0) {
+    return "A settled pick's why is 1 or more characters.";
   }
   if (
-    given.runs !== null &&
-    (given.runs.length === 0 || given.runs.length > CHOICE_LIMITS.runs)
+    !given.sources.every((one) => typeof one === "string" && one.length > 0)
   ) {
-    return `A settled pick's runs is null or 1 to ${CHOICE_LIMITS.runs} characters.`;
-  }
-  if (given.why.length === 0 || given.why.length > CHOICE_LIMITS.why) {
-    return `A settled pick's why is 1 to ${CHOICE_LIMITS.why} characters.`;
-  }
-  if (
-    given.sources.length > CHOICE_LIMITS.sources ||
-    !given.sources.every(
-      (one) =>
-        typeof one === "string" &&
-        one.length > 0 &&
-        one.length <= CHOICE_LIMITS.source
-    )
-  ) {
-    return `A settled pick names at most ${CHOICE_LIMITS.sources} sources, each 1 to ${CHOICE_LIMITS.source} characters.`;
+    return "A settled pick's sources are each 1 or more characters.";
   }
   return null;
 };

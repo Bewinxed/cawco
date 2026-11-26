@@ -68,7 +68,6 @@
  * link is down, wins every merge, and every copy converges on "deleted".
  */
 
-import { CHOICE_LIMITS } from "../choices";
 import { type MapChange, type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
 import { getMeta, setMeta } from "../doc-meta";
@@ -91,36 +90,22 @@ export const previewMode = (value: unknown): PreviewMode | null =>
   PREVIEW_MODES.find((mode) => mode === value) ?? null;
 
 /** The longest `writes` a Send carries, in base64 characters. Our call: a page's own picks, pins and ink are a few KB. */
+// @limit recording: hub.send-body-chars until 2026-12-10
 export const SEND_WRITES_MAX = 4 * 1024 * 1024;
 
-/** The longest send body read: its text and the page's writes at their bounds, as JSON. */
-export const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + SEND_WRITES_MAX + 4096;
+/** The longest send body read: the page's writes at their bound, as JSON, and the text and pins round them. */
+export const SEND_BODY_MAX = SEND_WRITES_MAX + 4096;
 
 export const COMMENT_LIMITS = {
-  /** Pins an artifact keeps. */
-  pins: 200,
-  /** Deleted pins' tombstones an artifact keeps (the doc's `gone`). Our call: five artifacts' worth of pins. */
-  gone: 1000,
   /**
    * Bytes the comments of one artifact hold, every pin's thread together: the
    * size of a send body ({@link SEND_BODY_MAX}), which the hub already reads
    * whole. This is what bounds a thread; no count of entries or files does.
    */
   bytes: SEND_BODY_MAX,
-  /** Characters one thread entry holds: what a send's text holds (`CHOICE_LIMITS.note`), which a held note rides in. */
-  text: CHOICE_LIMITS.note,
-  /** Pictures, texts and files one entry carries (attachments design §1). */
-  attachments: 10,
-  /** Characters an attachment's name holds. Our call. */
-  attachmentName: 300,
   /** Characters one named file holds: Linux's PATH_MAX, the longest path a file can have there. */
+  // @limit external: Linux's PATH_MAX, 4,096 bytes, the longest path a file can have there (limits.h, path_resolution(7))
   file: 4096,
-  /** Characters of the element's text an anchor keeps. */
-  anchorText: 200,
-  /** Pictures one post carries, and one delivery's message: one crop per mark; marks past it are posted in more posts and named in the delivery. Our call. */
-  pictures: 20,
-  /** Base64 characters one picture holds, about 2.2 MB of PNG. Our call. */
-  pictureChars: 3_000_000,
 } as const;
 
 /**
@@ -660,23 +645,31 @@ export interface ActivityLine {
   answered: boolean;
   at: string;
   before?: string;
-  /** On the oldest line kept alone: how many lines before it were let go past {@link ACTIVITY_LIMIT}. */
+  /** On the oldest line kept alone: how many lines before it were let go for want of room ({@link keptActivity}). */
   earlier?: number;
   element: string;
   moved?: { after: string; before: string };
   revision: number;
 }
 
-/** Characters a change keeps of an element's words before and after: a paragraph's, never a page's. Our call. */
-export const CHANGE_WORDS_MOST = 600;
+const bytesOfLines = (lines: readonly ActivityLine[]): number =>
+  new TextEncoder().encode(JSON.stringify(lines)).length;
 
-/** Lines one pin's thread keeps of what changed for it, newest last. Our call. */
-const ACTIVITY_LIMIT = 30;
-
-/** `lines` held to {@link ACTIVITY_LIMIT}: the oldest let go, the count of all let go carried on the oldest kept. */
-export function keptActivity(lines: ActivityLine[]): ActivityLine[] {
-  const cut = lines.length - ACTIVITY_LIMIT;
-  if (cut <= 0) {
+/**
+ * `lines` held to `room` bytes: the oldest let go while they are over it,
+ * never the newest, the count of all let go carried on the oldest kept
+ * (`earlier`). A pin's lines are held by bytes as its thread is
+ * ({@link COMMENT_LIMITS}`.bytes`); no count of lines does.
+ */
+export function keptActivity(
+  lines: ActivityLine[],
+  room: number
+): ActivityLine[] {
+  let cut = 0;
+  while (cut < lines.length - 1 && bytesOfLines(lines.slice(cut)) > room) {
+    cut += 1;
+  }
+  if (cut === 0) {
     return lines;
   }
   const [first, ...rest] = lines.slice(cut);
@@ -779,7 +772,7 @@ export function carryChanges(
         : {}),
     };
   });
-  return [...unseen.values(), ...merged].slice(0, CHANGES_LIMIT);
+  return [...unseen.values(), ...merged];
 }
 
 /** Each pin's change lines from one revision's items (`bindChanges`'s), by pin id: what the doc's `activity` gains. */
@@ -837,11 +830,12 @@ export function answerChanges(
   return { items, bound };
 }
 
-/** Pin `pin`'s change lines with `bound` (an answer's, {@link answerChanges}) in: each line of theirs answered, each new one added, the oldest let go past {@link ACTIVITY_LIMIT}. */
+/** Pin `pin`'s change lines with `bound` (an answer's, {@link answerChanges}) in: each line of theirs answered, each new one added, the oldest let go past `room` bytes ({@link keptActivity}). */
 export function answeredLines(
   lines: readonly ActivityLine[],
   bound: readonly ChangedItem[],
-  at: string
+  at: string,
+  room: number
 ): ActivityLine[] {
   const fresh = activityLines(bound, at).get(bound[0]?.pin ?? "") ?? [];
   const next = lines.map((line) => {
@@ -856,11 +850,8 @@ export function answeredLines(
         (line) => line.anchor === one.anchor && line.revision === one.revision
       )
   );
-  return keptActivity([...next, ...added]);
+  return keptActivity([...next, ...added], room);
 }
-
-/** Items one revision's changes keep. Our call: past it, the page changed whole. */
-export const CHANGES_LIMIT = 100;
 
 /**
  * The person's looks at what revisions changed (the doc's `seen` map): per
@@ -878,7 +869,7 @@ export function seeChanges(
   const seen = seenOf(doc);
   const key = String(revision);
   const was = seen.get(key) ?? [];
-  const next = [...new Set([...was, ...anchors])].slice(0, CHANGES_LIMIT);
+  const next = [...new Set([...was, ...anchors])];
   if (next.length > was.length) {
     doc.transact(() => {
       // Only the latest revision's looks are worth keeping: the next replaces the set.
@@ -905,16 +896,12 @@ export const attachmentsProblem = (attachments: unknown): string | null => {
   if (!Array.isArray(attachments)) {
     return "An entry's attachments are a list.";
   }
-  if (attachments.length > COMMENT_LIMITS.attachments) {
-    return `A comment carries at most ${COMMENT_LIMITS.attachments} attachments.`;
-  }
   const whole = (one: unknown) =>
     isObject(one) &&
     typeof one.kind === "string" &&
     ATTACHMENT_KINDS.has(one.kind) &&
     typeof one.name === "string" &&
     one.name.length > 0 &&
-    one.name.length <= COMMENT_LIMITS.attachmentName &&
     typeof one.ref === "string" &&
     FILE_REF.test(one.ref) &&
     typeof one.size === "number" &&
@@ -1033,6 +1020,7 @@ export const newId = (): string => {
   // biome-ignore lint/suspicious/noBitwiseOperators: RFC 4122's variant bits
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+  // @limit external: RFC 9562 section 4: a UUID is 8-4-4-4-12 hex digits, and these are its first 4 bytes
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 };
 
@@ -1206,12 +1194,6 @@ function personEntry(
   const again = what === "comment" ? "comment again" : "reply again";
   if (!(text || attachments.length > 0)) {
     return `This ${what} has no words and nothing attached, so it wasn't kept. Write something or attach a file, then ${again}.`;
-  }
-  if (text.length > COMMENT_LIMITS.text) {
-    return `A ${what} holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so this one wasn't kept. Shorten it, then ${again}.`;
-  }
-  if (attachments.length > COMMENT_LIMITS.attachments) {
-    return `A ${what} takes up to ${COMMENT_LIMITS.attachments} files, so this one wasn't kept. Remove one, then ${again}.`;
   }
   const problem = attachmentsProblem(attachments);
   if (problem) {
@@ -1483,6 +1465,21 @@ export const threadBytes = (pins: Iterable<Pin>): number => {
 export const threadBytesOf = (thread: readonly ThreadEntry[]): number =>
   new TextEncoder().encode(JSON.stringify(thread)).length;
 
+/**
+ * The bytes pin `pin`'s change lines may hold: what the artifact's comments
+ * leave of {@link COMMENT_LIMITS}`.bytes` after every pin's thread and every
+ * other pin's lines.
+ */
+export const activityRoom = (doc: MapDoc, pin: string): number => {
+  let held = threadBytes(readPins(doc).values());
+  for (const [id, lines] of activityOf(doc).entries()) {
+    if (id !== pin) {
+      held += bytesOfLines(lines);
+    }
+  }
+  return COMMENT_LIMITS.bytes - held;
+};
+
 /** The bytes one entry adds to its thread. */
 export const entryBytes = (entry: ThreadEntry): number =>
   new TextEncoder().encode(JSON.stringify(entry)).length;
@@ -1535,9 +1532,6 @@ export function commentOn(
   id: string = newId()
 ): Pin | string {
   const pins = headsOf(doc);
-  if (pins.size >= COMMENT_LIMITS.pins) {
-    return `A page keeps ${COMMENT_LIMITS.pins} comments, so this one wasn't kept. Delete one, then comment again.`;
-  }
   const entry = personEntry(said, "comment");
   if (typeof entry === "string") {
     return entry;
@@ -1594,9 +1588,6 @@ export function deletePin(doc: MapDoc, pin: string): string | null {
   const held = places.get(pin);
   if (!(held && headsOf(doc).has(pin))) {
     return "This pin is gone from the page already, so there was nothing to delete.";
-  }
-  if (goneOf(doc).size >= COMMENT_LIMITS.gone) {
-    return `A page keeps track of ${COMMENT_LIMITS.gone.toLocaleString()} deleted comments, so this one wasn't deleted. Resolve it instead.`;
   }
   const shared = [...places.entries()].some(
     ([other, place]) => other !== pin && !!held.ink && place.ink === held.ink

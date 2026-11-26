@@ -54,7 +54,9 @@ import {
   type Query,
 } from "@cawco/core/find-match";
 import { harnessLabel } from "@cawco/core/harness/kinds";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
@@ -68,18 +70,21 @@ import { type FindIndex, type Names, sessionKey } from "./find-index";
 import { cursorAt, DEFAULT_LIMIT } from "./pages";
 import type { ViewMachine } from "./read";
 
+// @limit measured: a page; the next page's cursor rides the answer. 50 is the rows one page returns
 const MAX_LIMIT = 50;
 
 /** How long an answer that asked the machines is kept for its next pages, ms. */
+// @limit recording: hub.find-page-age-ms until 2026-12-10
 const PAGE_KEPT_MS = 60_000;
+// @limit recording: hub.find-pages-held until 2026-12-03
 const PAGES_KEPT = 16;
 
 /**
  * How many of one author's words a listing (no words, a `by`) reads, newest
- * first: from each machine's index (agent search/index.ts, the same bound).
- * Older words are the next listing's,
- * asked `before` the last one read (find-tool.ts pages so).
+ * first: the page it asks each machine's index for. Older words are the next
+ * listing's, asked `before` the last one read (find-tool.ts pages so).
  */
+// @limit measured: a page; the next page's cursor rides the answer. 200 is the documents one listing reads
 const LISTED_DOCS = 200;
 
 /** A conversation's moments; none for anything else. */
@@ -305,7 +310,7 @@ const storedConversation = (
     sessionId: hit.sessionId,
     harness: hit.harness,
     handle: null,
-    title: dir ?? hit.sessionId.slice(0, 8),
+    title: dir ?? shortId(hit.sessionId),
     purpose: null,
     lastReport: null,
     children: { count: 0, needsYou: 0 },
@@ -406,7 +411,11 @@ export const createFindEngine = (deps: EngineDeps) => {
     string,
     {
       answer: FindResult[];
+      /** How many conversations each machine was asked for. */
+      asked: number;
       at: number;
+      /** How many more conversations the machines that filled their ask match, beyond it. */
+      beyond: number;
       coverage: FindCoverage;
       transcriptsMs: number | null;
     }
@@ -834,6 +843,7 @@ export const createFindEngine = (deps: EngineDeps) => {
       .toSorted((a, b) => newestOf(b) - newestOf(a));
     return {
       ranked,
+      beyond: 0,
       // A machine that gave all it may leaves older words unread: the
       // listing's reader pages on from before its last (find-tool.ts).
       atLimit: asked.some(
@@ -890,6 +900,7 @@ export const createFindEngine = (deps: EngineDeps) => {
           : (a: FindResult, b: FindResult) => b.score - a.score;
       return {
         ranked: kept(matched.found.values()).toSorted(order),
+        beyond: 0,
         coverage: {
           asked: false,
           machines: unasked(matched.held.machines, liveNow),
@@ -926,6 +937,15 @@ export const createFindEngine = (deps: EngineDeps) => {
     );
     return {
       ranked: said.toSorted((a, b) => b.score - a.score),
+      // A machine that filled its ask has more than it gave: the next page asks for them.
+      beyond: asked.reduce(
+        (sum, each) =>
+          each.answer?.matched !== undefined &&
+          each.answer.conversations.length >= limit
+            ? sum + each.answer.matched - each.answer.conversations.length
+            : sum,
+        0
+      ),
       coverage: askedCoverage(asked),
       namesMs,
       transcriptsMs: Math.round(performance.now() - askedAt),
@@ -956,11 +976,21 @@ export const createFindEngine = (deps: EngineDeps) => {
       request.where ?? {},
     ]);
     const kept = paging ? pages.get(key) : undefined;
-    if (kept && Date.now() - kept.at < PAGE_KEPT_MS) {
+    if (kept) {
+      // A next page asked of a kept answer: how long after it was kept.
+      recordLimitReading("hub.find-page-age-ms", Date.now() - kept.at);
+    }
+    // Kept while it holds what the page asks for: a machine that filled its ask has more, asked again for as many as this page reaches.
+    if (
+      kept &&
+      Date.now() - kept.at < PAGE_KEPT_MS &&
+      (kept.beyond === 0 || kept.asked >= limit || kept.answer.length >= limit)
+    ) {
       // A session purged since the first page is on none after it.
       const purged = index.purged();
       return {
         ranked: kept.answer.filter((result) => !purgedOut(result, purged)),
+        beyond: kept.beyond,
         coverage: kept.coverage,
         namesMs: 0,
         transcriptsMs: kept.transcriptsMs,
@@ -970,10 +1000,13 @@ export const createFindEngine = (deps: EngineDeps) => {
     if (fresh.transcriptsMs !== null) {
       pages.set(key, {
         answer: fresh.ranked,
+        asked: limit,
         at: Date.now(),
+        beyond: fresh.beyond,
         coverage: fresh.coverage,
         transcriptsMs: fresh.transcriptsMs,
       });
+      recordLimitReading("hub.find-pages-held", pages.size);
       while (pages.size > PAGES_KEPT) {
         const [oldest] = pages.keys();
         pages.delete(oldest);
@@ -1021,18 +1054,20 @@ export const createFindEngine = (deps: EngineDeps) => {
         request,
         query,
         kinds,
-        request.where ? MAX_LIMIT : Math.min(offset + limit, MAX_LIMIT),
+        request.where ? Math.max(MAX_LIMIT, offset + limit) : offset + limit,
         offset > 0,
         started,
         liveNow
       );
       const page = fresh.ranked.slice(offset, offset + limit);
       const end = offset + page.length;
+      // What the machines matched in all, not only what they gave: the page's next asks for more of it.
+      const total = fresh.ranked.length + fresh.beyond;
       const found: FindPage = {
         query: query.words.join(" "),
         results: page,
-        next: end < fresh.ranked.length ? cursorAt(end) : null,
-        total: fresh.ranked.length,
+        next: end < total ? cursorAt(end) : null,
+        total,
         coverage: fresh.coverage,
         leftOut: leftOutNow(liveNow),
         timing: { namesMs: fresh.namesMs, transcriptsMs: fresh.transcriptsMs },

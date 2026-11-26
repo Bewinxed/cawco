@@ -23,9 +23,11 @@
  * the stylesheet's parking places take over again.
  */
 import { flushSync } from "svelte";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import {
   integrate,
   spring as play,
+  Release,
   type Sample,
 } from "#lib/platform/motion/spring.js";
 import { catchSettle, gatherParked, type Parked } from "./parked";
@@ -43,9 +45,8 @@ const COMMIT = 0.35;
 const FLICK = 110;
 /** How far ahead a release looks, in seconds of the release velocity. */
 const LOOKAHEAD = 0.1;
-/** How much of a drag past the end is shown, and the most it can show. */
+/** How much of a drag past the end is shown (the most it can show is --resist-max). */
 const RESIST = 0.35;
-const RESIST_MAX = 0.25;
 /**
  * The last stretch of the spring, as a fraction of the height. Inside it and
  * slowing, the card sets down while it is still moving, so the scale-up and
@@ -53,8 +54,6 @@ const RESIST_MAX = 0.25;
  * that fires after it has stopped.
  */
 const LAND = 0.06;
-/** Velocity samples older than this say nothing about the release. */
-const VELOCITY_WINDOW = 80;
 
 type Phase = "idle" | "armed" | "claimed";
 /** A card in view: its element and its distance from the focus. */
@@ -79,7 +78,8 @@ export function createDeck(
   let startY = 0;
   /** Where the focused card was when the fingers took hold — mid-settle, not 0. */
   let base = 0;
-  let samples: Array<{ y: number; t: number }> = [];
+  /** Where the fingers' midpoint was drawn, for the speed they let go at. */
+  const hand = new Release();
   /** The cards in view, gathered at claim and again after a focus flip. */
   let cards: Card[] = [];
   /** The settle in flight: its path, the animations playing it, the set-down timer. */
@@ -144,25 +144,11 @@ export function createDeck(
   };
 
   const resist = (d: number) =>
-    Math.sign(d) * Math.min(Math.abs(d) * RESIST, height * RESIST_MAX);
+    Math.sign(d) *
+    Math.min(Math.abs(d) * RESIST, height * numberOf("--resist-max"));
 
-  /** Release velocity in px/s, from the samples of the last few dozen ms. */
-  const releaseVelocity = () => {
-    if (samples.length < 2) {
-      return 0;
-    }
-    // biome-ignore lint/style/useAtIndex: samples has >= 2 elements here (checked above); .at(-1) would widen to undefined
-    const last = samples[samples.length - 1];
-    let [first] = samples;
-    for (const sample of samples) {
-      if (last.t - sample.t <= VELOCITY_WINDOW) {
-        first = sample;
-        break;
-      }
-    }
-    const dt = last.t - first.t;
-    return dt > 0 ? ((last.y - first.y) / dt) * 1000 : 0;
-  };
+  /** Release velocity in px/s, from the hand's last 80 ms (`Release`). */
+  const releaseVelocity = () => hand.velocity() * 1000;
 
   /**
    * The settle, played by the compositor. The path is integrated here and
@@ -301,7 +287,8 @@ export function createDeck(
         const mid = midpoint(event.touches);
         startX = mid.x;
         startY = mid.y;
-        samples = [{ y: mid.y, t: performance.now() }];
+        hand.clear();
+        hand.push(mid.y, performance.now());
         phase = "armed";
         caught.hold();
       };
@@ -322,10 +309,7 @@ export function createDeck(
         const dx = mid.x - startX;
         const dy = mid.y - startY;
 
-        samples.push({ y: mid.y, t: performance.now() });
-        if (samples.length > 5) {
-          samples.shift();
-        }
+        hand.push(mid.y, performance.now());
 
         if (phase === "armed") {
           if (Math.abs(dy) <= SLOP || Math.abs(dy) <= Math.abs(dx) * SLOPE) {

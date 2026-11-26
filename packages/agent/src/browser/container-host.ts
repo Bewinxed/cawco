@@ -787,6 +787,7 @@ export class ContainerHost implements BrowserHost {
     devtools: string,
     placement: Placement
   ): Promise<MachineNetwork | undefined> {
+    // @limit external: Docker's short container id, 12 hex characters
     const id = handle.id.slice(0, 12);
     const restarted = await restartChromium(handle).then(
       (said) => `restarted (${said})`,

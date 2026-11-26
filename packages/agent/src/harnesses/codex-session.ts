@@ -1165,6 +1165,7 @@ class CodexSession implements HarnessSession {
       }
       return Promise.resolve(this.#setMode(offered));
     },
+    // @limit external: Codex app-server's page size for model/list (codex-protocol/v2.gen.ts ModelListParams.limit)
     [CONTROL_SUPPORTED_MODELS]: async () =>
       (await this.#peer.request("model/list", { limit: 100 })).data,
     [CONTROL_SUPPORTED_COMMANDS]: () => this.#commands(),

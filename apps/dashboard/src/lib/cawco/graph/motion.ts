@@ -432,8 +432,8 @@ export function partsOf(track: Track): Part[] {
 export const delayOf = (track: Track): number =>
   track.begins - Math.min(...track.clips.map((clip) => clip.start));
 
-/** A run's drag step and an arrow's, ms; Shift and an arrow, ms. */
-export const RUN_STEP = 10;
+/** A run's drag step and an arrow's, ms (`--duration-run-step`); Shift and an arrow, ms. */
+export const runStep = (): number => dur("--duration-run-step");
 export const RUN_BIG_STEP = 100;
 
 /*
@@ -456,7 +456,7 @@ const clampRunMove = (
 
 /** A run's length as its end's drag or arrow leaves it: a step at least, inside the lane. */
 const clampRunResizeEnd = (length: number, at: number, end: number): number =>
-  clamp(length, RUN_STEP, end - at);
+  clamp(length, runStep(), end - at);
 
 /** A run's start and length as its start's drag or arrow leaves them: never before its floor, a step long at least. */
 const clampRunResizeStart = (
@@ -465,7 +465,7 @@ const clampRunResizeStart = (
   length: number,
   floor: number
 ): { at: number; length: number } => {
-  const begins = clamp(next, floor, at + length - RUN_STEP);
+  const begins = clamp(next, floor, at + length - runStep());
   return { at: begins, length: at + length - begins };
 };
 
@@ -478,7 +478,7 @@ export type RunPart = "body" | "start" | "end";
  */
 const snapRun = (part: RunPart, ms: number, free: boolean): number =>
   part === "body" || free
-    ? Math.round(ms / RUN_STEP) * RUN_STEP
+    ? Math.round(ms / runStep()) * runStep()
     : snapLength(ms);
 
 /** The other bars' edges a run's moving edge settles on, and how near it must come, ms. */

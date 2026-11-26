@@ -19,6 +19,7 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   type AnimationRead,
   FORMS,
@@ -34,6 +35,7 @@ import {
 } from "@cawco/core/stage";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
+import { firstNames } from "@cawco/providers/names";
 import { stillPage } from "./held-scroll";
 import {
   deltaOf,
@@ -77,23 +79,22 @@ const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
 const FOCUSABLE =
   'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
 /** How long a move may play before it is read as stuck. Ours. */
+// @limit recording: agent.story-play-ms until 2026-12-10
 const PLAY_LIMIT_MS = 6000;
 /** How long a move's animations are waited on after its play ends. Ours. */
+// @limit recording: agent.story-settle-ms until 2026-12-10
 const SETTLE_LIMIT_MS = 3000;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
 /** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
 const ROW_GAP = 24;
 
-/** What the canvas could not force, the first 20 and a notice of how many more there were. */
+/** What the canvas could not force, the first few and a notice of how many more there were. */
 const notForcedSaid = (refused: ReadonlySet<string>): string[] => {
-  const all = [...refused];
-  return all.length > 20
-    ? [
-        ...all.slice(0, 20),
-        stageRenderWords.andMore(all.length - 20, "not forced"),
-      ]
-    : all;
+  const { more, shown } = firstNames([...refused]);
+  return more > 0
+    ? [...shown, stageRenderWords.andMore(more, "not forced")]
+    : shown;
 };
 
 /** A probe step run as one task, named for the page's timeline (`cawco probe`, its interaction and phase in its detail). */
@@ -414,6 +415,7 @@ export function readerOf(page: Page): Reader {
     requestAnimationFrame(watch);
     let current = { ...args };
     try {
+      const playing = performance.now();
       const played = await readWithin(PLAY_LIMIT_MS, async () =>
         play({
           args: current,
@@ -428,6 +430,7 @@ export function readerOf(page: Page): Reader {
           },
         })
       );
+      recordLimitReading("agent.story-play-ms", performance.now() - playing);
       if (played.kind === "unanswered") {
         throw new Error(`${to}'s play ran past ${PLAY_LIMIT_MS / 1000} s.`);
       }
@@ -436,7 +439,8 @@ export function readerOf(page: Page): Reader {
       // waits once to the end and does not spin; a run one of them starts
       // as it ends is seen on the frame after.
       look();
-      const end = performance.now() + SETTLE_LIMIT_MS;
+      const settling = performance.now();
+      const end = settling + SETTLE_LIMIT_MS;
       let running = [...seen].filter((one) => one.playState === "running");
       while (running.length > 0 && performance.now() < end) {
         await readWithin(Math.max(0, end - performance.now()), () =>
@@ -446,6 +450,7 @@ export function readerOf(page: Page): Reader {
         look();
         running = [...seen].filter((one) => one.playState === "running");
       }
+      recordLimitReading("agent.story-settle-ms", performance.now() - settling);
       if (running.length > 0) {
         move.stillRunning = running.length;
       }

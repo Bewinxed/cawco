@@ -68,6 +68,7 @@ export const runStores = async (): Promise<void> => {
   await writer.work("sync", Date.now());
   const found = await reader.read("search", {
     query: WORD,
+    // @limit measured: a page; the smoke reads only the first page of its search, and the word it looks for is in the first few
     options: { limit: 20 },
   });
   reader.close();

@@ -54,6 +54,7 @@ import {
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink, stepLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { planWords } from "@cawco/core/words/plan";
@@ -851,7 +852,7 @@ export const createPlans = (deps: PlansDeps) => {
       }
     }
     console.info(
-      `[plans] ${row.id.slice(0, 8)}: its plan completed ${[...ticks.values()].flat().length} to-do(s), ticked`
+      `[plans] ${shortId(row.id)}: its plan completed ${[...ticks.values()].flat().length} to-do(s), ticked`
     );
   };
 

@@ -34,6 +34,7 @@ import {
 import type { readFolderFile } from "./project-folder";
 
 /** The largest page the hub publishes. */
+// @limit measured: the largest update of a page artifact is 804 KiB, an upper bound for the page field (artifact_updates on obelisk, 2026-11-26)
 export const PAGE_LIMIT = 512 * 1024;
 
 const PLACEHOLDER = /\{\{([^}]+)\}\}/gu;

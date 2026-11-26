@@ -20,7 +20,7 @@ as-cast	(typeof work)[number]	scripts/lib/import-graph.ts	1
 as-cast	(value: unknown) => void	packages/agent/src/stores/client.ts	1
 as-cast	(value: unknown) => void	packages/agent/src/search/process.ts	2
 as-cast	(Window & typeof globalThis) | null	packages/preview/src/overlay/frames.ts	1
-as-cast	[ (typeof found)[number], (typeof found)[number], (typeof found)[number]	scripts/border-width-check.ts	1
+as-cast	[ (typeof found)[number], (typeof found)[number], (typeof found)[number], ]	scripts/border-width-check.ts	1
 as-cast	[ keyof typeof SECRET_VARIABLES, string, ][]	scripts/release-signing.ts	1
 as-cast	[ number, number, number, ]	scripts/codemods/lib/theme-measure.ts	1
 as-cast	[ number, number, number, ]	scripts/codemods/theme-audit.ts	1
@@ -32,14 +32,14 @@ as-cast	[string, string, string]	scripts/lib/ratchet.ts	1
 as-cast	[string, string]	packages/hub/scripts/agent-calls.ts	1
 as-cast	[string, string]	packages/hub/scripts/shipped.ts	1
 as-cast	{ __cawcoSheetsOnPage?: Record<string, object> }	packages/preview/src/overlay/page.ts	1
-as-cast	{ [STAMPED_KEY]?: unknown; response_format?: ResponseFormat; } & z.infer	packages/hub/src/mcp-tool.ts	1
+as-cast	{ [STAMPED_KEY]?: unknown; response_format?: ResponseFormat; } & z.infer<z.ZodObject<T>>	packages/hub/src/mcp-tool.ts	1
 as-cast	{ action: string } & Partial<z.infer<z.ZodObject<T>>>	packages/hub/src/admin-tools.ts	2
 as-cast	{ action: string } & Record<string, unknown>	packages/hub/src/admin-tools.ts	1
-as-cast	{ anchor?: unknown; elements?: unknown; inkId?: unknown; point?: { x?: u	packages/preview/src/overlay/page.ts	1
-as-cast	{ anchors?: unknown; box?: unknown; seq?: unknown; type?: unknown; near?	packages/preview/src/overlay/embeds.ts	1
-as-cast	{ artifact: Parameters<typeof artifact.join>[0]; sync: Parameters<typeof	packages/preview/src/overlay/page.ts	1
+as-cast	{ anchor?: unknown; elements?: unknown; inkId?: unknown; point?: { x?: unknown; y?: unknown }; } | null	packages/preview/src/overlay/page.ts	1
+as-cast	{ anchors?: unknown; box?: unknown; seq?: unknown; type?: unknown; near?: unknown; x?: unknown; y?: unknown; } | null	packages/preview/src/overlay/embeds.ts	1
+as-cast	{ artifact: Parameters<typeof artifact.join>[0]; sync: Parameters<typeof artifact.join>[1]; }	packages/preview/src/overlay/page.ts	1
 as-cast	{ at: number; }	scripts/binary/e2e-db-rows.ts	1
-as-cast	{ author: DocAuthor; doc_id: string; id: number; output: string | null; 	packages/jsonl-parser/src/fts5.ts	1
+as-cast	{ author: DocAuthor; doc_id: string; id: number; output: string | null; role: string; sidechain: number; text: string; thinking: string | null; tools: string | null; ts: string | null; }[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ bareScroll?: unknown }	packages/preview/src/overlay/page.ts	1
 as-cast	{ bottom?: unknown; side?: unknown; top?: unknown } | undefined	packages/preview/src/overlay/page.ts	1
 as-cast	{ c: number }	packages/jsonl-parser/src/fts5.ts	1
@@ -52,7 +52,7 @@ as-cast	{ default: { packages: Record<string, [string, ...unknown[]]> }; }	scrip
 as-cast	{ default: { patchedDependencies?: Record<string, string> }; }	scripts/patched-dependencies-check.ts	1
 as-cast	{ definitions?: Record<string, Schema> }	packages/hub/scripts/openapi.ts	1
 as-cast	{ diagnostics: Diagnostic[] }	scripts/lib/biome-run.ts	1
-as-cast	{ ds: { candidatesToCss: (c: string[]) => (string | null)[]; theme: { va	scripts/codemods/type-roles.ts	1
+as-cast	{ ds: { candidatesToCss: (c: string[]) => (string | null)[]; theme: { values: Map<string, { value: string }> }; }; }	scripts/codemods/type-roles.ts	1
 as-cast	{ ds: DesignSystem }	scripts/codemods/lib/tailwind-reads.ts	1
 as-cast	{ ds: DesignSystem }	scripts/codemods/theme-prune.ts	1
 as-cast	{ entries: { idx: number; tag: string; when: number }[] }	packages/hub/scripts/migrations-check.ts	1
@@ -60,17 +60,18 @@ as-cast	{ entries: { idx: number; tag: string; when: number }[] }	scripts/binary
 as-cast	{ entries: { url: string }[]; currentIndex: number }	scripts/takeover-bench.ts	1
 as-cast	{ entries: unknown[] }	scripts/release/steps/version.ts	1
 as-cast	{ environment?: unknown } | undefined	apps/cawrier/src/storekit.ts	1
-as-cast	{ errors?: unknown; found?: unknown; png?: unknown; seq?: unknown; targe	packages/preview/src/overlay/embeds.ts	1
-as-cast	{ event?: { frame?: { kind?: string }; sessionId?: string }; instanceId?	scripts/binary/smoke-stack.ts	1
+as-cast	{ errors?: unknown; found?: unknown; png?: unknown; seq?: unknown; target?: unknown; type?: unknown; } | null	packages/preview/src/overlay/embeds.ts	1
+as-cast	{ event?: { frame?: { kind?: string }; sessionId?: string }; instanceId?: string; payload?: { kind?: string; message?: string }; type?: string; verb?: string; }	scripts/binary/smoke-stack.ts	1
 as-cast	{ fragment: unknown }	scripts/lib/parse-source.ts	1
 as-cast	{ headed?: unknown }	packages/preview/src/overlay/page.ts	1
-as-cast	{ hooks?: { body?: Record<string, unknown> }; method: string; path: stri	packages/hub/scripts/openapi.ts	1
+as-cast	{ hooks?: { body?: Record<string, unknown> }; method: string; path: string; }[]	packages/hub/scripts/openapi.ts	1
 as-cast	{ i: number }	scripts/codemods/type-roles.ts	1
 as-cast	{ id: number }[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: number | null }	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: number; }	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: number; } | null	packages/jsonl-parser/src/fts5.ts	1
-as-cast	{ id: number; output: string | null; text: string; thinking: string | nu	packages/jsonl-parser/src/fts5.ts	2
+as-cast	{ id: number; output: string | null; text: string; thinking: string | null; }[]	packages/jsonl-parser/src/fts5.ts	1
+as-cast	{ id: number; output: string | null; text: string; thinking: string | null; tools: string | null; }[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: number; text: string }[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: number; value: string; }[]	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ id: string }[]	packages/hub/scripts/migrations-check.ts	1
@@ -88,15 +89,15 @@ as-cast	{ nodes?: Node[]; type?: string }	apps/dashboard/scripts/mark-line-check
 as-cast	{ origin?: unknown; at?: unknown }	site/src/oauth/handoff.ts	1
 as-cast	{ origin?: unknown; auth?: unknown }	site/src/oauth/handoff.ts	1
 as-cast	{ parameters?: Schema[] }	packages/hub/scripts/openapi.ts	1
-as-cast	{ parse: (source: string, options: { modern: true }) => { css: unknown }	scripts/style-residual-check.ts	1
-as-cast	{ products: { productID: string; type: string; displayPrice: string }[];	site/vite.config.ts	1
+as-cast	{ parse: (source: string, options: { modern: true }) => { css: unknown }; }	scripts/style-residual-check.ts	1
+as-cast	{ products: { productID: string; type: string; displayPrice: string }[]; }	site/vite.config.ts	1
 as-cast	{ propertyName?: string } | undefined	packages/hub/scripts/openapi-order.ts	1
 as-cast	{ result?: { width: number; height: number; wasResized: boolean }; }	scripts/binary/smoke-runtime.ts	1
 as-cast	{ scripts: Record<string, string>; }	scripts/check.ts	1
 as-cast	{ scripts?: Record<string, string>; }	scripts/fmt.ts	1
 as-cast	{ start: number; text: string }	scripts/codemods/move-exports.ts	1
 as-cast	{ start?: unknown }	scripts/lib/parse-source.ts	1
-as-cast	{ tables: Record< string, { checkConstraints: Record<string, { name: str	packages/hub/scripts/migrations-check.ts	1
+as-cast	{ tables: Record< string, { checkConstraints: Record<string, { name: string; value: string }> } >; }	packages/hub/scripts/migrations-check.ts	1
 as-cast	{ targetId: string }	scripts/takeover-bench.ts	1
 as-cast	{ targetInfos: { targetId: string; type: string }[]; }	scripts/takeover-bench.ts	1
 as-cast	{ token: string }	scripts/codemods/type-roles.ts	1
@@ -106,7 +107,7 @@ as-cast	{ typeParameters?: readonly Node[] }	scripts/lint/switch-exhaustiveness.
 as-cast	{ v: number; } | null	packages/jsonl-parser/src/fts5.ts	1
 as-cast	{ value: string } | null	packages/jsonl-parser/src/fts5.ts	2
 as-cast	{ value: string; } | null	packages/jsonl-parser/src/fts5.ts	1
-as-cast	| (Css & { children: Css[]; comments: { end: number; start: number; valu	scripts/style-residual-check.ts	1
+as-cast	| (Css & { children: Css[]; comments: { end: number; start: number; value: string }[]; content: { end: number; start: number; styles: string }; }) | null	scripts/style-residual-check.ts	1
 as-cast	Action	packages/cli/src/browser.ts	1
 as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
@@ -254,7 +255,7 @@ as-cast	Pick<T, K>	apps/dashboard/src/lib/cawco/first-paint.ts	1
 as-cast	Pid	packages/core/src/signal-wall.ts	1
 as-cast	Pin[]	packages/preview/src/overlay/artifact.ts	1
 as-cast	PinnedElement[]	packages/preview/src/overlay/page.ts	1
-as-cast	Point	packages/preview/src/overlay/ink.ts	5
+as-cast	Point	packages/preview/src/overlay/ink.ts	3
 as-cast	Pointer	scripts/binary/socket-activation.ts	1
 as-cast	PointerEvent	packages/preview/src/overlay/page.ts	2
 as-cast	Prepared	scripts/build-binary.ts	1
@@ -402,7 +403,7 @@ as-cast	ts.StringLiteral	scripts/codemods/closure-context.ts	2
 as-cast	ts.StringLiteral	scripts/lib/check-inputs.ts	1
 as-cast	ts.TypeNode	scripts/codemods/closure-context.ts	1
 as-cast	typeof import("../packages/core/src/words/configure")	scripts/words-swift.ts	1
-as-cast	typeof WebSocket & { new (url: string, options: Bun.WebSocketOptions): W	packages/preview/src/proxy.ts	1
+as-cast	typeof WebSocket & { new (url: string, options: Bun.WebSocketOptions): WebSocket; }	packages/preview/src/proxy.ts	1
 as-cast	typeof window.setInterval	packages/preview/src/overlay/hold.ts	1
 as-cast	typeof window.setTimeout	packages/preview/src/overlay/hold.ts	1
 as-cast	unknown	apps/dashboard/scripts/mark-line-check.ts	1
@@ -417,7 +418,7 @@ as-cast	WorkerMessage	packages/jsonl-parser/src/pool.ts	1
 as-cast	WorkerTask	packages/jsonl-parser/src/worker.ts	1
 as-cast	z.infer<z.ZodObject<T>>	packages/hub/src/mcp-tool.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
-as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
+as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<ToWorker>) => void ) => void; postMessage: (message: FromWorker) => void; }	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ fragment: { nodes: Node[] }; }	apps/dashboard/scripts/mark-line-check.ts	1
 as-unknown-as	{ fragment: Node; instance: { content: Node } | null; }	apps/dashboard/scripts/outro-reads-check.ts	1
 as-unknown-as	{ instance: { content: Node } | null }	apps/dashboard/scripts/outro-reads-check.ts	1
@@ -697,8 +698,6 @@ suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/h
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/platform/frame-observer.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/platform/motion/morph.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/platform/visible-viewport.svelte.ts	2
-suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
-suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte	1
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/platform/motion/spring.ts	4
 suppression	biome-ignore lint/style/useErrorCause	packages/core/src/state-file.ts	1

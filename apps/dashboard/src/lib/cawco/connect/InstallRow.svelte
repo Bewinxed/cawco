@@ -29,9 +29,10 @@
     machineHue,
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
+  import MiddleClip from "#lib/components/ui/middle-clip/middle-clip.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { tickingClock } from "#lib/platform/motion/clock.svelte.js";
-  import { connect, phone } from "./installs.svelte";
+  import { connect } from "./installs.svelte";
   import StepMark from "./StepMark.svelte";
   import { currentRow, stepRows } from "./steps";
   import { clockOf } from "./words";
@@ -120,17 +121,6 @@
   });
 
   const Icon = $derived(machineIcon(os));
-  /**
-   * On the phone the name gives way in its middle, so both ends of an
-   * address stay (deploy@bui…ample.net): the end stands whole beside a
-   * start that truncates.
-   */
-  const TAIL = 10;
-  const split = $derived(
-    phone.current && name.length > TAIL * 2
-      ? [name.slice(0, -TAIL), name.slice(-TAIL)]
-      : [name, ""]
-  );
   /** The marks of every step, for an SSH install: as many as its route has. */
   const showMarks = $derived(install.route === "ssh");
 </script>
@@ -165,9 +155,8 @@
       <span
         data-slot="name"
         data-box
-        class="flex min-w-0 flex-1 whitespace-nowrap type-label text-ink-row"
-        ><span class="min-w-0 overflow-clip text-ellipsis">{split[0]}</span
-        >{#if split[1]}<span class="flex-none">{split[1]}</span>{/if}</span
+        class="flex min-w-0 flex-1 type-label text-ink-row"
+        ><MiddleClip text={name} /></span
       >
       {#if showMarks && install.state === "running"}
         <span

@@ -437,6 +437,7 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
  * arguments: - at '/ImagePaths': maxItems: got 14, want 3" (its
  * image-generator subagent's transcript, obelisk, 2026-11-05).
  */
+// @limit external: agy 1.5.1's generate_image `ImagePaths` holds at most 3 (maxItems: got 14, want 3, its subagent's transcript, 2026-11-05)
 const AGY_MAX_REFERENCES = 3;
 
 /**

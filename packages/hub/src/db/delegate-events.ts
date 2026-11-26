@@ -250,6 +250,7 @@ export const delegateEventsDb = (core: DbCore): DelegateEventsDb => {
           )
         )
         .orderBy(desc(delegateEvents.id))
+        // @limit measured: a page; the next page's cursor rides the answer. 200 is the rows one page returns
         .limit(DELEGATE_EVENTS_PAGE)
         .all()
         .reverse()

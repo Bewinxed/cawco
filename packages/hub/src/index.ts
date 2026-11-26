@@ -9,13 +9,7 @@ import { unknownMigrations } from "@cawco/core/migration-state";
 import { hubStoppedPath } from "@cawco/core/paths/hub";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Effect, Layer } from "effect";
-import {
-  BIND_HOST,
-  DB_PATH,
-  HUB_PORT,
-  HUB_VERSION,
-  MAX_REQUEST_BYTES,
-} from "./config";
+import { BIND_HOST, DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
 import { Db, DbLayer } from "./db";
 import { loopRecord, watchHubLoop } from "./hub-loop";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
@@ -53,8 +47,9 @@ const main = Effect.gen(function* () {
     hostname: BIND_HOST,
     port: HUB_PORT,
     idleTimeout: 120,
-    // A pack to the git remote and a large file to LFS stream through.
-    maxRequestBodySize: MAX_REQUEST_BYTES,
+    // A pack to the git remote and a large file to LFS stream through: the
+    // most the option names, so the disk bounds a push and no cap of ours does.
+    maxRequestBodySize: Number.MAX_SAFE_INTEGER,
   });
   // From here on, what the hub's connection reads is the control loop's:
   // each statement is explained once, and a whole read of a large table is

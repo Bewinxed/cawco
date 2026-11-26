@@ -595,6 +595,7 @@ export const logOf = (
   const lines = [
     `# ${record.title}`,
     "",
+    // @limit external: RFC 3339 section 5.6: full-date is YYYY-MM-DD, a timestamp's first 10 characters
     `Decided ${record.madeAt.slice(0, 10)}, from the picks and notes on decisions/${record.name}/.`,
   ];
   for (const card of record.cards) {

@@ -9,5 +9,6 @@ export const uuidOf = (name: string): string => {
   const hex = createHash("sha256").update(name).digest("hex");
   // The RFC 4122 variant: the nibble's top two bits are `10`.
   const variant = "89ab".charAt(Number.parseInt(hex.charAt(16), 16) % 4);
+  // @limit external: a UUID is written 8-4-4-4-12 hex digits (RFC 9562 §4)
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };

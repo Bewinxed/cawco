@@ -64,7 +64,7 @@ import {
 } from "yjs";
 import { bindingMade } from "./bound";
 import { authorOf, type Entry, elementOf, posOf, theElement } from "./entry";
-import { clock, progressOf, tokenMs } from "./motion";
+import { clock, progressOf, tokenMs, tokenNumber } from "./motion";
 import type { CanvasHold } from "./replica";
 import { sayToHost } from "./say";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
@@ -541,7 +541,7 @@ const tellDrawn = (live: Doc): (() => void) => {
 
 /** The room round a drawing fitted to the view, px; the zoom it may take. The brief's numbers. */
 const FIT_MARGIN = 32;
-const FIT_ZOOM = { min: 0.25, max: 1.5 };
+const FIT_ZOOM_MIN = 0.25;
 
 /**
  * A drawing's box: its centre in scene units, and its size drawn at zoom 1
@@ -582,7 +582,7 @@ export const sceneBox = (api: ExcalidrawImperativeAPI): SceneBox | null => {
 
 /**
  * Fits the drawing to the view: its box ({@link sceneBox}, the margin round
- * it) centred, the zoom held to {@link FIT_ZOOM}; the view moves, never an
+ * it) centred, the zoom held to {@link FIT_ZOOM_MIN} and `--zoom-fit-most`; the view moves, never an
  * element. An empty canvas stays at the origin, zoom 1.
  */
 export const fitScene = (api: ExcalidrawImperativeAPI): void => {
@@ -593,9 +593,9 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
   const { width, height } = api.getAppState();
   const room = 2 * box.margin;
   const zoom = Math.min(
-    FIT_ZOOM.max,
+    tokenNumber("--zoom-fit-most"),
     Math.max(
-      FIT_ZOOM.min,
+      FIT_ZOOM_MIN,
       Math.min(
         (width - room) / (box.width - room),
         (height - room) / (box.height - room)

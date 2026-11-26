@@ -988,7 +988,8 @@
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
-            {@const drawn = stripOf(routine.nextRuns, now) !== null}
+            {@const drawn =
+              stripOf(routine.nextRuns, now, routine.nextRunsCut) !== null}
             <!-- A separator stands only between two things on the line:
                  the schedule's words show when no strip is drawn, then the
                  paused or off words, then the folded Last and Next. -->
@@ -1004,6 +1005,7 @@
                   {now}
                   paused={!routine.enabled}
                   runs={routine.nextRuns}
+                  cut={routine.nextRunsCut}
                 />
               </span>
             {/if}

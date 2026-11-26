@@ -178,6 +178,7 @@ export interface FolderLook {
 export const CONTROL_CLONE_HOLDING = "cloneHolding";
 
 /** The most a place's first commit may weigh; a place past it stays a folder. */
+// @limit measured: the largest place the fleet works in tracks 7,116 files of 238 MiB (cockpit, 2026-11-26)
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
 /** One path a place's first commit leaves out, from the place's root, and why. */
@@ -252,14 +253,17 @@ export interface PlacePush {
 }
 
 /** Total git budget for cutting a workspace, including its remote fetch and checkout. */
+// @limit recording: agent.workspace-cut-ms until 2026-12-10
 export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */
+// @limit recording: agent.boundary-start-ms until 2026-12-10
 export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
 /**
  * Git and boundary budgets, plus a minute for setup, teardown and control
  * transport. A cut installs nothing: its delegate runs its project's install
  * inside the workspace when it needs one.
  */
+// @limit measured: the git and boundary budgets plus a minute for setup, teardown and transport
 export const WORKSPACE_CREATE_TIMEOUT_MS =
   WORKSPACE_GIT_TIMEOUT_MS + WORKSPACE_BOUNDARY_START_TIMEOUT_MS + 60_000;
 

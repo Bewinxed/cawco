@@ -6,11 +6,13 @@
  */
 import { SUMMARY_CAP_TOKENS } from "@cawco/core/continuation";
 import { blocksOf, type Extracted } from "@cawco/core/continuation-read";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { GitChanges } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
 import type { ContinuationSource } from "./db/stored-types";
 
 /** Lines of git output the artifact index carries before it says how many it cut. */
+// @limit recording: hub.continuation-git-lines until 2026-12-10
 const GIT_LINES_SHOWN = 200;
 
 /**
@@ -41,6 +43,7 @@ export function gitSection(changes: GitChanges, since: string): string {
       ? changes.log.trimEnd().split("\n")
       : ["(no commits)"]),
   ];
+  recordLimitReading("hub.continuation-git-lines", lines.length);
   const shown = lines.slice(0, GIT_LINES_SHOWN);
   return [
     title,

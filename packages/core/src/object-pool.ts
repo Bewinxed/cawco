@@ -55,6 +55,7 @@ const poolKey = (format: string, origin: string): string =>
   createHash("sha256")
     .update(`${format}\n${origin}`)
     .digest("hex")
+    // @limit measured: 32 hex characters are 128 bits of SHA-256; one pool per origin and object format, so two collide after about 2^64 names
     .slice(0, 32);
 
 /** The pool every clone of `origin` in object format `format` borrows from. */

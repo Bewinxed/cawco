@@ -25,6 +25,7 @@ import {
 } from "@cawco/core/harness-config";
 import type { FleetHook } from "@cawco/core/hooks";
 import type { Rule, RuleRow } from "@cawco/core/rules";
+import { shortId } from "@cawco/core/short-id";
 import {
   memoryKeptWords,
   memoryListWords,
@@ -33,7 +34,15 @@ import {
 import { rulesWords } from "@cawco/core/words/rules";
 import type { Presented } from "../mcp-tool";
 import { delegateTypesWords } from "./sessions";
-import { ago, count, lasted, lines, listed, quote, valueWords } from "./words";
+import {
+  ago,
+  count,
+  lasted,
+  lines,
+  listed,
+  quote,
+  valueExcerpt,
+} from "./words";
 
 /** The catalog's first line, which a saved type's answer says otherwise. */
 const CATALOG_HEAD = /^1 delegate type;[^\n]*\n/u;
@@ -58,10 +67,10 @@ const placeWords = (row: {
   scope?: string;
 }): string => {
   if (row.projectId) {
-    return `project ${row.projectId.slice(0, 8)} only`;
+    return `project ${shortId(row.projectId)} only`;
   }
   return row.areaId
-    ? `area ${row.areaId.slice(0, 8)}'s projects only`
+    ? `area ${shortId(row.areaId)}'s projects only`
     : "every machine";
 };
 
@@ -115,7 +124,7 @@ export const delegateTypeSettingsWords = (
 };
 
 const connectionLine = (connection: ConnectionView): string =>
-  `- ${connection.name}: ${connection.service} as ${connection.account} · ${connection.transport}${connection.url ? ` ${connection.url}` : ""}${connection.command ? ` ${connection.command}` : ""} · ${connection.state}${connection.reason ? ` (${connection.reason})` : ""} · ${connection.hasSecret ? "key held" : "no key held"} · ${connection.tools ? `tools ${listed(connection.tools) || "none"}` : "tools not listed yet"}${connection.projects.length > 0 ? ` · projects ${connection.projects.map((id) => id.slice(0, 8)).join(", ")}` : ""}`;
+  `- ${connection.name}: ${connection.service} as ${connection.account} · ${connection.transport}${connection.url ? ` ${connection.url}` : ""}${connection.command ? ` ${connection.command}` : ""} · ${connection.state}${connection.reason ? ` (${connection.reason})` : ""} · ${connection.hasSecret ? "key held" : "no key held"} · ${connection.tools ? `tools ${listed(connection.tools) || "none"}` : "tools not listed yet"}${connection.projects.length > 0 ? ` · projects ${connection.projects.map((id) => shortId(id)).join(", ")}` : ""}`;
 
 /** admin_connections: each connection, or the one written. */
 export const connectionSettingsWords = (
@@ -130,7 +139,7 @@ export const connectionSettingsWords = (
     return removedWords(`connection ${asked.name}`, answer);
   }
   if ("authorizationUrl" in answer) {
-    return `Open this to sign in: ${valueWords(answer, 2000)}`;
+    return `Open this to sign in: ${valueExcerpt(answer, 2000)}`;
   }
   if ("connections" in answer) {
     const { connections } = answer;
@@ -254,7 +263,7 @@ export const mcpSettingsWords = (
       ? "No fleet MCP servers."
       : lines(`${count(mcp.length, "MCP server")}:`, mcp.map(mcpLine));
   }
-  return `Saved MCP server ${asked.name}: ${valueWords(answer, 600)}\nRunning sessions connect to it within seconds; no new session is needed.`;
+  return `Saved MCP server ${asked.name}: ${valueExcerpt(answer, 600)}\nRunning sessions connect to it within seconds; no new session is needed.`;
 };
 
 interface RuleTemplate {
@@ -269,7 +278,7 @@ const ruleLine = (rule: RuleRow): string => {
     rule.stats.lastFiredAt === null
       ? "never fired"
       : `fired ${count(rule.stats.totalFires, "time")}, last ${ago(rule.stats.lastFiredAt, now)}`;
-  return `- ${rule.name} (${rule.id.slice(0, 8)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern, 120)} · replies ${quote(rule.reply, 160)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}${rule.stats.unjudged > 0 ? ` · ${rulesWords.unjudged(rule.stats.unjudged, rule.stats.lastUnjudgedWhy ?? "no reason kept")}` : ""}`;
+  return `- ${rule.name} (${shortId(rule.id)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern)} · replies ${quote(rule.reply)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}${rule.stats.unjudged > 0 ? ` · ${rulesWords.unjudged(rule.stats.unjudged, rule.stats.lastUnjudgedWhy ?? "no reason kept")}` : ""}`;
 };
 
 const templateLine = (template: RuleTemplate): string =>
@@ -296,7 +305,7 @@ export const ruleSettingsWords = (
       templates.map(templateLine)
     );
   }
-  return `Saved rule ${answer.name} (${answer.id.slice(0, 8)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern, 120)}.`;
+  return `Saved rule ${answer.name} (${shortId(answer.id)}): ${answer.enabled ? "on" : "off"}, ${answer.matchKind} ${quote(answer.pattern)}.`;
 };
 
 interface HookTemplate {
@@ -305,7 +314,7 @@ interface HookTemplate {
 }
 
 const hookLine = (hook: FleetHook): string =>
-  `- ${hook.name} (${hook.id.slice(0, 8)}) · ${hook.enabled ? "on" : "off"} · on ${hook.event}${hook.matcher ? ` matching ${hook.matcher}` : ""} · ${hook.handler.type}${hook.script ? ", with a script" : ""} · ${placeWords(hook)}`;
+  `- ${hook.name} (${shortId(hook.id)}) · ${hook.enabled ? "on" : "off"} · on ${hook.event}${hook.matcher ? ` matching ${hook.matcher}` : ""} · ${hook.handler.type}${hook.script ? ", with a script" : ""} · ${placeWords(hook)}`;
 
 /** admin_hooks: each hook and the templates, or the one written. */
 export const hookSettingsWords = (
@@ -342,6 +351,7 @@ interface AgentRefused {
 /** One subagent's file, under the hash put and remove take back. */
 const agentFileWords = (agent: FleetAgent, lead = ""): string =>
   lines(
+    // @limit measured: 12 hex characters are 48 bits of a hash; one project's subagent files and memories share the namespace, so two collide after about 2^24 names
     `${lead}Subagent ${agent.name}, hash ${agent.hash.slice(0, HASH_HANDLE)} (expectedHash takes it):`,
     agent.content
   );
@@ -376,7 +386,7 @@ export const subagentSettingsWords = (
   }
   return asked.action === "get"
     ? agentFileWords(answer)
-    : `Saved subagent ${answer.name}, ${count(answer.content.split("\n").length, "line")}, hash ${answer.hash.slice(0, HASH_HANDLE)}.`;
+    : `Saved subagent ${answer.name}, ${count(answer.content.split("\n").length, "line")}, hash ${answer.hash.slice(0, /* @limit measured: 12 hex characters are 48 bits of a hash; one project's subagent files and memories share the namespace, so two collide after about 2^24 names */ HASH_HANDLE)}.`;
 };
 
 const scopeWords = (scope: MemoryScope | undefined): string => {
@@ -390,10 +400,10 @@ const scopeWords = (scope: MemoryScope | undefined): string => {
       : []),
     ...(scope.model ? [`models matching ${scope.model}`] : []),
     ...(scope.projectIds?.length
-      ? [`projects ${scope.projectIds.map((id) => id.slice(0, 8)).join(", ")}`]
+      ? [`projects ${scope.projectIds.map((id) => shortId(id)).join(", ")}`]
       : []),
     ...(scope.areaIds?.length
-      ? [`areas ${scope.areaIds.map((id) => id.slice(0, 8)).join(", ")}`]
+      ? [`areas ${scope.areaIds.map((id) => shortId(id)).join(", ")}`]
       : []),
     ...(scope.briefer ? ["handed to the delegate's caller"] : []),
   ];
@@ -413,6 +423,7 @@ export const memorySettingsWords = (
     const { memory } = answer;
     return memory
       ? lines(
+          // @limit measured: 12 hex characters are 48 bits of a hash; one project's subagent files and memories share the namespace, so two collide after about 2^24 names
           memoryReadHead(memory.docs.length, memory.hash.slice(0, HASH_HANDLE)),
           memory.content
         )
@@ -436,6 +447,7 @@ export const memorySettingsWords = (
     path: answer.path ?? "CLAUDE.md",
     lines: answer.lines,
     bytes: answer.bytes,
+    // @limit measured: 12 hex characters are 48 bits of a hash; one project's subagent files and memories share the namespace, so two collide after about 2^24 names
     handle: answer.hash.slice(0, HASH_HANDLE),
   });
 };

@@ -18,9 +18,6 @@ import { nameSlug } from "./name-slug";
 /** A block's fence language. */
 export const INLINE_BLOCK_LANG = "openui";
 
-/** The longest name a block takes, as the person reads it. */
-const NAME_MAX = 80;
-
 const SPACES = /\s+/gu;
 /** `name="…"` in a fence's info string, after its language. */
 const NAME = /(?:^|\s)name\s*=\s*"([^"\n]*)"/u;
@@ -40,7 +37,7 @@ export const inlineBlockName = (
   const name = NAME.exec(meta ?? "")?.[1]
     ?.replace(SPACES, " ")
     .trim();
-  return name ? name.slice(0, NAME_MAX) : null;
+  return name || null;
 };
 
 /** One block in a text, in order: its name and its program as written. */

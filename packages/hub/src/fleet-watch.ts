@@ -63,12 +63,21 @@ import {
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { fleetWatchNudge } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { isMachineSilence } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
+import {
+  cutToHead,
+  cutToTail,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+  shareOut,
+} from "@cawco/core/prompt-budget";
 import type { InstanceRow, SpawnPayload } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import type { NeutralMessage } from "@cawco/core/session-messages";
+import { MINUTE_MS } from "@cawco/core/time";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { decisionWords, signalLine } from "@cawco/core/words/fleet-watch";
@@ -96,23 +105,35 @@ import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-item-state";
 
 /** Triage runs at once, fleet-wide; the rest wait their turn. */
+// @limit recording: hub.triage-waiting until 2026-12-10
 const TRIAGE_MAX_RUNNING = 2;
 /** A triage run that has not ended its turn by then is ended and its slot freed. */
+// @limit recording: hub.triage-turn-ms until 2026-12-10
 const TRIAGE_DEADLINE_MS = 10 * 60_000;
 /** How often running turns are looked at for a stall. */
 const STALL_SWEEP_MS = 60_000;
 /** Jev answers inside a minute or the question is over. */
+// @limit recording: hub.fleet-watch-jev-ms until 2026-12-10
 const JEV_TIMEOUT_MS = 60_000;
-/** The slice Jev and triage read, as meaning.ts bounds its text: the tail. */
-const SLICE_LIMIT = 60_000;
-/** What one call or error adds to the slice, at most. */
-const ENTRY_LIMIT = 400;
-/** What one message adds to the slice, at most. */
-const SAID_LIMIT = 1600;
-/** An error's normalised text, compared at this length. */
-const ERROR_KEY_LIMIT = 300;
-/** A task's brief, as triage reads it. */
-const BRIEF_LIMIT = 4000;
+/**
+ * What Jev and triage read, dealt out of Jev's window, the smaller of the
+ * two, in the proportion the cuts had to one another: the slice (as
+ * meaning.ts bounds its text, the tail), what one call or error adds to it,
+ * what one message adds, an error's normalised text (compared at this
+ * length), and a task's brief.
+ */
+const READS = shareOut(promptBudgetChars(JEV_WINDOW_TOKENS), {
+  slice: 60_000,
+  entry: 400,
+  said: 1600,
+  errorKey: 300,
+  brief: 4000,
+});
+const SLICE_LIMIT = READS.slice;
+const ENTRY_LIMIT = READS.entry;
+const SAID_LIMIT = READS.said;
+const ERROR_KEY_LIMIT = READS.errorKey;
+const BRIEF_LIMIT = READS.brief;
 /** The origin of what fleet watch sends: never a person's word. */
 const ORIGIN = { kind: "system", name: FLEET_WATCH_ORIGIN } as const;
 
@@ -182,8 +203,7 @@ const resultText = (content: unknown): string => {
   return content === undefined ? "" : JSON.stringify(content);
 };
 
-const clip = (text: string, limit: number): string =>
-  text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+const clip = (text: string, limit: number): string => cutToHead(text, limit);
 
 /** Who a watched session's steward is. */
 type Steward =
@@ -217,6 +237,8 @@ interface Watch {
   last?: { count: number; key: string };
   /** ms epoch of the last frame the session streamed. */
   lastOutputAt: number;
+  /** How many of the oldest entries were let go of to make room, since it was last taken. */
+  leftOut: number;
   /** Open signals, by kind, with their line. */
   open: Map<FleetWatchSignal, string>;
   /** Finished turns in a row that changed no file. */
@@ -336,6 +358,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       quietTurns: 0,
       slice: [],
       sliceLength: 0,
+      leftOut: 0,
       turn: 0,
     };
     watches.set(id, made);
@@ -347,14 +370,24 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     watch.sliceLength += entry.length + 1;
     while (watch.sliceLength > SLICE_LIMIT && watch.slice.length > 1) {
       watch.sliceLength -= (watch.slice.shift() ?? "").length + 1;
+      watch.leftOut += 1;
     }
   };
 
   /** What it did since the last look, and the slate wiped for the next. */
   const takeSlice = (watch: Watch): string => {
-    const text = watch.slice.join("\n").slice(-SLICE_LIMIT);
+    const text = cutToTail(
+      [
+        ...(watch.leftOut > 0
+          ? [`… (the ${watch.leftOut} earliest entries left out)`]
+          : []),
+        ...watch.slice,
+      ].join("\n"),
+      SLICE_LIMIT
+    );
     watch.slice = [];
     watch.sliceLength = 0;
+    watch.leftOut = 0;
     return text;
   };
 
@@ -543,6 +576,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const signals = together(watch);
     const seen = takeSlice(watch);
     log(row, row.id, `asked Jev about: ${signals}`);
+    const asked = Date.now();
     askJev(
       access,
       {
@@ -560,6 +594,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       { timeoutMs: JEV_TIMEOUT_MS }
     )
       .then((asking) => {
+        recordLimitReading("hub.fleet-watch-jev-ms", Date.now() - asked);
         episode.jevInFlight = false;
         switch (asking.kind) {
           case "answered":
@@ -624,6 +659,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   ) => {
     episode.settled = true;
     queue.push({ watched: row.id, episode: episode.id, seen });
+    // How many wait while the running ones run.
+    recordLimitReading("hub.triage-waiting", queue.length);
     log(row, row.id, `triage queued: ${together(watch)}`);
     drain();
   };
@@ -653,10 +690,10 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   const launch = (row: InstanceRow, watch: Watch, queued: Queued) => {
     const id = crypto.randomUUID();
     const steward = stewardOf(row);
-    const seen = [queued.seen, takeSlice(watch)]
-      .filter(Boolean)
-      .join("\n")
-      .slice(-SLICE_LIMIT);
+    const seen = cutToTail(
+      [queued.seen, takeSlice(watch)].filter(Boolean).join("\n"),
+      SLICE_LIMIT
+    );
     const triage: Triage = {
       id,
       watched: row.id,
@@ -667,6 +704,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       gone: () => undefined,
     };
     running.set(id, triage);
+    const started = Date.now();
     // The run's answer is the end of its turn, within the deadline.
     const turn = Deferred.makeUnsafe<void, Gone>();
     triage.ended = () => {
@@ -683,11 +721,15 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       ).pipe(
         Effect.match({
           onSuccess: () => {
+            recordLimitReading("hub.triage-turn-ms", Date.now() - started);
             if (running.get(id) === triage) {
               finish(triage, "its turn ended first");
             }
           },
           onFailure: ({ after, reason }) => {
+            if (reason !== "dead") {
+              recordLimitReading("hub.triage-turn-ms", Date.now() - started);
+            }
             if (running.get(id) !== triage) {
               return;
             }
@@ -961,8 +1003,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         ...watch.errors.filter((each) => each.turn > since),
         { key, turn: watch.turn },
       ];
-      const same = watch.errors.filter((each) => each.key === key).length;
+      const repeats = watch.errors.filter((each) => each.key === key);
+      const same = repeats.length;
       if (same >= FLEET_WATCH_LIMITS.sameError) {
+        // The turns holding the repeats: what the window must span.
+        recordLimitReading(
+          "hub.fleet-watch-error-span",
+          watch.turn - (repeats[0]?.turn ?? watch.turn) + 1
+        );
         openSignal(
           id,
           watch,
@@ -1051,12 +1099,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return;
     }
     const now = Date.now();
-    const limit = FLEET_WATCH_LIMITS.stallMinutes * 60_000;
     for (const [id, watch] of watches) {
       if (
         !watch.busy ||
         watch.open.has("stall") ||
-        now - watch.lastOutputAt < limit ||
+        now - watch.lastOutputAt <
+          FLEET_WATCH_LIMITS.stallMinutes * MINUTE_MS ||
         deps.asking(id)
       ) {
         continue;

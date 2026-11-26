@@ -9,6 +9,7 @@
  * property of the fleet.
  */
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { VisitSchema } from "#lib/cawco/stored-shapes.js";
 import { store, stored } from "#lib/platform/storage.js";
 
@@ -16,6 +17,7 @@ const WORKING_SET_KEY = "cawco-working-set";
 const KEY = WORKING_SET_KEY;
 
 /** Past this, the coldest conversation that is not open is forgotten. */
+// @limit recording: dashboard.working-set-visits until 2026-12-03
 const LIMIT = 10;
 
 export interface Visit {
@@ -131,6 +133,7 @@ export const workingSet = {
       return;
     }
     visits.push({ id, at, ...(ctx ?? {}) });
+    recordLimitReading("dashboard.working-set-visits", visits.length);
     // The coldest conversation that is no longer open makes room. An open tab
     // is never forgotten — its name and address are what draw it — so with
     // more tabs open than the limit, the set simply holds them all.

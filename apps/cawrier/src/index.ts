@@ -40,10 +40,20 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/u;
 const BEARER = /^Bearer (\S+)$/u;
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/u;
 /** APNs' limit on an alert's payload. */
+// @limit external: APNs' payload, 4,096 bytes (https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification)
 const MAX_PAYLOAD_BYTES = 4096;
-const MAX_BODY_BYTES = 32_768;
-/** A notification carries a signed payload with signed transaction and renewal info inside. */
-const MAX_NOTIFICATION_BYTES = 65_536;
+// @limit external: APNs' apns-collapse-id, 64 bytes (https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
+const COLLAPSE_ID_BYTES = 64;
+/**
+ * The largest body Cawrier reads that carries Apple-signed data: an App
+ * Store Server Notification (a signed payload with signed transaction and
+ * renewal info inside) and an enrollment's StoreKit proof. Apple documents
+ * no size for either; a body is read whole into a Worker that holds 128 MB
+ * in all (developers.cloudflare.com/workers/platform/limits), so a cap
+ * there must be.
+ */
+// @limit asked: cawco:decision/1a311bd5-71d9-4b87-a9d7-094435a46b6c/signed-body-cap
+const SIGNED_BODY_BYTES = 1024 * 1024;
 const HEALTH_TTL_MS = 60_000;
 
 const json = (status: number, body: unknown): Response =>
@@ -70,8 +80,11 @@ const isObject = (value: unknown): value is Body =>
 const matches = (value: unknown, pattern: RegExp): value is string =>
   typeof value === "string" && pattern.test(value);
 
-/** The body as an object, or undefined when it is too big or not a JSON object. */
-/** The body as sent, or undefined when it is over `maxBytes`. */
+/**
+ * The body as sent, or undefined when it is over `maxBytes`: counted as its
+ * bytes arrive, so a body that names no length (chunked) is let go at the
+ * cap, never read whole first.
+ */
 const rawBodyOf = async (
   request: Request,
   maxBytes: number
@@ -80,8 +93,25 @@ const rawBodyOf = async (
   if (declared > maxBytes) {
     return undefined;
   }
-  const text = await request.text();
-  return bytes(text) > maxBytes ? undefined : text;
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return "";
+  }
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return text + decoder.decode();
+    }
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 };
 
 const parsedBody = (text: string | undefined): Body | undefined => {
@@ -97,8 +127,29 @@ const parsedBody = (text: string | undefined): Body | undefined => {
   return isObject(parsed) ? parsed : undefined;
 };
 
-const bodyOf = async (request: Request): Promise<Body | undefined> =>
-  parsedBody(await rawBodyOf(request, MAX_BODY_BYTES));
+const bodyOf = async (
+  request: Request,
+  maxBytes: number
+): Promise<Body | undefined> => parsedBody(await rawBodyOf(request, maxBytes));
+
+/**
+ * What a push's request holds beside its payload, each field at its largest
+ * as JSON.stringify writes it (the hub's push.ts `post`): the pairing's
+ * UUID, a collapse id of control characters (six bytes each, escaped), a
+ * safe integer's digits, `background`, and the keys and punctuation around
+ * them. An unenrollment's body is a part of it.
+ */
+const RELAY_ENVELOPE_BYTES = bytes(
+  JSON.stringify({
+    collapseId: "\u0000".repeat(COLLAPSE_ID_BYTES),
+    expiration: Number.MAX_SAFE_INTEGER,
+    pairingId: "0".repeat(36),
+    payload: {},
+    pushType: "background",
+  })
+);
+/** The largest body a push's request holds: APNs' payload and the request's own fields. */
+const RELAY_BODY_BYTES = MAX_PAYLOAD_BYTES + RELAY_ENVELOPE_BYTES;
 
 interface Enrollment {
   readonly apnsEnvironment: ApnsEnvironment;
@@ -146,7 +197,9 @@ const pushTypeOf = (body: Body): PushType | undefined => {
 
 const isCollapseId = (value: unknown): value is string | undefined =>
   value === undefined ||
-  (typeof value === "string" && value.length > 0 && bytes(value) <= 64);
+  (typeof value === "string" &&
+    value.length > 0 &&
+    bytes(value) <= COLLAPSE_ID_BYTES);
 
 const isExpiration = (value: unknown): value is number | undefined =>
   value === undefined ||
@@ -199,7 +252,7 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
       "Too many enrollments from this address. Try again in a minute."
     );
   }
-  const enrollment = enrollmentOf(await bodyOf(request));
+  const enrollment = enrollmentOf(await bodyOf(request, SIGNED_BODY_BYTES));
   if (!enrollment) {
     return refuse(400, "The enrollment is not in the shape Cawrier reads.");
   }
@@ -244,7 +297,7 @@ const relay = async (request: Request, env: Env): Promise<Response> => {
   if (!matches(secret, SECRET)) {
     return refuse(401, "The pairing's secret is missing.");
   }
-  const push = pushOf(await bodyOf(request));
+  const push = pushOf(await bodyOf(request, RELAY_BODY_BYTES));
   if (!push) {
     return refuse(400, "The push is not in the shape Cawrier reads.");
   }
@@ -296,7 +349,7 @@ const unenroll = async (request: Request, env: Env): Promise<Response> => {
   if (!matches(secret, SECRET)) {
     return refuse(401, "The pairing's secret is missing.");
   }
-  const body = await bodyOf(request);
+  const body = await bodyOf(request, RELAY_BODY_BYTES);
   if (!(body && matches(body.pairingId, UUID))) {
     return refuse(400, "The unenrollment is not in the shape Cawrier reads.");
   }
@@ -347,7 +400,7 @@ const appleNotification = async (
   env: Env,
   ctx: ExecutionContext
 ): Promise<Response> => {
-  const raw = await rawBodyOf(request, MAX_NOTIFICATION_BYTES);
+  const raw = await rawBodyOf(request, SIGNED_BODY_BYTES);
   const body = parsedBody(raw);
   if (!(raw && typeof body?.signedPayload === "string")) {
     return refuse(400, "The notification is not in the shape Cawrier reads.");
@@ -370,7 +423,12 @@ const appleNotification = async (
   return json(200, { ok: true });
 };
 
-const FORWARD_TIMEOUT_MS = 10_000;
+/**
+ * How long a verified notification's forward to Yield may run: it runs in
+ * `ctx.waitUntil`, which Cloudflare ends with the rest of the invocation.
+ */
+// @limit external: Cloudflare cancels a waitUntil task 30 s after the response is sent (https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
+const FORWARD_TIMEOUT_MS = 30_000;
 
 /** Passes a verified notification's exact body on to Yield; logs its answer, never throws. */
 const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {

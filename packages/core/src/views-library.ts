@@ -135,7 +135,12 @@ const routine = z.object({
   nextRuns: z
     .array(z.number())
     .describe(
-      "Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms."
+      "Its runs ahead, as the hub's scheduler will start them: the next week's, epoch ms."
+    ),
+  nextRunsCut: z
+    .boolean()
+    .describe(
+      "The runs ahead stop before the week's end: the scheduler starts more than they tell."
     ),
   lastSlot: z.number().nullable(),
   runs: z.array(run).describe("Its newest runs, newest first."),
@@ -188,7 +193,6 @@ const TOOLS = {
         .number()
         .int()
         .min(1)
-        .max(20)
         .optional()
         .describe("How many of each routine's newest runs; 5 when left out."),
     }) satisfies z.ZodType<ViewRoutinesInput>,
@@ -204,7 +208,6 @@ const TOOLS = {
         .number()
         .int()
         .min(1)
-        .max(90)
         .optional()
         .describe("How many days back from now; 30 when left out."),
     }) satisfies z.ZodType<ViewSpendInput>,
@@ -236,7 +239,6 @@ const TOOLS = {
         .number()
         .int()
         .min(1)
-        .max(100)
         .optional()
         .describe("How many; 20 when left out."),
     }) satisfies z.ZodType<ViewEventsInput>,

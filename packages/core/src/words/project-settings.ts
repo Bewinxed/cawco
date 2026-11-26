@@ -9,6 +9,7 @@ import type { StartingSet } from "../delegate-types";
 import { type HarnessKind, harnessName } from "../harness/kinds";
 import type { OfferedMode } from "../harness/modes";
 import type { OutsiderRule } from "../outsiders";
+import { shortSha } from "../short-id";
 import type { TriggerKind } from "../triggers";
 import { areaWords } from "./areas";
 import { triggerKindWords } from "./caw-settings";
@@ -173,7 +174,7 @@ export interface SettingsRead {
 export const projectSettingsWords = {
   /** A `create_repo` card's detail, when reading the plain folder made it a repository: its folder as the summary names it, and its one commit. */
   publishedMade: (folder: string | undefined, commit: string): string =>
-    `${folder ?? "The folder"} was a plain folder, so it was made a git repository: one commit, ${commit.slice(0, 7)}, not pushed yet. `,
+    `${folder ?? "The folder"} was a plain folder, so it was made a git repository: one commit, ${shortSha(commit)}, not pushed yet. `,
   /** A `create_repo`'s answer to the session that asked, when the folder's first commit left files out for their size: each file with its size. */
   leftForSize: (files: readonly { bytes: number; path: string }[]): string =>
     `Left out of the first commit for size: ${files.map((file) => `${file.path} (${sizeWords(file.bytes)})`).join(", ")}`,

@@ -32,12 +32,6 @@
 /** What the field holds when nothing has been typed. */
 export const SINK_PAD = "\n\n\n\n";
 
-/** Past this many characters, the field starts again at the next space, so it never grows. */
-export const SINK_MOST = 64;
-
-/** A field ending at a space: where it may start again without cutting a word autocorrect still reads. */
-export const SINK_AT_SPACE = /\s$/u;
-
 /** What the keyboard typed: characters removed before the caret, then the text typed (a newline is Enter). */
 export interface Typed {
   back: number;

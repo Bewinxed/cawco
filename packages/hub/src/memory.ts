@@ -38,7 +38,13 @@
  */
 
 import { frontMatterBlock } from "@cawco/core/fleet";
+import {
+  fitItems,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+} from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortSha } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryWords } from "@cawco/core/words/memory";
@@ -93,16 +99,12 @@ const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
 export const ARCHIVE_DIR = "memory/archive";
 
-/** The longest note an agent writes. */
-const NOTE_LIMIT = 4000;
 /** The most messages one night reads: the most the person said in a day (memory-run.ts); a note is checked against as many for his words. */
 export const RUN_SAID = 240;
 /** How far back a night reads, when it has no mark yet or its last mark is older (memory-run.ts); a note is checked against the same week. */
 export const SAID_DAYS = 7;
 /** What one brief carries of all its context together; each file's share is the file budget (config.ts). */
 const CONTEXT_CHARS = 24_000;
-/** The lines a brief's grep shortlists, the most words in common first, before Jev or the budget. */
-const SHORTLIST = 60;
 /**
  * A yes at or over this keeps a line Jev judged in the brief: the likelier
  * of two, as a Noul reads ("Use 0.5 when yes and no are equally easy to act
@@ -214,6 +216,7 @@ const noteIdAt = (at: Date): string => {
     .slice(0, 19)
     .replace(STAMP_PUNCTUATION, "")
     .replace("T", "-");
+  // @limit measured: 6 hex characters of a random UUID are 24 bits; one hub's ids of this kind share the namespace, so two collide after about 2^12 ids
   const tail = crypto.randomUUID().replaceAll("-", "").slice(0, 6);
   return `n-${stamp}-${tail}`;
 };
@@ -420,17 +423,17 @@ const factLine = ({ line }: Fact): string => renderLesson(line);
 /**
  * Grep's shortlist for a brief: the lessons holding the task's words, and
  * every lesson of a file the task names; named first, then the most words
- * in common, at most {@link SHORTLIST}.
+ * in common, as many as Jev's window holds beside the task (core
+ * prompt-budget.ts), since Jev judges each.
  */
 const briefShortlist = (
   facts: Fact[],
   task: BriefTask,
   named: ReadonlySet<string>
 ): Fact[] => {
-  const words = wordsOf(
-    [task.title, task.description, task.acceptance].join("\n")
-  );
-  return facts
+  const asked = [task.title, task.description, task.acceptance].join("\n");
+  const words = wordsOf(asked);
+  const ranked = facts
     .map((fact) => ({
       fact,
       named: named.has(fact.path),
@@ -438,8 +441,12 @@ const briefShortlist = (
     }))
     .filter((each) => each.named || each.score > 0)
     .sort((a, b) => Number(b.named) - Number(a.named) || b.score - a.score)
-    .slice(0, SHORTLIST)
     .map(({ fact }) => fact);
+  return fitItems(
+    ranked,
+    promptBudgetChars(JEV_WINDOW_TOKENS, asked.length),
+    (fact) => factLine(fact).length
+  );
 };
 
 /** A file's words as a brief carries them: whole up to its share, else cut, said so. */
@@ -835,7 +842,7 @@ export const createMemory = ({
     }
     folderChanged(projectId);
     console.log(
-      `[memory] ${projectId}: ${made.id} from ${from} (${made.source}${made.verdict ? `, ${made.verdict}` : ""}) at ${written.sha.slice(0, 9)}`
+      `[memory] ${projectId}: ${made.id} from ${from} (${made.source}${made.verdict ? `, ${made.verdict}` : ""}) at ${shortSha(written.sha)}`
     );
     return written;
   };
@@ -1125,7 +1132,7 @@ const MEMORY_NOTE_DEFINITION = defineTool(
   "memory_note",
   memoryRunWords.noteTool,
   {
-    text: z.string().max(NOTE_LIMIT),
+    text: z.string(),
     since: z
       .string()
       .optional()
@@ -1152,12 +1159,10 @@ const MEMORY_RULE_DEFINITION = defineTool(
       .describe("For remove and reword: its id, like L-28939a."),
     text: z
       .string()
-      .max(NOTE_LIMIT)
       .optional()
       .describe("For reword and add: the rule in one sentence."),
     why: z
       .string()
-      .max(NOTE_LIMIT)
       .optional()
       .describe("For reword and add: why it holds, in one line."),
   },
@@ -1185,7 +1190,6 @@ const MEMORY_APPLY_DEFINITION = defineTool(
     ops: z
       .array(OpInput)
       .min(1)
-      .max(20)
       .describe(
         'sources: your brief\'s handles (m3, l2) and note ids. home: "index", {skill}, or {knowledge: <topic>}.'
       ),

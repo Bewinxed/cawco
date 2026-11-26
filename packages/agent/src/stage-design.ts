@@ -19,6 +19,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
 import { workspaceStateDir, workspacesDir } from "@cawco/core/paths/workspace";
+import { shortId } from "@cawco/core/short-id";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
@@ -81,7 +82,7 @@ export const dropDesign = async (id: string): Promise<void> => {
   }
   await forgetInstalls(id);
   await removeTree(workspaceStateDir(id));
-  console.info(`[stage] design ${id.slice(0, 8)}: let go`);
+  console.info(`[stage] design ${shortId(id)}: let go`);
 };
 
 /** Every design tree recorded here whose folder is gone: its artifact went while this machine was away. */

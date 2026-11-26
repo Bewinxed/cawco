@@ -24,6 +24,7 @@ import {
   isFlockMember,
   type Kind,
   kindOf,
+  MARK_HUES,
   memberOf,
   readDecides,
   slugOf,
@@ -37,7 +38,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
-import { MESSAGE_LIMIT, writeFolderFile, YOU } from "./project-folder";
+import { writeFolderFile, YOU } from "./project-folder";
 
 /** A harness on the fleet, as the page draws setup from it. */
 export interface HarnessOffer {
@@ -112,7 +113,7 @@ interface AgentBody {
   skills: string[];
 }
 const HEAR = t.UnionEnum(HEARS);
-const HUE = t.Integer({ minimum: 1, maximum: 8 });
+const HUE = t.UnionEnum(MARK_HUES);
 
 /** The refusal of the first of `ids` the fleet knows no member by; none when it knows them all. */
 const unknownMembers = (fleet: FleetDecides, ids: string[]) => {
@@ -822,7 +823,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         {
           body: t.Object({
             routes: t.Record(t.String(), t.Nullable(t.String())),
-            message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
+            message: t.String({ minLength: 1 }),
           }),
         },
         async ({ params, body }) => {

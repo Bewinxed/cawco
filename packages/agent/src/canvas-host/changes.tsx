@@ -72,6 +72,7 @@ interface Ring {
 }
 
 /** Excalidraw's rounded box: a quarter of its short side, at most 32 (its adaptive radius). */
+// @limit external: Excalidraw's DEFAULT_ADAPTIVE_RADIUS (https://github.com/excalidraw/excalidraw/blob/master/packages/common/src/constants.ts)
 const ROUND_MOST = 32;
 const ROUND_SHARE = 0.25;
 

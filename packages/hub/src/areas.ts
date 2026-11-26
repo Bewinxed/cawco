@@ -23,13 +23,7 @@
  */
 
 import type { ProjectAtLimit } from "@cawco/core/accounts";
-import {
-  AREA_NAME_LIMIT,
-  type Area,
-  type CapPeriod,
-  type OnCap,
-  type SettingSource,
-} from "@cawco/core/areas";
+import type { Area, CapPeriod, OnCap, SettingSource } from "@cawco/core/areas";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -43,7 +37,6 @@ import {
   deleteProjectFolder,
   FOLDER_WRITE,
   listFolder,
-  MESSAGE_LIMIT,
   readFolderFile,
   writeAsked,
 } from "./project-folder";
@@ -101,14 +94,13 @@ export interface AreasDeps {
 }
 
 /**
- * An area's name as a body carries it: one line with something on it, at
- * most {@link AREA_NAME_LIMIT} characters; kept trimmed.
+ * An area's name as a body carries it: one line with something on it; kept
+ * trimmed.
  */
 const AREA_NAME = t.String({
-  maxLength: AREA_NAME_LIMIT,
   pattern:
     "^[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f][^\\u0000-\\u001f\\u007f]*$",
-  error: schemaRefusal(areaWords.name(AREA_NAME_LIMIT)),
+  error: schemaRefusal(areaWords.name),
 });
 
 /** Where each setting a note names came from for one project. */
@@ -434,7 +426,8 @@ export const createAreas = ({
         {
           body: t.Object({
             name: t.Optional(AREA_NAME),
-            account: t.Optional(t.Nullable(t.String({ maxLength: 320 }))),
+            // @limit external: an address fits an SMTP path of 256 octets with its angle brackets, so 254 characters (RFC 5321 section 4.5.3.1.3; RFC 3696 erratum 1690)
+            account: t.Optional(t.Nullable(t.String({ maxLength: 254 }))),
             accountAtLimit: t.Optional(
               t.Union([t.Literal("wait"), t.Literal("move")])
             ),
@@ -513,7 +506,7 @@ export const createAreas = ({
         {
           query: t.Object({
             path: t.String(),
-            message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
+            message: t.Optional(t.String()),
           }),
         },
         async ({ params, query }) => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DRAFT_LIMITS, type InstallSignIn } from "@cawco/core/install";
+  import type { InstallSignIn } from "@cawco/core/install";
   /**
    * Reach: the window's details for a machine not yet added, under the two
    * ways in as tabs (Over SSH, By a command), the one the entry point
@@ -384,7 +384,6 @@
                 hint="subtle"
                 look="address"
                 placeholder="deploy@build-01.example.net"
-                maxlength={DRAFT_LIMITS.target}
                 value={connect.fields.target}
                 oninput={(event) => edit({ target: event.currentTarget.value })}
                 onkeydown={(event) => {
@@ -407,7 +406,6 @@
                     field="number"
                     hint="subtle"
                     placeholder="22"
-                    maxlength={DRAFT_LIMITS.port}
                     value={connect.fields.port}
                     oninput={(event) =>
                       edit({ port: event.currentTarget.value })}

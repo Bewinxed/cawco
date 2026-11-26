@@ -31,7 +31,7 @@
 
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { flushSync } from "svelte";
-import { motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { motionOk, numberOf } from "#lib/platform/motion/curves.svelte.js";
 import {
   clearHints,
   coarse,
@@ -52,8 +52,6 @@ import { workspace } from "./workspace.svelte";
 const START = 4;
 /** How near a scrolling strip's end the pointer scrolls it, px. */
 const EDGE = 32;
-/** The fastest that scroll goes, at the very end, px a frame. */
-const SCROLL_MAX = 12;
 
 /** What a drop here would do. */
 type Target =
@@ -294,7 +292,7 @@ function carry(
     if (into <= 0) {
       return;
     }
-    const step = SCROLL_MAX * Math.min(1, into / EDGE);
+    const step = numberOf("--tab-scroll-max") * Math.min(1, into / EDGE);
     const was = track.scrollLeft;
     track.scrollLeft = was + (px < t.left + t.width / 2 ? -step : step);
     if (track.scrollLeft !== was) {

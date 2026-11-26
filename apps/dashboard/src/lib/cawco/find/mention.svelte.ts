@@ -23,6 +23,7 @@ const SPACES = /\s+/u;
 const ENDS_IN_SPACE = /\s$/u;
 
 /** How many candidates the menu holds (the wireframe's "up to five"). */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const MENU_ROWS = 5;
 
 /** What @ offers without a kind word: what a message hands work to. */
@@ -182,7 +183,7 @@ export function lookUp(label: string, handle: string): Promise<Chip | null> {
   }
   const title = label.split(" · ")[0]?.trim() ?? label;
   const words = SESSION_HANDLE.test(handle) ? handle : title;
-  const asked = findNames(words, { limit: 12 }).then((answer) => {
+  const asked = findNames(words).then((answer) => {
     const read = answer.kind === "answered" ? answer.read : null;
     const result = read?.ok
       ? read.value.results.find((r) => r.handle === handle)
@@ -320,7 +321,6 @@ export class MentionState {
       this.answer = { state: "asking", for: words, since: Date.now() };
     }
     const asked = await findNames(words, {
-      limit: 12,
       kinds: this.kindNamed ? undefined : NAMED,
       signal: abort.signal,
     });

@@ -61,11 +61,16 @@ export function rangeOf(dial: GraphDial, written: number): DialRange {
   return { min, max, step: dial.step ?? stepFor(max - min) };
 }
 
+/** A count of decimal places, held to what `toFixed` takes. */
+const placesOf = (places: number): number =>
+  // @limit external: Number.prototype.toFixed takes 0 to 100 fraction digits (ECMA-262, https://tc39.es/ecma262/#sec-number.prototype.tofixed)
+  Math.min(places, 100);
+
 /** `value` on `range`'s step, from its min, without the step's float dust. */
 export function snapTo(value: number, range: DialRange): number {
   const steps = Math.round((value - range.min) / range.step);
   const places = Math.max(0, -Math.floor(Math.log10(range.step)));
-  return Number((range.min + steps * range.step).toFixed(Math.min(places, 6)));
+  return Number((range.min + steps * range.step).toFixed(placesOf(places)));
 }
 
 /** `value` held inside `range`: where a step or a drag stops (a typed figure is kept as typed). */
@@ -166,7 +171,7 @@ interface Written {
 const writtenOf = (token: string): Written => {
   const match = CHANNEL.exec(token);
   return {
-    places: Math.min(6, match?.[1]?.length ?? 0),
+    places: placesOf(match?.[1]?.length ?? 0),
     percent: match?.[2] === "%",
     unit: match?.[2] && match[2] !== "%" ? match[2] : "",
   };
@@ -225,6 +230,7 @@ export function colourLike(picked: string, like: string): string {
   const name = match?.[1]?.toLowerCase() ?? "";
   const body = match?.[2]?.trim() ?? "";
   const commas = body.includes(",");
+  // @limit external: CSS colour functions: three channels, then alpha (CSS Color 4, section 4)
   const [channelsSaid = "", alphaSaid] = commas
     ? [body.split(",").slice(0, 3).join(" "), body.split(",")[3]]
     : body.split("/");
@@ -264,7 +270,9 @@ export function colourLike(picked: string, like: string): string {
 }
 
 /** At most this many options, this many characters in all, stand in place as chips; past it a set is a list. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const IN_PLACE_MAX = 8;
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const IN_PLACE_CHARS = 64;
 
 /** Whether a set of options, as their words read, stands in place (segments or chips) in the card's width. */

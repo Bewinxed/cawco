@@ -20,6 +20,7 @@ export {
   scanFile,
   type Span,
 } from "./file.ts";
+export { recordLimitReadingsWith } from "./limit-readings.ts";
 export { parseMany, type ParseManyOptions } from "./pool.ts";
 export { section, setSectionMarker } from "./section.ts";
 export {

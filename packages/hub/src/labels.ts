@@ -1,4 +1,5 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { shortId } from "@cawco/core/short-id";
 
 /**
  * How the hub names a session, everywhere it names one: peer frames, reports,
@@ -29,7 +30,7 @@ export const leafOf = (path: string): string =>
 export const sessionLabel = (
   row: LabelledRow
 ): { dir: string; name: string; tag: string } => {
-  const id8 = row.id.slice(0, 8);
+  const id8 = shortId(row.id);
   if (row.launchDir === "unknown") {
     const harness = row.harness ?? "session";
     const dir = "launch folder unknown";

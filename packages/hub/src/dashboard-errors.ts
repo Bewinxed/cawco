@@ -1,20 +1,18 @@
 import {
-  PAGE_FAULT_TEXT_MAX,
+  ERROR_REPORT_BYTES,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
 import { Elysia, ElysiaStatus, ParseError, problem, status, t } from "elysia";
 
-const BODY_LIMIT = 64 * 1024;
-
 /** Where the dashboard sends its errors, on its own origin (dashboard lib/cawco/error-report.ts). */
 const DASHBOARD_ERRORS_PATH = "/api/dashboard-errors";
 
-const faultText = t.String({ maxLength: PAGE_FAULT_TEXT_MAX });
+const faultText = t.String();
 const faultPlace = t.Union([t.Integer({ minimum: 0 }), t.Null()]);
 
 /** A page's fault (core page-faults.ts), as the preview overlay reports it. */
 const faultBody = t.Object({
-  artifact: t.String({ minLength: 1, maxLength: 64 }),
+  artifact: t.String({ minLength: 1 }),
   revision: t.Integer({ minimum: 0 }),
   fault: t.Union([
     t.Object({
@@ -76,12 +74,12 @@ export const dashboardErrorsRoutes = () =>
         }
       },
       body: t.Object({
-        message: t.String({ maxLength: 1000 }),
-        stack: t.String({ maxLength: 6000 }),
-        path: t.String({ minLength: 1, maxLength: 1000, pattern: "^/" }),
-        sessionId: t.Union([t.String({ maxLength: 256 }), t.Null()]),
-        version: t.String({ minLength: 1, maxLength: 128 }),
-        userAgent: t.String({ maxLength: 512 }),
+        message: t.String(),
+        stack: t.String(),
+        path: t.String({ minLength: 1, pattern: "^/" }),
+        sessionId: t.Union([t.String(), t.Null()]),
+        version: t.String({ minLength: 1 }),
+        userAgent: t.String(),
         fault: t.Optional(faultBody),
       }),
       parse: [
@@ -95,7 +93,9 @@ export const dashboardErrorsRoutes = () =>
               detail: "Dashboard errors require application/json",
             });
           }
-          if (Number(request.headers.get("content-length")) > BODY_LIMIT) {
+          if (
+            Number(request.headers.get("content-length")) > ERROR_REPORT_BYTES
+          ) {
             throw problem(413, {
               code: "dashboard-error-report-too",
               detail: "Dashboard error report is too large",
@@ -115,7 +115,7 @@ export const dashboardErrorsRoutes = () =>
                 break;
               }
               size += value.byteLength;
-              if (size > BODY_LIMIT) {
+              if (size > ERROR_REPORT_BYTES) {
                 await reader.cancel();
                 throw problem(413, {
                   code: "dashboard-error-report-too",

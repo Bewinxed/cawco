@@ -75,11 +75,13 @@ import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { boundedRead } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import { harnessName } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { type Install, installName } from "@cawco/core/install";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import { DESK_ACK_MS, type DeskAlertFrame } from "@cawco/core/notifications";
 import {
@@ -91,6 +93,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
@@ -140,6 +143,7 @@ const SAME_MOMENT_MS = 10_000;
  * tasks makes one tool call every few seconds (2026-10-15: six moves to
  * Review in about 25 s, six pushes), so a quiet of two such calls ends it.
  */
+// @limit recording: hub.push-arrival-gap-ms until 2026-12-03
 const QUIET_MS = 10_000;
 /** And at most this long from its first: nothing held waits longer for the owner. */
 const BURST_MS = 30_000;
@@ -147,6 +151,7 @@ const BURST_MS = 30_000;
 const COVER_KEPT_MS = DAY_MS;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
+// @limit recording: hub.cawrier-request-ms until 2026-12-10
 const REQUEST_TIMEOUT_MS = 10_000;
 /** At most one background push per device in this window (Apple: "two or three per hour"). */
 const BACKGROUND_GAP_MS = 20 * 60_000;
@@ -182,6 +187,7 @@ export const PUSH_CATEGORIES = {
 const BROWSER_ASK_BODY = "Needs you in the browser";
 
 /** A question with more options than this is opened to be answered: three and "Other…" fill the four actions a category shows. */
+// @limit external: a notification category holds up to four custom actions, so three options and "Other…" (Apple, Local and Remote Notification Programming Guide, https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/SupportingNotificationsinYourApp.html)
 const MAX_INLINE_OPTIONS = 3;
 
 /**
@@ -545,6 +551,7 @@ const sentLine = (
 };
 
 /** Cawrier refuses a payload over APNs' 4096 bytes (apps/cawrier `MAX_PAYLOAD_BYTES`). */
+// @limit external: APNs' payload, 4,096 bytes (https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification)
 const MAX_PAYLOAD_BYTES = 4096;
 /** AES-GCM's IV and tag around the ciphertext: CryptoKit's `SealedBox.combined`. */
 const IV_BYTES = 12;
@@ -810,30 +817,33 @@ const post = (
         expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
         ...made,
       });
-      return boundedRead(
-        REQUEST_TIMEOUT_MS,
-        Effect.tryPromise(async (signal) => {
-          const response = await fetch(`${CAWRIER}/v1/push`, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${device.secret}`,
-              "content-type": "application/json",
-            },
-            body: sent,
-            signal,
-          });
-          if (response.ok) {
-            return { status: response.status, reason: null };
-          }
-          const read = CAWRIER_REFUSAL.safeParse(
-            await response.json().catch(() => ({}))
-          );
-          const answer = read.success ? read.data : {};
-          return {
-            status: response.status,
-            reason: answer.reason ?? answer.error ?? null,
-          };
-        })
+      return timedEffect(
+        boundedRead(
+          REQUEST_TIMEOUT_MS,
+          Effect.tryPromise(async (signal) => {
+            const response = await fetch(`${CAWRIER}/v1/push`, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${device.secret}`,
+                "content-type": "application/json",
+              },
+              body: sent,
+              signal,
+            });
+            if (response.ok) {
+              return { status: response.status, reason: null };
+            }
+            const read = CAWRIER_REFUSAL.safeParse(
+              await response.json().catch(() => ({}))
+            );
+            const answer = read.success ? read.data : {};
+            return {
+              status: response.status,
+              reason: answer.reason ?? answer.error ?? null,
+            };
+          })
+        ),
+        (ms) => recordLimitReading("hub.cawrier-request-ms", ms)
       );
     }),
     Effect.catchTag("Unanswered", ({ after }) =>
@@ -857,27 +867,30 @@ const removeDevice = (
   if (!device) {
     return Effect.succeed(false);
   }
-  return boundedRead(
-    REQUEST_TIMEOUT_MS,
-    Effect.tryPromise(async (signal) => {
-      const response = await fetch(`${CAWRIER}/v1/unenroll`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${device.secret}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ pairingId }),
-        signal,
-      });
-      if (response.status === 204) {
-        return;
-      }
-      const read = CAWRIER_REFUSAL.safeParse(
-        await response.json().catch(() => ({}))
-      );
-      const answer = read.success ? read.data : {};
-      return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
-    })
+  return timedEffect(
+    boundedRead(
+      REQUEST_TIMEOUT_MS,
+      Effect.tryPromise(async (signal) => {
+        const response = await fetch(`${CAWRIER}/v1/unenroll`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${device.secret}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ pairingId }),
+          signal,
+        });
+        if (response.status === 204) {
+          return;
+        }
+        const read = CAWRIER_REFUSAL.safeParse(
+          await response.json().catch(() => ({}))
+        );
+        const answer = read.success ? read.data : {};
+        return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
+      })
+    ),
+    (ms) => recordLimitReading("hub.cawrier-request-ms", ms)
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }) =>
       Effect.succeed(cawrierSilent(after))
@@ -1243,7 +1256,7 @@ export const createPush = ({
       atDesk.set(id, item);
       alertDesk(tab, item);
       console.log(
-        `[notify] ${presenceLogWords.heldAtDesk(id)}; shown on tab ${tab.slice(0, 8)}`
+        `[notify] ${presenceLogWords.heldAtDesk(id)}; shown on tab ${shortId(tab)}`
       );
     }
     return going;
@@ -1265,7 +1278,7 @@ export const createPush = ({
       timer: lifetime.after("push desk ack missed", DESK_ACK_MS, () => {
         unanswered.delete(id);
         console.log(
-          `[notify] push ${id}: tab ${tab.slice(0, 8)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
+          `[notify] push ${id}: tab ${shortId(tab)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
         );
         notifications.dropDeskTab(tab);
         deskOn(id);
@@ -1303,9 +1316,7 @@ export const createPush = ({
         ? notifications.deskTab()
         : undefined;
     if (tab) {
-      console.log(
-        `[notify] push ${id}: shown on tab ${tab.slice(0, 8)} instead`
-      );
+      console.log(`[notify] push ${id}: shown on tab ${shortId(tab)} instead`);
       alertDesk(tab, item);
       return;
     }
@@ -1335,7 +1346,7 @@ export const createPush = ({
       return;
     }
     console.log(
-      `[notify] push ${collapseId}: tab ${clientId.slice(0, 8)} can't show a desktop notification; it is no longer an alert target`
+      `[notify] push ${collapseId}: tab ${shortId(clientId)} can't show a desktop notification; it is no longer an alert target`
     );
     notifications.dropDeskTab(clientId);
     deskOn(collapseId);
@@ -1409,6 +1420,9 @@ export const createPush = ({
     };
   };
 
+  /** When the last item that needs you arrived. */
+  let lastArrivalAt: number | undefined;
+
   /**
    * An item that needs you joins the open burst, or opens one; the burst
    * goes out {@link QUIET_MS} after its last arrival, at most
@@ -1421,6 +1435,11 @@ export const createPush = ({
   const arrive = (item: Arrival, once = true): void => {
     const { collapseId } = item.notification;
     const now = Date.now();
+    if (lastArrivalAt !== undefined) {
+      // The quiet between two items: what QUIET_MS must outlast for a burst.
+      recordLimitReading("hub.push-arrival-gap-ms", now - lastArrivalAt);
+    }
+    lastArrivalAt = now;
     for (const [id, at] of recent) {
       if (now - at > SAME_MOMENT_MS) {
         recent.delete(id);
@@ -2625,7 +2644,7 @@ export const pushRoutes = (db: DbShape, push: Push) =>
           pairingId: body.pairingId,
           secret: body.secret,
           key: body.key,
-          name: body.name.trim().slice(0, 120) || "iPhone",
+          name: body.name.trim() || "iPhone",
           platform: body.platform,
           quiet: body.quiet,
         });

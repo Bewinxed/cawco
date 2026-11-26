@@ -66,16 +66,15 @@ export const recapLine = (
   timestamp: new Date(line.at).toISOString(),
 });
 
-/** How many continuations a recap follows to the session that goes on now. */
-const CONTINUED_MOST = 20;
-
 export const createReturnRecap = (deps: ReturnRecapDeps) => {
   const { db } = deps;
 
   /** The session that goes on from `instanceId` now: itself, or the last it was continued into. */
   const goingOn = (instanceId: string): InstanceRow | undefined => {
     let [row] = db.getInstancesByIds([instanceId]);
-    for (let hop = 0; row?.continuedInto && hop < CONTINUED_MOST; hop += 1) {
+    const seen = new Set([instanceId]);
+    while (row?.continuedInto && !seen.has(row.continuedInto)) {
+      seen.add(row.continuedInto);
       [row] = db.getInstancesByIds([row.continuedInto]);
     }
     return row;

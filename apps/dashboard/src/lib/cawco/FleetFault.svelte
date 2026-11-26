@@ -79,6 +79,7 @@
    * width, and past that the list has stopped being something you take in at a
    * glance and become something you scroll.
    */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const NAMED = 6;
   const shown = $derived(group.faults.slice(0, NAMED));
   const extra = $derived(group.faults.length - shown.length);

@@ -211,6 +211,8 @@ export interface RoutineDraft {
 export interface SchedulePreview {
   /** Its runs ahead, as the scheduler would start them, epoch ms. */
   nextRuns: number[];
+  /** The runs stop before the week's end: the schedule runs more than they tell. */
+  nextRunsCut: boolean;
   /** The cron in words, in its zone (cronstrue). */
   words: string;
 }

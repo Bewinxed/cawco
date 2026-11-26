@@ -28,6 +28,7 @@ import { mcpUsageName, SCORE_WINDOW_DAYS } from "./usage-count";
 /** The window a count reads when none is asked: the starting-set spec's 30 days. */
 export const CALLS_DEFAULT_DAYS = 30;
 /** The longest window: the calls the hub keeps (usage-count.ts). */
+// @limit measured: the calls the hub keeps (usage-count.ts SCORE_WINDOW_DAYS): a row older than 120 days weighs 2^(-120/14) = 0.26% at the 14-day half-life, and the hub drops it as it starts
 export const CALLS_MAX_DAYS = SCORE_WINDOW_DAYS;
 
 /** A skill or an MCP server: what a role's set lists. */

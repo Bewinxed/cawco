@@ -8,8 +8,7 @@
  * deriving it on the hub is meant to remove.
  */
 
-/** How long a title derived from a first message runs before it is cut. */
-const TITLE_LIMIT = 80;
+import { derivedName } from "@cawco/providers/derived-name";
 
 const COMMAND_OPEN = /<command-(?:message|name)>/u;
 const COMMAND_CLOSE = /<\/command-(?:message|name)>/gu;
@@ -71,5 +70,5 @@ export function deriveTitleFromFirstMessage(raw: string): string {
   const cleaned = (command ?? typed.replace(ANY_TAG, " "))
     .replace(WHITESPACE_RUN, " ")
     .trim();
-  return cleaned.slice(0, TITLE_LIMIT);
+  return derivedName(cleaned);
 }

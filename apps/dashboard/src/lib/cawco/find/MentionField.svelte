@@ -578,7 +578,7 @@
       }
       if (c === "@" && (i === 0 || SPACE.test(before[i - 1]))) {
         const query = before.slice(i + 1).replaceAll(" ", " ");
-        if (query.length > 80 || query.startsWith(" ")) {
+        if (query.startsWith(" ")) {
           return null;
         }
         return { node, offset: i, query };

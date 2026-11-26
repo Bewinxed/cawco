@@ -30,6 +30,7 @@ import { makeFolder } from "@cawco/core/folders";
 import type { ControlResultFrame as ControlResult } from "@cawco/core/frames";
 import { jsonSizeEstimate } from "@cawco/core/json-stream";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -39,8 +40,10 @@ import { writeStateFile } from "@cawco/core/state-file";
  * of every open page), so an id is never forgotten while it can still come
  * again; a request is held no longer than its own deadline, an hour at most.
  */
+// @limit recording: agent.requests-held until 2026-12-03
 const REQUESTS_KEPT = 4096;
 /** Characters of answers kept in memory in all. Our choice: a few transcripts' worth. */
+// @limit recording: agent.answer-chars-held until 2026-12-10
 const ANSWER_CHARS_KEPT = 64 * 1024 * 1024;
 /** The longest answer kept on disk. Our choice: every mutation's answer, no read's bulk. */
 const ANSWER_CHARS_ON_DISK = 64 * 1024;
@@ -195,6 +198,8 @@ const persist = (id: string): void => {
 
 /** The oldest ids, and their answers, past the bounds go. */
 function trim(): void {
+  recordLimitReading("agent.requests-held", entries.size);
+  recordLimitReading("agent.answer-chars-held", answerChars);
   for (const [id, entry] of entries) {
     if (entries.size <= REQUESTS_KEPT && answerChars <= ANSWER_CHARS_KEPT) {
       return;

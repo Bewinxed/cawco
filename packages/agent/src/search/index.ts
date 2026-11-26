@@ -65,17 +65,6 @@ const WIRE_MS = 200;
  * search with its reason.
  */
 const SYNC_WAIT_MS = TRANSCRIPT_ANSWER_MS - TRANSCRIPT_QUERY_MS - WIRE_MS;
-const MAX_SEARCH_LIMIT = 50;
-const DEFAULT_SEARCH_LIMIT = 20;
-/** How many documents a listing (an author's words, no query) answers with at most. */
-const MAX_LISTED_DOCS = 200;
-/** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
-const MAX_TURNS_SIDE = 10;
-/**
- * The most places one window of a conversation's find holds: the hub's
- * own window (core find.ts `PLACES_WINDOW`) and room over it.
- */
-const MAX_PLACES = 200;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -218,26 +207,22 @@ export class TranscriptSearchService {
    */
   async search(
     query: string,
-    options?: TranscriptQuery,
+    options: TranscriptQuery,
     signal?: AbortSignal
   ): Promise<TranscriptAnswer> {
     const started = performance.now();
     await this.#fresh();
     const queried = performance.now();
-    const limit = Math.min(
-      options?.limit ?? DEFAULT_SEARCH_LIMIT,
-      MAX_SEARCH_LIMIT
-    );
     // No words and an author: that author's words, newest first, off the
     // index's author-and-time order (fts5.ts `listed`), never a scan.
-    const { conversations, dropped } = await this.#conversations(
+    const { conversations, dropped, matched } = await this.#conversations(
       query,
-      limit,
       options,
       signal
     );
     return {
       conversations,
+      matched,
       ...(dropped === null ? {} : { dropped }),
       unreadTranscripts: this.#unread,
       // Only a sync of an index that was never whole is a catch-up: a slow
@@ -302,7 +287,7 @@ export class TranscriptSearchService {
       "turns",
       {
         sessions: query.sessions,
-        side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
+        side: query.side,
         ...(query.docId ? { docId: query.docId } : {}),
         ...(query.at === undefined ? {} : { at: query.at }),
       },
@@ -330,7 +315,7 @@ export class TranscriptSearchService {
       {
         sessions: query.sessions,
         words: query.words,
-        limit: Math.min(Math.max(1, query.limit), MAX_PLACES),
+        limit: query.limit,
         ...(query.kind === undefined ? {} : { kind: query.kind }),
         ...(query.offset === undefined ? {} : { offset: query.offset }),
         ...(query.near === undefined ? {} : { near: query.near }),
@@ -346,29 +331,28 @@ export class TranscriptSearchService {
    */
   async #conversations(
     query: string,
-    limit: number,
-    options: TranscriptQuery | undefined,
+    options: TranscriptQuery,
     signal: AbortSignal | undefined
   ) {
-    const author = options?.author;
+    const { author, limit } = options;
     const narrowed = {
-      ...(options?.sessions ? { sessions: options.sessions } : {}),
-      ...(options?.before ? { before: options.before } : {}),
+      ...(options.sessions ? { sessions: options.sessions } : {}),
+      ...(options.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      const conversations = await this.#reader.read(
+      const { conversations, matched } = await this.#reader.read(
         "listed",
         {
           author,
-          limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
+          limit,
           ...narrowed,
-          ...(options?.since ? { since: options.since } : {}),
-          ...(options?.toolOutput ? { toolOutput: true } : {}),
-          ...(options?.context ? { context: true } : {}),
+          ...(options.since ? { since: options.since } : {}),
+          ...(options.toolOutput ? { toolOutput: true } : {}),
+          ...(options.context ? { context: true } : {}),
         },
         signal
       );
-      return { conversations, dropped: null };
+      return { conversations, dropped: null, matched };
     }
     return await this.#reader.read(
       "search",
@@ -378,9 +362,9 @@ export class TranscriptSearchService {
           limit,
           ...(author ? { author } : {}),
           ...narrowed,
-          ...(options?.toolOutput ? { toolOutput: true } : {}),
-          ...(options?.context ? { context: true } : {}),
-          ...(options?.submitted ? { submitted: true } : {}),
+          ...(options.toolOutput ? { toolOutput: true } : {}),
+          ...(options.context ? { context: true } : {}),
+          ...(options.submitted ? { submitted: true } : {}),
         },
       },
       signal

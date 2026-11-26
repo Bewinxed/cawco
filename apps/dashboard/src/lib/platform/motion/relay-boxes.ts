@@ -32,6 +32,7 @@ interface Opening {
  */
 const tweenMs = (delta: number): number =>
   Math.min(
+    // @limit external: "At 500ms, animations start to feel like a real drag" (NN/g, https://www.nngroup.com/articles/animation-duration/)
     480,
     Math.max(dur("--duration-panel"), Math.ceil(Math.abs(delta) * 2.5))
   );

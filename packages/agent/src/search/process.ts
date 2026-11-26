@@ -29,6 +29,11 @@
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  keepLimitReadings,
+  recordLimitReading,
+  timed,
+} from "@cawco/core/limit-readings";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
@@ -51,6 +56,7 @@ import type {
  * every asker. A search of obelisk's 1.47M-document index answers in under
  * 0.8 s (fts5.ts `MARKED_CHARS`). Our call.
  */
+// @limit recording: agent.search-read-ms until 2026-12-10
 const READ_LIMIT_MS = 5000;
 /**
  * How long a question let go while it runs may go on holding the reader
@@ -225,6 +231,7 @@ export class SearchProcess<R extends SearchRole> {
     from.heardAt = Date.now();
     switch (said.kind) {
       case "beat":
+        keepLimitReadings(said.readings ?? []);
         return;
       case "ready":
         from.ready = true;
@@ -447,7 +454,9 @@ export class SearchProcess<R extends SearchRole> {
       this.#next();
       this.#unheld();
     }
-    return answered<SearchAnswer<K>>(question);
+    return timed(answered<SearchAnswer<K>>(question), (ms) =>
+      recordLimitReading("agent.search-read-ms", ms)
+    );
   }
 
   /** `op` run in the process to its end, `tell` hearing how far it has come. */

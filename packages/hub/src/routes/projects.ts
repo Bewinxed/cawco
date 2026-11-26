@@ -3,7 +3,6 @@
  */
 
 import { isFleetProject } from "@cawco/core/fleet-project";
-import { PROJECT_NAME_LENGTH } from "@cawco/core/forgotten-project";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -29,6 +28,9 @@ export const projectsListed = ({
     cap: caps.capOf(project),
   }));
 };
+
+/** An optional field that, given, says something. */
+const LINE = t.Optional(t.String({ minLength: 1 }));
 
 export const projectRoutes = ({
   askerOf,
@@ -85,17 +87,15 @@ export const projectRoutes = ({
       "/api/projects",
       {
         body: t.Object({
-          name: t.Optional(
-            t.String({ minLength: 1, maxLength: PROJECT_NAME_LENGTH })
-          ),
-          machineId: t.Optional(t.String({ minLength: 1 })),
-          cwd: t.Optional(t.String({ minLength: 1 })),
+          name: LINE,
+          machineId: LINE,
+          cwd: LINE,
           // Made with Caw: its Caw starts on. A folder that joins a project
           // leaves that project's setting as it is.
           caw: t.Optional(t.Boolean()),
           template: t.Optional(t.UnionEnum(STAGES_TEMPLATES)),
-          prompt: t.Optional(t.String({ maxLength: 20_000 })),
-          promptId: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+          prompt: t.Optional(t.String()),
+          promptId: LINE,
         }),
       },
       async ({ body }) => {
@@ -159,12 +159,13 @@ export const projectRoutes = ({
       {
         body: t.Object(
           {
-            name: t.Optional(t.String({ maxLength: PROJECT_NAME_LENGTH })),
+            name: t.Optional(t.String()),
             lands: t.Optional(LANDS),
             // The account its sessions start on, by id, nickname or email;
             // null: the fleet's routing.
             account: t.Optional(
-              t.Union([t.String({ maxLength: 320 }), t.Null()])
+              // @limit external: an address fits an SMTP path of 256 octets with its angle brackets, so 254 characters (RFC 5321 section 4.5.3.1.3; RFC 3696 erratum 1690)
+              t.Union([t.String({ maxLength: 254 }), t.Null()])
             ),
             // What its sessions on that account do at its limit.
             accountAtLimit: t.Optional(
@@ -174,8 +175,8 @@ export const projectRoutes = ({
             lfs: t.Optional(
               t.Union([
                 t.Object({
-                  url: t.String({ maxLength: 2000 }),
-                  connection: t.String({ maxLength: 200 }),
+                  url: t.String(),
+                  connection: t.String(),
                 }),
                 t.Null(),
               ])
@@ -325,9 +326,7 @@ export const projectRoutes = ({
       {
         body: t.Optional(
           t.Object({
-            name: t.Optional(
-              t.String({ minLength: 1, maxLength: PROJECT_NAME_LENGTH })
-            ),
+            name: t.Optional(t.String({ minLength: 1 })),
             forgottenAt: t.Optional(t.Number()),
           })
         ),

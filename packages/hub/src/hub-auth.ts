@@ -72,6 +72,7 @@ import {
   type WaitingMachine,
 } from "@cawco/core/hub-auth";
 import { INSTALL_CODE_HEADER } from "@cawco/core/install";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { httpProof, sameMac, socketProof } from "@cawco/core/machine-key";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
@@ -181,6 +182,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A browser's pass for its dashboard door, and the dashboard's origins
   // (browser-passes.ts): its machine's agent alone, for its own browsers.
   ["GET", /^\/api\/browser-passes\/[^/]+$/u, "machine"],
+  // A machine's CLI and scripts report the bound readings they took
+  // (limit-readings.ts), each under its own machine.
+  ["POST", /^\/api\/limit-readings\/[^/]+$/u, "machine"],
   // A folder move's bytes between two machines (folder-move-relay.ts): each
   // side a machine's agent; the token names one copy's stream.
   ["PUT", /^\/api\/folder-moves\/relay\/[^/]+$/u, "machine"],
@@ -229,6 +233,7 @@ const OWN_MACHINE: readonly RegExp[] = [
   /^\/api\/binary-updates\/machines\/([^/]+)\/state$/u,
   /^\/api\/agents\/([^/]+)$/u,
   /^\/api\/agents\/([^/]+)\/busy$/u,
+  /^\/api\/limit-readings\/([^/]+)$/u,
 ];
 
 const namesAnother = (path: string, machineId: string): boolean =>
@@ -318,6 +323,7 @@ const PAIRING_TTL_MS = 10 * 60_000;
 /** How often its client polls (RFC 8628 §3.2 `interval`, the default 5 s). */
 const POLL_INTERVAL_S = 5;
 /** Pairings held at once; the oldest goes past it, so a flood of asks buries no real one for long. */
+// @limit recording: hub.pairings-open until 2026-12-03
 const PAIRINGS_HELD = 20;
 /** How often a device's last use is written, at most. */
 const TOUCH_EVERY_MS = 60_000;
@@ -360,9 +366,9 @@ export const browserName = (userAgent: string | null): string => {
   return os ? `${browser} on ${os}` : browser;
 };
 
-/** A client's own name for itself, kept short and on one line. */
+/** A client's own name for itself, on one line. */
 const cleanName = (name: string | undefined, fallback: string): string =>
-  name?.replace(/\s+/gu, " ").trim().slice(0, 60) || fallback;
+  name?.replace(/\s+/gu, " ").trim() || fallback;
 
 interface Pairing extends PairingRequest {
   /** Set once approved: the device made, and its token until the client takes it. */
@@ -911,6 +917,7 @@ export const createHubAuth = ({
     address: string | null
   ): PairingStart => {
     sweep();
+    recordLimitReading("hub.pairings-open", pairings.size + 1);
     while (pairings.size >= PAIRINGS_HELD) {
       const oldest = pairings.entries().next().value;
       if (oldest === undefined) {
@@ -1176,7 +1183,7 @@ export const createHubAuth = ({
               t.Literal("app"),
               t.Literal("cli"),
             ]),
-            name: t.Optional(t.String({ maxLength: 200 })),
+            name: t.Optional(t.String()),
           }),
         },
         ({ body, request, server }) => {
@@ -1276,7 +1283,7 @@ export const createHubAuth = ({
           body: t.Object({
             required: t.Boolean(),
             kind: t.Optional(t.Union([t.Literal("browser"), t.Literal("app")])),
-            name: t.Optional(t.String({ maxLength: 200 })),
+            name: t.Optional(t.String()),
           }),
         },
         ({ body, request, server, set }) => {

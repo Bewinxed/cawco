@@ -328,7 +328,7 @@ const holdAppServer = (env: Record<string, string>) => {
   let receive: (line: string) => void = () => undefined;
   createInterface({ input: child.stdout }).on("line", (line) => {
     if (process.env.CODEX_CHECK_TRACE) {
-      console.error(`<< ${line.slice(0, 300)}`);
+      console.error(`<< ${line}`);
     }
     receive(line);
   });

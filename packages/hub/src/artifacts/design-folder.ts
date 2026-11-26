@@ -46,7 +46,12 @@ export interface DesignFile {
  * code, styles and pictures it loads, never a project's tree. Its
  * dependencies are its stage's install's.
  */
-export const DESIGN_LIMITS = { bytes: 64 * 1024 * 1024, files: 4000 } as const;
+export const DESIGN_LIMITS = {
+  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
+  bytes: 64 * 1024 * 1024,
+  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
+  files: 4000,
+} as const;
 
 /**
  * The latest release of Vite and of its framework plugins and their

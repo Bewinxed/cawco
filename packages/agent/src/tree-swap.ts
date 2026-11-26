@@ -40,6 +40,7 @@ import { hashFiles } from "@cawco/core/file-hash";
 import type { SkillFile } from "@cawco/core/fleet";
 import { makeFolder } from "@cawco/core/folders";
 import { treeStoreOf } from "@cawco/core/paths/claude";
+import { shortId } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
 
@@ -51,8 +52,7 @@ import { z } from "zod";
 export const CARRIED = ".cawco-carried.json";
 
 /** A tree of `name` in its store: the name and eight hex digits. */
-const treeName = (name: string): string =>
-  `${name}-${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+const treeName = (name: string): string => `${name}-${shortId(randomUUID())}`;
 
 const TREE_SUFFIX = /^[0-9a-f]{8}$/u;
 
@@ -252,7 +252,7 @@ export const placeTree = async (
     );
     const link = join(
       dir,
-      `.${name}.cawco-${process.pid}-${randomUUID().slice(0, 8)}.tmp`
+      `.${name}.cawco-${process.pid}-${shortId(randomUUID())}.tmp`
     );
     await symlink(relative(dir, tree), link);
     try {

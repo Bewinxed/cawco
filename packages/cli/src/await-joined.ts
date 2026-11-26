@@ -15,6 +15,7 @@ import {
   INSTALL_LIST_LIMIT_MS,
 } from "@cawco/core/install";
 import { INSTALL_STEP_PREFIX, JOIN_WAIT_STEP } from "@cawco/core/join";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -25,6 +26,7 @@ import type { AgentRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { dataOf, HubNotAnswering, hubClient, reached } from "@cawco/hub/client";
 
+// @limit measured: the install list's own limit (INSTALL_LIST_LIMIT_MS)
 const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
 const LOCAL_NETWORK_URL =
   /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/u;
@@ -107,6 +109,7 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
           );
         }
         if (answer.value.row?.status === "online") {
+          recordLimitReading("install.list-wait-ms", Date.now() - since);
           return;
         }
         break;

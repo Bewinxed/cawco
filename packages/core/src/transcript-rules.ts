@@ -9,6 +9,7 @@
  * (`transcript.ts`) applies it.
  */
 
+import { quote } from "@cawco/providers/quote";
 import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
@@ -50,6 +51,7 @@ import {
 import { invariant } from "./invariant";
 import { isRecord } from "./is-record";
 import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
+import { answerShare } from "./prompt-budget";
 import { parseReference } from "./references";
 import type { ReturnRecap } from "./return-recap";
 import { parseRuleMarker } from "./rules";
@@ -73,6 +75,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./session-messages";
+import { shortId } from "./short-id";
 import { withoutSkillMarkers } from "./skill-words";
 import {
   ContextLineSchema,
@@ -257,15 +260,17 @@ export function getToolGlance(
   }
   // File operations - show path (last 2 segments)
   if (input.file_path) {
+    // @limit external: POSIX path form: the last two segments are the file's folder and its name
     return String(input.file_path).split("/").slice(-2).join("/");
   }
   if (input.path) {
+    // @limit external: POSIX path form: the last two segments are the file's folder and its name
     return String(input.path).split("/").slice(-2).join("/");
   }
   // Bash - show command preview
   if (input.command) {
     const cmd = String(input.command);
-    return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
+    return quote(cmd);
   }
   // Search - show pattern
   if (input.pattern) {
@@ -583,7 +588,7 @@ function subagentSpawn(
  * the SDK writes, or by the id/file pair a re-worded launch still carries.
  */
 function subagentLaunch(result: string): boolean {
-  const head = result.trimStart().slice(0, 200);
+  const head = result.trimStart();
   if (head.startsWith("Async agent launched")) {
     return true;
   }
@@ -705,7 +710,7 @@ function unnamedLine(
 }
 
 /** A task summary folded into the ~200-char line metadata. */
-const TASK_SUMMARY_LIMIT = 200;
+const TASK_SUMMARY_LIMIT = answerShare(200);
 function truncateSummary(summary: string | undefined): string {
   if (!summary) {
     return "";
@@ -1679,7 +1684,7 @@ const isHarnessNote = (value: unknown): value is HarnessNote =>
 function systemNote(
   text: string
 ): { kind: string; title: string; taskToolId?: string } | null {
-  const head = text.trimStart().slice(0, 200);
+  const head = text.trimStart();
   // A slash command's local echo (`<local-command-caveat>`, `<command-name>`,
   // `<local-command-stdout>`), and a command or skill sent as a prompt, which
   // Claude Code stores opening on `<command-message>` (a spawn's `skills`, each
@@ -1753,7 +1758,7 @@ function firstPlainLine(text: string): string {
   if (!line) {
     return "";
   }
-  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+  return quote(line);
 }
 
 /**
@@ -2240,7 +2245,7 @@ function sendRow(
       row.metadata?.subtype === ARTIFACT_RESPONSES,
     "artifact-notice-drawn",
     () =>
-      `Send ${record.uuid} to session ${record.instanceId} came on the artifact origin, and no artifact notice reads it, so it was about to be drawn as the person's words: "${text.split("\n")[0].slice(0, 160)}".`,
+      `Send ${record.uuid} to session ${record.instanceId} came on the artifact origin, and no artifact notice reads it, so it was about to be drawn as the person's words: "${quote(text)}".`,
     () => ({ send: record.uuid, session: record.instanceId })
   );
   const metadata = {
@@ -2290,7 +2295,7 @@ function cawcoRow(
         ...carried,
         peerName: origin.name ?? "another session",
         ...(origin.fromSession
-          ? { peerSession: origin.fromSession.slice(0, 8) }
+          ? { peerSession: shortId(origin.fromSession) }
           : {}),
       },
     };

@@ -36,14 +36,19 @@ export const FLEET_WATCH_WAITS: ReadonlySet<string> = new Set([
  */
 export const FLEET_WATCH_LIMITS = {
   /** The same tool error, normalised, this many times in the session's recent turns. */
+  // @limit external: three repeats mark a stuck agent, as OpenCode's doom_loop counts them (https://opencode.ai/docs/permissions); the Projects PRD asks for "same error three times"
   sameError: 3,
   /** The turns `sameError` counts over. */
+  // @limit recording: hub.fleet-watch-error-span until 2026-12-26
   errorTurns: 10,
   /** The same tool call (name and normalised input) this many times in a row. */
+  // @limit external: three identical tool calls mark a stuck agent: OpenCode's doom_loop is "triggered when the same tool call repeats 3 times with identical input" (https://opencode.ai/docs/permissions)
   sameCall: 3,
   /** Finished turns in a row that changed no file. */
-  quietTurns: 6,
+  // @limit measured: the longest run of finished turns that changed no file is 7 at the 95th percentile of 1,603 landed sessions (fleet transcripts on obelisk, 2026-07-25 to 2026-11-26)
+  quietTurns: 8,
   /** Minutes a running turn streams nothing while its process lives. */
+  // @limit external: no harness lets one foreground command run past 10 minutes (Claude Code's BASH_MAX_TIMEOUT_MS, default 600000, https://code.claude.com/docs/en/env-vars), so a turn silent that long is not waiting on one
   stallMinutes: 10,
 } as const;
 

@@ -14,6 +14,8 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
@@ -152,50 +154,23 @@ const tail = (output: string): string =>
 
 /**
  * How much of a failed installer's output is kept, which a person opens to
- * see why (its row's popover): whole up to {@link OUTPUT_LINES} lines and
- * {@link OUTPUT_CHARS} characters, which every failure measured fits in:
- * npm's ECONNREFUSED is six to twelve lines, the cause (`npm error code
- * ECONNREFUSED`, `FetchError: … reason: connect ECONNREFUSED`) at the head
- * and its log's path at the end, which the last four lines alone kept and
- * the cause dropped (host run 41f12701); bun says one or two lines; the
- * curl installers a few lines of progress and curl's own `curl: (7)`.
- * Longer output keeps its head ({@link OUTPUT_HEAD} lines: where most
- * installers say the cause) and its tail (the rest of the lines: where they
- * end), with how many were left out between; a line longer than
- * {@link OUTPUT_LINE_CHARS} is cut.
+ * see why (its row's popover): whole up to {@link OUTPUT_TAIL_KEPT}
+ * characters. npm's ECONNREFUSED is six to twelve lines, the cause (`npm
+ * error code ECONNREFUSED`, `FetchError: … reason: connect ECONNREFUSED`) at
+ * the head and its log's path at the end, which the last four lines alone
+ * kept and the cause dropped (host run 41f12701); bun says one or two lines;
+ * the curl installers a few lines of progress and curl's own `curl: (7)`.
+ * Longer output keeps its head (where most installers say the cause) and its
+ * tail (where they end), half the room each, with how many characters were
+ * left out between.
  */
-const OUTPUT_LINES = 60;
-const OUTPUT_HEAD = 20;
-const OUTPUT_CHARS = 8000;
-const OUTPUT_LINE_CHARS = 400;
-
-/** A failed installer's output, kept as {@link OUTPUT_LINES} says. */
 const failedOutput = (output: string): string => {
-  const lines = output
-    .trim()
-    .split("\n")
-    .map((line) =>
-      line.length > OUTPUT_LINE_CHARS
-        ? `${line.slice(0, OUTPUT_LINE_CHARS)}…`
-        : line
-    );
-  const whole = lines.join("\n");
-  if (lines.length <= OUTPUT_LINES && whole.length <= OUTPUT_CHARS) {
+  const whole = output.trim();
+  if (whole.length <= OUTPUT_TAIL_KEPT) {
     return whole;
   }
-  const tailLines = Math.min(
-    OUTPUT_LINES - OUTPUT_HEAD,
-    lines.length - OUTPUT_HEAD
-  );
-  const left = lines.length - OUTPUT_HEAD - tailLines;
-  const kept = [
-    ...lines.slice(0, OUTPUT_HEAD),
-    ...(left > 0 ? [`… ${left} lines left out …`] : []),
-    ...lines.slice(-tailLines),
-  ].join("\n");
-  return kept.length > OUTPUT_CHARS
-    ? `${kept.slice(0, OUTPUT_CHARS / 2)}\n…\n${kept.slice(-OUTPUT_CHARS / 2)}`
-    : kept;
+  const half = Math.floor(OUTPUT_TAIL_KEPT / 2);
+  return `${whole.slice(0, half)}\n… (${whole.length - 2 * half} of ${whole.length} characters left out) …\n${whole.slice(-half)}`;
 };
 
 /** An installer's tail, as one line for a sentence. */
@@ -934,6 +909,7 @@ const settleUnderway = async (): Promise<void> => {
  * restart the agent, and every session on it, for good. Our call: two
  * stops in a row are a power cut and a restart; a third is the install.
  */
+// @limit recording: agent.install-runs-cut-short until 2026-12-10
 const CUT_SHORT_MOST = 3;
 
 /** One install a stop cut short, settled ({@link settleUnderway}). */
@@ -1000,6 +976,7 @@ const redoInstall = async (
   const began = new Date(entry.at).toISOString();
   const there = found ? `the copy there says ${found}` : "no copy is there";
   const runs = (entry.tries ?? 0) + 1;
+  recordLimitReading("agent.install-runs-cut-short", runs);
   if (runs >= CUT_SHORT_MOST) {
     console.info(
       `[tools] ${spec.name}'s install that began ${began} stopped before it finished, as ${runs} runs of it in a row did, and ${there}: it is not run again until Retry`
@@ -2028,6 +2005,7 @@ const copyStamp = async (
  * every 2 s costs nothing, and the bound covers the slowest npm install seen.
  */
 const COPY_SETTLE_MS = 2000;
+// @limit recording: agent.copy-settle-ms until 2026-12-10
 const COPY_SETTLE_MOST_MS = 3 * 60_000;
 
 /** Each probed tool's copy as it stands now ({@link copyStamp}), by tool id; a tool an install of this agent's is putting on is passed over: its end tells. */
@@ -2099,6 +2077,7 @@ const settleCopies = (wasThere: Iterable<string>): void => {
 const settleLooks = async (): Promise<void> => {
   let told = probedNow();
   let last = await copiesNow();
+  const began = Date.now();
   /** One look after the first, against the one before it: whether the looks are done. */
   const lookAgain = async (): Promise<boolean> => {
     const look = await copiesNow();
@@ -2137,6 +2116,7 @@ const settleLooks = async (): Promise<void> => {
       )
     )
   );
+  recordLimitReading("agent.copy-settle-ms", Date.now() - began);
   if (looked.kind === "deadline" && !sameCopies(last, told)) {
     toolsMoved();
   }

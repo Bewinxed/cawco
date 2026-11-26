@@ -38,7 +38,7 @@ import {
   CALLS_MAX_DAYS,
   type CapabilityCallsReport,
 } from "./capability-calls";
-import { type createDesignSystem, DESIGN_WRITE_FILES } from "./design-system";
+import type { createDesignSystem } from "./design-system";
 import type { createDesignVerify } from "./design-verify";
 import {
   FIND_TOOL,
@@ -242,7 +242,6 @@ const UPDATE_MACHINES_DEFINITION = defineTool(
       .describe("true only looks for a new build and tells every machine."),
     reason: z
       .string()
-      .max(300)
       .optional()
       .describe("One sentence on why: the person reads it on the ask."),
   },
@@ -267,11 +266,9 @@ const DESIGN_WRITE_DEFINITION = defineTool(
             .describe("A file where you work, in place of content."),
         })
       )
-      .min(1)
-      .max(DESIGN_WRITE_FILES),
+      .min(1),
     why: z
       .string()
-      .max(500)
       .optional()
       .describe("Required to change an existing system: why."),
   },
@@ -288,23 +285,22 @@ const DESIGN_VERDICT_DEFINITION = defineTool(
           file: z.string().min(1),
           line: z.number().int().min(1),
           selector: z.string().min(1),
-          problem: z.string().min(1).max(1000),
+          problem: z.string().min(1),
         })
       )
-      .max(50)
       .describe(
         "Every must-fix finding, each tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. None for a pass."
       ),
     pick: z
       .object({
         variant: z.string().min(1),
-        why: z.string().min(1).max(500),
+        why: z.string().min(1),
       })
       .optional()
       .describe(
         "When the result offers variants: the one that holds to the system best, and why."
       ),
-    summary: z.string().min(1).max(2000),
+    summary: z.string().min(1),
   },
   designVerdictWords
 );

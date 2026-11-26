@@ -29,6 +29,7 @@
 import { dirname, join as joinPath } from "node:path";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import {
   checkStep,
   currentStep,
@@ -57,6 +58,7 @@ import {
   type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core/join";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
@@ -98,8 +100,10 @@ import {
 } from "./ssh-tunnels";
 
 /** Output kept per install. The steps are a dozen lines; a package manager's is the bulk. */
+// @limit recording: hub.install-output-lines until 2026-12-03
 const MAX_LINES = 2000;
 /** The output's last lines every read carries, for the window's well. */
+// @limit recording: hub.install-output-lines until 2026-12-03
 const TAIL_LINES = 3;
 /** How long a stopped `ssh` gets to close its connection before its group is killed outright. Our choice. */
 const STOP_GRACE_MS = 3000;
@@ -108,6 +112,7 @@ const LOOK_MS = 1000;
 /** How often a running install's record is written while only its output changes. Our choice. */
 const WRITE_MS = 2000;
 /** How many pages' last draft edits the hub remembers: more tabs than one person keeps open. Our choice. */
+// @limit recording: hub.install-stamped-pages until 2026-12-03
 const STAMPED_PAGES = 64;
 /** The draft before anything is typed into it. */
 const EMPTY_DRAFT: InstallDraft = {
@@ -161,6 +166,8 @@ const LINGER_USER = /enable-linger (\S+)/u;
 /** What an install holds besides what every dashboard reads. */
 interface Kept {
   code: string | null;
+  /** When the SSH add's install script download began, until the line after it. */
+  downloadAt?: number;
   /** Lines let go from the front of `lines` past {@link MAX_LINES}. */
   dropped: number;
   exitCode: number | null;
@@ -174,6 +181,8 @@ interface Kept {
    */
   legacyStep?: string;
   lines: string[];
+  /** When the machine began waiting to be listed, until it is. */
+  listWaitAt?: number;
   run: Run | null;
 }
 
@@ -409,6 +418,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
     stamps.delete(stamp.page);
     stamps.set(stamp.page, stamp.seq);
+    recordLimitReading("hub.install-stamped-pages", stamps.size);
     for (const page of stamps.keys()) {
       if (stamps.size <= STAMPED_PAGES) {
         break;
@@ -548,9 +558,12 @@ export const createInstalls = (deps: InstallsDeps) => {
    * output: what is still on its way lands on the machine's row by itself.
    */
   const sync = (machineId: string, say: (line: string) => void) =>
-    boundedRead(
-      INSTALL_SYNC_LIMIT_MS,
-      Effect.promise((signal) => deps.synced(machineId, signal))
+    timedEffect(
+      boundedRead(
+        INSTALL_SYNC_LIMIT_MS,
+        Effect.promise((signal) => deps.synced(machineId, signal))
+      ),
+      (ms) => recordLimitReading("install.sync-wait-ms", ms)
     ).pipe(
       Effect.match({
         onSuccess: () =>
@@ -683,6 +696,30 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
   };
 
+  /** The waits an install's lines time: its script's download (an SSH add's) and its wait to be listed. */
+  const timeSteps = (entry: Kept, line: string): void => {
+    if (entry.downloadAt !== undefined) {
+      // The line after the download's step: the download has ended.
+      recordLimitReading(
+        "hub.ssh-add-download-ms",
+        Date.now() - entry.downloadAt
+      );
+      entry.downloadAt = undefined;
+    }
+    if (line.startsWith(`${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}`)) {
+      entry.downloadAt = Date.now();
+    }
+    if (line.startsWith(`${INSTALL_STEP_PREFIX}${JOIN_WAIT_STEP}`)) {
+      entry.listWaitAt = Date.now();
+    } else if (
+      line.startsWith(INSTALL_JOINED) &&
+      entry.listWaitAt !== undefined
+    ) {
+      recordLimitReading("install.list-wait-ms", Date.now() - entry.listWaitAt);
+      entry.listWaitAt = undefined;
+    }
+  };
+
   /** One line of an install's output, kept as the window reads it, and the step it starts. */
   const take = (entry: Kept, raw: string): void => {
     const line = raw.replace(CARRIAGE_RETURN, "");
@@ -690,12 +727,18 @@ export const createInstalls = (deps: InstallsDeps) => {
     if (STACK_LINE.test(line)) {
       return;
     }
+    timeSteps(entry, line);
     entry.lines.push(line);
+    recordLimitReading(
+      "hub.install-output-lines",
+      entry.lines.length + entry.dropped
+    );
     if (entry.lines.length > MAX_LINES) {
       const over = entry.lines.length - MAX_LINES;
       entry.lines.splice(0, over);
       entry.dropped += over;
     }
+    // @limit recording: hub.install-output-lines until 2026-12-03
     entry.install.tail = entry.lines
       .filter((one) => one.trim())
       .slice(-TAIL_LINES);

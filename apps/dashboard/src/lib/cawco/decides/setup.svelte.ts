@@ -10,6 +10,8 @@ import {
   type FleetDecides,
   HEARS,
   type Hear,
+  MARK_HUES,
+  type MarkHue,
   type Member,
   slugOf,
 } from "@cawco/core/decides";
@@ -39,7 +41,7 @@ export interface Draft {
   effort: EffortLevel | null;
   harness: HarnessKind | null;
   hear: Hear;
-  hue: number;
+  hue: MarkHue;
   instructions: string;
   job: string;
   /** The kinds it decides on this page. */
@@ -55,7 +57,7 @@ const DraftShape = z.object({
   effort: z.enum(EFFORT_LEVELS).nullable(),
   harness: z.enum(HARNESSES).nullable(),
   hear: z.enum(HEARS),
-  hue: z.number().int().min(1).max(8),
+  hue: z.literal([...MARK_HUES]),
   instructions: z.string(),
   job: z.string(),
   kinds: z.array(z.string()),
@@ -167,10 +169,8 @@ export const readOnly = (row: RowId, member: Member | null): boolean =>
   row === "record";
 
 /** The first identity hue no member wears, else the first. */
-const freeHue = (members: Member[]): number =>
-  [1, 2, 3, 4, 5, 6, 7, 8].find(
-    (hue) => !members.some((member) => member.hue === hue)
-  ) ?? 1;
+const freeHue = (members: Member[]): MarkHue =>
+  MARK_HUES.find((hue) => !members.some((member) => member.hue === hue)) ?? 1;
 
 /** A harness on an online machine, Claude Code first. */
 const firstHarness = (fleet: FleetOffer): HarnessKind | null =>

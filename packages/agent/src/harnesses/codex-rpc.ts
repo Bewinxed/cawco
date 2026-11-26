@@ -11,6 +11,9 @@ import { createInterface, type Interface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import { Deferred, Effect, Exit, Schema } from "effect";
+import { readWithin } from "@cawco/core/bounded";
+import { lastOutput } from "@cawco/core/output-tail";
+import { shortId } from "@cawco/core/short-id";
 import type {
   ClientRequest,
   InitializeResponse,
@@ -126,7 +129,7 @@ const isResultOf = <M extends CodexMethod>(
 export class CodexPeer {
   readonly #write: (line: string) => Promise<void>;
   readonly #handlers: CodexHandlers;
-  readonly #prefix = `cawco-${crypto.randomUUID().slice(0, 8)}-`;
+  readonly #prefix = `cawco-${shortId(crypto.randomUUID())}-`;
   #sent = 0;
   /** Each request still waiting, by id: its method, and the answer it waits on. */
   readonly #pending = new Map<
@@ -281,7 +284,7 @@ const openAppServer = (
   });
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr = `${stderr}${chunk.toString()}`.slice(-2000);
+    stderr = lastOutput(`${stderr}${chunk.toString()}`);
   });
   const peer: CodexPeer = new CodexPeer(
     (line) =>

@@ -19,6 +19,7 @@
  * left out, as the timed read leaves them.
  */
 
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type {
   ForcedAt,
   FrameCall,
@@ -29,6 +30,7 @@ import type {
   TraceFrame,
 } from "@cawco/core/stage-measure";
 import { median, tenths } from "@cawco/core/stage-measure";
+import { derivedName } from "@cawco/providers/derived-name";
 import type * as TraceEngine from "@paulirish/trace_engine";
 import type { Browser, Page } from "playwright-core";
 import { z } from "zod";
@@ -53,8 +55,10 @@ const SAMPLED = "disabled-by-default-v8.cpu_profiler";
 const INVALIDATIONS =
   "disabled-by-default-devtools.timeline.invalidationTracking";
 /** The most functions and tasks a frame names: the rest are the long tail. */
+// @limit recording: agent.frame-named until 2026-12-10
 const MOST_NAMED = 8;
 /** The most calls a task names, longest first. */
+// @limit recording: agent.task-calls-named until 2026-12-10
 const MOST_CALLS = 3;
 /** Less than this, ms, a function or a task is noise in a frame. */
 const LEAST_MS = 0.1;
@@ -395,7 +399,7 @@ const hottest = (one: Sampled): TraceFrame =>
   ).frame;
 
 /** Most of a call's time: the share of its samples a function must run under to stand for it. */
-const MOST = 0.6;
+const MAJORITY_SHARE = 0.6;
 
 /**
  * Where a call's time went: the deepest function with an address that
@@ -428,7 +432,7 @@ function heavyIn(
     }
   }
   return [...under]
-    .filter(([, us]) => us >= MOST * total)
+    .filter(([, us]) => us >= MAJORITY_SHARE * total)
     .reduce<ProfileNode | null>(
       (deepest, [node]) =>
         !deepest || node.depth > deepest.depth ? node : deepest,
@@ -533,11 +537,12 @@ function scriptOf(read: Read, places: Map<string, ForcedAt>): FrameScript[] {
       });
     }
   }
-  return [...script.values()]
+  const named = [...script.values()]
     .map((one) => ({ ...one, ms: tenths(one.ms) }))
     .filter((one) => one.ms >= LEAST_MS)
-    .sort((a, b) => b.ms - a.ms)
-    .slice(0, MOST_NAMED);
+    .sort((a, b) => b.ms - a.ms);
+  recordLimitReading("agent.frame-named", named.length);
+  return named.slice(0, MOST_NAMED);
 }
 
 const PACKAGE = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u;
@@ -597,13 +602,14 @@ function tasksOf(read: Read, places: Map<string, ForcedAt>): FrameTask[] {
       ]);
     }
   }
+  recordLimitReading("agent.frame-named", read.tasks.length);
   return [...read.tasks]
     .sort((a, b) => b.ms - a.ms)
     .slice(0, MOST_NAMED)
     .map((task) => {
-      const its = (calls.get(task.node) ?? [])
-        .sort((a, b) => b.ms - a.ms)
-        .slice(0, MOST_CALLS);
+      const all = calls.get(task.node) ?? [];
+      recordLimitReading("agent.task-calls-named", all.length);
+      const its = all.sort((a, b) => b.ms - a.ms).slice(0, MOST_CALLS);
       return {
         for: task.for,
         ms: task.ms,
@@ -676,11 +682,13 @@ function changed(event: TraceEvent): string {
 
 const NODE_NAME = /^(\w+)(?: id='([^']*)')?(?: class='([^']*)')?/u;
 
-/** An element as the trace names it (`DIV id='x' class='a b c'`), as a selector a person reads: its tag, id and first two classes. */
+/** An element as the trace names it (`DIV id='x' class='a b c'`), as a selector a person reads: its tag, id and classes, as one derived name. */
 function elementOf(nodeName: string): string {
   const [, tag = nodeName, id, classes] = nodeName.match(NODE_NAME) ?? [];
-  const named = (classes ?? "").split(" ").filter(Boolean).slice(0, 2);
-  return `${tag.toLowerCase()}${id ? `#${id}` : ""}${named.map((one) => `.${one}`).join("")}`;
+  const named = (classes ?? "").split(" ").filter(Boolean);
+  return derivedName(
+    `${tag.toLowerCase()}${id ? `#${id}` : ""}${named.map((one) => `.${one}`).join("")}`
+  );
 }
 
 /** The tracked play read: for each place script forced style or layout, the write that left it stale (its latest one with a stack before the forced read). */

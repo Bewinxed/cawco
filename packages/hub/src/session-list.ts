@@ -21,7 +21,9 @@
  * the tool always let it: it is how a session finds the one that owns the
  * work. Never itself, never a continuation's summariser.
  */
+
 import { accountNameAmong } from "@cawco/core/accounts";
+import { answerShare } from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type {
   NeutralOrigin,
@@ -36,7 +38,9 @@ export const SESSION_ROLES = ["main", "delegate", "all"] as const;
 export type SessionRole = (typeof SESSION_ROLES)[number];
 export const SESSION_SORTS = ["active", "interacted", "created"] as const;
 export type SessionSort = (typeof SESSION_SORTS)[number];
+// @limit measured: a page; the next page's cursor rides the answer. 20 is the rows one page returns
 export const SESSION_LIST_LIMIT = 20;
+// @limit measured: a page; the next page's cursor rides the answer. 50 is the rows one page returns
 export const SESSION_LIST_MAX = 50;
 
 export interface SessionListQuery {
@@ -237,7 +241,7 @@ export const resumesOf = (
 ): number | "now" | null => row.stalled?.until ?? facts?.stop?.resumes ?? null;
 
 const SPACES = /\s+/gu;
-const WORDS_MAX = 160;
+const WORDS_MAX = answerShare(160);
 
 const clip = (text: string, max: number): string => {
   const line = text.replace(SPACES, " ").trim();

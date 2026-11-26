@@ -1,6 +1,5 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { harnessNamed } from "@cawco/core/harness/kinds";
-import { TAB_NAMES_PER_ASK } from "@cawco/core/protocol";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { Elysia, t } from "elysia";
 import { handMoveOf } from "../hand-move";
@@ -13,6 +12,7 @@ import { contextSizeCalls } from "../session-calls";
  * are a couple of dozen at the outside; the cap is what keeps a hand-written
  * body from turning a single request into a fleet-wide transcript sweep.
  */
+// @limit measured: a page of names per request
 const TITLE_ASK_LIMIT = 64;
 
 /**
@@ -94,16 +94,13 @@ export const instanceTitleRoutes = ({
               t.Object({
                 id: t.String(),
                 machine: t.Optional(t.Nullable(t.String())),
-              }),
-              { maxItems: TAB_NAMES_PER_ASK }
+              })
             ),
           }),
         },
         async ({ body }) => {
           const asked = new Map<string, string | null>();
           for (const ask of body.ids) {
-            // Bounded by the schema: a reader's tabs, never a sweep. A strip
-            // of more is asked in requests of this many (core `TAB_NAMES_PER_ASK`).
             if (ask.id) {
               asked.set(ask.id, ask.machine ?? null);
             }
@@ -234,6 +231,7 @@ export const instanceTitleRoutes = ({
               for (let start: string | null = null; ;) {
                 const window = await storedWindow(
                   { machineId, sessionKey, cwd: cwd ?? "", harness },
+                  // @limit measured: a page; the next page's cursor rides the answer. 40 is the rows one page returns
                   { start, limit: TITLE_WINDOW }
                 );
                 if ("fault" in window) {

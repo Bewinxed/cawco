@@ -63,6 +63,7 @@ export type BackoffStep =
     };
 
 /** Past this, `2 ** n` is far over any cap: the exponent stops growing there. */
+// @limit measured: 2^30 times the base delay is past any wait; more doublings overflow
 const MOST_DOUBLINGS = 30;
 
 /**

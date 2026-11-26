@@ -12,6 +12,7 @@ import { store, stored } from "#lib/platform/storage.js";
  * (routes/config/+layout.server.ts).
  */
 /** The paths remembered: the sections and the editors opened last. */
+// @limit external: a cookie holds at least 4,096 bytes (RFC 6265 section 6.1, https://www.rfc-editor.org/rfc/rfc6265#section-6.1); 24 paths with their heights are about a kilobyte of it
 const CARDS_LIMIT = 24;
 
 export type Cards = Record<string, number>;

@@ -95,6 +95,7 @@ export const IMAGE_EXTENSIONS: Readonly<Record<ImageFormat, string>> = {
 };
 
 /** The most reference images any provider takes on one call: the Gemini API's "Up to 14 reference images". */
+// @limit external: the Gemini API's "Up to 14 reference images" (ai.google.dev/gemini-api/docs/image-generation)
 export const MAX_REFERENCE_IMAGES = 14;
 
 /** One subscription-backed image request, independent of the calling harness. */
@@ -128,7 +129,8 @@ export interface GeneratedImage {
 }
 
 export const GENERATE_IMAGE = "generateImage";
-export const IMAGE_GENERATION_TIMEOUT_MS = 600_000;
+// @limit measured: an image generation, p99 388 s, longest 404 s over 217 calls (fleet transcripts, 2026-07-25 to 2026-11-26); three times the longest
+export const IMAGE_GENERATION_TIMEOUT_MS = 1_212_000;
 export const IMAGE_GENERATION_DESCRIPTION =
   "Images made, or edited from reference images, by an image provider on this machine's sign-in, saved as a file on your machine. " +
   "Use it for photos, illustrations, textures and other raster assets; write SVGs, icons and code-native graphics as source.";

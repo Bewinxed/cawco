@@ -42,6 +42,7 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import { SEND_STATES } from "@cawco/core/session-messages";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
@@ -852,6 +853,7 @@ export const createSends = (ctx: SendsContext) => {
           SETTLE_SKEW_MS
         : Number.POSITIVE_INFINITY;
     const windows: SessionMessage[][] = [];
+    // @limit measured: a page; the next page's cursor rides the answer. 50 is the rows one page returns
     let ask: WindowAsk = { end: "newest", limit: STORED_TAIL };
     for (;;) {
       const answer: Bounded<
@@ -881,6 +883,7 @@ export const createSends = (ctx: SendsContext) => {
           value: { ok: true, result: windows.flat() },
         };
       }
+      // @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns
       ask = { before: older, limit: HISTORY_WINDOW };
     }
   };
@@ -2166,13 +2169,13 @@ export const createSends = (ctx: SendsContext) => {
     }
     if (aboutItsProcess(message)) {
       console.info(
-        `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
+        `[continuation] ${shortId(named)} was continued in ${shortId(now)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
       );
       return undefined;
     }
     const [row] = ctx.db.getInstancesByIds([now]);
     console.info(
-      `[continuation] A send to ${named.slice(0, 8)} goes to ${now.slice(0, 8)}, the session it was continued in (send ${message.uuid}).`
+      `[continuation] A send to ${shortId(named)} goes to ${shortId(now)}, the session it was continued in (send ${message.uuid}).`
     );
     return {
       ...envelope,
@@ -2349,8 +2352,8 @@ export const createSends = (ctx: SendsContext) => {
     };
     const how =
       move.kind === "recut"
-        ? `its clone was cut again at ${move.commit.slice(0, 9)} on ${move.branch}`
-        : `its checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)} as it landed on ${move.branch}`;
+        ? `its clone was cut again at ${shortSha(move.commit)} on ${move.branch}`
+        : `its checkout moved from ${shortSha(move.from)} to ${shortSha(move.to)} as it landed on ${move.branch}`;
     console.log(
       `[hub] send ${message.uuid} to ${instanceId} opens with the hub's line that ${how}`
     );
@@ -2480,7 +2483,7 @@ export const createSends = (ctx: SendsContext) => {
     const next = remindedContent(sent.message.content, lines);
     if (said) {
       console.log(
-        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.unanswered ? ", their last message unanswered" : ""}`
+        `[presence] send ${message.uuid} to ${shortId(instanceId)}: the person is ${said.kind}${said.unanswered ? ", their last message unanswered" : ""}`
       );
     }
     return {
@@ -2519,7 +2522,7 @@ export const createSends = (ctx: SendsContext) => {
       message: { ...message, shouldQuery: false },
     };
     console.info(
-      `[sends] the hub's ${message.origin.name ?? "unnamed"} word to ${instanceId.slice(0, 8)} waits as a note its next turn reads (${noteWhy(choice)}; a turn now would cost ${choice.usd === null ? "an unknown amount" : `$${choice.usd.toFixed(2)}`}).`
+      `[sends] the hub's ${message.origin.name ?? "unnamed"} word to ${shortId(instanceId)} waits as a note its next turn reads (${noteWhy(choice)}; a turn now would cost ${choice.usd === null ? "an unknown amount" : `$${choice.usd.toFixed(2)}`}).`
     );
   };
 

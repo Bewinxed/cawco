@@ -47,8 +47,6 @@ let askTimer: ReturnType<typeof setTimeout> | undefined;
 /** Requests in a row the hub did not answer: how long the next one waits ({@link againAfter}). */
 let failures = 0;
 
-/** The most names one request carries (the hub's own bound, find.ts `FIND_SESSIONS_BODY`). */
-const NAMES_PER_ASK = 200;
 /**
  * The wait after requests the hub did not answer: from 1 s, doubling to a
  * minute (core backoff.ts, its jitter keeping tabs that lost the hub
@@ -110,10 +108,8 @@ const againAfter = (failed: number): number => backoffWait(ASKS_AGAIN, failed);
 /** The names owed asked in one request now, and what it answered kept. */
 function askOwed(): void {
   askTimer = undefined;
-  const names = [...owed].slice(0, NAMES_PER_ASK);
-  for (const name of names) {
-    owed.delete(name);
-  }
+  const names = [...owed];
+  owed.clear();
   if (names.length === 0) {
     return;
   }

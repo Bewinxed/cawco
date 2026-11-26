@@ -19,6 +19,7 @@
 import { createReadStream, existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { handOnAsMachine } from "../packages/agent/src/limit-readings-hand-on";
 import { releaseTag } from "../packages/core/src/binary-distribution";
 import { RELEASE_PUBLIC_KEY } from "../packages/core/src/release-key";
 import {
@@ -186,6 +187,7 @@ if (import.meta.main) {
   }
   try {
     await republish(output, version);
+    await handOnAsMachine();
   } catch (error) {
     if (error instanceof Refusal) {
       console.error(`Republish refused: ${error.message}`);

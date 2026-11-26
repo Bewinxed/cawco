@@ -46,6 +46,8 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
+import { handOnAsMachine } from "../packages/agent/src/limit-readings-hand-on";
+import { shortSha } from "../packages/core/src/short-id";
 import {
   listedPid,
   signalGroup,
@@ -591,8 +593,7 @@ const runCommand: Runner = async (command, at, captured, extra, limit) => {
 /** One line per command with its seconds, so a slow release says where the time went. */
 function logStep(what: string, started: number): void {
   const seconds = ((performance.now() - started) / 1000).toFixed(1);
-  const label = what.length > 140 ? `${what.slice(0, 137)}...` : what;
-  console.log(`[release] ${seconds}s ${label}`);
+  console.log(`[release] ${seconds}s ${what}`);
 }
 
 await mkdir(state, { recursive: true });
@@ -953,8 +954,8 @@ try {
  * its steps run as their graph says.
  */
 const build = async (current: Request): Promise<void> => {
-  requireDiskRoom(`The release of ${current.commit.slice(0, 12)}`);
-  holdAwake(`The release of ${current.commit.slice(0, 12)}`);
+  requireDiskRoom(`The release of ${shortSha(current.commit)}`);
+  holdAwake(`The release of ${shortSha(current.commit)}`);
   const building = performance.now();
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
@@ -990,7 +991,7 @@ const build = async (current: Request): Promise<void> => {
         },
       }
     );
-    logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
+    logStep(`build of ${shortSha(current.commit)}, in all`, building);
   } catch (error) {
     // A step that failed under a stop (a command or gh call it ended) is the
     // stop's to clear, in its order: nightly 5186's upload failed beside its
@@ -1055,4 +1056,6 @@ try {
   }
 } finally {
   await release();
+  // What the release read of the bounds waiting on data goes to this host's hub.
+  await handOnAsMachine();
 }

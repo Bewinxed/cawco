@@ -67,6 +67,7 @@ export const byWorkspaceIdKind = <T>(
 
 /** The place id whose 8 hex digits are `hex`'s first 8 (hub caw.ts hashes a session's machine and folder). */
 export const placeIdOf = (hex: string): string =>
+  // @limit measured: 8 hex characters are 32 bits of SHA-256; one id per machine and folder a session works in, so two collide after about 2^16 names
   `${hex.slice(0, 8)}${PLACE_SUFFIX}`;
 
 /**

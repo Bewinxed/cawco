@@ -103,6 +103,7 @@ export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
  * its server, claude its CLI) takes seconds; past this the machine is not
  * going to answer.
  */
+// @limit recording: hub.spawn-start-ms until 2026-12-10
 export const SPAWN_START_TIMEOUT_MS = 120_000;
 
 /**
@@ -119,14 +120,6 @@ export const LFS_ROOT = resolve(dirname(DB_PATH), "lfs");
 
 /** Each page artifact's built files, `artifacts/<id>/index.html`, served by the preview listener. */
 export const ARTIFACTS_ROOT = resolve(dirname(DB_PATH), "artifacts");
-
-/**
- * The server-wide body cap (Bun's `maxRequestBodySize`), which only the git
- * remote's routes reach: a pack pushed to it or a large file to its LFS store
- * streams through, and Bun's own default (128 MiB) would refuse both. Every
- * other route is held to its own, smaller cap first (body-limits.ts).
- */
-export const MAX_REQUEST_BYTES = 64 * 1024 ** 3;
 
 /** A whole number from `name`, at least `least`; unset, `fallback`; anything else stops the hub at start, in so many words. */
 const wholeFrom = (

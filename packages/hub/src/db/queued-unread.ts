@@ -16,6 +16,7 @@ import { HARNESSES } from "@cawco/core/harness/kinds";
 import { LANDS_MODES } from "@cawco/core/injected";
 import type { z } from "zod";
 import { undeclaredKeys } from "../stored-json";
+import { shown } from "./json-reads";
 import { AttemptAskSchema, QueuedRequestSchema } from "./stored-shapes";
 
 /** How one field of a kept call reads, as stored-types.ts `DelegateCall` declares it. */
@@ -134,9 +135,6 @@ export interface QueuedKept {
   /** `queued_work_items` by its id, or `queued_task_starts` by its project and task. */
   table: "queued_work_items" | "queued_task_starts";
 }
-
-/** A stored value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Why `raw` does not read as `schema`'s type, in a clause: what its schema says of it. */
 const whyUnread = (schema: z.ZodType, raw: string): string => {

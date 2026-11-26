@@ -1,3 +1,5 @@
+import { recordLimitReading } from "./limit-readings";
+
 /**
  * Lines and the line diff of two texts, as a diff draws them: one model for
  * every count the surfaces show (a tool row's "+2 −1", a permission card's
@@ -11,6 +13,7 @@
  */
 
 /** Past this many cells the line table is not built: every line on each side counts as changed. */
+// @limit recording: core.line-diff-cells until 2026-12-10
 const TABLE_CAP = 4_000_000;
 
 const LINE = /[^\n]*\n|[^\n]+$/gu;
@@ -73,6 +76,7 @@ export function editScript(
   const m = b.length - head - tail;
   const removedAt: number[] = [];
   const addedAt: number[] = [];
+  recordLimitReading("core.line-diff-cells", n * m);
   if (n * m > TABLE_CAP || n === 0 || m === 0) {
     for (let i = 0; i < n; i += 1) {
       removedAt.push(head + i);

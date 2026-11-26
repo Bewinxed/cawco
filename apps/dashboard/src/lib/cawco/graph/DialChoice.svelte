@@ -4,7 +4,9 @@
   /** A name's lead up to its first hyphen ("radius-" of "radius-md"). */
   const LEAD = /^[^-]+-/u;
   /** At most this many options, their words this long in all, stand as one segmented row. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const SEGMENTS_MAX = 3;
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const SEGMENTS_CHARS = 18;
 
   /** A design system's colour name: words joined by hyphens, as its variable is named. */

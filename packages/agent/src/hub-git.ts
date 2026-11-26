@@ -54,8 +54,10 @@ import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { recordedPool } from "@cawco/core/object-pool";
+import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import {
   workspaceDoorDir,
@@ -400,9 +402,6 @@ const pushOriginLfs = async (
  */
 const HOST_RUN_SILENCE_MS = 120_000;
 
-/** The most of a host run's stderr kept: its progress repeats, its last words are what it said. */
-const HOST_RUN_ERR_KEPT = 64_000;
-
 /** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran); `silent` when its silence stopped it. */
 interface HostRun {
   readonly code: number;
@@ -486,11 +485,11 @@ const runOnHost = (
           heard();
         });
         child.stderr.on("data", (chunk: Buffer) => {
-          writeTail(err, chunk.toString(), HOST_RUN_ERR_KEPT);
+          writeTail(err, chunk.toString(), OUTPUT_TAIL_KEPT);
           heard();
         });
         child.on("error", (error) => {
-          writeTail(err, `\n${error.message}`, HOST_RUN_ERR_KEPT);
+          writeTail(err, `\n${error.message}`, OUTPUT_TAIL_KEPT);
         });
         child.on("close", (code) => resume(Effect.succeed(code)));
       }),
@@ -506,6 +505,7 @@ const runOnHost = (
   return Effect.runPromise(
     ran.pipe(
       Effect.map((code): HostRun => {
+        // @limit external: git's own command words: `git lfs <command>` is two, every other `git <command>` one
         const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
         return {
           code: silent ? 128 : (code ?? 128),
@@ -527,6 +527,7 @@ const runOnHost = (
  * keychain); one still silent after this waits on a person (a keychain
  * prompt, an askpass window) nobody may be there to answer.
  */
+// @limit recording: agent.git-credential-fill-ms until 2026-12-10
 const CREDENTIAL_LIMIT_MS = 15_000;
 
 /** One `key=value` line of `git credential fill`'s answer (git-credential(1), "INPUT/OUTPUT FORMAT"). */
@@ -600,14 +601,17 @@ const withHostLogin = async (
   // `SSH_ASKPASS`) would open a window for every remote that needs no login;
   // set and empty, git passes all three over (prompt.c `git_prompt`), and
   // with `GIT_TERMINAL_PROMPT=0` a fill no helper answers ends at once.
-  const asked = await runOnHost(
-    ref,
-    ["credential", "fill"],
-    { ...env, GIT_ASKPASS: "" },
-    {
-      input: `url=${url}\n\n`,
-      silenceMs: CREDENTIAL_LIMIT_MS,
-    }
+  const asked = await timed(
+    runOnHost(
+      ref,
+      ["credential", "fill"],
+      { ...env, GIT_ASKPASS: "" },
+      {
+        input: `url=${url}\n\n`,
+        silenceMs: CREDENTIAL_LIMIT_MS,
+      }
+    ),
+    (ms) => recordLimitReading("agent.git-credential-fill-ms", ms)
   );
   if (asked.silent) {
     throw new Error(
@@ -1498,7 +1502,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     head = Buffer.concat([head, chunk]);
     const end = head.indexOf(LINE_END);
     if (end < 0) {
-      if (head.length > 4096) {
+      if (head.length > OUTPUT_TAIL_KEPT) {
         fail("the helper sent no URL line");
       }
       return;
@@ -1627,7 +1631,7 @@ const pipeHubHelper = (
   const before = remoteRefs(ref);
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr = (stderr + chunk.toString()).slice(-4000);
+    stderr = lastOutput(stderr + chunk.toString());
   });
   child.on("close", (code) => {
     if (code !== 0 && stderr.trim()) {

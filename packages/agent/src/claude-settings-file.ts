@@ -33,6 +33,7 @@ import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
  * one past this is no settings file anyone wrote by hand (a 200 MB one
  * stood in the host run's probes). Our call.
  */
+// @limit measured: the largest Claude Code config file on obelisk is 216 KiB of 14 (2026-11-26)
 const SETTINGS_FILE_LIMIT = 4 * 1024 * 1024;
 
 /** A settings file as {@link readSettingsFile} found it. */

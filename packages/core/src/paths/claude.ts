@@ -201,6 +201,7 @@ export const USER_LAYER_FILES = [
 ] as const;
 
 /** The longest slug Claude Code keeps whole (the SDK's `lo`, 0.3.289). */
+// @limit measured: read off Claude Code's SDK 0.3.289, its `lo` caps a project slug at 200 characters; no document states it
 const SLUG_MAX = 200;
 
 /**

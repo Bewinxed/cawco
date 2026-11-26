@@ -6,6 +6,7 @@
 import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
+import { recordLimitReading } from "../packages/core/src/limit-readings";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 import { hubClient, refusalText, unwrap } from "../packages/hub/src/client";
 
@@ -15,6 +16,7 @@ const ANNOUNCE_MS = 30_000;
 const ANNOUNCE_FOUND_MS = 60_000;
 /** The first wait before asking again; each next one doubles, to {@link ANNOUNCE_WAIT_MAX_MS}. */
 const ANNOUNCE_WAIT_MS = 2000;
+// @limit recording: release.announce-found-ms until 2026-12-10
 const ANNOUNCE_WAIT_MAX_MS = 15_000;
 /**
  * The hub on this host told to look at its release host now (`POST
@@ -65,6 +67,8 @@ export async function announce(published: ReleaseManifest): Promise<void> {
       return;
     }
     if (found === published.version) {
+      // How long the hub took to find the release, its waits included.
+      recordLimitReading("release.announce-found-ms", Date.now() - started);
       console.log(`The hub at ${hubUrl} found ${found}`);
       return;
     }

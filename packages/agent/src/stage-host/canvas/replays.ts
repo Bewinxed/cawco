@@ -79,6 +79,7 @@ const figureIn = (frame: Keyframe, key: string): number | null => {
 };
 
 /** Whether a clip's curve lives in its frames: a linear timing over three or more frames that are each linear (a Svelte transition's), never an author's legs, each eased. */
+// @limit external: Web Animations: two keyframes are an animation's start and end, a third is the first frame between them
 export const framedOf = (easing: string, keyframes: readonly Keyframe[]) =>
   easing === "linear" &&
   keyframes.length > 2 &&

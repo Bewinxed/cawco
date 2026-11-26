@@ -90,6 +90,7 @@ const NO_SKIPS: ReadonlyMap<string, number> = new Map();
  * virtua keeps the sizes of rows it unmounts, and the buffer mounts
  * measured rows that move nothing.
  */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const STAGE_ROWS = 6;
 
 /** How many views of rows from the end a far landing stages: its view, and the screen above it the buffer mounts. */

@@ -1,4 +1,6 @@
 /** Browser-neutral release policy and machine state consumed by API clients. */
+
+import { recordLimitReading } from "./limit-readings";
 import { unhandled } from "./unhandled";
 import { unmanagedInstallWords } from "./words/unmanaged-installs";
 import { updatesWords } from "./words/updates";
@@ -180,6 +182,7 @@ export const UPDATE_DRAIN_MS = 45_000;
  * short enough that a fix still reaches a machine when the work never
  * ends.
  */
+// @limit recording: core.restart-waited-ms until 2026-12-26
 export const RESTART_WAIT_CAP_MS = 30 * 60_000;
 
 /**
@@ -188,8 +191,11 @@ export const RESTART_WAIT_CAP_MS = 30 * 60_000;
  * auto-update (agent binary-update.ts `#drain`) and an account move (hub
  * account-carry.ts `waitForLater`) wait by.
  */
-export const waitedOut = (since: number, now = Date.now()): boolean =>
-  now - since >= RESTART_WAIT_CAP_MS;
+export const waitedOut = (since: number, now = Date.now()): boolean => {
+  // How long a restart has waited on work it would cut.
+  recordLimitReading("core.restart-waited-ms", now - since);
+  return now - since >= RESTART_WAIT_CAP_MS;
+};
 
 /**
  * How long an installed build has to become healthy, from the swap, before

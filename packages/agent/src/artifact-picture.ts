@@ -31,6 +31,7 @@ import {
   type PictureAsk,
   type PictureCut,
 } from "@cawco/core/artifact-picture";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { PREVIEW_DOWNS } from "@cawco/core/preview/protocol";
 import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
@@ -231,7 +232,8 @@ export async function drawPage(
     );
   }
   // The load and the page's readiness share one bound.
-  const deadline = Date.now() + PICTURE_LIMITS.loadMs;
+  const began = Date.now();
+  const deadline = began + PICTURE_LIMITS.loadMs;
   const browser = await launchChromium(
     `${name} wasn't drawn: the machine drawing it has no Chromium browser to draw it with. Install Google Chrome or Chromium there (the machine's capability report names the command), then call again.`
   );
@@ -268,19 +270,25 @@ export async function drawPage(
       // The hello places the person's pins: the quiet counts from it too.
       await page.evaluate(markChanged);
     }
+    const loaded = Date.now();
     await ready(page, Math.max(0, deadline - Date.now()));
+    recordLimitReading("agent.picture-ready-ms", Date.now() - loaded);
     const scrolled = await openToLength(page, width);
     await framesReady(page, deadline);
+    recordLimitReading("agent.picture-load-ms", Date.now() - began);
     const tall = await page.evaluate(documentHeight);
     const whole = Math.max(tall, scrolled, PICTURE_VIEW.height);
     const height = Math.min(whole, PICTURE_LIMITS.maxHeight);
     await holdTimeAnimations(page);
-    const png = await page.screenshot({
-      fullPage: true,
-      clip: { x: 0, y: 0, width, height },
-      caret: "hide",
-      timeout: PICTURE_LIMITS.shotMs,
-    });
+    const png = await timed(
+      page.screenshot({
+        fullPage: true,
+        clip: { x: 0, y: 0, width, height },
+        caret: "hide",
+        timeout: PICTURE_LIMITS.shotMs,
+      }),
+      (ms) => recordLimitReading("agent.picture-shot-ms", ms)
+    );
     return {
       png: png.toString("base64"),
       ...(whole > height ? { cut: { drawn: height, of: whole } } : {}),

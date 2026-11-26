@@ -9,6 +9,7 @@ import {
   KIND_SEED,
   type Kind,
   type Member,
+  markHueOf,
   type UnreadMember,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
@@ -149,7 +150,7 @@ const memberOfRow = (row: Omit<MemberRow, "createdAt">): Member => {
     job: row.job,
     subject: row.subject,
     builtIn: false,
-    hue: row.hue,
+    hue: markHueOf(row.hue),
     pose: null,
     hear: row.hear,
   };

@@ -50,9 +50,6 @@ const browserAnsweredWords = (answer: BrowserAskAnswer): string =>
     ? browserAskWords.declined(answer.words)
     : browserAskWords.handedBack(answer.origin);
 
-/** The longest reason the person reads. */
-const REASON_MAX = 300;
-
 /** Whether `value` is an origin alone: a scheme, a host and perhaps a port, no path, query or fragment. */
 const isOrigin = (value: string): boolean => {
   try {
@@ -307,7 +304,6 @@ const BROWSER_ASK_DEFINITION = defineTool(
       .string()
       .trim()
       .min(1)
-      .max(REASON_MAX)
       .describe(
         'One sentence they read: what to do and why, e.g. "Sign in to GitHub to open the release page."'
       ),

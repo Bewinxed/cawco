@@ -65,9 +65,11 @@ export interface RoutineView {
   name: string;
   /**
    * Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next
-   * week's, at most 288, epoch ms; a paused routine's too.
+   * week's, epoch ms; a paused routine's too.
    */
   nextRuns: number[];
+  /** Its runs ahead stop before the week's end: the scheduler starts more than they tell. */
+  nextRunsCut: boolean;
   nextSlot: number;
   /** Its project; null for the Fleet project's. */
   projectId: string | null;

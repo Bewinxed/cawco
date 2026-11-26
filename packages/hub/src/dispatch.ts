@@ -114,6 +114,7 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
+
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import {
   artifactName,
@@ -121,6 +122,8 @@ import {
   POST_OUTPUT_RULE,
 } from "@cawco/core/deliverables";
 import type { LandsMode } from "@cawco/core/injected";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { outputTail } from "@cawco/core/output-tail";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   markdownLink,
@@ -128,6 +131,7 @@ import {
   taskLink,
   todoLink,
 } from "@cawco/core/references";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import type {
   AttemptStart,
   Stage,
@@ -139,6 +143,7 @@ import type { StageKind, TaskMover } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { judgedWords } from "@cawco/core/words/judged";
 import { workWords } from "@cawco/core/words/work";
+import { firstNames } from "@cawco/providers/names";
 import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
@@ -154,7 +159,6 @@ import type {
 } from "./dispatch-shapes";
 import type { JevAccess } from "./jev";
 import {
-  DISPATCH_ASKED_MAX,
   type DispatchJudgement,
   head,
   JevFailed,
@@ -199,7 +203,6 @@ import {
 import {
   type CloneRef,
   DEFAULT_DELEGATE_TYPE,
-  SESSION_TITLE_MAX,
   type WorkItemRequest,
   type WorkItemStart,
   type WorkItems,
@@ -346,13 +349,10 @@ const NO_LEAD =
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
+// @limit measured: of 30 routine runs that failed once, 4 passed at the second attempt and none ran a third (task_runs, to 2026-11-26)
 const MAX_ATTEMPTS_LIMIT = 20;
+// @limit measured: a page; the next page's cursor rides the answer. 100 is the rows one page returns
 const REVIEW_LIMIT_LIMIT = 100;
-
-const short = (id: string): string => id.slice(0, 8);
-
-/** How long a commit is named in a task's history: git's own short form for a large repository. */
-const SHA_SHOWN = 9;
 
 /**
  * The commit an attempt's work landed as, as its task's move names it: on
@@ -363,7 +363,7 @@ const SHA_SHOWN = 9;
 const landedAs = (
   item: Pick<WorkItemRow, "landedOnto" | "landedSha" | "landedUnread">
 ): string => {
-  const sha = item.landedSha?.slice(0, SHA_SHOWN);
+  const sha = item.landedSha ? shortSha(item.landedSha) : undefined;
   if (item.landedUnread !== null) {
     return `; landed${sha ? ` ${sha}` : ""}, its landing's record unread`;
   }
@@ -431,9 +431,6 @@ const JEV_READS: WorkReads = {
  */
 const LEAD_READS: WorkReads = { diff: 12_000, notes: 4000, report: 4000 };
 
-/** The most paths a cut diff names of the files it left out. */
-const CUT_PATHS_NAMED = 20;
-
 /** Where a file's patch begins in a diff. */
 const FILE_PATCH = /^diff --git /gmu;
 
@@ -453,7 +450,7 @@ interface AttemptWork {
  * is kept whole, in git's order, until the next one would take the diff
  * past `max`; that file and every one after it are left out, and `cut`
  * says how many of how many files that is, their lines added and removed,
- * and names the first {@link CUT_PATHS_NAMED} of them. A patch the read
+ * and names the first of them. A patch the read
  * stopped inside (landed.ts `landedDiff` reads `max` bytes and one more) is
  * left out with them.
  */
@@ -483,6 +480,7 @@ const cutDiff = (
   if (left.length === 0) {
     return { kept };
   }
+  const { shown, more } = firstNames(left.map((file) => file.path));
   return {
     kept,
     cut: judgedWords.diffCut({
@@ -490,8 +488,8 @@ const cutDiff = (
       files: diff.files.length,
       added: left.reduce((sum, file) => sum + (file.added ?? 0), 0),
       removed: left.reduce((sum, file) => sum + (file.removed ?? 0), 0),
-      paths: left.slice(0, CUT_PATHS_NAMED).map((file) => file.path),
-      more: Math.max(0, left.length - CUT_PATHS_NAMED),
+      paths: shown,
+      more,
     }),
   };
 };
@@ -548,7 +546,7 @@ const attemptWork = async (
 
 /** How a session is named in a sentence. */
 const named = (row: InstanceRow): string =>
-  `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${short(row.id)}`}”`;
+  `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${shortId(row.id)}`}”`;
 
 /**
  * The one rule for who takes a project's reports: why `row` cannot take an
@@ -691,8 +689,6 @@ interface RetryContext {
   workItemId: string;
 }
 
-/** The longest stretch of a failure a retry's brief carries: its end. */
-const FAILURE_TAIL = 4000;
 const BACKTICKS = /`+/gu;
 
 /** An attempt by its session's link, labelled by its task's title: what a comment or a message names it by. */
@@ -701,13 +697,8 @@ const attemptNamed = (
   task: Pick<TaskView, "title">
 ): string => `its attempt ${sessionLink(item.instanceId, task.title)}`;
 
-/** The work item's title: the task's title, what its session's chip reads, cut to what a session name takes. */
-const titleOf = (task: TaskView): string => {
-  const { title } = task;
-  return title.length > SESSION_TITLE_MAX
-    ? `${title.slice(0, SESSION_TITLE_MAX - 1).trimEnd()}…`
-    : title;
-};
+/** The work item's title: the task's title, what its session's chip reads. */
+const titleOf = (task: TaskView): string => task.title;
 
 /**
  * The brief: the words of the `delegate` call that named the task when one
@@ -875,11 +866,14 @@ const partsSection = (parts: string[]): string =>
 const RESULT_LINE = "Before finish_item, hand your work in with task_result.";
 
 /** The most comments a brief carries: the newest. */
+// @limit recording: hub.brief-comments until 2026-12-03
 const BRIEF_COMMENTS_MAX = 20;
 
 /** The comments left on the task since its last attempt started, batched into the brief (§5.3). */
 const commentsSection = (comments: TaskComment[]): string => {
+  recordLimitReading("hub.brief-comments", comments.length);
   const older = Math.max(0, comments.length - BRIEF_COMMENTS_MAX);
+  // @limit recording: hub.brief-comments until 2026-12-03
   return `## Comments since the last attempt\n\n${older > 0 ? `${judgedWords.olderComments(older)}\n\n` : ""}${comments
     .slice(-BRIEF_COMMENTS_MAX)
     .map(
@@ -897,10 +891,7 @@ const retrySection = (
 ): string => {
   const done = task.todos.filter((todo) => todo.done);
   const failure = retry.failure.trim() || "(the hub kept no words for it)";
-  const tail =
-    failure.length > FAILURE_TAIL
-      ? `…${failure.slice(-FAILURE_TAIL)}`
-      : failure;
+  const tail = outputTail(failure);
   // Longer than any run of backticks in the report, which fences its own.
   const longest = Math.max(
     0,
@@ -908,7 +899,7 @@ const retrySection = (
   );
   const fence = "`".repeat(Math.max(3, longest + 1));
   return [
-    `## The last attempt\n\nThis is a retry. The last attempt (work item ${short(retry.workItemId)}) ${retry.state === "cancelled" ? "was cancelled" : "failed"}; the hub reported:\n\n${fence}\n${tail}\n${fence}`,
+    `## The last attempt\n\nThis is a retry. The last attempt (work item ${shortId(retry.workItemId)}) ${retry.state === "cancelled" ? "was cancelled" : "failed"}; the hub reported:\n\n${fence}\n${tail}\n${fence}`,
     done.length > 0
       ? `Done so far, by the task's to-dos: ${done.map((todo) => (todo.id ? todoLink(projectId, task.id, todo.id, todo.text) : todo.text)).join("; ")}.`
       : "None of the task's to-dos is ticked yet.",
@@ -1308,12 +1299,10 @@ export const createDispatcher = ({
       return list;
     }
     const byId = new Map(list.tasks.map((each) => [each.id, each]));
-    const triaged = frontier
-      .filter((id) => {
-        const state = byId.get(id)?.fields[TRIAGE_FIELD];
-        return !state || state === "ready-for-agent";
-      })
-      .slice(0, DISPATCH_ASKED_MAX);
+    const triaged = frontier.filter((id) => {
+      const state = byId.get(id)?.fields[TRIAGE_FIELD];
+      return !state || state === "ready-for-agent";
+    });
     const read = await Promise.all(
       triaged.map((id) => tasks.get(project.id, id))
     );
@@ -1741,7 +1730,7 @@ export const createDispatcher = ({
         projectId,
         task.id,
         active.name,
-        hubActor(`attempt ${short(item.id)} started`)
+        hubActor(`attempt ${shortId(item.id)} started`)
       );
       return moved instanceof ElysiaStatus
         ? unmoved(moved.response.detail)
@@ -2464,8 +2453,8 @@ export const createDispatcher = ({
     const noted = await tasks.comment(
       projectId,
       taskId,
-      `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
-      hubActor(`attempt ${short(item.id)}'s follow-up ended`)
+      `Attempt ${shortId(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
+      hubActor(`attempt ${shortId(item.id)}'s follow-up ended`)
     );
     return noted instanceof ElysiaStatus ? noted : undefined;
   };
@@ -2592,8 +2581,8 @@ export const createDispatcher = ({
       target.name,
       hubActor(
         closed
-          ? `its coordinator ${short(item.id)} reported and every part is done${landedAs(item)}`
-          : `its coordinator ${short(item.id)} ${item.state}`
+          ? `its coordinator ${shortId(item.id)} reported and every part is done${landedAs(item)}`
+          : `its coordinator ${shortId(item.id)} ${item.state}`
       )
     );
     return moved instanceof ElysiaStatus ? moved : undefined;
@@ -2648,23 +2637,23 @@ export const createDispatcher = ({
     criteria: number
   ): string => {
     if (judged === "done" && kind === "you") {
-      return `attempt ${short(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
+      return `attempt ${shortId(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
     }
     if (kind === "you" && item.state === "done" && item.error) {
-      return `attempt ${short(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
+      return `attempt ${shortId(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
     }
     if (kind === "you" && item.prUrl && item.lands === "pr") {
-      return `attempt ${short(item.id)} opened ${item.prUrl}`;
+      return `attempt ${shortId(item.id)} opened ${item.prUrl}`;
     }
     if (kind === "you") {
-      return `attempt ${short(item.id)} ${item.state}; with Jev and events off, its acceptance criteria wait for you`;
+      return `attempt ${shortId(item.id)} ${item.state}; with Jev and events off, its acceptance criteria wait for you`;
     }
     if (kind === "todo" && item.state === "done") {
-      return `attempt ${short(item.id)} ${item.state}; Jev does not show its acceptance criteria met`;
+      return `attempt ${shortId(item.id)} ${item.state}; Jev does not show its acceptance criteria met`;
     }
     return closedMet(judged, kind, criteria)
-      ? `attempt ${short(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
-      : `attempt ${short(item.id)} ${item.state}`;
+      ? `attempt ${shortId(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
+      : `attempt ${shortId(item.id)} ${item.state}`;
   };
 
   /**
@@ -2699,7 +2688,7 @@ export const createDispatcher = ({
       offLine(
         "judged",
         projectId,
-        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
+        `${task.id}'s attempt ${shortId(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
       );
       placement.judgeByLead(
         projectId,
@@ -2719,7 +2708,7 @@ export const createDispatcher = ({
     offLine(
       "judged",
       projectId,
-      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
+      `${task.id}'s attempt ${shortId(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
     );
     return "you";
   };
@@ -2745,7 +2734,7 @@ export const createDispatcher = ({
     criteria: string[],
     item: WorkItemRow
   ) => {
-    const about = hubActor(`attempt ${short(item.id)} judged`);
+    const about = hubActor(`attempt ${shortId(item.id)} judged`);
     const attempt = attemptNamed(item, task);
     const link = taskLink(projectId, task.id, task.title);
     // The comment on the task, then one line to the attempt's starter
@@ -2934,7 +2923,7 @@ export const createDispatcher = ({
     }
     db.markAttemptUnmet(newest.id);
     console.log(
-      `[dispatch] ${id}: the project's conversation sent it back to ${to}; its attempt ${short(newest.id)} counts as unmet, and the task waits for task_retry.`
+      `[dispatch] ${id}: the project's conversation sent it back to ${to}; its attempt ${shortId(newest.id)} counts as unmet, and the task waits for task_retry.`
     );
   };
 

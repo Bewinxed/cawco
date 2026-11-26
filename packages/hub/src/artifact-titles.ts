@@ -7,7 +7,7 @@
  * spelled as words. It runs once, as the hub starts (`data_migrations`):
  * no surface ever reads an empty title, and nothing falls back at runtime.
  */
-import { ARTIFACT_TITLE_LIMIT } from "@cawco/core/artifact-kinds";
+
 import {
   ARTIFACT_MARKER_KINDS,
   markerTag,
@@ -15,6 +15,7 @@ import {
 } from "@cawco/core/injected";
 import { isOneOf } from "@cawco/core/one-of";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
+import { derivedName } from "@cawco/providers/derived-name";
 import type { ArtifactRow } from "./db/artifacts";
 import { ARTIFACT_TITLES } from "./db/migration-names";
 import { rewriteSendText } from "./db/tag-markers";
@@ -23,25 +24,8 @@ import { readKept } from "./decision-program";
 /** Where a row's title came from. */
 export type TitleSource = "page" | "ask" | "name";
 
-/** Runs of white space, one space each in a title. */
-const SPACES = /\s+/gu;
-/** What a cut leaves dangling at a title's end: a space, a comma, a dash. */
-const DANGLING = /[\s,;:.—-]+$/u;
-
-/** `words` cut to the title's length at the last word that fits, whole when it fits. */
-const titleCut = (words: string): string => {
-  const one = words.replace(SPACES, " ").trim();
-  if (one.length <= ARTIFACT_TITLE_LIMIT) {
-    return one;
-  }
-  const head = one.slice(0, ARTIFACT_TITLE_LIMIT + 1);
-  const space = head.lastIndexOf(" ");
-  return (
-    space > 0 ? head.slice(0, space) : head.slice(0, ARTIFACT_TITLE_LIMIT)
-  )
-    .replace(DANGLING, "")
-    .trim();
-};
+/** `words` cut as a derived name is: on one line, at the last word that fits. */
+const titleCut = derivedName;
 
 /** A slug spelled as words, sentence case: `title-bars-close` is "Title bars close". */
 const nameAsWords = (name: string): string => {

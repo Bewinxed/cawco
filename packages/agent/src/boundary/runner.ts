@@ -307,6 +307,7 @@ const runtimeDirOf = (id: string): string => {
  * A Linux boundary generation's srt temp dir, short (a socket path is capped
  * at 108 bytes, srt #213) and its own (REPORT.md §5o).
  */
+// @limit measured: 12 hex characters are 48 bits of SHA-256; the srt temp folders one machine holds, so two collide after about 2^24 names
 export const srtTmpOf = (id: string, gen: string): string =>
   join(
     runtimeDirOf(id),

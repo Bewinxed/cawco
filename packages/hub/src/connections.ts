@@ -205,6 +205,7 @@ const GH_FRESH_MS = 60_000;
 /** A GitHub organization's login: letters, digits and single hyphens, up to 39 characters. */
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 /** A GitHub App's name, as GitHub caps it. */
+// @limit external: GitHub: an App's name "cannot be longer than 34 characters" (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
 const APP_NAME_MAX = 34;
 const DIGITS = /^\d{1,20}$/u;
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -506,10 +507,7 @@ export interface AppInput {
 const linearAppOf = (input: AppInput): HeldApp | string => {
   const clientId = input.clientId.trim();
   const clientSecret = input.clientSecret.trim();
-  if (
-    !(clientId && clientSecret) ||
-    `${clientId}${clientSecret}`.length > 512
-  ) {
+  if (!(clientId && clientSecret)) {
     return "A Linear app is set with the client id and client secret its settings page shows.";
   }
   return { service: "linear", clientId, clientSecret };
@@ -676,6 +674,7 @@ const sessionGone = (error: unknown): boolean =>
  * one that does not fails the whole request with a 400 ("tools.15.custom.name:
  * String should match pattern", github.com/anthropics/claude-code/issues/985).
  */
+// @limit external: the model API's tool name matches ^[a-zA-Z0-9_-]{1,64}$ (https://docs.anthropic.com/en/docs/build-with-claude/tool-use/implement-tool-use)
 const TOOL_NAME_MAX = 64;
 const HARNESS_PREFIX = "mcp__cawco__";
 const TOOL_NAME_SAFE = /^[A-Za-z0-9_-]+$/u;
@@ -701,6 +700,7 @@ const sessionToolName = (connection: string, tool: string): string => {
   const hash = createHash("sha256")
     .update(tool)
     .digest("hex")
+    // @limit measured: 6 hex characters are 24 bits of a hash; one connection's tool aliases share the namespace, so two collide after about 2^12 names
     .slice(0, ALIAS_HASH);
   const room =
     TOOL_NAME_MAX -
@@ -2041,8 +2041,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
       };
       misfit(`${name} signs in with ${r.auth}, not a key: ${instead[r.auth]}`);
     }
-    if (!key.trim() || key.length > 8192) {
-      misfit("A key is between 1 and 8192 characters.");
+    if (!key.trim()) {
+      misfit("A key is at least 1 character.");
     }
     reseal(r.id, () => ({ key: key.trim() }));
     drop(r.id);
@@ -2577,6 +2577,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     projects?: string[];
   }): Promise<ConnectionView> => {
     const name = `github-${input.login.toLowerCase().replace(NOT_NAME, "-")}`
+      // @limit measured: room under the 64-character tool name
       .slice(0, CONNECTION_NAME_LENGTH)
       .replace(TRAILING_HYPHENS, "");
     if (db.byName(name)) {

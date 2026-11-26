@@ -40,9 +40,6 @@ const HUB_PATH = new RegExp(
 );
 /** A piece of a path that is not a known string. */
 const PIECE = "\0";
-/** No string folds to more paths than this: past it, the piece is any value. */
-const MAX_VARIANTS = 16;
-const MAX_DEPTH = 4;
 
 export interface SourceFile {
   path: string;
@@ -80,13 +77,13 @@ const constAt = (at: ts.Node, name: string): ts.Expression | undefined => {
 const constValues = (
   file: ts.SourceFile,
   node: ts.Identifier,
-  depth: number
+  following: ReadonlySet<ts.Node>
 ): string[] | undefined => {
   const initializer = constAt(node, node.text);
-  if (!initializer) {
+  if (!initializer || following.has(initializer)) {
     return;
   }
-  const values = render(file, initializer, depth + 1);
+  const values = render(file, initializer, new Set(following).add(initializer));
   return values.some((value) => value.includes(PIECE)) ? undefined : values;
 };
 
@@ -94,11 +91,8 @@ const constValues = (
 function render(
   file: ts.SourceFile,
   node: ts.Expression,
-  depth: number
+  following: ReadonlySet<ts.Node>
 ): string[] {
-  if (depth > MAX_DEPTH) {
-    return [PIECE];
-  }
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
     return [node.text];
   }
@@ -107,28 +101,24 @@ function render(
     ts.isAsExpression(node) ||
     ts.isSatisfiesExpression(node)
   ) {
-    return render(file, node.expression, depth);
+    return render(file, node.expression, following);
   }
   if (ts.isConditionalExpression(node)) {
     return [
-      ...render(file, node.whenTrue, depth),
-      ...render(file, node.whenFalse, depth),
-    ].slice(0, MAX_VARIANTS);
+      ...render(file, node.whenTrue, following),
+      ...render(file, node.whenFalse, following),
+    ];
   }
   if (ts.isIdentifier(node)) {
-    return constValues(file, node, depth) ?? [PIECE];
+    return constValues(file, node, following) ?? [PIECE];
   }
   if (ts.isTemplateExpression(node)) {
     let variants = [node.head.text];
     for (const span of node.templateSpans) {
-      const pieces = render(file, span.expression, depth);
-      const next = variants.flatMap((before) =>
+      const pieces = render(file, span.expression, following);
+      variants = variants.flatMap((before) =>
         pieces.map((piece) => `${before}${piece}${span.literal.text}`)
       );
-      variants =
-        next.length > MAX_VARIANTS
-          ? variants.map((before) => `${before}${PIECE}${span.literal.text}`)
-          : next;
     }
     return variants;
   }
@@ -446,7 +436,7 @@ const builtCalls = (
     return [];
   }
   const local = isLocalUrl(node);
-  return render(file, node, 0)
+  return render(file, node, new Set())
     .filter(
       (built) =>
         !(local && GATEWAY_OWN.some((prefix) => built.startsWith(prefix)))

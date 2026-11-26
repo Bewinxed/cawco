@@ -7,6 +7,7 @@ import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { GitHubResource, InboundVia } from "./db/stored-types";
 
 /** The most a stored payload holds (intake.ts). */
+// @limit measured: the largest inbound event is 2,277 bytes of 26 (2026-11-26)
 export const PAYLOAD_MAX = 64 * 1024;
 
 /** Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts. */

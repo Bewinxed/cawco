@@ -70,6 +70,7 @@
   const FAILED_INK = "text-error-9";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const SLOTS = 6;
 
   const lastLine = (text: string): string =>
@@ -236,7 +237,12 @@
    * leaves. A tail already in the store is there from the first frame.
    */
   let shown = $state<string[]>(
-    untrack(() => rows.map((row) => row.key).slice(-SLOTS))
+    untrack(() =>
+      rows
+        .map((row) => row.key)
+        // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
+        .slice(-SLOTS)
+    )
   );
   /**
    * The tail's height in rows: as many as it holds, up to six, so a delegate
@@ -278,6 +284,7 @@
     const anchor = [...shown, ...queue].findLast((key) => present.has(key));
     if (anchor === undefined) {
       // Nothing on screen is in the transcript any more (or yet): it is simply there.
+      // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
       shown = keys.slice(-SLOTS);
       queue = [];
       return;
@@ -327,6 +334,7 @@
     }
     if (!motionOk.current) {
       // Reduced motion: the rows shift at once and the new one fades in place.
+      // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
       shown = [...shown, key].slice(-SLOTS);
       await tick();
       await column?.lastElementChild?.animate(
@@ -355,6 +363,7 @@
       ],
       timing
     ).finished;
+    // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
     shown = shown.slice(-SLOTS);
     return lift(dur("--duration-control"));
   }

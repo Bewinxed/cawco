@@ -47,6 +47,7 @@ import {
 export const checkReads = ["packages/core/src/"];
 
 /** The longest schedule swept, past the start-up the world begins in. */
+// @limit measured: a sweep to depth 8 explores 196,121 states in 3.1 s and each further event doubles it (depth 9: 434,287 states, 6.0 s; bun scripts/protocol-sweep.ts on obelisk, 2026-11-26)
 const MAX_EVENTS = 8;
 const MACHINE = "m";
 const UNIT = "claude";

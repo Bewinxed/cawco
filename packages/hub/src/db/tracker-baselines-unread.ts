@@ -17,6 +17,7 @@
  * keep them off a value that is not JSON.
  */
 import type { Database } from "bun:sqlite";
+import { shown } from "./json-reads";
 
 /** `synced` is a JSON object. */
 const OBJECT =
@@ -74,9 +75,6 @@ interface Row {
   status: string | null;
   title: string | null;
 }
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** The fields of a baseline 0407 places, in its columns' order. */
 const placedOf = (row: Row): string[] => [

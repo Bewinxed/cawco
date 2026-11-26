@@ -563,11 +563,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    session-questions.ts). A page built for 110 reads them closed, so it
  *    reloads first.
  *
+ * 112: a member's identity mark (`hue` of `POST /api/decides/members`,
+ *    `PUT /api/decides/members/:id` and its picture) is one of the eight
+ *    marks (core decides.ts `MARK_HUES`), not any whole number. A page built
+ *    for 111 reads it as a number, so it reloads first.
+ *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 111;
+export const WIRE_PROTOCOL = 112;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds
@@ -768,6 +773,7 @@ export interface StreamHeartbeat {
 export const HEARTBEAT_INTERVAL_MS = 20_000;
 
 /** How long after asking a client waits for anything at all before calling the socket dead. */
+// @limit recording: dashboard.heartbeat-heard-ms until 2026-12-10
 export const HEARTBEAT_DEADLINE_MS = 10_000;
 
 /**

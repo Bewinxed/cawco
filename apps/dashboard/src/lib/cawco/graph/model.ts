@@ -159,7 +159,14 @@ function recordSets(
       "many",
       list.length === null
         ? words.recordsSome
-        : words.recordsMany(figure(Math.min(MANY_RECORDS, list.length)))
+        : words.recordsMany(
+            figure(
+              Math.min(
+                /* @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows */ MANY_RECORDS,
+                list.length
+              )
+            )
+          )
     ),
     set("longest", words.recordsLongest),
   ];

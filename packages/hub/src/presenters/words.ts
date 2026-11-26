@@ -5,9 +5,7 @@
  */
 
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
-
-/** An id's short handle: its first eight characters, what every tool taking that id takes back (handles.ts). */
-export const handle = (id: string): string => id.slice(0, 8);
+import { quote as quoteLine } from "@cawco/providers/quote";
 
 const dateOf = (at: Date | string | number): number =>
   at instanceof Date ? at.getTime() : new Date(at).getTime();
@@ -81,8 +79,11 @@ export const lasted = (ms: number): string => {
     : count(Math.round(ms / DAY_MS), "day");
 };
 
-/** Words as said, cut at `max` characters, in quotes. */
-export const quote = (text: string, max = 200): string => {
+/** Words as said, one line of them (core `quote`), in quotes. */
+export const quote = (text: string): string => `“${quoteLine(text)}”`;
+
+/** Words as said, read for what they hold and not quoted in a sentence: cut at `max` characters, in quotes. */
+export const excerpt = (text: string, max: number): string => {
   const flat = text.replace(/\s+/gu, " ").trim();
   return `“${flat.length > max ? `${flat.slice(0, max - 1)}…` : flat}”`;
 };
@@ -107,8 +108,12 @@ export const lines = (
     .filter((part) => part !== "")
     .join("\n");
 
-/** A value a page or the person set, as the agent reads it: JSON, cut. */
-export const valueWords = (value: unknown, max = 200): string => {
+/** A value a page or the person set, as a sentence quotes it: its JSON, one line (core `quote`). */
+export const valueWords = (value: unknown): string =>
+  quoteLine(JSON.stringify(value));
+
+/** A value as the agent reads it for what it holds: its JSON, cut at `max` characters. */
+export const valueExcerpt = (value: unknown, max: number): string => {
   const text = JSON.stringify(value);
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 };

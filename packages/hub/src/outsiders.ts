@@ -31,6 +31,7 @@ import type { WaitingOffer } from "@cawco/core/project-conversation";
 import type { Stage } from "@cawco/core/task-views";
 import { TRACKERS } from "@cawco/core/trackers";
 import { externalItemWords } from "@cawco/core/words/external-items";
+import { quote } from "@cawco/providers/quote";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { InboundEventRow } from "./db/ingress";
@@ -55,17 +56,13 @@ const UNATTENDED: ReadonlySet<Stage["kind"]> = new Set([
   "waiting",
 ]);
 
-/** A line as an offer shows it: the first that holds words, cut. */
-const FIRST_LINE_MAX = 160;
 const firstLine = (text: string | null): string => {
   const line =
     (text ?? "")
       .split("\n")
       .map((one) => one.trim())
       .find((one) => one.length > 0) ?? "";
-  return line.length > FIRST_LINE_MAX
-    ? `${line.slice(0, FIRST_LINE_MAX)}…`
-    : line;
+  return quote(line);
 };
 
 export interface OutsidersDeps {
@@ -250,7 +247,7 @@ export const outsiderRoutes = (outsiders: Outsiders) =>
     "/api/projects/:id/outsiders/answer",
     {
       body: t.Object({
-        itemId: t.String({ minLength: 1, maxLength: 200 }),
+        itemId: t.String({ minLength: 1 }),
         answer: t.Union([t.Literal("accept"), t.Literal("decline")]),
       }),
     },

@@ -16,6 +16,8 @@ import {
   SPOT_ATTR,
   SPOT_PAGE_ATTR,
 } from "@cawco/core/file-spot-marks";
+import { recordLimitReading } from "@cawco/core/limit-readings";
+import { carryPageReadings } from "@cawco/core/limit-readings-page";
 import { fileViewerWords as words } from "@cawco/core/words/file-viewer";
 import type * as PdfJs from "pdfjs-dist";
 
@@ -28,7 +30,11 @@ const CSS_PX_PER_POINT = 96 / 72;
 /** How far past the view a page is drawn before it scrolls in, as an IntersectionObserver margin. Our call: about a screen. */
 const NEAR = "100% 0px";
 /** The most device pixels per CSS px a page's canvas takes: past 2 its memory grows and no eye sees it. Our call. */
+// @limit recording: viewer.device-pixel-ratio until 2026-12-10
 const DENSITY_MOST = 2;
+
+// What the page reads of the bounds still waiting on data reaches the hub.
+carryPageReadings();
 
 const root = document.documentElement;
 const holder = document.getElementById("cawco-pages");
@@ -58,6 +64,7 @@ async function draw(pdfjs: typeof PdfJs, box: HTMLElement): Promise<void> {
   drawnAt.set(box, width);
   const scale = width / page.getViewport({ scale: 1 }).width;
   const viewport = page.getViewport({ scale });
+  recordLimitReading("viewer.device-pixel-ratio", window.devicePixelRatio || 1);
   const density = Math.min(window.devicePixelRatio || 1, DENSITY_MOST);
   const canvas = document.createElement("canvas");
   canvas.width = Math.floor(viewport.width * density);

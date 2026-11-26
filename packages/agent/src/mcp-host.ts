@@ -91,6 +91,7 @@ import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { workspaceScratchDir } from "@cawco/core/paths/workspace";
@@ -100,7 +101,12 @@ import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { cutShortTail } from "@cawco/core/words/helpers";
+import {
+  cutShortTail,
+  newTail,
+  saidTail,
+  writeTail,
+} from "@cawco/core/words/helpers";
 import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
@@ -165,11 +171,10 @@ const FORWARDED = new Set([
   "completion/complete",
 ]);
 /** The most pages one listing reads: a cursor that never ends is the server's fault, not a reason to spin. */
+// @limit measured: a page count; a walk that reaches it says so, with the method and the page it stopped at (the warning in #pages), and only a cursor that never ends gets there
 const MOST_PAGES = 100;
 /** The MCP revision the host asks a server for, as the agent's other MCP client does (fleet-mcp-listing.ts). */
 const PROTOCOL_VERSION = "2025-06-18";
-/** How many of a process's last stderr lines its failure quotes. */
-const STDERR_KEPT = 20;
 
 /** JSON-RPC's own error codes (https://www.jsonrpc.org/specification#error_object). */
 const PARSE_ERROR = -32_700;
@@ -305,9 +310,8 @@ class Child {
     number,
     Deferred.Deferred<JsonRpcMessage, unknown>
   >();
-  readonly #stderr: string[] = [];
-  /** How many of its stderr lines were dropped from the front of {@link #stderr}. */
-  #stderrCut = 0;
+  /** The end of what the process wrote on stderr, which its failure quotes. */
+  readonly #stderr = newTail();
   readonly #changed: (method: string) => void;
   #next = 1;
   #ended: string | undefined;
@@ -339,20 +343,12 @@ class Child {
     );
     readLines(this.#proc.stdout, (line) => this.#take(line));
     readLines(this.#proc.stderr, (line) => {
-      this.#stderr.push(line);
-      if (this.#stderr.length > STDERR_KEPT) {
-        this.#stderr.shift();
-        this.#stderrCut += 1;
-      }
+      writeTail(this.#stderr, `${line}\n`, OUTPUT_TAIL_KEPT);
     });
     this.exited = this.#proc.exited.then((code) => {
       started.delete(pid);
       recordStarted();
-      const said = (
-        this.#stderrCut > 0
-          ? `… (${this.#stderrCut} earlier lines cut)\n${this.#stderr.join("\n")}`
-          : this.#stderr.join("\n")
-      ).trim();
+      const said = saidTail(this.#stderr).trim();
       this.#ended = `The ${name} MCP server exited (code ${code})${said ? `: ${cutShortTail(said, 400)}` : ""}. Its next call starts it again.`;
       console.warn(`[mcp-host] ${this.#ended}`);
       for (const answer of this.#pending.values()) {

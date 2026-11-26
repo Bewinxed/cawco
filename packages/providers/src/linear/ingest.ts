@@ -32,6 +32,7 @@ import {
   RatelimitedLinearError,
 } from "@linear/sdk";
 import { Effect } from "effect";
+import { CONNECTOR_MIN_S } from "../connection/descriptor";
 import { eventKeys } from "../event-keys";
 import type {
   ExternalActor,
@@ -61,8 +62,8 @@ export interface LinearStreamCursor {
 
 const LINEAR_STREAMS = ["issues", "comments"] as const;
 
-/** Linear every 60 s, as GitHub (Projects spec §5.5). */
-const EVERY_MS = 60_000;
+/** Linear every poll of the one loop, as GitHub (Projects spec §5.5). */
+const EVERY_MS = CONNECTOR_MIN_S * 1000;
 /** The edge of the window read again each poll. Our choice, as GitHub's. */
 const OVERLAP_MS = 2 * 60_000;
 /** Linear's default page; a connection's complexity stays low. */

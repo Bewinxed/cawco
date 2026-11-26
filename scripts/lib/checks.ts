@@ -8,14 +8,18 @@
  * passes: the key of the inputs it passed on, which check.ts reads to skip
  * it on inputs it passed on (the last few kept).
  */
+
+import { handOnAsMachine } from "../../packages/agent/src/limit-readings-hand-on";
+import { recordLimitReading } from "../../packages/core/src/limit-readings";
 import {
   type Pid,
   signalGroup,
   spawnedPid,
 } from "../../packages/core/src/signal";
 
-/** Past this a check is stopped and fails; the slowest takes about 15 s on a loaded machine. */
-const TIMEOUT_MS = 240_000;
+/** Past this a check is stopped and fails; the slowest takes 143 s at the longest. */
+// @limit measured: the slowest check, packages/hub openapi:check, took 143.3 s at the longest over 26,965 check runs in the fleet's transcripts (2026-07-25 to 2026-11-26); three times the longest
+const TIMEOUT_MS = 430_000;
 /** Grace between asking a timed-out check to stop and killing it. */
 const KILL_GRACE_MS = 5000;
 
@@ -122,6 +126,7 @@ const run = async (check: Check): Promise<Outcome> => {
 };
 
 /** How many passes a stamp keeps: a change undone finds the pass before it. */
+// @limit recording: check.passes-held until 2026-12-03
 const PASSES_KEPT = 16;
 
 /** Adds `key` to the passes `file` keeps, newest last. */
@@ -130,6 +135,8 @@ const keepPass = async (file: string, key: string): Promise<void> => {
   const kept = (await stamp.exists())
     ? (await stamp.text()).split("\n").filter((line) => line && line !== key)
     : [];
+  recordLimitReading("check.passes-held", kept.length + 1);
+  // @limit recording: check.passes-held until 2026-12-03
   await Bun.write(file, [...kept, key].slice(-PASSES_KEPT).join("\n"));
 };
 
@@ -221,8 +228,10 @@ export const runChecks = async (
     console.error(
       `${what}: ${failed.length} of ${checks.length} checks failed in ${wall}s: ${failed.map((outcome) => outcome.check.name).join(", ")}`
     );
+    await handOnAsMachine();
     process.exit(1);
   }
   console.log(`${what}: ${checks.length} checks passed in ${wall}s${tail}`);
+  await handOnAsMachine();
   process.exit(0);
 };

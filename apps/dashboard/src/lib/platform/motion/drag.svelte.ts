@@ -34,7 +34,7 @@
  * unmounts once every animation on the node has finished) without drawing a
  * second exit over it.
  */
-import { motionOk } from "./curves.svelte";
+import { motionOk, numberOf } from "./curves.svelte";
 import { integrate, Release, spring } from "./spring";
 
 /** The edge a surface came in from, and leaves through. */
@@ -56,9 +56,8 @@ const SLOPE = 0.7;
 const COMMIT = 0.3;
 /** A flick: short but fast still counts, in px/ms. */
 const FLICK = 0.3;
-/** Past rest, a third of the finger's travel shows, and never more than a quarter of the surface. */
+/** Past rest, a third of the finger's travel shows, and never more than --resist-max of the surface. */
 const RESIST = 0.35;
-const RESIST_MAX = 0.25;
 
 type Phase = "idle" | "armed" | "dragging" | "gone";
 
@@ -93,7 +92,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       horizontal ? event.clientY : event.clientX;
     /** Drawn distance: past rest, the rubber band. */
     const drawn = (at: number) =>
-      at < 0 ? -Math.min(-at * RESIST, size * RESIST_MAX) : at;
+      at < 0 ? -Math.min(-at * RESIST, size * numberOf("--resist-max")) : at;
     const place = (at: number) =>
       horizontal
         ? `translate3d(${sign * at}px, 0, 0)`

@@ -8,7 +8,9 @@ import { lstat, open as openFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { boundedRead } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { makeFolder } from "@cawco/core/folders";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   workspaceClaudeTmpDir,
   workspacePolicyFile,
@@ -137,7 +139,9 @@ export const ready = (
   }).pipe(Effect.scoped);
   // The promise edge of a boundary's or a judge's start (ensure.ts, judge-process.ts).
   return Effect.runPromise(
-    boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard).pipe(
+    timedEffect(boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard), (ms) =>
+      recordLimitReading("agent.boundary-start-ms", ms)
+    ).pipe(
       Effect.catchTag("Unanswered", () =>
         Effect.fail(
           new Unstarted({

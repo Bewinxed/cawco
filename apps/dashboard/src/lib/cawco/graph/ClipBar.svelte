@@ -59,9 +59,9 @@
     type Clip,
     moveRun,
     RUN_BIG_STEP,
-    RUN_STEP,
     type Run,
     type RunPart,
+    runStep,
     type Track,
   } from "./motion";
 
@@ -195,7 +195,7 @@
 
   /** The arrows, Shift, Home and End on a part of a run, through the drag's own rule. */
   const keyOf = (run: Run, part: RunPart) => (event: KeyboardEvent) => {
-    const step = event.shiftKey ? RUN_BIG_STEP : RUN_STEP;
+    const step = event.shiftKey ? RUN_BIG_STEP : runStep();
     const by = {
       ArrowRight: step,
       ArrowUp: step,
@@ -212,6 +212,7 @@
   };
 
   /** The most repeats a bar draws before the glyph: past it, the lane's end is far off. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const GHOSTS_MOST = 24;
   /** A run whose one clip runs on past its first time: its repeats are drawn. */
   const repeats = (run: Run) =>
@@ -232,7 +233,7 @@
     span: { from: number; to: number }
   ): number[] => {
     const legs = [...(legsHeld?.id === clip.id ? legsHeld.legs : clip.legs)];
-    const gap = RUN_STEP / Math.max(RUN_STEP, span.to - span.from);
+    const gap = runStep() / Math.max(runStep(), span.to - span.from);
     const low = (legs[leg - 1] ?? 0) + gap;
     const high = (legs[leg + 1] ?? 1) - gap;
     legs[leg] = Math.min(high, Math.max(low, offset));
@@ -269,7 +270,7 @@
       });
       const place = (next: PointerEvent) => {
         const share = (next.clientX - bar.left) / Math.max(1, bar.width);
-        let t = Math.round((span.from + share * long) / RUN_STEP) * RUN_STEP;
+        let t = Math.round((span.from + share * long) / runStep()) * runStep();
         if (!next.altKey) {
           const near = others.find(
             (edge) =>
@@ -303,7 +304,7 @@
     span: { from: number; to: number },
     event: KeyboardEvent
   ) => {
-    const step = event.shiftKey ? RUN_BIG_STEP : RUN_STEP;
+    const step = event.shiftKey ? RUN_BIG_STEP : runStep();
     const by = {
       ArrowRight: step,
       ArrowUp: step,
@@ -441,10 +442,10 @@
             ? words.clipStarts(runName(at))
             : words.clipEnds(runName(at))}
           aria-valuemax={Math.round(
-            end === "start" ? span.to - RUN_STEP : scale
+            end === "start" ? span.to - runStep() : scale
           )}
           aria-valuemin={Math.round(
-            end === "start" ? run.floor : span.from + RUN_STEP
+            end === "start" ? run.floor : span.from + runStep()
           )}
           aria-valuenow={Math.round(edge)}
           aria-valuetext={ms(edge)}
@@ -516,7 +517,7 @@
     </div>
     {#if repeats(run)}
       <!-- Its repeats to the lane's end, then the repeat glyph. -->
-      {@const period = Math.max(RUN_STEP, span.to - span.from)}
+      {@const period = Math.max(runStep(), span.to - span.from)}
       {@const times = Math.min(
         GHOSTS_MOST,
         Math.max(0, Math.floor((scale - span.to) / period))

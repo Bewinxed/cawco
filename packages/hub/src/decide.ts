@@ -69,6 +69,7 @@ const COMPACTED_SHARE = 76_000 / 521_000;
  * one organization is priced as one across organizations.
  */
 const CARRY_READ_SHARE = 294_539 / 305_611;
+// @limit measured: a session's first turn after an account move read 98.2% of its prompt from cache at the median of 253 moves (turn_usage on the hub, to 2026-11-26)
 const CACHE_KEPT_AT = 0.9;
 
 /** A context: its last request's prompt in tokens, or unknown. Never a default. */

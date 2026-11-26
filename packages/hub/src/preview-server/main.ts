@@ -18,9 +18,14 @@ import { dirname } from "node:path";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { failureOf } from "@cawco/core/detach";
 import { makeFolder } from "@cawco/core/folders";
+import {
+  keepLimitReadings,
+  READINGS_HANDED_EVERY_MS,
+  takeLimitReadings,
+} from "@cawco/core/limit-readings";
 import { previewServerSocket } from "@cawco/core/paths/hub";
 import { unhandled } from "@cawco/core/unhandled";
-import { Cause, Effect, Exit, FiberSet, Runtime } from "effect";
+import { Cause, Effect, Exit, FiberSet, Runtime, Schedule } from "effect";
 import { dataOf, reached, refusalText, succeeded } from "../client";
 import { LOCAL_DASHBOARD_PORT } from "../config";
 import { labelOf, originFor } from "../preview-hosts";
@@ -131,6 +136,16 @@ const previewServer = Effect.gen(function* () {
     }
   };
   const link = yield* openHubLink(heard);
+  // The server's readings of the bounds waiting on data go to the hub over
+  // its link, and stay held while the link is down.
+  yield* Effect.forkScoped(
+    Effect.sync(() => {
+      const readings = takeLimitReadings();
+      if (readings.length > 0 && !link.say({ type: "readings", readings })) {
+        keepLimitReadings(readings);
+      }
+    }).pipe(Effect.repeat(Schedule.spaced(READINGS_HANDED_EVERY_MS)))
+  );
 
   const watch = (key: string): (() => void) => {
     const now = (viewers.get(key) ?? 0) + 1;

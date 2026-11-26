@@ -47,8 +47,7 @@ if (ran) {
     `session_plans: ${plans.length} read, ${placed.length} placed, ${never.length} never set, ${unread.length} restrictive; ${steps} steps and ${comments} comments placed`
   );
   /** A value as this shows it: cut short, on one line. */
-  const shown = (raw: string | null): string =>
-    JSON.stringify((raw ?? "").slice(0, 120));
+  const shown = (raw: string | null): string => JSON.stringify(raw ?? "");
   for (const plan of unread) {
     if (plan.reading.kind === "unread") {
       console.log(

@@ -3,6 +3,8 @@
  * as it happened (`task_moves`), the work items that landed in a stretch,
  * and the sessions that hear of a task.
  */
+
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { DAY_MS } from "@cawco/core/time";
 import { and, eq, gte, isNotNull, like, lt, lte, or } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -60,13 +62,18 @@ export const returnRecapDb = (db: BunSQLiteDatabase): ReturnRecapDb => ({
       )
       .run();
   },
-  movesBetween: (from, to) =>
-    db
+  movesBetween: (from, to) => {
+    recordLimitReading(
+      "hub.return-recap-span-ms",
+      to.getTime() - from.getTime()
+    );
+    return db
       .select()
       .from(taskMoves)
       .where(and(gte(taskMoves.at, from), lte(taskMoves.at, to)))
       .orderBy(taskMoves.at)
-      .all(),
+      .all();
+  },
   landedBetween: (from, to) =>
     db
       .select({

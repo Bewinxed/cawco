@@ -53,16 +53,20 @@ export const PICTURE_PAGE_SCROLLER = '[data-slot="page-scroll"]';
 /** How an artifact's picture is bounded ({@link ARTIFACT_PICTURE}). */
 export const PICTURE_LIMITS = {
   /** Widths a read may name, in CSS px: a phone's to a wide desk's. */
+  // @limit external: content reflows at 320 CSS pixels (WCAG 2.2 SC 1.4.10, https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)
   minWidth: 320,
-  maxWidth: 2560,
-  /** The tallest picture, in CSS px: a page longer than this is drawn from its top, and the read says so. Our call: three panes' worth. */
-  maxHeight: 2400,
+  // @limit external: the widest display standard, UHD at 3840 pixels (ITU-R BT.2020, https://www.itu.int/rec/R-REC-BT.2020)
+  maxWidth: 3840,
+  /** The tallest picture, in CSS px: a page longer than this is drawn from its top, and the read says so. */
+  // @limit external: Claude 4.7 and later models take images up to a 2,576 px long edge and downscale larger ones (https://platform.claude.com/docs/en/build-with-claude/vision)
+  maxHeight: 2576,
   /**
    * The page's load, through its preview origin: a sleeping server is woken
    * by it and waited on first (agent preview.ts `staged`, within core
    * `STAGE_READY_MS`, 60 s), then the page loads and is waited on until
    * it is ready: one bound for both. Our call.
    */
+  // @limit recording: agent.picture-load-ms until 2026-12-10
   loadMs: 75_000,
   /**
    * How long a page stands ready before its picture: content painted and
@@ -70,9 +74,12 @@ export const PICTURE_LIMITS = {
    * and the hello that places its pins (agent artifact-picture.ts
    * `watchReadiness`), within `loadMs`, as Files waits on a page.
    */
+  // @limit recording: agent.picture-ready-ms until 2026-12-10
   settleMs: 1000,
   /** The picture itself, once the page settled. Our call. */
+  // @limit recording: agent.picture-shot-ms until 2026-12-10
   shotMs: 15_000,
   /** How long the hub waits for the daemon's answer, launch to picture: the load, the settle and the picture, with room for the launch. Our call. */
+  // @limit recording: hub.picture-ask-ms until 2026-12-10
   askMs: 100_000,
 } as const;

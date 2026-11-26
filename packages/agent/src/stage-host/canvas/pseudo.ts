@@ -248,15 +248,10 @@ function rewriteRule(rule: CSSStyleRule, into: Rewrite): string | null {
 }
 
 const REWRITTEN = new WeakSet<CSSRule>();
-/** Storybook's bound per sheet: a reset with thousands of states gives up past it. */
-const REWRITE_LIMIT = 1000;
-
 function rewriteContainer(
   container: CSSStyleSheet | CSSGroupingRule | CSSStyleRule,
-  into: Rewrite,
-  left: number
-): number {
-  let count = 0;
+  into: Rewrite
+): void {
   for (let index = 0; index < container.cssRules.length; index += 1) {
     const rule = container.cssRules.item(index);
     if (!rule || REWRITTEN.has(rule)) {
@@ -270,7 +265,6 @@ function rewriteContainer(
           container.insertRule(text, index + 1);
           container.deleteRule(index);
           target = container.cssRules.item(index) ?? target;
-          count += 1;
         } catch {
           into.refused.add(rule.selectorText);
         }
@@ -284,19 +278,15 @@ function rewriteContainer(
       (target instanceof CSSGroupingRule || target instanceof CSSStyleRule) &&
       target.cssRules.length
     ) {
-      count += rewriteContainer(target, into, left - count);
-    }
-    if (count >= left) {
-      break;
+      rewriteContainer(target, into);
     }
   }
-  return count;
 }
 
 /** Rewrites one sheet in place; a cross-origin sheet (no `cssRules`) is left as it is. */
 export function rewriteSheet(sheet: CSSStyleSheet, into: Rewrite): void {
   try {
-    rewriteContainer(sheet, into, REWRITE_LIMIT);
+    rewriteContainer(sheet, into);
   } catch {
     // A cross-origin sheet's rules can't be read: its states are not forced.
     if (sheet.href) {

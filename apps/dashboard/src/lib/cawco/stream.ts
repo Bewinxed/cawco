@@ -23,6 +23,7 @@
  *   ever move forward.
  */
 
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import type {
   CommandAck,
   CommandAckStage,
@@ -39,9 +40,11 @@ import type {
 import { COMMAND_ACK_STAGES } from "@cawco/core/stream";
 
 /** How long a submitted command may go unacknowledged before it is called off. */
+// @limit recording: dashboard.command-ack-ms until 2026-12-10
 const COMMAND_ACK_TIMEOUT_MS = 15_000;
 
 /** How many settled commands are kept for the UI to read back. */
+// @limit recording: dashboard.settled-commands until 2026-12-03
 export const SETTLED_COMMAND_LIMIT = 50;
 
 /** How long a settled command stays readable before it is forgotten. */
@@ -52,6 +55,7 @@ export const SETTLED_COMMAND_TTL_MS = 5 * 60_000;
  * the ring can heal it and asks for the history instead. Without this a hub
  * that answers every resume with the same unusable backlog is a livelock.
  */
+// @limit recording: dashboard.resync-failures until 2026-12-03
 const MAX_RESYNC_ATTEMPTS = 3;
 
 /** What the client knows about one session's place in its stream. */
@@ -702,6 +706,7 @@ function applyBacklog(
   }
   cursor.resyncFailures += 1;
   cursor.resyncAfter = null;
+  recordLimitReading("dashboard.resync-failures", cursor.resyncFailures);
   if (cursor.resyncFailures >= MAX_RESYNC_ATTEMPTS) {
     // The ring cannot heal this. Stop asking it to and go and read the truth,
     // exactly as a reset would have us do.
@@ -996,6 +1001,10 @@ function noteCommandAck(
   if (!record) {
     return false;
   }
+  if (record.stage === "submitted") {
+    // The hub's first word on a command: how long after it was sent.
+    recordLimitReading("dashboard.command-ack-ms", now - record.changedAt);
+  }
   if (ack.stage === "applied") {
     record.outcome = ack.outcome;
   }
@@ -1057,6 +1066,7 @@ export function sweepCommands(
     }
     settled.push(record);
   }
+  recordLimitReading("dashboard.settled-commands", settled.length);
   if (settled.length > SETTLED_COMMAND_LIMIT) {
     settled.sort((a, b) => a.changedAt - b.changedAt);
     for (const record of settled.slice(

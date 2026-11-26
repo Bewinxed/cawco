@@ -83,7 +83,7 @@ rmSync(`${indexPath}-shm`, { force: true });
   ];
   for (const q of queries) {
     const t2 = performance.now();
-    const hits = index.search(q, { limit: 5 });
+    const { hits } = index.search(q, { limit: 5 });
     const ms2 = performance.now() - t2;
     const top = hits[0]?.moments[0];
     console.log(

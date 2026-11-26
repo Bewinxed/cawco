@@ -5,6 +5,7 @@
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import { maskInspection } from "@cawco/core/fleet-secrets";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { AGENT_BUSY, UPDATE_CAWCO } from "@cawco/core/protocol";
 import { CONTROL_FOLDER_COMMANDS } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
@@ -20,6 +21,7 @@ import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
 
 /** An update is a pull, an install and a dashboard build — minutes, not seconds. */
+// @limit recording: hub.agent-update-ms until 2026-12-26
 const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /**
@@ -27,6 +29,7 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
  * turn (Claude Code answers its initialize in 0.3–2.4 s, measured
  * 2026-11-05), with room for a cold start on a busy machine.
  */
+// @limit measured: Claude Code answers its initialize in 0.3 to 2.4 s, measured 2026-11-05; 30 s leaves room for a cold start
 const FOLDER_COMMANDS_TIMEOUT_MS = 30_000;
 
 /** What an update is asked with. */
@@ -48,11 +51,9 @@ export const agentUpdate =
   (ctx: Pick<HubContext, "callAgent" | "machineName"> & MachineReadsContext) =>
   async (machineId: string, body: Static<typeof agentUpdateBody>) => {
     const { callAgent, machineName } = ctx;
-    const answer = await callAgent(
-      machineId,
-      UPDATE_CAWCO,
-      [body],
-      UPDATE_TIMEOUT_MS
+    const answer = await timed(
+      callAgent(machineId, UPDATE_CAWCO, [body], UPDATE_TIMEOUT_MS),
+      (ms) => recordLimitReading("hub.agent-update-ms", ms)
     );
     switch (answer.kind) {
       case "unanswered":

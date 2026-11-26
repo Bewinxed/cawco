@@ -9,10 +9,8 @@ import { spawn } from "node:child_process";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { findProgram } from "@cawco/core/workspace-needs";
 import { Effect } from "effect";
+import { quote } from "@cawco/providers/quote";
 import { resolveBin, toolEnv } from "./tools";
-
-/** The most of the work's words logind's listing carries; the log line has them whole. */
-const WHY_MAX = 200;
 
 /** The argv that holds idle sleep off while `why` runs, for as long as `pid` lives, or why this machine has none. */
 export const holdCommand = (
@@ -39,7 +37,7 @@ export const holdCommand = (
       "--what=idle:sleep",
       "--mode=block-weak",
       "--who=CawCo",
-      `--why=${why.length > WHY_MAX ? `${why.slice(0, WHY_MAX - 1)}…` : why}`,
+      `--why=${quote(why)}`,
       ...(plasma ? [plasma, "--power"] : []),
       tail,
       `--pid=${pid}`,

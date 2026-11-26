@@ -53,6 +53,7 @@ const HUB_LATE_MS = 250;
  * and 60 s come first. Nothing before `listen` counts: the watch starts
  * once the hub listens.
  */
+// @limit measured: twelve of the hub's 10 s read deadlines, past the 75 s longest hold seen to end by itself (369 sessions reattached, core loop-watch.ts)
 const HUB_HELD_END_MS = 120_000;
 
 /** Where the watch keeps what it read as it ended a hub: beside its database. */

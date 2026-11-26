@@ -73,6 +73,7 @@ import type {
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { closeFences, someLineOutsideFences } from "@cawco/core/markdown-code";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -112,6 +113,7 @@ import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { workWords } from "@cawco/core/words/work";
+import { quote } from "@cawco/providers/quote";
 import { linkOfUrl } from "@cawco/providers/registry";
 import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -750,12 +752,8 @@ export interface TaskFilter {
   type?: string;
 }
 
-const TITLE_LIMIT = 200;
-const TODO_LIMIT = 500;
 /** A to-do line promoted to a task: `- [ ] Persist it → #152` (task-file.ts `PROMOTED`), its number apart. */
 const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gmu;
-const TEXT_LIMIT = 20_000;
-const ITEM_LIMIT = 200;
 /** How many numberings a create or merge tries while files keep landing on the numbers it took. */
 const CLAIM_TRIES = 10;
 
@@ -764,7 +762,6 @@ const sameNumber: Exclusive = (name, rel) => {
   const number = fileTaskNumber(rel);
   return number !== undefined && fileTaskNumber(name) === number;
 };
-const LIST_LIMIT = 50;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
 /** A line that opens a section of the task file, outside fenced code. */
 const SECTION_LINE = /^##\s/u;
@@ -912,7 +909,7 @@ const artifactProblem = async (
 
 // --- what a caller may write ------------------------------------------------------
 
-const oneLine = (what: string, text: string, limit: number) => {
+const oneLine = (what: string, text: string) => {
   const trimmed = text.trim();
   if (!trimmed) {
     return problem(400, {
@@ -925,6 +922,15 @@ const oneLine = (what: string, text: string, limit: number) => {
       code: "task-words-line-break",
       detail: `The ${what} is one line; take out the line break.`,
     });
+  }
+  return trimmed;
+};
+
+/** {@link oneLine}, refused past `limit` characters. */
+const oneLineWithin = (what: string, text: string, limit: number) => {
+  const trimmed = oneLine(what, text);
+  if (trimmed instanceof ElysiaStatus) {
+    return trimmed;
   }
   if (trimmed.length > limit) {
     return problem(400, {
@@ -941,12 +947,6 @@ const oneLine = (what: string, text: string, limit: number) => {
  * this text and not in the sections after it.
  */
 const block = (what: string, text: string) => {
-  if (text.length > TEXT_LIMIT) {
-    return problem(400, {
-      code: "task-text-too-long",
-      detail: `The ${what} is ${text.length} characters long; it stops at ${TEXT_LIMIT}.`,
-    });
-  }
   if (someLineOutsideFences(text, SECTION_LINE)) {
     return problem(400, {
       code: "task-text-heading",
@@ -963,6 +963,7 @@ const acceptanceOf = (text: string) => {
     return criteria;
   }
   const named = criteriaOf(criteria).length;
+  recordLimitReading("hub.task-criteria", named);
   if (named > CRITERIA_MAX) {
     return problem(400, {
       code: "task-text-too-long",
@@ -973,7 +974,7 @@ const acceptanceOf = (text: string) => {
 };
 
 const todoText = (text: string) => {
-  const line = oneLine("to-do", text, TODO_LIMIT);
+  const line = oneLine("to-do", text);
   if (!(line instanceof ElysiaStatus) && TODO_MARKER_START.test(line)) {
     return problem(400, {
       code: "task-todo-marker",
@@ -1000,7 +1001,7 @@ const todoTexts = (list: readonly string[]) => {
 const items = (what: string, list: string[]) => {
   const kept = new Set<string>();
   for (const item of list) {
-    const line = oneLine(`${what} item`, item, ITEM_LIMIT);
+    const line = oneLine(`${what} item`, item);
     if (line instanceof ElysiaStatus) {
       return line;
     }
@@ -1078,7 +1079,7 @@ const ownsOf = (owns: string[]) => {
 
 /** A draft's group, owned files and budget as its file's fields; the first refusal when one cannot stand. */
 const limitsOf = (draft: TaskDraft) => {
-  const group = draft.group ? oneLine("group", draft.group, 64) : null;
+  const group = draft.group ? oneLineWithin("group", draft.group, 64) : null;
   if (group instanceof ElysiaStatus) {
     return group;
   }
@@ -1137,7 +1138,7 @@ const extraFieldOf = (key: string, value: ExtraValue) => {
   if (Array.isArray(value)) {
     return value.length > 0 ? items(key, value) : [];
   }
-  return value.trim() ? oneLine(key, value, ITEM_LIMIT) : "";
+  return value.trim() ? oneLine(key, value) : "";
 };
 
 /**
@@ -1147,12 +1148,6 @@ const extraFieldOf = (key: string, value: ExtraValue) => {
  */
 const extraFieldsOf = (fields: Record<string, ExtraValue>) => {
   const entries = Object.entries(fields);
-  if (entries.length > LIST_LIMIT) {
-    return problem(400, {
-      code: "task-fields-too-many",
-      detail: `fields holds ${entries.length} fields; it stops at ${LIST_LIMIT}.`,
-    });
-  }
   const read: [string, ExtraValue][] = [];
   for (const [key, value] of entries) {
     const field = extraFieldOf(key, value);
@@ -1192,7 +1187,7 @@ const commentText = (text: string) => {
 /** A comment's first line, cut short, for its commit's subject. */
 const commentGist = (text: string): string => {
   const first = text.split("\n")[0]?.trim() ?? "";
-  return first.length > 60 ? `${first.slice(0, 59)}…` : first;
+  return quote(first);
 };
 
 // --- the service --------------------------------------------------------------
@@ -1207,9 +1202,6 @@ const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
  */
 const conditionGone = (wait: WaitState): boolean =>
   wait.condition?.state === "deleted";
-
-/** How long a failure's first line may run in its task's sentence. */
-const WHY_LIMIT = 200;
 
 /** Who stopped an attempt, as its task says it. */
 const stopperWords = (by: EndedBy): string => {
@@ -1253,7 +1245,7 @@ const endedHowOf = (
   if (!why) {
     return "It failed without a reason.";
   }
-  return why.length > WHY_LIMIT ? `${why.slice(0, WHY_LIMIT - 1)}…` : why;
+  return quote(why);
 };
 
 /** An attempt as a task read shows it. */
@@ -1536,8 +1528,7 @@ const setField = (changed: string[], name: string, apply: () => void) => {
 /** A patch's words (title, description, acceptance criteria) set; the first refusal when one cannot stand. */
 const patchWords = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   const { title, description, acceptance } = patch;
-  const line =
-    title === undefined ? undefined : oneLine("title", title, TITLE_LIMIT);
+  const line = title === undefined ? undefined : oneLine("title", title);
   if (line instanceof ElysiaStatus) {
     return line;
   }
@@ -1569,7 +1560,7 @@ const patchNames = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   if (name instanceof ElysiaStatus) {
     return name;
   }
-  const ranked = rank ? oneLine("rank", rank, 64) : null;
+  const ranked = rank ? oneLineWithin("rank", rank, 64) : null;
   if (ranked instanceof ElysiaStatus) {
     return ranked;
   }
@@ -1584,7 +1575,7 @@ const patchNames = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
 /** A patch's lands, runs_on, group and budget set; the first refusal when one cannot stand. */
 const patchLimits = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   const { lands, runsOn, group, budget } = patch;
-  const grouped = group ? oneLine("group", group, 64) : null;
+  const grouped = group ? oneLineWithin("group", group, 64) : null;
   if (grouped instanceof ElysiaStatus) {
     return grouped;
   }
@@ -1886,7 +1877,6 @@ const mergedInMessage = (
   );
 
 /** The longest reason a move takes. */
-const REASON_LIMIT = 500;
 
 export const createTasks = (store: TaskStore) => {
   /** The refusal of your approval, with its line, while the store says it cannot go. */
@@ -4291,7 +4281,7 @@ export const createTasks = (store: TaskStore) => {
 
   /** A move's reason as given: one line, or nothing. */
   const reasonOf = (reason: string | undefined) =>
-    reason?.trim() ? oneLine("reason", reason, REASON_LIMIT) : undefined;
+    reason?.trim() ? oneLine("reason", reason) : undefined;
 
   /**
    * The file the task `ref` names, the project's index caught up first, as a
@@ -5442,7 +5432,7 @@ export const createTasks = (store: TaskStore) => {
     if (limits instanceof ElysiaStatus) {
       return limits;
     }
-    const rank = draft.rank ? oneLine("rank", draft.rank, 64) : null;
+    const rank = draft.rank ? oneLineWithin("rank", draft.rank, 64) : null;
     if (rank instanceof ElysiaStatus) {
       return rank;
     }
@@ -5488,7 +5478,7 @@ export const createTasks = (store: TaskStore) => {
     draft: TaskDraft,
     actor: TaskActor
   ) => {
-    const title = oneLine("title", draft.title, TITLE_LIMIT);
+    const title = oneLine("title", draft.title);
     if (title instanceof ElysiaStatus) {
       return title;
     }
@@ -6886,7 +6876,7 @@ export const taskRoutes = (tasks: Tasks) =>
       {
         body: t.Object({
           content: t.String(),
-          message: t.Optional(t.String({ maxLength: 2000 })),
+          message: t.Optional(t.String()),
         }),
       },
       async ({ params, body }) =>

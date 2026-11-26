@@ -18,6 +18,7 @@ export const INSTALL_CODE_HEADER = "x-cawco-install-code";
 export const INSTALL_CODE_ENV = "CAWCO_INSTALL_CODE";
 
 /** How long the agent waits for the hub to list it (cli await-joined.ts `JOIN_TIMEOUT_MS`). */
+// @limit recording: install.list-wait-ms until 2026-12-26
 export const INSTALL_LIST_LIMIT_MS = 90_000;
 
 /**
@@ -28,6 +29,7 @@ export const INSTALL_LIST_LIMIT_MS = 90_000;
  * install on a fresh machine can run longer, and its item then lands on the
  * machine's row on its own.
  */
+// @limit recording: install.sync-wait-ms until 2026-12-26
 export const INSTALL_SYNC_LIMIT_MS = 60_000;
 
 /** How long the hub waits after a clean exit for the machine to come online (hub join.ts). */
@@ -37,6 +39,7 @@ export const INSTALL_GRACE_MS = 15_000;
  * How long the command route's install may run on the machine before it
  * reads as stuck: the agent's wait and the hub's grace, folded together.
  */
+// @limit measured: the agent's list wait and the hub's join grace, added (INSTALL_LIST_LIMIT_MS and INSTALL_GRACE_MS), so the install reads as stuck only after both have run out
 const COMMAND_INSTALL_LIMIT_MS = INSTALL_LIST_LIMIT_MS + INSTALL_GRACE_MS;
 
 export type InstallRoute = "ssh" | "command";
@@ -224,13 +227,6 @@ export interface InstallDraft {
   signIn: InstallSignIn;
   target: string;
 }
-
-/**
- * How long each of the draft's typed words may run: the hub keeps no
- * longer, and the window's fields take no more, so nothing a person can
- * type is a draft the hub refuses.
- */
-export const DRAFT_LIMITS = { target: 500, port: 10, address: 500 } as const;
 
 /**
  * Which page made an edit of the draft, and its place among that page's

@@ -18,6 +18,7 @@ import {
 } from "./provider";
 
 /** Native Codex's edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
+// @limit external: native Codex's edit-image cap, 5 (codex-rs/ext/image-generation/src/tool.rs)
 const MAX_EDIT_IMAGES = 5;
 
 /**

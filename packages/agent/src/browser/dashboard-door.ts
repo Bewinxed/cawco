@@ -152,6 +152,7 @@ const makeIdentity = (): { cert: string; key: string } => {
     version: Version.v3,
     // Sixteen bytes of its key's hash, the first below 0x80 so the INTEGER
     // stays positive (RFC 5280 §4.1.2.2).
+    // @limit external: an X.509 serial number is at most 20 octets (RFC 5280 section 4.1.2.2); 16 bytes of the certificate's SHA-256 are one
     serialNumber: new Uint8Array(createHash("sha256").update(spki).digest())
       .slice(0, 16)
       .map((byte, at) => (at === 0 ? byte % 0x80 : byte)).buffer,

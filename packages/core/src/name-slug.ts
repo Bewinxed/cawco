@@ -9,6 +9,7 @@ const NOT_SLUG = /[^a-z0-9]+/gu;
 const SLUG_ENDS = /^-+|-+$/gu;
 
 /** The longest slug: an artifact name's limit. */
+// @limit external: a DNS label, 63 characters (RFC 1035 section 2.3.4)
 const SLUG_MOST = 63;
 
 /** `name` as a slug, or "" when it has no letter or digit. */

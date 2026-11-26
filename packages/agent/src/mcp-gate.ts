@@ -55,6 +55,7 @@ const gatedEntry = (
   config: FleetMcpConfig
 ): Extract<FleetMcpConfig, { url: string }> => ({
   type: "http",
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the MCP configs one gate has held, so two collide after about 2^32 names
   url: `${gate.base}${encodeURIComponent(name)}?config=${createHash("sha256")
     .update(JSON.stringify(config))
     .digest("hex")

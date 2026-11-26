@@ -63,6 +63,7 @@ import { openLockFile, tryLock, unlock } from "./flock";
 import { makeFolderSync } from "./folders";
 import { workspaceCacheDir } from "./paths/workspace";
 import { parentPid } from "./process-identity";
+import { shortId } from "./short-id";
 import { parseRecord } from "./state-file";
 import { HOUR_MS } from "./time";
 
@@ -254,7 +255,8 @@ const pidNamespace = (): string | undefined => {
 function ancestors(): number[] {
   const out: number[] = [];
   let pid = process.ppid;
-  while (pid > 1 && out.length < 64) {
+  // To the namespace's first; a pid met twice is a read gone wrong, not an ancestor.
+  while (pid > 1 && !out.includes(pid)) {
     out.push(pid);
     // From the kernel, no spawn: a workspace's boundary refuses setuid
     // `/bin/ps` on macOS (EPERM at posix_spawn).
@@ -294,9 +296,7 @@ export function heldAbove(place: SlotPlace): string | null {
 }
 
 const where = (): string =>
-  process.env.CAWCO_WORKSPACE
-    ? process.env.CAWCO_WORKSPACE.slice(0, 8)
-    : "host";
+  process.env.CAWCO_WORKSPACE ? shortId(process.env.CAWCO_WORKSPACE) : "host";
 
 const minutes = (ms: number): string => {
   const s = Math.round(ms / 1000);
@@ -493,7 +493,7 @@ function joinLine(queue: string, who: string): { fd: number; name: string } {
   makeFolderSync(queue);
   // Made and locked under a name no look counts, then renamed into line: no
   // other waiter ever sees it unlocked and deletes it.
-  const nonce = `${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
+  const nonce = `${process.pid}-${shortId(crypto.randomUUID())}`;
   const name = `ticket-${String(Date.now()).padStart(15, "0")}-${nonce}`;
   const making = join(queue, `new-${nonce}`);
   const fd = openLockFile(making, true);

@@ -96,7 +96,7 @@ import {
   type TaskTool,
 } from "./task-tools";
 import { WAIT_ITEM_LIMIT, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
-import { SESSION_TITLE_DESCRIPTION, SESSION_TITLE_MAX } from "./work-items";
+import { SESSION_TITLE_DESCRIPTION } from "./work-items";
 
 /**
  * A tool whose answer the hub wrote already in the form asked for
@@ -108,12 +108,7 @@ const verbatim: Presenter<string, unknown> = (text) => text;
 
 /** The name the caller gives a session it starts or delegates to; never cut from the brief. */
 const sessionTitle = () =>
-  z
-    .string()
-    .trim()
-    .min(1)
-    .max(SESSION_TITLE_MAX)
-    .describe(SESSION_TITLE_DESCRIPTION);
+  z.string().trim().min(1).describe(SESSION_TITLE_DESCRIPTION);
 
 const ISO_TIME =
   "an ISO date or datetime, like 2026-10-20 or 2026-10-20T14:00Z";
@@ -1035,7 +1030,7 @@ export function handoffTools(view: ToolView) {
           .describe(
             "true asks the person, for a workspace that serves what waits on them, which is refused without it."
           ),
-        reason: z.string().max(300).optional().describe("With ask: why."),
+        reason: z.string().optional().describe("With ask: why."),
       },
       ({ workspace, ask, reason }, _format, bound) =>
         bound.actions.discardWorkspace(workspace, {
@@ -1067,7 +1062,7 @@ export function handoffTools(view: ToolView) {
           .number()
           .int()
           .min(1)
-          .max(1440)
+          .max(WAIT_ITEM_MAX_MINUTES)
           .optional()
           .describe("How long to pause it; give this or resume."),
         resume: z
@@ -1134,7 +1129,6 @@ export function handoffTools(view: ToolView) {
       {
         cursor: z
           .string()
-          .max(20)
           .optional()
           .describe("next_cursor, for more questions."),
       },
@@ -1150,7 +1144,6 @@ export function handoffTools(view: ToolView) {
           .string()
           .trim()
           .min(1)
-          .max(SESSION_TITLE_MAX)
           .describe(
             "3–6 plain words, verb first, like 'Fix tray chip overflow'."
           ),

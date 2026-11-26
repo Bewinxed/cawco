@@ -3,15 +3,14 @@
  * return-recap.ts): one line counting what moved of its records while they
  * were away, opening to each by its link.
  */
+
+import { andList } from "@cawco/providers/names";
 import type { ReturnRecap } from "../return-recap";
-import { andList } from "./helpers";
+import { shortSha } from "../short-id";
 
 /** `n` of a kind, counted: "1 task moved", "2 tasks moved". */
 const counted = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
-
-/** A commit as the line names it: its first nine characters. */
-const shortSha = (sha: string): string => sha.slice(0, 9);
 
 export const returnRecapWords = {
   /** The kind the transcript's line is drawn under. */

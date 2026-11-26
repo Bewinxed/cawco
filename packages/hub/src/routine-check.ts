@@ -25,6 +25,7 @@
 
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { isRecord } from "@cawco/core/is-record";
+import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import { checkWords } from "@cawco/core/words/routine-check";
 import type { CheckRow } from "./db/task-triggers";
 
@@ -33,6 +34,7 @@ import type { CheckRow } from "./db/task-triggers";
  * checks had at most, now every check's. A scan that takes longer belongs
  * in a job of its own on its machine, whose result the check reads.
  */
+// @limit recording: hub.routine-check-ms until 2026-12-10
 export const CHECK_LIMIT_MS = 10 * 60_000;
 
 /**
@@ -40,7 +42,7 @@ export const CHECK_LIMIT_MS = 10 * 60_000;
  * a few hundred findings' lines. Past it the rest is cut, and the input says
  * how much was.
  */
-const CHECK_OUTPUT_MAX = 16_000;
+const CHECK_OUTPUT_MAX = TOOL_ANSWER_CHARS;
 
 /** A command's exit when it ran past its limit (agent hub-command.ts, `expired`). */
 const EXIT_TIMED_OUT = 124;
@@ -51,6 +53,7 @@ const EXIT_NOT_FOUND = 127;
 /** POSIX: a command ended by signal n exits 128 + n. */
 const EXIT_SIGNAL = 128;
 /** The highest signal a shell reports as 128 + n. */
+// @limit external: Linux's highest signal number is 64, SIGRTMAX (signal(7), https://man7.org/linux/man-pages/man7/signal.7.html); a shell reports signal n as exit status 128 + n
 const SIGNAL_MAX = 64;
 const LINES = /\r?\n/u;
 const BACKTICKS = /`+/gu;

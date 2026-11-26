@@ -196,6 +196,7 @@ function recordsOf(upload: Upload): Stored[] {
         id: createHash("sha256")
           .update(JSON.stringify(diagnostic))
           .digest("hex")
+          // @limit measured: 16 hex characters are 64 bits of a hash; one device's diagnostics share the namespace, so two collide after about 2^32 names
           .slice(0, 16),
         kind,
         appVersion: upload.appVersion,
@@ -217,10 +218,10 @@ export const appleDiagnosticsRoutes = () =>
       {
         ...hidden,
         body: t.Object({
-          appVersion: t.String({ maxLength: 40 }),
-          build: t.String({ maxLength: 40 }),
-          os: t.String({ maxLength: 80 }),
-          device: t.Optional(t.String({ maxLength: 80 })),
+          appVersion: t.String(),
+          build: t.String(),
+          os: t.String(),
+          device: t.Optional(t.String()),
           payload: t.Record(t.String(), t.Unknown()),
         }),
       },

@@ -74,7 +74,7 @@ export interface PageAnchor {
     story: string;
   };
   source: PreviewElement["source"];
-  /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
+  /** The element's text. */
   text?: string;
   /**
    * Off a sheet: the view the mark was made in, its window's width (px, as

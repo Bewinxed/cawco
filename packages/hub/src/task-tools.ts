@@ -446,7 +446,6 @@ export const groupParameter = () =>
     .string()
     .trim()
     .min(1)
-    .max(64)
     .describe(
       "Items in one group under one parent report once, together, when all have ended; a failure reports at once."
     );

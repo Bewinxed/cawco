@@ -14,6 +14,7 @@
  * faults.ts), so `artifact_read` says them.
  */
 
+import { fitReport } from "@cawco/core/page-faults";
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
 import { hub } from "#lib/platform/hub.js";
 import { hubReached } from "#lib/platform/hub-read.js";
@@ -130,12 +131,11 @@ export function reportError(
       return;
     }
     const words = thrownWords(error);
-    const message = (about ? `${about}: ${words}` : words).slice(0, 1000);
-    const stack = (
+    const message = about ? `${about}: ${words}` : words;
+    const stack =
       isError(error) && typeof error.stack === "string"
         ? error.stack
-        : stackHint
-    ).slice(0, 6000);
+        : stackHint;
     const firstFrame =
       stack.split("\n").find((line) => FIRST_FRAME.test(line)) ?? "";
     const key = JSON.stringify([message, firstFrame]);
@@ -150,15 +150,14 @@ export function reportError(
     seen.set(key, now);
     windowCount += 1;
     total += 1;
-    const body = {
+    const body = fitReport({
       message,
       stack,
-      path: path.slice(0, 1000),
-      sessionId:
-        SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
-      version: sink.version.slice(0, 128),
-      userAgent: navigator.userAgent.slice(0, 512),
-    };
+      path,
+      sessionId: SESSION_PATH.exec(location.pathname)?.[1] ?? null,
+      version: sink.version,
+      userAgent: navigator.userAgent,
+    });
     // keepalive also delivers while navigating away.
     (sink.to === "preview"
       ? fetch(PREVIEW_ERRORS_PATH, {

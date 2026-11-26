@@ -40,6 +40,7 @@ import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { isGone } from "./absent";
 import { makeFolder, makeFolderSync } from "./folders";
+import { shortId } from "./short-id";
 import { isAlive, listedPid } from "./signal-wall";
 
 export interface StateWriteOptions {
@@ -69,7 +70,7 @@ const DEFAULT_MODE = 0o666;
 const temporaryFor = (path: string, scratchDir?: string): string =>
   join(
     scratchDir ?? dirname(path),
-    `.${basename(path)}.cawco-${process.pid}-${randomUUID().slice(0, 8)}.tmp`
+    `.${basename(path)}.cawco-${process.pid}-${shortId(randomUUID())}.tmp`
   );
 
 const TEMPORARY = /^\.(.+)\.cawco-(\d+)-[0-9a-f]{8}\.tmp$/u;

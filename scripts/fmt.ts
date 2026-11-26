@@ -29,6 +29,8 @@
  */
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { handOnAsMachine } from "../packages/agent/src/limit-readings-hand-on";
+import { recordLimitReading } from "../packages/core/src/limit-readings";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
 /** The first stable Bun with `bun fmt` (bun.com/blog/bun-v1.4.4). */
@@ -94,6 +96,8 @@ async function packagesWithoutScript(): Promise<string[]> {
 /** How `bun fmt` says a file is no language it formats. */
 const NO_PARSER = "No parser could be inferred";
 /** Formatter processes at once: each is short, and a generator may hand over hundreds of files. */
+recordLimitReading("check.fmt-processes-wanted", availableParallelism());
+// @limit recording: check.fmt-processes-wanted until 2026-12-10
 const AT_ONCE = Math.min(8, availableParallelism());
 let running = 0;
 const waiting: (() => void)[] = [];
@@ -264,5 +268,7 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  process.exit(await main());
+  const code = await main();
+  await handOnAsMachine();
+  process.exit(code);
 }

@@ -9,19 +9,13 @@ import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ARTIFACT_PICKS,
-  ARTIFACT_TITLE_LIMIT,
-  ASK_LIMIT,
   MADE_ARTIFACT_KINDS,
 } from "@cawco/core/artifact-kinds";
-import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
-import { CHOICE_LIMITS } from "@cawco/core/choices";
+import { SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
-  CANVAS_SPEC_LIMITS,
-  DESIGN_MAP_LIMITS,
   DESIGN_MARKS,
-  SERVE_COMMAND_LIMIT,
   STATES_ENTRY,
   STORY_NAME,
   STORY_REF,
@@ -30,26 +24,25 @@ import { t } from "elysia";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import { CREATE_SHAPE } from "./component";
-import { ARGS_LIMIT, WORKSPACE_ID } from "./tools";
+import { WORKSPACE_ID } from "./tools";
 
 /** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
 const skeletons = t.Array(
   t.Object(
     {
       type: t.UnionEnum(SKELETON_TYPES),
-      id: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+      id: t.Optional(t.String({ minLength: 1 })),
     },
     { additionalProperties: true }
   ),
-  { minItems: 1, maxItems: CANVAS_LIMITS.elementsPerCall }
+  { minItems: 1 }
 );
 
 const mermaid = t.String({
   minLength: 1,
-  maxLength: CANVAS_LIMITS.mermaid,
 });
 
-const pointer = t.String({ maxLength: 1000 });
+const pointer = t.String();
 
 /** One RFC 6902 operation, as rfc6902's `Operation` takes it: `from` on a move or copy, `value` on an add, replace or test. */
 const operation = t.Union([
@@ -68,46 +61,40 @@ const operation = t.Union([
 
 const storyName = t.String({ pattern: STORY_NAME.source });
 /** A story a write or a read names in any states file of the design graph: `Story`, or `file:Story`. */
-const storyNamed = t.String({ pattern: STORY_REF.source, maxLength: 1100 });
-const argValues = t.Record(
-  t.String({ minLength: 1, maxLength: 100 }),
-  t.Unknown(),
-  {
-    maxProperties: ARGS_LIMIT,
-  }
-);
+const storyNamed = t.String({ pattern: STORY_REF.source });
+const argValues = t.Record(t.String({ minLength: 1 }), t.Unknown());
 
 /** A states file, from the clone's root or absolute; on the person's graph `file:Story`, naming its live story (core `STATES_ENTRY`). */
 const statesFile = t.String({
   minLength: 1,
-  maxLength: 1000,
   pattern: STATES_ENTRY.source,
 });
 
 /** A story on a canvas: `Story`, or `file:Story` across sections. */
-const storyRef = t.String({ minLength: 1, maxLength: 1100 });
+const storyRef = t.String({ minLength: 1 });
 
 /** What the person does on an artifact, and its one line in the panel's head. */
 const doesField = t.UnionEnum(ARTIFACT_DOES);
-const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
+const askField = t.String({ minLength: 1 });
 /** Where the person makes the pick it opens (core `ARTIFACT_PICKS`). */
 const pickField = t.UnionEnum(ARTIFACT_PICKS);
-const titleField = t.String({
-  minLength: 1,
-  maxLength: ARTIFACT_TITLE_LIMIT,
-});
+const titleField = t.String({ minLength: 1 });
 
 /** A direction's name and its one line on what it tries. */
 const directionWords = {
-  name: t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.label }),
+  name: t.String({ minLength: 1 }),
   line: t.String({
     minLength: 1,
-    maxLength: CANVAS_SPEC_LIMITS.directionLine,
   }),
 };
 
 /** A folder on the session's machine, absolute. */
-const folderField = t.String({ minLength: 2, maxLength: 4096, pattern: "^/" });
+// @limit external: Linux PATH_MAX, 4,096 bytes (limits.h)
+const folderField = t.String({
+  /* @limit external: Linux PATH_MAX, 4,096 bytes (limits.h); an absolute path is at least "/" and one character, 2 */ minLength: 2,
+  /* @limit external: Linux PATH_MAX, 4,096 bytes (limits.h) */ maxLength: 4096,
+  pattern: "^/",
+});
 
 /** A page's whole document. */
 const htmlField = t.String({ minLength: 1, maxLength: PAGE_LIMIT });
@@ -137,9 +124,8 @@ const canvasFields = {
       t.Object({
         from: storyRef,
         to: storyRef,
-        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.edges }
+        label: t.Optional(t.String()),
+      })
     )
   ),
   group: t.Optional(t.Record(storyRef, storyRef)),
@@ -148,10 +134,9 @@ const canvasFields = {
       t.Object({
         name: t.String({
           minLength: 1,
-          maxLength: 60,
           pattern: "^[A-Za-z][\\w-]*$",
         }),
-        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
+        label: t.Optional(t.String()),
         kind: t.Union([
           t.Literal("number"),
           t.Literal("color"),
@@ -160,22 +145,19 @@ const canvasFields = {
           t.Literal("text"),
           t.Literal("action"),
         ]),
-        group: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
+        group: t.Optional(t.String()),
         min: t.Optional(t.Number()),
         max: t.Optional(t.Number()),
         step: t.Optional(t.Number({ exclusiveMinimum: 0 })),
-        unit: t.Optional(t.String({ maxLength: 10 })),
-        options: t.Optional(
-          t.Array(t.String({ maxLength: 100 }), { maxItems: 24 })
-        ),
+        unit: t.Optional(t.String()),
+        options: t.Optional(t.Array(t.String())),
         target: t.Union([
           t.Object({
-            cssVar: t.String({ pattern: "^--[\\w-]+$", maxLength: 100 }),
+            cssVar: t.String({ pattern: "^--[\\w-]+$" }),
           }),
-          t.Object({ arg: t.String({ minLength: 1, maxLength: 100 }) }),
+          t.Object({ arg: t.String({ minLength: 1 }) }),
         ]),
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.dials }
+      })
     )
   ),
 };
@@ -186,7 +168,7 @@ export const SHAPES = {
   update:
     "artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); dir (a folder preview, its files read again); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph's states file); or edges, group, dials, directions (the canvas itself); or ask or title (any kind's head), and pick (where a design graph's or decision page's pick is made). Example: { id, args: { story: \"Waiting\", values: { status: \"waiting\" } } }.",
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render, layout (a component frame\'s alignment guides; needs state), measure (one move on a component\'s state.story: { play: true }, or { press: "click" | "hover" | "type" | "key", on: { role, name? } | { text } | { testId } | { selector }, text?, key? }, with repeats?: 7 to 40 and speed?: "slowed" | "machine"). Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }; { id, state: { story: "Approved" }, measure: { play: true } }.',
-  map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
+  map: `design_map takes dir?, query?, component?, limit? (a page's size; all when left out), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
 
 /** A sheet's change (core `SheetWrite` less its file): one story's args, or one story op. */
@@ -195,11 +177,7 @@ const sheetChange = {
     t.Object({
       story: storyNamed,
       values: argValues,
-      unset: t.Optional(
-        t.Array(t.String({ minLength: 1, maxLength: 100 }), {
-          maxItems: ARGS_LIMIT,
-        })
-      ),
+      unset: t.Optional(t.Array(t.String({ minLength: 1 }))),
     })
   ),
   story: t.Optional(
@@ -231,19 +209,17 @@ export const createBody = t.Object({
   file: t.Optional(t.Union([statesFile, t.Array(statesFile, { minItems: 1 })])),
   dir: t.Optional(folderField),
   content: designMark,
+  // @limit external: a TCP port is 16 bits, 1 to 65,535 (RFC 9293 §3.1)
   port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
-  path: t.Optional(
-    t.String({ maxLength: 2000, pattern: PREVIEW_START_PATH.source })
-  ),
-  machine: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  path: t.Optional(t.String({ pattern: PREVIEW_START_PATH.source })),
+  machine: t.Optional(t.String({ minLength: 1 })),
   workspace: t.Optional(t.String({ pattern: WORKSPACE_ID.source })),
   serve: t.Optional(
     t.Object({
       command: t.String({
         minLength: 1,
-        maxLength: SERVE_COMMAND_LIMIT,
       }),
-      cwd: t.Optional(t.String({ maxLength: 1000 })),
+      cwd: t.Optional(t.String()),
     })
   ),
   draft: t.Optional(t.Boolean()),
@@ -257,9 +233,8 @@ export const updateBody = t.Object({
   patch: t.Optional(t.Array(operation, { minItems: 1 })),
   elements: t.Optional(skeletons),
   delete: t.Optional(
-    t.Array(t.String({ minLength: 1, maxLength: 100 }), {
+    t.Array(t.String({ minLength: 1 }), {
       minItems: 1,
-      maxItems: CANVAS_LIMITS.deletePerCall,
     })
   ),
   mermaid: t.Optional(mermaid),
@@ -286,32 +261,27 @@ export const pickBody = t.Object({ pick: pickField });
 
 /** A card settled for the person. */
 export const settleBody = t.Object({
-  card: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.id }),
-  option: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.option }),
-  why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
-  sources: t.Array(
-    t.String({ minLength: 1, maxLength: CHOICE_LIMITS.source }),
-    { maxItems: CHOICE_LIMITS.sources }
-  ),
+  card: t.String({ minLength: 1 }),
+  option: t.String({ minLength: 1 }),
+  why: t.String({ minLength: 1 }),
+  sources: t.Array(t.String({ minLength: 1 })),
 });
 
 /** A pick recorded for the person from his own words: his pin on the page or a message he typed, quoted. */
 export const citeBody = t.Object({
-  card: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.id }),
-  options: t.Array(
-    t.String({ minLength: 1, maxLength: CHOICE_LIMITS.option }),
-    { minItems: 1, maxItems: CHOICE_LIMITS.options }
-  ),
+  card: t.String({ minLength: 1 }),
+  options: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
+  // @limit external: minLength 6 is a handle's shortest form (handles.ts), maxLength 36 a UUID's length
   pin: t.Optional(t.String({ minLength: 6, maxLength: 36 })),
-  message: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-  quote: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.quote }),
+  message: t.Optional(t.String({ minLength: 1 })),
+  quote: t.String({ minLength: 1 }),
 });
 
 /** `question_close`: taken from the person's answer, or withdrawn. */
 export const closeQuestionBody = t.Object({
-  question: t.String({ minLength: 1, maxLength: 400 }),
+  question: t.String({ minLength: 1 }),
   as: t.Union([t.Literal("taken"), t.Literal("withdrawn")]),
-  why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
+  why: t.String({ minLength: 1 }),
 });
 
 /** A decision page's revision: statements merged into its program by name. */
@@ -330,17 +300,17 @@ const QUESTION_BODY = t.Object({
       ),
       question: t.String(),
     }),
-    { minItems: 1, maxItems: 4 }
+    { minItems: 1 }
   ),
   blocks: t.Boolean(),
-  waiting: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-  meanwhile: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  waiting: t.Optional(t.String({ minLength: 1 })),
+  meanwhile: t.Optional(t.String({ minLength: 1 })),
   task: t.Optional(t.String({ pattern: "^tsk-\\d+$" })),
 });
 
 /** An agent's answer to a pin. */
 export const replyBody = t.Object({
-  text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
+  text: t.String({ minLength: 1 }),
   files: t.Optional(
     t.Array(t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }))
   ),
@@ -349,7 +319,7 @@ export const replyBody = t.Object({
 
 /** An agent's resolve of a pin, with an optional last line. */
 export const resolveBody = t.Object({
-  text: t.Optional(t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text })),
+  text: t.Optional(t.String({ minLength: 1 })),
 });
 
 /** A sheet's write by the person: one story's args or one story op. */
@@ -359,17 +329,17 @@ export const sheetBody = t.Object(sheetChange);
 export const readFields = t.Object({
   story: t.Optional(storyNamed),
   // JSON: a frame { story, interaction?, scheme?, width? }, or a state link's "?query" or "#hash".
-  state: t.Optional(t.String({ maxLength: 1400 })),
+  state: t.Optional(t.String()),
   // Where the picture is kept in the session's workspace.
-  save: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+  save: t.Optional(t.String({ minLength: 1 })),
 });
 
 /** The fields of a read of the person's pins. */
 export const commentsFields = {
   // Its id, or (the session's comment_read) its name or handle.
-  artifact: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  artifact: t.Optional(t.String({ minLength: 1 })),
   filter: t.Optional(
     t.Union([t.Literal("open"), t.Literal("resolved"), t.Literal("all")])
   ),
-  since: t.Optional(t.String({ maxLength: 40 })),
+  since: t.Optional(t.String()),
 };

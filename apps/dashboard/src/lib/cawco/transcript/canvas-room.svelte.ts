@@ -37,7 +37,12 @@
 import { unhandled } from "@cawco/core/unhandled";
 import { tick } from "svelte";
 import { failureClause as errorOf } from "#lib/platform/hub-read.js";
-import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import {
+  CURVE,
+  dur,
+  motionOk,
+  numberOf,
+} from "#lib/platform/motion/curves.svelte.js";
 import { integrate, type Sample, spring } from "#lib/platform/motion/spring.js";
 import {
   type CanvasExport,
@@ -69,8 +74,6 @@ import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 const STEPS = 24;
 /** How much of the drag past a bound the canvas follows (DESIGN.md, Dialog, sheet and drawer: a sheet under the finger). */
 const RUBBER = 0.35;
-/** The furthest past a bound it follows, as a share of its height. */
-const RUBBER_MAX = 0.25;
 /** The shortest share of the column the canvas stands at (§5.10: "floor 40 % of the column"). */
 const FLOOR = 0.4;
 /**
@@ -1006,7 +1009,10 @@ export class CanvasRoom {
       return value;
     }
     const bound = past > 0 ? max : min;
-    const reach = Math.min(Math.abs(past) * RUBBER, scale(bound) * RUBBER_MAX);
+    const reach = Math.min(
+      Math.abs(past) * RUBBER,
+      scale(bound) * numberOf("--resist-max")
+    );
     return bound + Math.sign(past) * reach;
   }
 

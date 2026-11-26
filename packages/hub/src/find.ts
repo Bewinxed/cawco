@@ -176,9 +176,7 @@ export const FIND_QUERY = t.Object({
  * find answers it, or null (views/find-engine.ts `named`).
  */
 export const FIND_SESSIONS_BODY = t.Object({
-  names: t.Array(t.String({ minLength: 1, maxLength: 200 }), {
-    maxItems: 200,
-  }),
+  names: t.Array(t.String({ minLength: 1 }), {}),
 });
 
 /**

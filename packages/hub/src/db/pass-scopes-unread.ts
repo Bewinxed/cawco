@@ -14,6 +14,7 @@
  * list: SQLite may run the right side of an AND first.
  */
 import type { Database } from "bun:sqlite";
+import { shown } from "./json-reads";
 
 /** The scope reads whole, as the hub read it (`z.array(z.string())`): a JSON list whose every entry is text. Null (never set) does not. */
 const SCOPE_READS =
@@ -48,9 +49,6 @@ interface Row {
   raw: string | null;
   reads: number;
 }
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 const readingOf = (row: Row): ScopeReading => {
   if (row.raw === null) {

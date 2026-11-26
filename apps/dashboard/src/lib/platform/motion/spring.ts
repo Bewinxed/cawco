@@ -24,7 +24,6 @@ const MASS = 1;
  * already a frame on the fastest phone, so the thinning mostly keeps all.
  */
 const STEP = 1 / 120;
-const MAX_SETTLE = 1.5;
 const KEYFRAME_MS = 8;
 
 /** One point of the settle: seconds since release, px from rest, px/s. */
@@ -46,6 +45,8 @@ export function integrate(
 ): Sample[] {
   /** The perceptual duration, in seconds. */
   const settle = ms / 1000;
+  /** The longest a settle runs before it is taken to rest, in seconds. */
+  const settleMax = dur("--duration-settle-max") / 1000;
   const stiffness = ((2 * Math.PI) / settle) ** 2;
   const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
@@ -57,7 +58,7 @@ export function integrate(
     v += a * STEP;
     x += v * STEP;
     t += STEP;
-    const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
+    const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= settleMax;
     out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
     if (done) {
       return out;
@@ -130,6 +131,7 @@ export class Release {
   /** The hand drew it at `at` px, at `t` ms. */
   push(at: number, t: number) {
     this.#samples.push({ at, t });
+    // @limit measured: a speed is read between two samples, so the 80 ms window's trim keeps the last two
     while (
       this.#samples.length > 2 &&
       t - this.#samples[0].t > VELOCITY_WINDOW

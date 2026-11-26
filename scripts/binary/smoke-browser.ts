@@ -47,10 +47,10 @@ try {
     .catch(async (error: unknown) => {
       const seen = await page.evaluate(() => ({
         path: location.pathname,
-        text: document.body.innerText.slice(0, 400),
+        text: document.body.innerText,
       }));
       throw new Error(
-        `The served dashboard did not show session ${session}'s answer: ${JSON.stringify(seen)}; page errors ${JSON.stringify(thrown)}; console errors ${JSON.stringify(logged.slice(0, 5))}`,
+        `The served dashboard did not show session ${session}'s answer: ${JSON.stringify(seen)}; page errors ${JSON.stringify(thrown)}; console errors ${JSON.stringify(logged)}`,
         { cause: error }
       );
     });

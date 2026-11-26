@@ -229,6 +229,7 @@ const until = (at: number | null, now: number) =>
 const ringWindow = (w: WindowForecast | undefined): RingWindow | null =>
   w
     ? {
+        // @limit external: a percentage runs from 0 to 100
         left: Math.min(100, Math.max(0, 100 - w.utilization)),
         resetsAt: w.resetsAt ? Date.parse(w.resetsAt) : null,
         runsOutAt: w.runsOutAt ?? null,
@@ -519,6 +520,7 @@ export function openCodeRing(
     }
     const meter = readMeter(w, now, false);
     return {
+      // @limit external: a percentage runs from 0 to 100
       left: Math.min(100, Math.max(0, 100 - w.percent)),
       resetsAt: w.resetsAt ? Date.parse(w.resetsAt) : null,
       runsOutAt: meter.runsOutIn === null ? null : now + meter.runsOutIn,

@@ -211,7 +211,6 @@ function* mainTexts() {
     env: process.env,
     stdin: Buffer.from(paths.map((p) => `${base}:${p}\n`).join("")),
     stdout: "pipe",
-    maxBuffer: 2 ** 30,
   });
   const out = batch.stdout;
   let at = 0;
@@ -317,7 +316,7 @@ for (const [key, value] of before.variables) {
     ) {
       explain(
         "a shadow utility holds the shadow itself, its colours behind var(--tw-shadow-color, …) (was var(--shadow-…)); the same until a shadow colour is set",
-        key.split(" › ").slice(-2).join(" ")
+        key.split(" › ").join(" ")
       );
     } else {
       differences.push(

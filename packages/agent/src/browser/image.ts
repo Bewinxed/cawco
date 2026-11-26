@@ -170,6 +170,7 @@ export const ensureImage = async (
       .update(files[name] ?? "")
       .update("\0");
   }
+  // @limit measured: 12 hex characters are 48 bits of SHA-256; the browser image tags one machine holds, so two collide after about 2^24 names
   const tag = `${prefix}:${hash.digest("hex").slice(0, 12)}`;
   if (await hasImage(docker, tag)) {
     return tag;

@@ -1,3 +1,5 @@
+import { recordLimitReading } from "@cawco/core/limit-readings";
+
 /**
  * The page's host and its origin. A preview is an origin of its own: the
  * dashboard's pane that frames it is another (in the Apple app, the host
@@ -10,6 +12,7 @@
 let hostOrigin: string | null = null;
 const waiting: unknown[] = [];
 /** The most said before a hello that is kept. Our call: a page says a handful while it loads. */
+// @limit recording: overlay.host-waiting until 2026-12-03
 const WAITING_MAX = 50;
 
 /**
@@ -47,6 +50,7 @@ export function heardFromHost(event: MessageEvent): boolean {
 /** Posts `message` to the host's origin; before its hello, once the hello comes. */
 export function toHost(message: unknown): void {
   if (hostOrigin === null) {
+    recordLimitReading("overlay.host-waiting", waiting.length + 1);
     if (waiting.length < WAITING_MAX) {
       waiting.push(message);
     }

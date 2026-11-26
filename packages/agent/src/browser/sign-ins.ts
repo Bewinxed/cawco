@@ -32,6 +32,7 @@
 
 import { lookUntil } from "@cawco/core/effect/poll";
 import { Effect } from "effect";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 import { idbRead, idbWrite } from "./sign-ins-page";
@@ -42,6 +43,7 @@ import { idbRead, idbWrite } from "./sign-ins-page";
  * Chrome lets an origin keep "up to 60% of the total disk space"
  * (web.dev/articles/storage-for-the-web), so no source caps a carry.
  */
+// @limit recording: agent.signin-idb-chars until 2026-12-26
 const IDB_CAP_CHARS = 32 * 1024 * 1024;
 
 /** How long a page's script may take to read or write an origin's databases. */
@@ -251,6 +253,7 @@ const readDatabases = async (
       over: z.number().optional(),
     })
     .parse(JSON.parse(answer));
+  recordLimitReading("agent.signin-idb-chars", read.over ?? answer.length);
   if (read.over !== undefined) {
     console.info(
       `[browser] ${origin}'s IndexedDB was not carried: it encodes past ${read.over} characters, over the ${IDB_CAP_CHARS}-character cap`

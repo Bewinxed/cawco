@@ -8,8 +8,8 @@
  *
  * Kept in localStorage, the source, and as a pref (lib/platform/prefs.ts), the
  * server's copy, which the layout's load reads. Keyed by the tab's value, the
- * most recently measured last, at most `KEPT` of them and fewer where they
- * would not fit a cookie: the oldest go first.
+ * most recently measured last, as many as fit a cookie: the oldest go
+ * first.
  */
 
 import type { FoldBox } from "#lib/platform/motion/fold-path.js";
@@ -26,7 +26,6 @@ export interface FoldMeasure {
   ink: { ease: number; stroke: number; taper: number };
 }
 
-const KEPT = 40;
 const STORED_LENGTH = 9;
 /**
  * Tabs settle together (a strip's every tab after a load or a resize): their
@@ -108,9 +107,9 @@ export function parseFoldBoxes(
   );
 }
 
-/** The newest entries, as many of the last `KEPT` as fit a pref. */
+/** The newest entries, as many as fit a pref. */
 const fitted = (entries: [string, Stored][]): string => {
-  let kept = entries.slice(-KEPT);
+  let kept = entries;
   let value = JSON.stringify(Object.fromEntries(kept));
   while (
     kept.length > 0 &&

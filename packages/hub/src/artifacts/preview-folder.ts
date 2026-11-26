@@ -30,7 +30,9 @@ export const previewFolderOf = (root: string, id: string): string =>
  * hub reads every byte of it off the agent's machine and keeps it.
  */
 export const FOLDER_LIMITS: FolderLimits = {
+  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
   bytes: 256 * 1024 * 1024,
+  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
   files: 10_000,
 };
 

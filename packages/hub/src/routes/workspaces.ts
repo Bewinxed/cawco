@@ -111,7 +111,7 @@ export const workspaceRoutes = (
           body: t.Object({
             from: t.String({ minLength: 1 }),
             ask: t.Optional(t.Boolean()),
-            reason: t.Optional(t.String({ maxLength: 300 })),
+            reason: t.Optional(t.String()),
           }),
         },
         async ({ params, body, request }) => {

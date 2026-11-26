@@ -1,3 +1,9 @@
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
+import {
+  fitItems,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+} from "@cawco/core/prompt-budget";
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -7,6 +13,7 @@ import type { JevResult } from "./jev-types";
 import { mcpUsageName, usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
+// @limit recording: hub.suggest-ms until 2026-12-10
 const SUGGEST_TIMEOUT_MS = 10_000;
 
 /**
@@ -18,9 +25,14 @@ const SUGGEST_TIMEOUT_MS = 10_000;
 /** A yes probability (kept as `noul`) at or above this is shown as a chip. Our own call, to be tuned. */
 const SUGGEST_THRESHOLD = 0.6;
 /** The most chips shown at once. Our own call, to be tuned. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const SUGGEST_MAX = 4;
-/** The most candidates Jev is asked about, ranked by the operator's usage. */
-const SUGGEST_CANDIDATE_LIMIT = 50;
+/**
+ * What Jev is asked of each candidate. "Would the agent need to use" scored
+ * deep-research 0.39 for "we should really research this"; this wording
+ * scored it 0.74 and kept typo/rename/commit prompts under the threshold.
+ */
+const QUESTION = "Is `candidate` made for the task `prompt` describes?";
 /** A skill installed this recently is always asked about, so it can earn usage. */
 const NEW_SKILL_DAYS = 7;
 
@@ -42,8 +54,8 @@ const usageName = (candidate: SuggestCandidate): string =>
   candidate.kind === "mcp" ? mcpUsageName(candidate.name) : candidate.name;
 
 /**
- * The candidates worth asking about: the top {@link SUGGEST_CANDIDATE_LIMIT}
- * by each one's share of its own kind's usage, never-used ones dropped except
+ * The candidates worth asking about, ranked by each one's share of its own
+ * kind's usage, never-used ones dropped except
  * skills installed in the last {@link NEW_SKILL_DAYS} days. An MCP server's own
  * tools (`mcp__<server>__…`) are never candidates: the server's chip stands for
  * them, and its description already lists their names — asking about both
@@ -89,7 +101,6 @@ function rankCandidates(
       share: entry.score / (kindTotal[entry.candidate.kind] || 1),
     }))
     .sort((a, b) => Number(b.fresh) - Number(a.fresh) || b.share - a.share)
-    .slice(0, SUGGEST_CANDIDATE_LIMIT)
     .map((entry) => entry.candidate);
 }
 
@@ -107,7 +118,19 @@ export async function suggest(
 ): Promise<
   { suggestions: { id: string; noul: number }[] } | { error: string }
 > {
-  const asked = rankCandidates(db, candidates);
+  // As many of the ranked candidates as Jev's window holds beside the
+  // prompt (core prompt-budget.ts), the best first.
+  const asked = fitItems(
+    rankCandidates(db, candidates),
+    promptBudgetChars(JEV_WINDOW_TOKENS, text.length + QUESTION.length),
+    (candidate) =>
+      QUESTION.length +
+      JSON.stringify({
+        kind: candidate.kind,
+        name: candidate.name,
+        description: candidate.description,
+      }).length
+  );
   if (asked.length === 0) {
     return { suggestions: [] };
   }
@@ -122,19 +145,19 @@ export async function suggest(
             name: candidate.name,
             description: candidate.description,
           },
-          // "Would the agent need to use" scored deep-research 0.39 for
-          // "we should really research this"; this wording scored it 0.74
-          // and kept typo/rename/commit prompts under the threshold.
-          question: "Is `candidate` made for the task `prompt` describes?",
+          question: QUESTION,
         },
       },
     ])
   );
   let result: JevResult<typeof questions>;
   try {
-    const asking = await askJev(access, { prompt: text }, questions, {
-      timeoutMs: SUGGEST_TIMEOUT_MS,
-    });
+    const asking = await timed(
+      askJev(access, { prompt: text }, questions, {
+        timeoutMs: SUGGEST_TIMEOUT_MS,
+      }),
+      (ms) => recordLimitReading("hub.suggest-ms", ms)
+    );
     switch (asking.kind) {
       case "answered":
         result = asking.value;

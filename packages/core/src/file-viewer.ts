@@ -53,6 +53,7 @@ const PDFJS_ASSETS = `pdfjs-${pdfjsPackage.version}/`;
 const FACES_SHEET = "/__cawco/decision/faces.css";
 
 /** The most of a text file the viewer draws, bytes. Our call: a long log reads, and the page stays a few MB. */
+// @limit recording: preview.viewed-text-bytes until 2026-12-10
 const TEXT_MOST = 2 * 1024 * 1024;
 /** How much of a file of no known type is read to tell text from bytes. */
 const SNIFF_BYTES = 8192;
@@ -192,6 +193,7 @@ const esc = (text: string): string => Bun.escapeHTML(text);
 function kindWord(name: string, type: string | null): string {
   const dot = name.lastIndexOf(".");
   const extension = dot > 0 ? name.slice(dot + 1) : "";
+  // @limit external: a file extension is a short dot suffix; a tail over 8 characters is part of a name, not a kind
   return extension && extension.length <= 8
     ? extension.toUpperCase()
     : mediaOf(type) || "binary";

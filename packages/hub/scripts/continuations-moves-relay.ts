@@ -26,7 +26,7 @@ import { countedDatabase } from "./counted-database";
 
 const { client, has, ran } = countedDatabase("continuations-moves-relay");
 /** A value as this shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 120));
+const shown = (raw: string): string => JSON.stringify(raw);
 
 if (has("continuations", "asked_by")) {
   const jobs = continuationsKept(client);

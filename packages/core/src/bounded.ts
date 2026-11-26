@@ -1,3 +1,4 @@
+import { recordLimitReading } from "./limit-readings";
 /**
  * A read with a deadline has three outcomes: answered yes, answered no, or no
  * answer in time. The answer, yes or no, is `value`; no answer is its own
@@ -27,6 +28,7 @@ export class Gone extends Error {
 }
 
 /** A deadline's timer this late ran in a process that was held (its loop blocked, or the machine starved it). */
+// @limit recording: core.deadline-timer-late-ms until 2026-12-10
 const HELD_LATE_MS = 1000;
 /** How long a held process reads what came due meanwhile before a late deadline decides. */
 const CATCH_UP_MS = 1000;
@@ -165,6 +167,11 @@ const readUntil = <T>(
           arm(more);
           return;
         }
+        // How late a deadline's timer ran: what a held process looks like.
+        recordLimitReading(
+          "core.deadline-timer-late-ms",
+          performance.now() - due
+        );
         if (performance.now() - due < HELD_LATE_MS) {
           giveUp();
           return;

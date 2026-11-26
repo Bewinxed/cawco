@@ -9,6 +9,7 @@ import type { WorkBudget } from "./db/stored-types";
 // --- file ownership ------------------------------------------------------------
 
 /** The longest path a glob is matched against (PATH_MAX). */
+// @limit measured: the longest owned glob is 90 characters of 5,819 (work_item_globs, 2026-11-26)
 const GLOB_LIMIT = 4096;
 const LEADING_DOT_SLASH = /^(\.\/)+/u;
 const TRAILING_SLASH = /\/+$/u;

@@ -5,6 +5,7 @@
   let {
     ref = $bindable(null),
     class: className,
+    // @limit external: a percentage runs from 0 to 100
     max = 100,
     value,
     ...restProps

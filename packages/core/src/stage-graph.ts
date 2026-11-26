@@ -19,6 +19,8 @@
  * the panel sees only as code).
  */
 
+import { derivedName } from "@cawco/providers/derived-name";
+import { answerShare } from "./prompt-budget";
 import { DAY_MS } from "./time";
 import { graphWords as words } from "./words/graph";
 
@@ -227,9 +229,6 @@ export interface StageLoad {
   /** The states file, from the toolchain root. */
   file: string;
 }
-
-/** The most room a stage's head may take, px: a head's, never the page's. */
-const STAGE_ROOM_MOST = 480;
 
 /** One dial's value as set on the drawing: a number, a colour or an option's words, a toggle. */
 export type DialSet = number | string | boolean;
@@ -503,7 +502,7 @@ export interface StageFault {
 const finite = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 /** The longest name a state is read with: a path, an export. Ours. */
-const NAME_MAX = 1000;
+const NAME_MAX = answerShare(1000);
 const nameOf = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 && value.length <= NAME_MAX
     ? value
@@ -554,12 +553,11 @@ export function stageReachOf(value: unknown): StageReach | null {
   };
 }
 
-/** The most clips one move says: far past any move a person tunes. Ours. */
-const CLIPS_MAX = 2000;
-/** The most frames' points or legs one clip says. Ours: a Svelte transition of seconds has a few hundred. */
-const POINTS_MAX = 1000;
 /** The longest value a frame says, in CSS. Ours. */
-const VALUE_MAX = 400;
+const VALUE_MAX = answerShare(400);
+
+const textOf = (value: unknown): string | null =>
+  typeof value === "string" ? value : null;
 
 const wordsOf = (value: unknown, most = NAME_MAX): string | null =>
   typeof value === "string" && value.length <= most ? value : null;
@@ -582,7 +580,7 @@ const KINDS_SAID = new Set<ClipKind>([
 /** Offsets between a clip's first frame and its last, each inside them; null when none were said. */
 const offsetsOf = (value: unknown): number[] | null =>
   Array.isArray(value)
-    ? value.slice(0, POINTS_MAX).flatMap((one) => {
+    ? value.flatMap((one) => {
         const offset = finite(one);
         return offset !== null && offset > 0 && offset < 1 ? [offset] : [];
       })
@@ -601,10 +599,7 @@ function clipValueOf(value: unknown): ClipValue | null {
 
 const valuesOf = (value: unknown): ClipValue[] =>
   Array.isArray(value)
-    ? value
-        .slice(0, POINTS_MAX)
-        .map(clipValueOf)
-        .filter((one): one is ClipValue => one !== null)
+    ? value.map(clipValueOf).filter((one): one is ClipValue => one !== null)
     : [];
 
 /** A {@link ClipRead} as it crossed the frame; null when it is none. */
@@ -614,7 +609,7 @@ function clipReadOf(value: unknown): ClipRead | null {
   const start = finite(said?.start);
   const delay = finite(said?.delay);
   const duration = finite(said?.duration);
-  const easing = wordsOf(said?.easing, POINTS_MAX * 8);
+  const easing = textOf(said?.easing);
   const element = wordsOf(said?.element);
   const property = wordsOf(said?.property);
   if (!(
@@ -630,15 +625,13 @@ function clipReadOf(value: unknown): ClipRead | null {
     return null;
   }
   const curve = Array.isArray(said.frameCurve)
-    ? said.frameCurve
-        .slice(0, POINTS_MAX)
-        .filter(
-          (one): one is [number, number] =>
-            Array.isArray(one) &&
-            one.length === 2 &&
-            finite(one[0]) !== null &&
-            finite(one[1]) !== null
-        )
+    ? said.frameCurve.filter(
+        (one): one is [number, number] =>
+          Array.isArray(one) &&
+          one.length === 2 &&
+          finite(one[0]) !== null &&
+          finite(one[1]) !== null
+      )
     : [];
   const iterations = finite(said.iterations);
   return {
@@ -680,7 +673,6 @@ function moveReadOf(value: unknown): MoveRead | null {
     to: said.to,
     length: Math.max(0, length),
     clips: said.clips
-      .slice(0, CLIPS_MAX)
       .map(clipReadOf)
       .filter((one): one is ClipRead => one !== null),
   };
@@ -763,9 +755,6 @@ export interface LeftOutOne {
   kind: "line" | "name" | "value";
 }
 
-const HEAD_MAX = 40;
-const headOf = (value: string): string =>
-  value.length > HEAD_MAX ? `${value.slice(0, HEAD_MAX)}…` : value;
 const recordsOf = (of: unknown): Record<string, unknown>[] =>
   Array.isArray(of) ? of.filter(isRecord) : [];
 
@@ -778,7 +767,7 @@ const collect = (
 ): void => {
   for (const one of values) {
     if (typeof one === "string" && one.length > most) {
-      left.push({ kind, head: headOf(one) });
+      left.push({ kind, head: derivedName(one) });
     }
   }
 };
@@ -894,10 +883,8 @@ export function stageLeftOut(
   return left.length > 0 ? left : null;
 }
 
-/** The most differences one read says: far past what the panel names (its `LINES_SHOWN`), so its count stays true. Ours. */
-const DIFFERENCES_MAX = 500;
 /** The longest line a difference is said in. Ours: core words/graph.ts quotes 40 characters of each value. */
-const LINE_MAX = 400;
+const LINE_MAX = answerShare(400);
 
 /** A {@link DifferenceRead} as it crossed the frame; null when it is none. */
 function differenceOf(value: unknown): DifferenceRead | null {
@@ -941,7 +928,6 @@ export function stageDifferencesOf(value: unknown): StageDifferences | null {
     return null;
   }
   const found = said.found
-    .slice(0, DIFFERENCES_MAX)
     .map(differenceOf)
     .filter((one): one is DifferenceRead => one !== null);
   return {
@@ -972,7 +958,7 @@ function tuningOneOf(value: unknown): Tuning | null {
   const id = nameOf(said?.id);
   const delay = msOf(said?.delay);
   const duration = msOf(said?.duration);
-  const easing = wordsOf(said?.easing, POINTS_MAX * 8);
+  const easing = textOf(said?.easing);
   if (!(said && id && delay !== null && duration !== null && easing)) {
     return null;
   }
@@ -990,10 +976,7 @@ function tuningOneOf(value: unknown): Tuning | null {
 
 const tuningOf = (value: unknown): Tuning[] =>
   Array.isArray(value)
-    ? value
-        .slice(0, CLIPS_MAX)
-        .map(tuningOneOf)
-        .filter((one): one is Tuning => one !== null)
+    ? value.map(tuningOneOf).filter((one): one is Tuning => one !== null)
     : [];
 
 /** A {@link StagePlay} as it crossed the frame; null when it is none. */
@@ -1069,16 +1052,13 @@ export function stageTimeOf(value: unknown): StageTime | null {
     : null;
 }
 
-/** The most dials one canvas says. Ours: core stage `CANVAS_LIMITS`' dials stand well under it. */
-const DIALS_MAX = 200;
-
 /** Dial values by name as they crossed the frame: each a number, a string or a boolean. */
 function dialValuesOf(value: unknown): Record<string, DialSet> | null {
   if (!isRecord(value)) {
     return null;
   }
   const kept: Record<string, DialSet> = {};
-  for (const [name, one] of Object.entries(value).slice(0, DIALS_MAX)) {
+  for (const [name, one] of Object.entries(value)) {
     const set =
       finite(one) ?? (typeof one === "boolean" ? one : wordsOf(one, VALUE_MAX));
     if (nameOf(name) && set !== null) {
@@ -1098,7 +1078,7 @@ export function stageDialsOf(value: unknown): StageDials | null {
 export function stageRoomOf(value: unknown): StageRoom | null {
   const px = isRecord(value) ? value.px : null;
   return typeof px === "number" && Number.isFinite(px) && px >= 0
-    ? { px: Math.min(px, STAGE_ROOM_MOST) }
+    ? { px }
     : null;
 }
 

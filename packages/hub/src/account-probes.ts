@@ -14,6 +14,7 @@ import {
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
@@ -463,6 +464,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
   };
   /** What adding an account set moving, newest first, for the Accounts page (core `RebalanceNotice`). */
   const rebalanceNotices: RebalanceNotice[] = [];
+  // @limit recording: hub.rebalance-notice-dropped-age-ms until 2026-12-03
   const REBALANCE_NOTICES_KEPT = 20;
   const publishUsage = (machineId = ""): void => {
     ctx.accountsMoved();
@@ -482,6 +484,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * provider's answer (5 s on Claude's, its CLI's own bound) and, for a
    * login past its expiry, Claude Code's `auth status` renewing it first.
    */
+  // @limit recording: hub.account-read-now-ms until 2026-12-26
   const READ_NOW_TIMEOUT_MS = 10_000;
 
   /**
@@ -516,12 +519,14 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     const named = ctx.accountWords(accountId);
     const whys: string[] = [];
     for (const machineId of machines) {
+      const asked = Date.now();
       const answer = await ctx.readAgent(
         machineId,
         CONTROL_READ_ACCOUNT_USAGE,
         [accountId],
         READ_NOW_TIMEOUT_MS
       );
+      recordLimitReading("hub.account-read-now-ms", Date.now() - asked);
       const machine = ctx.machineName(machineId);
       if (answer.kind === "unanswered") {
         whys.push(

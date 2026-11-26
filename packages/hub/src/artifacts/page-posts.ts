@@ -4,9 +4,7 @@
  * Each body is read (its size, its shape) before the artifact service takes
  * it (service.ts `pictures`, `send`), whose answers each handler passes on.
  */
-import { CHOICE_LIMITS } from "@cawco/core/choices";
 import {
-  COMMENT_LIMITS,
   isSendControl,
   type MarkPicture,
   type MarkPictures,
@@ -15,7 +13,7 @@ import {
   SEND_WRITES_MAX,
   type SendBody,
 } from "@cawco/core/comments/model";
-import { picturesBodyTooLong } from "@cawco/core/words/comment-lines";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import type { AnyProblem } from "../refusal";
@@ -23,14 +21,9 @@ import type { ArtifactDocs } from "./docs";
 import type { Artifacts } from "./service";
 import { takeSentWrites } from "./sync";
 
-/** The longest pictures body read: its pictures and its address at their bounds, as JSON. */
-const PICTURES_BODY_MAX =
-  COMMENT_LIMITS.pictures * (COMMENT_LIMITS.pictureChars + 100) + 4096;
-
-/** The longest page address a post names. Our call. */
-const URL_MAX = 2048;
-/** The longest mark id a picture names: a pin's. Our call. */
-const MARK_ID_MAX = 100;
+/** The longest page address a post names. */
+// @limit external: RFC 9110 section 4.1 recommends senders and recipients support URIs of at least 8,000 octets (https://www.rfc-editor.org/rfc/rfc9110#section-4.1)
+const URL_MAX = 8000;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u;
 
@@ -43,16 +36,12 @@ const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 const isRecord = (body: unknown): body is Record<string, unknown> =>
   !!body && typeof body === "object" && !Array.isArray(body);
 
-/** Whether a post's pin list is one: absent, or 1 to the most pins, each a pin's id. */
+/** Whether a post's pin list is one: absent, or one or more pins, each a pin's id. */
 const isPinIds = (value: unknown): value is string[] | undefined =>
   value === undefined ||
   (Array.isArray(value) &&
     value.length > 0 &&
-    value.length <= COMMENT_LIMITS.pins &&
-    value.every(
-      (pin) =>
-        typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
-    ));
+    value.every((pin) => typeof pin === "string" && pin.length > 0));
 
 /** Whether `writes` is a Send's carried writes (core `SendBody.writes`): absent, or a bounded base64 Yjs update. */
 const isSentWrites = (writes: unknown): writes is string | undefined =>
@@ -67,20 +56,17 @@ const sendBodyRead = (body: unknown): SendBody | string => {
     return SEND_SHAPE;
   }
   const { text, control, pins, again, writes } = body;
-  if (
-    text !== undefined &&
-    !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
-  ) {
-    return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
+  if (text !== undefined && typeof text !== "string") {
+    return "text is a string.";
   }
   if (control !== undefined && !isSendControl(control)) {
     return `control is one of ${Object.keys(SEND_CONTROLS).join(", ")}.`;
   }
   if (!isPinIds(pins)) {
-    return `pins is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
+    return "pins is a list of pin ids.";
   }
   if (!isPinIds(again)) {
-    return `again is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
+    return "again is a list of pin ids.";
   }
   if (!isSentWrites(writes)) {
     return `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
@@ -94,13 +80,11 @@ const sendBodyRead = (body: unknown): SendBody | string => {
   };
 };
 
-/** A picture a pictures post carries, when it is one: a mark's id and a bounded base64 PNG. */
+/** A picture a pictures post carries, when it is one: a mark's id and a base64 PNG. */
 const pictureOf = (picture: unknown): MarkPicture | undefined =>
   isRecord(picture) &&
   typeof picture.mark === "string" &&
-  picture.mark.length <= MARK_ID_MAX &&
   typeof picture.png === "string" &&
-  picture.png.length <= COMMENT_LIMITS.pictureChars &&
   PNG_BASE64.test(picture.png)
     ? { mark: picture.mark, png: picture.png }
     : undefined;
@@ -117,16 +101,14 @@ const picturesBodyRead = (body: unknown): MarkPictures | string => {
   ) {
     return `url is a string of at most ${URL_MAX} characters.`;
   }
-  if (!(
-    Array.isArray(pictures) && pictures.length <= COMMENT_LIMITS.pictures
-  )) {
-    return `pictures is a list of at most ${COMMENT_LIMITS.pictures}.`;
+  if (!Array.isArray(pictures)) {
+    return "pictures is a list.";
   }
   const read: MarkPicture[] = [];
   for (const picture of pictures) {
     const one = pictureOf(picture);
     if (!one) {
-      return `A picture is { mark, png }: a mark's id and a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
+      return `A picture is { mark, png }: a mark's id and a base64 PNG.`;
     }
     read.push(one);
   }
@@ -153,13 +135,6 @@ export const artifactPictures =
       );
     }
     const raw = await request.text();
-    if (raw.length > PICTURES_BODY_MAX) {
-      return problemResponse({
-        status: 413,
-        code: "post-carries-most-pictures",
-        detail: picturesBodyTooLong(PICTURES_BODY_MAX),
-      });
-    }
     let body: unknown;
     try {
       body = JSON.parse(raw);
@@ -205,10 +180,11 @@ export const artifactSend =
     raw: string,
     route: string
   ) => {
+    recordLimitReading("hub.send-body-chars", raw.length);
     if (raw.length > SEND_BODY_MAX) {
       return problem(413, {
         code: "send-carries-most-pictures",
-        detail: `A send carries at most ${COMMENT_LIMITS.pictures} pictures and ${CHOICE_LIMITS.note} characters of text.`,
+        detail: `A send is at most ${SEND_BODY_MAX.toLocaleString()} characters.`,
       });
     }
     let body: unknown;

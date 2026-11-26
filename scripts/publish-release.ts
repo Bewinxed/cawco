@@ -26,6 +26,7 @@ import {
   NIGHTLY_TAG_PREFIX,
   RELEASE_REPOSITORY,
 } from "../packages/core/src/binary-distribution";
+import { recordLimitReading } from "../packages/core/src/limit-readings";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 import {
   type Answer,
@@ -37,10 +38,13 @@ import {
 } from "./lib/outside-call";
 
 /** How many nightly pre-releases are kept; older ones are deleted with their tags. */
+// @limit measured: 5 builds of at most 3 GB each (a nightly's whole output, scripts/release/steps/promote.ts, 2026-10-26) fit in 15 GB, 0.8% of obelisk's 1.8 TB disk (df, 2026-11-26)
 const NIGHTLIES_KEPT = 5;
 const REPO = `repos/${RELEASE_REPOSITORY}`;
 /** One request's time; an archive's upload gets more. */
+// @limit recording: release.gh-call-ms until 2026-12-10
 const CALL_TIMEOUT_MS = 60_000;
+// @limit recording: release.upload-ms until 2026-12-10
 const UPLOAD_TIMEOUT_MS = 15 * 60_000;
 /** gh's exit for "not signed in" (cli/cli cmd/gh/main.go `exitAuth`): a refusal, not a dropped call. */
 const GH_EXIT_AUTH = 4;
@@ -85,6 +89,7 @@ async function request(
     }
   );
   calls.add(child);
+  const began = Date.now();
   const timer = setTimeout(
     () => child.kill("SIGTERM"),
     options.timeoutMs ?? CALL_TIMEOUT_MS
@@ -95,6 +100,11 @@ async function request(
       new Response(child.stderr).text(),
       child.exited,
     ]);
+    if (options.timeoutMs === UPLOAD_TIMEOUT_MS) {
+      recordLimitReading("release.upload-ms", Date.now() - began);
+    } else if (options.timeoutMs === undefined) {
+      recordLimitReading("release.gh-call-ms", Date.now() - began);
+    }
     const answer = printedAnswer(out);
     if (answer) {
       return sorted(what, answer);

@@ -27,9 +27,11 @@ import { basename, join } from "node:path";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
+import { shortSha } from "@cawco/core/short-id";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
 import type { WorkspaceCut } from "@cawco/core/workspace/controls";
+import { namedAndMore } from "@cawco/providers/names";
 import { z } from "zod";
 import { placedAsMade } from "./fleet";
 import { hostGit } from "./git/run";
@@ -71,14 +73,8 @@ export const createdAt = async (id: string): Promise<string | undefined> =>
     ).catch(() => undefined)
   )?.path;
 
-/** Up to {@link NAMED} entries by name, and how many there are. */
-const NAMED = 5;
-export const entryWords = (entries: readonly string[]): string => {
-  const named = entries.slice(0, NAMED).join(", ");
-  const more =
-    entries.length > NAMED ? `, and ${entries.length - NAMED} more` : "";
-  return `${entries.length} ${entries.length === 1 ? "entry" : "entries"} (${named}${more})`;
-};
+export const entryWords = (entries: readonly string[]): string =>
+  `${entries.length} ${entries.length === 1 ? "entry" : "entries"} (${namedAndMore(entries)})`;
 
 /** The entries of the folder at `path`, by name, sorted. */
 export const entriesAt = async (path: string): Promise<string[]> =>
@@ -263,7 +259,7 @@ const filesProblem = async (
   const foreign = await notCheckedOut(path, source, git, start);
   return foreign.length === 0
     ? undefined
-    : `it holds ${entryWords(foreign)} that a checkout of ${start.slice(0, 9)} did not write`;
+    : `it holds ${entryWords(foreign)} that a checkout of ${shortSha(start)} did not write`;
 };
 
 /**
@@ -311,7 +307,7 @@ const commitsBeyond = async (
     ).trim()
   );
   return count > 0
-    ? `its .git holds ${count} commit${count === 1 ? "" : "s"} on no branch of origin${at ? ` and not on ${at.commit.slice(0, 9)}, the commit it was cut again at` : ""}`
+    ? `its .git holds ${count} commit${count === 1 ? "" : "s"} on no branch of origin${at ? ` and not on ${shortSha(at.commit)}, the commit it was cut again at` : ""}`
     : undefined;
 };
 
@@ -435,7 +431,8 @@ const blobId = async (
 
 const LFS_POINTER =
   /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize (\d+)\n/u;
-/** The largest blob read as a possible LFS pointer: git-lfs's own limit for one. */
+/** The size an LFS pointer stays under: a blob this large or larger is none. */
+// @limit external: Git LFS pointer files "must be less than 1024 bytes in size, including any pointer extension lines" (https://github.com/git-lfs/git-lfs/blob/main/docs/spec.md#the-pointer)
 const POINTER_MAX = 1024;
 
 /**
@@ -469,7 +466,7 @@ const asCheckedOut = async (
     return true;
   }
   const size = Number((await git(["cat-file", "-s", want.object])).trim());
-  if (size > POINTER_MAX) {
+  if (size >= POINTER_MAX) {
     return false;
   }
   const pointer = LFS_POINTER.exec(

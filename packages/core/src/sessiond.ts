@@ -315,6 +315,16 @@ export interface SessiondLimit {
 }
 
 /**
+ * sessiond → one attached agent, every few seconds while it took any: the
+ * keeper's readings of the bounds still waiting on data (limit-readings.ts),
+ * which the agent carries to the hub on its beat with its own.
+ */
+export interface SessiondReadings {
+  readings: import("./limit-readings").LimitReading[];
+  type: "limit.readings";
+}
+
+/**
  * sessiond → agent, the lifecycle of a mutating command. Unknown message
  * types are answered, never fatal (design §5): sessiond replies `failed`
  * with `reason: 'unsupported: <type>'` and keeps the connection; the agent
@@ -367,6 +377,7 @@ export type SessiondServerMessage =
   | SessiondReset
   | SessiondExit
   | SessiondLimit
+  | SessiondReadings
   | SessiondAck
   | SessiondDraining;
 
@@ -447,6 +458,7 @@ const SESSIOND_LINK = "c";
  * at whichever HOME asked last.
  */
 const sessiondLinkName = (home: string = homedir()): string =>
+  // @limit measured: 8 hex characters are 32 bits of SHA-256; one link per HOME of one user on one machine, so two collide after about 2^16 names
   `${SESSIOND_LINK}-${createHash("sha256").update(home).digest("hex").slice(0, 8)}`;
 
 /** {@link sessiondLinkDir}'s path alone, nothing made. */

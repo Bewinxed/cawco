@@ -71,11 +71,7 @@ import {
   type StoredRun,
 } from "./session-messages";
 import { INTERACTIONS } from "./stage";
-import {
-  MEASURE_PRESSES,
-  MEASURE_REPEATS,
-  MEASURE_SPEEDS,
-} from "./stage-measure";
+import { MEASURE_PRESSES, MEASURE_SPEEDS } from "./stage-measure";
 import { storedAs } from "./stored-as";
 import {
   BinaryUpdatePolicySchema,
@@ -179,6 +175,7 @@ const MoveSnapshotResult = storedAs(
   MoveSnapshotResultShape,
   controlWords.meant.moveSnapshot
 );
+// @limit external: a TCP or UDP port is 16 bits, 65,535 at most (RFC 9293 section 3.1)
 const Port = pipe(count, integer(), minValue(1), maxValue(65_535));
 const ServeSpec = object({
   command: text,
@@ -215,7 +212,7 @@ const MeasureAsk = object({
   ),
   play: optional(literal(true)),
   press: optional(picklist(MEASURE_PRESSES)),
-  repeats: optional(pipe(count, integer(), minValue(MEASURE_REPEATS))),
+  repeats: optional(pipe(count, integer(), minValue(1))),
   speed: optional(picklist(MEASURE_SPEEDS)),
   text: optional(text),
 });
@@ -365,18 +362,16 @@ const ARGS: {
   readSessionContext: tuple([text, maybe(text)]),
   searchTranscripts: tuple([
     text,
-    maybe(
-      object({
-        author: optional(TranscriptAuthor),
-        before: optional(text),
-        context: optional(boolean()),
-        limit: optional(count),
-        sessions: optional(texts),
-        since: optional(text),
-        submitted: optional(literal(true)),
-        toolOutput: optional(boolean()),
-      })
-    ),
+    object({
+      author: optional(TranscriptAuthor),
+      before: optional(text),
+      context: optional(boolean()),
+      limit: count,
+      sessions: optional(texts),
+      since: optional(text),
+      submitted: optional(literal(true)),
+      toolOutput: optional(boolean()),
+    }),
   ]),
   abandon: tuple([text]),
   transcriptTurns: tuple([

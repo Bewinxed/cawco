@@ -61,6 +61,7 @@
     dur,
     easeOut,
     motionOk,
+    numberOf,
   } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
@@ -340,7 +341,8 @@
         view.height > 0 &&
         box.height > 0 &&
         box.top >= view.top &&
-        box.top + Math.min(box.height, 28) <= Math.min(view.bottom, foot)
+        box.top + Math.min(box.height, numberOf("--spacing-c-report-seen")) <=
+          Math.min(view.bottom, foot)
       ) {
         return row;
       }
@@ -391,7 +393,7 @@
     to: DOMRect,
     target: HTMLElement
   ): Promise<void> {
-    const line = Math.min(to.height, 26);
+    const line = Math.min(to.height, numberOf("--spacing-c-mark"));
     const scale = Math.min(1, line / from.height);
     const dy = to.top + (line - from.height * scale) / 2 - from.top;
     await copy.animate(
@@ -834,7 +836,7 @@
       x: Math.max(0, chip.offsetLeft),
       span: row.clientWidth,
       origin: chip.offsetWidth / 2,
-      room: Math.min(320, roomOver(root)),
+      room: Math.min(numberOf("--spacing-c-shelf-room"), roomOver(root)),
     };
     openKey = key;
     pinned = pin || pinned;
@@ -918,7 +920,7 @@
    * to the top of the composer's dock (`roomOver`), read as it opens. What
    * it lists past that scrolls inside it.
    */
-  let shelfRoom = $state(320);
+  let shelfRoom = $state(0);
 
   function toggleShelf(
     kind: "failed" | "more",
@@ -929,9 +931,9 @@
       closeShelf(true);
       return;
     }
-    if (root) {
-      shelfRoom = Math.max(0, roomOver(root));
-    }
+    shelfRoom = root
+      ? Math.max(0, roomOver(root))
+      : numberOf("--spacing-c-shelf-room");
     layer.take(layerOwner);
     shelf = kind;
     opener = key;

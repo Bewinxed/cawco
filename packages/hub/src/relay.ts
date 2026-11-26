@@ -16,7 +16,7 @@
  *   the same empty 404. It is write-only: a delivery that lands gets 202 and
  *   an empty body, and nothing is ever read back through it.
  * - **Verified before it is stored.** In order, before the body is parsed:
- *   the id's rate limit (60 a minute, a token bucket; 429), a 1 MiB cap
+ *   the id's rate limit (60 a minute, a token bucket; 429), a 25 MB cap
  *   enforced while the body streams in (413, without reading the rest), and
  *   the signature, checked by the relay's watch's provider (401; its
  *   `webhook.verify`: GitHub's with `@octokit/webhooks-methods`, Linear's
@@ -57,6 +57,7 @@ import type { BackoffPolicy } from "@cawco/core/backoff";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -64,6 +65,7 @@ import {
   type RelayProvider,
   type RelayView,
 } from "@cawco/core/relays";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { HookScheme } from "@cawco/providers/connection/descriptor";
 import {
@@ -107,9 +109,11 @@ import {
 } from "./presenters/project";
 import type { RelayCreated } from "./relay-created";
 
-/** The most a delivery's body holds: 1 MiB. */
-const RELAY_BODY_MAX = 1024 * 1024;
+/** The most a delivery's body holds: 25 MB, the most GitHub delivers. */
+// @limit external: GitHub caps a webhook payload at 25 MB, the most a relay's sender delivers (https://docs.github.com/en/webhooks/webhook-events-and-payloads#payload-cap)
+const RELAY_BODY_MAX = 25 * 1024 * 1024;
 /** Deliveries one relay takes a minute: the token bucket's size and its refill. */
+// @limit recording: hub.relay-bucket-drawn until 2026-12-03
 const PER_MINUTE = 60;
 /**
  * The wanted state applied again while a relay isn't live: from a minute,
@@ -473,6 +477,8 @@ export const createRelay = ({
       PER_MINUTE,
       bucket.tokens + ((now - bucket.at) / 60_000) * PER_MINUTE
     );
+    // How much of its bucket a relay has drawn: its deliveries' rate.
+    recordLimitReading("hub.relay-bucket-drawn", PER_MINUTE - tokens);
     const left = tokens >= 1 ? tokens - 1 : tokens;
     buckets.set(id, { at: now, tokens: left });
     return tokens >= 1;
@@ -600,7 +606,9 @@ export const createRelay = ({
       readCapped(request, RELAY_BODY_MAX)
     );
     if (!body) {
-      console.warn(`[relay] ${relay.id}: a delivery over 1 MiB (413)`);
+      console.warn(
+        `[relay] ${relay.id}: a delivery over ${RELAY_BODY_MAX / (1024 * 1024)} MB (413)`
+      );
       return empty(413);
     }
     return empty(
@@ -1650,7 +1658,7 @@ export const createRelay = ({
       return problem(409, { code: "relay-off", detail: `Relay ${id} is off.` });
     }
     const trimmed = secret.trim();
-    if (trimmed.length < 16 || trimmed.length > 512) {
+    if (trimmed.length < 16) {
       return problem(400, {
         code: "relay-secret-unfit",
         detail: "A relay's secret is 16 to 512 characters.",
@@ -1781,7 +1789,7 @@ export const createRelay = ({
           relays,
           {
             id: (relay) => relay.id,
-            said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
+            said: (relay) => `${relay.provider} ${shortId(relay.id)}`,
           },
           "relay"
         );

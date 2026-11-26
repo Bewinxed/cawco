@@ -77,7 +77,7 @@ export interface ServedMedia {
 export interface ArtifactInput {
   /**
    * The panel head's one line under its name: what the person does here,
-   * in their words (core `ASK_LIMIT`). Every create names it but the
+   * in their words. Every create names it but the
    * person's own composer canvas (`draft`), which asks them nothing.
    */
   ask?: string | undefined;
@@ -129,8 +129,8 @@ export interface ArtifactInput {
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
   /**
-   * What every surface names it by to the person, in plain words (core
-   * `ARTIFACT_TITLE_LIMIT`): every create names it. The person's own
+   * What every surface names it by to the person, in plain words: every
+   * create names it. The person's own
    * composer canvas (`draft`) takes the dashboard's.
    */
   title?: string | undefined;

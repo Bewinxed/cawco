@@ -47,6 +47,7 @@ export const MODEL_STORAGE_PREFIX = "cawco-models";
 const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent-by-harness`;
 
 /** How many typed-in model ids are remembered per harness — a shortlist, not a history. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const RECENT_LIMIT = 5;
 
 /**

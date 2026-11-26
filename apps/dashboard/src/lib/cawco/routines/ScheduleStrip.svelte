@@ -1,9 +1,6 @@
 <script lang="ts" module>
   /** How many days ahead the hub tells a routine's runs (hub routines.ts `nextRunsOf`). */
   const WEEK_DAYS = 7;
-  /** How many runs it tells at most (hub routines.ts `NEXT_RUNS_MAX`). */
-  const RUNS_MAX = 288;
-
   export interface Schedule {
     kind: "day" | "week";
     /** Each run inside it, ms from now, the next run first. */
@@ -15,12 +12,13 @@
   /**
    * The strip for the runs the hub's scheduler will start (`runs`, epoch
    * ms): a day's strip when a run falls in each of the next seven days, or
-   * the hub's bound was reached (spanning to the last run told, under a
-   * day); otherwise a week's. No runs ahead, no strip.
+   * the hub cut them before the week's end (`cut`: spanning to the last run
+   * told, under a day); otherwise a week's. No runs ahead, no strip.
    */
   export function stripOf(
     runs: readonly number[],
-    now: number
+    now: number,
+    cut: boolean
   ): Schedule | null {
     const ahead = runs.map((at) => at - now).filter((at) => at >= 0);
     if (ahead.length === 0) {
@@ -28,7 +26,7 @@
     }
     const days = new Set(ahead.map((at) => Math.floor(at / DAY_MS)));
     const daily =
-      runs.length >= RUNS_MAX ||
+      cut ||
       Array.from({ length: WEEK_DAYS }, (_, day) => day).every((day) =>
         days.has(day)
       );
@@ -36,7 +34,7 @@
       return { kind: "week", runs: ahead, span: WEEK_DAYS * DAY_MS };
     }
     const last = ahead.at(-1) ?? 0;
-    const span = runs.length >= RUNS_MAX && last < DAY_MS ? last : DAY_MS;
+    const span = cut && last < DAY_MS ? last : DAY_MS;
     return { kind: "day", runs: ahead.filter((at) => at <= span), span };
   }
 </script>
@@ -60,6 +58,7 @@
 
   let {
     runs,
+    cut,
     now,
     label,
     paused = false,
@@ -67,6 +66,8 @@
   }: {
     /** The runs ahead, as the hub tells them (`Routine.nextRuns`), epoch ms. */
     runs: readonly number[];
+    /** The hub's runs stop before the week's end (`Routine.nextRunsCut`). */
+    cut: boolean;
     now: number;
     /** The schedule in words: the strip's name. */
     label: string;
@@ -75,7 +76,7 @@
     compact?: boolean;
   } = $props();
 
-  const schedule = $derived(stripOf(runs, now));
+  const schedule = $derived(stripOf(runs, now, cut));
   /**
    * A mark's or a run tick's shift from its time (`--f` of the strip):
    * centred (-50% of itself), but never past the strip's start (-f of its

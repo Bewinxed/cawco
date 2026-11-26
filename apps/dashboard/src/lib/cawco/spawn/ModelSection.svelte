@@ -254,7 +254,7 @@
    * session on here (models `admits`); one it would refuse is never offered.
    */
   const showCustomRow = $derived(
-    q.length > 2 &&
+    q.length >= 3 &&
       !exact &&
       isIdShaped(query.trim()) &&
       models.admits(listHarness, query.trim(), machineIds)

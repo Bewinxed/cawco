@@ -9,7 +9,6 @@
 
 import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import { SHOWN_FAILURES } from "@cawco/core/preview/protocol";
-import { DESIGN_MAP_LIMITS } from "@cawco/core/stage";
 import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
 import {
   askBody,
@@ -119,7 +118,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     // the words on their page, best first, with the words round a hit.
     .get(
       "/api/instances/:id/artifacts/search",
-      { query: t.Object({ q: t.String({ maxLength: 200 }) }) },
+      { query: t.Object({ q: t.String() }) },
       ({ params, query }) => artifacts.search(params.id, query.q)
     )
     // A screen's thumbnail of a page or preview, kept as its latest picture.
@@ -153,7 +152,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/list",
       {
         query: t.Object({
-          cursor: t.Optional(t.String({ maxLength: 60 })),
+          cursor: t.Optional(t.String()),
           waiting: t.Optional(t.BooleanString()),
         }),
       },
@@ -189,7 +188,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           render: t.Optional(t.BooleanString()),
           layout: t.Optional(t.BooleanString()),
           // JSON: core stage-measure.ts `MeasureAsk`, one move to measure on state.story.
-          measure: t.Optional(t.String({ maxLength: 2000 })),
+          measure: t.Optional(t.String()),
           verify: t.Optional(t.BooleanString()),
         }),
       },
@@ -280,13 +279,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/design-map",
       {
         query: t.Object({
-          dir: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
-          query: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
-          component: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
-          limit: t.Optional(
-            t.Numeric({ minimum: 1, maximum: DESIGN_MAP_LIMITS.max })
-          ),
-          cursor: t.Optional(t.String({ maxLength: 20 })),
+          dir: t.Optional(t.String({ minLength: 1 })),
+          query: t.Optional(t.String({ minLength: 1 })),
+          component: t.Optional(t.String({ minLength: 1 })),
+          limit: t.Optional(t.Numeric({ minimum: 1 })),
+          cursor: t.Optional(t.String()),
           response_format: t.Optional(
             t.Union([t.Literal("concise"), t.Literal("detailed")])
           ),
@@ -360,9 +357,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             at: t.Optional(
               t.Union([
                 t.Object({ pin: t.Integer({ minimum: 1 }) }),
-                t.Object({ card: t.String({ minLength: 1, maxLength: 200 }) }),
+                t.Object({ card: t.String({ minLength: 1 }) }),
                 t.Object({
-                  change: t.String({ minLength: 1, maxLength: 200 }),
+                  change: t.String({ minLength: 1 }),
                 }),
               ])
             ),
@@ -390,8 +387,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/:artifact/shown",
       {
         body: t.Object({
-          client: t.String({ minLength: 1, maxLength: 100 }),
-          revision: t.String({ minLength: 1, maxLength: 100 }),
+          client: t.String({ minLength: 1 }),
+          revision: t.String({ minLength: 1 }),
           ok: t.Boolean(),
           error: t.Optional(t.UnionEnum(SHOWN_FAILURES)),
         }),

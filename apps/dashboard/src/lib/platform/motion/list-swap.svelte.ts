@@ -12,7 +12,7 @@
  * - The new rows mount at once, keyed `${gen}:${id}` so even a row in both
  *   lists enters as new, and come in from the side the choice moved toward
  *   (`ns-in-*`, --pop-rise and a fade) over --duration-pop: the first once the old
- *   rows are out, each next --duration-stagger later, capped at STAGGER_CAP.
+ *   rows are out, each next --duration-stagger later, capped at --stagger-rows.
  * A relay: each new row arrives no sooner than the old row in its place
  * has gone (`rowAnim`'s `notBefore`, which a caller that knows the places
  * passes), so a row and its replacement are never on screen in the same
@@ -28,7 +28,7 @@
  * style, which a component's scoped <style> cannot rewrite.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { dur, ease, motionOk } from "./curves.svelte";
+import { dur, ease, motionOk, numberOf } from "./curves.svelte";
 
 /** The leaving rows' beat. */
 const outMs = () => dur("--duration-exit");
@@ -36,9 +36,8 @@ const outMs = () => dur("--duration-exit");
 export const inMs = () => dur("--duration-pop");
 /** Between one incoming row and the next. */
 const inStagger = () => dur("--duration-stagger");
-/** Rows past this all move together; a stagger that keeps growing down a
-    forty-row list is a wait, not a rhythm. */
-const STAGGER_CAP = 9;
+/** Rows past this many (--stagger-rows) all move together. */
+const staggerCap = () => numberOf("--stagger-rows");
 /** How many leaving rows keep animating. A list shows about five. */
 const LEAVING = 8;
 
@@ -154,7 +153,7 @@ export class ListSwap<T> {
    */
   static enterAt(i: number, notBefore = 0): number {
     return Math.max(
-      outMs() + Math.min(i, STAGGER_CAP) * inStagger(),
+      outMs() + Math.min(i, staggerCap()) * inStagger(),
       notBefore
     );
   }
@@ -179,7 +178,7 @@ export class ListSwap<T> {
         ],
         {
           duration: inMs(),
-          delay: Math.min(i, STAGGER_CAP) * inStagger(),
+          delay: Math.min(i, staggerCap()) * inStagger(),
           easing: ease("--ease-out"),
           fill: "backwards",
         }
@@ -197,7 +196,7 @@ export class ListSwap<T> {
       () => {
         this.phase = "idle";
       },
-      motionOk.current ? ListSwap.enterAt(STAGGER_CAP) + inMs() : 0
+      motionOk.current ? ListSwap.enterAt(staggerCap()) + inMs() : 0
     );
   }
 

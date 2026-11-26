@@ -4,7 +4,9 @@
  * and the handle `around` (or the hit's own tool) takes back; `around`'s
  * turns, a line each. The detailed form is the hits as JSON, every id whole.
  */
-import { ago, count, handle, lines, quote } from "./words";
+
+import { shortId } from "@cawco/core/short-id";
+import { ago, count, excerpt, lines, quote } from "./words";
 
 /** A task hit's id, `<project>:tsk-1`. */
 const TASK_HIT = /:(tsk-\d+)$/u;
@@ -22,7 +24,7 @@ const idWords = (id: string): string => {
   if (task?.[1]) {
     return task[1];
   }
-  return WHOLE_ID.test(id) ? handle(id) : id;
+  return WHOLE_ID.test(id) ? shortId(id) : id;
 };
 
 /** A ref, `<hit id>#<record>@<when>`, as `around` takes it back: the id's and the record's handles, the time whole. */
@@ -33,8 +35,8 @@ const refWords = (ref: string): string => {
   }
   const at = record.lastIndexOf("@");
   return at < 0
-    ? `${idWords(id ?? "")}#${handle(record)}`
-    : `${idWords(id ?? "")}#${handle(record.slice(0, at))}${record.slice(at)}`;
+    ? `${idWords(id ?? "")}#${shortId(record)}`
+    : `${idWords(id ?? "")}#${shortId(record.slice(0, at))}${record.slice(at)}`;
 };
 
 /** Where a hit is, its ids as handles. */
@@ -42,8 +44,8 @@ const whereWords = (where: string): string =>
   where.replace(BRACKETED_ID, "($1)");
 
 /** The words a hit matched, each whole id in them its handle, as every other id find names. */
-const excerptWords = (excerpt: string): string =>
-  excerpt.replace(ID_IN_WORDS, "$1");
+const excerptWords = (words: string): string =>
+  words.replace(ID_IN_WORDS, "$1");
 
 /** `when`, as find writes it (`2026-10-22 06:03Z`), as how long ago. */
 const whenWords = (when: string | null | undefined, now: number): string =>
@@ -91,10 +93,10 @@ interface Around {
 }
 
 const hitLine = (hit: Hit, now: number): string =>
-  `- ${hit.kind} ${quote(hit.title, 120)}${hit.where ? ` · ${whereWords(hit.where)}` : ""} · ${whenWords(hit.when, now)}${hit.who ? ` · ${hit.who}` : ""}${hit.excerpt ? `: ${quote(excerptWords(hit.excerpt), 240)}` : ""} · ${hit.ref ? `around takes ${refWords(hit.ref)}` : `id ${idWords(hit.id)}`}`;
+  `- ${hit.kind} ${quote(hit.title)}${hit.where ? ` · ${whereWords(hit.where)}` : ""} · ${whenWords(hit.when, now)}${hit.who ? ` · ${hit.who}` : ""}${hit.excerpt ? `: ${quote(excerptWords(hit.excerpt))}` : ""} · ${hit.ref ? `around takes ${refWords(hit.ref)}` : `id ${idWords(hit.id)}`}`;
 
 const turnLine = (turn: Turn, now: number): string =>
-  `- ${turn.here ? "▶ " : ""}${turn.who}${turn.when ? `, ${whenWords(turn.when, now)}` : ""}: ${quote(turn.text, 2000)}${turn.ref ? ` (${refWords(turn.ref)})` : ""}`;
+  `- ${turn.here ? "▶ " : ""}${turn.who}${turn.when ? `, ${whenWords(turn.when, now)}` : ""}: ${excerpt(turn.text, 2000)}${turn.ref ? ` (${refWords(turn.ref)})` : ""}`;
 
 /** A page's first line: how many, in which order; a listing's total is unknown. */
 const headOf = (answer: Searched): string => {
@@ -111,7 +113,7 @@ export const findWords = (answer: Searched | Around): string => {
   const now = Date.now();
   if ("around" in answer) {
     return lines(
-      `${answer.around.kind} ${quote(answer.around.title, 120)} ${idWords(answer.around.id)}${answer.around.where ? ` · ${whereWords(answer.around.where)}` : ""}:`,
+      `${answer.around.kind} ${quote(answer.around.title)} ${idWords(answer.around.id)}${answer.around.where ? ` · ${whereWords(answer.around.where)}` : ""}:`,
       answer.turns.map((turn) => turnLine(turn, now)),
       answer.note
     );

@@ -60,7 +60,9 @@ import {
   withWords,
   wordsOf,
 } from "@cawco/core/find-match";
+import { shareOut, TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { shortId } from "@cawco/core/short-id";
 import { DAY_MS } from "@cawco/core/time";
 import { searchWords } from "@cawco/core/words/search";
 import { ElysiaStatus, problem } from "elysia";
@@ -83,12 +85,23 @@ import { cursorAt } from "./views/pages";
 
 export const FIND_TOOL = "find";
 
+// @limit measured: a page; the next page's cursor rides the answer. ANSWER_MAX_CHARS (61,250) over MAX_LIMIT (50) is 1,225 characters a hit; 10 hits of that size are 12,250 characters, about 3,000 tokens at 4 a character, under the 10,000 tokens past which Claude Code warns of a tool's answer (https://code.claude.com/docs/en/mcp)
 const DEFAULT_LIMIT = 10;
+// @limit measured: a page; the next page's cursor rides the answer. 50 hits of 1,225 characters fill ANSWER_MAX_CHARS (61,250), and a concise hit is a title of at most 120 characters, an excerpt of at most 200 and its id, place and ref; a longer hit moves to the next page
 const MAX_LIMIT = 50;
-/** An excerpt's most characters: the matched words with their sentence. */
-const EXCERPT_MAX = 200;
+/**
+ * What a concise hit holds, dealt out of its share of an answer: a title, an
+ * excerpt (the matched words with their sentence), and its id, place and ref.
+ */
+const HIT_SHARES = shareOut(Math.floor(TOOL_ANSWER_CHARS / MAX_LIMIT), {
+  title: 120,
+  excerpt: 200,
+  rest: 880,
+});
+/** An excerpt's most characters. */
+const EXCERPT_MAX = HIT_SHARES.excerpt;
 /** A hit's title, cut. */
-const TITLE_MAX = 120;
+const TITLE_MAX = HIT_SHARES.title;
 /** Turns each side of `around`, and each turn's characters, by format. */
 const AROUND = {
   concise: { side: 2, chars: 500 },
@@ -96,20 +109,14 @@ const AROUND = {
 } as const;
 /** A detailed hit's turn either side of its best moment, cut to this. */
 const NEIGHBOUR_CHARS = 300;
-/** Detailed hits whose neighbouring turns are read: each is a read of its machine's index. */
-const NEIGHBOURED_HITS = 10;
 /**
  * How far behind a whole index may be before find says how far it has come:
  * a search brings it up to date first, so past this its sync ran long, or
  * its machine has not finished one since it started.
  */
 const STALE_MS = 5 * 60_000;
-/**
- * The most characters one answer holds: about 15,000 tokens at ~4 a
- * character, well under Claude Code's 25,000-token cap on a tool's answer
- * (designing-skills-and-tools: "Target a 25,000-token response budget").
- */
-const ANSWER_MAX_CHARS = 60_000;
+/** The most characters one answer holds: what Claude Code passes on of a tool's answer. */
+const ANSWER_MAX_CHARS = TOOL_ANSWER_CHARS;
 
 const BY = ["person", "agent", "report"] as const;
 type By = (typeof BY)[number];
@@ -952,7 +959,7 @@ export const createFindTool = (deps: FindToolDeps) => {
       header: {
         kind: "conversation",
         id,
-        title: sessionId.slice(0, 8),
+        title: shortId(sessionId),
         where: machine ? `on ${machine}` : "",
       },
       read: (centre: Centre, side: number, chars: number) =>
@@ -1092,12 +1099,10 @@ export const createFindTool = (deps: FindToolDeps) => {
     return read && !("why" in read) ? read.turns : undefined;
   };
 
-  /** A detailed page's hits, the first {@link NEIGHBOURED_HITS} with their neighbouring turns. */
+  /** A detailed page's hits with their neighbouring turns. */
   const withNeighbours = async (results: FindResult[], before?: number) => {
     const turns = await Promise.all(
-      results
-        .slice(0, NEIGHBOURED_HITS)
-        .map((result) => neighboursOf(result, before))
+      results.map((result) => neighboursOf(result, before))
     );
     return results.map((result, index) => {
       const beside = turns[index];

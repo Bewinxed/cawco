@@ -51,6 +51,7 @@ import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { Deferred, Effect } from "effect";
+import { namedAndMore } from "@cawco/providers/names";
 import type { AgentPorts } from "../agent-ports";
 import {
   ContainerHost,
@@ -1029,7 +1030,7 @@ const intoContainer = async (
     const missing = await missingSignIns(at, signIns);
     if (missing.length > 0) {
       throw new Error(
-        `the container's Chromium does not hold ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}`
+        `the container's Chromium does not hold ${namedAndMore(missing)}`
       );
     }
     goOn(signal);

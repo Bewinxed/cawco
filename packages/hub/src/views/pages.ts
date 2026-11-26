@@ -6,6 +6,7 @@
  */
 
 /** How many results a page of a find holds by default, and at most. */
+// @limit measured: a page; the next page's cursor rides the answer. The finder's rows are --spacing-c-row-h (44 px) each, so 20 are 880 px of list
 export const DEFAULT_LIMIT = 20;
 
 /** The cursor that starts a page of a find at `offset`. */

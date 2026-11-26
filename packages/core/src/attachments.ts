@@ -124,6 +124,7 @@ export function attachedFileName(
   const base = name.split(FOLDERS).pop()?.trim() || "file";
   const safe = base === "." || base === ".." ? "file" : base;
   const hash = fileHash(ref);
+  // @limit measured: 8 hex characters are 32 bits of the file's SHA-256; the files of one session share one folder, so two collide after about 2^16 names
   return `${sessionId}/${whole ? hash : hash.slice(0, 8)}-${safe}`;
 }
 
@@ -183,6 +184,7 @@ export function attachedFiles(text: string): {
 }
 
 /** How many hex characters of a picture's hash its name keeps: plenty to tell one session's pictures apart. */
+// @limit measured: 12 hex characters are 48 bits of the picture's SHA-256; one session's pictures share one name space, so two collide after about 2^24 names
 const PICTURE_HASH_CHARS = 12;
 
 const PICTURE_NAME = /^picture-([a-f0-9]{12})\.(png|jpg|gif|webp)$/u;

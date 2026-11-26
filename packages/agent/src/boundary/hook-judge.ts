@@ -10,6 +10,8 @@ import { access, readFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join } from "node:path";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
+import { timedEffect } from "@cawco/core/effect/timed";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { workspaceClaudeTmpDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -30,6 +32,7 @@ import { scriptText } from "./shims";
 import { refusal, stateDir } from "./state";
 
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
+// @limit recording: agent.boundary-judge-answer-ms until 2026-12-03
 export const HOOK_TIMEOUT_S = 90;
 
 /**
@@ -40,6 +43,7 @@ export const HOOK_TIMEOUT_S = 90;
  * always answers first. The judge answers in under a millisecond; the hook
  * takes 2–4ms on obelisk.
  */
+// @limit measured: HOOK_TIMEOUT_S less 10 s, so the judge answers before its hook is killed
 const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 
 /**
@@ -269,6 +273,7 @@ export const judgeScripts = (): Promise<[string, string, string]> =>
  * The build a judge runs, as it says it ({@link JUDGE_BUILD_QUESTION}): its
  * three scripts, hashed. Handed to each judge as it starts.
  */
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the judge builds one machine holds, so two collide after about 2^32 names
 export const judgeBuildOf = ([judgeText, serverText, protocolText]: [
   string,
   string,
@@ -313,7 +318,8 @@ const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
  * connection is closed once the answer is whole, or the read let go.
  */
 const judgeSays = (socket: string): Effect.Effect<string, Unanswered> =>
-  boundedRead(
+  timedEffect(
+    boundedRead(
     HOOK_LIMIT_S * 1000,
     Effect.gen(function* () {
       const answer = yield* Deferred.make<string>();
@@ -349,6 +355,8 @@ const judgeSays = (socket: string): Effect.Effect<string, Unanswered> =>
       );
       return yield* Deferred.await(answer);
     }).pipe(Effect.scoped)
+    ),
+    (ms) => recordLimitReading("agent.boundary-judge-answer-ms", ms)
   );
 
 /** A judge's answer, or that it gave none in time, in words a law's line quotes. */

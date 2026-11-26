@@ -119,6 +119,7 @@ import { workspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
 import { Deferred, Effect, Fiber, Schema } from "effect";
+import { namedAndMore } from "@cawco/providers/names";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
 import { isGitDir } from "../git-dir";
@@ -168,7 +169,7 @@ import {
 } from "./narrowing";
 import { makeDirs, ownInodes } from "./package-managers";
 import { type Seen, snapshot } from "./place-guard";
-import { formMoveWords, formOf, planOf, REASONS_SAID } from "./plan";
+import { formMoveWords, formOf, planOf } from "./plan";
 import { commandsEnded, drainable, ownWork, type Work } from "./processes";
 import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import { srtTmpOf } from "./runner";
@@ -654,7 +655,7 @@ export const replaceNarrowed = async (
         : await armHook(ref.id, held);
     const line = await tellStopped(ref.id, narrowedCause(why), stopped);
     console.info(
-      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
+      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${namedAndMore(why)})`}`
     );
     await recordDecision(ref.id, {
       cause,

@@ -482,7 +482,7 @@ interface ControlTable {
     CommandResult
   >;
   searchTranscripts: Entry<
-    [query: string, options?: TranscriptQuery | null],
+    [query: string, options: TranscriptQuery],
     TranscriptAnswer | null
   >;
   sessionCustody: Entry<[], SessionCustodyRead>;

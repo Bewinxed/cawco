@@ -10,8 +10,10 @@
  * whose words, value or availability differ changed. A part inside a part
  * that came in or went is said by its outermost part alone.
  */
+
 import type { DifferenceRead, DrawingBox } from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
+import { quote } from "@cawco/providers/quote";
 import { nameOf, wordsOf } from "./names";
 
 const READ =
@@ -100,10 +102,6 @@ const boxIn = (el: Element, root: Element, scale: number): DrawingBox => {
     h: a.height / scale,
   };
 };
-
-const SHORT = 40;
-const short = (text: string) =>
-  text.length > SHORT ? `${text.slice(0, SHORT - 1).trimEnd()}…` : text;
 
 /** The parts of `list` by what a person calls them, only the names one part holds. */
 const byOneName = (list: Part[]): Map<string, Part> => {
@@ -219,7 +217,7 @@ export function differences(
           said
             ? // In the order the two drawings stand side by side, the kept
               // one first (its value is `part`'s, the compared one's `was`'s).
-              words.changed(name, short(said[1]), short(said[0]))
+              words.changed(name, quote(said[1]), quote(said[0]))
             : words.changedPlain(name)
         )
       );

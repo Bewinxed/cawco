@@ -8,6 +8,7 @@ import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
  * records and configs of kilobytes (OpenCode's config, Claude Code's plugin
  * registry, CawCo's sidecars); one past this is no such file. Our call.
  */
+// @limit measured: the largest JSON file the agent reads through readJson is 3.0 MB (catalog-index.json, obelisk, 2026-11-26)
 const JSON_FILE_LIMIT = 32 * 1024 * 1024;
 
 /** A JSON file that is there and was not read, and why (json-on-disk.ts). */

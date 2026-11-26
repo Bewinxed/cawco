@@ -41,10 +41,12 @@ import {
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
 } from "@cawco/core/move";
+import { lastOutput } from "@cawco/core/output-tail";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortId } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
@@ -182,7 +184,7 @@ const runStep = <T>(
   work: (run: Run) => Promise<T>
 ): Promise<T> => {
   const running = runs.get(jobId);
-  const job = jobId.slice(0, 8);
+  const job = shortId(jobId);
   if (running && running.stage !== stage) {
     return Promise.reject(
       new StepFailed(
@@ -315,7 +317,7 @@ const exec = async (
           const reading = (async () => {
             for await (const chunk of child.stderr) {
               const text = decoder.decode(chunk, { stream: true });
-              tail = (tail + text).slice(-8000);
+              tail = lastOutput(tail + text);
               options.onStderr?.(text);
             }
           })();
@@ -432,7 +434,8 @@ const entries = (text: string): string[] => text.split("\0").filter(Boolean);
 
 const POINTER =
   /^version https:\/\/git-lfs\.github\.com\/spec\/v1\n(?:.*\n)*?oid sha256:([0-9a-f]{64})\n(?:.*\n)*?size (\d+)\n?/u;
-/** A pointer file is about 130 bytes; nothing past this is one. */
+/** The size an LFS pointer stays under: a blob this large or larger is none. */
+// @limit external: Git LFS pointer files "must be less than 1024 bytes in size, including any pointer extension lines" (https://github.com/git-lfs/git-lfs/blob/main/docs/spec.md#the-pointer)
 const POINTER_MAX = 1024;
 const WHITESPACE = /\s+/u;
 
@@ -496,9 +499,7 @@ const pointersIn = async (
   const small = entries(listed).flatMap((entry) => {
     const [meta, path] = entry.split("\t");
     const [, type, sha, size] = meta.split(WHITESPACE);
-    return type === "blob" && Number(size) <= POINTER_MAX
-      ? [{ sha, path }]
-      : [];
+    return type === "blob" && Number(size) < POINTER_MAX ? [{ sha, path }] : [];
   });
   const found = new Map<string, Pointed>();
   if (small.length === 0) {
@@ -1120,7 +1121,7 @@ const MARKER = "cawco-move";
 
 /** The place the clone is made before it takes its name. */
 const cloneScratch = (path: string, jobId: string): string =>
-  join(dirname(path), `.${basename(path)}.cawco-move-${jobId.slice(0, 8)}`);
+  join(dirname(path), `.${basename(path)}.cawco-move-${shortId(jobId)}`);
 
 /**
  * Leaves the clone as the source stood: on the source's branch at its HEAD,
@@ -1401,6 +1402,7 @@ const fetchedBytes = async (
       "git could not find the LFS store"
     )
   ).trim();
+  // @limit external: git-lfs keeps an object at lfs/objects/<first 2 hex of its oid>/<next 2>/<oid> (git-lfs docs/spec.md, Local Storage)
   const present = await Promise.all(
     [...wanted].map(async ([oid, { size }]) =>
       (await exists(join(lfsDir, oid.slice(0, 2), oid.slice(2, 4), oid)))

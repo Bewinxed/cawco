@@ -23,6 +23,7 @@
  *   providers) are told apart by provider, else by id.
  */
 
+import { firstNames } from "@cawco/providers/names";
 import type { HarnessReport } from "./harness";
 import type { UnlistedModels } from "./harness/descriptor";
 import {
@@ -277,9 +278,6 @@ const modelListed = (
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
 const MODEL_ID_WORD = /[-.]/u;
 
-/** How many listed models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
-const MODELS_NAMED = 12;
-
 /**
  * What a harness lists on a machine: its rows once it has read them (none
  * when it read and lists none), or unread, with the machine's words on why
@@ -392,7 +390,7 @@ export const unlistedModelRefusal = (
     .map((value, order) => ({ value, order }))
     .sort((a, b) => rank(a.value) - rank(b.value) || a.order - b.order)
     .map((one) => one.value);
-  const shown = listed.slice(0, MODELS_NAMED);
+  const { shown } = firstNames(listed);
   const refusal = spawnWords.unlistedModel.words(
     name,
     machine,

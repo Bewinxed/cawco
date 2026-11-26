@@ -17,6 +17,7 @@ import {
   unmanagedWords,
 } from "@cawco/core/binary-updates";
 import type { CawStatus } from "@cawco/core/project-conversation";
+import { shortSha } from "@cawco/core/short-id";
 import { MINUTE_MS } from "@cawco/core/time";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { spawnWords } from "@cawco/core/words/spawn";
@@ -76,6 +77,7 @@ export interface ReleaseNotes {
 }
 
 /** Bullets the summary holds at most. */
+// @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
 const SUMMARY_ITEMS = 3;
 
 /**
@@ -436,7 +438,7 @@ export function runningOf(machine: UpdateMachine): string {
   if (machine.binaryUpdate && machine.binaryUpdate.unmanaged !== "source") {
     return displayVersion(machine.binaryUpdate.installedVersion);
   }
-  return machine.build?.commit ? machine.build.commit.slice(0, 7) : "—";
+  return machine.build?.commit ? shortSha(machine.build.commit) : "—";
 }
 
 /** Machines waiting on the operator: a failed update, a sessiond kept from its restart, or (auto-update off) one to install. */
@@ -765,6 +767,7 @@ function installing({ input, machines, name }: Ctx): Notice | null {
       text: `${done} of ${inSet.length} machines done`,
     });
   }
+  // @limit external: a sentence names three things and counts the rest, four chunks, what working memory holds (Cowan 2001, https://doi.org/10.1017/S0140525X01003922)
   if (inSet.length <= 3) {
     lines.push(...inSet.map((m) => installLine(m, name(m))));
   }

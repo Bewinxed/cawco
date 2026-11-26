@@ -11,6 +11,8 @@
  * mark stands down. The mark is set here, synchronously, before the
  * document holds any frame, so a frame never misses its parent's.
  */
+
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { hold, isHeld } from "./hold";
 
 /** What a document's overlay answers its frames' overlays, under {@link MARK}. */
@@ -32,6 +34,7 @@ type Marked = Window & { [MARK]?: OverlayMark };
 /** The queries {@link watchMedia} heard, the first {@link MEDIA_MOST}. */
 const asked = new Set<string>();
 /** The most queries kept: a page asks a few, each again and again. Our call. */
+// @limit recording: overlay.media-queries until 2026-12-10
 const MEDIA_MOST = 200;
 
 export const mark: OverlayMark = {
@@ -72,6 +75,11 @@ export function parentMark(): OverlayMark | null {
 export function watchMedia(): void {
   const original = window.matchMedia;
   window.matchMedia = (query: string) => {
+    // How many queries the page has asked, this one counted.
+    recordLimitReading(
+      "overlay.media-queries",
+      asked.size + (asked.has(query) ? 0 : 1)
+    );
     if (asked.size < MEDIA_MOST) {
       asked.add(query);
     }

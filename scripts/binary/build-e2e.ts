@@ -53,6 +53,7 @@ const run = async (argv: string[], cwd?: string) => {
   }
 };
 const exists = (path: string) => Bun.file(path).exists();
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the inputs of the builds one machine caches, so two collide after about 2^32 names
 const hash = (text: string) =>
   new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16);
 /** A finished build put in the cache whole, by rename, so a run stopped mid-build leaves no half file there. */
@@ -93,6 +94,7 @@ const builds = [
   ["2", "0.0.1-test.2", "2222222222222222222222222222222222222222"],
   ["3", "0.0.1-test.3", "3333333333333333333333333333333333333333"],
 ] as const;
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the inputs of the builds one machine caches, so two collide after about 2^32 names
 const keptDir = inputs
   ? join(cache, "builds", `${inputs.slice(0, 16)}-${keyId}`)
   : undefined;

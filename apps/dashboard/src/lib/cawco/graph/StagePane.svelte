@@ -91,6 +91,7 @@
   } = $props();
 
   /** The most lines of differences the stage's head names; the rest are counted. */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const LINES_SHOWN = 12;
   /** The panel's own width less its field's: its edge. */
   let edge = $state(-1);

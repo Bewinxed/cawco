@@ -29,9 +29,9 @@ import {
   type StoryOp,
 } from "@cawco/core/stage";
 import { type NamedStory, shownName } from "@cawco/core/stage-graph";
-import { cutShort } from "@cawco/core/words/helpers";
 import { storyReadWords as reasons } from "@cawco/core/words/story-read";
 import { Schema } from "effect";
+import { derivedName } from "@cawco/providers/derived-name";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {
@@ -188,19 +188,21 @@ function scopeOf(body: Node[]): Scope {
 /** An expression followed through the helper parameters and locals it names, to what they were given. */
 function deref(at: Bound): Bound {
   let now = at;
-  for (let hops = 0; hops < MAX_DEPTH; hops += 1) {
+  const seen = new Set<Node>([at.node]);
+  for (;;) {
     const name = identifier(now.node);
     const next = name ? now.env.get(name) : undefined;
-    if (!next) {
+    if (!next || seen.has(next.node)) {
       return now;
     }
+    seen.add(next.node);
     now = next;
   }
-  return now;
 }
 
-/** How many spreads, names and calls deep the reader follows a story before it gives up. */
-const MAX_DEPTH = 12;
+/** The expressions a read is following, outermost first: one met again is a story that goes round on itself. */
+type Following = ReadonlySet<Node>;
+const NOTHING_FOLLOWED: Following = new Set();
 
 /** Whether an expression is a literal the inspector writes: its value, else undefined. A helper's parameter reads as what its call gave it. */
 function literal(
@@ -321,26 +323,27 @@ function flatten(
   reading: Reading,
   at: Bound,
   via: Node | null = null,
-  depth = 0
+  following: Following = NOTHING_FOLLOWED
 ): Flat {
   const { node, env } = deref(at);
   const expr = bare(node);
   if (!expr) {
     return { why: reasons.noValue };
   }
-  if (depth > MAX_DEPTH) {
+  if (following.has(expr)) {
     return {
       why: reasons.tooDeep(codeOf(reading, expr)),
     };
   }
+  const inside = new Set(following).add(expr);
   switch (expr.type) {
     case "ObjectExpression":
-      return flattenObject(reading, expr, env, via, depth);
+      return flattenObject(reading, expr, env, via, inside);
     case "Identifier": {
       const name = textOf(expr, "name") ?? "";
       const declared = reading.scope.get(name);
       return declared && declared.type !== "FunctionDeclaration"
-        ? flatten(reading, { node: declared, env: NO_ENV }, via, depth + 1)
+        ? flatten(reading, { node: declared, env: NO_ENV }, via, inside)
         : { why: elsewhere(reading, name) };
     }
     case "MemberExpression": {
@@ -349,22 +352,17 @@ function flatten(
       if (!(key && object)) {
         return { why: reasons.computed(codeOf(reading, expr)) };
       }
-      const flat = flatten(reading, { node: object, env }, via, depth + 1);
+      const flat = flatten(reading, { node: object, env }, via, inside);
       if ("why" in flat) {
         return flat;
       }
       const entry = flat.entries.findLast((one) => one.key === key);
       return entry
-        ? flatten(
-            reading,
-            { node: entry.value, env: entry.env },
-            via,
-            depth + 1
-          )
+        ? flatten(reading, { node: entry.value, env: entry.env }, via, inside)
         : { why: reasons.noSuchKey(codeOf(reading, expr)) };
     }
     case "CallExpression":
-      return flattenCall(reading, expr, env, via, depth);
+      return flattenCall(reading, expr, env, via, inside);
     default:
       return {
         why: reasons.notAnObject(codeOf(reading, expr)),
@@ -377,7 +375,7 @@ function flattenObject(
   object: Node,
   env: Env,
   via: Node | null,
-  depth: number
+  following: Following
 ): Flat {
   const entries: Entry[] = [];
   for (const property of children(object, "properties")) {
@@ -386,7 +384,7 @@ function flattenObject(
         reading,
         { node: child(property, "argument") ?? property, env },
         via ?? property,
-        depth + 1
+        following
       );
       if ("why" in flat) {
         return flat;
@@ -414,7 +412,7 @@ function flattenCall(
   call: Node,
   env: Env,
   via: Node | null,
-  depth: number
+  following: Following
 ): Flat {
   const said = sourceOf(reading.text, call);
   const name = identifier(child(call, "callee"));
@@ -438,11 +436,11 @@ function flattenCall(
   }
   const body = child(fn, "body");
   if (body && body.type !== "BlockStatement") {
-    return flatten(reading, { node: body, env: inner }, via, depth + 1);
+    return flatten(reading, { node: body, env: inner }, via, following);
   }
   const returned = returnedBy(children(body ?? { type: "" }, "body"), inner);
   return returned
-    ? flatten(reading, { node: returned, env: inner }, via, depth + 1)
+    ? flatten(reading, { node: returned, env: inner }, via, following)
     : { why: reasons.doesMore(name) };
 }
 
@@ -520,7 +518,7 @@ function argsOf(
         { type: "ObjectExpression", properties: [property] },
         found.env,
         null,
-        0
+        NOTHING_FOLLOWED
       );
       if ("why" in one) {
         const source = sourceOf(reading.text, property);
@@ -714,12 +712,9 @@ function labelOf(text: string, statement: Node): string | null {
     next = comment.start ?? 0;
   }
   const words = run.map(commentWords).filter(Boolean).join(" ");
-  return words ? cutShort(words, LABEL_LIMIT) : null;
+  return words ? derivedName(words) : null;
 }
 const BLANK_BETWEEN = /\n[ \t]*\n/u;
-/** A label's longest. Ours: a frame's caption, one line. */
-const LABEL_LIMIT = 160;
-
 /** The shapes of a word of code in a label: a backticked span, `snake_case`, `camelCase`, `key=value`, a call `name()`. */
 const CODE_WORDS = [
   /`[^`]*[A-Za-z_][^`]*`/u,
@@ -838,7 +833,7 @@ function lastViewport(
 function constOf(
   reading: Reading,
   at: Bound,
-  depth = 0
+  following: Following = NOTHING_FOLLOWED
 ): { value: unknown } | { why: string } {
   const found = deref(at);
   const name = identifier(found.node);
@@ -847,9 +842,13 @@ function constOf(
     if (!declared || declared.type === "FunctionDeclaration") {
       return { why: elsewhere(reading, name) };
     }
-    return depth > MAX_DEPTH
+    return following.has(declared)
       ? { why: reasons.tooDeep(name) }
-      : constOf(reading, { node: declared, env: NO_ENV }, depth + 1);
+      : constOf(
+          reading,
+          { node: declared, env: NO_ENV },
+          new Set(following).add(declared)
+        );
   }
   return (
     literal(found.node, found.env) ?? {
@@ -1123,11 +1122,11 @@ function drawnOf(
   reading: Reading,
   at: Bound,
   drop: ReadonlySet<string> = new Set(),
-  depth = 0
+  following: Following = NOTHING_FOLLOWED
 ): string | null {
   const found = deref(at);
   const expr = bare(found.node);
-  if (!expr || depth > MAX_DEPTH) {
+  if (!expr || following.has(expr)) {
     return null;
   }
   const flat =
@@ -1145,7 +1144,7 @@ function drawnOf(
             reading,
             { node: one.value, env: one.env },
             new Set(),
-            depth + 1
+            new Set(following).add(expr)
           )
     );
     return said === null ? null : `{${said.join(",")}}`;

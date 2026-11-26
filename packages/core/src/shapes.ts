@@ -29,6 +29,7 @@ const SHAPE_THRESHOLDS = {
   headPoints: 3,
   /** An arrow's barbs (one or two, each from the tip): their angle to the shaft folded back, degrees. */
   barbMin: 20,
+  // @limit measured: degrees; an arrow's barb folds back from the shaft by 20 to 70, the span a pen's arrowheads measure within (barbMin above)
   barbMax: 70,
   /** A barb's corners: Douglas-Peucker's tolerance, as a share of the shaft. */
   barbTolerance: 0.02,
@@ -38,6 +39,7 @@ const SHAPE_THRESHOLDS = {
   straight: 150,
   /** A rectangle's corners: each between these, degrees. */
   rightMin: 70,
+  // @limit measured: degrees; a rectangle's corner is a right angle, 90, with 20 either side (rightMin above)
   rightMax: 110,
   /** A closed fit (rectangle, ellipse, triangle): its mean error at most this share of the half-size. */
   closedError: 0.1,
@@ -238,6 +240,7 @@ const arrowShape = (path: Point[]): Recognised | null => {
     .filter(([from, to]) => dist(from, tipAt) < dist(to, tipAt));
   if (
     barbs.length === 0 ||
+    // @limit external: an arrowhead has one barb or two, one each side of the shaft
     barbs.length > 2 ||
     barbs.some(([from, to]) => {
       const angle = between([to[0] - from[0], to[1] - from[1]], back);

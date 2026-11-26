@@ -8,14 +8,15 @@
  *
  * IndexedDB rather than localStorage because the attachments are binary and
  * large: images are stored as Blobs, not as base64 strings in a 5 MB string
- * store. The whole database is held under {@link CAP_BYTES}; past it, the
- * drafts edited longest ago are dropped until it fits, never the one being
- * written.
+ * store. The browser's own quota holds the database: a write it refuses
+ * (`QuotaExceededError`) drops the draft edited longest ago and is tried
+ * again, never dropping the one being written, and each dropped draft is
+ * named to the person.
  */
 
 import { isImageMediaType } from "@cawco/core/attachments";
-import { cutShort } from "@cawco/core/words/helpers";
 import { transcriptWords } from "@cawco/core/words/transcript";
+import { quote } from "@cawco/providers/quote";
 import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "#lib/platform/id.js";
 import { toast } from "#lib/platform/toasts.js";
@@ -36,9 +37,6 @@ export type StoredFile = Pick<
   blob?: Blob;
 };
 
-/** The most the stored drafts may weigh together, in bytes. */
-const CAP_BYTES = 50 * 1024 * 1024;
-
 export interface DraftRecord {
   /** The canvas the message carries; absent on a record stored before canvases. */
   canvas?: DraftCanvas | null;
@@ -46,7 +44,7 @@ export interface DraftRecord {
   files?: StoredFile[];
   images: { blob: Blob; mediaType: string; name: string }[];
   sessionId: string;
-  /** What the record weighs, for the cap: blob bytes plus two per character. */
+  /** What the record weighs: blob bytes plus two per character. */
   size: number;
   text: string;
   texts: PendingText[];
@@ -124,20 +122,46 @@ const isEmpty = (draft: DraftContent) =>
     draft.files.length
   );
 
+/** Whether `error` is the browser refusing a write for want of room. */
+const outOfRoom = (error: unknown): boolean =>
+  error instanceof DOMException && error.name === "QuotaExceededError";
+
+/** The draft of the conversation edited longest ago, other than `keep`'s, dropped; null when there is none. */
+async function dropOldest(
+  db: IDBDatabase,
+  keep: string
+): Promise<DraftRecord | null> {
+  const transaction = db.transaction(STORE, "readwrite");
+  const finished = done(transaction);
+  const store = transaction.objectStore(STORE);
+  const [oldest] = (await result(store.getAll()))
+    .flatMap((one: unknown) => {
+      const read = DraftRecordSchema.safeParse(one);
+      return read.success && read.data.sessionId !== keep ? [read.data] : [];
+    })
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+  if (oldest) {
+    store.delete(oldest.sessionId);
+  }
+  await finished;
+  return oldest ?? null;
+}
+
 /**
  * Stores a conversation's draft, or drops its record when the draft is
- * empty, then holds the database under the cap.
+ * empty. A write the browser refuses for want of room drops the oldest
+ * other draft and is tried again, until it is kept or no other draft is left
+ * to drop.
  */
 export async function saveDraft(
   sessionId: string,
   draft: DraftContent
 ): Promise<void> {
   const db = await database();
-  const transaction = db.transaction(STORE, "readwrite");
-  const finished = done(transaction);
-  const store = transaction.objectStore(STORE);
   if (isEmpty(draft)) {
-    store.delete(sessionId);
+    const transaction = db.transaction(STORE, "readwrite");
+    const finished = done(transaction);
+    transaction.objectStore(STORE).delete(sessionId);
     return finished;
   }
   const images = draft.images.map((image) => ({
@@ -178,27 +202,28 @@ export async function saveDraft(
     size,
     updatedAt: Date.now(),
   };
-  store.put(record);
-  // Over the cap, the drafts edited longest ago go first; never this one.
-  const all = (await result(store.getAll())).flatMap((one: unknown) => {
-    const read = DraftRecordSchema.safeParse(one);
-    return read.success ? [read.data] : [];
-  });
-  let total = all.reduce((sum, each) => sum + each.size, 0);
   const dropped: DraftRecord[] = [];
-  for (const old of all
-    .filter((each) => each.sessionId !== sessionId)
-    .sort((a, b) => a.updatedAt - b.updatedAt)) {
-    if (total <= CAP_BYTES) {
+  for (;;) {
+    const transaction = db.transaction(STORE, "readwrite");
+    const finished = done(transaction);
+    transaction.objectStore(STORE).put(record);
+    try {
+      await finished;
       break;
+    } catch (error) {
+      // The request's error may reach the transaction's handler before the abort that carries the cause.
+      const old =
+        outOfRoom(error) || outOfRoom(transaction.error)
+          ? await dropOldest(db, sessionId)
+          : null;
+      if (!old) {
+        throw error;
+      }
+      dropped.push(old);
     }
-    store.delete(old.sessionId);
-    total -= old.size;
-    dropped.push(old);
   }
-  await finished;
   for (const old of dropped) {
-    const first = cutShort(old.text.trim(), 60);
+    const first = quote(old.text);
     toast.info(
       transcriptWords.draftDropped(
         first ? `"${first}"` : "a draft with attachments and no words"

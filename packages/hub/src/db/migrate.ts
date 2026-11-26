@@ -7,6 +7,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   appliedRows,
   type JournalEntry,
@@ -698,7 +699,9 @@ const applyPending = (
       hubDatabaseWords.missingAfterApply(path, missing, tags, behind)
     );
   }
+  recordLimitReading("hub.migrations-applied", tags.length);
   console.info(
+    // @limit recording: hub.migrations-applied until 2026-12-03
     `[migrations] applied ${tags.length <= 5 ? tags.join(", ") : `${tags.length} migrations, ${tags[0]} to ${tags.at(-1)}`} in ${((performance.now() - began) / 1000).toFixed(1)} s`
   );
   for (const line of behind) {

@@ -68,11 +68,7 @@ import type {
 import type { TriggerEvent } from "./trigger-event";
 import type { Routed as TriggerRouted } from "./triggers";
 
-import {
-  SESSION_TITLE_MAX,
-  type WorkItemRequest,
-  type WorkItems,
-} from "./work-items";
+import type { WorkItemRequest, WorkItems } from "./work-items";
 
 /** A page's cards as a brief reads them: the page, the cards to settle, all its cards and its picks. */
 export interface PageCards {
@@ -527,10 +523,7 @@ export const createSettling = (deps: SettlingDeps) => {
         pages,
         true
       ),
-      title:
-        title.length > SESSION_TITLE_MAX
-          ? `${title.slice(0, SESSION_TITLE_MAX - 1)}…`
-          : title,
+      title,
       type: member.delegateType,
       lands: "none",
       settlesCards: true,

@@ -20,10 +20,12 @@ import {
   COMPACTION_ORIGIN,
   CONTINUATION_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import { doing } from "@cawco/core/loop-watch";
 import type { ContinuationJob, NamedSpawn } from "@cawco/core/protocol";
 import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
+import { shortId } from "@cawco/core/short-id";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { CONTINUATION_ASKER_UNREAD } from "@cawco/core/words/relaunch";
 import { Effect, Latch } from "effect";
@@ -62,6 +64,7 @@ import { unwatchedMode } from "./unwatched-mode";
  * five minutes lets a dashboard that was reconnecting when it settled still
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
+// @limit recording: hub.continuation-settled-read-age-ms until 2026-12-10
 const CONTINUATION_KEPT_MS = 5 * 60_000;
 
 /**
@@ -822,7 +825,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     let row = ctx.db.continuationRow(id);
     if (row) {
       doing(
-        `continuation ${id.slice(0, 8)} of ${row.prepared.source.title} at ${row.stage}`
+        `continuation ${shortId(id)} of ${row.prepared.source.title} at ${row.stage}`
       );
     }
     if (row?.stage === "waiting") {
@@ -1023,7 +1026,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return;
     }
     console.warn(
-      `[continuation] ${row.prepared.source.title}'s new session ${row.targetInstanceId.slice(0, 8)} is removed: nothing of ${row.prepared.source.title} moved to it, and it goes on where it was.`
+      `[continuation] ${row.prepared.source.title}'s new session ${shortId(row.targetInstanceId)} is removed: nothing of ${row.prepared.source.title} moved to it, and it goes on where it was.`
     );
     ctx.lifecycle.oweEndSession(target.id, "delete");
     ctx.forgetPending(target.id, UNREAD.stopped);
@@ -1311,7 +1314,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return "its project's folder moving";
     }
     const [asker] = ctx.db.getInstancesByIds([by.id]);
-    return asker ? ctx.sessionName(asker) : `session ${by.id.slice(0, 8)}`;
+    return asker ? ctx.sessionName(asker) : `session ${shortId(by.id)}`;
   };
 
   /**
@@ -1408,7 +1411,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ctx.lifecycle.oweEndSession(from, "delete");
     }
     console.info(
-      `[continuation] ${ctx.sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(askerOf(job))}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
+      `[continuation] ${ctx.sessionName(source)} (${shortId(from)}) goes on as ${shortId(to)}, one session, asked by ${askerWords(askerOf(job))}: ${shortId(from)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
     );
   };
 
@@ -1453,12 +1456,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     ctx.owedMoves.delete(from);
     const live = !["stopped", "discarded"].includes(row.status);
     console.info(
-      `[continuation] ${ctx.sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
+      `[continuation] ${ctx.sessionName(row)} (${shortId(from)}) was continued in ${shortId(to)}, which carries its work on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${shortId(to)}.`
     );
     if (live) {
       ctx.endSession(from, "stop", {
         kind: "hub",
-        why: `it was continued in ${to.slice(0, 8)}`,
+        why: `it was continued in ${shortId(to)}`,
       });
     }
   };
@@ -1605,6 +1608,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     ctx.lifetime.run(
       Effect.gen(function* () {
         let row = ctx.db.continuationRow(id);
+        if (row && SETTLED.has(row.stage)) {
+          // A reader that came after the job settled: how long after.
+          recordLimitReading(
+            "hub.continuation-settled-read-age-ms",
+            Date.now() - row.updatedAt.getTime()
+          );
+        }
         while (row && !SETTLED.has(row.stage)) {
           let settles = continuationWaiters.get(id);
           if (!settles) {

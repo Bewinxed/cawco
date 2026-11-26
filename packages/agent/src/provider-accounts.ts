@@ -49,6 +49,7 @@ import {
   opencodeAccountHome,
   opencodeDataDir,
 } from "@cawco/core/paths/harnesses";
+import { keyTail } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -505,9 +506,10 @@ const providerIdentity = (
 ): AccountIdentity => ({ email, organization, orgId: organization });
 
 /** A key as an identity: its last four characters, and a fingerprint of it. */
+// @limit measured: 16 hex characters are 64 bits of SHA-256; the keys one machine holds, so two collide after about 2^32 names
 const keyIdentity = (key: string): AccountIdentity =>
   providerIdentity(
-    `…${key.slice(-4)}`,
+    `…${keyTail(key)}`,
     `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`
   );
 
@@ -1313,6 +1315,7 @@ export const homeStoresStamp = async (): Promise<string | undefined> => {
     }
     ownRowsRead = { rows: own.value, stamp };
   }
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the provider accounts one machine holds, so two collide after about 2^32 names
   return createHash("sha256")
     .update(pi)
     .update("\u0000")

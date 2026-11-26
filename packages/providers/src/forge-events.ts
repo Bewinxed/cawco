@@ -6,6 +6,7 @@
  * webhook and its write name one change alike.
  */
 import { Effect } from "effect";
+import { CONNECTOR_MIN_S } from "./connection/descriptor";
 import { eventKeys } from "./event-keys";
 import type {
   ExternalActor,
@@ -126,8 +127,8 @@ export interface SinceCursor {
   since: number;
 }
 
-/** A forge every 60 s, as GitHub (Projects spec §5.5). */
-const EVERY_MS = 60_000;
+/** A forge every poll of the one loop, as GitHub (Projects spec §5.5). */
+const EVERY_MS = CONNECTOR_MIN_S * 1000;
 
 /** One stream read from its cursor: what a forge's ingest polls. */
 interface StreamRead<Client> {

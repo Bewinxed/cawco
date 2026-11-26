@@ -37,10 +37,10 @@ import {
 } from "@cawco/core/harness/modes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
+import { shortId } from "@cawco/core/short-id";
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { externalItemWords } from "@cawco/core/words/external-items";
-import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { CONNECTOR_MIN_S } from "@cawco/providers/connection/descriptor";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -100,7 +100,6 @@ const SYNCED_TRIGGERS: ReadonlySet<string> = new Set([
  * And how long the regex may be.
  */
 const MATCH_TEXT_MAX = PAYLOAD_MAX;
-const REGEX_MAX = 200;
 /** Events an ingress view lists a page of; `eventsMore` counts the older ones, which `skip` reaches. */
 const EVENTS_SHOWN = 50;
 
@@ -138,9 +137,6 @@ const same = (a: string | null, b: string | null) =>
  * them is refused with RE2's own words.
  */
 const regexProblem = (regex: string): string | undefined => {
-  if (regex.length > REGEX_MAX) {
-    return routineToolWords.regexOver(REGEX_MAX);
-  }
   try {
     re2(regex);
     return undefined;
@@ -325,6 +321,7 @@ const conditions = {
 
 const pollFields = {
   args: z.record(z.string(), z.unknown()).optional(),
+  // @limit measured: a connector poll is due no sooner than the one poll loop's 60 s period (CONNECTOR_MIN_S, providers connection/descriptor.ts)
   interval_s: z.number().int().min(CONNECTOR_MIN_S),
   items_path: z
     .string()
@@ -946,7 +943,7 @@ export const createEventRoutes = ({
             store.routes(projectId),
             {
               id: (one) => one.id,
-              said: (one) => `${one.source} ${one.id.slice(0, 8)}`,
+              said: (one) => `${one.source} ${shortId(one.id)}`,
             },
             "event route"
           ).id;
@@ -962,7 +959,7 @@ export const createEventRoutes = ({
             {
               id: (poll) => poll.id,
               said: (poll) =>
-                `${poll.connection}:${poll.tool} ${poll.id.slice(0, 8)}`,
+                `${poll.connection}:${poll.tool} ${shortId(poll.id)}`,
             },
             "connector poll"
           ).id;
@@ -1117,6 +1114,7 @@ const ROUTE_FIELDS = {
 
 const POLL_FIELDS = {
   args: t.Optional(t.Record(t.String(), t.Unknown())),
+  // @limit measured: a connector poll is due no sooner than the one poll loop's 60 s period (CONNECTOR_MIN_S, providers connection/descriptor.ts)
   intervalS: t.Integer({ minimum: CONNECTOR_MIN_S }),
   itemsPath: t.Optional(t.String()),
   idPath: t.String(),

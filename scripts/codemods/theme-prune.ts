@@ -228,6 +228,7 @@ const NAMESPACES = new Set([
 ]);
 const namespaceOf = (name: string) => {
   const parts = name.slice(2).split("-");
+  // @limit external: Tailwind v4 theme variables (tailwindcss.com/docs/theme): the first one or two dash-separated parts of a name are its namespace (`--color-`, `--font-weight-`)
   return (
     [parts.slice(0, 2).join("-"), parts[0] as string].find((p) =>
       NAMESPACES.has(p)

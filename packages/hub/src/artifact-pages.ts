@@ -524,6 +524,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
   };
 
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
+  // @limit measured: the largest update of a canvas artifact is 572 KiB, an upper bound for one image (artifact_updates on obelisk, 2026-11-26)
   const IMAGE_LIMIT = 2 * 1024 * 1024;
 
   /** Why an Image's file wasn't read: its machine (`machine`, null for the session's own) not connected or not answering. */

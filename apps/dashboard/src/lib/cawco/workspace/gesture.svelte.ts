@@ -35,9 +35,11 @@
 
 import { flushSync } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import {
   integrate,
   spring as play,
+  Release,
   type Sample,
 } from "#lib/platform/motion/spring.js";
 import { catchSettle, gatherParked, type Parked, settleAt } from "./parked";
@@ -51,9 +53,8 @@ const SLOPE = 0.7;
 const COMMIT = 0.3;
 /** A flick: short but fast still counts, in px/ms. */
 const FLICK = 0.3;
-/** How much of a drag past the last tab is shown, and the most it can show. The deck's. */
+/** How much of a drag past the last tab is shown (the most it can show is --resist-max). The deck's. */
 const RESIST = 0.35;
-const RESIST_MAX = 0.25;
 
 type Phase = "idle" | "tracking" | "decided";
 /** A pane in view: its element and its distance from the active tab. */
@@ -149,7 +150,8 @@ export function createSwipe(
   let startY = 0;
   /** Where the active pane was when the finger took hold — mid-settle, not 0. */
   let base = 0;
-  let samples: Array<{ x: number; t: number }> = [];
+  /** Where the finger was drawn, for the speed it lets go at. */
+  const hand = new Release();
   /** The panes in view, gathered at claim and again after a tab flip. */
   let panes: Pane[] = [];
   /** The settle in flight: its path and the animations playing it. */
@@ -205,7 +207,8 @@ export function createSwipe(
   };
 
   const resist = (d: number) =>
-    Math.sign(d) * Math.min(Math.abs(d) * RESIST, width * RESIST_MAX);
+    Math.sign(d) *
+    Math.min(Math.abs(d) * RESIST, width * numberOf("--resist-max"));
 
   const stopFollow = () => {
     if (followFrame !== null) {
@@ -317,17 +320,8 @@ export function createSwipe(
     stop: stopSettle,
   });
 
-  /** Release velocity in px/ms, from the last few samples. */
-  const releaseVelocity = () => {
-    if (samples.length < 2) {
-      return 0;
-    }
-    const [first] = samples;
-    // biome-ignore lint/style/useAtIndex: samples has >= 2 elements here (checked above); .at(-1) would widen to undefined
-    const last = samples[samples.length - 1];
-    const dt = last.t - first.t;
-    return dt > 0 ? (last.x - first.x) / dt : 0;
-  };
+  /** Release velocity in px/ms, from the finger's last 80 ms (`Release`). */
+  const releaseVelocity = () => hand.velocity();
 
   function release(allowed: boolean) {
     const velocity = releaseVelocity();
@@ -567,7 +561,8 @@ export function createSwipe(
         const [touch] = event.touches;
         startX = touch.clientX;
         startY = touch.clientY;
-        samples = [{ x: touch.clientX, t: performance.now() }];
+        hand.clear();
+        hand.push(touch.clientX, performance.now());
         phase = "tracking";
         caught.hold();
       };
@@ -585,10 +580,7 @@ export function createSwipe(
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;
 
-        samples.push({ x: touch.clientX, t: performance.now() });
-        if (samples.length > 5) {
-          samples.shift();
-        }
+        hand.push(touch.clientX, performance.now());
 
         const { prev, next } = neighbours();
         if (phase === "tracking") {

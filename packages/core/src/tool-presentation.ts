@@ -14,8 +14,13 @@
  * apps/apple/Packages/CawCoKit/Sources/CawCoTranscript/Generated/ToolPresentation.swift;
  * `bun run tools:check` fails while that file is stale).
  */
+
+import { fitsQuote, QUOTE_CHARS } from "@cawco/providers/quote";
 import { keysOf } from "./keys-of";
+import { recordLimitReading } from "./limit-readings";
 import { lineCounts, linesOf } from "./line-diff";
+import { answerShare, TOOL_ANSWER_CHARS } from "./prompt-budget";
+import { isRegistrableDomain } from "./registrable-domain";
 
 /** Which body an opened call shows; each exists once per client. */
 export type Renderer =
@@ -79,7 +84,7 @@ export interface Piece {
   as?: Transform;
   /** Input fields, in the order they answer it. */
   from: string[];
-  /** Where no field of `from` answers: the longest input string at most {@link PRIMARY_MAX} long. */
+  /** Where no field of `from` answers: the longest input string at most {@link QUOTE_CHARS} long. */
   orShortest?: boolean;
   /** Words written here rather than read from the input. */
   text?: string;
@@ -221,9 +226,9 @@ export const FACTS = keysOf(FACT_SET);
 export const STATUSES = keysOf(STATUS_SET);
 
 /** Past this a line is a payload, not a sentence: it only has to truncate. */
-export const LINE_CAP = 200;
+export const LINE_CAP = answerShare(200);
 /** The most of a result a fields body shows; the rest is counted (`… N more chars`). */
-export const RESULT_CAP = 20_000;
+export const RESULT_CAP = TOOL_ANSWER_CHARS;
 /** A failed call's reason as the sentence it is: Claude Code's tags off. */
 export const REFUSAL_TAGS = "</?tool_use_error>";
 /** An MCP tool's name: `mcp__<server>__<tool>`. */
@@ -238,8 +243,6 @@ export const PRIMARY_FIELDS = [
   "command",
   "description",
 ];
-/** The longest value still read as a name rather than a payload. */
-export const PRIMARY_MAX = 80;
 
 const filePath: Piece = { from: ["file_path", "filePath", "path", "filename"] };
 /** What an unnamed call is about: its first primary field, else its longest short value. */
@@ -725,7 +728,7 @@ function numberedLine(line: string): boolean {
 
 /** Grep's `Found <count> <word>` at a line's start, any case. */
 function foundLine(line: string): [string, string] | undefined {
-  if (line.slice(0, 6).toLowerCase() !== "found ") {
+  if (!line.toLowerCase().startsWith("found ")) {
     return undefined;
   }
   const digits = digitsAt(line, 6);
@@ -761,6 +764,7 @@ function isAddress(host: string): boolean {
     parts.every(
       (part) =>
         part.length >= 1 &&
+        // @limit external: an IPv4 address is written as four decimal octets of 1 to 3 digits (RFC 3986 section 3.2.2, IPv4address and dec-octet)
         part.length <= 3 &&
         digitsAt(part, 0) === part.length
     )
@@ -829,6 +833,7 @@ const readParts = new Map<
 >();
 const readKinds = new Map<string, ToolKind>();
 /** The most names kept; past it the table starts again. */
+// @limit recording: core.tool-names-read until 2026-12-03
 const MOST_NAMES = 4096;
 function remember<Value>(
   table: Map<string, Value>,
@@ -839,6 +844,7 @@ function remember<Value>(
     table.clear();
   }
   table.set(name, value);
+  recordLimitReading("core.tool-names-read", table.size);
 }
 
 /** The sentence a call's row reads as, and the body it opens. */
@@ -948,11 +954,7 @@ function shortest(input: Record<string, unknown>): string | undefined {
   let best: string | undefined;
   for (const value of Object.values(input)) {
     const text = textOf(value);
-    if (
-      text &&
-      text.length <= PRIMARY_MAX &&
-      (!best || text.length > best.length)
-    ) {
+    if (text && fitsQuote(text) && (!best || text.length > best.length)) {
       best = text;
     }
   }
@@ -1318,10 +1320,7 @@ function factOf(
       return total > 0 ? `${total} matches` : undefined;
     }
     case "glob-files": {
-      if (
-        !output ||
-        output.trim().slice(0, 14).toLowerCase() === "no files found"
-      ) {
+      if (!output || output.trim().toLowerCase().startsWith("no files found")) {
         return undefined;
       }
       const files = output.split("\n").filter((line) => line.trim()).length;
@@ -1401,21 +1400,24 @@ export const faviconUrl = (host: string): string | undefined =>
     ? `/api/favicon?host=${encodeURIComponent(host)}`
     : undefined;
 
-const TLD_LABELS = new Set(["ai", "com", "io", "org", "net"]);
-
 /**
  * `mcp__claude_ai_Gmail__…` carries the server's domain with the dots beaten
- * out of it, the only place an MCP tool name says who answers it. Two or
- * three labels ending in a real TLD is a domain; anything else is a name.
+ * out of it, the only place an MCP tool name says who answers it. The
+ * first labels that make a registrable domain are one (the public suffix
+ * list); anything else is a name.
  */
 function mcpServer(server: string): { label: string; host?: string } {
   const parts = server.split(SERVER_SEPARATORS).filter(Boolean);
-  const at =
-    parts.length <= 3
-      ? parts.findIndex(
-          (part, i) => i > 0 && TLD_LABELS.has(part.toLowerCase())
-        )
-      : -1;
+  const at = parts.findIndex(
+    (_, i) =>
+      i > 0 &&
+      isRegistrableDomain(
+        parts
+          .slice(0, i + 1)
+          .join(".")
+          .toLowerCase()
+      )
+  );
   if (at < 1) {
     return { label: parts.join(" ") };
   }

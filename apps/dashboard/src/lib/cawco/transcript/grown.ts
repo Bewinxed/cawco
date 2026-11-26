@@ -45,6 +45,7 @@ import {
   easeDrawer,
   easingOf,
   motionOk,
+  numberOf,
 } from "#lib/platform/motion/curves.svelte.js";
 import { FRAME } from "#lib/platform/motion/edge-cut.js";
 import type { GrowChange } from "#lib/platform/motion/grow-cut.js";
@@ -63,6 +64,7 @@ const DROP_STEPS = 12;
  * to 1169ms (probe-kit ios-safari-motion, queued-edit, 2026-10-23 and
  * 2026-10-25), and a morph on the wall's clock was seen only landed. Our call.
  */
+// @limit measured: three frames at 60 Hz; a longer gap is a stalled tab, not motion
 const FRAME_STEP_MS = 50;
 
 /** The composer's sizes, read once before anything is written. */
@@ -645,11 +647,11 @@ export class GrownShape {
     if (this.#fade) {
       this.#mid.setAttribute(
         "offset",
-        String(Math.min(24, up * 0.25) / height)
+        String(Math.min(numberOf("--grown-fade-mid"), up * 0.25) / height)
       );
       this.#edge.setAttribute(
         "offset",
-        String(Math.min(40, up * 0.4) / height)
+        String(Math.min(numberOf("--grown-fade-edge"), up * 0.4) / height)
       );
     }
     for (const [el, box] of this.#clips) {

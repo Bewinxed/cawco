@@ -11,13 +11,13 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { QUOTE_CHARS } from "@cawco/providers/quote";
 import {
   FACTS,
   LINE_CAP,
   MCP_NAME,
   type Piece,
   PRIMARY_FIELDS,
-  PRIMARY_MAX,
   PROSE_FIELD,
   REFUSAL_TAGS,
   RENDERERS,
@@ -209,7 +209,7 @@ ${enumOf(
 
     static let lineCap = ${LINE_CAP}
     static let resultCap = ${RESULT_CAP}
-    static let primaryMax = ${PRIMARY_MAX}
+    static let primaryMax = ${QUOTE_CHARS}
     static let primaryFields: [String] = ${list(PRIMARY_FIELDS, str)}
     static let refusalTags = ${raw(REFUSAL_TAGS)}
     static let mcpName = ${raw(MCP_NAME)}
@@ -300,10 +300,13 @@ function fingerprint(code: string): string {
     .replace(EXPORT_MODIFIER, "")
     .replace(WHITESPACE, " ")
     .trim();
-  return new Bun.CryptoHasher("sha256")
-    .update(rules)
-    .digest("hex")
-    .slice(0, 16);
+  return (
+    new Bun.CryptoHasher("sha256")
+      .update(rules)
+      .digest("hex")
+      // @limit measured: 16 hex characters are 64 bits of SHA-256; one fingerprint names one version of the rules text, a few hundred over the project's life, so two collide after about 2^32 names
+      .slice(0, 16)
+  );
 }
 
 function interpreters(): { ts: string; swift: string } {

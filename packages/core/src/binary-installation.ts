@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { namedAndMore } from "@cawco/providers/names";
 import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
@@ -253,6 +254,7 @@ const STAGED_PHASES: ReadonlySet<BinaryUpdateState["phase"]> = new Set([
  * installed before it, in `versions/`, in `runtime/` and, on the hub's
  * machine, in the hub's archive cache ({@link hubReleasesDir}).
  */
+// @limit measured: the installed build and the one before it, which a rollback goes to
 const KEPT_INSTALLS = 2;
 
 /**
@@ -264,6 +266,7 @@ const KEPT_INSTALLS = 2;
  * stable's do not sort by when they went on.
  */
 const installOrderPath = (): string => join(binaryRoot(), "install-order.json");
+// @limit measured: the same bound as KEPT_INSTALLS: the installed build and the one before it, which a rollback goes to
 const readInstallOrder = async (): Promise<string[]> =>
   ((await readRecord(installOrderPath(), z.array(z.string()))) ?? []).slice(
     -KEPT_INSTALLS
@@ -282,6 +285,7 @@ export async function recordInstall(
   const before = (await readInstallOrder()).filter(
     (name) => name !== version && name !== previous
   );
+  // @limit measured: the same bound as KEPT_INSTALLS: the installed build and the one before it, which a rollback goes to
   await writeJsonAtomic(
     installOrderPath(),
     [...before, ...(previous ? [previous] : []), version].slice(-KEPT_INSTALLS)
@@ -435,9 +439,6 @@ export async function prune(): Promise<PruneReport> {
   return { keptBytes, places, removedBytes };
 }
 
-/** How many build names a {@link pruneLine} spells out on each side before it counts the rest. */
-const NAMED_BUILDS = 8;
-
 /**
  * A prune's journal line: on each side the folders by place (runtime/,
  * versions/, binary-releases/, always in that order), their bytes, and the
@@ -463,15 +464,10 @@ export const pruneLine = (report: PruneReport): string => {
       return `${pick} nothing`;
     }
     const builds = [...new Set(counted.flatMap((place) => place[pick]))].sort();
-    const named = builds.slice(0, NAMED_BUILDS).join(", ");
-    const more =
-      builds.length > NAMED_BUILDS
-        ? ` and ${builds.length - NAMED_BUILDS} more`
-        : "";
     const where = counted
       .map((place) => `${basename(place.dir)}/ ${place[pick].length}`)
       .join(", ");
-    return `${pick} ${folders} folder${folders === 1 ? "" : "s"} (${where}) of ${builds.length} build${builds.length === 1 ? "" : "s"}, ${sizeWords(bytes)}: ${named}${more}`;
+    return `${pick} ${folders} folder${folders === 1 ? "" : "s"} (${where}) of ${builds.length} build${builds.length === 1 ? "" : "s"}, ${sizeWords(bytes)}: ${namedAndMore(builds)}`;
   };
   return `${said("removed", report.removedBytes)}; ${said("kept", report.keptBytes)}`;
 };

@@ -120,6 +120,7 @@ export const reattachable = (
  * been a fork bomb wearing a recovery hat. Everything past the cap settles as
  * `sleeping`, which is a wake button away.
  */
+// @limit recording: hub.restore-candidates until 2026-12-03
 export const RESTORE_MAX = 20;
 
 /**

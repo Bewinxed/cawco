@@ -8,6 +8,8 @@
  * it.
  */
 import type { Database } from "bun:sqlite";
+import { quote } from "@cawco/providers/quote";
+import { shown } from "./json-reads";
 
 const type = (path: string): string => `json_type(landed, '${path}')`;
 const value = (path: string): string => `json_extract(landed, '${path}')`;
@@ -90,12 +92,9 @@ const why = (row: Row): string => {
     }
     return bad === "missing"
       ? [`${field.key} is missing`]
-      : [`${field.key} is ${bad.slice(0, 80)}, not ${field.wants}`];
+      : [`${field.key} is ${quote(bad)}, not ${field.wants}`];
   }).join("; ");
 };
-
-/** A value as the log shows it: cut short, on one line. */
-const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Every work item whose stored landing does not read, oldest first. */
 const unreadLandings = (client: Database): Row[] =>

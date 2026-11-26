@@ -100,6 +100,7 @@
    * mounts, and read where they stand (`reread`): none of them is taken for
    * an arrival to animate.
    */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   const FIRST_CARDS = 16;
   let whole = $state(false);
   let list = $state<HTMLElement>();

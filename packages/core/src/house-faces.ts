@@ -371,6 +371,7 @@ async function cutPiece(
     cut,
     range: pairsOf(points),
     bytes,
+    // @limit measured: 16 hex characters are 64 bits of SHA-256; one name per font file the dashboard ships, so two collide after about 2^32 names
     name: `face-${hash.slice(0, 16)}.woff2`,
   };
 }

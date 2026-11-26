@@ -61,6 +61,7 @@ import {
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
 import { makeLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type { OwnTools } from "@cawco/core/own-tools";
 import {
   claudeHomeJson,
@@ -135,6 +136,11 @@ import {
   removeTree,
 } from "./tree-swap";
 import { cloneHolding } from "./workspace-records";
+
+/** A plugin's or a file's revision as a message names it: the first 7 hex characters of its digest. */
+const revisionOf = (hash: string): string =>
+  // @limit measured: 7 hex characters are 28 bits of SHA-256; a revision is named in a message, never looked up, so two collide after about 2^14 revisions
+  hash.slice(0, 7);
 
 /**
  * User-scope MCP servers live at the top level of this file — not in
@@ -252,6 +258,7 @@ const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
 const LOCAL_CLAUDE = userLayerPath("local", "claude");
 
 /** How long one `claude plugin …` gets: a first clone of a marketplace is slow. */
+// @limit recording: agent.fleet-cli-ms until 2026-12-26
 const CLI_TIMEOUT_MS = 120_000;
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
@@ -814,26 +821,30 @@ const CLAUDE_ELSEWHERE = [
  * worth holding the report open for. A probe that times out reports the path
  * with no version, which is still the fact that matters.
  */
+// @limit recording: agent.fleet-version-ms until 2026-12-10
 const VERSION_TIMEOUT_MS = 5000;
 
 /** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
   let read: Bounded<string | undefined>;
   try {
-    read = await readWithin(VERSION_TIMEOUT_MS, async (signal) => {
-      const child = Bun.spawn([path, "--version"], {
-        env: toolEnv(),
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-      });
-      const [out, err] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      await child.exited;
-      return versionSaid(`${out}${err}`);
-    });
+    read = await timed(
+      readWithin(VERSION_TIMEOUT_MS, async (signal) => {
+        const child = Bun.spawn([path, "--version"], {
+          env: toolEnv(),
+          stdout: "pipe",
+          stderr: "pipe",
+          signal,
+        });
+        const [out, err] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ]);
+        await child.exited;
+        return versionSaid(`${out}${err}`);
+      }),
+      (ms) => recordLimitReading("agent.fleet-version-ms", ms)
+    );
   } catch {
     return undefined;
   }
@@ -936,31 +947,38 @@ const runClaude = async (
   args: string[],
   cwd?: string
 ): Promise<Ran> => {
-  const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
-    const child = Bun.spawn([bin, ...args], {
-      // A project or local scope is the project the command runs in.
-      ...(cwd ? { cwd } : {}),
-      // `$HOME/.claude`, the dir every path in this file names, whatever
-      // config dir the daemon itself was started in.
-      env: claudeHomeEnv(),
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [stdout, stderr] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    const code = await child.exited;
-    if (child.signalCode) {
-      return { code: null, output: `was ended by ${child.signalCode}`, stdout };
-    }
-    return {
-      code,
-      output: tail(stderr) || tail(stdout) || `exited ${code}`,
-      stdout,
-    };
-  });
+  const ran = await timed(
+    readWithin(CLI_TIMEOUT_MS, async (signal) => {
+      const child = Bun.spawn([bin, ...args], {
+        // A project or local scope is the project the command runs in.
+        ...(cwd ? { cwd } : {}),
+        // `$HOME/.claude`, the dir every path in this file names, whatever
+        // config dir the daemon itself was started in.
+        env: claudeHomeEnv(),
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const [stdout, stderr] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      const code = await child.exited;
+      if (child.signalCode) {
+        return {
+          code: null,
+          output: `was ended by ${child.signalCode}`,
+          stdout,
+        };
+      }
+      return {
+        code,
+        output: tail(stderr) || tail(stdout) || `exited ${code}`,
+        stdout,
+      };
+    }),
+    (ms) => recordLimitReading("agent.fleet-cli-ms", ms)
+  );
   switch (ran.kind) {
     case "answered":
       return ran.value;
@@ -1534,7 +1552,7 @@ const writeVendoredMarketplace = async (
     }
     await placeTree(join(into, "plugins", plugin.name), plugin.files);
     console.log(
-      `[fleet] ${plugin.name}@${marketplace} written (${plugin.files.length} files, ${plugin.hash.slice(0, 7)})`
+      `[fleet] ${plugin.name}@${marketplace} written (${plugin.files.length} files, ${revisionOf(plugin.hash)})`
     );
   }
 
@@ -1708,7 +1726,7 @@ export const skillDrift = (
   }
   return recorded === fleet
     ? DRIFTED
-    : `edited on this machine (now ${disk.slice(0, 7)}), and the fleet's copy changed since (now ${fleet.slice(0, 7)}) — adopt this machine's copy or overwrite it with the fleet's`;
+    : `edited on this machine (now ${revisionOf(disk)}), and the fleet's copy changed since (now ${revisionOf(fleet)}) — adopt this machine's copy or overwrite it with the fleet's`;
 };
 
 /**

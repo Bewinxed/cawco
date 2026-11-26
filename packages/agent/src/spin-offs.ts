@@ -14,6 +14,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { SpinOffHeld } from "@cawco/core/session/controls";
 import { CONTROL_SPIN_OFF_HELD } from "@cawco/core/session/controls";
+import { shortId } from "@cawco/core/short-id";
 import { holdingWords } from "@cawco/core/words/workspace-holding";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { carryWorktree, worktreeHeld } from "./carry";
@@ -231,7 +232,7 @@ export class SpinOffs {
     }
     const [prefix = ""] = at.text().split("\n");
     const path = expandHome(
-      `~/.worktrees/${basename(root)}-${instanceId.slice(0, 8)}`
+      `~/.worktrees/${basename(root)}-${shortId(instanceId)}`
     );
     // A relaunch after a daemon restart finds its worktree already there.
     const listed = (

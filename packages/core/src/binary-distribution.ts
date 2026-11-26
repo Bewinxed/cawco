@@ -7,6 +7,7 @@ import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { makeFolder } from "./folders";
 import { refusalWords } from "./hub-refusal";
+import { recordLimitReading } from "./limit-readings";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {
   type Answered,
@@ -328,6 +329,7 @@ interface Fetch {
  * that waited on the failed fetch each hear why, rather than the first
  * starting another under the rest.
  */
+// @limit recording: core.archive-failure-asked-age-ms until 2026-12-10
 const FAILURE_KEPT_MS = 60_000;
 
 /** Each archive being fetched now, by its path ({@link archiveFor}). */
@@ -376,6 +378,13 @@ export async function archiveFor(
       return { kind: "fetching", ...going.progress };
     }
     const last = failed.get(path);
+    if (last) {
+      // An ask after its archive's fetch failed: how long after.
+      recordLimitReading(
+        "core.archive-failure-asked-age-ms",
+        Date.now() - last.at
+      );
+    }
     if (last && Date.now() - last.at < FAILURE_KEPT_MS) {
       return { kind: "failed", error: last.error };
     }

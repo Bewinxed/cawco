@@ -29,12 +29,14 @@ import {
   hubRepoSegment,
   parseHubRepoSegment,
 } from "@cawco/core/hub-repo";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { Effect, Schema, type Scope } from "effect";
+import { quote } from "@cawco/providers/quote";
 import { Elysia } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
@@ -62,8 +64,6 @@ const LFS_TYPE = "application/vnd.git-lfs+json";
 const REALM = 'Basic realm="CawCo"';
 /** How long a large file's link in a batch answer stands. */
 const ACTION_EXPIRES_S = 3600;
-/** The tail of a CGI's stderr kept for the log. */
-const STDERR_KEPT = 4000;
 
 /** The bare repository of `key` under `root`. */
 export const bareRepoPath = (root: string, key: HubRepoKey): string =>
@@ -71,6 +71,7 @@ export const bareRepoPath = (root: string, key: HubRepoKey): string =>
 
 /** A large file's place in the store. */
 const lfsObjectPath = (lfsRoot: string, oid: string): string =>
+  // @limit external: git-lfs's object store layout, objects/<first 2 hex>/<next 2 hex>/<oid> (git-lfs docs, spec/server.md)
   join(lfsRoot, "objects", oid.slice(0, 2), oid.slice(2, 4), oid);
 
 /** The hub's environment, git speaking {@link GIT_LOCALE}. */
@@ -114,7 +115,7 @@ const run = Effect.fnUntraced(function* (
   );
   if (code !== 0) {
     return yield* new GitFailed({
-      message: `${argv.slice(0, 3).join(" ")} failed: ${stderr.trim()}`,
+      message: `${quote(argv.join(" "))} failed: ${stderr.trim()}`,
     });
   }
 }, Effect.scoped);
@@ -380,7 +381,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         yield* heldChild(() => child);
         const code = yield* Effect.promise(async () => {
           for await (const chunk of child.stderr) {
-            writeTail(stderr, decoder.decode(chunk), STDERR_KEPT);
+            writeTail(stderr, decoder.decode(chunk), OUTPUT_TAIL_KEPT);
           }
           return await child.exited;
         });
@@ -569,6 +570,10 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     return OID.test(oid) ? user : lfsError(status, words);
   };
 
+  /** An object as git-lfs names it in a line: its oid's first 10 characters. */
+  // @limit external: git-lfs names an object by its oid's first 10 characters (git-lfs-ls-files(1), https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-ls-files.adoc)
+  const lfsOidShort = (oid: string): string => oid.slice(0, 10);
+
   /** `[git]` and `[lfs]` log lines name the caller and that it authenticated, never the credential. */
   const logLfs = (
     request: Request,
@@ -678,7 +683,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           logLfs(
             request,
             user,
-            `object ${params.oid.slice(0, 12)}`,
+            `object ${lfsOidShort(params.oid)}`,
             range ? ` Range: ${range}` : " whole"
           );
         }
@@ -695,7 +700,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           return user;
         }
         if (HUB_DEBUG) {
-          logLfs(request, user, `object ${params.oid.slice(0, 12)}`);
+          logLfs(request, user, `object ${lfsOidShort(params.oid)}`);
         }
         return upload(params.oid, request);
       })

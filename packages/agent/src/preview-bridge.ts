@@ -33,6 +33,7 @@ import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { socketPathProblem } from "@cawco/core/paths/workspace";
 import { PreviewStartDown } from "@cawco/core/preview/protocol";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
@@ -84,9 +85,6 @@ const JOIN = [
 
 /** How long a bridge has to put its socket down. Our call: the relay binds in well under a second. */
 const BRIDGE_START_MS = 3000;
-
-/** The most of a bridge's stderr kept, to say why it did not start. */
-const STDERR_KEPT = 2000;
 
 /**
  * What a bridge reaches: `port` of workspace `workspace`, in the network of
@@ -364,7 +362,11 @@ const open = (
     const draining = (async () => {
       const decoder = new TextDecoder();
       for await (const chunk of proc.stderr) {
-        writeTail(said, decoder.decode(chunk, { stream: true }), STDERR_KEPT);
+        writeTail(
+          said,
+          decoder.decode(chunk, { stream: true }),
+          OUTPUT_TAIL_KEPT
+        );
       }
     })().catch(() => {
       // The pipe broke with its process: what it said before stands in `said`.

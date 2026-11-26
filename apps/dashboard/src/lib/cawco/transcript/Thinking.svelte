@@ -48,7 +48,6 @@
   } = $props();
   /** Emphasis, code ticks and heading marks: noise in a three-line glimpse. */
   const MARKUP = /[*_`#>]/gu;
-  const TAIL_CHARS = 240;
 
   /**
    * One step per block: blocks part on blank lines, except inside a fenced
@@ -191,11 +190,7 @@
    * so the latest words read and the rest trails off behind the label.
    */
   const tail = $derived(
-    (paragraphs.at(-1) ?? "")
-      .replace(MARKUP, "")
-      .replace(/\s+/gu, " ")
-      .trim()
-      .slice(-TAIL_CHARS)
+    (paragraphs.at(-1) ?? "").replace(MARKUP, "").replace(/\s+/gu, " ").trim()
   );
 </script>
 

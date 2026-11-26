@@ -1,8 +1,8 @@
+import { andList } from "@cawco/providers/names";
 import type { HarnessKind } from "../harness/kinds";
 import { harnessName } from "../harness/kinds";
 import { firstCopy } from "../tool-updates";
 import type { ToolStatus } from "../tools";
-import { andList } from "./helpers";
 
 /**
  * What a harness's process says on its session's row when it does not start

@@ -38,7 +38,6 @@ import {
 import { base64ToBytes, bytesToBase64 } from "@cawco/core/base64";
 import { readWithin } from "@cawco/core/bounded";
 import {
-  CHOICE_LIMITS,
   type ChoiceChange,
   type ChoiceEntry,
   changedEntry,
@@ -706,7 +705,7 @@ export const artifact = {
       tell({ type: "replace", generation: next });
       restart(next);
     }
-    joined = { id: raw.id, kind, name: raw.name.slice(0, 200) };
+    joined = { id: raw.id, kind, name: raw.name };
     syncPath = sync as string;
     status = "joined";
     loadRefused(joined.id);
@@ -858,9 +857,6 @@ export const artifact = {
     }
     const state = mirror.getMap<ChoiceEntry>("state");
     const before = state.get(change.choice);
-    if (!before && state.size >= CHOICE_LIMITS.perArtifact) {
-      return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
-    }
     const entry = changedEntry(before, change, new Date().toISOString());
     const problem = choiceEntryProblem(change.choice, entry);
     if (problem) {

@@ -1,4 +1,6 @@
 /** A server as any config names it: a session's status or a fleet row. */
+
+import { registrableDomain } from "@cawco/core/registrable-domain";
 export interface ConfiguredServer {
   config?: unknown;
   name: string;
@@ -40,19 +42,9 @@ export function mcpServerHost(
 }
 
 /**
- * The registrable root of a host, by a small heuristic rather than the public
- * suffix list: the last two labels, or three when the second-to-last is a
- * generic second-level label under a two-letter country TLD (`foo.co.uk`).
- * A bare host (localhost, an IP) is its own root.
+ * The registrable root of a host, by the public suffix list. A bare host
+ * (localhost, an IP) is its own root.
  */
-const GENERIC_SLD = new Set(["co", "com", "net", "org", "gov", "edu", "ac"]);
-
 export function rootDomain(host: string): string {
-  const parts = host.split(".");
-  if (parts.length <= 2) {
-    return host;
-  }
-  const [sld, tld] = parts.slice(-2);
-  const take = GENERIC_SLD.has(sld) && tld.length === 2 ? 3 : 2;
-  return parts.slice(-take).join(".");
+  return registrableDomain(host) ?? host;
 }

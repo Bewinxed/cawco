@@ -555,7 +555,7 @@
     </div>
 
     <!-- The brief: the first line of what it was asked, at the text column.
-         headline() bounds its length; the wrap is the layout's. -->
+         headline() is the whole first line; the wrap is the layout's. -->
     {#if brief}
       <p
         class="rail-hang mt-space-1 mb-0 type-body text-ink-muted max-w-c-measure wrap-anywhere"

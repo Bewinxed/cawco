@@ -81,6 +81,7 @@ const PRIVATE = 0o700;
 const WORKING = 0o755;
 
 /** How deep below a root {@link keepFoldersPrivate} looks: as deep as {@link folderMode} names a mode of its own (a scratch dir, `~/.cawco/tmp/<id8>`). */
+// @limit measured: as deep as folderMode names a mode of its own (a scratch dir is two below its root)
 const KEPT_DEPTH = 2;
 
 /**

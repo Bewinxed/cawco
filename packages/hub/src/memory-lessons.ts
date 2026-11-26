@@ -40,6 +40,7 @@ export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/u;
 export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/iu;
 
 /** The day of an ISO time or a date: `2026-10-18`. */
+// @limit external: RFC 3339 section 5.6: full-date is YYYY-MM-DD, a timestamp's first 10 characters
 export const dayOf = (at: string | Date): string =>
   (typeof at === "string" ? at : at.toISOString()).slice(0, 10);
 
@@ -108,11 +109,11 @@ const TOPIC_NAME = /^[a-z0-9][a-z0-9-]*$/u;
 export const CAPS = {
   /**
    * The whole index, its Notes counted: the share of AGENTS.md a brief
-   * carried before (`MEMORY_FILE_CHARS`, config.ts), so every session pays
-   * what an attempt paid, and no more. His notes count, so they shrink what
-   * the run may keep.
+   * carries (`MEMORY_FILE_CHARS`, config.ts, the memory replay's pick), so
+   * every session pays what an attempt pays, and no more. His notes count,
+   * so they shrink what the run may keep.
    */
-  indexChars: 8000,
+  indexChars: MEMORY_FILE_CHARS,
 } as const;
 
 /**
@@ -199,6 +200,7 @@ export const renderLesson = (line: LessonLine): string =>
 /** A fresh lesson id that `taken` does not hold. */
 export const newLessonId = (taken: (id: string) => boolean): string => {
   for (;;) {
+    // @limit measured: 6 hex characters of a random UUID are 24 bits; one hub's ids of this kind share the namespace, so two collide after about 2^12 ids
     const id = `L-${crypto.randomUUID().replaceAll("-", "").slice(0, 6)}`;
     if (!taken(id)) {
       return id;

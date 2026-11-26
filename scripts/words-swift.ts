@@ -16,8 +16,8 @@
  *
  * A word's body may use template literals, `?:`, `===`/`!==`/`<`/`>`/`<=`/
  * `>=`, `&&`/`||`/`!`, `??`, `+`/`-`, `.length`, `.join(sep)` and the
- * helpers in packages/core/src/words/helpers.ts (HELPERS: each has its Swift
- * twin here). Parameters are `string`, `number` (an `Int`), `boolean`,
+ * helpers in packages/core/src/words/helpers.ts and `andList` in
+ * packages/providers/src/names.ts (HELPERS: each has its Swift twin here). Parameters are `string`, `number` (an `Int`), `boolean`,
  * `string | null` or a string array. Anything else is refused by name, so a
  * word never means one thing on the web and another in the app.
  *

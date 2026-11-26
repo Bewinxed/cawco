@@ -10,6 +10,7 @@ import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { makeFolder } from "@cawco/core/folders";
 import { currentKeeper } from "@cawco/core/keepers";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
+import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   workspaceAccountsFile,
   workspaceSpillsFile,
@@ -202,6 +203,7 @@ export const viewOfBoundary = async (
 const DECISIONS_FILE = "boundary-decisions.json";
 
 /** How many of a workspace's latest decisions its {@link DECISIONS_FILE} keeps. Ours: an update, a narrowing and the closes after them, with room. */
+// @limit recording: agent.boundary-decisions-held until 2026-12-03
 const DECISIONS_KEPT = 32;
 
 /** A boundary generation as a decision names it. */
@@ -411,10 +413,13 @@ export const readDecisions = async (id: string): Promise<BoundaryDecision[]> =>
 /** {@link recordDecision}'s write itself: every stored entry (an entry of another shape is kept as it is), `entry` added, written whole. */
 const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
   const path = join(stateDir(id), DECISIONS_FILE);
-  const all = [
+  const stored = [
     ...(await storedDecisions(id)),
     { ...entry, agent: process.pid, at: Date.now() },
-  ].slice(-DECISIONS_KEPT);
+  ];
+  recordLimitReading("agent.boundary-decisions-held", stored.length);
+  // @limit recording: agent.boundary-decisions-held until 2026-12-03
+  const all = stored.slice(-DECISIONS_KEPT);
   await writeWhole(path, `${JSON.stringify(all)}\n`, 0o644);
 };
 

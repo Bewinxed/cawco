@@ -54,6 +54,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseAskAnswered } from "@cawco/core/asks";
 import { choiceEntryProblem } from "@cawco/core/choices";
+import { gitShort } from "@cawco/core/git-short";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
 import {
   MARKER_KINDS,
@@ -77,6 +78,7 @@ import {
   migrationState,
 } from "@cawco/core/migration-state";
 import { isOneOf } from "@cawco/core/one-of";
+import { lastOutput } from "@cawco/core/output-tail";
 import { parseRuleMarker } from "@cawco/core/rules";
 import {
   contextLineOf,
@@ -175,17 +177,13 @@ const MARKER_READERS: Readonly<Record<MarkerKind, MarkerReader>> = {
 const STAMP = /^\[cawco:([a-z-]+)[ \]]/u;
 
 /** The first line of a stored row, as a failure quotes it. */
-const quoted = (text: string): string =>
-  `"${text.split("\n")[0].slice(0, 200)}"`;
+const quoted = (text: string): string => `"${text.split("\n")[0]}"`;
 
 /** How many rows of one kind {@link storedMarkers} found no reader reads, and the first few, quoted. */
 interface UnreadRows {
   count: number;
   rows: string[];
 }
-
-/** The rows of each kind a failure quotes. */
-const QUOTED_PER_KIND = 3;
 
 /**
  * Every stored marker read back as the transcript reads it: each send
@@ -235,9 +233,7 @@ const storedMarkers = (
   const fail = (kind: string, row: string): void => {
     const held = unread.get(kind) ?? { count: 0, rows: [] };
     held.count += 1;
-    if (held.rows.length < QUOTED_PER_KIND) {
-      held.rows.push(row);
-    }
+    held.rows.push(row);
     unread.set(kind, held);
   };
   let artifactOrigin = 0;
@@ -452,7 +448,7 @@ const frozenBases = (nightly: Baseline | undefined): Map<string, string> => {
       bases.set(
         commit,
         base.label === "the base"
-          ? `the base ${commit.slice(0, 12)}`
+          ? `the base ${gitShort(HUB, commit)}`
           : base.label
       );
     }
@@ -629,6 +625,7 @@ const identityCases = async (
     const time = new Date(row.createdAt).toISOString();
     if (!(
       refused?.includes("holds a migration this build of CawCo doesn't have") &&
+      // @limit measured: 12 hex characters are 48 bits of a hash; one database's stored rows share the namespace, so two collide after about 2^24 names
       refused.includes(`written ${time}, hash ${row.hash.slice(0, 12)}`)
     )) {
       throw new Error(
@@ -697,7 +694,7 @@ const openAsHubAlone = (path: string): void => {
   );
   if (run.exitCode !== 0) {
     throw new Error(
-      `the hub did not open ${path}: ${run.stderr.toString().slice(-600)}`
+      `the hub did not open ${path}: ${lastOutput(run.stderr.toString())}`
     );
   }
 };
@@ -1007,8 +1004,7 @@ const migratedRecord = async (
   if (differ.length > 0) {
     throw new Error(
       `case restore: the record placed by its columns at ${found.found.tag} brings other rows than at the schema it names: ${differ
-        .slice(0, 5)
-        .map(([table, text]) => `${table} ${text.slice(0, 200)}`)
+        .map(([table, text]) => `${table} ${text}`)
         .join("; ")}`
     );
   }
@@ -1240,8 +1236,7 @@ const restoreCase = async (): Promise<string> => {
   if (added.length > 0) {
     throw new Error(
       `case restore: the restore put back rows the migrations do not place: ${added
-        .slice(0, 5)
-        .map(([table, text]) => `${table} ${text.slice(0, 200)}`)
+        .map(([table, text]) => `${table} ${text}`)
         .join("; ")}`
     );
   }
@@ -1256,7 +1251,7 @@ const restoreCase = async (): Promise<string> => {
   );
   if (unexplained.length > 0 || missed.length !== held.length) {
     throw new Error(
-      `case restore: ${missed.length} row(s) the migrations place did not come back and ${held.length} were held back, ${unexplained.length} of them for a reason no migration gave: ${[...unexplained.map(projectTrashWords.heldRow), ...missed.slice(0, 5).map(([table, text]) => `${table} ${text.slice(0, 160)}`)].join("; ")}`
+      `case restore: ${missed.length} row(s) the migrations place did not come back and ${held.length} were held back, ${unexplained.length} of them for a reason no migration gave: ${[...unexplained.map(projectTrashWords.heldRow), ...missed.map(([table, text]) => `${table} ${text}`)].join("; ")}`
     );
   }
   const unread = held.find(
@@ -1712,6 +1707,7 @@ const outOfOrder = (entries: { tag: string; when: number }[]): string[] =>
     const prior = entries[i - 1];
     return prior && entry.when <= prior.when
       ? [
+          // @limit external: format: a migration tag's four-digit number, NNNN_name (drizzle's journal)
           `\`${entry.tag}\`'s when (${entry.when}) is before \`${prior.tag}\`'s (${prior.when}): hubs that ran ${prior.tag.slice(0, 4)} skip it.`,
         ]
       : [];
@@ -1727,6 +1723,7 @@ const outOfOrder = (entries: { tag: string; when: number }[]): string[] =>
  */
 const qualifiedChecks = async (tag: string): Promise<string[]> => {
   const { tables } = (await Bun.file(
+    // @limit external: format: a migration tag's four-digit number, NNNN_name (drizzle's journal)
     join(HUB, `drizzle/meta/${tag.slice(0, 4)}_snapshot.json`)
   ).json()) as {
     tables: Record<
@@ -2026,9 +2023,7 @@ try {
     const response = await hub.handle(new Request(`http://127.0.0.1${path}`));
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(
-        `GET ${path} answered ${response.status}: ${text.slice(0, 300)}`
-      );
+      throw new Error(`GET ${path} answered ${response.status}: ${text}`);
     }
     answers.push(path);
     return JSON.parse(text);
@@ -2049,6 +2044,7 @@ try {
   const resolved = migrationState(after.applied, journal);
   if (resolved.pending.length > 0 || resolved.unknown.length > 0) {
     throw new Error(
+      // @limit measured: 12 hex characters are 48 bits of a hash; one database's stored rows share the namespace, so two collide after about 2^24 names
       `Once the hub started, the database records none of ${resolved.pending.map((entry) => entry.tag).join(", ") || "no entry"}, and holds rows no journal entry is: ${resolved.unknown.map((row) => `${row.createdAt} ${row.hash.slice(0, 12)}`).join(", ") || "none"}`
     );
   }
@@ -2105,7 +2101,6 @@ try {
   if (dangling.length) {
     throw new Error(
       `${dangling.length} row${dangling.length === 1 ? "" : "s"} name a row that is not there once the hub started: ${dangling
-        .slice(0, 10)
         .map((row) => `${row.table} rowid ${row.rowid} → ${row.parent}`)
         .join("; ")}`
     );
@@ -2144,7 +2139,7 @@ try {
   const choices = docChoices(dbPath);
   if (choices.failures.length > 0) {
     throw new Error(
-      `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.slice(0, 10).join("\n")}`
+      `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.join("\n")}`
     );
   }
   // Every stored marker reads as its kind once the hub started (its
@@ -2180,7 +2175,7 @@ try {
   const empty = [...titles].filter(([, title]) => title === "");
   if (mistitled.length > 0 || empty.length > 0) {
     throw new Error(
-      `Artifacts the start's title pass left wrong: ${[...mistitled, ...empty.map(([id]) => `${id}: no title`)].slice(0, 10).join("; ")}`
+      `Artifacts the start's title pass left wrong: ${[...mistitled, ...empty.map(([id]) => `${id}: no title`)].join("; ")}`
     );
   }
   const stepProblems = await misplacedSteps(entries);

@@ -15,6 +15,7 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { shortSha } from "../packages/core/src/short-id";
 import { testInputsKey } from "./binary/test-inputs";
 import {
   e2eBuilds,
@@ -76,17 +77,13 @@ const commit = (() => {
   }
 })();
 
-const tree = join(
-  homedir(),
-  ".worktrees",
-  `binary-tests-${commit.slice(0, 12)}`
-);
+const tree = join(homedir(), ".worktrees", `binary-tests-${shortSha(commit)}`);
 const staging = join(
   homedir(),
   ".cache",
   "cawco",
   "binary-tests",
-  `staging-${commit.slice(0, 12)}`
+  `staging-${shortSha(commit)}`
 );
 const testBinary = join(staging, "cawco-test");
 
@@ -108,7 +105,7 @@ const run: Runner = async (command, at, captured, extra) => {
   const status = await child.exited;
   const label = command.join(" ");
   console.log(
-    `[binary-tests] ${((performance.now() - started) / 1000).toFixed(1)}s ${label.length > 140 ? `${label.slice(0, 137)}...` : label}`
+    `[binary-tests] ${((performance.now() - started) / 1000).toFixed(1)}s ${label}`
   );
   if (status !== 0) {
     throw new Error(`Command failed with exit status ${status}: ${label}`);
@@ -142,7 +139,7 @@ try {
   await run(["git", "worktree", "add", "--detach", tree, commit]);
   await run([process.execPath, "install", "--frozen-lockfile"], tree);
   state.inputs = await testInputsKey(tree, commit);
-  const version = `${(await Bun.file(join(tree, "packages/cli/package.json")).json()).version as string}-test+${commit.slice(0, 12)}`;
+  const version = `${(await Bun.file(join(tree, "packages/cli/package.json")).json()).version as string}-test+${shortSha(commit)}`;
   // The dashboard and every target-independent asset, once, for the builds below.
   await run([process.execPath, "scripts/build-binary.ts", "prepare"], tree);
   const smoke = async (): Promise<void> => {

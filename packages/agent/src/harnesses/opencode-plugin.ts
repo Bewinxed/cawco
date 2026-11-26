@@ -155,6 +155,7 @@ const PLUGIN_VERSION_DIR = /^cawco-context-[0-9a-f]{16}$/u;
  * directory, so a running server's files never change under it).
  */
 export const writePlugin = async (files: PluginFiles): Promise<string> => {
+  // @limit measured: 16 hex characters are 64 bits of SHA-256; the plugin builds one machine holds, so two collide after about 2^32 names
   const target = join(
     pluginsDir(),
     `cawco-context-${createHash("sha256").update(pluginSource(files)).digest("hex").slice(0, 16)}`

@@ -16,9 +16,18 @@
  * - `decisions`: what to lay out as a decision page, on the empty Decisions
  *   tab, from the project's open choices.
  *
- * Every input is cut to a stated length and count ({@link STARTER_BOUNDS})
- * before Jev is asked and before the inputs are hashed.
+ * Every input is cut to a stated length, and every list to its share of Jev's
+ * window with how many of how many it holds ({@link STARTER_BOUNDS}), before
+ * Jev is asked and before the inputs are hashed.
  */
+
+import {
+  fitItems,
+  JEV_WINDOW_TOKENS,
+  promptBudgetChars,
+  shareOut,
+} from "@cawco/core/prompt-budget";
+import { shortSha } from "@cawco/core/short-id";
 import type {
   StarterGlyph,
   StarterOutcome,
@@ -26,38 +35,49 @@ import type {
   StarterSource,
 } from "@cawco/core/starters";
 import type { StageKind } from "@cawco/core/views";
+import { DERIVED_NAME_CHARS } from "@cawco/providers/derived-name";
+
+/** What Jev may read of one project, in characters: its window less what it writes. */
+const INPUT_BUDGET = promptBudgetChars(JEV_WINDOW_TOKENS);
+
+/** The lists of {@link StarterInputs}, which share the budget equally and are cut to their share. */
+const STARTER_LISTS = [
+  "knowledge",
+  "tasks",
+  "commits",
+  "failures",
+  "recentKinds",
+  "unrouted",
+  "drafts",
+  "routines",
+  "shown",
+] as const;
+type StarterList = (typeof STARTER_LISTS)[number];
+const LIST_SHARE = Math.floor(INPUT_BUDGET / STARTER_LISTS.length);
 
 /**
- * Every input's bound, and the output's: each text cut to its length, each
- * list to its count.
+ * Every input's bound, and the output's: each text cut to its share of the
+ * budget, in the proportion the texts had to one another, and each list to
+ * its share ({@link boundStarterInputs} says how many of how many).
  */
 export const STARTER_BOUNDS = {
-  name: 100,
-  agents: 1500,
-  knowledge: 20,
-  path: 160,
-  tasks: 12,
-  title: 160,
-  line: 200,
-  commits: 5,
-  subject: 120,
-  failures: 5,
-  failure: 200,
-  /** Task kinds filed often, and the tasks each names. */
-  recentKinds: 5,
-  kindTasks: 3,
-  kindName: 60,
-  /** Event sources whose events reached no routine. */
-  unrouted: 5,
-  source: 120,
-  eventKind: 40,
-  drafts: 5,
-  routines: 10,
-  shown: 10,
-  /** The output: at most this many starters per place, each `text` and `reason` at most this long. */
+  ...shareOut(INPUT_BUDGET, {
+    name: 100,
+    agents: 1500,
+    path: 160,
+    title: 160,
+    line: 200,
+    subject: 120,
+    failure: 200,
+    kindName: 60,
+    source: 120,
+    eventKind: 40,
+  }),
+  /** The output: at most this many starters per place, each `text` one line (a derived name's, providers derived-name.ts); a reason is held to its words ({@link REASON_WORDS}). */
+  // @limit asked: cawco:decision/4a2d30bd-1d73-4788-b9f1-1834866eeb2f/rows
   starters: 6,
-  text: 90,
-  reason: 120,
+  // @limit external: a derived name is one line, at most 80 characters, cut at a word (WCAG 2.2 SC 1.4.8, https://www.w3.org/WAI/WCAG22/Understanding/visual-presentation.html)
+  text: DERIVED_NAME_CHARS,
 } as const;
 
 /** A task untouched this long in a stage of kind active reads as stuck. Our own call. */
@@ -66,8 +86,6 @@ const STARTER_STALE_DAYS = 3;
 export const STARTER_RECENT_DAYS = 14;
 /** A task kind filed at least this often in {@link STARTER_RECENT_DAYS} is a routine's work. Our own call. */
 export const STARTER_OFTEN = 3;
-/** How many design-shaped tasks the design-system starter names as its sources. */
-const DESIGN_SOURCES_MAX = 3;
 const AGENTS_PATH = "AGENTS.md";
 
 /** One open task, as the starters read it. */
@@ -95,6 +113,8 @@ export interface StarterInputs {
   /** Its repository's default branch, when a checkout was read. */
   branch: string | null;
   commits: { sha: string; subject: string }[];
+  /** The lists that did not fit Jev's window whole: how many of how many they hold. Absent when none was cut. */
+  cut?: Partial<Record<StarterList, { of: number; shown: number }>>;
   /** The person said Not now to Caw's offer of a design system (design-offers.ts): none is suggested again unless they ask. */
   designDeclined: boolean;
   /** Its work is design work: its template's (design, brand, launch, social), or an open task's labels or outputs (design-offers.ts `designShaped`). */
@@ -128,56 +148,90 @@ const within = (words: string, max: number): string =>
   words.length > max ? `${words.slice(0, max - 1)}…` : words;
 const SPACES = /\s+/gu;
 
-/** Every text cut to its length and every list to its count. */
+/** Every text cut to its length and every list to its share of the budget. */
 export const boundStarterInputs = (raw: StarterInputs): StarterInputs => {
   const b = STARTER_BOUNDS;
-  return {
+  const cut: NonNullable<StarterInputs["cut"]> = {};
+  const fit = <Item>(list: StarterList, items: Item[]): Item[] => {
+    const fitting = fitItems(items, LIST_SHARE);
+    if (fitting.length < items.length) {
+      cut[list] = { shown: fitting.length, of: items.length };
+    }
+    return fitting;
+  };
+  const bounded: StarterInputs = {
     name: within(raw.name, b.name),
     template: raw.template,
     agents: within(raw.agents.trim(), b.agents),
-    knowledge: raw.knowledge
-      .slice(0, b.knowledge)
-      .map((path) => within(path, b.path)),
-    tasks: raw.tasks.slice(0, b.tasks).map((task) => ({
-      ...task,
-      title: within(task.title, b.title),
-      stage: within(task.stage, b.name),
-      failed: task.failed === null ? null : within(task.failed, b.failure),
-    })),
+    knowledge: fit(
+      "knowledge",
+      raw.knowledge.map((path) => within(path, b.path))
+    ),
+    tasks: fit(
+      "tasks",
+      raw.tasks.map((task) => ({
+        ...task,
+        title: within(task.title, b.title),
+        stage: within(task.stage, b.name),
+        failed: task.failed === null ? null : within(task.failed, b.failure),
+      }))
+    ),
     branch: raw.branch,
-    commits: raw.commits.slice(0, b.commits).map((commit) => ({
-      sha: commit.sha,
-      subject: within(commit.subject, b.subject),
-    })),
+    commits: fit(
+      "commits",
+      raw.commits.map((commit) => ({
+        sha: commit.sha,
+        subject: within(commit.subject, b.subject),
+      }))
+    ),
     designDeclined: raw.designDeclined,
     designWork: raw.designWork,
     hasDesign: raw.hasDesign,
-    failures: raw.failures.slice(0, b.failures).map((failure) => ({
-      ...failure,
-      name: within(failure.name, b.title),
-      reason: within(failure.reason, b.failure),
-    })),
-    recentKinds: raw.recentKinds.slice(0, b.recentKinds).map((kind) => ({
-      name: within(kind.name, b.kindName),
-      count: kind.count,
-      tasks: kind.tasks.slice(0, b.kindTasks),
-    })),
-    unrouted: raw.unrouted.slice(0, b.unrouted).map((each) => ({
-      source: within(each.source, b.source),
-      kind: within(each.kind, b.eventKind),
-      count: each.count,
-    })),
-    drafts: raw.drafts.slice(0, b.drafts).map((path) => within(path, b.path)),
-    routines: raw.routines.slice(0, b.routines).map((routine) => ({
-      id: routine.id,
-      name: within(routine.name, b.name),
-    })),
-    shown: raw.shown.slice(0, b.shown).map((each) => ({
-      place: each.place,
-      text: within(each.text, b.text),
-      outcome: each.outcome,
-    })),
+    failures: fit(
+      "failures",
+      raw.failures.map((failure) => ({
+        ...failure,
+        name: within(failure.name, b.title),
+        reason: within(failure.reason, b.failure),
+      }))
+    ),
+    recentKinds: fit(
+      "recentKinds",
+      raw.recentKinds.map((kind) => ({
+        name: within(kind.name, b.kindName),
+        count: kind.count,
+        tasks: kind.tasks,
+      }))
+    ),
+    unrouted: fit(
+      "unrouted",
+      raw.unrouted.map((each) => ({
+        source: within(each.source, b.source),
+        kind: within(each.kind, b.eventKind),
+        count: each.count,
+      }))
+    ),
+    drafts: fit(
+      "drafts",
+      raw.drafts.map((path) => within(path, b.path))
+    ),
+    routines: fit(
+      "routines",
+      raw.routines.map((routine) => ({
+        id: routine.id,
+        name: within(routine.name, b.name),
+      }))
+    ),
+    shown: fit(
+      "shown",
+      raw.shown.map((each) => ({
+        place: each.place,
+        text: within(each.text, b.text),
+        outcome: each.outcome,
+      }))
+    ),
   };
+  return Object.keys(cut).length > 0 ? { ...bounded, cut } : bounded;
 };
 
 /**
@@ -257,9 +311,6 @@ export const reasonRefusal = (reason: string): string | null => {
   }
   if (words > REASON_WORDS) {
     return `it is ${words} words; the cap is ${REASON_WORDS}`;
-  }
-  if (said.length > STARTER_BOUNDS.reason) {
-    return `it is ${said.length} characters; the cap is ${STARTER_BOUNDS.reason}`;
   }
   for (const [rule, why] of REASON_RULES) {
     if (rule.test(said)) {
@@ -395,7 +446,7 @@ const commitSubject = (
   commit: StarterInputs["commits"][number],
   branch: string | null
 ): Subject => ({
-  at: `repository.commits (${commit.sha.slice(0, 9)})`,
+  at: `repository.commits (${shortSha(commit.sha)})`,
   asks: {
     review: {
       about:
@@ -441,9 +492,7 @@ const designSubject = (inputs: StarterInputs): Subject | undefined => {
           designTasks.length > 0
             ? "Its tasks are design work, and it has no design system yet."
             : `It is a ${inputs.template} project with no design system yet.`,
-        sources: designTasks
-          .slice(0, DESIGN_SOURCES_MAX)
-          .map((task) => ({ kind: "task", ref: task.id })),
+        sources: designTasks.map((task) => ({ kind: "task", ref: task.id })),
       },
     },
   };
@@ -459,9 +508,7 @@ const projectSubject = (inputs: StarterInputs): Subject | undefined => {
   }
   const notes: StarterSource[] = [
     ...(inputs.agents ? [{ kind: "path" as const, ref: AGENTS_PATH }] : []),
-    ...inputs.knowledge
-      .slice(0, 3)
-      .map((path) => ({ kind: "path" as const, ref: path })),
+    ...inputs.knowledge.map((path) => ({ kind: "path" as const, ref: path })),
   ];
   if (notes.length === 0) {
     return {

@@ -3396,6 +3396,13 @@
       "when": 1795605383634,
       "tag": "0492_relay_watches",
       "breakpoints": true
+    },
+    {
+      "idx": 493,
+      "version": "6",
+      "when": 1795706124606,
+      "tag": "0493_limit_readings",
+      "breakpoints": true
     }
   ]
 }

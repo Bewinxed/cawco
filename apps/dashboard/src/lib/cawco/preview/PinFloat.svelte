@@ -308,6 +308,7 @@
   /** The tokens a frame draws with, read at its first frame (the page's, never a server render's). */
   let tokens: { cardR: number; hair: number; join: number } | null = null;
   /** A frame's step at most, ms: a tab hidden mid-run lands its next frame, never a jump past its end. */
+  // @limit measured: three frames at 60 Hz; a longer gap is a stalled tab, not motion
   const FRAME_STEP_MS = 50;
 
   /** A run of the pour's clock: from where it was drawn to `to`, on a token's curve. */

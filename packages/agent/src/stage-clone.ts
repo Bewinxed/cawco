@@ -97,6 +97,7 @@ import {
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shortId, shortSha } from "@cawco/core/short-id";
 import { STAGE_CLONE_GIT_MS, STAGE_COPY_LIMIT } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
@@ -718,7 +719,7 @@ const cut = (
       await copyOwnSecrets(repo, boundary.path, git);
       return {
         kept,
-        said: `cut from ${repo} at ${head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), ${lending ? `borrowing from the object pool ${lending.pool}` : "with a store of its own"}`,
+        said: `cut from ${repo} at ${shortSha(head)} with ${kept.mirrored.length} uncommitted path(s), ${lending ? `borrowing from the object pool ${lending.pool}` : "with a store of its own"}`,
       };
     }
   );
@@ -878,15 +879,15 @@ const copyCut = async (
     },
     async () => {
       await copyTree(from, boundary.path, LEFT_OUT);
-      const kept: Kept = {
+      const record: Kept = {
         kind: "copy",
         form: FORM,
         folder: from,
         mirrored: await filesIn(from),
       };
       return {
-        kept,
-        said: `copied from ${from}, which is in no repository, ${kept.mirrored.length} file(s)`,
+        kept: record,
+        said: `copied from ${from}, which is in no repository, ${record.mirrored.length} file(s)`,
       };
     }
   );
@@ -985,7 +986,7 @@ const cloneNow = async (
   const kept = await keptOf(id);
   const path =
     (await recordedPath(id)) ??
-    expandHome(`~/.worktrees/${basename(from)}-stage-${id.slice(0, 8)}`);
+    expandHome(`~/.worktrees/${basename(from)}-stage-${shortId(id)}`);
   const boundary: WorkspaceRef = { id, path };
   const whole = await wholeAt(path, repo ? { repo } : { folder: real }, kept);
   if (whole) {
@@ -1189,7 +1190,7 @@ const heard = (
         Effect.catch((error) =>
           Effect.sync(() =>
             console.warn(
-              `[stage ${id.slice(0, 8)} follow] failed: ${failureOf(error)}`
+              `[stage ${shortId(id)} follow] failed: ${failureOf(error)}`
             )
           )
         )
@@ -1221,7 +1222,7 @@ const rewatch = (id: string, follow: Following, after: number): void => {
         Effect.catch((error) =>
           Effect.sync(() =>
             console.warn(
-              `[stage ${id.slice(0, 8)} watch] failed: ${failureOf(error)}`
+              `[stage ${shortId(id)} watch] failed: ${failureOf(error)}`
             )
           )
         )
@@ -1260,7 +1261,7 @@ const watchSource = Effect.fnUntraced(function* (
   const ignored = yield* Effect.promise(() =>
     ignoredBy(kept).catch((error: unknown) => {
       console.warn(
-        `[stage] ${id.slice(0, 8)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
+        `[stage] ${shortId(id)}: the folders git ignores in ${source} could not be read, so its watch reads them too: ${failureOf(error)}`
       );
       return [];
     })
@@ -1297,7 +1298,7 @@ const watchSource = Effect.fnUntraced(function* (
           .on("ready", () => heard(id, follow, "whole"))
           .on("error", (error) => {
             console.warn(
-              `[stage] ${id.slice(0, 8)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
+              `[stage] ${shortId(id)}: the watch of ${source} failed, so its clone is brought in step whole and watched again in ${REWATCH_MS / 1000}s: ${failureOf(error)}`
             );
             rewatch(id, follow, REWATCH_MS);
             heard(id, follow, "whole");
@@ -1494,7 +1495,7 @@ export const dropPin = (pin: string): Promise<void> =>
       return;
     }
     await dropped(pin, await recordedPath(pin));
-    console.info(`[stage] pin ${pin.slice(0, 8)}: let go`);
+    console.info(`[stage] pin ${shortId(pin)}: let go`);
   });
 
 /**

@@ -61,6 +61,7 @@ import {
   type NeutralStreamMessage,
   type NeutralSystemMessage,
 } from "@cawco/core/session-messages";
+import { shortId } from "@cawco/core/short-id";
 import { joined } from "./stream-so-far";
 
 /** How much the outbox keeps, across every session on the machine. */
@@ -273,7 +274,7 @@ export class Outbox {
     }
     if (owed.length > 0 || gone) {
       this.#log(
-        `outbox: ${instanceId.slice(0, 8)}: sent ${owed.length} frame(s) again (${sameHub ? `same hub, it had up to ${took}` : "a hub new to this agent"})${gone ? ", after saying some were lost" : ""}`
+        `outbox: ${shortId(instanceId)}: sent ${owed.length} frame(s) again (${sameHub ? `same hub, it had up to ${took}` : "a hub new to this agent"})${gone ? ", after saying some were lost" : ""}`
       );
     }
     return true;
