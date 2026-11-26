@@ -6,5 +6,5 @@ export const docSwapWords = {
    * was known hears (hub artifacts sync.ts `replaced`): reloading takes the
    * new doc.
    */
-  copyReplaced: "This page's copy is out of date. Reload it.",
+  copyReplaced: "This page is out of date. Reload.",
 };
