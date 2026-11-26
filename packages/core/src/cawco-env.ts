@@ -151,7 +151,7 @@ export const CAWCO_ENV = {
   /**
    * One agy session's judge, set on its `agy acp` process and read by the
    * hook agy runs before each tool call, which inherits agy's environment
-   * (core harness/agy.ts `AGY_JUDGE_ENV`, agent harnesses/agy-hook.ts). The
+   * (agent harnesses/agy-hook.ts `AGY_JUDGE_ENV`). The
    * hook reads it in perl, so cawco itself never does.
    */
   agyJudge: "CAWCO_AGY_JUDGE",

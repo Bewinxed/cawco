@@ -1,7 +1,4 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
-import { createInterface } from "node:readline";
-import { readCall } from "@cawco/core/control-args";
-import type { Control } from "@cawco/core/control-table";
 import {
   type PiHostCommand,
   type PiHostEvent,
@@ -10,22 +7,13 @@ import {
 } from "@cawco/core/harness/pi-host-state";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
-import {
-  type HarnessContext,
-  type HarnessSession,
-  runControl,
-} from "../harness";
-import { installOf } from "./credential-controls";
+import { unhandled } from "@cawco/core/unhandled";
+import type { HarnessContext, HarnessSession } from "../harness";
+import { sayOnLine, serveHostLine } from "./host-serve";
 import { startPiHost } from "./pi-runtime";
-import { backgroundShell, hostFailure, PI_ASKS_NOTHING } from "./pi-sessiond";
+import { backgroundShell, PI_ASKS_NOTHING } from "./pi-sessiond";
 
-// SDK/extension diagnostics must never enter the sequenced protocol stream.
-console.log = console.error;
-console.info = console.error;
-console.debug = console.error;
-const output = (event: PiHostEvent): void => {
-  process.stdout.write(`${JSON.stringify(event)}\n`);
-};
+const output = (event: PiHostEvent): void => sayOnLine(event);
 const state: PiHostState = {
   sessionId: null,
   busy: false,
@@ -103,100 +91,50 @@ function start(
   return started;
 }
 
-/**
- * A command off the agent's line, a control's call read as the wire's
- * controls are (core control-args.ts `readCall`): its name the table's, its
- * arguments its own.
- */
-type HostCommand =
-  | (PiHostCommand & { type: "start" | "send" | "snapshot" | "stop" })
-  | { type: "control"; id: string; control: Control };
-
-async function handle(command: HostCommand): Promise<void> {
-  if (command.type === "start") {
-    await start(command);
-    return;
-  }
+/** The started session, once its start has run. */
+async function startedSession(): Promise<HarnessSession> {
   await starting;
   if (!session) {
     throw new Error("pi host is not initialized");
   }
+  return session;
+}
+
+async function handle(command: PiHostCommand): Promise<void> {
+  if (command.type === "start") {
+    await start(command);
+    return;
+  }
+  const held = await startedSession();
   switch (command.type) {
     case "send":
       if (!state.held.includes(command.message.uuid)) {
         state.held.push(command.message.uuid);
-        session.send(command.message, command.extras);
+        held.send(command.message, command.extras);
       }
       return;
     case "snapshot":
       output({ type: "reply", id: command.id, value: state });
       return;
+    // The line answers these itself (host-serve.ts).
     case "control":
-      output({
-        type: "reply",
-        id: command.id,
-        value: await runControl(
-          session.controls,
-          command.control.method,
-          command.control.args
-        ),
-      });
-      return;
     case "stop":
-      await session.stop();
-      output({ type: "reply", id: command.id });
       return;
     default:
-      return;
+      unhandled("command", command);
   }
 }
 
-createInterface({ input: process.stdin })
-  .on("line", (line) => {
-    let command: HostCommand;
-    try {
-      const read = piHostCommand(JSON.parse(line));
-      if (read.type === "control") {
-        const called = readCall(read.method, read.args);
-        if (!called.ok) {
-          output({ type: "reply", id: read.id, error: called.error });
-          return;
-        }
-        command = { type: "control", id: read.id, control: called.control };
-      } else {
-        command = read;
-      }
-    } catch (error) {
-      output({ type: "failed", error: String(error) });
-      return;
-    }
-    handle(command).catch((error: unknown) => {
-      const installing =
-        command.type === "control" ? installOf(command.control) : undefined;
-      const failure = hostFailure(error);
-      if ("id" in command) {
-        const said = installing
-          ? failure.error.replaceAll(installing, "[credential]")
-          : failure.error;
-        output({ type: "reply", id: command.id, ...failure, error: said });
-      } else if (command.type === "send") {
-        state.held = state.held.filter((held) => held !== command.message.uuid);
-        output({
-          type: "rejected",
-          uuid: command.message.uuid,
-          error: String(error),
-        });
-      } else {
-        output({ type: "failed", ...failure });
-      }
-    });
-  })
-  .on("close", () => {
-    (async () => {
-      await starting;
-      await session?.stop();
-      await session?.dispose();
-    })()
-      .catch((error: unknown) => console.error(error))
-      .finally(() => process.exit(0));
-  });
+serveHostLine({
+  read: piHostCommand,
+  handle,
+  session: startedSession,
+  sendFailed: (uuid) => {
+    state.held = state.held.filter((held) => held !== uuid);
+  },
+  close: async () => {
+    await starting;
+    await session?.stop();
+    await session?.dispose();
+  },
+});

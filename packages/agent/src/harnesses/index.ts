@@ -5,12 +5,14 @@
  */
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import type { Harness } from "../harness";
+import { agyHarness } from "./agy";
 import { claudeHarness } from "./claude";
 import { codexHarness } from "./codex";
 import { opencodeHarness } from "./opencode";
 import { piHarness } from "./pi";
 
 const ADAPTERS: { [K in HarnessKind]: Harness<K> } = {
+  agy: agyHarness,
   claude: claudeHarness,
   codex: codexHarness,
   opencode: opencodeHarness,

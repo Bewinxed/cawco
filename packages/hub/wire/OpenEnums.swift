@@ -1125,6 +1125,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/BlockMetadataCompactBy`.
     public enum BlockMetadataCompactBy: OpenEnum {
+        case agy
         case codex
         case opencode
         case pi
@@ -1133,6 +1134,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "agy": self = .agy
             case "codex": self = .codex
             case "opencode": self = .opencode
             case "pi": self = .pi
@@ -1142,6 +1144,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .agy: "agy"
             case .codex: "codex"
             case .opencode: "opencode"
             case .pi: "pi"
@@ -1153,7 +1156,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.codex, .opencode, .pi]
+        public static let allCases: [Self] = [.agy, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4172,6 +4175,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/HarnessKind`.
     public enum HarnessKind: OpenEnum {
+        case agy
         case claude
         case codex
         case opencode
@@ -4181,6 +4185,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "agy": self = .agy
             case "claude": self = .claude
             case "codex": self = .codex
             case "opencode": self = .opencode
@@ -4191,6 +4196,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .agy: "agy"
             case .claude: "claude"
             case .codex: "codex"
             case .opencode: "opencode"
@@ -4203,7 +4209,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
+        public static let allCases: [Self] = [.agy, .claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4406,6 +4412,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/HomeStore`.
     public enum HomeStore: OpenEnum {
+        case agy
         case claude
         case codex
         case opencode
@@ -4415,6 +4422,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "agy": self = .agy
             case "claude": self = .claude
             case "codex": self = .codex
             case "opencode": self = .opencode
@@ -4425,6 +4433,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .agy: "agy"
             case .claude: "claude"
             case .codex: "codex"
             case .opencode: "opencode"
@@ -4437,7 +4446,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
+        public static let allCases: [Self] = [.agy, .claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5622,6 +5631,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/MachineCapabilityId`.
     public enum MachineCapabilityId: OpenEnum {
+        case antigravity
         case browser
         case claude
         case codex
@@ -5639,6 +5649,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "antigravity": self = .antigravity
             case "browser": self = .browser
             case "claude": self = .claude
             case "codex": self = .codex
@@ -5657,6 +5668,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .antigravity: "antigravity"
             case .browser: "browser"
             case .claude: "claude"
             case .codex: "codex"
@@ -5677,7 +5689,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .codex, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
+        public static let allCases: [Self] = [.antigravity, .browser, .claude, .codex, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -10696,6 +10708,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/TriggerSourced.T`.
     public enum TriggerSourced.T: OpenEnum {
+        case agy
         case claude
         case codex
         case opencode
@@ -10705,6 +10718,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "agy": self = .agy
             case "claude": self = .claude
             case "codex": self = .codex
             case "opencode": self = .opencode
@@ -10715,6 +10729,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .agy: "agy"
             case .claude: "claude"
             case .codex: "codex"
             case .opencode: "opencode"
@@ -10727,7 +10742,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
+        public static let allCases: [Self] = [.agy, .claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

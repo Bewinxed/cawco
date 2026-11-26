@@ -28,6 +28,9 @@ export const wireReadWords = {
    */
   piHostRefused: (what: "command" | "event", why: string) =>
     `A pi host ${what} was refused as it was read: it is not one (${why})`,
+  /** The same of an Antigravity host's line (agent agy-sessiond.ts, agy-host.ts). */
+  agyHostRefused: (what: "command" | "event", why: string) =>
+    `An Antigravity host ${what} was refused as it was read: it is not one (${why})`,
   /** A pi host's frame whose message is not a session's message (core session-messages.ts `isNeutralMessage`). */
   notNeutralMessage: "is not a session's message",
   /** What a payload is meant to be, as a refusal of one that is not names it. */
@@ -38,6 +41,7 @@ export const wireReadWords = {
     fs: "a file request",
     heartbeat: "a beat's answer",
     launch: "a launch's grant",
+    permission: "a permission's answer",
     register: "a register's answer",
     send: "a send",
     spawn: "a start",

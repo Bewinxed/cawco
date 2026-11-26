@@ -7,13 +7,15 @@
   /**
    * Each CLI's mark, by its id: the harnesses CawCo runs, and the CLIs it
    * installs beside them (core TOOL_CATALOG). Antigravity's is Iconify's
-   * `logos:antigravity`; Codex's is OpenAI's, `logos:openai-icon`.
+   * `logos:antigravity`, under its harness's kind and its tool's id alike;
+   * Codex's is OpenAI's, `logos:openai-icon`.
    */
   const MARKS = {
     claude: LogoClaude,
     opencode: OpenCodeLogo,
     pi: PiLogo,
     codex: LogoOpenai,
+    agy: LogoAntigravity,
     antigravity: LogoAntigravity,
   } satisfies Record<HarnessKind | "antigravity", unknown>;
 

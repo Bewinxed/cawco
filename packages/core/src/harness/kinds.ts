@@ -7,6 +7,7 @@
  */
 
 import { everyOf } from "../every-of";
+import { AGY } from "./agy";
 import { CLAUDE } from "./claude";
 import { CODEX } from "./codex";
 import type { HarnessDescriptor } from "./descriptor";
@@ -25,6 +26,7 @@ export const HARNESS_PLUGINS = [
   OPENCODE,
   PI,
   CODEX,
+  AGY,
 ] as const satisfies readonly HarnessDescriptor[];
 
 /** A registered plugin's descriptor. */
@@ -40,6 +42,19 @@ export const HARNESSES = [
 
 /** The harnesses cawco can spawn sessions on: a registered plugin's kind. */
 export type HarnessKind = (typeof HARNESSES)[number];
+
+/**
+ * Every harness's CLI, by its tool catalog id (its descriptor's `tool`), in
+ * {@link HARNESS_PLUGINS} order: what a machine's capability report names
+ * each by.
+ */
+export const HARNESS_TOOLS = [
+  FIRST_PLUGIN.tool,
+  ...LATER_PLUGINS.map((plugin) => plugin.tool),
+] as const;
+
+/** A harness's CLI, by its tool catalog id. */
+export type HarnessTool = (typeof HARNESS_TOOLS)[number];
 
 /** The descriptor of harness `K`, as its plugin wrote it. */
 export type PluginOf<K extends HarnessKind> = Extract<

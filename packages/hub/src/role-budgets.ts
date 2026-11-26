@@ -318,9 +318,12 @@ import {
  * `question_close` the evidence that another session's question was
  * overtaken, and `answer_delegate` a `forward` to the person (worker
  * 34,139, delegate 14,631 measured); both budgets are raised to it.
+ * 2026-11-26: Antigravity joins the harnesses (tsk-340): every tool schema
+ * that names a harness lists `agy` beside the others (worker 34,149
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 34_139,
+  worker: 34_149,
   delegate: 14_631,
   overseer: 770,
   "web-facing": 3400,

@@ -77,7 +77,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "account_routing.delegates_strategy": {
@@ -104,7 +105,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "account_signins.refusal_reach": {
@@ -1212,7 +1214,8 @@
             "claude",
             "opencode",
             "pi",
-            "codex"
+            "codex",
+            "agy"
           ]
         },
         "additionalProperties": {
@@ -2405,7 +2408,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "config_trash.kind": {
@@ -3136,7 +3140,8 @@
                 "enum": [
                   "opencode",
                   "pi",
-                  "codex"
+                  "codex",
+                  "agy"
                 ]
               },
               "summaryRefused": {
@@ -4479,7 +4484,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "instanceId": {
@@ -4618,7 +4624,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "model": {
@@ -4672,7 +4679,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "machineId": {
@@ -4923,7 +4931,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "design_checks.findings": {
@@ -6311,7 +6320,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "fleet_trigger_settings.kind": {
@@ -6604,7 +6614,8 @@
                 "claude",
                 "opencode",
                 "pi",
-                "codex"
+                "codex",
+                "agy"
               ]
             },
             "instanceId": {
@@ -6640,7 +6651,8 @@
                 "claude",
                 "opencode",
                 "pi",
-                "codex"
+                "codex",
+                "agy"
               ]
             },
             "wasRunning": {
@@ -6817,7 +6829,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "instance_starting_set.kind": {
@@ -6903,7 +6916,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "instances.keep_alive_stopped": {
@@ -7056,7 +7070,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "homeLoginMove": {
@@ -7418,7 +7433,8 @@
         "enum": [
           "opencode",
           "pi",
-          "codex"
+          "codex",
+          "agy"
         ]
       },
       "summaryRefused": {
@@ -7722,7 +7738,8 @@
             "enum": [
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "summaryRefused": {
@@ -8945,7 +8962,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "mcp_server_platforms.platform": {
@@ -9581,7 +9599,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "model": {
@@ -9678,7 +9697,8 @@
             "enum": [
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "summaryRefused": {
@@ -11023,7 +11043,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "input": {
@@ -11788,7 +11809,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "project_trigger_settings.kind": {
@@ -11831,7 +11853,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "projects.caw_mode": {
@@ -11942,7 +11965,8 @@
           "claude",
           "opencode",
           "pi",
-          "codex"
+          "codex",
+          "agy"
         ]
       },
       "inputs": {
@@ -12049,7 +12073,8 @@
           "claude",
           "opencode",
           "pi",
-          "codex"
+          "codex",
+          "agy"
         ]
       },
       "host": {
@@ -12158,7 +12183,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "rules.scope_role": {
@@ -13771,7 +13797,8 @@
               "claude",
               "opencode",
               "pi",
-              "codex"
+              "codex",
+              "agy"
             ]
           },
           "machineId": {
@@ -14563,7 +14590,8 @@
       "claude",
       "opencode",
       "pi",
-      "codex"
+      "codex",
+      "agy"
     ]
   },
   "work_items.landing_phase": {

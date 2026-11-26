@@ -833,6 +833,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
     homepage: "https://antigravity.google",
     bin: "agy",
     versionCommand: "agy --version",
+    // The release CawCo's Antigravity harness was built and proven on
+    // (tsk-340): its ACP sign-in methods, its hook decisions and its
+    // `session/new` model list as agy-runtime.ts reads them.
+    minVersion: "1.5.18",
     // Its own reads and sign-in, never a request of CawCo's to Google
     // (Antigravity's terms §6, https://antigravity.google/terms). `/usage`
     // in print mode is answered by the CLI itself, spends nothing, and

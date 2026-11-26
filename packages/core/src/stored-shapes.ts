@@ -35,7 +35,7 @@ import type {
   ConnectAccess as ConnectAccessType,
   ProjectOfferReason as ProjectOfferReasonType,
 } from "./frames";
-import { HARNESSES } from "./harness/kinds";
+import { HARNESS_TOOLS, HARNESSES } from "./harness/kinds";
 import { WIRE_PERMISSION_MODES } from "./harness/modes";
 import {
   COMPACT_NAMED_HARNESSES,
@@ -3435,6 +3435,13 @@ export const ExternalStateShape = declared(
 );
 export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 
+const HarnessToolShape = declared(
+  z.enum(HARNESS_TOOLS),
+  "HarnessTool",
+  "packages/core/src/harness/kinds.ts"
+);
+export type HarnessToolOutput = z.output<typeof HarnessToolShape>;
+
 const WorkspaceToolShape = declared(
   z.object({
     command: z.string(),
@@ -3454,7 +3461,7 @@ const MachineCapabilityShape = declared(
     available: z.boolean(),
     id: z.union([
       z.literal("git"),
-      HarnessKindShape,
+      HarnessToolShape,
       z.literal("node"),
       z.literal("browser"),
       z.literal("container-runtime"),

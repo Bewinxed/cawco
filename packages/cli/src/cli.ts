@@ -883,15 +883,19 @@ const runBrowserCommand = async (args: Args): Promise<number> => {
 };
 
 /**
- * A pi process the agent starts from this build: a session's host
- * (pi-host.ts), or pi's own `mcp list` (pi-mcp-list.ts), which says how it
- * went in its exit code.
+ * A harness process the agent starts from this build: a pi or Antigravity
+ * session's host (pi-host.ts, agy-host.ts), or pi's own `mcp list`
+ * (pi-mcp-list.ts), which says how it went in its exit code.
  */
-const runPiEntry = async (
-  command: "pi-host" | "pi-mcp-list"
+const runHostEntry = async (
+  command: "pi-host" | "agy-host" | "pi-mcp-list"
 ): Promise<number> => {
   if (command === "pi-host") {
     await import("@cawco/agent/pi-host");
+    return 0;
+  }
+  if (command === "agy-host") {
+    await import("@cawco/agent/agy-host");
     return 0;
   }
   await import("@cawco/agent/pi-mcp-list");
@@ -986,8 +990,9 @@ const run = async (argv: string[]): Promise<number> => {
       await import("../../../apps/dashboard/serve.js");
       return 0;
     case "pi-host":
+    case "agy-host":
     case "pi-mcp-list":
-      return runPiEntry(args.command);
+      return runHostEntry(args.command);
     case "capabilities": {
       const { probeMachineCapabilities } =
         await import("@cawco/agent/machine-capabilities");

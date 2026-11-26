@@ -4,14 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { CONTROL_REPLIES } from "@cawco/core/control-replies";
-import type { Control } from "@cawco/core/control-table";
 import {
   BOUNDARY_RELAUNCH,
   CONTROL_REFRESH_CAWCO_TOOLS,
   GATEWAY_RELAUNCH,
-  INSTALL_SESSION_CREDENTIAL,
-  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import {
   type PiHostCommand,
@@ -23,29 +19,20 @@ import {
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
-import { KindedError, type LastErrorKind } from "@cawco/core/relaunch";
 import { standalone } from "@cawco/core/runtime";
 import type {
   FleetMcpChange,
   FleetMcpTakeAnswer,
 } from "@cawco/core/session/controls";
 import {
-  CONTROL_CONTEXT_USAGE,
-  CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_MCP_RECONNECT,
   CONTROL_MCP_TOGGLE,
   CONTROL_RELOAD_SKILLS,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_MODEL,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_SUPPORTED_MODELS,
 } from "@cawco/core/session/controls";
-import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
-import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
+import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
-import { Deferred, Effect, Exit } from "effect";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
@@ -53,18 +40,13 @@ import {
   type HarnessContext,
   type HarnessSession,
   type SessionControls,
-  type TurnExtras,
-  unreadSendsHeld,
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
 import { procIdFor } from "../proc-id";
-import {
-  KeeperRefused,
-  procEpoch,
-  refusalReason,
-  type SessiondClient,
-} from "../sessiond-client";
+import type { SessiondClient } from "../sessiond-client";
+import { hostSnapshot } from "./host-line";
+import { HostedSession } from "./hosted-session";
 
 /**
  * The MCP gateway port a host reaches CawCo's tools on. One started before
@@ -75,33 +57,8 @@ import {
 const hostGateway = (state: PiHostState): number | undefined =>
   state.gatewayPort ??
   (readEnv(CAWCO_ENV.mcpPort) === undefined ? undefined : mcpGatewayPort());
-/**
- * A failure as the host says it on its line: its words, and its kind when
- * its maker typed it (core relaunch.ts), which a thrown error loses on the
- * way out of the host's process.
- */
-interface HostFailure {
-  error: string;
-  lastErrorKind?: LastErrorKind;
-}
-
-/** `error` as the host says it. */
-export const hostFailure = (error: unknown): HostFailure =>
-  error instanceof KindedError
-    ? { error: error.message, lastErrorKind: error.lastErrorKind }
-    : { error: String(error) };
-
-/** A failure the host said, as the error it was. */
-const saidFailure = (said: HostFailure): Error =>
-  said.lastErrorKind
-    ? new KindedError(said.lastErrorKind, said.error)
-    : new Error(said.error);
-
 /** Why a pi session takes no answer: it raises no permission prompt and has no question tool. */
 export const PI_ASKS_NOTHING = "pi puts no call to the hub.";
-
-/** What the host says that must reach the session in its order: its frames. */
-type InOrder = Extract<PiHostEvent, { type: "frame" }>;
 
 /**
  * A frame about a shell command a pi host moved to the background: its
@@ -131,7 +88,10 @@ const staleHosts = new Map<string, string>();
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
-class PiRemoteSession implements HarnessSession {
+class PiRemoteSession
+  extends HostedSession<PiHostEvent>
+  implements HarnessSession
+{
   readonly endedForMove = cannot(
     "A pi session is never carried between accounts: it keeps no account dir."
   );
@@ -162,49 +122,16 @@ class PiRemoteSession implements HarnessSession {
   }
 
   readonly harness = "pi" as const;
-  sessionId: string | null = null;
-  /** Each request still waiting on the host's reply, by id: the reply it waits on, and whether it reads the state. */
-  readonly #pending = new Map<
-    string,
-    { reply: Deferred.Deferred<unknown, Error>; snapshot: boolean }
-  >();
-  readonly #client: SessiondClient;
-  readonly #ctx: HarnessContext;
-  readonly #epoch: string;
-  readonly #recoveryHead: number;
-  #seq: number;
-  #ready: boolean;
-  #busy: boolean;
-  #exited = false;
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
   /** The MCP gateway port the host reaches CawCo's tools on ({@link hostGateway}). */
   #hostGateway: number | undefined;
-  /** What the host said before the supervisor installed this session, in order. */
-  readonly #early: { seq: number; event: InOrder }[] = [];
-  /**
-   * The sends the host has been handed and pi has not read, by uuid: from
-   * {@link send} (or the host's own list, {@link applyState}) until the
-   * host says each read or refused. A send steered into a turn as it ends
-   * waits in pi's queue past the turn's end, so the host's `busy` going off
-   * says nothing of it; stopping the host before pi reads it loses it
-   * ({@link holding}).
-   */
-  readonly #unread = new Set<string>();
   /**
    * The shell commands the host moved to the background that still run, by
    * task id: from their `task_started` (or the host's own list,
    * {@link applyState}) until their `task_notification` ({@link holding}).
    */
   readonly #background = new Set<string>();
-
-  /** Its host's pid as its keeper listed it: the process a refusal of its input is about. */
-  readonly #pid: number;
-
-  /** Its host's process: what its commands run under (agent left-running.ts). */
-  processId(): Promise<number | undefined> {
-    return Promise.resolve(this.#pid);
-  }
 
   constructor(
     client: SessiondClient,
@@ -214,120 +141,33 @@ class PiRemoteSession implements HarnessSession {
     afterSeq: number,
     recoveryHead = 0
   ) {
-    this.#client = client;
-    this.#ctx = ctx;
-    this.#ready = false;
-    this.#busy = false;
-    const { epoch, pid } = host;
-    this.#pid = pid;
-    this.#epoch = procEpoch(epoch, pid);
-    this.#seq = afterSeq;
-    this.#recoveryHead = recoveryHead;
-    client.subscribe(
-      procIdFor("pi", ctx.instanceId),
-      {
-        line: (line) => {
-          if (line.seq <= this.#seq) {
-            return;
-          }
-          this.#seq = line.seq;
-          const event = piHostEvent(JSON.parse(line.data));
-          switch (event.type) {
-            case "frame":
-              if (this.#ready) {
-                this.#inOrder(line.seq, event);
-              } else {
-                this.#early.push({ seq: line.seq, event });
-              }
-              break;
-            case "busy":
-              this.#setBusy(event.active);
-              break;
-            case "session":
-              this.sessionId = event.sessionId;
-              this.#setBusy(this.#busy);
-              ctx.session(event.sessionId);
-              break;
-            case "failed":
-              ctx.failed(saidFailure(event));
-              break;
-            case "rejected":
-              this.#unread.delete(event.uuid);
-              ctx.rejected(event.uuid, new Error(event.error));
-              break;
-            case "reply": {
-              const pending = this.#pending.get(event.id);
-              this.#pending.delete(event.id);
-              if (!pending) {
-                break;
-              }
-              if (event.error) {
-                Deferred.doneUnsafe(
-                  pending.reply,
-                  Exit.fail(saidFailure({ ...event, error: event.error }))
-                );
-              } else {
-                // Apply in socket order, before a later busy delta can arrive.
-                if (pending.snapshot) {
-                  this.applyState(piHostState(event.value));
-                }
-                Deferred.doneUnsafe(pending.reply, Exit.succeed(event.value));
-              }
-              break;
-            }
-            default:
-              break;
-          }
-        },
-        reset: (nextSeq) =>
-          ctx.failed(new Error(`pi replay window lost: next line ${nextSeq}`)),
-        exit: (code, signal) => {
-          // Killed from outside (nothing of this agent's stopped it): a death
-          // the supervisor hands back, the turn and the commands it cut.
-          if (signal && !this.#exited) {
-            ctx.died?.(
-              signal,
-              new Error(`pi's host process was ended by ${signal}`)
-            );
-          }
-          for (const pending of this.#pending.values()) {
-            Deferred.doneUnsafe(
-              pending.reply,
-              Exit.fail(new Error(`pi host exited: ${code ?? signal}`))
-            );
-          }
-          this.#pending.clear();
-          this.#exited = true;
-          // Gone with the host: the supervisor hands back what it never read.
-          this.#unread.clear();
-          this.#setBusy(false);
-          ctx.closed?.();
-          client.release(procIdFor("pi", ctx.instanceId), pid);
-        },
-      },
-      afterSeq
-    );
+    super({
+      client,
+      ctx,
+      host,
+      afterSeq,
+      recoveryHead,
+      name: "pi",
+      procId: procIdFor("pi", ctx.instanceId),
+      read: piHostEvent,
+    });
   }
 
-  /** A frame, in the order the host said them. */
-  #inOrder(seq: number, event: InOrder): void {
-    this.#frame(seq, event.message);
+  /** pi's host says nothing beyond what every host says. */
+  protected override ownEvent(): void {
+    // Every event of pi's host is a shared one.
   }
 
-  #frame(seq: number, message: NeutralMessage): void {
-    if (message.type === "system" && message.subtype === MESSAGES_READ) {
-      for (const uuid of message.read ?? []) {
-        this.#unread.delete(uuid);
-      }
-    }
+  protected override applySnapshot(value: unknown): void {
+    this.applyState(piHostState(value));
+  }
+
+  protected override beforeFrame(message: NeutralMessage): void {
     const moved = backgroundShell(message);
     if (moved?.running) {
       this.#background.add(moved.taskId);
     } else if (moved) {
       this.#background.delete(moved.taskId);
-    }
-    if (message.type === "result" && seq <= this.#recoveryHead) {
-      message.recovered = true;
     }
     // What will wake it as the turn ends: the shell commands its host moved
     // to the background, each of whose ends starts a turn (pi-runtime
@@ -335,19 +175,21 @@ class PiRemoteSession implements HarnessSession {
     if (message.type === "result") {
       message.wakes = { background: this.#background.size, scheduled: 0 };
     }
-    this.#ctx.line?.(this.#epoch, seq);
-    this.#ctx.frame(message);
-    // A turn of a host on another gate has ended: its boundary is where the
-    // hub relaunches it onto this build's gate. Asked after the result, which
-    // is how the hub knows the turn is over; a result replayed while a later
-    // turn runs asks nothing.
-    if (message.type === "result" && !this.#busy) {
+  }
+
+  /**
+   * A turn of a host on another gate has ended: its boundary is where the
+   * hub relaunches it onto this build's gate. Asked after the result, which
+   * is how the hub knows the turn is over; a result replayed while a later
+   * turn runs asks nothing.
+   */
+  protected override afterFrame(message: NeutralMessage): void {
+    if (message.type === "result" && !this.busyNow) {
       this.askRelaunch();
     }
   }
 
-  #setBusy(active: boolean): void {
-    this.#busy = active;
+  protected override setBusy(active: boolean): void {
     if (this.sessionId) {
       if (active) {
         piOpenTurns.add(this.sessionId);
@@ -355,25 +197,16 @@ class PiRemoteSession implements HarnessSession {
         piOpenTurns.delete(this.sessionId);
       }
     }
-    this.#ctx.busy(active);
+    super.setBusy(active);
   }
 
   applyState(state: PiHostState): void {
-    this.sessionId = state.sessionId;
     this.#hostForm = state.gateForm;
     this.#hostGateway = hostGateway(state);
-    // What the host holds unread when it answers: the reads after it come
-    // as frames. One sent since it answered is in the set already.
-    for (const uuid of state.held) {
-      this.#unread.add(uuid);
-    }
     for (const taskId of state.background ?? []) {
       this.#background.add(taskId);
     }
-    this.#setBusy(state.busy);
-    if (state.sessionId) {
-      this.#ctx.session(state.sessionId);
-    }
+    this.applyShared(state);
   }
 
   /**
@@ -388,77 +221,30 @@ class PiRemoteSession implements HarnessSession {
    * relaunches it only while it is idle, never mid-turn.
    */
   askRelaunch(): void {
-    if (!this.#ready || this.#exited) {
+    if (!this.ready || this.exited) {
       return;
     }
-    if (this.#ctx.boundary && this.#hostForm !== gateForm("pi")) {
-      staleHosts.set(this.#ctx.instanceId, this.#hostForm ?? "none");
-      this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+    if (this.ctx.boundary && this.#hostForm !== gateForm("pi")) {
+      staleHosts.set(this.ctx.instanceId, this.#hostForm ?? "none");
+      this.ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
     } else if (this.#hostGateway !== mcpGatewayPort()) {
-      this.#ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
+      this.ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
     }
   }
 
-  attached(): void {
-    this.#ready = true;
-    for (const { seq, event } of this.#early.splice(0)) {
-      this.#inOrder(seq, event);
-    }
-    if (!this.#busy) {
+  override attached(): void {
+    super.attached();
+    if (!this.busyNow) {
       this.askRelaunch();
     }
   }
 
-  async write(command: PiHostCommand): Promise<void> {
-    const procId = procIdFor("pi", this.#ctx.instanceId);
-    try {
-      await this.#client.write(procId, `${JSON.stringify(command)}\n`);
-    } catch (error) {
-      // Never silent: the session hears the keeper refused its host its
-      // input, and the caller's wait ends with the same refusal.
-      const refusal = new KeeperRefused(
-        procId,
-        refusalReason(error),
-        this.#pid
-      );
-      console.warn(`[sessiond] ${procId}: write refused: ${refusal.reason}`);
-      this.#ctx.keeperRefused(refusal);
-      throw refusal;
-    }
+  write(command: PiHostCommand): Promise<void> {
+    return this.line.write(command);
   }
 
-  async request(
-    command:
-      { type: "snapshot" } | ({ type: "control" } & Control) | { type: "stop" }
-  ): Promise<unknown> {
-    const id = crypto.randomUUID();
-    const reply = Deferred.makeUnsafe<unknown, Error>();
-    this.#pending.set(id, { reply, snapshot: command.type === "snapshot" });
-    try {
-      await this.write({ ...command, id });
-    } catch (error) {
-      this.#pending.delete(id);
-      throw error;
-    }
-    // The promise edge of the host's reply.
-    return await Effect.runPromise(Deferred.await(reply));
-  }
-
-  send(message: SentMessage, extras: TurnExtras): void {
-    this.#unread.add(message.uuid);
-    this.#setBusy(true);
-    this.write({ type: "send", message, extras }).catch((error: unknown) => {
-      // A refused write has been said, and its send is kept for the next
-      // start ({@link KeeperRefused}); any other failure is this send's.
-      this.#unread.delete(message.uuid);
-      if (!(error instanceof KeeperRefused)) {
-        this.#ctx.rejected(message.uuid, error);
-      }
-    });
-  }
-
-  holding(): string | undefined {
-    const unread = unreadSendsHeld(this.#unread);
+  override holding(): string | undefined {
+    const unread = super.holding();
     if (unread) {
       return unread;
     }
@@ -467,48 +253,24 @@ class PiRemoteSession implements HarnessSession {
       ? `${this.#background.size} shell command(s) it moved to the background are still running`
       : undefined;
   }
-  /** `control`, asked of the host, which runs it (pi-runtime.ts `PiSession.controls`): its answer as the host gave it. */
-  #ask(control: Control): Promise<unknown> {
-    return this.request({ type: "control", ...control });
-  }
+
   /**
    * Its controls (core traits.ts `sessionControls`), each asked of the host
    * that runs the session, and its answer read there as its reply's type
    * (core control-replies.ts).
    */
   readonly controls: SessionControls<"pi"> = {
-    [INSTALL_SESSION_CREDENTIAL]: async (...args) =>
-      CONTROL_REPLIES[INSTALL_SESSION_CREDENTIAL].parse(
-        await this.#ask({ method: INSTALL_SESSION_CREDENTIAL, args })
-      ),
-    [VERIFY_SESSION_CREDENTIAL]: () =>
-      this.#ask({ method: VERIFY_SESSION_CREDENTIAL, args: [] }),
+    ...this.sharedControls(),
     [CONTROL_REFRESH_CAWCO_TOOLS]: () =>
-      this.#ask({ method: CONTROL_REFRESH_CAWCO_TOOLS, args: [] }),
+      this.ask({ method: CONTROL_REFRESH_CAWCO_TOOLS, args: [] }),
     [CONTROL_MCP_FLEET_CHANGED]: (changes) => this.#takeFleetMcp(changes),
     [CONTROL_MCP_FLEET_HEAL]: (names) => this.#healFleetMcp(names ?? []),
-    [CONTROL_INTERRUPT]: () =>
-      this.#ask({ method: CONTROL_INTERRUPT, args: [] }),
-    [CONTROL_SET_MODEL]: (...args) =>
-      this.#ask({ method: CONTROL_SET_MODEL, args }),
-    [CONTROL_SET_EFFORT]: (...args) =>
-      this.#ask({ method: CONTROL_SET_EFFORT, args }),
     [CONTROL_RELOAD_SKILLS]: () =>
-      this.#ask({ method: CONTROL_RELOAD_SKILLS, args: [] }),
+      this.ask({ method: CONTROL_RELOAD_SKILLS, args: [] }),
     [CONTROL_MCP_RECONNECT]: (...args) =>
-      this.#ask({ method: CONTROL_MCP_RECONNECT, args }),
+      this.ask({ method: CONTROL_MCP_RECONNECT, args }),
     [CONTROL_MCP_TOGGLE]: (...args) =>
-      this.#ask({ method: CONTROL_MCP_TOGGLE, args }),
-    [CONTROL_SUPPORTED_MODELS]: () =>
-      this.#ask({ method: CONTROL_SUPPORTED_MODELS, args: [] }),
-    [CONTROL_SUPPORTED_COMMANDS]: async () =>
-      CONTROL_REPLIES[CONTROL_SUPPORTED_COMMANDS].parse(
-        await this.#ask({ method: CONTROL_SUPPORTED_COMMANDS, args: [] })
-      ),
-    [CONTROL_CONTEXT_USAGE]: async () =>
-      CONTROL_REPLIES[CONTROL_CONTEXT_USAGE].parse(
-        await this.#ask({ method: CONTROL_CONTEXT_USAGE, args: [] })
-      ),
+      this.ask({ method: CONTROL_MCP_TOGGLE, args }),
   };
   /**
    * A fleet MCP change, to the host, which registers the fleet's servers
@@ -525,7 +287,7 @@ class PiRemoteSession implements HarnessSession {
       })
     );
     console.info(
-      `[pi] ${this.#ctx.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
+      `[pi] ${this.ctx.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
     );
     return taken;
   }
@@ -539,12 +301,9 @@ class PiRemoteSession implements HarnessSession {
       })
     );
     console.info(
-      `[pi] ${this.#ctx.instanceId}: fleet MCP read ${healed.servers.map(({ name, status }) => `${name}: ${status}`).join("; ")}`
+      `[pi] ${this.ctx.instanceId}: fleet MCP read ${healed.servers.map(({ name, status }) => `${name}: ${status}`).join("; ")}`
     );
     return healed;
-  }
-  async interrupt(): Promise<void> {
-    await this.#ask({ method: CONTROL_INTERRUPT, args: [] });
   }
   /** pi raises no permission prompt and has no question tool: nothing waits on an answer. */
   resolvePermission(): void {
@@ -552,15 +311,6 @@ class PiRemoteSession implements HarnessSession {
   }
   withdrawPermission(): void {
     throw new Error(PI_ASKS_NOTHING);
-  }
-  async stop(): Promise<void> {
-    // A host being stopped is not one to relaunch.
-    this.#exited = true;
-    await this.request({ type: "stop" });
-    await this.#client.stdinEnd(procIdFor("pi", this.#ctx.instanceId));
-  }
-  async dispose(): Promise<void> {
-    await this.stop();
   }
 }
 
@@ -635,51 +385,13 @@ export async function spawnPi(
   return session;
 }
 
-export async function piSnapshot(instanceId: string): Promise<PiHostState> {
-  const held = await piKeepers.holding(procIdFor("pi", instanceId));
-  if (!held) {
-    throw new Error(`pi host ${instanceId} is gone`);
-  }
-  const { client } = held;
-  const id = crypto.randomUUID();
-  // The promise edge of one state read off the host.
-  return await Effect.runPromise(
-    Effect.callback<PiHostState, unknown>((resume) => {
-      // Its own subscription beside the session's: ending it leaves the
-      // session's listener as it was.
-      let stop = (): void => undefined;
-      stop = client.subscribe(procIdFor("pi", instanceId), {
-        line: (line) => {
-          const event = piHostEvent(JSON.parse(line.data));
-          if (event.type !== "reply" || event.id !== id) {
-            return;
-          }
-          stop();
-          resume(
-            event.error
-              ? Effect.fail(saidFailure({ ...event, error: event.error }))
-              : Effect.succeed(piHostState(event.value))
-          );
-        },
-        exit: () => {
-          stop();
-          resume(Effect.fail(new Error("pi host exited while reading state")));
-        },
-      });
-      client
-        .write(
-          procIdFor("pi", instanceId),
-          `${JSON.stringify({ type: "snapshot", id })}\n`
-        )
-        .catch((error: unknown) => {
-          stop();
-          resume(Effect.fail(error));
-        });
-      // Interrupted, the read ends its subscription.
-      return Effect.sync(() => stop());
-    })
+export const piSnapshot = (instanceId: string): Promise<PiHostState> =>
+  hostSnapshot(
+    piKeepers,
+    procIdFor("pi", instanceId),
+    piHostState,
+    piHostEvent
   );
-}
 
 export async function adoptPi(
   instanceId: string,
@@ -700,12 +412,6 @@ export async function adoptPi(
     options.head
   );
   const state = piHostState(await session.request({ type: "snapshot" }));
-  ctx.frame({
-    type: "system",
-    subtype: MESSAGES_HELD,
-    held: state.held,
-    whole: true,
-    ...(state.sessionId ? { session_id: state.sessionId } : {}),
-  });
+  session.sayHeld(state);
   return session;
 }

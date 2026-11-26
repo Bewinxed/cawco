@@ -35,7 +35,7 @@
 import { rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
-import { AGY_JUDGE_ENV } from "@cawco/core/harness/agy";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Effect, Schema } from "effect";
@@ -46,7 +46,18 @@ import {
   perlQuote,
 } from "../boundary/hook-judge";
 import { JUDGE_ANSWER_END, JUDGE_ANSWER_END_PERL } from "../boundary/protocol";
+
 import type { AgyAnswer } from "./agy-judge";
+
+/**
+ * The environment variable the agy process of one session is started
+ * with, naming its judge's socket as perl's `Socket` packs it, in hex
+ * (boundary/hook-judge.ts `socketAddress`). agy hands its whole environment
+ * to the hook commands it runs (`assets/338276e4/p0a.calls.jsonl`), so the
+ * one hook every session of an agy home runs reaches that session's judge,
+ * and only it.
+ */
+const AGY_JUDGE_ENV = CAWCO_ENV.agyJudge;
 
 /**
  * How long the hook waits for its judge before it denies the call: under
@@ -139,10 +150,7 @@ class AgyHookWriteError extends Schema.TaggedError<AgyHookWriteError>()(
  * Writes the hook's script to `script` and the hooks.json that runs it into
  * agy home `home`, each whole (core state-file.ts). The script is read-only:
  * the hook is what every call passes, so nothing rewrites it but this.
- *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
+
  */
 export const writeAgyHook = Effect.fn("writeAgyHook")(function* (
   home: string,
@@ -168,10 +176,7 @@ class AgyJudgeError extends Schema.TaggedError<AgyJudgeError>()(
 /**
  * The environment an `agy acp` session is started with for its hook to
  * reach the judge at `socket` ({@link AGY_JUDGE_ENV}).
- *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
+
  */
 export const agyJudgeEnv = Effect.fn("agyJudgeEnv")(function* (socket: string) {
   const packed = yield* Effect.promise(() => packedSocketAddress(socket));
@@ -195,10 +200,7 @@ const answerText = (answer: AgyAnswer): string =>
  * workspace's policy unreadable, say) is a denial with why: a call never
  * runs that the judge could not answer. The socket is removed as the scope
  * closes.
- *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
+
  */
 export const serveAgyJudge = Effect.fn("serveAgyJudge")(function* (
   socket: string,

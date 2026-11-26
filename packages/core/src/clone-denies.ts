@@ -16,7 +16,6 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { PLACED_MEMORY, PLACED_SYNCED } from "./claude-dirs";
-import { AGY_CLONE_CONFIG } from "./harness/agy";
 import { HARNESS_PLUGINS } from "./harness/kinds";
 
 /**
@@ -144,13 +143,9 @@ const oneTable = (
   );
 };
 
-/**
- * Every harness's config, as one table. Antigravity's is its own table
- * until it is a registered harness, whose descriptor's `cloneConfig` it then
- * is (harness/agy.ts).
- */
+/** Every harness's config, as one table. */
 const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = oneTable(
-  [...HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig), AGY_CLONE_CONFIG]
+  HARNESS_PLUGINS.map((plugin) => plugin.cloneConfig)
 );
 
 /**

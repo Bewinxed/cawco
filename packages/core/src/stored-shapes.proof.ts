@@ -230,6 +230,7 @@ import type {
 import type {
   EffortLevel as EffortLevelType,
   HarnessKind as HarnessKindType,
+  HarnessTool as HarnessToolType,
   ModelInfo as ModelInfoType,
 } from "./harness/kinds";
 import type { PermissionMode as PermissionModeType } from "./harness/modes";
@@ -658,6 +659,7 @@ import type {
   HarnessKindOutput,
   HarnessNoteOutput,
   HarnessReportOutput,
+  HarnessToolOutput,
   HeartbeatAckPayloadOutput,
   HeldAccountOutput,
   HeldReasonOutput,
@@ -1290,6 +1292,7 @@ prove<
     Same<InstallOutput, InstallType>,
     Same<InstanceStatusOutput, InstanceStatusType>,
     Same<ExternalStateOutput, ExternalStateType>,
+    Same<HarnessToolOutput, HarnessToolType>,
     Same<WorkspaceToolOutput, WorkspaceToolType>,
     Same<MachineCapabilityOutput, MachineCapabilityType>,
     Same<NamedMachineCapabilitiesOutput, NamedMachineCapabilitiesType>,

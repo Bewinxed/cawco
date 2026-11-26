@@ -5,40 +5,43 @@ import { dirname, join, resolve } from "node:path";
 import { darwinSocketRoot, hubDataDir } from "./roots";
 
 /**
- * The agent's socket that answers `cawco git-credential` outside a session:
- * this machine's credential for the hub's git remote, so a checkout whose
- * `origin` is the hub pulls and pushes from a terminal. Where a deep HOME
- * cannot push it past a socket path's length: `$XDG_RUNTIME_DIR/cawco` on
- * Linux, {@link darwinSocketRoot} on macOS, else `~/.cawco`. No workspace
- * reads or connects into either.
+ * A socket of this machine's CawCo by its name, where a deep HOME cannot
+ * push it past a socket path's length: `$XDG_RUNTIME_DIR/cawco` on Linux,
+ * {@link darwinSocketRoot} on macOS, else `~/.cawco`. No workspace reads or
+ * connects into either.
  */
-export const hubCredentialSocket = (): string => {
+const runtimeSocket = (name: string): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
   if (process.platform === "linux" && runtime) {
-    return join(runtime, "cawco", "git-credential.sock");
+    return join(runtime, "cawco", name);
   }
   if (process.platform === "darwin") {
-    return join(darwinSocketRoot(), "git-credential.sock");
+    return join(darwinSocketRoot(), name);
   }
-  return join(homedir(), ".cawco", "git-credential.sock");
+  return join(homedir(), ".cawco", name);
 };
+
+/**
+ * The agent's socket that answers `cawco git-credential` outside a session:
+ * this machine's credential for the hub's git remote, so a checkout whose
+ * `origin` is the hub pulls and pushes from a terminal.
+ */
+export const hubCredentialSocket = (): string =>
+  runtimeSocket("git-credential.sock");
 
 /**
  * The preview server's own socket (hub preview-server/main.ts), which
  * answers whether it stands: what `cawco service status` and the first
- * machine's readiness probe connect to. Where {@link hubCredentialSocket}'s
- * stands, for the same reason.
+ * machine's readiness probe connect to.
  */
-export const previewServerSocket = (): string => {
-  const runtime = process.env.XDG_RUNTIME_DIR;
-  if (process.platform === "linux" && runtime) {
-    return join(runtime, "cawco", "preview.sock");
-  }
-  if (process.platform === "darwin") {
-    return join(darwinSocketRoot(), "preview.sock");
-  }
-  return join(homedir(), ".cawco", "preview.sock");
-};
+export const previewServerSocket = (): string => runtimeSocket("preview.sock");
+
+/**
+ * The socket one Antigravity session's judge answers its hook on (agent
+ * harnesses/agy-hook.ts), by the session's instance.
+ */
+export const agyJudgeSocket = (instanceId: string): string =>
+  runtimeSocket(`agy-${instanceId}.sock`);
 
 /**
  * The hub's sqlite file, as an absolute path: `CAWCO_DB_PATH`, else

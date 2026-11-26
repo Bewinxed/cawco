@@ -28,9 +28,9 @@
  */
 import { deniedToolsBy } from "@cawco/core/delegate-types";
 import {
+  AGY,
   AGY_BROWSER_PREFIX,
   AGY_DENIED_TOOLS,
-  AGY_KIND,
   AGY_TASK_INPUT_ACTION,
   AGY_TOOLS,
   type AgyToolClass,
@@ -71,12 +71,8 @@ export type AgyAnswer =
       readonly overwrite?: Readonly<Record<string, unknown>>;
     };
 
-/** A workspace session's boundary, as the judge holds it to it. *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
- */
-export interface AgyWorkspace {
+/** A workspace session's boundary, as the judge holds it to it. */
+interface AgyWorkspace {
   /**
    * The workspace's executor (agent boundary/exec.ts `execScript`): every
    * `run_command` is rewritten to run through it, inside the boundary.
@@ -86,11 +82,7 @@ export interface AgyWorkspace {
   readonly policy: () => Policy;
 }
 
-/** What one session's judge knows when a call comes in. *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
- */
+/** What one session's judge knows when a call comes in. */
 export interface AgySession {
   /**
    * The tools denied to it, in agy's names ({@link agyDeniedTools}): the
@@ -115,10 +107,7 @@ export interface AgySession {
  * A denied-tool list written in Claude Code's names (the fleet's, a
  * delegate type's: agent denied-tools.ts `sessionFleetDenials`), in agy's
  * names, for {@link AgySession.denied}.
- *
- * @public No module imports it yet: agy's adapter does once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
+
  */
 export const agyDeniedTools = (names: readonly string[]): ReadonlySet<string> =>
   new Set(deniedToolsBy(AGY_DENIED_TOOLS, names).tools);
@@ -331,7 +320,7 @@ const refusedOutright = (
   const { workspace } = session;
   if (workspace && kind !== "shell") {
     const verdict = judgeCall(workspace.policy(), {
-      harness: AGY_KIND,
+      harness: AGY.kind,
       tool,
       input,
       cwd: call.cwd,
@@ -384,10 +373,7 @@ const agyAnswer = (call: AgyHookInput, session: AgySession): AgyAnswer => {
  * The answer to one line the hook sent: the call agy handed it, as JSON. A
  * line that is not one is denied: the judge never lets a call run that it
  * could not read.
- *
- * @public No module imports it yet: agy's adapter serves it once agy is a
- * registered harness (item 3 of tsk-340, which removes this tag and the
- * knip.ts entry for this file).
+
  */
 export const agyAnswerTo = (line: string, session: AgySession): AgyAnswer =>
   Option.match(decodeInput(line), {

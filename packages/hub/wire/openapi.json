@@ -273,6 +273,7 @@
                   },
                   "store": {
                     "enum": [
+                      "agy",
                       "claude",
                       "codex",
                       "opencode",
@@ -610,6 +611,7 @@
                             "properties": {
                               "harness": {
                                 "enum": [
+                                  "agy",
                                   "claude",
                                   "codex",
                                   "opencode",
@@ -2334,6 +2336,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "agy",
                 "claude",
                 "codex",
                 "opencode",
@@ -6815,6 +6818,7 @@
                       },
                       "harness": {
                         "enum": [
+                          "agy",
                           "claude",
                           "codex",
                           "opencode",
@@ -6954,6 +6958,7 @@
                       },
                       "harness": {
                         "enum": [
+                          "agy",
                           "claude",
                           "codex",
                           "opencode",
@@ -7646,6 +7651,7 @@
                   },
                   "harness": {
                     "enum": [
+                      "agy",
                       "claude",
                       "codex",
                       "opencode",
@@ -11724,6 +11730,7 @@
                   },
                   "harness": {
                     "enum": [
+                      "agy",
                       "claude",
                       "codex",
                       "opencode",
@@ -16900,6 +16907,7 @@
                     "properties": {
                       "harness": {
                         "enum": [
+                          "agy",
                           "claude",
                           "codex",
                           "opencode",
@@ -16954,6 +16962,7 @@
                       },
                       "harness": {
                         "enum": [
+                          "agy",
                           "claude",
                           "codex",
                           "opencode",
@@ -21419,6 +21428,7 @@
                   },
                   "harness": {
                     "enum": [
+                      "agy",
                       "claude",
                       "codex",
                       "opencode",
@@ -24331,6 +24341,7 @@
                       },
                       "harness": {
                         "enum": [
+                          "agy",
                           "claude",
                           "codex",
                           "opencode",
@@ -29172,6 +29183,7 @@
                   },
                   "harness": {
                     "enum": [
+                      "agy",
                       "claude",
                       "codex",
                       "opencode",
@@ -37864,6 +37876,7 @@
       "BlockMetadataCompactBy": {
         "type": "string",
         "enum": [
+          "agy",
           "codex",
           "opencode",
           "pi"
@@ -40228,6 +40241,7 @@
           "harness": {
             "description": "The harness the machine-scoped call is addressed at; session calls route by instance.",
             "enum": [
+              "agy",
               "claude",
               "codex",
               "opencode",
@@ -45326,6 +45340,9 @@
           "mcpByHarness": {
             "type": "object",
             "properties": {
+              "agy": {
+                "type": "object"
+              },
               "claude": {
                 "type": "object"
               },
@@ -46974,6 +46991,7 @@
         "description": "The harnesses cawco can spawn sessions on: a registered plugin's kind.",
         "type": "string",
         "enum": [
+          "agy",
           "claude",
           "codex",
           "opencode",
@@ -47669,6 +47687,7 @@
         "description": "Where a credential moved into an account came from: a harness's own store on the machine.",
         "type": "string",
         "enum": [
+          "agy",
           "claude",
           "codex",
           "opencode",
@@ -50106,6 +50125,7 @@
       "MachineCapabilityId": {
         "type": "string",
         "enum": [
+          "antigravity",
           "browser",
           "claude",
           "codex",
@@ -50143,6 +50163,9 @@
           "chosenModes": {
             "type": "object",
             "properties": {
+              "agy": {
+                "$ref": "#/components/schemas/BlockMetadataPermissionMode"
+              },
               "claude": {
                 "$ref": "#/components/schemas/BlockMetadataPermissionMode"
               },
@@ -62015,6 +62038,7 @@
           "harness": {
             "description": "Which harness runs the session. Every start names it: the hub refuses one\nthat does not (`enforceRowSessionKey`), and the agent starts none without\nit. Optional on the wire only until TestFlight 20261015, 20261015.3,\n20261017 and 20261018 are expired (the app they hold declares it\noptional); then it is required here.",
             "enum": [
+              "agy",
               "claude",
               "codex",
               "opencode",
@@ -63009,6 +63033,7 @@
           "harness": {
             "description": "The row's harness, which ends its process and its server custody without\nadoption. The hub names it on every stop it sends a machine, and the\nagent ends nothing without it; a dashboard's or an app's ask is a\n{@link StopRequest}. Optional on the wire only until TestFlight 20261015,\n20261015.3, 20261017 and 20261018 are expired (the app they hold sends\nthis type); then it is required here.",
             "enum": [
+              "agy",
               "claude",
               "codex",
               "opencode",
@@ -66759,6 +66784,7 @@
       "TriggerSourced.T": {
         "type": "string",
         "enum": [
+          "agy",
           "claude",
           "codex",
           "opencode",

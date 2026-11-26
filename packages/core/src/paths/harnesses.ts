@@ -194,3 +194,35 @@ export const codexStoreDir = (): string => join(cawcoDataDir(), "codex-store");
 
 /** What the fleet sync writes for Codex (skills, rules), linked into every account's home. */
 export const codexFleetRoot = (): string => join(cawcoDataDir(), "fleet-codex");
+
+/** What the fleet sync writes for Antigravity, linked into every account's agy home (tsk-340 item 9). */
+export const agyFleetRoot = (): string => join(cawcoDataDir(), "fleet-agy");
+
+/**
+ * One Antigravity account's agy home (`agy acp --gemini-dir`): its
+ * `config/hooks.json` (CawCo's one hook), and its app-data dir
+ * ({@link AGY_APP_DATA}) with its settings, its sign-in when agy keeps one
+ * in a file, and its conversations. Beside the account's other stores, which
+ * no workspace reads. The owner's own `~/.gemini` is never read or written.
+ */
+export const agyAccountHome = (accountId: string): string =>
+  join(homedir(), ".cawco", "accounts", accountId, "agy");
+
+/**
+ * The app-data dir every session of an account's agy home shares, by its
+ * name in the home (`agy acp --app-data-dir`, which takes a relative name
+ * alone). One per account, as T3 Code keeps one per profile: agy keeps a
+ * file sign-in in it (`acp_token.json`), which a session in a dir of its own
+ * would not find.
+ */
+export const AGY_APP_DATA = "cawco";
+
+/**
+ * What one Antigravity account signs in with on this machine: its method,
+ * and the Google Cloud project and location the method takes, never a key
+ * (a key is the account's `credential.json`'s, paths/claude.ts
+ * `accountCredentialPath`). Beside the account's agy home, outside it, so
+ * agy never reads it.
+ */
+export const agyAccountRecord = (accountId: string): string =>
+  join(homedir(), ".cawco", "accounts", accountId, "antigravity.json");

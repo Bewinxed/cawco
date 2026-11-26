@@ -73,7 +73,7 @@ export interface Lacks {
 /** What stands in for one config path of a clone while the clone has none (core clone-denies.ts). */
 type CloneConfigEmpty =
   | { readonly kind: "dir"; readonly readOnly?: true }
-  | { readonly kind: "file"; readonly text: string }
+  | { readonly kind: "file"; readonly text: string; readonly readOnly?: true }
   | { readonly kind: "none" };
 
 /**
@@ -168,8 +168,9 @@ export type UnlistedModels =
  * call or a turn loads (hub usage-count.ts).
  */
 export interface CallNaming {
-  /** `mcp-prefix`: `mcp__<server>__<tool>`. `longest-known`: `<server>_<tool>`, read by the longest known server it starts with. `mcp-prefix-safe`: `mcp__<server>__<tool>` with each `-` written `_`. */
-  readonly server: "mcp-prefix" | "longest-known" | "mcp-prefix-safe";
+  /** `mcp-prefix`: `mcp__<server>__<tool>`. `longest-known`: `<server>_<tool>`, read by the longest known server it starts with. `mcp-prefix-safe`: `mcp__<server>__<tool>` with each `-` written `_`. `mcp-single-known`: `mcp_<server>_<tool>`, read by the longest known server after `mcp_`. */
+  readonly server:
+    "mcp-prefix" | "longest-known" | "mcp-prefix-safe" | "mcp-single-known";
   /** A skill loaded by a call other than its `Skill` tool: `read-skill-file`, a read of a `SKILL.md`; `none`. */
   readonly skillCall: "read-skill-file" | "none";
   /** The skill a user turn's words load: `command-name`, a `<command-name>`; `skill-tag`, an expanded `<skill name="…">`. */

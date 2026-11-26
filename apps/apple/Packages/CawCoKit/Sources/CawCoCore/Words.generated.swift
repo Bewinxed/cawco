@@ -971,8 +971,10 @@ public enum Words {
 
             public static let codex = "Codex"
 
+            public static let agy = "Antigravity"
+
             /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["claude": claude, "opencode": opencode, "pi": pi, "codex": codex]
+            public static let byKey: [String: String] = ["claude": claude, "opencode": opencode, "pi": pi, "codex": codex, "agy": agy]
         }
 
         // packages/core/src/accounts.ts `ACCOUNT_RULES`

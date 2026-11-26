@@ -1,13 +1,16 @@
 /**
- * Antigravity's CLI, `agy`: the project config it loads from a folder, ahead
- * of its descriptor. This file becomes its descriptor (core
- * harness/descriptor.ts) once it is a registered harness, and
- * {@link AGY_CLONE_CONFIG} its `cloneConfig`; until then clone-denies.ts
- * stands these in beside the registered harnesses' own, as any agy the
- * owner runs in a clone loads them on the host today.
+ * Antigravity, Google's `agy` CLI, described (core harness/descriptor.ts).
+ * Its adapter is agent harnesses/agy.ts: `agy acp` run as Google ships it,
+ * one process per session under a CawCo host the keeper holds
+ * (agent harnesses/agy-host.ts), in a home CawCo keeps per account. The
+ * values rest on the agy audits of 2026-11-11 and 2026-11-26 (the project's
+ * `assets/b3380ec3/agy-harness-parity.md`, `assets/1a32dcdc/
+ * agy-compliant-route.md`) and the probes each comment names.
  */
-import { CAWCO_ENV } from "../cawco-env";
+import type { ImageMediaType } from "../attachments";
+import { AGY_NOT_CLEAN, AGY_WORDS } from "../words/harness-plugins";
 import type { DeniedToolNames, HarnessDescriptor } from "./descriptor";
+import { SHARED_MODES } from "./modes";
 
 /** An empty dir with no write bits, so agy's own writes on the host never fill it. */
 const HELD = { kind: "dir", readOnly: true } as const;
@@ -33,7 +36,7 @@ const CODEIUM = {
  * repository"). The project's `assets/50e9e4c3/agy-harness-decisions.md`
  * §4.1 and `assets/b3380ec3/agy-harness-parity.md` §P-k.
  */
-export const AGY_CLONE_CONFIG = {
+const AGY_CLONE_CONFIG = {
   ".agents": HELD,
   ".agent": HELD,
   _agents: HELD,
@@ -45,14 +48,6 @@ export const AGY_CLONE_CONFIG = {
   ".codeium.yml": CODEIUM,
   ".codeium.yaml": CODEIUM,
 } as const satisfies HarnessDescriptor["cloneConfig"];
-
-/**
- * agy's kind, as its descriptor will name it once it is a registered
- * harness (core harness/kinds.ts `HARNESS_PLUGINS`). Until then the
- * workspace judge keys its table by this beside the registered kinds.
- */
-export const AGY_KIND = "agy";
-export type AgyKind = typeof AGY_KIND;
 
 /**
  * What one of agy's tools is, which its session's judge (agent
@@ -164,8 +159,8 @@ export const AGY_TASK_INPUT_ACTION = "send_input";
 
 /**
  * A denied-tool list written in Claude Code's names, as agy's
- * (core delegate-types.ts `deniedToolsBy`); its descriptor's `deniedTools`
- * once it is a registered harness. An MCP tool is `mcp_<server>_<tool>`,
+ * (core delegate-types.ts `deniedToolsBy`): its descriptor's `deniedTools`.
+ * An MCP tool is `mcp_<server>_<tool>`,
  * the server and tool as written (its `mcp_%s_%s`; §P-d named
  * `mcp_cawco-probe_probe_echo`); a character outside the set below has
  * not been seen in one and is written `_`.
@@ -219,12 +214,131 @@ export const AGY_DENIED_TOOLS = {
   mcpUnsafe: "[^A-Za-z0-9_-]",
 } as const satisfies DeniedToolNames;
 
+/** Its own subagents, workflows and swarms ({@link AGY_TOOLS} class `subagent`). */
+const SUBAGENTS = AGY_DENIED_TOOLS.equivalents.Agent;
+/** Its own question and permission tools (class `question`). */
+const QUESTIONS = [
+  "ask_question",
+  "ask_permission",
+  "ask_custom_permission",
+] as const;
+/** Its step list (class `list`). */
+const STEPS = ["update_steps"] as const;
+/** Its command runner. */
+const RUNS = ["run_command"] as const;
+/** Its file writers. */
+const WRITES = ["write_file", "edit_file"] as const;
+/** Its web search. */
+const WEB = ["search_web"] as const;
+/** What a board-only session may never call: its subagents, its commands (and input to them), its writes. */
+const BOARD_DENIED = [...SUBAGENTS, ...RUNS, "manage_task", ...WRITES] as const;
+
 /**
- * The environment variable the agy process of one session is started
- * with, naming its judge's socket as perl's `Socket` packs it, in hex (agent
- * boundary/hook-judge.ts `socketAddress`). agy hands its whole environment
- * to the hook commands it runs (`assets/338276e4/p0a.calls.jsonl`), so the
- * one hook every session of an agy home runs reaches that session's judge,
- * and only it.
+ * The pictures a send to it can carry: those every model agy runs takes,
+ * Gemini's and Claude's alike (core attachments.ts names each provider's),
+ * as an ACP `image` block agy hands its model (§P-g: a PNG answered).
  */
-export const AGY_JUDGE_ENV = CAWCO_ENV.agyJudge;
+const AGY_PICTURES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const satisfies readonly ImageMediaType[];
+
+export const AGY = {
+  kind: "agy",
+  tool: "antigravity",
+  words: AGY_WORDS,
+
+  // An account is an agy home CawCo keeps under the account's own dir
+  // (`--gemini-dir`, core paths/harnesses.ts `agyAccountHome`), signed in
+  // by agy itself or run on a key CawCo hands it; a conversation lives in
+  // that home's own store, which no other account's reads, and nothing
+  // carries it.
+  accountDir: false,
+  mcpPerFolder: false,
+  // No machine sign-in moves in: CawCo never reads a Google token, the
+  // owner's `~/.gemini` included (tsk-340: "CawCo never reads or holds a
+  // Google OAuth token").
+  homeLogin: "none",
+  soleProvider: null,
+  // Its models are agy's own ids (`gemini-3.8-flash`, `claude-opus-5-5`),
+  // which no account provider names.
+  ownProviderIds: false,
+  providerLimit: "account",
+  // agy reports a turn's tokens and no price; a plan's work costs nothing
+  // per token.
+  costMeaning: "estimated",
+  usage: {
+    scanned: false,
+    lacks:
+      "CawCo does not scan agy's usage files: its turns report their tokens live, and an account's limits are read from agy.",
+  },
+  compactByOnMovedLine: "named",
+
+  // What `session/new` lists for the session's account, read live in its
+  // own home, never a list kept here (§P-f; a gemini-api-key account lists
+  // Gemini alone).
+  modelCatalog: "machine",
+  resolvesModelNames: false,
+  unlistedModels: "none",
+  // agy's ACP names no model's window.
+  contextWindow: "catalog",
+  pictureTypes: AGY_PICTURES,
+
+  cleanStartRefused: AGY_NOT_CLEAN,
+  // CawCo's modes, answered by its judge over agy's own `default` mode
+  // (agent harnesses/agy-judge.ts `MODE_ACTION`); agy's modes are never set.
+  permissionModes: SHARED_MODES,
+  requiredOnEveryMachine: false,
+  startsWithoutConversation: false,
+  // agy saves an output too large for its model in its home's
+  // `brain/<conversation>/`, which no workspace reads yet.
+  spills: false,
+  storeOAuthProviders: {},
+
+  nativeTools: { questions: QUESTIONS, subagents: SUBAGENTS, todos: STEPS },
+  boardOnlyDenied: BOARD_DENIED,
+  curatorDenied: [...BOARD_DENIED, ...WEB],
+  deniedTools: AGY_DENIED_TOOLS,
+  tools: { edit: WRITES, fetch: [], powershell: [], search: WEB, shell: RUNS },
+  // agy runs a hook itself, from its home's `config/hooks.json` (agent
+  // harnesses/agy-hook.ts), its payloads its own.
+  hooks: { runs: "harness" },
+
+  cloneConfig: AGY_CLONE_CONFIG,
+  // The owner's own agy home, which Gemini CLI shares, holding its saved
+  // sign-in, settings and conversations. CawCo's homes sit under each
+  // account's dir, which no workspace reads.
+  credentialPlaces: [{ in: "home", path: ".gemini" }],
+
+  custody: "keeper",
+  procIdPrefix: "agy:",
+  // Stored conversations are not listed yet.
+  listsAllConversations: false,
+  catalogProvesGone: false,
+  readsStoredContext: false,
+  readsThroughCli: false,
+  sessionControls: [
+    "installSessionCredential",
+    "verifySessionCredential",
+    "interrupt",
+    "setModel",
+    "setEffort",
+    "setPermissionMode",
+    "supportedModels",
+    "supportedCommands",
+    "getContextUsage",
+  ],
+
+  rewindAnchor: "user-turn",
+  queuesSends: false,
+  promptCacheMaxMs: null,
+  boundaryBeforeCompactionFailure: false,
+  subagentEndsWithCall: false,
+  // `mcp_<server>_<tool>` (its `mcp_%s_%s`, §P-d).
+  callNaming: {
+    server: "mcp-single-known",
+    skillCall: "none",
+    turnSkill: "command-name",
+  },
+} as const satisfies HarnessDescriptor<"agy">;

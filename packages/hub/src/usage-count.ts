@@ -85,6 +85,23 @@ const commandSkill = (
   return command && known.has(command) ? command : undefined;
 };
 
+/** agy's MCP tools' prefix (core harness/agy.ts `AGY_DENIED_TOOLS`). */
+const MCP_SINGLE = "mcp_";
+
+/** The longest known server `tool` starts with, then `_`. */
+const longestKnown = (
+  tool: string,
+  known: readonly string[]
+): string | undefined => {
+  let found: string | undefined;
+  for (const server of known) {
+    if (tool.startsWith(`${server}_`) && server.length > (found?.length ?? 0)) {
+      found = server;
+    }
+  }
+  return found;
+};
+
 /**
  * The MCP server a tool's name says answered it, as {@link mcpUsageName}
  * keeps it, by how the harness names one (its descriptor's
@@ -100,18 +117,13 @@ const serverOf = (
     case "mcp-prefix":
       return prefixedServer(tool);
     // `<server>_<tool>`, read by the longest known server it starts with.
-    case "longest-known": {
-      let found: string | undefined;
-      for (const server of known) {
-        if (
-          tool.startsWith(`${server}_`) &&
-          server.length > (found?.length ?? 0)
-        ) {
-          found = server;
-        }
-      }
-      return found;
-    }
+    case "longest-known":
+      return longestKnown(tool, known);
+    // `mcp_<server>_<tool>`: the same, after its `mcp_`.
+    case "mcp-single-known":
+      return tool.startsWith(MCP_SINGLE)
+        ? longestKnown(tool.slice(MCP_SINGLE.length), known)
+        : undefined;
     // The prefix lost each `-`, so it is given back the name of the server
     // it stands for.
     case "mcp-prefix-safe": {

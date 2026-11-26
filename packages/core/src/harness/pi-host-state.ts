@@ -128,19 +128,11 @@ const TURN_EXTRAS = object({
 });
 
 /**
- * A command the agent writes to its host: start the session on a spawn, send
- * it a turn, call a control on it, answer its state, stop it.
+ * The commands every session host's line takes beside its start (pi's here,
+ * Antigravity's in ./agy-host-state.ts): send its session a turn, call a
+ * control on it, answer its state, stop it.
  */
-const PI_HOST_COMMAND = variant("type", [
-  object({
-    type: literal("start"),
-    spec: storedAs(SpawnPayloadSchema, wireReadWords.meant.spawn),
-    boundary: optional(BOUNDARY),
-    /** The gate form of the build that starts the host, which is the build the host runs (agent gate-form.ts). */
-    gateForm: optional(string()),
-    /** The session's MCP gate, which its fleet servers with a command go through, started at their first call. */
-    mcpGate: optional(MCP_GATE),
-  }),
+export const HOST_COMMANDS = [
   object({
     type: literal("send"),
     message: storedAs(SentMessageSchema, wireReadWords.meant.send),
@@ -154,6 +146,23 @@ const PI_HOST_COMMAND = variant("type", [
   }),
   object({ type: literal("snapshot"), id: string() }),
   object({ type: literal("stop"), id: string() }),
+] as const;
+
+/**
+ * A command the agent writes to its host: start the session on a spawn, or
+ * one of {@link HOST_COMMANDS}.
+ */
+const PI_HOST_COMMAND = variant("type", [
+  object({
+    type: literal("start"),
+    spec: storedAs(SpawnPayloadSchema, wireReadWords.meant.spawn),
+    boundary: optional(BOUNDARY),
+    /** The gate form of the build that starts the host, which is the build the host runs (agent gate-form.ts). */
+    gateForm: optional(string()),
+    /** The session's MCP gate, which its fleet servers with a command go through, started at their first call. */
+    mcpGate: optional(MCP_GATE),
+  }),
+  ...HOST_COMMANDS,
 ]);
 
 /** A command of a pi host's line ({@link PI_HOST_COMMAND}). */
@@ -169,10 +178,11 @@ const LAST_ERROR_KIND = storedAs(
 );
 
 /**
- * An event the host writes back: a frame of its session, its busy state,
- * its session's id, a failure, a send it refused, and a command's reply.
+ * The events every session host writes back: a frame of its session, its
+ * busy state, its session's id, a failure, a send it refused, and a
+ * command's reply.
  */
-const PI_HOST_EVENT = variant("type", [
+export const HOST_EVENTS = [
   object({ type: literal("frame"), message: NEUTRAL_MESSAGE }),
   object({ type: literal("busy"), active: boolean() }),
   object({ type: literal("session"), sessionId: string() }),
@@ -189,7 +199,13 @@ const PI_HOST_EVENT = variant("type", [
     error: optional(string()),
     lastErrorKind: optional(LAST_ERROR_KIND),
   }),
-]);
+] as const;
+
+/** An event a pi host writes back: one of {@link HOST_EVENTS}. */
+const PI_HOST_EVENT = variant("type", [...HOST_EVENTS]);
+
+/** An event every session host writes back ({@link HOST_EVENTS}). */
+export type HostEvent = InferOutput<(typeof HOST_EVENTS)[number]>;
 
 /** An event of a pi host's line ({@link PI_HOST_EVENT}). */
 export type PiHostEvent = InferOutput<typeof PI_HOST_EVENT>;

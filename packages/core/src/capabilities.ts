@@ -1,4 +1,4 @@
-import type { HarnessKind } from "./harness/kinds";
+import type { HarnessTool } from "./harness/kinds";
 
 /** Optional machine tools. Reporting never installs or impersonates a tool. */
 export interface MachineCapability {
@@ -7,7 +7,7 @@ export interface MachineCapability {
   available: boolean;
   id:
     | "git"
-    | HarnessKind
+    | HarnessTool
     | "node"
     | "browser"
     | "container-runtime"

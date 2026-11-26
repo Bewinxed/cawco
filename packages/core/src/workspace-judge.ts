@@ -36,15 +36,7 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgyKind } from "./harness/agy";
 import type { HarnessKind } from "./harness/kinds";
-
-/**
- * Every harness this judge has a table for: the registered ones, and agy,
- * whose session judge (agent harnesses/agy-judge.ts) hands it agy's file
- * tools ahead of agy's registration as a harness.
- */
-type JudgedHarness = HarnessKind | AgyKind;
 
 type Access = "read" | "write";
 
@@ -122,7 +114,7 @@ export type Verdict =
 export interface Call {
   /** The directory the harness resolves a relative path against. */
   readonly cwd: string;
-  readonly harness: JudgedHarness;
+  readonly harness: HarnessKind;
   readonly input: unknown;
   readonly tool: string;
   /**
@@ -382,7 +374,7 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
 
 /** What each harness adds to the policy for its own sessions; see {@link sessionPolicy}. */
 const SESSION_POLICY: Record<
-  JudgedHarness,
+  HarnessKind,
   ((policy: Policy, call: Call) => Policy) | undefined
 > = {
   claude: (policy, call) => claudeSession(policy, call.transcript),
@@ -446,7 +438,7 @@ const write = (key: string, extra: Partial<Field> = {}): Field => ({
  * A shell tool is judged by the boundary its command runs in, never here.
  * Every tool not in its harness's table is judged by {@link argumentPaths}.
  */
-const BUILT_INS: Record<JudgedHarness, Record<string, readonly Field[]>> = {
+const BUILT_INS: Record<HarnessKind, Record<string, readonly Field[]>> = {
   claude: {
     Bash: [],
     Monitor: [],
@@ -602,7 +594,7 @@ const handedToHub = (policy: Policy, path: string): boolean => {
 };
 
 /** The cawco tool a harness's tool name is: Claude Code's and Codex's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`, agy's `mcp_cawco_<tool>`. */
-const CAWCO_PREFIX: Record<JudgedHarness, string | undefined> = {
+const CAWCO_PREFIX: Record<HarnessKind, string | undefined> = {
   claude: "mcp__cawco__",
   opencode: "cawco_",
   pi: undefined,
@@ -893,7 +885,7 @@ interface InstructionFiles {
  * `AGENTS.override.md`, then `AGENTS.md`, from the repository's root down to
  * its folder. agy: `AGENTS.md` with its includes.
  */
-const INSTRUCTIONS: Record<JudgedHarness, InstructionFiles> = {
+const INSTRUCTIONS: Record<HarnessKind, InstructionFiles> = {
   claude: {
     names: ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"],
     nested: true,
@@ -1040,7 +1032,7 @@ export const instructionRead = (policy: Policy, file: string): boolean =>
 export interface InstructionsAt {
   /** The session's folder: its harness reads instruction files from the clone's root down to it. */
   readonly cwd: string;
-  readonly harness: JudgedHarness;
+  readonly harness: HarnessKind;
   /**
    * The paths a tool call names: a nested harness reads the instruction
    * files of each folder down to each as the call runs

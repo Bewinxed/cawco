@@ -562,17 +562,19 @@ import type { TailnetServing } from "./tailnet-https";
  *    kind is a card or a design graph's pick (core artifact-needs.ts,
  *    session-questions.ts). A page built for 110 reads them closed, so it
  *    reloads first.
- *
  * 112: a member's identity mark (`hue` of `POST /api/decides/members`,
  *    `PUT /api/decides/members/:id` and its picture) is one of the eight
  *    marks (core decides.ts `MARK_HUES`), not any whole number. A page built
  *    for 111 reads it as a number, so it reloads first.
+ * 113: a harness may be `agy` (Antigravity, tsk-340), in a trigger's
+ *    source and every other value that names a harness. A page built for
+ *    112 reads the harnesses closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 112;
+export const WIRE_PROTOCOL = 113;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

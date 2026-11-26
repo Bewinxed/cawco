@@ -17,6 +17,7 @@
     "./machine-fetch": "./src/machine-fetch.ts",
     "./awake-hold": "./src/awake-hold.ts",
     "./group-run": "./src/group-run.ts",
+    "./agy-host": "./src/harnesses/agy-host.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",
     "./pin-record": "./src/pin-record.ts",
@@ -30,6 +31,7 @@
     "start": "bun src/cli.ts"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "2.12.0",
     "@ai-sdk/google": "4.0.121",
     "@anthropic-ai/claude-agent-sdk": "0.3.326",
     "@anthropic-ai/sandbox-runtime": "0.0.81",

@@ -347,9 +347,6 @@ export default {
         "src/file-viewer/viewer.ts",
         // CawCo's OpenCode plugin, a Bun.build entrypoint (src/harnesses/opencode-plugin.ts, scripts/build-binary.ts) that OpenCode loads from a directory.
         "src/harnesses/opencode-plugin-module.ts",
-        // agy's hook, judge and judge server, which agy's adapter loads once agy is a registered harness (item 3 of tsk-340, which removes these two entries).
-        "src/harnesses/agy-hook.ts",
-        "src/harnesses/agy-judge.ts",
         // The passkey bridge's service worker, which Chromium loads from its manifest: browser/passkey-extension/manifest.json.
         "browser/passkey-extension/background.js",
       ],

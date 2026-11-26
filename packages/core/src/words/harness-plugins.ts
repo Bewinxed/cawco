@@ -141,3 +141,38 @@ export const CODEX_WORDS = {
   noReply: STEPS_ON_AFTER_THE_CALL,
   usageName: "Codex",
 } as const satisfies HarnessWords;
+
+/**
+ * Antigravity's. CawCo's judge answers each call agy makes before it runs
+ * (agent harnesses/agy-judge.ts `MODE_ACTION`); agy's own modes are never
+ * set, so a mode means here what it means on Codex.
+ */
+export const AGY_WORDS = {
+  name: "Antigravity",
+  modes: {
+    default: "Every command and edit asks.",
+    plan: "Read-only. No commands run.",
+    acceptEdits: "File edits run without asking; commands ask.",
+    bypassPermissions: "Commands and edits run unasked.",
+    fullSend: "Bypass, and fleet changes are approved too.",
+  },
+  fullSend: {
+    confirm: [
+      "Approves without asking, fleet changes like memory, skills, hooks and MCP servers included.",
+      STILL_ASKS,
+    ],
+    restarts: RESTARTS,
+    warning:
+      "Fleet changes run without asking you. Pick Bypass to have them ask again.",
+  },
+  noReply: STEPS_ON_AFTER_THE_CALL,
+  usageName: "Antigravity",
+} as const satisfies HarnessWords;
+
+/**
+ * Why Antigravity can't start a session clean (core harness/descriptor.ts
+ * `cleanStartRefused`): agy reads the folder's `AGENTS.md`, `GEMINI.md` and
+ * `.agents` into every session, and has no switch that turns them off.
+ */
+export const AGY_NOT_CLEAN =
+  "Antigravity can't start clean; it always reads AGENTS.md, GEMINI.md and .agents. Use Claude Code or pi, or turn off start clean.";

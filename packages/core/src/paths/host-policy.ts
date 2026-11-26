@@ -321,8 +321,8 @@ export const credentialStores = (): string[] => {
     ...HARNESS_PLUGINS.flatMap((plugin) =>
       plugin.credentialPlaces.flatMap(credentialPaths)
     ),
-    // Other agents' logins: Gemini, GitHub Copilot.
-    join(home, ".gemini"),
+    // Other agents' logins: GitHub Copilot. (Gemini CLI's `~/.gemini` is
+    // agy's too, held by agy's descriptor.)
     join(xdgConfigHome(), "github-copilot"),
     // Coding agents a person keeps beside CawCo ({@link OTHER_AGENT_CREDENTIALS}).
     ...Object.values(OTHER_AGENT_CREDENTIALS).flatMap((stores) => stores()),
