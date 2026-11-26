@@ -13,6 +13,7 @@
  * nor refused, and answered 500 "couldn't be read" for the two seconds
  * before the report (host run 84ca5c0e, 20:05:27.547).
  */
+import { Effect } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
 
 /** One machine's connection now, and whether its tools have been said on it. */
@@ -40,7 +41,7 @@ export interface ToolFactsShape {
 }
 
 export const createToolFacts = (
-  lifetime: Pick<HubLifetimeShape, "after" | "cancel">
+  lifetime: Pick<HubLifetimeShape, "run">
 ): ToolFactsShape => {
   const connections = new Map<string, Connection>();
 
@@ -85,15 +86,20 @@ export const createToolFacts = (
       if (!connection || connection.heard) {
         return Promise.resolve(connection?.heard === true);
       }
-      return new Promise((resolve) => {
-        const done = (): void => {
-          lifetime.cancel(timer);
-          connection.wake.delete(done);
-          resolve(heard(machineId));
-        };
-        const timer = lifetime.after("tool facts waited", ms, done);
+      // The promise edge of the wait: the first tools report on this
+      // connection, its end, or `ms`, whichever comes first.
+      const woken = Effect.callback<void>((resume) => {
+        const done = (): void => resume(Effect.void);
         connection.wake.add(done);
+        return Effect.sync(() => {
+          connection.wake.delete(done);
+        });
       });
+      return lifetime.run(
+        Effect.raceFirst(woken, Effect.sleep(ms)).pipe(
+          Effect.map(() => heard(machineId))
+        )
+      );
     },
   };
 };

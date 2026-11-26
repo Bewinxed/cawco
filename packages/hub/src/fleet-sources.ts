@@ -1,7 +1,6 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { FsOp } from "@cawco/core/control-replies";
 import type { AddressedControl } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   FleetPlugin,
@@ -29,6 +28,7 @@ import {
   CONTROL_RELOAD_SKILLS,
 } from "@cawco/core/session/controls";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
+import { Effect, Fiber } from "effect";
 import type { FleetMcpTook } from "./connect-asks";
 import type { SourceNote } from "./db/fleet-catalog";
 import type { PublicInstanceRow } from "./db/instances";
@@ -45,7 +45,11 @@ import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
 import { readMarketplace, resolveMarketplacePlugins } from "./plugins";
 import { projectRowsFor, unbound } from "./project-placements";
-import { resolveSkill } from "./skills";
+import {
+  type ResolvedSkill,
+  resolveSkill,
+  type UnresolvedSkill,
+} from "./skills";
 import { unreachable } from "./unreachable";
 import type { MachineSocket } from "./wire-socket";
 
@@ -309,9 +313,10 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     );
     for (const row of live) {
       const took = ctx.connectAsks.taking(row.id, changes);
-      detach(
-        ctx
-          .callAgent(
+      ctx.lifetime.fork(
+        `fleet MCP take in ${row.id}`,
+        Effect.tryPromise(() =>
+          ctx.callAgent(
             machineId,
             CONTROL_MCP_FLEET_CHANGED,
             [changes],
@@ -319,8 +324,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
             undefined,
             row.id
           )
-          .then((answer) => took?.(tookOf(answer))),
-        `fleet MCP take in ${row.id}`
+        ).pipe(Effect.map((answer) => took?.(tookOf(answer))))
       );
     }
   };
@@ -518,7 +522,10 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   /** A definition changed: every machine that is online takes it now. */
   const fanOutAgents = (): void => {
     for (const machineId of ctx.registry.machineIds()) {
-      detach(pushAgents(machineId), "agent push");
+      ctx.lifetime.fork(
+        "agent push",
+        Effect.tryPromise(() => pushAgents(machineId))
+      );
     }
   };
 
@@ -538,58 +545,59 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * worked when it had some (`putPluginPayload`); one that never had files
    * reaches no machine, and each machine's row says why.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
-  const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
-    if (ids.length === 0) {
-      return;
-    }
-    const sources = new Map(
-      ctx.db
-        .fleetConfig()
-        .marketplaces.map(({ name, source }) => [name, source])
-    );
-
-    const byMarketplace = new Map<string, string[]>();
-    for (const id of ids) {
-      const marketplace = id.split("@")[1] ?? "";
-      byMarketplace.set(marketplace, [
-        ...(byMarketplace.get(marketplace) ?? []),
-        id,
-      ]);
-    }
-
-    for (const [marketplace, wanted] of byMarketplace) {
-      const source = sources.get(marketplace);
-      if (!source) {
-        for (const id of wanted) {
-          ctx.db.putPluginPayload({
-            id,
-            error: `no marketplace called ${marketplace} in this fleet`,
-          });
-        }
-        continue;
+  const resolvePlugins = (ids: readonly string[]): Effect.Effect<void> =>
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
+    Effect.gen(function* () {
+      if (ids.length === 0) {
+        return;
       }
-      const resolved = await resolveMarketplacePlugins(
-        marketplace,
-        source,
-        wanted.map((id) => id.split("@")[0] ?? id)
+      const sources = new Map(
+        ctx.db
+          .fleetConfig()
+          .marketplaces.map(({ name, source }) => [name, source])
       );
-      for (const plugin of resolved) {
-        const id = `${plugin.name}@${marketplace}`;
-        if ("error" in plugin) {
-          ctx.db.putPluginPayload({ id, error: plugin.error });
-        } else {
-          ctx.db.putPluginPayload({
-            id,
-            hash: plugin.hash,
-            bytes: plugin.bytes,
-            files: plugin.files,
-            version: plugin.version,
-          });
+
+      const byMarketplace = new Map<string, string[]>();
+      for (const id of ids) {
+        const marketplace = id.split("@")[1] ?? "";
+        byMarketplace.set(marketplace, [
+          ...(byMarketplace.get(marketplace) ?? []),
+          id,
+        ]);
+      }
+
+      for (const [marketplace, wanted] of byMarketplace) {
+        const source = sources.get(marketplace);
+        if (!source) {
+          for (const id of wanted) {
+            ctx.db.putPluginPayload({
+              id,
+              error: `no marketplace called ${marketplace} in this fleet`,
+            });
+          }
+          continue;
+        }
+        const resolved = yield* resolveMarketplacePlugins(
+          marketplace,
+          source,
+          wanted.map((id) => id.split("@")[0] ?? id)
+        );
+        for (const plugin of resolved) {
+          const id = `${plugin.name}@${marketplace}`;
+          if ("error" in plugin) {
+            ctx.db.putPluginPayload({ id, error: plugin.error });
+          } else {
+            ctx.db.putPluginPayload({
+              id,
+              hash: plugin.hash,
+              bytes: plugin.bytes,
+              files: plugin.files,
+              version: plugin.version,
+            });
+          }
         }
       }
-    }
-  };
+    });
 
   /**
    * The one way a fleet change reaches the machines: each ready machine is
@@ -609,9 +617,9 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * dashboard as a `fleet.fetch` frame. A second ask for a row already being
    * fetched joins the fetch under way.
    */
-  const skillFetches = new Map<string, Promise<SkillFetch | undefined>>();
-  /** The plugin fetches running at the hub, as {@link skillFetches}: each resolves with whether a fleet copy changed. */
-  const pluginFetches = new Map<string, Promise<boolean>>();
+  const skillFetches = new Map<string, Fiber.Fiber<SkillFetch | undefined>>();
+  /** The plugin fetches running at the hub, as {@link skillFetches}: each ends with whether a fleet copy changed. */
+  const pluginFetches = new Map<string, Fiber.Fiber<boolean>>();
   /** What an ambiguous source's last fetch could have meant, by skill name. */
   const skillChoices = new Map<string, string[]>();
 
@@ -698,6 +706,49 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   };
 
   /**
+   * Stores what a fetch of skill `name` from `source` resolved to, and says
+   * what came of it for the machines; absent when the row went meanwhile.
+   */
+  const landSkill = (
+    name: string,
+    source: string,
+    resolved: ResolvedSkill | UnresolvedSkill
+  ): SkillFetch | undefined => {
+    const stored = ctx.db.listSkills().find((skill) => skill.name === name);
+    if (!stored) {
+      return;
+    }
+    const after = ctx.db.putSkill({
+      name,
+      source,
+      enabled: stored.enabled,
+      ...("error" in resolved
+        ? { error: resolved.error }
+        : {
+            hash: resolved.hash,
+            bytes: resolved.bytes,
+            files: resolved.files,
+          }),
+    });
+    if ("choices" in resolved && resolved.choices) {
+      skillChoices.set(name, resolved.choices);
+    } else {
+      skillChoices.delete(name);
+    }
+    const error = "error" in resolved ? resolved.error : undefined;
+    const changed = noteFetch({ skill: name }, stored, after, error);
+    if (error !== undefined) {
+      return "failed";
+    }
+    // Nothing on any machine changed unless the fleet's copy did.
+    if (changed) {
+      fanOutFetched(`skill ${name}`);
+      return "changed";
+    }
+    return "same";
+  };
+
+  /**
    * Fetches a skill's source at the hub and stores what came of it, announced
    * as it starts and as it lands. The machines are told only when the fleet's
    * copy changed. Resolves once it has landed with what came of it (absent
@@ -708,62 +759,46 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     source: string
   ): Promise<SkillFetch | undefined> => {
     const key = `skill:${name}`;
-    const running = skillFetches.get(key);
-    if (running !== undefined) {
-      return running;
-    }
-    skillChoices.delete(name);
-    const work = (async (): Promise<SkillFetch | undefined> => {
-      const resolved = await resolveSkill(
-        source,
-        ctx.db.heldSkillNames(name),
-        ctx.readSkillFolder
-      );
-      const stored = ctx.db.listSkills().find((skill) => skill.name === name);
-      if (!stored) {
-        return;
-      }
-      const after = ctx.db.putSkill({
-        name,
-        source,
-        enabled: stored.enabled,
-        ...("error" in resolved
-          ? { error: resolved.error }
-          : {
-              hash: resolved.hash,
-              bytes: resolved.bytes,
-              files: resolved.files,
-            }),
-      });
-      if ("choices" in resolved && resolved.choices) {
-        skillChoices.set(name, resolved.choices);
-      } else {
+    const running =
+      skillFetches.get(key) ??
+      (() => {
         skillChoices.delete(name);
-      }
-      const error = "error" in resolved ? resolved.error : undefined;
-      const changed = noteFetch({ skill: name }, stored, after, error);
-      if (error !== undefined) {
-        return "failed";
-      }
-      // Nothing on any machine changed unless the fleet's copy did.
-      if (changed) {
-        fanOutFetched(`skill ${name}`);
-        return "changed";
-      }
-      return "same";
-    })()
-      .catch((error: unknown): undefined => {
-        console.warn(
-          `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
+        // Its first step waits a turn, so the fetch is held, and said as
+        // fetching, before any of it runs.
+        const fetch: Fiber.Fiber<SkillFetch | undefined> = ctx.lifetime.fork(
+          `skill ${name} fetch`,
+          Effect.yieldNow.pipe(
+            Effect.andThen(
+              resolveSkill(
+                source,
+                ctx.db.heldSkillNames(name),
+                ctx.readSkillFolder
+              )
+            ),
+            Effect.map((resolved) => landSkill(name, source, resolved)),
+            Effect.catchDefect((error) =>
+              Effect.sync((): undefined => {
+                console.warn(
+                  `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
+                );
+              })
+            ),
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (skillFetches.get(key) === fetch) {
+                  skillFetches.delete(key);
+                }
+                announceSkill(name, source);
+              })
+            )
+          )
         );
-      })
-      .finally(() => {
-        skillFetches.delete(key);
+        skillFetches.set(key, fetch);
         announceSkill(name, source);
-      });
-    skillFetches.set(key, work);
-    announceSkill(name, source);
-    return work;
+        return fetch;
+      })();
+    // The promise edge of the fetch: it lands with what came of it.
+    return ctx.lifetime.run(Fiber.join(running));
   };
 
   /**
@@ -772,11 +807,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * Each row that had files records what its fetch came to, and each that
    * came to files what its source holds now.
    */
-  const fetchPlugins = async (ids: readonly string[]): Promise<boolean> => {
+  const fetchPlugins = (ids: readonly string[]): Promise<boolean> => {
     const fresh = ids.filter((id) => !pluginFetches.has(`plugin:${id}`));
-    const joined = ids
-      .filter((id) => pluginFetches.has(`plugin:${id}`))
-      .map((id) => pluginFetches.get(`plugin:${id}`));
+    const joined = ids.flatMap((id) => {
+      const running = pluginFetches.get(`plugin:${id}`);
+      return running ? [running] : [];
+    });
     const announce = (id: string): void => {
       const row = ctx.db.listPlugins().find((plugin) => plugin.id === id);
       announceFetch(
@@ -794,39 +830,59 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         .filter((plugin) => fresh.includes(plugin.id))
         .map((plugin) => [plugin.id, plugin])
     );
-    const work = resolvePlugins(fresh)
-      .then(() =>
-        ctx.db
-          .listPlugins()
-          .flatMap((after) => {
-            const was = before.get(after.id);
-            return was
-              ? [noteFetch({ plugin: after.id }, was, after, after.error)]
-              : [];
+    // One fetch for every fresh id, each of them held by it. Its first step
+    // waits a turn, so each is held, and said as fetching, before it runs.
+    const fetch: Fiber.Fiber<boolean> = ctx.lifetime.fork(
+      "plugins fetch",
+      Effect.yieldNow.pipe(
+        Effect.andThen(resolvePlugins(fresh)),
+        Effect.map(() =>
+          ctx.db
+            .listPlugins()
+            .flatMap((after) => {
+              const was = before.get(after.id);
+              return was
+                ? [noteFetch({ plugin: after.id }, was, after, after.error)]
+                : [];
+            })
+            .includes(true)
+        ),
+        Effect.catchDefect((error) =>
+          Effect.sync(() => {
+            console.warn(
+              `[hub] plugins ${fresh.join(", ")}: fetch failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+            return false;
           })
-          .includes(true)
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const id of fresh) {
+              if (pluginFetches.get(`plugin:${id}`) === fetch) {
+                pluginFetches.delete(`plugin:${id}`);
+              }
+              announce(id);
+            }
+          })
+        )
       )
-      .catch((error: unknown) => {
-        console.warn(
-          `[hub] plugins ${fresh.join(", ")}: fetch failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-        return false;
-      });
+    );
     for (const id of fresh) {
-      pluginFetches.set(`plugin:${id}`, work);
+      pluginFetches.set(`plugin:${id}`, fetch);
       announce(id);
     }
-    const changed = await work;
-    for (const id of fresh) {
-      pluginFetches.delete(`plugin:${id}`);
-      announce(id);
-    }
-    await Promise.all(joined);
-    return changed;
+    // The promise edge of the fetch, and of the ones it joined.
+    return ctx.lifetime.run(
+      Effect.gen(function* () {
+        const changed = yield* Fiber.join(fetch);
+        yield* Effect.forEach(joined, Fiber.join, { discard: true });
+        return changed;
+      })
+    );
   };
 
   /** Marketplace sources being read at the hub, by source. */
-  const marketplaceReads = new Map<string, Promise<MarketplaceRead>>();
+  const marketplaceReads = new Map<string, Fiber.Fiber<MarketplaceRead>>();
 
   /**
    * Reads a marketplace source at the hub — what it calls itself and what it
@@ -834,27 +890,48 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * is. A second read of a source joins the one under way. Never rejects: a
    * read that failed carries its sentence.
    */
-  const readMarketplaceSource = (source: string): Promise<MarketplaceRead> => {
+  const readMarketplaceSource = (source: string): Promise<MarketplaceRead> =>
+    // The promise edge of the read.
+    ctx.lifetime.run(Fiber.join(marketplaceRead(source)));
+
+  /** {@link readMarketplaceSource}'s read, as the fiber that runs it: the one under way, or one started now. */
+  const marketplaceRead = (source: string): Fiber.Fiber<MarketplaceRead> => {
     const running = marketplaceReads.get(source);
     if (running !== undefined) {
       return running;
     }
-    const work = readMarketplace(source)
-      .then(
-        ({ name, plugins }): MarketplaceRead => ({ source, name, plugins }),
-        (error: unknown): MarketplaceRead => ({
+    // Its first step waits a turn, so the read is held, and said as
+    // fetching, before any of it runs.
+    const read: Fiber.Fiber<MarketplaceRead> = ctx.lifetime.fork(
+      `marketplace ${source} read`,
+      Effect.yieldNow.pipe(
+        Effect.andThen(readMarketplace(source)),
+        Effect.map(({ name, plugins }): MarketplaceRead => ({
           source,
-          error: error instanceof Error ? error.message : String(error),
-        })
+          name,
+          plugins,
+        })),
+        Effect.catchTag("FetchFailed", ({ message }) =>
+          Effect.succeed<MarketplaceRead>({ source, error: message })
+        ),
+        Effect.tap((landed) =>
+          Effect.sync(() => {
+            marketplaceReads.delete(source);
+            announceFetch({ marketplace: landed });
+          })
+        ),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            if (marketplaceReads.get(source) === read) {
+              marketplaceReads.delete(source);
+            }
+          })
+        )
       )
-      .then((read) => {
-        marketplaceReads.delete(source);
-        announceFetch({ marketplace: read });
-        return read;
-      });
-    marketplaceReads.set(source, work);
+    );
+    marketplaceReads.set(source, read);
     announceFetch({ marketplace: { source, fetching: true } });
-    return work;
+    return read;
   };
 
   /**
@@ -895,25 +972,29 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     if (!marketplaceLinks.get(source)?.fetching) {
       marketplaceLinks.set(source, { source, fetching: true });
       announceFetch({ link: { source, fetching: true } });
-      detach(
-        readMarketplaceSource(source).then((read) => {
-          let link: MarketplaceLink;
-          try {
-            link = linkRead(read);
-          } catch (error) {
-            link = {
-              source,
-              error: error instanceof Error ? error.message : String(error),
-            };
-          }
-          if (link.error === undefined) {
-            marketplaceLinks.delete(source);
-          } else {
-            marketplaceLinks.set(source, link);
-          }
-          announceFetch({ link });
-        }),
-        "marketplace link"
+      ctx.lifetime.fork(
+        "marketplace link",
+        Fiber.join(marketplaceRead(source)).pipe(
+          Effect.flatMap((read) =>
+            Effect.sync(() => {
+              let link: MarketplaceLink;
+              try {
+                link = linkRead(read);
+              } catch (error) {
+                link = {
+                  source,
+                  error: error instanceof Error ? error.message : String(error),
+                };
+              }
+              if (link.error === undefined) {
+                marketplaceLinks.delete(source);
+              } else {
+                marketplaceLinks.set(source, link);
+              }
+              announceFetch({ link });
+            })
+          )
+        )
       );
     }
     return { source, fetching: true };
@@ -1087,10 +1168,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         continue;
       }
       // One source at a time, so GitHub is not hit in a burst.
-      const resolved = await resolveSkill(
-        row.source,
-        ctx.db.heldSkillNames(row.name),
-        ctx.readSkillFolder
+      const resolved = await ctx.lifetime.run(
+        resolveSkill(
+          row.source,
+          ctx.db.heldSkillNames(row.name),
+          ctx.readSkillFolder
+        )
       );
       if (ctx.lifetime.closed()) {
         return;
@@ -1132,7 +1215,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   ): Promise<ResolvedPlugin[]> => {
     const source = marketplaceSource(marketplace);
     return source
-      ? resolveMarketplacePlugins(marketplace, source, names)
+      ? ctx.lifetime.run(resolveMarketplacePlugins(marketplace, source, names))
       : Promise.resolve(
           names.map((name) => ({
             name,

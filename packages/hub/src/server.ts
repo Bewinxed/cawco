@@ -9742,6 +9742,7 @@ export const createServer = (
    * machine's answer, a project's stages, which pages are kept blocks.
    */
   const viewsThread = createViewsThread({
+    lifetime,
     path: DB_PATH,
     hub: {
       askMachine: async (

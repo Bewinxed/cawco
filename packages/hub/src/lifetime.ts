@@ -189,7 +189,7 @@ export const soon = (run: () => void): void => {
   queueMicrotask(guarded(run));
 };
 
-const makeLifetime = (): HubLifetimeShape => {
+export const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   /**
    * Every fiber run or forked on the lifetime and not yet ended. Held here,

@@ -5,6 +5,7 @@
  * `linkMarketplace`); dashboards learn what came of it from the frame, and an
  * agent's admin tool (admin-tools.ts) from here, in the same process.
  */
+import { EventEmitter, on } from "node:events";
 import type { FleetFetchFrame } from "@cawco/core/frames";
 import { answered } from "./mcp-tool";
 import type { AnyProblem } from "./refusal";
@@ -12,60 +13,41 @@ import type { AnyProblem } from "./refusal";
 /** What one announcement carries: the frame less its kind. */
 export type FetchNews = Omit<FleetFetchFrame, "kind" | "instanceId">;
 
-const listeners = new Set<(news: FetchNews) => void>();
+/** The announcements, as events of one name, for {@link landedFetch} to read. */
+const fetches = new EventEmitter();
+// Each request waiting on a landing listens while it waits; there is no leak to warn of.
+fetches.setMaxListeners(0);
 
 /** Tells every waiter what a fetch came to; server.ts calls it beside each broadcast. */
 export const heardFetch = (news: FetchNews): void => {
-  for (const listener of listeners) {
-    listener(news);
-  }
+  fetches.emit("news", news);
 };
 
 /**
  * Asks for a fetch and resolves with what `pick` reads off the announcement
  * that lands it. The request answers with `fetching` first; the landing
- * announcement may come before that answer, so the listener is on before the
- * request goes.
+ * announcement may come before that answer, so the announcements are read
+ * from before the request goes (`on` holds each one heard until it is read).
  */
-export const landedFetch = <T extends { fetching?: boolean }>(
+export const landedFetch = async <T extends { fetching?: boolean }>(
   pick: (news: FetchNews) => T | undefined,
   ask: () => Promise<T | AnyProblem>
-): Promise<T | AnyProblem> =>
-  new Promise<T | AnyProblem>((resolve, reject) => {
-    let heard = false;
-    let landed: T | undefined;
-    const listener = (news: FetchNews): void => {
-      const row = pick(news);
-      if (!row || row.fetching) {
-        return;
+): Promise<T | AnyProblem> => {
+  const heard = on(fetches, "news");
+  try {
+    const row = await ask();
+    // A request the hub refused lands nothing.
+    if (!(answered(row) && row.fetching)) {
+      return row;
+    }
+    for await (const [news] of heard) {
+      const landed = pick(news);
+      if (landed && !landed.fetching) {
+        return landed;
       }
-      landed = row;
-      if (heard) {
-        listeners.delete(listener);
-        resolve(row);
-      }
-    };
-    listeners.add(listener);
-    ask().then(
-      (row) => {
-        // A request the hub refused lands nothing.
-        if (!answered(row)) {
-          listeners.delete(listener);
-          resolve(row);
-          return;
-        }
-        heard = true;
-        if (!row.fetching) {
-          listeners.delete(listener);
-          resolve(row);
-        } else if (landed) {
-          listeners.delete(listener);
-          resolve(landed);
-        }
-      },
-      (error: unknown) => {
-        listeners.delete(listener);
-        reject(error);
-      }
-    );
-  });
+    }
+    throw new Error("the fetch announcements ended");
+  } finally {
+    await heard.return?.();
+  }
+};

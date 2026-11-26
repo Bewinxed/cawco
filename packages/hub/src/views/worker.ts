@@ -8,6 +8,7 @@
  * The hub's thread asks by message (views/client.ts).
  */
 import { unhandled } from "@cawco/core/unhandled";
+import { makeLifetime } from "../lifetime";
 import { createCatalogs } from "./catalogs";
 import type { ViewChanges } from "./changes";
 import { createFindEngine, type Live } from "./find-engine";
@@ -33,6 +34,21 @@ const say = (message: FromViews): void => {
 /** The views thread's asks of the hub's thread, waiting on their answers. */
 const asking = createAsking<HubOps>((message) => say(message));
 
+/**
+ * The views thread's own lifetime: a thread of its own, it is its own
+ * edge, as the hub's thread's is (index.ts). Its asks of the hub's thread
+ * and a catalog's listing again run on it, and it closes as the thread
+ * exits.
+ */
+const lifetime = makeLifetime();
+process.on("exit", () => lifetime.close());
+
+/** The promise edge of an ask of the hub's thread. */
+const ask = <Answer>(
+  asked: Parameters<typeof asking.ask>[0],
+  pick: (answer: AnswerOf<HubOps>) => { value: Answer } | undefined
+): Promise<Answer> => lifetime.run(asking.ask(asked, pick));
+
 const liveOf = (facts: LiveFacts): Live => ({
   online: new Set(facts.online),
   needsYou: new Set(facts.needsYou),
@@ -43,6 +59,7 @@ const startViews = (path: string) => {
   const db = openViewsDb(path);
   // A catalog's move goes to the index and the list, made below it.
   const catalogs = createCatalogs({
+    lifetime,
     listStored: (machineId) =>
       asking.ask({ op: "listStored", arg: machineId }, (answer) =>
         answer.op === "listStored" ? answer : undefined
@@ -57,13 +74,12 @@ const startViews = (path: string) => {
     db,
     catalogs,
     blockPages: (ids) =>
-      asking.ask({ op: "blockPages", arg: ids }, (answer) =>
+      ask({ op: "blockPages", arg: ids }, (answer) =>
         answer.op === "blockPages" ? answer : undefined
       ),
     stageKinds: async (projectId) => {
-      const kinds = await asking.ask(
-        { op: "stageKinds", arg: projectId },
-        (answer) => (answer.op === "stageKinds" ? answer : undefined)
+      const kinds = await ask({ op: "stageKinds", arg: projectId }, (answer) =>
+        answer.op === "stageKinds" ? answer : undefined
       );
       return kinds ? new Map(kinds) : undefined;
     },
@@ -77,8 +93,8 @@ const startViews = (path: string) => {
   const engine = createFindEngine({
     index,
     catalogs,
-    askMachine: (machineId, query, options, timeoutMs, ask) =>
-      asking.ask(
+    askMachine: (machineId, query, options, timeoutMs, asker) =>
+      ask(
         {
           op: "askMachine",
           arg: {
@@ -86,8 +102,8 @@ const startViews = (path: string) => {
             query,
             options,
             timeoutMs,
-            caller: ask.caller,
-            requestId: ask.requestId,
+            caller: asker.caller,
+            requestId: asker.requestId,
           },
         },
         (answer) => (answer.op === "askMachine" ? answer : undefined)

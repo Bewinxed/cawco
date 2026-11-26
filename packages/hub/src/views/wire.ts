@@ -17,6 +17,7 @@ import type {
 } from "@cawco/core/find";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { StageKind } from "@cawco/core/views";
+import { Effect, Schema } from "effect";
 import type { Listed } from "./catalogs";
 import type { ViewChanges } from "./changes";
 import type { FindPage, FindRequest, WaitingFrom } from "./find-engine";
@@ -125,6 +126,14 @@ export type FromViews =
   { held: StoredHeld; kind: "stored" } | Asking<HubOps> | Answering<ViewOps>;
 
 /**
+ * Why an ask on the line got no answer of its own op: the other side failed
+ * it, answered another op, the line went, or its asker stopped waiting.
+ */
+export class AskFailed extends Schema.TaggedError<AskFailed>()("AskFailed", {
+  message: Schema.String,
+}) {}
+
+/**
  * Asks on one line and the answers they wait on: each ask is sent with a
  * number, and its answer settled by `pick`, which takes the answer of its
  * own op (a literal check, so the value is typed without an assertion).
@@ -133,66 +142,74 @@ export const createAsking = <Ops extends OpsShape<Ops>>(
   send: (asking: Asking<Ops>) => void
 ) => {
   let next = 0;
+  /** Each ask waiting, by its number: what its answer, or its failure, resumes. */
   const waiting = new Map<
     number,
-    { reject: (error: Error) => void; settle: (answer: AnswerOf<Ops>) => void }
+    (settled: Effect.Effect<AnswerOf<Ops>, AskFailed>) => void
   >();
   return {
-    /** Asks `asked`; `pick` reads its answer, or undefined for another op's. `signal` aborts the wait, not the work. */
+    /**
+     * Asks `asked`, sent as the effect starts; `pick` reads its answer, or
+     * undefined for another op's. `signal` aborts the wait, not the work, as
+     * interrupting the effect does.
+     */
     ask<Answer>(
       asked: AskOf<Ops>,
       pick: (answer: AnswerOf<Ops>) => { value: Answer } | undefined,
       signal?: AbortSignal
-    ): Promise<Answer> {
-      next += 1;
-      const id = next;
-      return new Promise<Answer>((resolve, reject) => {
-        waiting.set(id, {
-          reject,
-          settle: (answer) => {
-            const picked = pick(answer);
-            if (picked) {
-              resolve(picked.value);
-            } else {
-              reject(
-                new Error(
-                  `${String(asked.op)} was answered as ${String(answer.op)}`
-                )
-              );
-            }
-          },
-        });
-        signal?.addEventListener(
-          "abort",
-          () => {
-            if (waiting.delete(id)) {
-              reject(new Error("its asker no longer waits"));
-            }
-          },
-          { once: true }
-        );
+    ): Effect.Effect<Answer, AskFailed> {
+      return Effect.callback<AnswerOf<Ops>, AskFailed>((resume) => {
+        next += 1;
+        const id = next;
+        waiting.set(id, resume);
+        const gone = (): void => {
+          if (waiting.delete(id)) {
+            resume(
+              Effect.fail(
+                new AskFailed({ message: "its asker no longer waits" })
+              )
+            );
+          }
+        };
+        signal?.addEventListener("abort", gone, { once: true });
         send({ ...asked, id, kind: "ask" });
-      });
+        return Effect.sync(() => {
+          waiting.delete(id);
+          signal?.removeEventListener("abort", gone);
+        });
+      }).pipe(
+        Effect.flatMap((answer) => {
+          const picked = pick(answer);
+          return picked
+            ? Effect.succeed(picked.value)
+            : Effect.fail(
+                new AskFailed({
+                  message: `${String(asked.op)} was answered as ${String(answer.op)}`,
+                })
+              );
+        })
+      );
     },
     /** An answer came back: the ask it answers is settled. */
     answered(message: Answering<Ops>): void {
-      const one = waiting.get(message.id);
-      if (!one) {
+      const resume = waiting.get(message.id);
+      if (!resume) {
         return;
       }
       waiting.delete(message.id);
-      if (message.kind === "answer") {
-        one.settle(message);
-      } else {
-        one.reject(new Error(message.message));
-      }
+      resume(
+        message.kind === "answer"
+          ? Effect.succeed(message)
+          : Effect.fail(new AskFailed({ message: message.message }))
+      );
     },
     /** The line went: every ask waiting fails with `why`. */
     lost(why: string): void {
-      for (const one of waiting.values()) {
-        one.reject(new Error(why));
-      }
+      const lost = [...waiting.values()];
       waiting.clear();
+      for (const resume of lost) {
+        resume(Effect.fail(new AskFailed({ message: why })));
+      }
     },
   };
 };

@@ -50,7 +50,7 @@
  * on (its stale-verdict skip); and nothing here answers a permission.
  */
 
-import { Gone, readWithin } from "@cawco/core/bounded";
+import { boundedRead, Gone } from "@cawco/core/effect/bounded";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
   FLEET_WATCH_LIMITS,
@@ -72,6 +72,7 @@ import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { decisionWords, signalLine } from "@cawco/core/words/fleet-watch";
+import { Deferred, Effect, Exit } from "effect";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import { isProjectConversation } from "./caw";
@@ -667,44 +668,41 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     };
     running.set(id, triage);
     // The run's answer is the end of its turn, within the deadline.
-    readWithin(
-      TRIAGE_DEADLINE_MS,
-      (signal) =>
-        new Promise<void>((resolve, reject) => {
-          triage.ended = resolve;
-          triage.gone = () => reject(new Gone(`triage ${id}`));
-          signal.addEventListener("abort", () => reject(signal.reason), {
-            once: true,
-          });
-        }),
-      { signal: deps.lifetime.signal }
-    ).then(
-      (outcome) => {
-        if (running.get(id) !== triage) {
-          return;
-        }
-        switch (outcome.kind) {
-          case "answered":
-            finish(triage, "its turn ended first");
-            return;
-          case "unanswered":
-            if (outcome.reason === "dead") {
+    const turn = Deferred.makeUnsafe<void, Gone>();
+    triage.ended = () => {
+      Deferred.doneUnsafe(turn, Exit.void);
+    };
+    triage.gone = () => {
+      Deferred.doneUnsafe(turn, Exit.fail(new Gone({ what: `triage ${id}` })));
+    };
+    deps.lifetime.fork(
+      `triage ${id}`,
+      boundedRead<void, never, never>(
+        TRIAGE_DEADLINE_MS,
+        Deferred.await(turn)
+      ).pipe(
+        Effect.match({
+          onSuccess: () => {
+            if (running.get(id) === triage) {
+              finish(triage, "its turn ended first");
+            }
+          },
+          onFailure: ({ after, reason }) => {
+            if (running.get(id) !== triage) {
+              return;
+            }
+            if (reason === "dead") {
               release(triage);
               return;
             }
             log(row, row.id, "triage ran out of time");
             finish(
               triage,
-              `it did not end its turn within ${Math.round(outcome.after / 60_000)} min`
+              `it did not end its turn within ${Math.round(after / 60_000)} min`
             );
-            return;
-          default:
-            unhandled("read", outcome);
-        }
-      },
-      () => {
-        // The hub closed: nothing it would decide runs.
-      }
+          },
+        })
+      )
     );
     const { harness, model } = harnessFor(row);
     const brief = briefOf(row, triage, seen);

@@ -73,9 +73,8 @@
 import type { ActionState } from "@cawco/core/actions";
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
-import { readWithin } from "@cawco/core/bounded";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import { harnessName } from "@cawco/core/harness/kinds";
@@ -95,7 +94,6 @@ import type { TurnWakes } from "@cawco/core/session-messages";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
-import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { contactWords } from "@cawco/core/words/contact";
 import { decidesWords } from "@cawco/core/words/decides";
@@ -105,6 +103,7 @@ import { mcpWords } from "@cawco/core/words/mcp";
 import { pairingWords } from "@cawco/core/words/pairing";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { checkWords } from "@cawco/core/words/routine-check";
+import { Effect } from "effect";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { isProjectConversation } from "./caw";
@@ -800,50 +799,49 @@ const cawrierSilent = (after: number): string =>
  * APNs' reason it passed on; status 0 is no HTTP answer, its reason saying
  * when that was no answer in time.
  */
-const post = async (
+const post = (
   device: PushDeviceRow,
   body: () => Promise<PushBody>
-): Promise<{ status: number; reason: string | null }> => {
-  try {
-    const sent = JSON.stringify({
-      pairingId: device.pairingId,
-      expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
-      ...(await body()),
-    });
-    const asked = await readWithin(REQUEST_TIMEOUT_MS, async (signal) => {
-      const response = await fetch(`${CAWRIER}/v1/push`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${device.secret}`,
-          "content-type": "application/json",
-        },
-        body: sent,
-        signal,
+): Effect.Effect<{ status: number; reason: string | null }> =>
+  Effect.tryPromise(body).pipe(
+    Effect.flatMap((made) => {
+      const sent = JSON.stringify({
+        pairingId: device.pairingId,
+        expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
+        ...made,
       });
-      if (response.ok) {
-        return { status: response.status, reason: null };
-      }
-      const read = CAWRIER_REFUSAL.safeParse(
-        await response.json().catch(() => ({}))
+      return boundedRead(
+        REQUEST_TIMEOUT_MS,
+        Effect.tryPromise(async (signal) => {
+          const response = await fetch(`${CAWRIER}/v1/push`, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${device.secret}`,
+              "content-type": "application/json",
+            },
+            body: sent,
+            signal,
+          });
+          if (response.ok) {
+            return { status: response.status, reason: null };
+          }
+          const read = CAWRIER_REFUSAL.safeParse(
+            await response.json().catch(() => ({}))
+          );
+          const answer = read.success ? read.data : {};
+          return {
+            status: response.status,
+            reason: answer.reason ?? answer.error ?? null,
+          };
+        })
       );
-      const answer = read.success ? read.data : {};
-      return {
-        status: response.status,
-        reason: answer.reason ?? answer.error ?? null,
-      };
-    });
-    switch (asked.kind) {
-      case "answered":
-        return asked.value;
-      case "unanswered":
-        return { status: 0, reason: cawrierSilent(asked.after) };
-      default:
-        unhandled("read", asked);
-    }
-  } catch {
-    return { status: 0, reason: null };
-  }
-};
+    }),
+    Effect.catchTag("Unanswered", ({ after }) =>
+      Effect.succeed({ status: 0, reason: cawrierSilent(after) })
+    ),
+    // No HTTP answer: status 0, with no reason to give.
+    Effect.orElseSucceed(() => ({ status: 0, reason: null }))
+  );
 
 /**
  * Removes a device: Cawrier wipes its pairing first, which frees the
@@ -851,17 +849,17 @@ const post = async (
  * the hub still forgets the device and logs why; the seat then frees itself
  * at the pairing's alarm. False when no device has that pairing.
  */
-const removeDevice = async (
+const removeDevice = (
   db: DbShape,
   pairingId: string
-): Promise<boolean> => {
+): Effect.Effect<boolean> => {
   const device = db.push.devices().find((row) => row.pairingId === pairingId);
   if (!device) {
-    return false;
+    return Effect.succeed(false);
   }
-  let why: string | undefined;
-  try {
-    const asked = await readWithin(REQUEST_TIMEOUT_MS, async (signal) => {
+  return boundedRead(
+    REQUEST_TIMEOUT_MS,
+    Effect.tryPromise(async (signal) => {
       const response = await fetch(`${CAWRIER}/v1/unenroll`, {
         method: "POST",
         headers: {
@@ -879,26 +877,25 @@ const removeDevice = async (
       );
       const answer = read.success ? read.data : {};
       return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
-    });
-    switch (asked.kind) {
-      case "answered":
-        why = asked.value;
-        break;
-      case "unanswered":
-        why = cawrierSilent(asked.after);
-        break;
-      default:
-        unhandled("read", asked);
-    }
-  } catch (error) {
-    why = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;
-  }
-  if (why) {
-    console.warn(
-      `[push] ${device.name}: unenroll — ${why}; removed here, its seat frees at the pairing's alarm`
-    );
-  }
-  return db.push.dropDevice(pairingId);
+    })
+  ).pipe(
+    Effect.catchTag("Unanswered", ({ after }) =>
+      Effect.succeed(cawrierSilent(after))
+    ),
+    Effect.catch(({ cause }) =>
+      Effect.succeed(
+        `Cawrier not reached: ${cause instanceof Error ? cause.message : String(cause)}`
+      )
+    ),
+    Effect.map((why) => {
+      if (why) {
+        console.warn(
+          `[push] ${device.name}: unenroll — ${why}; removed here, its seat frees at the pairing's alarm`
+        );
+      }
+      return db.push.dropDevice(pairingId);
+    })
+  );
 };
 
 export const createPush = ({
@@ -976,14 +973,16 @@ export const createPush = ({
     const plaintext = plaintextOf(notification, cleared);
     return await Promise.all(
       devices.map(async (device): Promise<PushOutcome> => {
-        const { status, reason } = await post(device, async () => ({
-          collapseId: notification.collapseId,
-          payload: payloadOf(
-            notification,
-            await seal(device.key, plaintext),
-            cleared
-          ),
-        }));
+        const { status, reason } = await lifetime.run(
+          post(device, async () => ({
+            collapseId: notification.collapseId,
+            payload: payloadOf(
+              notification,
+              await seal(device.key, plaintext),
+              cleared
+            ),
+          }))
+        );
         const pruned = settle(device, status, reason);
         if (status === 200) {
           told.set(device.pairingId, count);
@@ -1001,10 +1000,9 @@ export const createPush = ({
     if (awake().length > 0) {
       notifications.shown(notification.collapseId);
     }
-    deliver(notification, undefined, replacing).catch((error: unknown) =>
-      console.warn(
-        `[push] ${notification.collapseId}: ${error instanceof Error ? error.message : String(error)}`
-      )
+    lifetime.fork(
+      `push ${notification.collapseId} replaced`,
+      Effect.tryPromise(() => deliver(notification, undefined, replacing))
     );
   };
 
@@ -1453,11 +1451,17 @@ export const createPush = ({
         if (open === burst) {
           open = undefined;
         }
-        detach(goOut(burst, null), "needs-you push");
+        lifetime.fork(
+          "needs-you push",
+          Effect.tryPromise(() => goOut(burst, null))
+        );
       }
     );
     if (item.ask) {
-      detach(goOut(burst, item), "ask push");
+      lifetime.fork(
+        "ask push",
+        Effect.tryPromise(() => goOut(burst, item))
+      );
     }
   };
 
@@ -1564,10 +1568,12 @@ export const createPush = ({
       return;
     }
     backgroundAt.set(pairingId, Date.now());
-    const { status, reason } = await post(device, async () => ({
-      pushType: "background",
-      payload: { aps: { "content-available": 1 }, cawco: { cleared } },
-    }));
+    const { status, reason } = await lifetime.run(
+      post(device, async () => ({
+        pushType: "background",
+        payload: { aps: { "content-available": 1 }, cawco: { cleared } },
+      }))
+    );
     settle(device, status, reason);
     if (status === 200) {
       told.set(pairingId, count);
@@ -1589,7 +1595,10 @@ export const createPush = ({
         pairingId,
         lifetime.after("push pairing queue", wait, () => {
           queued.delete(pairingId);
-          detach(background(pairingId), "background push");
+          lifetime.fork(
+            "background push",
+            Effect.tryPromise(() => background(pairingId))
+          );
         })
       );
     }
@@ -1682,6 +1691,13 @@ export const createPush = ({
   };
 
   return {
+    /**
+     * The promise edge of a device's removal: Cawrier wipes its pairing,
+     * then the hub forgets it (see removeDevice). False when no device has
+     * that pairing.
+     */
+    removeDevice: (pairingId: string): Promise<boolean> =>
+      lifetime.run(removeDevice(db, pairingId)),
     /**
      * A session is blocked on you: a permission or a question.
      * Call wherever the ask reaches the operator; a request is pushed once
@@ -1941,7 +1957,10 @@ export const createPush = ({
             },
           });
         });
-      detach(alerted, "attempt push");
+      lifetime.fork(
+        "attempt push",
+        Effect.tryPromise(() => alerted)
+      );
     },
 
     /**
@@ -2556,7 +2575,7 @@ export const pushRoutes = (db: DbShape, push: Push) =>
             })
     )
     .delete("/api/push/devices/:id", async ({ params }) =>
-      (await removeDevice(db, params.id))
+      (await push.removeDevice(params.id))
         ? { ok: true }
         : problem(404, {
             code: "device-no-longer-registered",
@@ -2618,6 +2637,6 @@ export const pushRoutes = (db: DbShape, push: Push) =>
       { ...hidden, body: t.Object({ pairingId: t.String() }) },
       async ({ body }) => ({
         ok: true,
-        removed: await removeDevice(db, body.pairingId),
+        removed: await push.removeDevice(body.pairingId),
       })
     );

@@ -27,8 +27,8 @@
  * before starting (never a password) is kept beside them.
  */
 import { dirname, join as joinPath } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import {
   checkStep,
   currentStep,
@@ -66,8 +66,8 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
-import { until } from "@cawco/core/until";
 import { outputCutWords } from "@cawco/core/words/install";
+import { Effect, Fiber } from "effect";
 import { InstallsRecordSchema } from "./db/stored-shapes";
 import type { InstallsRecord } from "./db/stored-types";
 import type { HubLifetimeShape } from "./lifetime";
@@ -177,12 +177,9 @@ interface Kept {
   run: Run | null;
 }
 
-/** An SSH add while it runs: the `ssh` it waits on, the connection it asked for, and its run as a whole. */
+/** An SSH add while it runs: the connection it asked for, whether a Stop cut it, and the fiber it runs on. */
 interface Run {
-  child: Bun.Subprocess | null;
-  ended: Promise<void>;
-  readonly halt: Promise<null>;
-  readonly halted: () => void;
+  fiber: Fiber.Fiber<void> | null;
   stopped: boolean;
   tunnel: TunnelOpen | null;
 }
@@ -542,31 +539,28 @@ export const createInstalls = (deps: InstallsDeps) => {
     changed();
   };
 
-  /** The installs whose sync and harnesses steps run now, by id: the steps' work. */
-  const readying = new Map<string, Promise<void>>();
+  /** The installs whose sync and harnesses steps run now, by id: the fiber of the steps' work. */
+  const readying = new Map<string, Fiber.Fiber<void>>();
 
   /**
    * The fleet's sync on the machine: its welcome converged, waited on up to
    * {@link INSTALL_SYNC_LIMIT_MS}. Past it the add goes on, said in its
    * output: what is still on its way lands on the machine's row by itself.
    */
-  const sync = async (machineId: string, say: (line: string) => void) => {
-    const synced = await readWithin(INSTALL_SYNC_LIMIT_MS, (signal) =>
-      deps.synced(machineId, signal)
+  const sync = (machineId: string, say: (line: string) => void) =>
+    boundedRead(
+      INSTALL_SYNC_LIMIT_MS,
+      Effect.promise((signal) => deps.synced(machineId, signal))
+    ).pipe(
+      Effect.match({
+        onSuccess: () =>
+          say("the fleet's skills, MCP servers, memory and hooks are on it"),
+        onFailure: () =>
+          say(
+            `the fleet's sync is still running on it after ${INSTALL_SYNC_LIMIT_MS / 1000} s: each item lands on its row in the machines list as it is placed`
+          ),
+      })
     );
-    switch (synced.kind) {
-      case "answered":
-        say("the fleet's skills, MCP servers, memory and hooks are on it");
-        return;
-      case "unanswered":
-        say(
-          `the fleet's sync is still running on it after ${INSTALL_SYNC_LIMIT_MS / 1000} s: each item lands on its row in the machines list as it is placed`
-        );
-        return;
-      default:
-        unhandled("synced", synced);
-    }
-  };
 
   /**
    * The machine is listed online: the fleet's sync is placed on it
@@ -580,8 +574,11 @@ export const createInstalls = (deps: InstallsDeps) => {
    * fix (dashboard HarnessBlock, on the outcome, the machine's row and
    * Configure → CLI tools). Asked again while it runs, it answers the same
    * work. Only called once the add knows its machine.
+   *
+   * The steps run on a fiber of their own, held by the install's id: the
+   * add that waits on them may be stopped, and they go on.
    */
-  const ready = (entry: Kept, machineId: string): Promise<void> => {
+  const ready = (entry: Kept, machineId: string): Fiber.Fiber<void> => {
     const { install } = entry;
     const running = readying.get(install.id);
     if (running !== undefined) {
@@ -589,28 +586,42 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
     mark(entry, "sync");
     const say = (line: string) => take(entry, `${INSTALL_STEP_PREFIX}${line}`);
-    const work = (async () => {
-      await sync(machineId, say);
-      if (install.state !== "running") {
-        return;
-      }
-      mark(entry, "harnesses");
-      const said = await deps
-        .readyHarnesses(machineId, say)
-        .catch(
-          (error: Error) =>
-            `The machine's Claude Code, OpenCode and pi weren't checked: ${error.message}`
+    // Its first step waits a turn, so the steps are held before they run.
+    const steps: Fiber.Fiber<void> = deps.lifetime.fork(
+      "machine install's sync and harnesses steps",
+      Effect.gen(function* () {
+        yield* Effect.yieldNow;
+        yield* sync(machineId, say);
+        if (install.state !== "running") {
+          return;
+        }
+        mark(entry, "harnesses");
+        const said = yield* Effect.tryPromise(() =>
+          deps.readyHarnesses(machineId, say)
+        ).pipe(
+          Effect.catch(({ cause }) =>
+            Effect.succeed(
+              `The machine's Claude Code, OpenCode and pi weren't checked: ${cause instanceof Error ? cause.message : String(cause)}`
+            )
+          )
         );
-      if (install.state !== "running") {
-        return;
-      }
-      say(said);
-      end(entry, "joined");
-    })().finally(() => {
-      readying.delete(install.id);
-    });
-    readying.set(install.id, work);
-    return work;
+        if (install.state !== "running") {
+          return;
+        }
+        say(said);
+        end(entry, "joined");
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (readying.get(install.id) === steps) {
+              readying.delete(install.id);
+            }
+          })
+        )
+      )
+    );
+    readying.set(install.id, steps);
+    return steps;
   };
 
   /** Every check passed, as the installer goes past them all. */
@@ -744,54 +755,80 @@ export const createInstalls = (deps: InstallsDeps) => {
    * at all (BatchMode). `ssh` leads a process group of its own, so a stop
    * ends it and its askpass together.
    */
-  const session = async (
+  const session = (
     entry: Kept,
-    run: Run,
     password: string | null,
     body: string
-  ): Promise<number> => {
+  ): Effect.Effect<number> => {
     const { install } = entry;
-    const child = Bun.spawn(
-      [
-        "ssh",
-        "-n",
-        ...(password === null
-          ? ["-o", "BatchMode=yes"]
-          : [
-              "-o",
-              "PreferredAuthentications=password,keyboard-interactive",
-              "-o",
-              "PubkeyAuthentication=no",
-              "-o",
-              "NumberOfPasswordPrompts=1",
-            ]),
-        ...sshOptions(install.port),
-        "--",
-        install.target,
-        remoteCommand(body),
-      ],
-      {
-        stdin:
-          password === null
-            ? "ignore"
-            : new TextEncoder().encode(`${password}\n`),
-        stdout: "pipe",
-        stderr: "pipe",
-        detached: true,
-        env:
-          password === null
-            ? process.env
-            : { ...process.env, ...ASKPASS_ENV() },
-      }
+    const spawn = () =>
+      Bun.spawn(
+        [
+          "ssh",
+          "-n",
+          ...(password === null
+            ? ["-o", "BatchMode=yes"]
+            : [
+                "-o",
+                "PreferredAuthentications=password,keyboard-interactive",
+                "-o",
+                "PubkeyAuthentication=no",
+                "-o",
+                "NumberOfPasswordPrompts=1",
+              ]),
+          ...sshOptions(install.port),
+          "--",
+          install.target,
+          remoteCommand(body),
+        ],
+        {
+          stdin:
+            password === null
+              ? "ignore"
+              : new TextEncoder().encode(`${password}\n`),
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: true,
+          env:
+            password === null
+              ? process.env
+              : { ...process.env, ...ASKPASS_ENV() },
+        }
+      );
+    return Effect.acquireUseRelease(
+      Effect.sync(spawn),
+      (child) =>
+        Effect.promise(() =>
+          Promise.all([
+            collect(entry, child.stdout),
+            collect(entry, child.stderr),
+            child.exited,
+          ])
+        ).pipe(Effect.map(([, , code]) => code)),
+      (child) => stopSsh(child)
     );
-    run.child = child;
-    const [, , code] = await Promise.all([
-      collect(entry, child.stdout),
-      collect(entry, child.stderr),
-      child.exited,
-    ]);
-    run.child = null;
-    return code;
+  };
+
+  /**
+   * An `ssh` cut short (a Stop): its process group asked to end, then
+   * killed when it has not within {@link STOP_GRACE_MS}. One that exited is
+   * left alone.
+   */
+  const stopSsh = (child: Bun.Subprocess): Effect.Effect<void> => {
+    const leader = spawnedPid(child);
+    if (child.exitCode !== null || child.signalCode !== null || !leader) {
+      return Effect.void;
+    }
+    signalGroup(leader, "SIGTERM");
+    return boundedRead(
+      STOP_GRACE_MS,
+      Effect.promise(() => child.exited)
+    ).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.sync(() => signalGroup(leader, "SIGKILL"))
+      ),
+      Effect.asVoid
+    );
   };
 
   /** Why the hub's own connection to the machine did not come up. */
@@ -819,19 +856,16 @@ export const createInstalls = (deps: InstallsDeps) => {
    * An exit of 0 waits out the hub's grace for the machine to come online,
    * then its sync and harnesses steps ({@link ready}), which a Stop cuts short.
    */
-  const settle = async (
-    entry: Kept,
-    run: Run,
-    record: string
-  ): Promise<void> => {
+  const settle = Effect.fnUntraced(function* (entry: Kept, record: string) {
     const { install } = entry;
     if (entry.exitCode === 0 && install.machineId) {
-      await until(() => machineOf(install.machineId)?.online, {
-        deadline: Date.now() + INSTALL_GRACE_MS,
-        every: 500,
-      });
+      yield* lookUntil(
+        { every: 500, deadlineMs: INSTALL_GRACE_MS },
+        Effect.sync(() => machineOf(install.machineId)?.online || undefined)
+      );
       if (machineOf(install.machineId)?.online) {
-        await Promise.race([ready(entry, install.machineId), run.halt]);
+        // A Stop cuts the wait; the steps go on.
+        yield* Fiber.join(ready(entry, install.machineId));
         return;
       }
     }
@@ -851,7 +885,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       return;
     }
     end(entry, "failed", problemOf(entry.lines, entry.exitCode ?? -1));
-  };
+  });
 
   /**
    * The SSH add, in order: the machine's port and host key, a password
@@ -859,21 +893,19 @@ export const createInstalls = (deps: InstallsDeps) => {
    * carrying a port on the machine to the hub, the key it gives the
    * machine, and the installer through that port.
    */
+  // A Stop interrupts the add's fiber: whichever step it waits on ends
+  // there, its `ssh` stopped ({@link session}), and nothing after it runs.
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the add's steps in order, each with the one way it can stop
-  async function runSsh(
+  const runSsh = Effect.fnUntraced(function* (
     entry: Kept,
     run: Run,
     trust: { password: string; command: string } | null
-  ): Promise<void> {
+  ) {
     const { install } = entry;
     mark(entry, "sign-in");
-    const before = await Promise.race([
-      beforeSsh(install.target, install.port),
-      run.halt,
-    ]);
-    if (run.stopped) {
-      return;
-    }
+    const before = yield* Effect.promise(() =>
+      beforeSsh(install.target, install.port)
+    );
     if (before?.kind === "host-key") {
       end(entry, "failed", {
         kind: "host-key",
@@ -886,10 +918,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       return;
     }
     if (trust) {
-      const code = await session(entry, run, trust.password, trust.command);
-      if (run.stopped) {
-        return;
-      }
+      const code = yield* session(entry, trust.password, trust.command);
       if (code !== 0) {
         entry.exitCode = code;
         end(
@@ -914,10 +943,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       install.hostname = machineOf(tunnel.machineId)?.hostname ?? null;
       changed();
     }
-    const outcome = await Promise.race([tunnel.outcome, run.halt]);
-    if (run.stopped || outcome === null) {
-      return;
-    }
+    const outcome = yield* Effect.promise(() => tunnel.outcome);
     if (outcome.kind === "ended") {
       if (tunnel.fresh) {
         deps.tunnels.abandon(tunnel.id);
@@ -935,10 +961,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     // The build the add leaves the machine on, known before anything is
     // written there (its script names it), then the machine's key.
     take(entry, `${INSTALL_STEP_PREFIX}${OFFER_STEP}`);
-    const offer = await deps.offered();
-    if (run.stopped) {
-      return;
-    }
+    const offer = yield* Effect.promise(() => deps.offered());
     if ("refused" in offer) {
       take(entry, `${HUB_SAID}${offer.refused}`);
       if (tunnel.fresh) {
@@ -949,10 +972,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       return;
     }
     take(entry, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
-    const unkept = await deps.tunnels.admit(tunnel.id);
-    if (run.stopped) {
-      return;
-    }
+    const unkept = yield* Effect.promise(() => deps.tunnels.admit(tunnel.id));
     if (unkept) {
       take(entry, unkept);
       if (tunnel.fresh) {
@@ -964,62 +984,51 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
     install.keys.machine = true;
     changed();
-    entry.exitCode = await session(
-      entry,
-      run,
-      null,
-      installCommand(entry.hubUrl)
-    );
-    if (run.stopped) {
-      return;
-    }
+    entry.exitCode = yield* session(entry, null, installCommand(entry.hubUrl));
     // A machine already joined over this connection installs nothing new and
     // says no `joined as`: it is the machine the connection was held for.
     install.machineId ??= tunnel.machineId;
-    await settle(entry, run, tunnel.id);
-    if (run.stopped) {
-      return;
-    }
+    yield* settle(entry, tunnel.id);
     if (install.state === "joined" && install.machineId) {
       deps.tunnels.joined(tunnel.id, install.machineId);
     } else if (tunnel.fresh) {
       deps.tunnels.abandon(tunnel.id);
     }
-  }
+  });
 
-  /** Starts (or starts again) an SSH add of `entry`. */
+  /** Starts (or starts again) an SSH add of `entry`, on a fiber a Stop interrupts. */
   const launchSsh = (
     entry: Kept,
     trust: { password: string; command: string } | null
   ): void => {
-    let halted = (): void => undefined;
-    const halt = new Promise<null>((resolve) => {
-      halted = () => resolve(null);
-    });
-    const run: Run = {
-      child: null,
-      ended: Promise.resolve(),
-      halt,
-      halted,
-      stopped: false,
-      tunnel: null,
-    };
+    const run: Run = { fiber: null, stopped: false, tunnel: null };
     entry.run = run;
-    run.ended = runSsh(entry, run, trust)
-      .catch((error: Error) => {
-        if (entry.install.state === "running" && !run.stopped) {
-          end(entry, "failed", { kind: "step", said: error.message });
-        }
-      })
-      .then(() => {
-        if (run.stopped) {
-          end(entry, "stopped");
-        }
-      })
-      .finally(() => {
-        entry.run = null;
-      });
-    detach(run.ended, "machine install");
+    const fiber = deps.lifetime.fork(
+      "machine install",
+      runSsh(entry, run, trust).pipe(
+        Effect.catchDefect((error) =>
+          Effect.sync(() => {
+            if (entry.install.state === "running") {
+              end(entry, "failed", {
+                kind: "step",
+                said: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })
+        ),
+        Effect.onExit(() =>
+          Effect.sync(() => {
+            if (run.stopped) {
+              end(entry, "stopped");
+            }
+            if (entry.run === run) {
+              entry.run = null;
+            }
+          })
+        )
+      )
+    );
+    run.fiber = fiber.pollUnsafe() === undefined ? fiber : null;
   };
 
   /** A fresh install record. */
@@ -1261,10 +1270,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     console.log(
       `[installs] ${install.id}: lost, and ${found.hostname} is online: its sync and harnesses steps run`
     );
-    detach(
-      ready(entry, found.machineId),
-      "lost machine install's sync and harnesses steps"
-    );
+    ready(entry, found.machineId);
   };
 
   /** Looks at the fleet for each install that waits on it. */
@@ -1283,10 +1289,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         !readying.has(install.id)
       ) {
         install.hostname = machine.hostname;
-        detach(
-          ready(entry, machine.machineId),
-          "machine install's sync and harnesses steps"
-        );
+        ready(entry, machine.machineId);
       }
     }
   });
@@ -1314,20 +1317,16 @@ export const createInstalls = (deps: InstallsDeps) => {
       return install;
     }
     run.stopped = true;
-    run.halted();
     if (run.tunnel?.fresh) {
       deps.tunnels.abandon(run.tunnel.id);
     }
-    const { child } = run;
-    const leader = child ? spawnedPid(child) : undefined;
-    if (child && leader) {
-      signalGroup(leader, "SIGTERM");
-      const exit = await readWithin(STOP_GRACE_MS, () => child.exited);
-      if (exit.kind === "unanswered") {
-        signalGroup(leader, "SIGKILL");
-      }
+    // Its `ssh` is stopped as the fiber unwinds, and the add ends stopped.
+    const { fiber } = run;
+    if (fiber) {
+      await deps.lifetime.run(Fiber.interrupt(fiber));
+    } else {
+      end(entry, "stopped");
     }
-    await run.ended;
     return install;
   };
 

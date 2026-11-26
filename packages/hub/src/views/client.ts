@@ -9,9 +9,10 @@
  * is started a moment later, which reads the database whole again; what it
  * held of the machines (their catalogs) is asked again (`restarted`).
  */
-import { detach } from "@cawco/core/detach";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
+import type { HubLifetimeShape } from "../lifetime";
 import type { ViewChanges } from "./changes";
 import type { StoredHeld } from "./stored";
 import {
@@ -51,6 +52,8 @@ export interface HubAnswers {
 
 export interface ViewsThreadDeps {
   hub: HubAnswers;
+  /** The hub's lifetime: its asks run on it, and the restart's timer. */
+  lifetime: HubLifetimeShape;
   /** The hub's database file. */
   path: string;
   /** The thread started again after it ended: what it held of the machines is to be asked again. */
@@ -72,6 +75,12 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
     started().postMessage(message);
   };
   const asking = createAsking<ViewOps>((message) => post(message));
+  /** The promise edge of an ask of the views thread, for the hub's callers. */
+  const ask = <Answer>(
+    asked: Parameters<typeof asking.ask>[0],
+    pick: (answer: AnswerOf<ViewOps>) => { value: Answer } | undefined,
+    signal?: AbortSignal
+  ): Promise<Answer> => deps.lifetime.run(asking.ask(asked, pick, signal));
 
   /** What the views thread asked, answered: its value, or why it failed. */
   const answerHub = async (
@@ -125,9 +134,10 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
         deps.stored(message.held);
         return;
       case "ask":
-        detach(
-          answerHub(message.id, () => answerOf(message)),
-          `views: ${message.op} answered`
+        // answerHub says a failure to the views thread; it never rejects.
+        deps.lifetime.fork(
+          `views: ${message.op} answered`,
+          Effect.promise(() => answerHub(message.id, () => answerOf(message)))
         );
         return;
       case "answer":
@@ -152,11 +162,11 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
       return;
     }
     restartOwed = true;
-    setTimeout(() => {
+    deps.lifetime.after("views thread started again", RESTART_MS, () => {
       if (!(closed || thread)) {
         started();
       }
-    }, RESTART_MS).unref();
+    });
   };
 
   const started = (): Worker => {
@@ -190,35 +200,35 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
       }
     },
     find: (arg: ViewOps["find"]["arg"], signal?: AbortSignal) =>
-      asking.ask(
+      ask(
         { op: "find", arg },
         (answer) => (answer.op === "find" ? answer : undefined),
         signal
       ),
     listing: (arg: ViewOps["listing"]["arg"], signal?: AbortSignal) =>
-      asking.ask(
+      ask(
         { op: "listing", arg },
         (answer) => (answer.op === "listing" ? answer : undefined),
         signal
       ),
     named: (arg: ViewOps["named"]["arg"]) =>
-      asking.ask({ op: "named", arg }, (answer) =>
+      ask({ op: "named", arg }, (answer) =>
         answer.op === "named" ? answer : undefined
       ),
     waiting: (arg: ViewOps["waiting"]["arg"]) =>
-      asking.ask({ op: "waiting", arg }, (answer) =>
+      ask({ op: "waiting", arg }, (answer) =>
         answer.op === "waiting" ? answer : undefined
       ),
     relist: (arg: ViewOps["relist"]["arg"]) =>
-      asking.ask({ op: "relist", arg }, (answer) =>
+      ask({ op: "relist", arg }, (answer) =>
         answer.op === "relist" ? answer : undefined
       ),
     catalogMoved: (arg: ViewOps["catalogMoved"]["arg"]) =>
-      asking.ask({ op: "catalogMoved", arg }, (answer) =>
+      ask({ op: "catalogMoved", arg }, (answer) =>
         answer.op === "catalogMoved" ? answer : undefined
       ),
     catalogSessions: (arg: ViewOps["catalogSessions"]["arg"]) =>
-      asking.ask({ op: "catalogSessions", arg }, (answer) =>
+      ask({ op: "catalogSessions", arg }, (answer) =>
         answer.op === "catalogSessions" ? answer : undefined
       ),
     /**

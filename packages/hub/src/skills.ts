@@ -9,8 +9,8 @@ import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
   frontMatterBlock,
@@ -23,8 +23,8 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import { $ } from "bun";
+import { Effect, Schema } from "effect";
 import { looseObject, optional, record, safeParse, string } from "valibot";
 import { skillMdName } from "./fleet-versions";
 import { skillTextProblems } from "./skill-text-rules";
@@ -119,6 +119,24 @@ const SKIP = SKILL_SKIPPED_DIRS;
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** A step of a fetch at the hub failed: its sentence, as every failure here is one. */
+export class FetchFailed extends Schema.TaggedError<FetchFailed>()(
+  "FetchFailed",
+  { message: Schema.String }
+) {}
+
+/**
+ * An async step of a fetch, its failure as its sentence ({@link
+ * FetchFailed}); `signal` aborts as the fetch is interrupted.
+ */
+export const fetchStep = <A>(
+  run: (signal: AbortSignal) => Promise<A>
+): Effect.Effect<A, FetchFailed> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) => new FetchFailed({ message: said(error) }),
+  });
 
 const URL_SOURCE_RE = /^https?:\/\//iu;
 const ZIP_NAME_RE = /\.zip$/iu;
@@ -308,45 +326,46 @@ const describe = (source: SkillSource): string => {
  * One GET within {@link FETCH_TIMEOUT_MS}, its body read inside the same
  * time. Not answered in time throws so, as every failure here is a sentence.
  */
-export const get = async (url: string): Promise<Response> => {
-  const asked = await readWithin(FETCH_TIMEOUT_MS, async (signal) => {
-    const response = await fetch(url, { signal });
-    return new Response(
-      [204, 205, 304].includes(response.status)
-        ? null
-        : await response.arrayBuffer(),
-      {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      }
-    );
-  });
-  switch (asked.kind) {
-    case "answered":
-      return asked.value;
-    case "unanswered":
-      throw new Error(
-        `${url} did not answer within ${secondsOf(asked.after)} s`
+export const get = (url: string): Effect.Effect<Response, FetchFailed> =>
+  boundedRead(
+    FETCH_TIMEOUT_MS,
+    fetchStep(async (signal) => {
+      const response = await fetch(url, { signal });
+      return new Response(
+        [204, 205, 304].includes(response.status)
+          ? null
+          : await response.arrayBuffer(),
+        {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        }
       );
-    default:
-      unhandled("read", asked);
-  }
-};
+    })
+  ).pipe(
+    Effect.catchTag("Unanswered", ({ after }) =>
+      Effect.fail(
+        new FetchFailed({
+          message: `${url} did not answer within ${secondsOf(after)} s`,
+        })
+      )
+    )
+  );
 
 /**
  * The downloaded archive, extracted, with the one directory both tarball kinds
  * wrap everything in stripped — GitHub's is named for the ref, npm's `package`.
  */
-export const unpack = async (
+export const unpack = (
   response: Response,
   work: string,
   name: string
-): Promise<string> => {
-  const archive = join(work, "archive");
-  await writeStateFile(archive, new Uint8Array(await response.arrayBuffer()));
-  return await extract(archive, work, name);
-};
+): Effect.Effect<string, FetchFailed> =>
+  fetchStep(async () => {
+    const archive = join(work, "archive");
+    await writeStateFile(archive, new Uint8Array(await response.arrayBuffer()));
+    return await extract(archive, work, name);
+  });
 
 /** An archive already on disk, extracted, with its one wrapping directory stripped. */
 const extract = async (
@@ -393,66 +412,76 @@ const GIT_TIMEOUT_MS = 180_000;
  * have is a failure that says so: prompts are off, so it never waits on a
  * terminal nobody is at.
  */
-export const downloadRepo = async (
+export const downloadRepo = (
   owner: string,
   repo: string,
   ref: string | undefined,
   work: string
-): Promise<string> => {
+): Effect.Effect<string, FetchFailed> => {
   const slug = `${owner}/${repo}`;
   const store = join(work, "repo.git");
-  const git = async (step: string, args: string[]): Promise<void> => {
-    const ran = await readWithin(GIT_TIMEOUT_MS, async (signal) => {
-      const child = Bun.spawn(
-        safeGitArgv([`--git-dir=${store}`, step, ...args]),
-        {
-          env: { ...process.env, ...SAFE_GIT_ENV },
-          stdout: "ignore",
-          stderr: "pipe",
-          signal,
-        }
-      );
-      const [code, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stderr).text(),
-      ]);
-      return { code, stderr };
-    });
-    switch (ran.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `git ${step} for ${slug} did not finish within ${secondsOf(ran.after)} s`
-        );
-      default:
-        unhandled("read", ran);
-    }
-    const { code, stderr } = ran.value;
-    if (code !== 0) {
-      throw new Error(
-        `git ${step} failed for ${slug}: ${stderr.trim() || `exit ${code}`}`
-      );
-    }
-  };
+  // One `git` child per step, killed when the step is cut short: by its
+  // deadline, or by whatever interrupts the fetch.
+  const git = (step: string, args: string[]) =>
+    boundedRead(
+      GIT_TIMEOUT_MS,
+      Effect.acquireUseRelease(
+        Effect.sync(() =>
+          Bun.spawn(safeGitArgv([`--git-dir=${store}`, step, ...args]), {
+            env: { ...process.env, ...SAFE_GIT_ENV },
+            stdout: "ignore",
+            stderr: "pipe",
+          })
+        ),
+        (child) =>
+          fetchStep(() =>
+            Promise.all([child.exited, new Response(child.stderr).text()])
+          ),
+        (child) =>
+          Effect.sync(() => {
+            if (child.exitCode === null) {
+              child.kill();
+            }
+          })
+      )
+    ).pipe(
+      Effect.catchTag("Unanswered", ({ after }) =>
+        Effect.fail(
+          new FetchFailed({
+            message: `git ${step} for ${slug} did not finish within ${secondsOf(after)} s`,
+          })
+        )
+      ),
+      Effect.flatMap(([code, stderr]) =>
+        code === 0
+          ? Effect.void
+          : Effect.fail(
+              new FetchFailed({
+                message: `git ${step} failed for ${slug}: ${stderr.trim() || `exit ${code}`}`,
+              })
+            )
+      )
+    );
 
-  await git("init", ["--quiet", "--bare"]);
-  await git("fetch", [
-    "--quiet",
-    "--depth",
-    "1",
-    `https://github.com/${slug}.git`,
-    ref ?? "HEAD",
-  ]);
   // One wrapping directory, so `extract` strips exactly it whatever the root holds.
   const archive = join(work, "archive.tar.gz");
-  await git("archive", [
-    "--format=tar.gz",
-    `--prefix=${repo}/`,
-    `--output=${archive}`,
-    "FETCH_HEAD",
-  ]);
-  return await extract(archive, work, "archive.tar.gz");
+  return Effect.gen(function* () {
+    yield* git("init", ["--quiet", "--bare"]);
+    yield* git("fetch", [
+      "--quiet",
+      "--depth",
+      "1",
+      `https://github.com/${slug}.git`,
+      ref ?? "HEAD",
+    ]);
+    yield* git("archive", [
+      "--format=tar.gz",
+      `--prefix=${repo}/`,
+      `--output=${archive}`,
+      "FETCH_HEAD",
+    ]);
+    return yield* fetchStep(() => extract(archive, work, "archive.tar.gz"));
+  });
 };
 
 /**
@@ -492,40 +521,43 @@ const Packument = looseObject({
   ),
 });
 
-const npmRoot = async (
+const npmRoot = (
   source: SkillSource & { kind: "npm" },
   work: string
-): Promise<string> => {
-  const metadata = await get(`https://registry.npmjs.org/${source.pkg}`);
-  if (!metadata.ok) {
-    throw new Error(
-      `the npm registry answered ${metadata.status} for ${source.pkg}`
-    );
-  }
+): Effect.Effect<string, FetchFailed> =>
+  Effect.gen(function* () {
+    const metadata = yield* get(`https://registry.npmjs.org/${source.pkg}`);
+    if (!metadata.ok) {
+      return yield* new FetchFailed({
+        message: `the npm registry answered ${metadata.status} for ${source.pkg}`,
+      });
+    }
 
-  const read = safeParse(Packument, await metadata.json());
-  if (!read.success) {
-    throw new Error(
-      `the npm registry's answer for ${source.pkg} is no packument`
-    );
-  }
-  const packument = read.output;
-  const version = source.version ?? packument["dist-tags"]?.latest;
-  const tarball = version
-    ? packument.versions?.[version]?.dist?.tarball
-    : undefined;
-  if (!tarball) {
-    throw new Error(
-      `the npm registry has no ${source.pkg}@${version ?? "latest"}`
-    );
-  }
+    const read = safeParse(Packument, yield* fetchStep(() => metadata.json()));
+    if (!read.success) {
+      return yield* new FetchFailed({
+        message: `the npm registry's answer for ${source.pkg} is no packument`,
+      });
+    }
+    const packument = read.output;
+    const version = source.version ?? packument["dist-tags"]?.latest;
+    const tarball = version
+      ? packument.versions?.[version]?.dist?.tarball
+      : undefined;
+    if (!tarball) {
+      return yield* new FetchFailed({
+        message: `the npm registry has no ${source.pkg}@${version ?? "latest"}`,
+      });
+    }
 
-  const response = await get(tarball);
-  if (!response.ok) {
-    throw new Error(`${tarball} answered ${response.status}`);
-  }
-  return await unpack(response, work, tarball);
-};
+    const response = yield* get(tarball);
+    if (!response.ok) {
+      return yield* new FetchFailed({
+        message: `${tarball} answered ${response.status}`,
+      });
+    }
+    return yield* unpack(response, work, tarball);
+  });
 
 /** Every directory under `container` that holds a `SKILL.md`, which is what a skill is. */
 const discover = async (container: string, depth = 1): Promise<string[]> => {
@@ -714,59 +746,79 @@ const readSkill = async (dir: string): Promise<ResolvedSkill> => {
 };
 
 /** A URL is either the skill's own file or an archive holding it. */
-const fetchUrl = async (
+const fetchUrl = (
   url: string,
   work: string,
   held: readonly string[]
+): Effect.Effect<ResolvedSkill | UnresolvedSkill, FetchFailed> =>
+  Effect.gen(function* () {
+    const response = yield* get(url);
+    if (!response.ok) {
+      return yield* new FetchFailed({
+        message: `${url} answered ${response.status}`,
+      });
+    }
+
+    const path = new URL(url).pathname;
+    if (MD_PATH_RE.test(path)) {
+      const content = Buffer.from(
+        yield* fetchStep(() => response.arrayBuffer())
+      );
+      const files: SkillFile[] = [
+        {
+          path: "SKILL.md",
+          contentBase64: content.toString("base64"),
+          executable: false,
+        },
+      ];
+      // A lone file has no directory of its own; the one it was served from names it.
+      return {
+        name: basename(dirname(path)),
+        hash: hashFiles(files),
+        bytes: content.byteLength,
+        files,
+      };
+    }
+    if (!ARCHIVE_PATH_RE.test(path)) {
+      yield* fetchStep(async () => {
+        await response.body?.cancel();
+      });
+      return yield* new FetchFailed({
+        message: `${url} is neither a SKILL.md nor an archive`,
+      });
+    }
+
+    const root = yield* unpack(response, work, path);
+    return yield* fetchStep(() =>
+      pickAndRead(root, { kind: "url", url }, held)
+    );
+  });
+
+/** The skill out of a fetched `root`, or why none. */
+const pickAndRead = async (
+  root: string,
+  source: SkillSource,
+  held: readonly string[]
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
-  const response = await get(url);
-  if (!response.ok) {
-    throw new Error(`${url} answered ${response.status}`);
-  }
-
-  const path = new URL(url).pathname;
-  if (MD_PATH_RE.test(path)) {
-    const content = Buffer.from(await response.arrayBuffer());
-    const files: SkillFile[] = [
-      {
-        path: "SKILL.md",
-        contentBase64: content.toString("base64"),
-        executable: false,
-      },
-    ];
-    // A lone file has no directory of its own; the one it was served from names it.
-    return {
-      name: basename(dirname(path)),
-      hash: hashFiles(files),
-      bytes: content.byteLength,
-      files,
-    };
-  }
-  if (!ARCHIVE_PATH_RE.test(path)) {
-    await response.body?.cancel();
-    throw new Error(`${url} is neither a SKILL.md nor an archive`);
-  }
-
-  const root = await unpack(response, work, path);
-  const picked = await pickSkillDir(root, { kind: "url", url }, held);
+  const picked = await pickSkillDir(root, source, held);
   return "error" in picked ? picked : await readSkill(picked.dir);
 };
 
-const fetchSkill = async (
+const fetchSkill = (
   source: Exclude<SkillSource, { kind: "file" }>,
   work: string,
   held: readonly string[]
-): Promise<ResolvedSkill | UnresolvedSkill> => {
+): Effect.Effect<ResolvedSkill | UnresolvedSkill, FetchFailed> => {
   if (source.kind === "url") {
-    return await fetchUrl(source.url, work, held);
+    return fetchUrl(source.url, work, held);
   }
-
-  const root =
+  return (
     source.kind === "npm"
-      ? await npmRoot(source, work)
-      : await downloadRepo(source.owner, source.repo, source.ref, work);
-  const picked = await pickSkillDir(root, source, held);
-  return "error" in picked ? picked : await readSkill(picked.dir);
+      ? npmRoot(source, work)
+      : downloadRepo(source.owner, source.repo, source.ref, work)
+  ).pipe(
+    Effect.flatMap((root) => fetchStep(() => pickAndRead(root, source, held)))
+  );
 };
 
 /** The folder and machine a bound local source names; undefined for any other source. */
@@ -870,25 +922,29 @@ const readLocalSkill = async (
  * the one of them those name, so a row installed from a bare multi-skill
  * source is fetched again, and checked, as the skill it holds.
  */
-export const resolveSkill = async (
+export const resolveSkill = (
   source: string,
   held: readonly string[] = [],
   readFolder?: SkillFolderReader
-): Promise<ResolvedSkill | UnresolvedSkill> => {
-  const parsed = parseSkillSource(source);
-  if (!parsed) {
-    return { error: `${source} is not a source cawco knows how to fetch` };
-  }
-  if (parsed.kind === "file") {
-    return await readLocalSkill(parsed, readFolder);
-  }
-
-  const work = await mkdtemp(join(tmpdir(), "cawco-skill-"));
-  try {
-    return await fetchSkill(parsed, work, held);
-  } catch (error) {
-    return { error: said(error) };
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
-};
+): Effect.Effect<ResolvedSkill | UnresolvedSkill> =>
+  Effect.suspend(() => {
+    const parsed = parseSkillSource(source);
+    if (!parsed) {
+      return Effect.succeed({
+        error: `${source} is not a source cawco knows how to fetch`,
+      });
+    }
+    if (parsed.kind === "file") {
+      return Effect.promise(() => readLocalSkill(parsed, readFolder));
+    }
+    // The work directory goes however the fetch ends, interrupted too.
+    return Effect.acquireUseRelease(
+      fetchStep(() => mkdtemp(join(tmpdir(), "cawco-skill-"))),
+      (work) => fetchSkill(parsed, work, held),
+      (work) => Effect.promise(() => rm(work, { recursive: true, force: true }))
+    ).pipe(
+      Effect.catchTag("FetchFailed", ({ message }) =>
+        Effect.succeed({ error: message })
+      )
+    );
+  });

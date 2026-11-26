@@ -35,12 +35,12 @@
  * `failures`).
  */
 
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { cutShort } from "@cawco/core/words/helpers";
+import { Cause, Effect, Schedule } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -57,47 +57,44 @@ const RELEASE_WAIT_MS = 20_000;
 export type ReleaseRead =
   { at: number; version: string } | { at: number; failed: string };
 
-/** Reads one release URL, within {@link RELEASE_WAIT_MS}. */
-const readRelease = async (
+/** Reads one release URL, within {@link RELEASE_WAIT_MS}; a read that failed says why. */
+const readRelease = (
   url: string,
-  options: { fetcher?: typeof fetch; signal?: AbortSignal } = {}
-): Promise<ReleaseRead> => {
-  const fetcher = options.fetcher ?? fetch;
-  let read: Bounded<{ body: string; status: number }>;
-  try {
-    read = await readWithin(
-      RELEASE_WAIT_MS,
-      async (signal) => {
-        const response = await fetcher(url, { signal });
-        return { status: response.status, body: await response.text() };
-      },
-      options.signal ? { signal: options.signal } : {}
-    );
-  } catch (error) {
-    return {
-      at: Date.now(),
-      failed: error instanceof Error ? error.message : String(error),
-    };
-  }
-  if (read.kind === "unanswered") {
-    return {
-      at: Date.now(),
-      failed: `no answer within ${secondsOf(read.after)} s`,
-    };
-  }
-  const { status, body } = read.value;
-  const version = status === 200 ? versionSaid(body) : undefined;
-  if (!version) {
-    return {
-      at: Date.now(),
-      failed:
-        status === 200
-          ? `it answered no version (“${cutShort(body.trim(), 80)}”)`
-          : `it answered ${status}`,
-    };
-  }
-  return { at: Date.now(), version };
-};
+  fetcher: typeof fetch = fetch
+): Effect.Effect<ReleaseRead> =>
+  boundedRead(
+    RELEASE_WAIT_MS,
+    Effect.tryPromise(async (signal) => {
+      const response = await fetcher(url, { signal });
+      return { status: response.status, body: await response.text() };
+    })
+  ).pipe(
+    Effect.map(({ status, body }): ReleaseRead => {
+      const version = status === 200 ? versionSaid(body) : undefined;
+      if (!version) {
+        return {
+          at: Date.now(),
+          failed:
+            status === 200
+              ? `it answered no version (“${cutShort(body.trim(), 80)}”)`
+              : `it answered ${status}`,
+        };
+      }
+      return { at: Date.now(), version };
+    }),
+    Effect.catchTag("Unanswered", ({ after }) =>
+      Effect.succeed<ReleaseRead>({
+        at: Date.now(),
+        failed: `no answer within ${secondsOf(after)} s`,
+      })
+    ),
+    Effect.catch(({ cause }) =>
+      Effect.succeed<ReleaseRead>({
+        at: Date.now(),
+        failed: cause instanceof Error ? cause.message : String(cause),
+      })
+    )
+  );
 
 /**
  * The release a copy of `spec` is kept at or past, for a tool CawCo keeps
@@ -142,7 +139,7 @@ export const keptReleases = (fleet: {
 /** What {@link ToolReleases} reads with and tells. */
 export interface ToolReleasesDeps {
   fetcher?: typeof fetch;
-  lifetime: Pick<HubLifetimeShape, "every" | "signal">;
+  lifetime: Pick<HubLifetimeShape, "fork">;
   /** The catalog's name for a tool id, for the log. */
   name: (toolId: string) => string;
   /** Runs after each read: the hub sends every machine what it is owed. */
@@ -171,27 +168,32 @@ export class ToolReleases {
     if (Object.keys(this.#deps.urls).length === 0) {
       return;
     }
-    detach(this.readAll(), "tool releases");
-    this.#deps.lifetime.every("tool releases read", RELEASE_READ_MS, () =>
-      detach(this.readAll(), "tool releases")
+    // A read that failed fails that read alone; the next is on time.
+    const once = this.#readAll().pipe(
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          console.error(
+            `[hub] a read of the tool releases failed: ${Cause.pretty(cause)}`
+          );
+        })
+      )
+    );
+    this.#deps.lifetime.fork(
+      "tool releases read",
+      Effect.repeat(once, Schedule.fixed(RELEASE_READ_MS))
     );
   }
 
-  /** Reads every release once, then runs `read`. */
-  async readAll(): Promise<void> {
-    await Promise.all(
-      Object.entries(this.#deps.urls).map(async ([toolId, url]) => {
-        const read = await readRelease(url, {
-          signal: this.#deps.lifetime.signal,
-          ...(this.#deps.fetcher ? { fetcher: this.#deps.fetcher } : {}),
-        });
-        this.#took(toolId, url, read);
-      })
-    );
-    // A hub that closed meanwhile sends nothing.
-    if (!this.#deps.lifetime.signal.aborted) {
-      this.#deps.read();
-    }
+  /** Reads every release once, then runs `read`; a hub that closed meanwhile has interrupted it. */
+  #readAll(): Effect.Effect<void> {
+    return Effect.forEach(
+      Object.entries(this.#deps.urls),
+      ([toolId, url]) =>
+        readRelease(url, this.#deps.fetcher).pipe(
+          Effect.map((read) => this.#took(toolId, url, read))
+        ),
+      { concurrency: "unbounded", discard: true }
+    ).pipe(Effect.andThen(Effect.sync(() => this.#deps.read())));
   }
 
   /** Keeps a read, and says in the log what moved: a new release, or a read that failed. */

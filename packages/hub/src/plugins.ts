@@ -33,6 +33,7 @@ import type {
   FleetPluginPayload,
   MarketplacePluginInfo,
 } from "@cawco/core/fleet";
+import { Effect } from "effect";
 import {
   array,
   type InferOutput,
@@ -45,7 +46,14 @@ import {
   unknown,
 } from "valibot";
 import { pluginVersion } from "./fleet-versions";
-import { downloadRepo, get, readTree, unpack } from "./skills";
+import {
+  downloadRepo,
+  FetchFailed,
+  fetchStep,
+  get,
+  readTree,
+  unpack,
+} from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
 const GITHUB_SLUG = /^([\w.-]+)\/([\w.-]+?)(?:@([\w./-]+))?$/u;
@@ -58,13 +66,24 @@ const DOT_GIT_SUFFIX = /\.git$/u;
  * is fetched from the internet, so `../../` in a source is a file the hub would
  * read off its own disk and hand to every machine in the fleet.
  */
-const inside = (root: string, rel: string): string => {
+const inside = (
+  root: string,
+  rel: string
+): Effect.Effect<string, FetchFailed> => {
   const joined = normalize(join(root, rel));
-  if (!joined.startsWith(normalize(root))) {
-    throw new Error(`${rel} points outside the marketplace`);
-  }
-  return joined;
+  return joined.startsWith(normalize(root))
+    ? Effect.succeed(joined)
+    : Effect.fail(
+        new FetchFailed({ message: `${rel} points outside the marketplace` })
+      );
 };
+
+/** `href` as a URL, or the sentence saying it is none. */
+const urlOf = (href: string): Effect.Effect<URL, FetchFailed> =>
+  Effect.try({
+    try: () => new URL(href),
+    catch: () => new FetchFailed({ message: `${href} is not a URL` }),
+  });
 
 /** What a marketplace's manifest says, of the parts that matter here: each plugin's facts, and its source as written, read where it resolves. */
 const Manifest = looseObject({
@@ -127,44 +146,55 @@ interface Fetched {
   root?: string;
 }
 
-const fetchMarketplace = async (
+const fetchMarketplace = (
   source: string,
   work: string
-): Promise<Fetched> => {
-  const trimmed = source.trim();
-  if (isManifestUrl(trimmed)) {
-    const response = await get(trimmed);
-    if (!response.ok) {
-      throw new Error(`${trimmed} answered ${response.status}`);
+): Effect.Effect<Fetched, FetchFailed> =>
+  Effect.gen(function* () {
+    const trimmed = source.trim();
+    if (isManifestUrl(trimmed)) {
+      const response = yield* get(trimmed);
+      if (!response.ok) {
+        return yield* new FetchFailed({
+          message: `${trimmed} answered ${response.status}`,
+        });
+      }
+      const manifest = manifestOf(
+        yield* Effect.promise(() => response.json().catch(() => undefined))
+      );
+      if (!manifest) {
+        return yield* new FetchFailed({
+          message: `${trimmed} is not a marketplace.json cawco could read`,
+        });
+      }
+      return { manifest };
     }
-    const manifest = manifestOf(await response.json().catch(() => undefined));
+    const root = yield* marketplaceRoot(trimmed, work);
+    const manifest = yield* Effect.promise(() => readManifest(root));
     if (!manifest) {
-      throw new Error(`${trimmed} is not a marketplace.json cawco could read`);
+      return yield* new FetchFailed({
+        message: `${source} has no .claude-plugin/marketplace.json cawco could read`,
+      });
     }
-    return { manifest };
-  }
-  const root = await marketplaceRoot(trimmed, work);
-  const manifest = await readManifest(root);
-  if (!manifest) {
-    throw new Error(
-      `${source} has no .claude-plugin/marketplace.json cawco could read`
-    );
-  }
-  return { manifest, root };
-};
+    return { manifest, root };
+  });
 
-/** A fetch of the marketplace in a work directory of its own, gone after `use`. */
-const withMarketplace = async <T>(
+/**
+ * A fetch of the marketplace in a work directory of its own, gone once `use`
+ * ends, however it ends: failed or interrupted too.
+ */
+const withMarketplace = <T>(
   source: string,
-  use: (fetched: Fetched, work: string) => Promise<T>
-): Promise<T> => {
-  const work = await mkdtemp(join(tmpdir(), "cawco-marketplace-"));
-  try {
-    return await use(await fetchMarketplace(source, work), work);
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
-};
+  use: (fetched: Fetched, work: string) => Effect.Effect<T, FetchFailed>
+): Effect.Effect<T, FetchFailed> =>
+  Effect.acquireUseRelease(
+    fetchStep(() => mkdtemp(join(tmpdir(), "cawco-marketplace-"))),
+    (work) =>
+      fetchMarketplace(source, work).pipe(
+        Effect.flatMap((fetched) => use(fetched, work))
+      ),
+    (work) => Effect.promise(() => rm(work, { recursive: true, force: true }))
+  );
 
 /** The directory a hub-directory source names, or undefined for any other form. */
 const hubPath = (source: string): string | undefined => {
@@ -198,93 +228,132 @@ const localRoot = async (source: string): Promise<string | undefined> => {
  * directory a relative path could mean). The manifest is read from the root,
  * `.claude-plugin/marketplace.json`, as Claude Code reads it.
  */
-const marketplaceRoot = async (
+const marketplaceRoot = (
   source: string,
   work: string
-): Promise<string> => {
-  const trimmed = source.trim();
-  const local = await localRoot(trimmed);
-  if (local) {
-    return local;
-  }
-  const slug = GITHUB_SLUG.exec(trimmed);
-  if (slug?.[1] && slug[2]) {
-    return await downloadRepo(slug[1], slug[2], slug[3], work);
-  }
+): Effect.Effect<string, FetchFailed> =>
+  Effect.gen(function* () {
+    const trimmed = source.trim();
+    const local = yield* fetchStep(() => localRoot(trimmed));
+    if (local) {
+      return local;
+    }
+    const slug = GITHUB_SLUG.exec(trimmed);
+    if (slug?.[1] && slug[2]) {
+      return yield* downloadRepo(slug[1], slug[2], slug[3], work);
+    }
 
-  const url = HTTP_URL_PREFIX.test(trimmed) ? new URL(trimmed) : undefined;
-  if (url?.hostname === "github.com") {
-    const [owner, repo] = url.pathname
-      .replace(LEADING_SLASHES, "")
-      .replace(DOT_GIT_SUFFIX, "")
-      .split("/");
-    if (owner && repo) {
-      return await downloadRepo(owner, repo, undefined, work);
+    const url = HTTP_URL_PREFIX.test(trimmed)
+      ? yield* urlOf(trimmed)
+      : undefined;
+    if (url?.hostname === "github.com") {
+      const [owner, repo] = url.pathname
+        .replace(LEADING_SLASHES, "")
+        .replace(DOT_GIT_SUFFIX, "")
+        .split("/");
+      if (owner && repo) {
+        return yield* downloadRepo(owner, repo, undefined, work);
+      }
     }
-  }
-  if (url) {
-    const response = await get(url.href);
-    if (!response.ok) {
-      throw new Error(`${url.href} answered ${response.status}`);
+    if (url) {
+      const response = yield* get(url.href);
+      if (!response.ok) {
+        return yield* new FetchFailed({
+          message: `${url.href} answered ${response.status}`,
+        });
+      }
+      return yield* unpack(response, work, url.pathname);
     }
-    return await unpack(response, work, url.pathname);
-  }
-  throw new Error(
-    `${source} is not a marketplace source cawco knows how to fetch — ` +
-      "give owner/repo, a git URL, or an absolute directory path on the hub"
-  );
-};
+    return yield* new FetchFailed({
+      message:
+        `${source} is not a marketplace source cawco knows how to fetch — ` +
+        "give owner/repo, a git URL, or an absolute directory path on the hub",
+    });
+  });
 
 /**
  * Where one plugin's files are, given how its manifest entry names them. Every
  * form ends as a directory on this disk, because that is what sync ships.
  */
-const pluginRoot = async (
+const pluginRoot = (
   entry: { name?: string; source?: unknown },
   marketplace: string | undefined,
   work: string
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per plugin source kind (vendored path, github repo, git-subdir/url archive) — see the file-level comment on why the hub resolves these itself.
-): Promise<string> => {
+): Effect.Effect<string, FetchFailed> => {
   const { source } = entry;
-
   // Vendored: a path relative to the marketplace, already downloaded.
   if (typeof source === "string") {
-    if (isAbsolute(source)) {
-      throw new Error(`${entry.name}'s source is an absolute path`);
-    }
-    if (!marketplace) {
-      throw new Error(
-        `${entry.name}'s source is the relative path ${source}, and ${URL_RELATIVE_REASON}`
-      );
-    }
-    return inside(marketplace, source);
+    return vendoredRoot(entry.name, source, marketplace);
   }
   if (!is(SourceSpec, source)) {
-    throw new Error(`${entry.name} has no source cawco can read`);
+    return failed(`${entry.name} has no source cawco can read`);
   }
   const kind = typeof source.source === "string" ? source.source : undefined;
-
   if (kind === "github" && typeof source.repo === "string") {
-    const [owner, repo] = source.repo.split("/");
-    if (!(owner && repo)) {
-      throw new Error(
-        `${entry.name}'s repo "${source.repo}" is not owner/name`
-      );
-    }
-    const ref = typeof source.ref === "string" ? source.ref : undefined;
-    return await downloadRepo(
-      owner,
-      repo,
-      ref,
-      await mkdtemp(join(work, "p-"))
-    );
+    return githubRoot(entry.name, source.repo, source.ref, work);
   }
-
   // `git-subdir` and `url` both name an archive; the first also names a path in it.
   const href = typeof source.url === "string" ? source.url : undefined;
   if ((kind === "git-subdir" || kind === "url") && href) {
-    const scratch = await mkdtemp(join(work, "p-"));
-    const url = new URL(href);
+    return archiveRoot(href, source, work);
+  }
+  return failed(
+    `${entry.name}'s source kind "${kind ?? "unknown"}" is not one cawco fetches`
+  );
+};
+
+/** A plugin's source refused, in its sentence. */
+const failed = (message: string): Effect.Effect<never, FetchFailed> =>
+  Effect.fail(new FetchFailed({ message }));
+
+/** A scratch directory of its own under `work`, for one plugin's download. */
+const scratchIn = (work: string): Effect.Effect<string, FetchFailed> =>
+  fetchStep(() => mkdtemp(join(work, "p-")));
+
+/** A plugin vendored in its marketplace, at a path relative to it. */
+const vendoredRoot = (
+  name: string | undefined,
+  path: string,
+  marketplace: string | undefined
+): Effect.Effect<string, FetchFailed> => {
+  if (isAbsolute(path)) {
+    return failed(`${name}'s source is an absolute path`);
+  }
+  if (!marketplace) {
+    return failed(
+      `${name}'s source is the relative path ${path}, and ${URL_RELATIVE_REASON}`
+    );
+  }
+  return inside(marketplace, path);
+};
+
+/** A plugin whose source is a GitHub repository, `owner/name`, at its ref. */
+const githubRoot = (
+  name: string | undefined,
+  slug: string,
+  ref: unknown,
+  work: string
+): Effect.Effect<string, FetchFailed> => {
+  const [owner, repo] = slug.split("/");
+  if (!(owner && repo)) {
+    return failed(`${name}'s repo "${slug}" is not owner/name`);
+  }
+  return scratchIn(work).pipe(
+    Effect.flatMap((into) =>
+      downloadRepo(owner, repo, typeof ref === "string" ? ref : undefined, into)
+    )
+  );
+};
+
+/** A plugin whose source is an archive at `href`, its files at `source.path` in it when it names one. */
+const archiveRoot = (
+  href: string,
+  source: Record<string, unknown>,
+  work: string
+): Effect.Effect<string, FetchFailed> =>
+  Effect.gen(function* () {
+    const into = yield* scratchIn(work);
+    const url = yield* urlOf(href);
     let root: string;
     if (url.hostname === "github.com") {
       const [owner, repo] = url.pathname
@@ -292,25 +361,20 @@ const pluginRoot = async (
         .replace(DOT_GIT_SUFFIX, "")
         .split("/");
       if (!(owner && repo)) {
-        throw new Error(`${href} is not a github repository`);
+        return yield* failed(`${href} is not a github repository`);
       }
       const ref = typeof source.sha === "string" ? source.sha : undefined;
-      root = await downloadRepo(owner, repo, ref, scratch);
+      root = yield* downloadRepo(owner, repo, ref, into);
     } else {
-      const response = await get(href);
+      const response = yield* get(href);
       if (!response.ok) {
-        throw new Error(`${href} answered ${response.status}`);
+        return yield* failed(`${href} answered ${response.status}`);
       }
-      root = await unpack(response, scratch, url.pathname);
+      root = yield* unpack(response, into, url.pathname);
     }
     const path = typeof source.path === "string" ? source.path : undefined;
-    return path ? inside(root, path) : root;
-  }
-
-  throw new Error(
-    `${entry.name}'s source kind "${kind ?? "unknown"}" is not one cawco fetches`
-  );
-};
+    return path ? yield* inside(root, path) : root;
+  });
 
 /**
  * A marketplace read from its source, one download: what it calls itself and
@@ -333,13 +397,20 @@ const pluginRoot = async (
  */
 export const readMarketplace = (
   source: string
-): Promise<{ name: string; plugins: MarketplacePluginInfo[] }> =>
+): Effect.Effect<
+  { name: string; plugins: MarketplacePluginInfo[] },
+  FetchFailed
+> =>
   withMarketplace(source, ({ manifest }) => {
     const name = typeof manifest.name === "string" ? manifest.name.trim() : "";
     if (!name) {
-      throw new Error(`${source}'s marketplace.json has no name`);
+      return Effect.fail(
+        new FetchFailed({
+          message: `${source}'s marketplace.json has no name`,
+        })
+      );
     }
-    return Promise.resolve({
+    return Effect.succeed({
       name,
       plugins: (manifest.plugins ?? []).map(
         ({ name: plugin, description, version, category }) => ({
@@ -366,50 +437,44 @@ export type ResolvedPlugin =
  * the common case — a marketplace that vendors its plugins, or names them by
  * relative path — is then a single fetch for the whole set.
  */
-export const resolveMarketplacePlugins = async (
+export const resolveMarketplacePlugins = (
   marketplace: string,
   marketplaceSource: string,
   names: readonly string[]
-): Promise<ResolvedPlugin[]> => {
-  if (names.length === 0) {
-    return [];
-  }
-  try {
-    return await withMarketplace(marketplaceSource, async (fetched, work) => {
-      const { manifest, root } = fetched;
-      const resolved: ResolvedPlugin[] = [];
-      for (const name of names) {
-        const entry = manifest.plugins?.find((plugin) => plugin.name === name);
-        if (!entry) {
-          resolved.push({
-            name,
-            error: `${marketplaceSource} lists no plugin called ${name}`,
-          });
-          continue;
-        }
-        try {
-          const dir = await pluginRoot(entry, root, work);
-          const { files, hash, bytes } = await readTree(dir);
-          const version = pluginVersion(files, entry.version);
-          resolved.push({
-            name,
-            marketplace,
-            hash,
-            bytes,
-            files,
-            ...(version ? { version } : {}),
-          });
-        } catch (error) {
-          resolved.push({
-            name,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      return resolved;
-    });
-  } catch (error) {
-    const said = error instanceof Error ? error.message : String(error);
-    return names.map((name) => ({ name, error: said }));
-  }
-};
+): Effect.Effect<ResolvedPlugin[]> =>
+  names.length === 0
+    ? Effect.succeed([])
+    : withMarketplace(marketplaceSource, ({ manifest, root }, work) =>
+        Effect.forEach(names, (name): Effect.Effect<ResolvedPlugin> => {
+          const entry = manifest.plugins?.find(
+            (plugin) => plugin.name === name
+          );
+          if (!entry) {
+            return Effect.succeed({
+              name,
+              error: `${marketplaceSource} lists no plugin called ${name}`,
+            });
+          }
+          return pluginRoot(entry, root, work).pipe(
+            Effect.flatMap((dir) => fetchStep(() => readTree(dir))),
+            Effect.map(({ files, hash, bytes }): ResolvedPlugin => {
+              const version = pluginVersion(files, entry.version);
+              return {
+                name,
+                marketplace,
+                hash,
+                bytes,
+                files,
+                ...(version ? { version } : {}),
+              };
+            }),
+            Effect.catchTag("FetchFailed", ({ message }) =>
+              Effect.succeed({ name, error: message })
+            )
+          );
+        })
+      ).pipe(
+        Effect.catchTag("FetchFailed", ({ message }) =>
+          Effect.succeed(names.map((name) => ({ name, error: message })))
+        )
+      );
