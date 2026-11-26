@@ -259,7 +259,8 @@ export const agyConversationInfo = async (
 
 /**
  * Conversation `id`'s transcript entries, every compaction where it
- * happened and CawCo's stops of it where they were made; none when no
+ * happened, CawCo's stops of it where they were made and the calls its
+ * cancels ended closed there; none when no
  * store holds it.
  */
 export const agyConversationEntries = async (
@@ -274,6 +275,7 @@ export const agyConversationEntries = async (
   return agyEntries(steps, {
     sessionId: id,
     ...(note.stops ? { stops: note.stops } : {}),
+    ...(note.cancels ? { cancels: note.cancels } : {}),
   });
 };
 

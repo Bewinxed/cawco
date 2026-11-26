@@ -22,6 +22,17 @@
  * live stream draws it (agy's `tool_call_update completed` comes then), so
  * a transcript read back and the live one agree. CawCo's own stops of the
  * conversation (agy-notes.ts) are drawn where they happened.
+ *
+ * A call agy ended without a result reads {@link agyWords.callCancelled},
+ * as it does live: agy writes no step for a call a cancel or its own end
+ * stopped, a timer, a command in the background or one part-way
+ * (`assets/b61a7f1b/REPORT.md` §3). Such a call is closed at the first of:
+ * a cancel CawCo noted (agy-notes.ts `cancels`), after the last step agy
+ * had made when it was sent; agy's notice that it stopped its background
+ * tasks (`[Notice] All your subagents and background tasks have been
+ * stopped due to …`, written after the next prompt's step,
+ * `assets/b5b3ca96/REPORT.md` §3, §8), before that prompt; and, for a call
+ * that had not moved to the background, the next prompt.
  */
 import { readFile } from "node:fs/promises";
 import { unlessGone } from "@cawco/core/absent";
@@ -30,6 +41,7 @@ import {
   type SessionMessage,
 } from "@cawco/core/session-messages";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import { agyWords } from "@cawco/core/words/agy";
 import { Option, Schema } from "effect";
 import type { TranscriptSpan } from "../harness";
 import { withoutHookNotice } from "./agy-frames";
@@ -76,6 +88,13 @@ export const agyRequestOf = (content: string): string =>
 const SYSTEM_SAYS =
   /\[Message\][^\n]*?sender=(\S+) priority=\S+ content=([\s\S]*?)\n?<\/SYSTEM_MESSAGE>/u;
 
+/** agy's notice that a cancel or its restart stopped every background task, as `SYSTEM_SAYS`'s content opens. */
+const TASKS_STOPPED =
+  /^\[Notice\] All your subagents and background tasks have been stopped/u;
+
+/** When a `SYSTEM_MESSAGE` was sent, as its `[Message]` line names it. */
+const SAID_AT = /\[Message\] timestamp=(\S+)/u;
+
 /** A background command's end, as its `SYSTEM_MESSAGE` opens. */
 const TASK_ENDED = /^Task id "[^"]*" finished with result:\n?/u;
 
@@ -120,6 +139,12 @@ export const stepResult = (
   };
 };
 
+/** One cancel CawCo made of the conversation's turn (agy-notes.ts `AgyNote.cancels`): when, and the last step agy had made then. */
+interface AgyCancel {
+  readonly after: number;
+  readonly at: number;
+}
+
 /** One stop CawCo made of the conversation (agy-notes.ts `AgyNote.stops`). */
 interface AgyStop {
   readonly at: number;
@@ -128,6 +153,7 @@ interface AgyStop {
 
 /** What the reader needs of the conversation beyond its steps. */
 interface ReadAs {
+  readonly cancels?: readonly AgyCancel[];
   readonly sessionId: string;
   readonly stops?: readonly AgyStop[];
 }
@@ -200,13 +226,56 @@ interface Reading {
   /** The calls of the last response whose results have not come yet, in order. */
   awaiting: string[];
   readonly entries: SessionMessage[];
+  /** Where the last prompt's entry stands in {@link entries}: what a notice written after it closes goes before it. */
+  input: number | undefined;
+  /** When the last step was made. */
+  lastAt: string | undefined;
   readonly sessionId: string;
   /** The calls moved to the background, by agy's task id. */
   readonly tasks: Map<string, string>;
 }
 
-const userInput = (read: Reading, step: AgyStep, id: string): void => {
+/** A call agy ended with no result written, as its result {@link agyWords.callCancelled}. */
+const cancelledEntry = (
+  read: Reading,
+  toolUseId: string,
+  at: string | undefined
+): SessionMessage =>
+  resultEntry(
+    read.sessionId,
+    `${toolUseId}:result`,
+    toolUseId,
+    agyWords.callCancelled,
+    true,
+    at
+  );
+
+/** Every call still running closed as cancelled, `before` the entry at that place, else last; `tasks` too, the calls moved to the background. */
+const cutOff = (
+  read: Reading,
+  at: string | undefined,
+  { tasks, before }: { tasks: boolean; before?: number }
+): void => {
+  const cut = [...read.awaiting, ...(tasks ? read.tasks.values() : [])];
   read.awaiting = [];
+  if (tasks) {
+    read.tasks.clear();
+  }
+  const closed = cut.map((toolUseId) => cancelledEntry(read, toolUseId, at));
+  read.entries.splice(before ?? read.entries.length, 0, ...closed);
+  if (
+    before !== undefined &&
+    read.input !== undefined &&
+    read.input >= before
+  ) {
+    read.input += closed.length;
+  }
+};
+
+const userInput = (read: Reading, step: AgyStep, id: string): void => {
+  // A call of the last response with no result yet was cut off part-way.
+  cutOff(read, read.lastAt, { tasks: false });
+  read.input = read.entries.length;
   read.entries.push(
     entry(
       read.sessionId,
@@ -300,8 +369,22 @@ const toolResult = (read: Reading, step: AgyStep): void => {
   );
 };
 
-/** A background command's end or a wake-up, as its call's result; agy's own notices and reminders to its model, nothing. */
+/**
+ * A background command's end or a wake-up, as its call's result; agy's
+ * notice that it stopped its background tasks, each of them as cancelled,
+ * before the prompt the notice follows; agy's other notices and reminders
+ * to its model, nothing.
+ */
 const systemMessage = (read: Reading, step: AgyStep, id: string): void => {
+  const said = SYSTEM_SAYS.exec(step.content ?? "");
+  if (said?.[1] === "system" && TASKS_STOPPED.test(said[2] ?? "")) {
+    const stamp = SAID_AT.exec(step.content ?? "")?.[1];
+    cutOff(read, stamp ?? step.created_at, {
+      tasks: true,
+      ...(read.input === undefined ? {} : { before: read.input }),
+    });
+    return;
+  }
   const ended = taskEnd(step);
   if (!ended) {
     return;
@@ -408,6 +491,8 @@ export const agyEntries = (
     sessionId: as.sessionId,
     entries: [],
     awaiting: [],
+    input: undefined,
+    lastAt: undefined,
     tasks: new Map(),
   };
   const stops = [...(as.stops ?? [])].sort((a, b) => a.at - b.at);
@@ -419,14 +504,29 @@ export const agyEntries = (
       }
     }
   };
+  // A cancel is placed by the last step agy had made when it was sent, as a
+  // step's time is whole seconds: a prompt sent in the cancel's own second
+  // is after it.
+  const cancels = [...(as.cancels ?? [])].sort((a, b) => a.after - b.after);
+  const cancelsBefore = (index: number) => {
+    while (cancels.length > 0 && (cancels[0]?.after ?? index) < index) {
+      const cancel = cancels.shift();
+      if (cancel) {
+        cutOff(read, new Date(cancel.at).toISOString(), { tasks: true });
+      }
+    }
+  };
   for (const step of steps) {
     const at = step.created_at ? Date.parse(step.created_at) : Number.NaN;
     if (!Number.isNaN(at)) {
       stopsUntil(at);
     }
+    cancelsBefore(step.step_index);
     STEP_ROWS[step.type]?.(read, step, `agy-${step.step_index}`);
+    read.lastAt = step.created_at ?? read.lastAt;
   }
   stopsUntil(Number.POSITIVE_INFINITY);
+  cancelsBefore(Number.POSITIVE_INFINITY);
   return read.entries;
 };
 

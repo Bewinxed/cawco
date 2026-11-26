@@ -448,6 +448,7 @@ class AgySession {
     console.warn(`[agy] ${this.#start.spec.instanceId}: ${words}`);
     this.#endAgy();
     this.#cancelAsks();
+    this.#closePending();
     this.#ctx.refused(words);
     this.#prompts = 0;
     this.#turn = undefined;
@@ -646,9 +647,9 @@ class AgySession {
    * A turn's start or end as agy's hook told it, read in its place among
    * agy's updates:
    * - a model call with none of CawCo's turns running is a turn agy began
-   *   itself inside an open prompt (a background command ended, a wake-up
-   *   came): it runs as a turn of its own, and says what it does as it
-   *   does it;
+   *   itself inside an open prompt (a wake-up came): it runs as a turn of
+   *   its own, and says what it does as it does it; one a background
+   *   call's end began opened already at that end ({@link #updated});
    * - a turn's first model call while one runs (a wake-up that came while
    *   the person's turn ran) closes what was said so far, so its words are
    *   their own;
@@ -721,11 +722,12 @@ class AgySession {
     if (this.#stopped || this.#agy !== agy) {
       return;
     }
+    // Its background commands and wake-ups ended with it.
+    this.#closePending();
     const tail = this.#stderr.trim();
     this.#ctx.failed(new Error(tail ? `${why}: ${tail}` : why));
     this.#prompts = 0;
     this.#turn = undefined;
-    // Its background commands and wake-ups ended with it.
     this.#calls.clear();
     this.#ctx.busy(false);
   }
@@ -813,30 +815,7 @@ class AgySession {
         this.#called(update.toolCallId, update.name ?? update.title, update);
         return;
       case "tool_call_update":
-        if (this.#calls.get(update.toolCallId)?.ended) {
-          return;
-        }
-        if (!this.#calls.has(update.toolCallId)) {
-          this.#called(
-            update.toolCallId,
-            update.name ?? update.title ?? "tool",
-            update
-          );
-        }
-        if (update.status === "completed" || update.status === "failed") {
-          this.#answered(
-            update.toolCallId,
-            update.status === "failed",
-            update,
-            written
-          );
-          if (update.status === "completed") {
-            this.#proven(update.toolCallId, update);
-          } else {
-            this.#callTools.delete(update.toolCallId);
-            this.#ran.delete(update.toolCallId);
-          }
-        }
+        this.#callUpdated(update, written);
         return;
       case "available_commands_update":
         this.#commands = commandsOf(update.availableCommands);
@@ -879,6 +858,48 @@ class AgySession {
         return;
       default:
         unhandled("session update", update);
+    }
+  }
+
+  /** A call's update: one never said begun, said so; one ending, said ended. */
+  #callUpdated(
+    update: Extract<
+      SessionNotification["update"],
+      { sessionUpdate: "tool_call_update" }
+    >,
+    written: Written | undefined
+  ): void {
+    if (this.#calls.get(update.toolCallId)?.ended) {
+      return;
+    }
+    if (!this.#calls.has(update.toolCallId)) {
+      this.#called(
+        update.toolCallId,
+        update.name ?? update.title ?? "tool",
+        update
+      );
+    }
+    if (update.status === "completed" || update.status === "failed") {
+      // A call that ends while no turn of CawCo's runs is one agy moved
+      // to the background, and its end begins agy's own turn: its hook
+      // ends the call before the model call that opens the turn
+      // (PostToolUse, then PreInvocation), so the turn opens here and
+      // the result is said in it.
+      if (!this.#turn && this.#prompts > 0) {
+        this.#beginTurn();
+      }
+      this.#answered(
+        update.toolCallId,
+        update.status === "failed",
+        update,
+        written
+      );
+      if (update.status === "completed") {
+        this.#proven(update.toolCallId, update);
+      } else {
+        this.#callTools.delete(update.toolCallId);
+        this.#ran.delete(update.toolCallId);
+      }
     }
   }
 
@@ -976,22 +997,40 @@ class AgySession {
       since: call?.since ?? Date.now(),
     });
     this.#writtenAt.delete(id);
-    this.#cancelled.delete(id);
+    const said = written?.content ?? callResult(update);
+    // A call CawCo's cancel ended that agy wrote no result of reads as it
+    // does read back (agy-history.ts).
+    const cancelled =
+      this.#cancelled.delete(id) && written === undefined && said === "";
+    this.#result(
+      id,
+      cancelled ? agyWords.callCancelled : said,
+      cancelled || (written?.isError ?? failed)
+    );
+  }
+
+  /** A call's result, said. */
+  #result(id: string, content: string, isError: boolean): void {
     this.#emit({
       type: "user",
       parent_tool_use_id: null,
       message: {
         role: "user",
         content: [
-          {
-            type: "tool_result",
-            tool_use_id: id,
-            content: written?.content ?? callResult(update),
-            is_error: written?.isError ?? failed,
-          },
+          { type: "tool_result", tool_use_id: id, content, is_error: isError },
         ],
       },
     });
+  }
+
+  /** Every call still running ended with agy's end or its prompt's answer, said as cancelled, as a transcript read back closes it (agy-history.ts), and forgotten. */
+  #closePending(): void {
+    for (const [id, call] of this.#calls) {
+      if (!call.ended) {
+        this.#result(id, agyWords.callCancelled, true);
+        this.#calls.delete(id);
+      }
+    }
   }
 
   // ---------------------------------------------------------- asks
@@ -1243,7 +1282,7 @@ class AgySession {
     }
     // agy answers its last prompt once nothing of the conversation runs
     // on, or as a cancel ended it all: no call of it is pending now.
-    this.#dropPending();
+    this.#closePending();
     const turn = this.#turn;
     // Its turn already ended at agy's Stop ({@link #turnEvent}).
     if (!turn) {
@@ -1419,15 +1458,6 @@ class AgySession {
     return { background: pending.length - scheduled, scheduled };
   }
 
-  /** Every call still running forgotten: agy ended them all. */
-  #dropPending(): void {
-    for (const [id, call] of this.#calls) {
-      if (!call.ended) {
-        this.#calls.delete(id);
-      }
-    }
-  }
-
   /**
    * The running turn cancelled. agy's cancel ends every command it moved to
    * the background and every wake-up it set (`assets/b5b3ca96/REPORT.md`
@@ -1442,6 +1472,19 @@ class AgySession {
         if (!call.ended) {
           this.#cancelled.add(id);
         }
+      }
+      if (this.#cancelled.size > 0) {
+        // agy writes no result of a call its cancel ends: the cancel is
+        // noted after the last step agy has made, for a transcript read
+        // back to close them there (agy-history.ts).
+        const cancel = {
+          at: Date.now(),
+          after: lastStep(this.#steps(), sessionId),
+        };
+        this.#note(sessionId, (note) => ({
+          ...note,
+          cancels: [...(note.cancels ?? []), cancel],
+        }));
       }
       await this.#connection().agent.notify(methods.agent.session.cancel, {
         sessionId,

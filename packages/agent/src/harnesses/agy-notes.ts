@@ -8,7 +8,10 @@
  * - what its host saw (`<id>.json`, agy-runtime.ts): the account whose home
  *   holds it, absent for one in agy's own default home; the session dir it
  *   runs in on that account; the folder it ran in; when it began; the
- *   title agy gave it (`session_info_update`), its default name;
+ *   title agy gave it (`session_info_update`), its default name; and each
+ *   time CawCo cancelled its turn (`cancels`), which ends every call then
+ *   running with no result written of it, so a transcript read back closes
+ *   each such call where it was cancelled (agy-history.ts);
  * - what the person and the agent did (`<id>.person.json`): the person's
  *   title, which outranks agy's; its tag; the folder it moved to with its
  *   project; and each stop CawCo made of it for failing the same way again
@@ -33,6 +36,9 @@ const HostNoteSchema = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
   title: Schema.optional(Schema.String),
+  cancels: Schema.optional(
+    Schema.Array(Schema.Struct({ at: Schema.Number, after: Schema.Number }))
+  ),
 });
 
 /** What a conversation's host saw of it. */
@@ -53,6 +59,8 @@ export type AgyPersonNote = typeof PersonNoteSchema.Type;
 /** One conversation's note, both files read as one: its folder the one it moved to, if it moved. */
 export interface AgyNote {
   readonly accountId?: string;
+  /** Each time CawCo cancelled its turn: when, and the last step agy had made then. */
+  readonly cancels?: readonly { after: number; at: number }[];
   readonly createdAt?: number;
   readonly customTitle?: string;
   readonly cwd?: string;

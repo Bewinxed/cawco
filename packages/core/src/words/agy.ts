@@ -102,6 +102,12 @@ export const agyWords = {
   emptyTurn:
     "No reply; Google Cloud sign-in may have expired. Send again, or sign in with gcloud on this machine.",
   /**
+   * A call's result when it ended without one: an interrupt, or agy's own
+   * end, stopped it (a timer, a command in the background, a command
+   * part-way), and agy wrote no result of it. Said live and read back alike.
+   */
+  callCancelled: "Cancelled",
+  /**
    * The account's quota for the model is used up (`QUOTA_EXHAUSTED`), and
    * when it resets as Google said it: a day and a UTC time, since the
    * reader's own zone isn't known where this is written.
