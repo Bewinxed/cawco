@@ -71,6 +71,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import { MEMORY_FILE_CHARS } from "./config";
@@ -82,6 +83,7 @@ import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import type { JevResult } from "./jev-types";
 import { boardTitle } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import {
   ARCHIVE_DIR,
   archivedNote,
@@ -283,6 +285,8 @@ export interface MemoryRunDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
+  /** What the run's let-go work runs on (lifetime.ts). */
+  readonly lifetime: HubLifetimeShape;
   /**
    * A machine's files, over the `fs` verb: a file's text (`read`), and
    * whether a folder is there (`listed`; undefined when the machine did not
@@ -716,6 +720,7 @@ const oldSource = (source: Record<string, unknown>): string | undefined => {
 export const createMemoryRun = ({
   db,
   folderChanged,
+  lifetime,
   machine,
   skillsFor,
   tasks,
@@ -2237,19 +2242,23 @@ export const createMemoryRun = ({
     run: Run,
     outcome: RunOutcome
   ): void => {
-    closed(projectId, run, outcome).then(
-      (refused) => {
-        if (refused) {
-          console.warn(
-            `[memory] ${projectId}: the run's mark was not kept: ${refused.response.detail}`
-          );
-        }
-      },
-      (error: unknown) => {
-        console.warn(
-          `[memory] ${projectId}: the run's mark was not kept: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+    const notKept = (why: string) =>
+      console.warn(
+        `[memory] ${projectId}: the run's mark was not kept: ${why}`
+      );
+    lifetime.fork(
+      "memory run's mark kept",
+      Effect.tryPromise(() => closed(projectId, run, outcome)).pipe(
+        Effect.match({
+          onSuccess: (refused) => {
+            if (refused) {
+              notKept(refused.response.detail);
+            }
+          },
+          onFailure: ({ cause }) =>
+            notKept(cause instanceof Error ? cause.message : String(cause)),
+        })
+      )
     );
   };
 

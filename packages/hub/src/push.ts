@@ -975,35 +975,36 @@ export const createPush = ({
    * every clear so far. `replacing` are the ids of what it takes the place
    * of, carried with them: the device takes those down as the hub's doing.
    */
-  const deliver = async (
+  const deliver = Effect.fnUntraced(function* (
     notification: Notification,
     to?: PushDeviceRow[],
     replacing: readonly string[] = []
-  ): Promise<PushOutcome[]> => {
+  ) {
     const devices = to ?? awake();
     const count = notifications.clearCount();
     const cleared = [...new Set([...replacing, ...notifications.carried()])];
     const plaintext = plaintextOf(notification, cleared);
-    return await Promise.all(
-      devices.map(async (device): Promise<PushOutcome> => {
-        const { status, reason } = await lifetime.run(
-          post(device, async () => ({
-            collapseId: notification.collapseId,
-            payload: payloadOf(
-              notification,
-              await seal(device.key, plaintext),
-              cleared
-            ),
-          }))
-        );
+    // Every device at once, each settled as its own answer lands.
+    return yield* Effect.forEach(
+      devices,
+      Effect.fnUntraced(function* (device): Effect.fn.Return<PushOutcome> {
+        const { status, reason } = yield* post(device, async () => ({
+          collapseId: notification.collapseId,
+          payload: payloadOf(
+            notification,
+            await seal(device.key, plaintext),
+            cleared
+          ),
+        }));
         const pruned = settle(device, status, reason);
         if (status === 200) {
           told.set(device.pairingId, count);
         }
         return { name: device.name, status, reason, pruned };
-      })
+      }),
+      { concurrency: "unbounded" }
     );
-  };
+  });
 
   /** Sends now; a push already shown under its collapse id is replaced by it (`apns-collapse-id`). */
   const replace = (
@@ -1015,7 +1016,7 @@ export const createPush = ({
     }
     lifetime.fork(
       `push ${notification.collapseId} replaced`,
-      Effect.tryPromise(() => deliver(notification, undefined, replacing))
+      deliver(notification, undefined, replacing)
     );
   };
 
@@ -1576,7 +1577,7 @@ export const createPush = ({
    * One background push to a device, carrying the whole cleared set, when it
    * has clears it was not handed yet (a visible push since hands them too).
    */
-  const background = async (pairingId: string): Promise<void> => {
+  const background = Effect.fnUntraced(function* (pairingId: string) {
     const device = awake().find((row) => row.pairingId === pairingId);
     const count = notifications.clearCount();
     if (!device || (told.get(pairingId) ?? 0) >= count) {
@@ -1587,17 +1588,15 @@ export const createPush = ({
       return;
     }
     backgroundAt.set(pairingId, Date.now());
-    const { status, reason } = await lifetime.run(
-      post(device, async () => ({
-        pushType: "background",
-        payload: { aps: { "content-available": 1 }, cawco: { cleared } },
-      }))
-    );
+    const { status, reason } = yield* post(device, async () => ({
+      pushType: "background",
+      payload: { aps: { "content-available": 1 }, cawco: { cleared } },
+    }));
     settle(device, status, reason);
     if (status === 200) {
       told.set(pairingId, count);
     }
-  };
+  });
 
   /** Ids cleared: each awake device gets a background push now, or when its gap since the last is out. */
   notifications.onCleared(() => {
@@ -1614,10 +1613,7 @@ export const createPush = ({
         pairingId,
         lifetime.after("push pairing queue", wait, () => {
           queued.delete(pairingId);
-          lifetime.fork(
-            "background push",
-            Effect.tryPromise(() => background(pairingId))
-          );
+          lifetime.fork("background push", background(pairingId));
         })
       );
     }
@@ -2506,27 +2502,29 @@ export const createPush = ({
       notifications.clear([pairingCollapseId(userCode)], "settled");
     },
 
-    /** A test: a push to the devices given, quiet ones too. */
+    /** A test: a push to the devices given, quiet ones too; the promise edge of its delivery. */
     async test(devices: PushDeviceRow[]): Promise<{ outcomes: PushOutcome[] }> {
       return {
-        outcomes: await deliver(
-          {
-            shown: alertOf(
-              "Test from Caw",
-              null,
-              "Notifications work. When an agent needs you, it arrives like this."
-            ),
-            sealed: alertOf(
-              "Test from Caw",
-              null,
-              "Notifications work, end to end encrypted. When an agent needs you, it arrives like this."
-            ),
-            category: PUSH_CATEGORIES.test,
-            collapseId: "test",
-            group: "test",
-            data: { kind: "test" },
-          },
-          devices
+        outcomes: await lifetime.run(
+          deliver(
+            {
+              shown: alertOf(
+                "Test from Caw",
+                null,
+                "Notifications work. When an agent needs you, it arrives like this."
+              ),
+              sealed: alertOf(
+                "Test from Caw",
+                null,
+                "Notifications work, end to end encrypted. When an agent needs you, it arrives like this."
+              ),
+              category: PUSH_CATEGORIES.test,
+              collapseId: "test",
+              group: "test",
+              data: { kind: "test" },
+            },
+            devices
+          )
         ),
       };
     },

@@ -87,7 +87,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     // session is not at rest.
     ctx.lifetime.fork(
       "sleep request",
-      Effect.promise(() =>
+      Effect.tryPromise(() =>
         timed(
           ctx.callAgent(
             row.machineId,
@@ -334,7 +334,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   ): void => {
     ctx.lifetime.fork(
       "lent sign-in",
-      Effect.promise(() =>
+      Effect.tryPromise(() =>
         ctx.callAgent(
           borrower,
           CONTROL_ACCOUNT_LENT,
@@ -419,7 +419,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     for (const { accountId, borrower } of waiting.values()) {
       ctx.lifetime.fork(
         "lent sign-in refreshed",
-        Effect.promise(() => lendOnce(accountId, lender)).pipe(
+        Effect.tryPromise(() => lendOnce(accountId, lender)).pipe(
           Effect.flatMap((answer) =>
             Effect.sync(() => {
               if (!("error" in answer)) {
@@ -565,7 +565,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         // Each re-pin runs on its own; one not done is tried at the next tick.
         ctx.lifetime.fork(
           "login move re-pin",
-          Effect.promise(() => repinMovedFrom(instanceId, machineId))
+          Effect.tryPromise(() => repinMovedFrom(instanceId, machineId))
         );
         continue;
       }
@@ -577,7 +577,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       // at rest yet, asked again next tick.
       ctx.lifetime.fork(
         "sleep request",
-        Effect.promise(() =>
+        Effect.tryPromise(() =>
           timed(
             ctx.callAgent(
               machineId,
@@ -723,7 +723,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       for (const move of moves) {
         ctx.lifetime.fork(
           "login move advanced",
-          Effect.promise(() => advanceMove(move))
+          Effect.tryPromise(() => advanceMove(move))
         );
       }
       sleepMovedFrom();

@@ -389,7 +389,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           if (triggers) {
             ctx.lifetime.fork(
               "run the projects' held triggers",
-              Effect.promise(() => triggers.machineOnline(machineId))
+              Effect.tryPromise(() => triggers.machineOnline(machineId))
             );
           }
         }

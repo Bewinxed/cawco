@@ -9244,6 +9244,7 @@ export const createServer = (
   // Its nightly run (memory-run.ts) is the one writer of its lessons.
   const memoryRun = createMemoryRun({
     db,
+    lifetime,
     folderChanged: (projectId) => tasks.touched(projectId),
     machine: {
       read: async (machineId, path) => {
@@ -9576,6 +9577,7 @@ export const createServer = (
   // Each project's conversation: the session the person's words reach (caw.ts).
   const caw = createCaw({
     blocks,
+    lifetime,
     caps,
     db,
     proposeType: (actor, path, content, toolUseId) =>
@@ -13235,7 +13237,9 @@ export const createServer = (
       key: "keep-alive wake",
       name: "keep-alive wake",
       priority: "background",
-      run: () => detach(keepAliveScheduler.wake(), "keepalive wake"),
+      run: () => {
+        lifetime.fork("keepalive wake", keepAliveScheduler.wake);
+      },
     });
   };
 

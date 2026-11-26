@@ -361,7 +361,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   const tell = (place: Place, now: number): void => {
     deps.lifetime.fork(
       "browser viewers",
-      Effect.promise(() =>
+      Effect.tryPromise(() =>
         deps.call(
           place.machineId,
           BROWSER_VIEWERS,

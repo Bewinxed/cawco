@@ -2261,12 +2261,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         db.atLimit.hold(instanceId) !== undefined
       );
     },
-    /** The promise edge of {@link lookAtNow}. */
-    lookNow: (
-      instanceId: string,
-      why: string,
-      asked?: TakenUpBy
-    ): Promise<void> => lifetime.run(lookAtNow(instanceId, why, asked)),
+    /** {@link lookAtNow}, for a caller outside this file. */
+    lookNow: lookAtNow,
     /**
      * `instanceId`'s process said its background work changed (cut-turns.ts
      * `keepTasks`): a hold whose move waits for that work is decided again
@@ -2401,29 +2397,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return decision?.kind === "move" ? decision.moves[0]?.to : undefined;
     },
     /** A turn of `instanceId` was refused at its account's limit, and has ended. */
-    turnRefused(instanceId: string): Promise<void> {
-      const row = rowOf(instanceId);
-      // The promise edge of the answer, in its provider's turn.
-      return lifetime.run(
+    turnRefused: (instanceId: string): Effect.Effect<void> =>
+      // The answer, in its provider's turn.
+      Effect.suspend(() =>
         serially(
-          providerOf(row?.accountId),
+          providerOf(rowOf(instanceId)?.accountId),
           `the answer to ${shortId(instanceId)}'s refused turn`,
           () => answerRefused(instanceId)
         )
-      );
-    },
+      ),
     /**
      * A turn of `instanceId` ended on Claude Code refusing its account's
      * credential for good, and the account is signed out on its machine:
      * it moves whole to another account and carries on there; with none to
      * take it, it is held ({@link holdRefused}).
      */
-    signedOut(instanceId: string): Promise<void> {
-      const row = rowOf(instanceId);
-      // The promise edge of the answer, in its provider's turn.
-      return lifetime.run(
+    signedOut: (instanceId: string): Effect.Effect<void> =>
+      // The answer, in its provider's turn.
+      Effect.suspend(() =>
         serially(
-          providerOf(row?.accountId),
+          providerOf(rowOf(instanceId)?.accountId),
           `the answer to ${shortId(instanceId)}'s refused sign-in`,
           async () => {
             const fresh = rowOf(instanceId);
@@ -2438,8 +2431,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
             await act(fresh, current, "refused-credential");
           }
         )
-      );
-    },
+      ),
     /**
      * A turn of `instanceId` ended as any turn does, after the decisions of
      * its provider queued before: one its account's extra usage answered

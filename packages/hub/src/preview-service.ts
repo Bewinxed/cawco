@@ -95,7 +95,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
   const stop = (machineId: string, key: string, token: string): void => {
     deps.lifetime.fork(
       "preview listener stop",
-      Effect.promise(() =>
+      Effect.tryPromise(() =>
         deps.call(
           machineId,
           PREVIEW_STOP,

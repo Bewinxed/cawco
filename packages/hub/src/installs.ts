@@ -986,7 +986,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       install.hostname = machineOf(tunnel.machineId)?.hostname ?? null;
       changed();
     }
-    const outcome = yield* Effect.promise(() => tunnel.outcome);
+    const outcome = yield* tunnel.outcome;
     if (outcome.kind === "ended") {
       if (tunnel.fresh) {
         deps.tunnels.abandon(tunnel.id);
@@ -1015,7 +1015,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       return;
     }
     take(entry, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
-    const unkept = yield* Effect.promise(() => deps.tunnels.admit(tunnel.id));
+    const unkept = yield* deps.tunnels.admit(tunnel.id);
     if (unkept) {
       take(entry, unkept);
       if (tunnel.fresh) {

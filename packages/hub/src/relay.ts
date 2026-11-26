@@ -985,7 +985,7 @@ export const createRelay = ({
           Effect.sync(() => {
             lifetime.fork(
               "relay apply",
-              Effect.promise(() => apply())
+              Effect.tryPromise(() => apply())
             );
           })
         )
@@ -1017,7 +1017,7 @@ export const createRelay = ({
   const start = (): void => {
     lifetime.fork(
       "relay apply at start",
-      Effect.promise(() => apply(true))
+      Effect.tryPromise(() => apply(true))
     );
     relooking?.interruptUnsafe();
     relooking = lifetime.fork("relay look again", relook);

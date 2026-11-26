@@ -576,13 +576,15 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         ctx.turnInFlight.over(ended);
         ctx.lifetime.fork(
           "answer a refused sign-in",
-          Effect.tryPromise(() => ctx.atLimit.signedOut(ended)).pipe(
-            Effect.catch(({ cause }) =>
-              Effect.sync(() =>
-                ctx.limitAnswerFailed(ended, "its refused sign-in", cause)
+          ctx.atLimit
+            .signedOut(ended)
+            .pipe(
+              Effect.catchDefect((cause) =>
+                Effect.sync(() =>
+                  ctx.limitAnswerFailed(ended, "its refused sign-in", cause)
+                )
               )
             )
-          )
         );
       } else if (
         neutral.type === "result" &&
@@ -600,13 +602,15 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         if (!ctx.moveOwedAtRefusal(refused)) {
           ctx.lifetime.fork(
             "answer a turn its limit refused",
-            Effect.tryPromise(() => ctx.atLimit.turnRefused(refused)).pipe(
-              Effect.catch(({ cause }) =>
-                Effect.sync(() =>
-                  ctx.limitAnswerFailed(refused, "its account's limit", cause)
+            ctx.atLimit
+              .turnRefused(refused)
+              .pipe(
+                Effect.catchDefect((cause) =>
+                  Effect.sync(() =>
+                    ctx.limitAnswerFailed(refused, "its account's limit", cause)
+                  )
                 )
               )
-            )
           );
         }
       } else if (

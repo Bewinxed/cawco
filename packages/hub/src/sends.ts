@@ -2697,15 +2697,11 @@ export const createSends = (ctx: SendsContext) => {
     if (agent && limited) {
       ctx.lifetime.fork(
         "at-limit look",
-        Effect.tryPromise({
-          try: () =>
-            ctx.atLimit.lookNow(
-              instanceId,
-              "a message to it is held at its account's limit",
-              ctx.takenUpBy(target, message.origin)
-            ),
-          catch: (error) => error,
-        })
+        ctx.atLimit.lookNow(
+          instanceId,
+          "a message to it is held at its account's limit",
+          ctx.takenUpBy(target, message.origin)
+        )
       );
     }
     if (accepted) {

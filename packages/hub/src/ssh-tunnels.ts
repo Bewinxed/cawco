@@ -53,7 +53,10 @@ import { randomBytes } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BackoffPolicy } from "@cawco/core/backoff";
-import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import {
+  backoffSchedule,
+  reopenSeries,
+} from "@cawco/core/effect/backoff-schedule";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
@@ -71,6 +74,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Option,
   Schedule,
   Schema,
 } from "effect";
@@ -268,7 +272,7 @@ export interface TunnelOpen {
   /** The machine this record names, when it has joined before. */
   readonly machineId: string | null;
   /** Up, or how it ended, once it is either. */
-  readonly outcome: Promise<TunnelOutcome>;
+  readonly outcome: Effect.Effect<TunnelOutcome>;
 }
 
 export interface SshTunnels {
@@ -280,7 +284,7 @@ export interface SshTunnels {
    * where the machine's agent reads its key. Answers what went wrong, or
    * nothing.
    */
-  readonly admit: (id: string) => Promise<string | undefined>;
+  readonly admit: (id: string) => Effect.Effect<string | undefined>;
   /**
    * A port on the hub's loopback carried to `port` on the machine's, through
    * the machine's connection: how the hub reaches a preview listener there.
@@ -1056,17 +1060,8 @@ export const createSshTunnels = ({
   const series = (
     tunnel: Tunnel,
     held: Dropped | undefined
-  ): Effect.Effect<Dropped | undefined, Dropped> => {
-    let pending = held;
-    return Effect.retry(
-      Effect.suspend(() => {
-        const failed = pending;
-        pending = undefined;
-        return failed ? Effect.fail(failed) : connect(tunnel);
-      }),
-      reopens(tunnel)
-    );
-  };
+  ): Effect.Effect<Dropped | undefined, Dropped> =>
+    reopenSeries(connect(tunnel), reopens(tunnel), Option.fromNullishOr(held));
 
   /** `tunnel`'s connection, opened now and again after each drop for as long as it is held. */
   const follow = (tunnel: Tunnel): Effect.Effect<void, Dropped> =>
@@ -1134,22 +1129,24 @@ export const createSshTunnels = ({
         id: row.id,
         fresh: !held,
         machineId: row.machineId,
-        // The promise edge of the add's wait on how the connection comes out.
-        outcome: lifetime.run(Deferred.await(outcome)),
+        outcome: Deferred.await(outcome),
       };
     },
-    admit: async (id) => {
+    admit: Effect.fnUntraced(function* (id: string) {
       const row = db.get(id);
       if (!(row && tunnels.get(id)?.up)) {
         return "the hub's SSH connection to the machine is not open";
       }
       const key = randomBytes(32).toString("base64url");
       db.update(id, { pendingKey: key });
-      const kept = await lifetime.run(
-        onMachine(controlPath(id), row.target, KEEP_KEY, `${key}\n`)
+      const kept = yield* onMachine(
+        controlPath(id),
+        row.target,
+        KEEP_KEY,
+        `${key}\n`
       );
       return kept?.code === 0 ? undefined : saidBy(kept);
-    },
+    }),
     abandon: (id) => {
       const tunnel = tunnels.get(id);
       if (tunnel) {

@@ -773,10 +773,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const keepAliveWake = (_ret: MachineReturn): void => {
     // Reconnect retries overdue stored schedules right after the register ACK.
-    ctx.lifetime.fork(
-      "keepalive wake",
-      Effect.tryPromise(() => ctx.keepAliveScheduler.wake())
-    );
+    ctx.lifetime.fork("keepalive wake", ctx.keepAliveScheduler.wake);
   };
 
   const continuationsGoOn = (ret: MachineReturn): void => {

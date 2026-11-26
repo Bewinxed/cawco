@@ -811,7 +811,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       }
       ctx.lifetime.fork(
         "sleep request",
-        Effect.promise(() =>
+        Effect.tryPromise(() =>
           ctx.callAgent(
             machineId,
             CONTROL_SLEEP,

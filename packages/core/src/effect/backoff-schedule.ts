@@ -1,4 +1,4 @@
-import { Cause, Duration, Effect, Schedule } from "effect";
+import { Cause, Duration, Effect, Option, Schedule } from "effect";
 import { type BackoffPolicy, backoffStep } from "../backoff";
 
 /**
@@ -63,3 +63,37 @@ export const backoffSchedule = (
           ]);
     })
   );
+
+/**
+ * `work` retried on `schedule` until it succeeds, with `dropped`, when
+ * given, counted as the series' first failure: the first run of `work`
+ * waits the schedule's first wait, as though `work` had just failed with
+ * it. For what opens something again after it held and then dropped (an
+ * SSH master, a socket): the drop is a failure of the series, and with the
+ * house backoff the open after it waits the first wait (`Backoff.succeeded`
+ * at the open, then `failed` at the drop).
+ *
+ * Each run of the returned effect is its own series: the count, and
+ * `dropped`, start again.
+ * @public The house Effect kit: the hub's SSH tunnels and the preview
+ * server's link use it, and the agent's will.
+ */
+export const reopenSeries = <A, E, R, Out, R2>(
+  work: Effect.Effect<A, E, R>,
+  schedule: Schedule.Schedule<Out, NoInfer<E>, never, R2>,
+  dropped: Option.Option<E>
+): Effect.Effect<A, E, R | R2> =>
+  Effect.suspend(() => {
+    let counted = dropped;
+    return Effect.retry(
+      Effect.suspend(() => {
+        if (Option.isSome(counted)) {
+          const failure = counted.value;
+          counted = Option.none();
+          return Effect.fail(failure);
+        }
+        return work;
+      }),
+      schedule
+    );
+  });

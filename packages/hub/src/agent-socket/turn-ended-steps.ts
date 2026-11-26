@@ -54,10 +54,7 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       );
       ctx.lastRequestContext.delete(cacheRow.id);
       // Real turns re-arm from their own request clock.
-      ctx.lifetime.fork(
-        "keepalive wake",
-        Effect.tryPromise(() => ctx.keepAliveScheduler.wake())
-      );
+      ctx.lifetime.fork("keepalive wake", ctx.keepAliveScheduler.wake);
       ctx.atLimit.turnEnded(cacheRow.id);
       // A compaction after a move: its next step, or its end.
       ctx.compactionTurnEnded(cacheRow.id);

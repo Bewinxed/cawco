@@ -523,7 +523,7 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
   // Startup does not wait for machines to reconnect.
   lifetime.fork("keep-alive wake", pass);
   return {
-    /** The promise edge of a pass now ({@link pass}). */
-    wake: (): Promise<void> => lifetime.run(pass),
+    /** A pass now ({@link pass}). */
+    wake: pass,
   };
 };

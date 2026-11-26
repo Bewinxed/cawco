@@ -1,4 +1,4 @@
-import { Cache, type Context, Effect, Equal, Hash } from "effect";
+import { Cache, type Context, Effect, Equal, Hash, type Option } from "effect";
 
 /**
  * Callers that share one run in flight, by key: the first caller starts it,
@@ -32,6 +32,19 @@ import { Cache, type Context, Effect, Equal, Hash } from "effect";
  * backend's move to Effect import it.
  */
 export interface Join<K, A, E = never> {
+  /**
+   * Whether a run is in flight on `key` now: true from the moment a
+   * {@link Join.run} starts it, before that call returns, until it ends.
+   * For a row that says it is being worked on while its run lasts.
+   */
+  readonly isRunning: (key: K) => boolean;
+  /**
+   * The run in flight on `key`, waited for without starting one: its value,
+   * or none at once when no run is in flight. It fails as that run fails.
+   * The wait counts as one of the run's callers: the run is interrupted only
+   * when every caller waiting on it, this one included, is.
+   */
+  readonly peek: (key: K) => Effect.Effect<Option.Option<A>, E>;
   /** `start` as `key`'s run, or the run already in flight on `key`. */
   readonly run: <R>(
     key: K,
@@ -83,9 +96,14 @@ export const makeJoin = <K, A, E = never>(): Join<K, A, E> => {
         Cache.get(runs, new Joined(key, Effect.provide(start, context)))
       )
     );
+  /** `key` as the Cache holds it, to look up and never to start: its start is never run. */
+  const lookOnly = (key: K): Joined<K, A, E> =>
+    new Joined(key, Effect.die("a join's look started a run"));
   return {
     run,
     runPromise: (key, start) =>
       Effect.runPromise(run(key, Effect.promise(start))),
+    isRunning: (key) => Effect.runSync(Cache.has(runs, lookOnly(key))),
+    peek: (key) => Cache.getOption(runs, lookOnly(key)),
   };
 };

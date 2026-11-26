@@ -1,4 +1,3 @@
-import { detach } from "@cawco/core/detach";
 import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { SessionAttachments } from "@cawco/core/protocol";
 import { harnessWords } from "@cawco/core/words/harness";
@@ -35,6 +34,7 @@ export const instanceEditRoutes = (
     | "db"
     | "everyPage"
     | "keepAliveScheduler"
+    | "lifetime"
     | "sessionName"
     | "transcripts"
     | keyof MachineReadsContext
@@ -46,6 +46,7 @@ export const instanceEditRoutes = (
     db,
     everyPage,
     keepAliveScheduler,
+    lifetime,
     sessionName,
     transcripts,
   } = ctx;
@@ -281,7 +282,7 @@ export const instanceEditRoutes = (
             });
           }
           // The stored toggle re-arms through the scheduler's one path.
-          detach(keepAliveScheduler.wake(), "keepalive wake");
+          lifetime.fork("keepalive wake", keepAliveScheduler.wake);
           const answered = withKeepAliveFacts(row);
           return { ...answered, ...instanceTimes(answered) };
         }

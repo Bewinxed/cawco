@@ -137,7 +137,9 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
         // answerHub says a failure to the views thread; it never rejects.
         deps.lifetime.fork(
           `views: ${message.op} answered`,
-          Effect.promise(() => answerHub(message.id, () => answerOf(message)))
+          Effect.tryPromise(() =>
+            answerHub(message.id, () => answerOf(message))
+          )
         );
         return;
       case "answer":

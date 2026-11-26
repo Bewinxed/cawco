@@ -83,6 +83,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { placeIdOf } from "@cawco/core/workspace-id";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
@@ -92,6 +93,7 @@ import type { ProjectRow } from "./db/projects";
 import type { StoredSendRefusal } from "./db/stored-types";
 import { boardTitle } from "./labels";
 import type { createLeadHome } from "./lead-home";
+import type { HubLifetimeShape } from "./lifetime";
 import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
 import { personsTier } from "./memory";
@@ -504,6 +506,8 @@ export interface CawDeps {
    * no machine is.
    */
   readonly leadHome: ReturnType<typeof createLeadHome>;
+  /** What the conversation's let-go work runs on (lifetime.ts). */
+  readonly lifetime: HubLifetimeShape;
   /** The machines online now, and the name CawCo shows a machine by. */
   readonly machines: {
     name: (machineId: string) => string;
@@ -624,6 +628,7 @@ export const createCaw = ({
   end,
   folderChanged,
   leadHome,
+  lifetime,
   machines,
   noted,
   online,
@@ -1802,28 +1807,38 @@ export const createCaw = ({
         return;
       }
       const { projectId, id } = event;
-      task(projectId, id)
-        .then((waiting) => {
+      /** The task as read now: one waiting in a stage of kind `you` is the trigger. */
+      const triggerIfWaiting = (
+        waiting: Awaited<ReturnType<typeof task>>
+      ): void => {
+        if ("kind" in waiting && waiting.kind === "you") {
+          trigger(projectId, {
+            kind: "task-move",
+            thing: {
+              kind: "task",
+              id: waiting.id,
+              name: taskLink(projectId, waiting.id, waiting.title),
+            },
+            what: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person.`,
+            delta: `It moved there${"reason" in event && event.reason ? `: ${event.reason}` : "."}`,
+            who:
+              event.actor.mover === "session"
+                ? event.actor.author.name
+                : `the ${event.actor.mover}`,
+            ...(event.actor.instanceId ? { by: event.actor.instanceId } : {}),
+          });
+        }
+      };
+      lifetime.fork(
+        "a task that waits for the person told",
+        Effect.tryPromise(() => task(projectId, id)).pipe(
+          Effect.flatMap((waiting) =>
+            Effect.sync(() => triggerIfWaiting(waiting))
+          ),
           // A task that does not read sends nothing, as a failed read did.
-          if ("kind" in waiting && waiting.kind === "you") {
-            trigger(projectId, {
-              kind: "task-move",
-              thing: {
-                kind: "task",
-                id: waiting.id,
-                name: taskLink(projectId, waiting.id, waiting.title),
-              },
-              what: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person.`,
-              delta: `It moved there${"reason" in event && event.reason ? `: ${event.reason}` : "."}`,
-              who:
-                event.actor.mover === "session"
-                  ? event.actor.author.name
-                  : `the ${event.actor.mover}`,
-              ...(event.actor.instanceId ? { by: event.actor.instanceId } : {}),
-            });
-          }
-        })
-        .catch(() => undefined);
+          Effect.ignore
+        )
+      );
     },
 
     /**

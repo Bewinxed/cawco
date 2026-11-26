@@ -1302,14 +1302,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     for (const held of heldHere) {
       ctx.lifetime.fork(
         "at-limit look",
-        Effect.tryPromise({
-          try: () =>
-            ctx.atLimit.lookNow(
-              held.instanceId,
-              `${ctx.machineName(machineId)} is connected again`
-            ),
-          catch: (cause) => new AccountMoveFailed({ cause }),
-        })
+        ctx.atLimit.lookNow(
+          held.instanceId,
+          `${ctx.machineName(machineId)} is connected again`
+        )
       );
     }
     const heldIds = new Set(heldHere.map((one) => one.instanceId));

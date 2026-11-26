@@ -1,6 +1,11 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 bare-run	Effect.runPromise	packages/hub/src/index.ts	1
 bare-run	Effect.runPromise	packages/hub/src/links.ts	1
+error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
+error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
+error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
+error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
+error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
@@ -13,6 +18,26 @@ hand-promise	new Promise	packages/agent/src/auth.ts	1
 hand-promise	new Promise	packages/agent/src/boundary-log.ts	1
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-docs.ts	1
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-plugin-module.ts	2
+hand-promise	new Promise	packages/agent/src/harnesses/opencode.ts	4
+hand-promise	new Promise	packages/agent/src/harnesses/pi-runtime.ts	3
+hand-promise	new Promise	packages/agent/src/harnesses/pi-sessiond.ts	2
+hand-promise	new Promise	packages/agent/src/harnesses/transcript-index.ts	1
+hand-promise	new Promise	packages/agent/src/host-lfs.ts	1
+hand-promise	new Promise	packages/agent/src/hub-command.ts	1
+hand-promise	new Promise	packages/agent/src/hub-git.ts	2
+hand-promise	new Promise	packages/agent/src/login.ts	1
+hand-promise	new Promise	packages/agent/src/mcp-host.ts	1
+hand-promise	new Promise	packages/agent/src/provider-accounts.ts	3
+hand-promise	new Promise	packages/agent/src/search/process.ts	2
+hand-promise	new Promise	packages/agent/src/session-containers.ts	1
+hand-promise	new Promise	packages/agent/src/session.ts	2
+hand-promise	new Promise	packages/agent/src/sessiond-client.ts	5
+hand-promise	new Promise	packages/agent/src/sessiond-custody.ts	1
+hand-promise	new Promise	packages/agent/src/stage-host/host.ts	1
+hand-promise	new Promise	packages/agent/src/stage.ts	2
+hand-promise	new Promise	packages/agent/src/stores/client.ts	1
+hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
+hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/law-tasks.ts	1
 hand-promise	new Promise	packages/hub/src/lifetime.ts	3
 hand-promise	new Promise	packages/hub/src/project-stops.ts	1
@@ -20,7 +45,76 @@ hand-promise	new Promise	packages/hub/src/server.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/boundary-host.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/machine-agent.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/welcome-converge.ts	1
+per-key-chain	this.#marks	packages/agent/src/browser/gate.ts	1
 promise-chain	this.#healing	packages/agent/src/fleet-converger.ts	1
 promise-map	#turns	packages/hub/src/meaning.ts	1
 promise-map	owedCarries	packages/hub/src/closure-context.ts	1
 promise-map	owedCarries	packages/hub/src/limit-moves.ts	1
+promise-map	#waves	packages/agent/src/harnesses/opencode-activity.ts	1
+promise-map	asking	packages/agent/src/provider-accounts.ts	1
+promise-map	closing	packages/agent/src/boundary/state.ts	1
+promise-map	doors	packages/agent/src/session-containers.ts	1
+promise-map	drawnKept	packages/agent/src/stage-host/host.ts	1
+promise-map	flights	packages/agent/src/move.ts	1
+promise-map	gateReads	packages/agent/src/tools.ts	1
+promise-map	gates	packages/agent/src/boundary/decisions.ts	1
+promise-map	importsKept	packages/agent/src/stage-host/host.ts	1
+promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
+promise-map	inFlight	packages/agent/src/mcp-install.ts	1
+promise-map	inFlight	packages/agent/src/provider-usage.ts	1
+promise-map	installing	packages/agent/src/stage-install.ts	1
+promise-map	installing	packages/agent/src/tools.ts	1
+promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
+promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
+promise-map	liveGroups	packages/agent/src/group-run.ts	1
+promise-map	local	packages/agent/src/stage-host/host.ts	1
+promise-map	needAsking	packages/agent/src/tools.ts	1
+promise-map	open	packages/agent/src/browser/dashboard-door.ts	1
+promise-map	owedCarries	packages/hub/src/closure-context.ts	1
+promise-map	owedCarries	packages/hub/src/limit-moves.ts	1
+promise-map	owning	packages/agent/src/layer.ts	1
+promise-map	ownKept	packages/agent/src/stage-host/host.ts	1
+promise-map	passes	packages/agent/src/browser/dashboard-door.ts	1
+promise-map	pendingServerAttachments	packages/agent/src/harnesses/opencode.ts	1
+promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
+promise-map	reading	packages/agent/src/stores/client.ts	1
+promise-map	rearming	packages/agent/src/boundary/ensure.ts	1
+promise-map	reviving	packages/agent/src/browser/browsers.ts	1
+promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
+promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
+promise-map	starting	packages/agent/src/boundary/state.ts	1
+promise-map	viewing	packages/agent/src/layer.ts	1
+promise-map	warming	packages/agent/src/stage.ts	1
+timed-loop	Bun.sleep	packages/agent/src/binary-update.ts	1
+timed-loop	Bun.sleep	packages/agent/src/boundary/work.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/bluez-bus.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/browsers.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/container-host.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/local-host.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/media-forwarding.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/own-size.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/relay.ts	1
+timed-loop	Bun.sleep	packages/agent/src/browser/sign-ins.ts	1
+timed-loop	Bun.sleep	packages/agent/src/daemon.ts	1
+timed-loop	Bun.sleep	packages/agent/src/harnesses/claude.ts	2
+timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-client.ts	3
+timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-models.ts	1
+timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-server.ts	2
+timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-session.ts	1
+timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode.ts	5
+timed-loop	Bun.sleep	packages/agent/src/hub-away.ts	1
+timed-loop	Bun.sleep	packages/agent/src/hub-command.ts	1
+timed-loop	Bun.sleep	packages/agent/src/keeper-watchdog.ts	1
+timed-loop	Bun.sleep	packages/agent/src/layer.ts	2
+timed-loop	Bun.sleep	packages/agent/src/runtime-dir-move.ts	1
+timed-loop	Bun.sleep	packages/agent/src/session.ts	2
+timed-loop	Bun.sleep	packages/agent/src/stage-render.ts	2
+timed-loop	Bun.sleep	packages/agent/src/stage.ts	2
+timed-loop	Bun.sleep	packages/agent/src/tools.ts	1
+timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
+timed-loop	delay	packages/agent/src/mcp-status.ts	1
+timed-loop	new Promise(setTimeout)	packages/agent/src/browser/passkey-inject.ts	1
+timed-loop	new Promise(setTimeout)	packages/agent/src/session.ts	1
+timed-loop	new Promise(setTimeout)	packages/agent/src/sessiond-client.ts	1
+timed-loop	setTimeout → #releaseDirectory	packages/agent/src/harnesses/opencode.ts	1
+timed-loop	setTimeout → obeyLink	packages/agent/src/daemon.ts	1

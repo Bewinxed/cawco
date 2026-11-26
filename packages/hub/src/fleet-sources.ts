@@ -1,6 +1,7 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { FsOp } from "@cawco/core/control-replies";
 import type { AddressedControl } from "@cawco/core/control-table";
+import { makeJoin } from "@cawco/core/effect/join";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type {
   FleetPlugin,
@@ -617,8 +618,12 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * dashboard as a `fleet.fetch` frame. A second ask for a row already being
    * fetched joins the fetch under way.
    */
-  const skillFetches = new Map<string, Fiber.Fiber<SkillFetch | undefined>>();
-  /** The plugin fetches running at the hub, as {@link skillFetches}: each ends with whether a fleet copy changed. */
+  const skillFetches = makeJoin<string, SkillFetch | undefined>();
+  /**
+   * The plugin fetches running at the hub, as {@link skillFetches}: each ends
+   * with whether a fleet copy changed. A map of fibers, not a join: one fetch
+   * holds every id it was asked for, and a join's run has one key.
+   */
   const pluginFetches = new Map<string, Fiber.Fiber<boolean>>();
   /** What an ambiguous source's last fetch could have meant, by skill name. */
   const skillChoices = new Map<string, string[]>();
@@ -628,7 +633,9 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     const choices = skillChoices.get(row.name);
     return {
       ...row,
-      ...(skillFetches.has(`skill:${row.name}`) ? { fetching: true } : {}),
+      ...(skillFetches.isRunning(`skill:${row.name}`)
+        ? { fetching: true }
+        : {}),
       ...(choices ? { choices } : {}),
     };
   };
@@ -759,46 +766,41 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     source: string
   ): Promise<SkillFetch | undefined> => {
     const key = `skill:${name}`;
-    const running =
-      skillFetches.get(key) ??
-      (() => {
-        skillChoices.delete(name);
-        // Its first step waits a turn, so the fetch is held, and said as
-        // fetching, before any of it runs.
-        const fetch: Fiber.Fiber<SkillFetch | undefined> = ctx.lifetime.fork(
-          `skill ${name} fetch`,
-          Effect.yieldNow.pipe(
-            Effect.andThen(
-              resolveSkill(
-                source,
-                ctx.db.heldSkillNames(name),
-                ctx.readSkillFolder
-              )
-            ),
-            Effect.map((resolved) => landSkill(name, source, resolved)),
-            Effect.catchDefect((error) =>
-              Effect.sync((): undefined => {
-                console.warn(
-                  `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
-                );
-              })
-            ),
-            Effect.ensuring(
-              Effect.sync(() => {
-                if (skillFetches.get(key) === fetch) {
-                  skillFetches.delete(key);
-                }
-                announceSkill(name, source);
-              })
+    const starts = !skillFetches.isRunning(key);
+    if (starts) {
+      skillChoices.delete(name);
+    }
+    // Its first step waits a turn, so the fetch is held, and said as
+    // fetching, before any of it runs.
+    const fetch = Effect.yieldNow.pipe(
+      Effect.andThen(
+        resolveSkill(source, ctx.db.heldSkillNames(name), ctx.readSkillFolder)
+      ),
+      Effect.map((resolved) => landSkill(name, source, resolved)),
+      Effect.catchDefect((error) =>
+        Effect.sync((): undefined => {
+          console.warn(
+            `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+      )
+    );
+    // The promise edge of the fetch: it lands with what came of it. The
+    // caller that started it says how it stands once it has ended, when the
+    // join no longer holds it.
+    const landed = ctx.lifetime.run(
+      starts
+        ? skillFetches
+            .run(key, fetch)
+            .pipe(
+              Effect.ensuring(Effect.sync(() => announceSkill(name, source)))
             )
-          )
-        );
-        skillFetches.set(key, fetch);
-        announceSkill(name, source);
-        return fetch;
-      })();
-    // The promise edge of the fetch: it lands with what came of it.
-    return ctx.lifetime.run(Fiber.join(running));
+        : skillFetches.run(key, fetch)
+    );
+    if (starts) {
+      announceSkill(name, source);
+    }
+    return landed;
   };
 
   /**
@@ -882,7 +884,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   };
 
   /** Marketplace sources being read at the hub, by source. */
-  const marketplaceReads = new Map<string, Fiber.Fiber<MarketplaceRead>>();
+  const marketplaceReads = makeJoin<string, MarketplaceRead>();
 
   /**
    * Reads a marketplace source at the hub — what it calls itself and what it
@@ -892,47 +894,38 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    */
   const readMarketplaceSource = (source: string): Promise<MarketplaceRead> =>
     // The promise edge of the read.
-    ctx.lifetime.run(Fiber.join(marketplaceRead(source)));
+    ctx.lifetime.run(marketplaceRead(source));
 
-  /** {@link readMarketplaceSource}'s read, as the fiber that runs it: the one under way, or one started now. */
-  const marketplaceRead = (source: string): Fiber.Fiber<MarketplaceRead> => {
-    const running = marketplaceReads.get(source);
-    if (running !== undefined) {
-      return running;
-    }
-    // Its first step waits a turn, so the read is held, and said as
-    // fetching, before any of it runs.
-    const read: Fiber.Fiber<MarketplaceRead> = ctx.lifetime.fork(
-      `marketplace ${source} read`,
-      Effect.yieldNow.pipe(
-        Effect.andThen(readMarketplace(source)),
-        Effect.map(({ name, plugins }): MarketplaceRead => ({
-          source,
-          name,
-          plugins,
-        })),
-        Effect.catchTag("FetchFailed", ({ message }) =>
-          Effect.succeed<MarketplaceRead>({ source, error: message })
-        ),
-        Effect.tap((landed) =>
-          Effect.sync(() => {
-            marketplaceReads.delete(source);
-            announceFetch({ marketplace: landed });
-          })
-        ),
-        Effect.onInterrupt(() =>
-          Effect.sync(() => {
-            if (marketplaceReads.get(source) === read) {
-              marketplaceReads.delete(source);
-            }
-          })
+  /** {@link readMarketplaceSource}'s read: the one under way, joined, or one started now and said as fetching. */
+  const marketplaceRead = (source: string): Effect.Effect<MarketplaceRead> =>
+    Effect.suspend(() => {
+      const starts = !marketplaceReads.isRunning(source);
+      // Its first step waits a turn, so the read is held, and said as
+      // fetching, before any of it runs.
+      const read = marketplaceReads.run(
+        source,
+        Effect.yieldNow.pipe(
+          Effect.andThen(readMarketplace(source)),
+          Effect.map(({ name, plugins }): MarketplaceRead => ({
+            source,
+            name,
+            plugins,
+          })),
+          Effect.catchTag("FetchFailed", ({ message }) =>
+            Effect.succeed<MarketplaceRead>({ source, error: message })
+          ),
+          Effect.tap((landed) =>
+            Effect.sync(() => announceFetch({ marketplace: landed }))
+          )
         )
-      )
-    );
-    marketplaceReads.set(source, read);
-    announceFetch({ marketplace: { source, fetching: true } });
-    return read;
-  };
+      );
+      // Said in the same step that starts it, so no other ask comes between.
+      return starts
+        ? Effect.sync(() =>
+            announceFetch({ marketplace: { source, fetching: true } })
+          ).pipe(Effect.andThen(read))
+        : read;
+    });
 
   /**
    * Marketplace links that have no row yet, by source: under way
@@ -974,7 +967,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       announceFetch({ link: { source, fetching: true } });
       ctx.lifetime.fork(
         "marketplace link",
-        Fiber.join(marketplaceRead(source)).pipe(
+        marketplaceRead(source).pipe(
           Effect.flatMap((read) =>
             Effect.sync(() => {
               let link: MarketplaceLink;
@@ -1160,7 +1153,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       if (ctx.lifetime.closed()) {
         return;
       }
-      if (skillFetches.has(`skill:${row.name}`)) {
+      if (skillFetches.isRunning(`skill:${row.name}`)) {
         continue;
       }
       if (!watched({ skill: row.name })) {

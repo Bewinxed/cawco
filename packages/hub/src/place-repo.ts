@@ -33,7 +33,7 @@ import {
   CONTROL_PLACE_REPO,
   type PlaceRepo,
 } from "@cawco/core/workspace/controls";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 
@@ -50,9 +50,6 @@ export interface PlaceRef {
   machineId: string;
   path: string;
 }
-
-/** What {@link PlaceRepos.settled} starts when no step is in flight: none, so it ends at once. */
-class NoStep extends Schema.TaggedError<NoStep>()("NoStep", {}) {}
 
 export const createPlaceRepos = ({ call, lifetime }: PlaceRepoDeps) => {
   const make = async (place: PlaceRef): Promise<PlaceRepo> => {
@@ -89,15 +86,10 @@ export const createPlaceRepos = ({ call, lifetime }: PlaceRepoDeps) => {
    * flight: what reads the folder to decide what to ask or do (a move's
    * plan) reads its settled state, whichever step started first. A step
    * that fails leaves the folder as it was; its error is its caller's. With
-   * none in flight, the step it starts ({@link NoStep}) ends at once and is
-   * kept by nothing.
+   * none in flight, it resolves at once.
    */
   const settled = (machineId: string, path: string): Promise<void> =>
-    lifetime.run(
-      inFlight
-        .run(keyOf(machineId, path), Effect.fail(new NoStep()))
-        .pipe(Effect.ignore)
-    );
+    lifetime.run(inFlight.peek(keyOf(machineId, path)).pipe(Effect.ignore));
 
   return {
     ensure,

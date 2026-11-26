@@ -7,9 +7,12 @@
  * use) is dropped, its next one said after.
  */
 import type { BackoffPolicy } from "@cawco/core/backoff";
-import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import {
+  backoffSchedule,
+  reopenSeries,
+} from "@cawco/core/effect/backoff-schedule";
 import { openWebSocket } from "@cawco/preview/proxy";
-import { Effect, Schema, type Scope } from "effect";
+import { Effect, Option, Schema, type Scope } from "effect";
 import { type HubClient, hubClient } from "../client";
 import { HUB_PORT } from "../config";
 import {
@@ -111,19 +114,12 @@ export const openHubLink = (
      * first wait (the house backoff's `succeeded()` at the open, then
      * `failed()` at the close).
      */
-    const series = (afterDrop: boolean) => {
-      let dropped = afterDrop;
-      return Effect.retry(
-        Effect.suspend(() => {
-          if (dropped) {
-            dropped = false;
-            return Effect.fail(new NotOpened());
-          }
-          return connection;
-        }),
-        backoffSchedule(REOPENS)
+    const series = (afterDrop: boolean) =>
+      reopenSeries(
+        connection,
+        backoffSchedule(REOPENS),
+        afterDrop ? Option.some(new NotOpened()) : Option.none()
       );
-    };
 
     yield* Effect.forkScoped(
       series(false).pipe(

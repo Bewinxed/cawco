@@ -266,7 +266,7 @@ export const createToolCallKeys = ({
     }
     lifetime.fork(
       "keyed tool call's answer kept",
-      Effect.promise(() => keep(id, running, response))
+      Effect.tryPromise(() => keep(id, running, response))
     );
     return await follow(lifetime, running);
   };

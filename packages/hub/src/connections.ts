@@ -3022,7 +3022,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (r.state !== "needs-sign-in") {
       deps.lifetime.fork(
         "connection back from the trash looked at",
-        Effect.promise(() => probe(name))
+        Effect.tryPromise(() => probe(name))
       );
     }
     deps.projectsWritten(name, []);
@@ -3099,7 +3099,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         if (r.state !== "needs-sign-in") {
           deps.lifetime.fork(
             "connection looked at first",
-            Effect.promise(() => probe(r.name))
+            Effect.tryPromise(() => probe(r.name))
           );
         }
       }
