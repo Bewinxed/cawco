@@ -37,6 +37,7 @@ import { transcriptUserText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact } from "@cawco/core/wait-targets";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { previewWords } from "@cawco/core/words/preview";
 import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_REPO_ROOT,
@@ -53,6 +54,7 @@ import { placeRefOf, stagePlaceRef } from "./caw";
 import { ARTIFACTS_ROOT } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
+import { goneDownOf } from "./design-revive";
 import type { HubContext } from "./hub-context";
 import { ARTIFACT_HANDED_ORIGIN } from "./hub-words";
 import type { HubTimer } from "./lifetime";
@@ -824,16 +826,64 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
             "No session works in the folder it was made in any more, so CawCo can't find that folder to run its stage in.",
         });
   /**
+   * Where `at` runs now, a workspace that retired brought back first: a
+   * clone workspace an artifact names that is archived goes through
+   * workspaces.ts `revive`, the one way a design whose workspace went
+   * comes back, as the person's open of it does (design-revive.ts). Every
+   * hub use of its stage (an agent's artifact_read, a render, a write, a
+   * decision page's warm-up) brings it back the same way: until
+   * 2026-11-26 only his open did, and the rest sent the retired clone's
+   * path to its machine, which answered "No vite.config … above …", so
+   * design-system board 683a4a42 read as dark and was made again by hand.
+   * Its words when it can't come back ({@link goneDownOf}).
+   */
+  const stageRevived = async (at: StageAt) => {
+    const retired =
+      "workspace" in at && workspaceIdKindOf(at.workspace) === "clone"
+        ? ctx.db
+            .workspacesNamed(at.workspace)
+            .find((one) => one.id === at.workspace && one.state === "archived")
+        : undefined;
+    if (!retired) {
+      const as: { at: StageAt } = { at };
+      return as;
+    }
+    const revived = await ctx.workItems.revive(retired.id);
+    if (revived.kind === "here") {
+      const here: { at: StageAt } = {
+        at: { workspace: revived.workspace.id },
+      };
+      return here;
+    }
+    const gone = goneDownOf(revived.why);
+    const named = idHandle(retired.id);
+    return gone.down === "machine"
+      ? awayProblem(
+          retired.machineId,
+          `The workspace ${named} it was made in retired, and its machine isn't connected to the hub to build it again, so its stage can't run.`
+        )
+      : problem(409, {
+          code: "stage-workspace-gone",
+          detail: `The workspace ${named} it was made in retired and can't be built again, so its stage can't run. ${gone.why ?? previewWords.goneLine}`,
+        });
+  };
+  /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
-   * own, or the one a sheet was made in), with the arguments `args` makes of
-   * the workspace: its answer, or a refusal saying
-   * why the stage can't be reached or said no.
+   * own, or the one a sheet was made in, brought back when it retired,
+   * {@link stageRevived}), with the arguments `args` makes of the
+   * workspace: its answer, or a refusal saying why the stage can't be
+   * reached or said no.
    */
   const onStage = async <K extends ControlName>(
-    at: StageAt,
+    stageAt: StageAt,
     method: K,
     args: (workspace: WorkspaceRef) => ControlArgs<K>
   ) => {
+    const revived = await stageRevived(stageAt);
+    if (revived instanceof ElysiaStatus) {
+      return revived;
+    }
+    const { at } = revived;
     const where = stageWhere(at);
     if (!where) {
       // Only an artifact's names one that can be gone: a session always has a place.

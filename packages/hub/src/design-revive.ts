@@ -10,7 +10,9 @@
  * (core preview.ts `goneWhy`). The owner's pick on 2026-11-22, "Comes back
  * when you open it". A design folder's tree (core stage.ts `designOf`),
  * whose folder the hub keeps, comes back by its stage started on the hub's
- * machine again, which records it there anew.
+ * machine again, which records it there anew. The hub's own uses of a
+ * retired workspace's stage bring it back by the same `revive`
+ * (artifact-events.ts `stageRevived`).
  */
 
 import { designOf } from "@cawco/core/stage";

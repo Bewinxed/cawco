@@ -2367,7 +2367,9 @@ export const createWorkspaces = ({
    * THE ONE WAY A DESIGN WHOSE WORKSPACE WENT COMES BACK: the person opened
    * something workspace `id` serves (a design graph's stage, a served
    * preview's server) and its machine answered that the workspace is not
-   * there (agent preview.ts `staged`, `gone`). In the workspace's turn, after
+   * there (agent preview.ts `staged`, `gone`), or the hub used the stage of
+   * an artifact it serves (an agent's artifact_read, a render, a write, a
+   * warm-up: artifact-events.ts `stageRevived`). In the workspace's turn, after
    * any settle or cut queued before it, it is cut again at the version the
    * hub recorded as it retired ({@link recut}: same id, same path, its
    * carry's commits and uncommitted changes), the cut a handoff or follow-up
