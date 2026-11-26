@@ -1,6 +1,9 @@
 /**
  * The last step of a published release, shared by release.ts and
- * republish.ts: the hub on this host told the release is up.
+ * republish.ts: the hub on this host told the release is up. When it fails
+ * the build is already published, and `ship.sh --republish` refuses a
+ * published version: once the hub answers, run {@link announce} alone with
+ * that version's release.json.
  */
 
 import { machineFetch } from "../packages/agent/src/machine-fetch";

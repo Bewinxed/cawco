@@ -350,6 +350,9 @@ const kit = process.env.CAWCO_STAGE_KIT === "1";
  * `./node_modules/.astro`" (docs.astro.build/en/reference/
  * configuration-reference/); Nuxt keeps "Explicit `vite.cacheDir` values"
  * (github.com/nuxt/nuxt/pull/35626). Vite's watcher ignores its `cacheDir`.
+ * Vite keys its prebundle (`deps/`) on the lockfile and the `patches`
+ * folder's mtime (its `getLockfileHash`), so a patch edited in place leaves
+ * the prebundle stale: stop the stage and delete `.cawco/stage/cache/deps`.
  */
 const CACHE_DIR = resolve(root, ".cawco/stage/cache");
 /** Nuxt's global CSS (`css` in its config) and source dir, once it has loaded. */

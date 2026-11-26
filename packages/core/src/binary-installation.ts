@@ -91,7 +91,13 @@ export const readInstallation = (): Promise<BinaryInstallation | undefined> =>
 export const readUpdateState = (): Promise<BinaryUpdateState | undefined> =>
   readRecord(updateStatePath(), BinaryUpdateStateSchema);
 
-/** The signed manifest of the build this process is running, as the installer or the updater staged it. */
+/**
+ * The signed manifest of the build this process is running, as the installer
+ * or the updater staged it. A build placed by hand (a branch's) has none, so
+ * it cannot update: once the channel offers a newer version, write one from
+ * the base build's manifest with `version` and `commit` set to the branch
+ * build's.
+ */
 export async function readRunningManifest(): Promise<ReleaseManifest> {
   const manifest = await readRecord(
     join(versionDirectory(runtimeVersion), "release.json"),

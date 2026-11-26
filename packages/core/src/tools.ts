@@ -405,7 +405,10 @@ const PI_VERSION_FLOOR = "1.3.0";
  * and runs each workspace session's tools in an execution environment, a
  * part Codex marks experimental (Codex audit 2026-11-17). A new release
  * moves only with its types regenerated and the scripted-model check
- * (`bun scripts/codex-check.ts`) passing on it.
+ * (`bun scripts/codex-check.ts`) passing on it, and with agent
+ * codex-native.ts read again against that release's `bin/codex.js`: its
+ * target triples, platform packages, vendor path and `CODEX_MANAGED_BY_*`
+ * variables.
  */
 export const CODEX_VERSION = "0.169.0";
 

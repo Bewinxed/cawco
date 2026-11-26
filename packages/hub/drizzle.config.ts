@@ -1,3 +1,10 @@
+/**
+ * `bun run db:generate --name <name>` in packages/hub writes the next
+ * migration from src/db/schema.ts. A rebase that conflicts in drizzle/meta:
+ * take main's snapshot and journal, remove the branch's .sql, generate
+ * again for a fresh number, copy the branch's SQL into it, and rebase onto
+ * origin/main again right before finishing.
+ */
 import { hubDbPath } from "@cawco/core/paths/hub";
 import { defineConfig } from "drizzle-kit";
 

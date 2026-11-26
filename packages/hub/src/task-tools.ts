@@ -1177,7 +1177,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_start",
-      "Starts an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file and reporting to you. Use it when a task is ready and should run now.",
+      "Starts an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file and reporting to you. Use it when a task is ready and should run now; to pick its account, delegate with `task` and `account`.",
       { id: taskRef() },
       async ({ id }) => {
         const scoped = scope();

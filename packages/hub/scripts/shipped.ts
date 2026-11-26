@@ -6,7 +6,9 @@
  * upload). They are read from origin itself, never from this clone's tags: a
  * clone cut without `--tags`, or fetched before a build was recorded, would
  * otherwise check against less than what ships, and say nothing. A tagged
- * commit this clone lacks is fetched by its id.
+ * commit this clone lacks is fetched by its id. A TestFlight build installed
+ * on a device but uploaded without its tag reads as not shipped, so
+ * openapi:check would let a bridge it still reads be dropped.
  */
 
 import { gitShort } from "@cawco/core/git-short";

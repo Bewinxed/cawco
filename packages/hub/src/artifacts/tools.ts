@@ -127,7 +127,10 @@ const canvasFields = {
   dials: z
     .array(
       z.object({
-        name: z.string(),
+        name: z
+          .string()
+          .regex(/^[A-Za-z][\w-]*$/u)
+          .describe("No spaces; its words go in label."),
         label: z.string().optional(),
         kind: z.enum(["number", "color", "select", "toggle", "text", "action"]),
         group: z.string().optional(),
@@ -461,7 +464,7 @@ export const artifactRead = {
       ])
       .optional()
       .describe(
-        "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta."
+        "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta. A story is drawn as mounted: its play runs only under measure."
       ),
     render: z.boolean().optional().describe("Draws it now."),
     layout: z

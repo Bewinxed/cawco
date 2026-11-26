@@ -66,6 +66,19 @@ on the newest iPhone Pro simulator whose runtime meets the deployment target
 The `.xcodeproj` and `CawCo/Info.plist` come from `project.yml`; change that
 file and regenerate.
 
+What a launch catches that `--compile-only` misses: `await` on a WKWebView
+method links the WebKit Swift overlay, which iOS 18.5 lacks, so the app dies
+there at launch. Call `__callAsyncJavaScript` inside a checked continuation
+instead.
+
+Driving the simulator: no touch works from inside a CawCo workspace
+(testmanagerd refuses its socket), so a touch probe runs from the
+orchestrator's shell over `ssh mac`. `axe` taps reach native views on the
+iOS 18.5 simulator only; on 27.2 it times out making its automation
+session. `axe describe-ui` exits 0 even when it cannot reach the simulator,
+so read the tree with MobileBuildMCP's `snapshot_ui` by UDID. A point in the
+page is a window point through the web view's frame, never a page pixel.
+
 ## The Mac's slots
 
 Simulators and builds outside build-both.sh go through mac-slot.sh. The Mac

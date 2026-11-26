@@ -164,7 +164,7 @@ const accountParameter = () =>
     .string()
     .optional()
     .describe(
-      "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
+      "The account the session runs on, by its label, email or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
     );
 
 /** What `forge_post` opens: an issue, a pull or merge request, or a comment. */
@@ -749,7 +749,7 @@ export function handoffTools(view: ToolView) {
           .string()
           .optional()
           .describe(
-            "An earlier delegate's workspace: the brief goes to its last session as a follow-up. Not with type, model, harness, skills, fork or machine."
+            "An earlier delegate's workspace: the brief goes to its last session as a follow-up, landing as this call's `lands` says, never the earlier item's. Not with type, model, harness, skills, fork or machine."
           ),
         from: z
           .string()
