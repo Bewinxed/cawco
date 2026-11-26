@@ -6,8 +6,11 @@
  * `assets/b3380ec3/agy-harness-parity.md` §P-o). agy reads its skills and
  * its global rules again before each turn ("Antigravity rereads your rules
  * and skills before each turn", its customization-discovery doc), so a
- * sync reaches a running session on its next turn. The person's own
- * `~/.gemini` is never read or written.
+ * sync reaches a running session on its next turn. agy 1.5.18 follows a
+ * link in its home, a dir's and a file's alike, and a skill added and a
+ * memory changed behind a link were in the model request of the running
+ * session's next turn (the project's `assets/8c459ba3/q1-summary.txt`).
+ * The person's own `~/.gemini` is never read or written.
  *
  * - **Skills**: `<home>/skills`, a link to {@link AGY_SKILLS}, which the
  *   sync writes (fleet.ts `syncSkillFiles`).

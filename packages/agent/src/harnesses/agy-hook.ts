@@ -118,17 +118,47 @@ exit 0;
 const hookCommand = (script: string): string =>
   `${shellQuote(perl())} -T ${shellQuote(script)}`;
 
+/** One command agy runs for a hook event. */
+interface AgyHookHandler {
+  readonly command: string;
+  readonly timeout: number;
+  readonly type: "command";
+}
+
+/** A tool event's group: the tools its matcher (a regex agy anchors) takes, and their handlers. */
+interface AgyToolHookGroup {
+  readonly hooks: readonly AgyHookHandler[];
+  readonly matcher: string;
+}
+
+/**
+ * One named entry of agy's `hooks.json`, in the one shape agy 1.5.18 takes:
+ * a tool event's handlers in matcher groups, every other event's as a flat
+ * list. A group on another event fails the whole file ("command hook must
+ * specify 'command'"), every hook in it with it, CawCo's judge included
+ * (the project's `assets/b5b3ca96/REPORT.md` §1), so the type holds each
+ * event to its shape.
+ */
+interface AgyHookEntry {
+  readonly PostInvocation?: readonly AgyHookHandler[];
+  readonly PostToolUse?: readonly AgyToolHookGroup[];
+  readonly PreInvocation?: readonly AgyHookHandler[];
+  readonly PreToolUse?: readonly AgyToolHookGroup[];
+  readonly SessionStart?: readonly AgyHookHandler[];
+  readonly Stop?: readonly AgyHookHandler[];
+}
+
 /**
  * An agy home's `config/hooks.json`, holding the hook at `script` alone,
- * before and after every tool (its matcher is a regex agy anchors), with
- * agy's limit on it: before, the judge's answer and then the fleet's
- * `PreToolUse` hooks; after, the fleet's `PostToolUse` hooks
- * (agy-fleet-hooks.ts). The fleet's hooks are never entries of their own
- * here: agy would hand them its own payload and read its own answer, and a
- * rewrite of theirs could undo the judge's.
+ * before and after every tool, with agy's limit on it: before, the judge's
+ * answer and then the fleet's `PreToolUse` hooks; after, the fleet's
+ * `PostToolUse` hooks (agy-fleet-hooks.ts). The fleet's hooks are never
+ * entries of their own here: agy would hand them its own payload and read
+ * its own answer, and a rewrite of theirs could undo the judge's. Nothing
+ * but this writes the file, whole, so no sync changes its shape.
  */
 const agyHooksFile = (script: string): string => {
-  const every = [
+  const every: readonly AgyToolHookGroup[] = [
     {
       matcher: ".*",
       hooks: [
@@ -140,11 +170,10 @@ const agyHooksFile = (script: string): string => {
       ],
     },
   ];
-  return `${JSON.stringify(
-    { cawco: { PreToolUse: every, PostToolUse: every } },
-    null,
-    2
-  )}\n`;
+  const entries: Readonly<Record<string, AgyHookEntry>> = {
+    cawco: { PreToolUse: every, PostToolUse: every },
+  };
+  return `${JSON.stringify(entries, null, 2)}\n`;
 };
 
 /** The hook could not be written. */

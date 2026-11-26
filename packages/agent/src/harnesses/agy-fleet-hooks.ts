@@ -26,6 +26,7 @@
  *   starts another turn, whose `Stop` hooks are told `stop_hook_active`, as
  *   Claude Code tells them.
  */
+import { AGY_DENIED_TOOLS } from "@cawco/core/harness/agy";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import { Option, Schema } from "effect";
@@ -40,6 +41,9 @@ import {
   agyAnswer,
   decodeAgyHookInput,
 } from "./agy-judge";
+
+/** How agy names an MCP tool it calls by its own name (`mcp_<server>_<tool>`, core harness/agy.ts). */
+const AGY_MCP_PREFIX = AGY_DENIED_TOOLS.mcpPrefix;
 
 /** agy's tool that calls an MCP tool by its server and name. */
 const CALL_MCP_TOOL = "call_mcp_tool";
@@ -61,22 +65,48 @@ const recordOf = (
     ? Object.fromEntries(Object.entries(value))
     : undefined;
 
+/** Claude Code's name for MCP tool `tool` of server `server`. */
+const claudeMcpName = (server: string, tool: string): string =>
+  `mcp__${server}__${tool}`;
+
 /**
  * A call as a fleet hook reads it: Claude Code's name and input keys, and
- * `call_mcp_tool` as the MCP tool it calls, `mcp__<server>__<tool>` with
- * its own arguments, as Claude Code names one.
+ * an MCP tool as Claude Code names one, `mcp__<server>__<tool>`: one agy
+ * calls by its own name, `mcp_<server>_<tool>` (agy 1.5.18 called a fleet
+ * server's tool so, the project's `assets/b596a24c/steps.txt`), read by the
+ * longest of the session's servers it starts with, and `call_mcp_tool`
+ * with its own arguments.
  */
-const claudeCall = (call: AgyHookInput): { input: unknown; name: string } => {
+const claudeCall = (
+  call: AgyHookInput,
+  servers: readonly string[]
+): { input: unknown; name: string } => {
   const { name, args = {} } = call.toolCall;
   if (name === CALL_MCP_TOOL) {
     const server = args.ServerName;
     const tool = args.ToolName;
     if (typeof server === "string" && typeof tool === "string") {
       return {
-        name: `mcp__${server}__${tool}`,
+        name: claudeMcpName(server, tool),
         input: recordOf(args.Arguments) ?? {},
       };
     }
+  }
+  const server = servers
+    .filter((one) => name.startsWith(`${AGY_MCP_PREFIX}${one}_`))
+    .reduce<string | undefined>(
+      (longest, one) =>
+        longest === undefined || one.length > longest.length ? one : longest,
+      undefined
+    );
+  if (server !== undefined) {
+    return {
+      name: claudeMcpName(
+        server,
+        name.slice(AGY_MCP_PREFIX.length + server.length + 1)
+      ),
+      input: args,
+    };
   }
   return hookToolCall("agy", name, args);
 };
@@ -96,6 +126,8 @@ const deny = (reason: string): AgyAnswer => ({ decision: "deny", reason });
 /** One session's fleet hooks, in its folder `cwd`. */
 export class AgyFleetHooks {
   readonly #cwd: string;
+  /** The MCP servers the session started with, by name. */
+  readonly #servers: readonly string[];
   readonly #sessionId: () => string | null;
   /** Ends every hook still running as the session ends. */
   readonly #abort = new AbortController();
@@ -104,8 +136,13 @@ export class AgyFleetHooks {
   /** The turn running now was started by a `Stop` hook's block. */
   #stopActive = false;
 
-  constructor(cwd: string, sessionId: () => string | null) {
+  constructor(
+    cwd: string,
+    servers: readonly string[],
+    sessionId: () => string | null
+  ) {
     this.#cwd = cwd;
+    this.#servers = servers;
     this.#sessionId = sessionId;
   }
 
@@ -153,7 +190,7 @@ export class AgyFleetHooks {
     if (judged.decision === "deny") {
       return judged;
     }
-    const asked = claudeCall(call);
+    const asked = claudeCall(call, this.#servers);
     const verdict = await this.#run("PreToolUse", asked.name, {
       tool_name: asked.name,
       tool_input: asked.input,
@@ -181,7 +218,7 @@ export class AgyFleetHooks {
     const ended = Option.getOrUndefined(decodePost(line));
     const error = ended?.error ?? "";
     const failed = error !== "";
-    const asked = claudeCall(call);
+    const asked = claudeCall(call, this.#servers);
     const event = failed ? "PostToolUseFailure" : "PostToolUse";
     const verdict = await this.#run(event, asked.name, {
       tool_name: asked.name,

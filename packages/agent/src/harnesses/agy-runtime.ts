@@ -258,7 +258,11 @@ class AgySession {
     this.#mode = modeOf(start.spec.permissionMode);
     this.#model = modelNamed(start.spec.model);
     this.#effort = start.spec.effort;
-    this.#fleet = new AgyFleetHooks(start.spec.cwd, () => this.sessionId);
+    this.#fleet = new AgyFleetHooks(
+      start.spec.cwd,
+      start.mcpServers.map((server) => server.name),
+      () => this.sessionId
+    );
   }
 
   /** The session the judge answers for, read afresh at each call. */
