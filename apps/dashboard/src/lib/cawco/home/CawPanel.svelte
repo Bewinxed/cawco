@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * What Caw's popover holds (NeedsCaw): one list in two sections. Needs you
-   * first, newest first (home `needs`, hub needs-rows.ts), each a NeedsCard
-   * row, or a piece of work with several (NeedsWork); then
+   * first, newest first (home `needs`): each conversation with what waits
+   * on you in it (ConversationRow), each task waiting on you, and what no
+   * conversation holds (NeedsCard); then
    * Notices, the update notice, the logins moved in, what an account's
    * arrival set moving and each artifact's notice (ArtifactNoticeRow), each
    * with its ✕, and `Clear all` at the head's trailing edge acknowledging
@@ -36,11 +37,11 @@
   import type { Notice } from "../updates/model";
   import ArtifactNoticeRow from "./ArtifactNoticeRow.svelte";
   import CawFace from "./CawFace.svelte";
+  import ConversationRow from "./ConversationRow.svelte";
   import type { CawFeed } from "./caw-feed.svelte";
   import { askCount } from "./home-state.svelte";
   import MovedLogins from "./MovedLogins.svelte";
   import NeedsCard from "./NeedsCard.svelte";
-  import NeedsWork from "./NeedsWork.svelte";
   import { type NeedsAnswers, provideAnswers } from "./needs-answer.svelte";
   import UpdateCard, { forgetFold } from "./UpdateCard.svelte";
 
@@ -50,7 +51,7 @@
     onchoose,
     answers = null,
   }: {
-    /** A row's press brings its ask up in his conversation (home/chat-asks); none: each row opens where it lives. */
+    /** A conversation's row opens it with its newest ask up on its composer (home/chat-asks); none: it opens the conversation. */
     answers?: NeedsAnswers | null;
     feed: CawFeed;
     /** What he says with nothing to count (NeedsCaw `quiet`). */
@@ -91,19 +92,17 @@
   const manyProjects = $derived(
     new Set(
       feed.needs.flatMap((entry) =>
-        (entry.kind === "work" ? entry.items : [entry]).flatMap((one) =>
-          "project" in one && one.project ? [one.project.name] : []
-        )
+        "project" in entry && entry.project ? [entry.project.name] : []
       )
     ).size > 1
   );
-  // A row's press brings its ask up in his conversation, and the panel closes.
+  // A conversation's row opens it with its newest ask up, and the panel closes.
   provideAnswers(() =>
     answers
       ? {
           manyProjects,
-          press: (key) => {
-            answers.press(key);
+          press: (conversation) => {
+            answers.press(conversation);
             onchoose();
           },
         }
@@ -240,8 +239,8 @@
       <ul class="m-0 list-none p-0" {@attach echoBeat()}>
         {#each needs as item (item.key)}
           <li data-flip>
-            {#if item.kind === "work"}
-              <NeedsWork {item} {onchoose} {stale} />
+            {#if item.kind === "conversation"}
+              <ConversationRow {item} {onchoose} {stale} />
             {:else}
               <NeedsCard {item} {onchoose} {stale} />
             {/if}

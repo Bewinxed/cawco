@@ -4557,11 +4557,9 @@ export const createServer = (
     db,
     needs: () => artifactLane.now().needs,
   });
-  // Needs you's rows, one per piece of stopped work (needs-rows.ts).
+  // The tasks waiting on the person by themselves (needs-rows.ts).
   const needsRows = createNeedsRows({
     db,
-    needs: () => artifactLane.now().needs,
-    parked: () => pending.list(),
     // The project's tasks are made further down; read when asked.
     tasks: { list: (projectId) => tasks.list(projectId) },
   });

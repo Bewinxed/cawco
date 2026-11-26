@@ -863,7 +863,7 @@ export interface ClosureContext {
   nameFromFirstTurn: (instanceId: string, raw: string) => string;
   nameFromLiveTurn: (instanceId: string, message: unknown) => void;
   nameStoredSessions: (machineId: string) => Promise<void>;
-  /** Needs you's rows, one per piece of stopped work (needs-rows.ts). */
+  /** The tasks waiting on the person by themselves (needs-rows.ts). */
   needsRows: NeedsRows;
   /** project-joining.ts `newProject`, typed from project-making.ts as `createOrJoinProject` is: `POST /api/projects` and `project_create`. */
   newProject: NewProject;

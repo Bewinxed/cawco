@@ -51649,48 +51649,24 @@
         ]
       },
       "NeedsRow": {
-        "description": "One row of Needs you.",
+        "description": "One task of Needs you.",
         "type": "object",
         "properties": {
-          "artifacts": {
-            "description": "Its artifacts waiting on the person, by id, newest first.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "asks": {
-            "description": "Its parked asks, by request id, newest first.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "at": {
-            "description": "When its newest item was raised, ms epoch: the rows' order, newest first.",
+            "description": "When the task last changed, ms epoch: the rows' order, newest first.",
             "type": "number"
-          },
-          "instanceId": {
-            "description": "The session whose questions it holds, when it stands for no task.",
-            "type": "string"
           },
           "key": {
             "type": "string"
-          },
-          "since": {
-            "description": "When its work began waiting on the person, ms epoch: its oldest item's raise.",
-            "type": "number"
           },
           "task": {
             "$ref": "#/components/schemas/NeedsRowTask"
           }
         },
         "required": [
-          "artifacts",
-          "asks",
           "at",
           "key",
-          "since"
+          "task"
         ]
       },
       "NeedsRowTask": {
@@ -51712,14 +51688,15 @@
           },
           "waits": {
             "$ref": "#/components/schemas/NeedsRowTaskWaits",
-            "description": "Why it waits on the person by itself: in review, or its routine failed; null while it waits only through its questions."
+            "description": "Why it waits on the person: in review, or its routine failed."
           }
         },
         "required": [
           "id",
           "projectId",
           "stage",
-          "title"
+          "title",
+          "waits"
         ]
       },
       "NeedsRowTaskWaits": {

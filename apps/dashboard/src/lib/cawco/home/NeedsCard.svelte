@@ -1,24 +1,15 @@
 <script lang="ts">
   /**
-   * One thing parked on the operator, as a row of Caw's panel (NeedsCaw):
-   * a session's question or permission, an artifact's open pick, a project
-   * past its spend cap, or a project's task waiting on you (its review, or
-   * a failed attempt), which opens the task with its deliverable and the way
-   * to act on it first. The panel is the short list of what waits (tsk-521):
-   * each row carries only what the person needs to pick it. A question is
-   * its own title, wrapped whole; a page says how many picks are left; a
-   * row names its project only when the lane spans several, and its machine
-   * only when it is offline. Its mark leads (the session's, a budget's
-   * glyph), with no status dot: every row here waits on him.
-   *
-   * A session's ask and an artifact's pick are answered in the conversation
-   * he is in, never here: the row's press brings it up on that
-   * conversation's composer, the one he last wrote in when he is in none,
-   * and the panel closes (home/chat-asks `chatAsks`). The open glyph at the
-   * title line's end goes where it lives (its session, its page), and in
-   * the wide layout a session's ask offers Peek there instead, the
-   * session's tail read before answering. A sign-in still opens its
-   * session, where it is signed in.
+   * One thing waiting on the operator that no conversation holds, as a row
+   * of Caw's panel (NeedsCaw): a project past its spend cap, a project's
+   * task waiting on you (its review, or a failed attempt), which opens the
+   * task with its deliverable and the way to act on it first, a fleet watch
+   * notice, a sign-in that ended, a machine lost or waiting to join, a
+   * pairing, a failed install, an offer, a tool to update, or an onboarding
+   * step. A session's ask or an artifact's pick is its conversation's
+   * (ConversationRow). Each row carries only what the person needs to pick
+   * it: its project only when the lane spans several. Its mark leads, with
+   * no status dot: every row here waits on him.
    *
    * An approved action is the same row with the call laid out under its
    * reason: when it runs (in this browser's zone), the connection and the
@@ -43,28 +34,19 @@
    * phone), then Skip and Allow as peers. Allow asks the browser for Idle
    * Detection and notifications on one press; a refusal says what the
    * browser blocked and where to change it; once allowed, the row's tick.
-   *
-   * Send stands at an artifact row's last line while something is written
-   * and not sent, except on a decision page, whose one Send is its own at
-   * its foot (the owner's pick, "Only the page's own Send").
+
    */
-  import { needLinkOf } from "@cawco/core/artifact-needs";
-  import { detach } from "@cawco/core/detach";
   import type { WaitingOffer } from "@cawco/core/project-conversation";
-  import { questionsOf } from "@cawco/core/question";
   import type {
     TailnetHttps,
     TailnetHttpsTodo,
   } from "@cawco/core/tailnet-https";
-  import { reasonLine } from "@cawco/core/words/artifact-needs";
-  import { artifactWords } from "@cawco/core/words/artifacts";
   import { configurePage } from "@cawco/core/words/configure";
   import { connectWords } from "@cawco/core/words/connect";
   import { contactWords } from "@cawco/core/words/contact";
   import { causeLine } from "@cawco/core/words/install";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { mcpWords } from "@cawco/core/words/mcp";
-  import { needsRowWords } from "@cawco/core/words/needs-rows";
   import { offerWords } from "@cawco/core/words/offers";
   import { outsiderWords } from "@cawco/core/words/outsiders";
   import { pairingWords } from "@cawco/core/words/pairing";
@@ -77,7 +59,6 @@
     stepsHere,
   } from "#lib/cawco/relay/relay.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconCheck,
     IconClose,
@@ -87,7 +68,6 @@
     IconFolder,
     IconKey,
     IconLock,
-    IconMaximize,
     IconMonitor,
     IconNeedsYou,
     IconPhone,
@@ -103,18 +83,11 @@
   import CopyBox from "../CopyBox.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
-  import { conversationHref } from "../links";
-  import OriginText from "../OriginText.svelte";
   import { allowHere, onPhone, person, skipHere } from "../person.svelte";
-  import { sendArtifact } from "../preview/artifact-doc";
   import RowFault from "../RowFault.svelte";
-  import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
-  import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { span } from "../span";
-
-  import { boardStore } from "../stores/board.svelte";
 
   import { decideAction } from "../stores/needs.svelte";
   import {
@@ -125,15 +98,13 @@
   import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";
   import {
-    askView,
     clock,
     type NeedsItem,
     type ProjectMarking,
   } from "./home-state.svelte";
   import NeedsMeta from "./NeedsMeta.svelte";
   import NeedsRow from "./NeedsRow.svelte";
-  import { answeredInPlace, answersHere } from "./needs-answer.svelte";
-  import { openPeek, peekable, peekTipOff } from "./peek.svelte";
+  import { answersHere } from "./needs-answer.svelte";
   import StepRow from "./StepRow.svelte";
   import ToolNeedsRow from "./ToolNeedsRow.svelte";
 
@@ -155,60 +126,28 @@
     }
   });
 
-  /** The panel brings its asks up in his conversation (shaping tsk-521): this one, when it is one. */
+  /** The panel's lane spans several projects: a row names its own. */
   const answersOf = answersHere();
   const answers = $derived(answersOf());
-  const inPlace = $derived(answeredInPlace(answers, item));
 
-  /**
-   * Needs you answers in place (shaping tsk-521): the row carries only what
-   * answering needs. A question is its own title, a task its title alone,
-   * a page what is left to pick; the project only when the lane spans
-   * several, the machine only when it is offline; no status dot, since every
-   * row here waits on him.
-   */
-  /** Where it lives: its session at the ask, a page in its session's panel, a task. */
-  const home = $derived.by(() => {
-    if (
-      item.kind === "tailnet" ||
+  /** Where a press on the row goes: its session, a setup page, a task; none for a row answered on itself. */
+  const href = $derived(
+    item.kind === "tailnet" ||
       item.kind === "desk" ||
       item.kind === "relay" ||
       item.kind === "machine"
-    ) {
-      return;
-    }
-    if (item.kind !== "ask") {
-      // An artifact's is its session's address, a setup page's where it
-      // lands; the press opens the artifact there itself (`chosen`), so a
-      // press on the address already in front opens it too.
-      return item.kind === "artifact" ? needLinkOf(item.href) : item.href;
-    }
-    // An ask opens where it was made (`askView`).
-    return conversationHref(askView(item), boardStore.instanceIndex);
-  });
-  /** Where a press on the row goes; none for a row whose ask comes up in his conversation. */
-  const href = $derived(inPlace ? undefined : home);
-  /** A task's line: its review, its failed attempt, or its questions while it stands in `stage`. */
-  const taskWant = (
-    reason: "review" | "failed" | null,
-    stage: string
-  ): string => {
-    if (reason === null) {
-      return needsRowWords.taskQuestions(stage);
-    }
-    return reason === "review"
+      ? undefined
+      : item.href
+  );
+  /** A task's line: its review in `stage`, or its failed attempt. */
+  const taskWant = (reason: "review" | "failed", stage: string): string =>
+    reason === "review"
       ? `Review the draft: it waits on you in ${stage}`
       : "Its session failed: read why, then try again";
-  };
 
   /** What it asks for, in the words it is asked: its second line. */
   const want = $derived.by(() => {
     switch (item.kind) {
-      case "ask":
-        return item.isQuestion
-          ? (questionsOf(item.request.toolName, item.request.input)?.[0]
-              ?.question ?? item.ask)
-          : item.ask;
       case "watch":
         // Why, in the notice's words: its title is the row's own first line
         // when the board holds no row, and never said twice.
@@ -229,8 +168,6 @@
           : presenceWords.lead(item, onPhone());
       case "relay":
         return "";
-      case "artifact":
-        return reasonLine(item.pending);
       case "pairing":
         return pairingWords.asks(item.request.userCode);
       case "admission":
@@ -260,41 +197,16 @@
     return "";
   });
 
-  /** The row's first line: a question is its own title when the panel answers it in place. */
-  const leanTitle = $derived(
-    item.kind === "ask" && item.isQuestion ? want : item.title
+  /** The row's second line, lean: a task in review says so. */
+  const leanWant = $derived(
+    item.kind === "task" && item.reason === "review" ? "Review the draft" : want
   );
-  /** The row's second line, lean: none for a question (it is the title) or a task waiting only on its questions; a page's picks still to make. */
-  const leanWant = $derived.by(() => {
-    if (item.kind === "ask" && item.isQuestion) {
-      return "";
-    }
-    if (item.kind === "task" && item.reason === null) {
-      return "";
-    }
-    if (item.kind === "task" && item.reason === "review") {
-      return "Review the draft";
-    }
-    if (item.kind === "artifact") {
-      const left = item.pending.reduce(
-        (sum, one) => sum + one.asked - one.answered,
-        0
-      );
-      return `${left} left to pick`;
-    }
-    return want;
-  });
-  /** The lean row names its project only when the lane spans several, and its machine only when offline. */
-  const leanPlace = $derived.by(() => {
-    if (!("project" in item)) {
-      return null;
-    }
-    const project =
-      answers?.manyProjects && item.project ? item.project.name : null;
-    const offline = "stale" in item && item.stale ? "machine offline" : null;
-    const said = [project, offline].filter(Boolean).join(" · ");
-    return said || null;
-  });
+  /** The row names its project only when the lane spans several. */
+  const leanPlace = $derived(
+    "project" in item && answers?.manyProjects && item.project
+      ? item.project.name
+      : null
+  );
 
   /** An offer's line: what it asks, in the hub's words for its kind. */
   function offerLine(offer: WaitingOffer): string {
@@ -409,11 +321,7 @@
       deciding = false;
     }
   }
-  /**
-   * A watch notice's and a budget's last line: the kind, then where
-   * it is. An ask's is drawn in the markup: its project, its kind, its
-   * machine by its mark.
-   */
+  /** A watch notice's and a budget's last line: the kind, then where it is. */
   const meta = $derived.by(() => {
     switch (item.kind) {
       case "watch":
@@ -440,8 +348,6 @@
           ? connectWords.addMachineOver("over SSH")
           : connectWords.addMachineOver("by a command");
       case "action":
-      case "artifact":
-      case "ask":
       case "cap":
       case "task":
         break;
@@ -472,64 +378,14 @@
     }
   }
   /**
-   * The row stands but cannot be answered yet: the hub is not live, or its
-   * session's machine is offline. It keeps its place, dimmed, and its
-   * answer waits; nothing is sent until it can land.
+   * The row stands but cannot be answered yet: the hub is not live. It
+   * keeps its place, dimmed, and its answer waits; nothing is sent until it
+   * can land.
    */
-  const held = $derived(
-    stale || ((item.kind === "ask" || item.kind === "artifact") && item.stale)
-  );
+  const held = $derived(stale);
 
-  /**
-   * An artifact's Send on its way, and the hub's refusal of it: the row
-   * leaves, or its unsent reason does, once the hub has it.
-   */
-  let sendingArtifact = $state(false);
-  let sendRefused = $state<string | null>(null);
-  async function sendItsMarks(): Promise<void> {
-    if (item.kind !== "artifact" || held || sendingArtifact) {
-      return;
-    }
-    sendingArtifact = true;
-    sendRefused = null;
-    try {
-      await sendArtifact(item.instanceId, item.artifactId, "needs-you");
-    } catch (error) {
-      sendRefused = failureWords(error);
-    } finally {
-      sendingArtifact = false;
-    }
-  }
-
-  /** Send stands on the row: something is written and unsent, on an artifact whose Send is not its page's own. */
-  const sends = $derived(
-    item.kind === "artifact" && item.unsent > 0 && !item.ownSend
-  );
-
-  /** The row was chosen: it opens, the panel closes; an artifact opens in its panel at its first pending stop. */
-  function chosen(): void {
-    onchoose();
-    if (item.kind === "artifact") {
-      detach(
-        openArtifactIn(item.instanceId, item.artifactId, item.stop),
-        "openArtifactIn"
-      );
-    }
-  }
-
-  /**
-   * A session's ask can be peeked, in the wide layout: a run and a budget
-   * have no tail.
-   */
-  const peeks = $derived(item.kind === "ask" && peekable());
-
-  function peekAsk(): void {
-    if (item.kind !== "ask") {
-      return;
-    }
-    onchoose();
-    openPeek({ viewId: item.instanceId, href: href ?? "", title: item.title });
-  }
+  /** The row was chosen: it opens, and the panel closes. */
+  const chosen = (): void => onchoose();
 
   /**
    * One step on the path to HTTPS, laid out: what to do, where or why, and
@@ -673,35 +529,20 @@
     />
   </div>
 {:else}
-  <!-- A shell ask's command, or a browser ask's origin, takes the line under
-       its reason: its place and the peers move down one row. -->
-  {@const command =
-    item.kind === "ask"
-      ? (item.request.presentation.command?.trim().split("\n")[0] ?? "")
-      : ""}
-  <!-- Lean, a command its line already says is said once. -->
-  {@const commandLine = Boolean(command && !leanWant.includes(command))}
-  {@const lined = Boolean(
-    item.kind === "ask" && (commandLine || item.request.browserAsk)
-  )}
   <!-- lead, end and below are this card's; the row's box, cover, title, wait and want are NeedsRow's. -->
   <NeedsRow
-    artifact={item.kind === "artifact" ? item.artifactId : undefined}
     {held}
     {href}
     kind={item.kind}
-    onpress={inPlace ? () => answers?.press(item.key) : undefined}
     onchoose={chosen}
     {onkeydown}
-    peek={peeks || (inPlace && home !== undefined)}
-    share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
-    title={leanTitle}
-    titleWraps={inPlace}
+    share="pane:{item.key}"
+    title={item.title}
     want={leanWant}
     wait={item.raisedAt === undefined ? null : span(clock.now - item.raisedAt)}
   >
     {#snippet lead()}
-      {#if item.kind === "ask" || item.kind === "watch" || item.kind === "artifact"}
+      {#if item.kind === "watch"}
         <SessionMark
           caw={cawOf(item.instanceId)}
           id={item.instanceId}
@@ -763,174 +604,15 @@
         <IconDollar aria-hidden="true" class="size-icon-md" />
       {/if}
     {/snippet}
-    {#snippet end()}
-      {#if peeks}
-        <!-- Glance → peek → dive: read what led here before answering. A box
-           round the 16px glyph, centred on the label line, hanging past the
-           trailing edge by `--peek-ink` (the box's padding round the glyph
-           plus the glyph's side bearing: Maximize's arrow ends at 22.75 of
-           24), so its ink ends on the panel's one trailing edge, where a
-           wait's figures and Approve's fill end. -->
-        <span
-          data-slot="end"
-          class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
-          style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
-        >
-          <Tip disabled={peekTipOff()} label="Peek">
-            {#snippet children(tip)}
-              <!-- An iPad's finger gets the house's 44px area (`touch-hit`),
-                 whole and centred where the box stood before it hung: moved
-                 back inboard by `--peek-ink`, so the list never grows a
-                 sideways scroll for it. -->
-              <button
-                data-needs-card-peek
-                {...tip}
-                aria-label="Peek {item.title}"
-                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
-                onclick={peekAsk}
-                {onkeydown}
-                style:--peek-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--peek-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
-                style:--peek-press="scale(var(--press-scale))"
-                type="button"
-              >
-                <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
-              </button>
-            {/snippet}
-          </Tip>
-        </span>
-      {:else if inPlace && home}
-        <!-- Where it lives, opened: its session at the question, or the page
-           in its session's panel; the press on the row answers it here. The
-           first line's trailing cell, as Peek stands. -->
-        <span
-          data-slot="end"
-          class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
-          style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
-        >
-          <Tip
-            disabled={peekTipOff()}
-            label={item.kind === "artifact" ? "Open page" : "Open session"}
-          >
-            {#snippet children(tip)}
-              <a
-                {...tip}
-                aria-label="{item.kind === 'artifact'
-                  ? 'Open page'
-                  : 'Open session'}: {item.title}"
-                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong"
-                href={home}
-                onclick={chosen}
-              >
-                <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
-                <span class="sr-only"
-                  >{item.kind === "artifact"
-                    ? "Open page"
-                    : "Open session"}</span
-                >
-              </a>
-            {/snippet}
-          </Tip>
-        </span>
-      {/if}
-    {/snippet}
     {#snippet below()}
-      {#if item.kind === "ask" && commandLine}
-        <!-- What runs, under why: its first line, so Approve here is made on
-           the command as much as on the card. A shell ask's command: one
-           line under its reason, in the transcript's command rule, cut with
-           an ellipsis. -->
-        <code
-          data-slot="needs-command"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
-          >{command}</code
-        >
-      {/if}
-      {#if item.kind === "ask" && item.request.browserAsk}
-        <!-- Where the person will be typing, in the line a command stands in:
-           the page's origin whole (never cut, as a command's line is: the
-           domain is at its end), broken only after its dots. -->
-        <code
-          data-slot="needs-origin"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta wrap-break-word whitespace-normal text-ink-muted"
-          ><OriginText origin={item.request.browserAsk.origin} /></code
-        >
-      {/if}
-      {#if item.kind === "ask" || item.kind === "task"}
+      {#if item.kind === "task"}
         {#if leanPlace}
           <span
             data-slot="meta"
-            class={[
-              "pointer-events-none relative col-start-2 col-end-4 min-w-0 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-              lined ? "row-4" : "row-3",
-            ]}>{leanPlace}</span
+            class="pointer-events-none relative col-start-2 col-end-4 row-3 min-w-0 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+            >{leanPlace}</span
           >
         {/if}
-      {:else if item.kind === "artifact"}
-        <!-- Its project when the lane spans several, its machine when offline;
-           Send ends the line while something is written and not sent. -->
-        {#if leanPlace}
-          <span
-            data-slot="meta"
-            class={[
-              "pointer-events-none relative col-start-2 row-3 min-w-0 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-              sends ? "col-end-3" : "col-end-4",
-            ]}>{leanPlace}</span
-          >
-        {/if}
-        {#if sends}
-          <!-- Send: the kit's sm ghost over the row's cover, its last figure's
-             ink on the trailing edge: it hangs past by what stands between
-             its box and that ink (the kit's 1px transparent border, its
-             padding, `space-2` a side so it never hangs past the row's own
-             `space-3`, and the figure's side bearing, --figure-bearing),
-             its ring inside its box (`ring="inset"`), clear of the list's
-             clip. -->
-          <span
-            data-slot="send"
-            class="relative col-3 row-3 flex items-center self-center justify-self-end"
-            style:--send-hang={"calc(-1 * (1px + var(--spacing-space-2) + var(--figure-bearing)))"}
-          >
-            <Button
-              data-needs-card-send
-              class="me-(--send-hang)"
-              ring="inset"
-              pad="more"
-              style="--more-px: var(--spacing-space-2);"
-              aria-label={artifactWords.sendNamed(item.unsent, item.title)}
-              disabled={held}
-              failed={sendRefused !== null}
-              icon={IconSend}
-              label={artifactWords.sendCount(item.unsent)}
-              onclick={sendItsMarks}
-              pending={sendingArtifact}
-              pendingLabel={artifactWords.sending}
-              size="sm"
-              variant="ghost"
-            />
-          </span>
-        {/if}
-        {#if sendRefused}
-          <div
-            data-slot="peers"
-            class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end"
-          >
-            <ErrorText
-              message={artifactWords.notSent(sendRefused)}
-              title="The hub refused that Send"
-            />
-          </div>
-        {/if}
-        <!-- A press (or its address) the hub refused: said on the row, over
-           its cover, with Try again, kept through a reload. -->
-        <RowFault
-          again={chosen}
-          class="relative col-start-2 col-end-4 row-5 mt-space-2"
-          data-needs-card-refused
-          reason={refusals.reason(artifactOpenKey(item.artifactId))}
-        />
       {:else if item.kind === "action" && call}
         <!-- The exact call: when, through which account, the tool, the arguments. -->
         <!-- An approved action: its reason, then the call (when, through, tool)

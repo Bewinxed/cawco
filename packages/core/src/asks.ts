@@ -122,9 +122,8 @@ const QUESTION_ASKED = z.object({
   meanwhile: z.string().optional(),
   /**
    * The task it is about, by handle (`tsk-12`), in its asker's project: the
-   * asker's own attempt's task unless it named another. A task waiting on
-   * the person and every open question about it are one row of Needs you
-   * (hub needs-rows.ts).
+   * asker's own attempt's task unless it named another; its open asks
+   * name it (hub open-asks.ts, open-items.ts).
    */
   task: z.string().optional(),
   /**

@@ -1,77 +1,55 @@
 /**
- * What waits on him is answered in the conversation he is in (tsk-521, his
- * pick "Folded on the bar"): every ask from another session waits folded on
- * that conversation's composer, and Caw's panel is the short list of what
- * waits. A press on a row brings its ask up there; in no conversation, it
- * opens the one he last wrote in and brings it up there.
+ * A conversation's row in Caw's panel opens that conversation with its
+ * newest waiting ask up on its composer (tsk-521): the composer of a
+ * conversation holds its own asks and picks and those of every delegate
+ * under it, and nothing from any other conversation.
  *
- * "His conversation" is the session pane he is on that he touched last
- * (SessionPane `here`): each pane on screen claims itself as it comes on
- * and as he presses or types in it, and lets go as it leaves.
+ * The press names the conversation and the ask; the conversation's pane
+ * takes the ask once it is on screen (SessionPane), so a pane already
+ * showing it brings it up in place, and any other press opens it first.
  */
 
 import { detach } from "@cawco/core/detach";
 import { SvelteMap } from "svelte/reactivity";
 import { goto } from "$app/navigation";
 import { rowHref } from "../links";
-import { boardStore } from "../stores/board.svelte";
 import type { NeedsAnswers } from "./needs-answer.svelte";
 
-/** When `at` was, ms epoch; 0 for never. */
-const epoch = (at: string | number | Date | null | undefined): number =>
-  at === null || at === undefined ? 0 : new Date(at).getTime() || 0;
-
 class ChatAsks {
-  /** Each pane on screen, by the session it shows, and when he last touched it. */
+  /** Each conversation on screen, by its session, and how many panes show it. */
   readonly #panes = new SvelteMap<string, number>();
-  #tick = 0;
-  /** A row pressed in the panel, by its key, waiting for his conversation to bring it up. */
-  pending = $state<string | null>(null);
+  /** A row pressed: the conversation it opens and the key of the ask to bring up there, until its pane takes it. */
+  pending = $state<{ key: string; view: string } | null>(null);
 
-  /** His conversation: the pane on screen he touched last; null on a page with none. */
-  get here(): string | null {
-    let best: string | null = null;
-    let at = -1;
-    for (const [view, touched] of this.#panes) {
-      if (touched > at) {
-        best = view;
-        at = touched;
-      }
-    }
-    return best;
+  /** A pane showing `view` came on screen. */
+  shown(view: string): void {
+    this.#panes.set(view, (this.#panes.get(view) ?? 0) + 1);
   }
 
-  /** Pane `view` is on screen, or he pressed or typed in it: it is his conversation now. */
-  claim(view: string): void {
-    this.#tick += 1;
-    this.#panes.set(view, this.#tick);
-  }
-
-  /** Pane `view` left the screen. */
-  release(view: string): void {
-    this.#panes.delete(view);
-  }
-
-  /** The row `key` pressed: its ask comes up in his conversation, the one he last wrote in when he is in none. */
-  bring(key: string): void {
-    this.pending = key;
-    if (this.here !== null) {
-      return;
-    }
-    const [last] = boardStore.instances
-      .filter((row) => epoch(row.wroteAt) > 0)
-      .sort((a, b) => epoch(b.wroteAt) - epoch(a.wroteAt));
-    if (last) {
-      detach(goto(rowHref(last.id)), "open his last conversation");
+  /** A pane showing `view` left the screen. */
+  hidden(view: string): void {
+    const left = (this.#panes.get(view) ?? 1) - 1;
+    if (left > 0) {
+      this.#panes.set(view, left);
+    } else {
+      this.#panes.delete(view);
     }
   }
 
-  /** The row pressed, for pane `view` to bring up when it is his conversation; null otherwise. Taken once. */
+  /** Conversation `view` opens with the ask `key` (a Needs you item's) up on its composer. */
+  bring(view: string, key: string): void {
+    this.pending = { view, key };
+    if (!this.#panes.has(view)) {
+      detach(goto(rowHref(view)), "open the conversation");
+    }
+  }
+
+  /** The ask pressed for `view` to bring up; null when none waits for it. Taken once. */
   take(view: string): string | null {
-    if (this.here !== view || this.pending === null) {
+    if (this.pending?.view !== view) {
       return null;
     }
-    const key = this.pending;
+    const { key } = this.pending;
     this.pending = null;
     return key;
   }
@@ -79,7 +57,12 @@ class ChatAsks {
 
 export const chatAsks = new ChatAsks();
 
-/** Caw's panel's answers in the product: a row's press brings its ask up in his conversation. */
+/** Caw's panel's answers in the product: a conversation's row opens it with its newest ask up. */
 export const liveAnswers: NeedsAnswers = {
-  press: (key) => chatAsks.bring(key),
+  press: (conversation) => {
+    const [newest] = conversation.items;
+    if (newest) {
+      chatAsks.bring(conversation.instanceId, newest.key);
+    }
+  },
 };

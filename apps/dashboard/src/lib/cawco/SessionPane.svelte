@@ -43,7 +43,6 @@
    * panel.
    */
   import { type Snippet, untrack } from "svelte";
-  import { SvelteSet } from "svelte/reactivity";
   import { presenceDocked } from "#lib/cawco/presence.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -73,9 +72,10 @@
   import CawFace from "./home/CawFace.svelte";
   import { chatAsks } from "./home/chat-asks.svelte";
   import {
+    type ConversationItem,
     home,
     instanceTitle,
-    type NeedsItem,
+    type WaitingItem,
   } from "./home/home-state.svelte";
   import { connectionStore } from "./hub/socket.svelte";
   import { rowHref } from "./links";
@@ -96,6 +96,7 @@
     type TaskView,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
+  import { openArtifactIn } from "./reference-open.svelte";
   import { planAsked } from "./reference-things.svelte";
   import type { SendExtras } from "./send-store";
   import { cawOf } from "./session-status";
@@ -1472,50 +1473,44 @@
    * Read as the list of what waits is, and the transcript under the pane
    * keeps each answered one where its call opened it.
    */
-  /**
-   * This is his conversation (tsk-521, home/chat-asks): the pane on screen
-   * he touched last. Every ask from another session waits on its composer,
-   * folded on the bar, and a row pressed in Caw's panel comes up here.
-   */
-  const mine = $derived(chatAsks.here === viewId);
-  // On screen it is his conversation, until he touches another.
+  // On screen, a row pressed in Caw's panel for this conversation comes up
+  // here (home/chat-asks).
   $effect(() => {
     if (!here) {
       return;
     }
-    untrack(() => chatAsks.claim(viewId));
-    return () => chatAsks.release(viewId);
+    untrack(() => chatAsks.shown(viewId));
+    return () => chatAsks.hidden(viewId);
   });
-  /** Every row of Needs you, newest first, as Caw's panel lists them. */
-  const needsItems = $derived(
-    home.needs.flatMap((entry): NeedsItem[] =>
-      entry.kind === "work" ? entry.items : [entry]
-    )
+  /** What waits on him in this conversation, as Caw's panel lists it: its own and its delegates' asks and pages, newest first. */
+  const waitingHere = $derived(
+    home.needs.find(
+      (entry): entry is ConversationItem =>
+        entry.kind === "conversation" && entry.instanceId === viewId
+    ) ?? null
   );
-  /** The other sessions whose open picks wait on him, while this is his conversation: one string, so a read goes only when the set changes. */
-  const othersKey = $derived(
-    mine
-      ? [
-          ...new Set(
-            needsItems.flatMap((one) =>
-              one.kind === "artifact" && one.instanceId !== viewId
-                ? [one.instanceId]
-                : []
-            )
-          ),
-        ]
-          .sort()
-          .join("\n")
-      : ""
+  /** The delegates under it whose open picks wait on him: one string, so a read goes only when the set changes. */
+  const delegatesKey = $derived(
+    [
+      ...new Set(
+        (waitingHere?.items ?? []).flatMap((one) =>
+          one.kind === "artifact" && one.instanceId !== viewId
+            ? [one.instanceId]
+            : []
+        )
+      ),
+    ]
+      .sort()
+      .join("\n")
   );
   const parkedQueue = new ParkedQueue({
     instanceId: () => viewId,
-    others: () => (othersKey ? othersKey.split("\n") : []),
+    others: () => (delegatesKey ? delegatesKey.split("\n") : []),
     onScreen: () => visible && isLive,
     standing: () => composerAskId,
   });
   provideParked(parkedQueue);
-  /** Each pick parked here, as the composer grows into it: its own session's, or another's, named by that session. */
+  /** Each pick parked here, as the composer grows into it: its own session's, or a delegate's, named by that delegate. */
   const parkedPick = (
     item: ParkedItem,
     from: string | null
@@ -1523,7 +1518,6 @@
     kind: "parked",
     item,
     asker: from ?? agentName,
-    ...(from === null ? {} : { fromElsewhere: true }),
     choices: parkedQueue.choicesOf(item),
     elsewhere: parkedQueue.elsewhereOf(item),
     drawing: directionDrawing,
@@ -1532,7 +1526,7 @@
     onwords: (words) => parkedQueue.answerInWords(item, words),
     onanswered: () => parkedQueue.answered(item),
   });
-  /** One ask the composer grows into: a parked row or a pick, and the other session it came from, by name; null for its own tree's. */
+  /** One ask the composer grows into: a parked row or a pick, and the delegate whose pick it is, by name; null for its own. */
   interface ComposerEntry {
     from: string | null;
     id: string;
@@ -1545,54 +1539,10 @@
     return row ? instanceTitle(row) : id;
   };
   /**
-   * Every ask from another session waiting on him, while this is his
-   * conversation, newest first as Caw's panel lists them: a session's
-   * question or permission (not a sign-in, whose card is its session's),
-   * and each open pick of an artifact of another session. Its own tree's
-   * are its own already.
-   */
-  const elsewhereAsks = $derived.by((): ComposerEntry[] => {
-    if (!mine) {
-      return [];
-    }
-    const own = new Set(parked.map((row) => row.request.requestId));
-    return needsItems.flatMap((one): ComposerEntry[] => {
-      if (
-        one.kind === "ask" &&
-        !one.request.connectAsk &&
-        !own.has(one.request.requestId)
-      ) {
-        return [
-          {
-            id: one.request.requestId,
-            row: {
-              request: one.request,
-              machine: one.machineId,
-              under: { asker: one.title, instanceId: one.instanceId },
-            },
-            item: null,
-            from: one.title,
-          },
-        ];
-      }
-      if (one.kind !== "artifact" || one.instanceId === viewId) {
-        return [];
-      }
-      return parkedQueue.othersOpen
-        .filter(({ item }) => item.artifact.id === one.artifactId)
-        .map(({ instance, item }) => ({
-          id: parkedId(item),
-          row: null,
-          item,
-          from: titleOf(instance),
-        }));
-    });
-  });
-  /**
    * Every ask the composer grows into, in the order it takes them: first
-   * its parked permissions and questions, each holding an agent's turn
-   * still, oldest raised first; then its parked picks, which hold no turn,
-   * oldest put to the person first.
+   * its parked permissions and questions, its delegates' too, each holding
+   * an agent's turn still, oldest raised first; then the picks it and its
+   * delegates put to him, which hold no turn, oldest put to him first.
    */
   const composerAsks = $derived<ComposerEntry[]>([
     ...parked
@@ -1604,16 +1554,20 @@
         item: null,
         from: null,
       })),
-    ...parkedQueue.open
-      .map((item, order) => ({ item, order, at: Date.parse(item.askedAt) }))
-      .sort((a, b) => a.at - b.at || a.order - b.order)
-      .map(({ item }) => ({
-        id: parkedId(item),
-        row: null,
+    ...[
+      ...parkedQueue.open.map((item) => ({ item, from: null })),
+      ...parkedQueue.othersOpen.map(({ instance, item }) => ({
         item,
-        from: null,
+        from: titleOf(instance),
       })),
-    ...elsewhereAsks,
+    ]
+      .map((one, order) => ({
+        ...one,
+        order,
+        at: Date.parse(one.item.askedAt),
+      }))
+      .sort((a, b) => a.at - b.at || a.order - b.order)
+      .map(({ item, from }) => ({ id: parkedId(item), row: null, item, from })),
   ]);
   /**
    * The ask a waiting row's press brought up, by its id (`askIdOf`), in the
@@ -1660,65 +1614,59 @@
             ? { ontaken: () => detach(goto(rowHref(askedIn)), "goto asker") }
             : {}),
           more,
-          ...(next?.from ? { fromElsewhere: true } : {}),
           onanswer: (result) => onanswer(first.request, first.machine, result),
         }
       : null;
   });
 
-  /**
-   * An ask from another session arrives folded on the composer's bar: it
-   * grows only when he opens it there or brings it up from Caw's panel.
-   */
-  const arrived = new SvelteSet<string>();
-  $effect(() => {
-    const fresh = composerAsks.filter(
-      (one) => one.from !== null && !arrived.has(one.id)
-    );
-    untrack(() => {
-      for (const one of fresh) {
-        arrived.add(one.id);
-        if (broughtUp?.id !== one.id) {
-          minimizedAsks.set(one.id, true);
-        }
-      }
-    });
-  });
-  /** The id of the ask a row of Caw's panel stands for on this composer: a question's, or its page's or design's first open pick. */
-  function askIdOfRow(row: NeedsItem): string | undefined {
-    if (row.kind === "ask") {
-      return row.request.requestId;
-    }
-    if (row.kind !== "artifact") {
-      return;
-    }
-    return composerAsks.find((one) => one.item?.artifact.id === row.artifactId)
-      ?.id;
+  /** The id of the ask a Needs you item stands for on this composer: a question's, or its page's or design's first open pick; none while the composer holds none of it. */
+  function askIdOfItem(item: WaitingItem): string | undefined {
+    return composerAsks.find((one) =>
+      item.kind === "ask"
+        ? one.id === item.request.requestId
+        : one.item?.artifact.id === item.artifactId
+    )?.id;
   }
-  /** A row of Caw's panel pressed while this is his conversation, by its key, until its ask comes up here. */
+  /** The Needs you item a row of Caw's panel pressed for this conversation, by its key, until it comes up here. */
   let wanted = $state<string | null>(null);
   $effect(() => {
-    if (mine) {
-      const key = chatAsks.take(viewId);
-      if (key !== null) {
-        wanted = key;
-      }
+    if (!here) {
+      return;
+    }
+    const key = chatAsks.take(viewId);
+    if (key !== null) {
+      wanted = key;
     }
   });
-  // The row's ask comes up on the composer once it is here: a page's or a
-  // design's once the other sessions' picks are read.
+  // The pressed item comes up on the composer once the composer holds it:
+  // a page's or a design's once its session's picks are read. One the
+  // composer never parks (a page whose pick is made in the panel) opens in
+  // the panel at its first pending stop; a sign-in's card stands in the
+  // transcript already.
   $effect(() => {
     const key = wanted;
     if (key === null) {
       return;
     }
-    const row = needsItems.find((one) => one.key === key);
-    const id = row ? askIdOfRow(row) : undefined;
+    const item = waitingHere?.items.find((one) => one.key === key);
+    const id = item ? askIdOfItem(item) : undefined;
     if (id !== undefined) {
       bringUp(id);
       wanted = null;
-    } else if (row?.kind !== "artifact" || parkedQueue.othersRead) {
+      return;
+    }
+    if (item?.kind !== "artifact") {
       wanted = null;
+      return;
+    }
+    const read =
+      item.instanceId === viewId ? parkedQueue.ownRead : parkedQueue.othersRead;
+    if (read) {
+      wanted = null;
+      detach(
+        openArtifactIn(item.instanceId, item.artifactId, item.stop),
+        "open the pressed page"
+      );
     }
   });
 
@@ -2377,16 +2325,6 @@
 <div
   data-slot="pane"
   data-find-view={viewId}
-  onfocusincapture={() => {
-    if (here) {
-      chatAsks.claim(viewId);
-    }
-  }}
-  onpointerdowncapture={() => {
-    if (here) {
-      chatAsks.claim(viewId);
-    }
-  }}
   class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
   {@attach measurePane}
 >

@@ -46,12 +46,6 @@ import { GrownShape, layoutScale, measureShape } from "./grown";
 interface AskCommon {
   /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
   asker: string;
-  /**
-   * It came from another session (tsk-521): it waits folded on the
-   * composer's bar until he opens it there or brings it up from Caw's
-   * panel, a permission too, and its card's title names that session.
-   */
-  fromElsewhere?: boolean;
   /** How many more asks wait behind this one. */
   more: number;
 }
@@ -160,12 +154,9 @@ export class GrownAsk {
       ? questionsOf(ask.request.toolName, ask.request.input)
       : null;
   });
-  /** The parked ask can fold to its bar: a question, a pick parked here, or any ask from another session. */
+  /** The parked ask can fold to its bar: a question, or a pick parked here. */
   readonly askParks = $derived.by(
-    () =>
-      !!this.askQuestions ||
-      this.#parts.ask()?.kind === "parked" ||
-      !!this.#parts.ask()?.fromElsewhere
+    () => !!this.askQuestions || this.#parts.ask()?.kind === "parked"
   );
   /** The parked ask is one the reader minimized here. */
   readonly minimized = $derived.by(() => {

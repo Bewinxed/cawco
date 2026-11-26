@@ -404,6 +404,15 @@ export const asksStore = {
     return blocked;
   },
   /**
+   * The conversation `instanceId` is part of: the session at the top of
+   * its chain of parents (`parentOf`), whose composer holds what it and
+   * every delegate under it ask the person (`asksUnder`); itself when it
+   * has none.
+   */
+  conversationOf(instanceId: string): string {
+    return sessionChain(instanceId, parentOf).at(-1) ?? instanceId;
+  },
+  /**
    * The asks for the person that delegates of `instanceId` parked, at any
    * depth under it: its pane draws each as its own (core `waitingOnYou`'s
    * `parentOf`), so an ask asked two deep reaches the session the person

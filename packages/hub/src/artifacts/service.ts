@@ -3985,8 +3985,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * opened with two or more directions to judge, and each card of its
    * decision pages that Who decides gives the person, where its agent
    * judged the pick quick (`pick`), or every pick (`every`: the composer of
-   * the conversation he is in parks another session's enlarged ones too,
-   * tsk-521) (a card the hub sent to
+   * the conversation above it parks its enlarged ones too, tsk-521) (a card
+   * the hub sent to
    * another member is that member's: settling.ts). Each is read whatever its
    * state, so the transcript can keep an answered one where it was opened;
    * one not put to the person (a draft, handed up or held, an option's

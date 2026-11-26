@@ -130,7 +130,7 @@ export const pendingRoutes = ({
     // artifact-needs.ts); each change after arrives as an
     // `artifact.needs` frame.
     .get("/api/artifact-needs", (): ArtifactNeedsRead => artifactLane.now())
-    // Needs you's rows, one per piece of stopped work, newest first
-    // (needs-rows.ts): the dashboard reads them again as asks, the lane or
-    // a project's tasks move.
+    // The tasks waiting on the person by themselves, newest first
+    // (needs-rows.ts): the dashboard reads them again as a project's
+    // tasks move.
     .get("/api/needs-rows", (): Promise<NeedsRowsRead> => needsRows.read());

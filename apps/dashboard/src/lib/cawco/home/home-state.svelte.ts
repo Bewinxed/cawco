@@ -4,10 +4,11 @@
  *
  * - Status: the hub and the machines, in one line.
  * - Needs you: every ask parked on the operator (a session's permission or
- *   question), every card of kind `you`, and every artifact waiting on the
- *   operator (core artifact-needs.ts), one row per piece of stopped work as
- *   the hub groups them (hub needs-rows.ts), newest first by the moment the
- *   hub raised it (`raisedAt`), so every device lists them alike.
+ *   question) and every artifact waiting on the operator (core
+ *   artifact-needs.ts), one row per conversation that holds them; every
+ *   task waiting on him by itself (hub needs-rows.ts); and what no
+ *   conversation holds (a lost machine, a pairing, a sign-in that ended),
+ *   newest first by the moment the hub raised it (`raisedAt`).
  * - Working: every session mid-turn (the tab's icon reads it).
  * - Seen: what "ended since you last looked" means (`endedUnseen`), the
  *   unread mark of the sidebar's Recent list (recent.svelte.ts), and Done,
@@ -24,7 +25,7 @@ import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import type { Install } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
-import type { NeedsRow, NeedsRowTask } from "@cawco/core/needs-rows";
+import type { NeedsRow } from "@cawco/core/needs-rows";
 import type { WaitingOffer } from "@cawco/core/project-conversation";
 import {
   projectAt as projectHolding,
@@ -578,8 +579,8 @@ interface TaskItem {
   project: ProjectMarking | null;
   /** When the task last changed, ms epoch: how long it has waited. */
   raisedAt: number;
-  /** Why it waits on you by itself: its review, or a failed attempt; null while only its questions do. */
-  reason: "review" | "failed" | null;
+  /** Why it waits on you: its review, or a failed attempt. */
+  reason: "review" | "failed";
   /** Its stage, as the board names it. */
   stage: string;
   taskId: string;
@@ -646,45 +647,67 @@ interface McpItem {
 }
 
 /**
- * One piece of stopped work with more than one thing waiting on you in it
- * (hub needs-rows.ts): a task and every open question about it, or a
- * session's questions about no task. Its task heads it, waiting since its
- * work stopped; its items follow, newest first.
+ * A conversation with things waiting on you in it: a top-level session
+ * (asks `conversationOf`) and every question, permission and open pick its
+ * delegates at any depth put to you, newest first. Its composer holds them
+ * all, so its row opens it with the newest up there.
  */
-export interface WorkItem {
-  items: (AskItem | ArtifactItem)[];
+export interface ConversationItem {
+  /** Where it runs: its mark's hue, the seed every list uses. */
+  cwd: string;
+  /** The conversation's own session. */
+  instanceId: string;
+  items: WaitingItem[];
   key: string;
-  kind: "work";
+  kind: "conversation";
+  machineId: string;
+  /** The project it runs in, named as the rail names it, with its mark's hue; null outside any. */
+  project: ProjectMarking | null;
   /** When its newest item was raised, ms epoch: its place in the list. */
   raisedAt: number;
-  /** Its task, the row's head; null for a session's questions. */
-  task: TaskItem | null;
+  /** Every machine its items wait on is offline: it still stands, and answering waits. */
+  stale: boolean;
+  title: string;
+  /** How many things wait on you in it: each ask, and each pick still open on its pages. */
+  waiting: number;
 }
 
-/** One row of Needs you: a thing waiting on you, or a piece of work with several. */
-export type NeedsEntry = NeedsItem | WorkItem;
+/** What a conversation holds for you: a session's ask, or an artifact's picks. */
+export type WaitingItem = AskItem | ArtifactItem;
+
+/** One row of Needs you: a conversation with what waits on you in it, or a thing no conversation holds. */
+export type NeedsEntry = NeedsItem | ConversationItem;
+
+/** How many things wait on you among `items`: each ask, and each pick still open on each artifact (one at least). */
+export const waitingIn = (items: readonly WaitingItem[]): number =>
+  items.reduce(
+    (sum, item) =>
+      sum +
+      (item.kind === "ask"
+        ? 1
+        : Math.max(
+            1,
+            item.pending.reduce(
+              (left, one) => left + one.asked - one.answered,
+              0
+            )
+          )),
+    0
+  );
 
 /**
  * How many things wait on him in Needs you, as its head and Caw's badge
- * count them: every row that asks him something. A piece of work counts its
- * questions, and its task only when the task itself waits on him (in
- * review, or failed); a task that only heads its questions is their heading.
+ * count them: each conversation by its count, every other row one.
  */
 export const askCount = (entries: readonly NeedsEntry[]): number =>
   entries.reduce(
-    (sum, entry) =>
-      sum +
-      (entry.kind === "work"
-        ? entry.items.length + (entry.task?.reason ? 1 : 0)
-        : 1),
+    (sum, entry) => sum + (entry.kind === "conversation" ? entry.waiting : 1),
     0
   );
 
 export type NeedsItem =
   | ToolItem
-  | ArtifactItem
   | McpItem
-  | AskItem
   | CapItem
   | ActionItem
   | WatchItem
@@ -729,7 +752,7 @@ const offerFacts = (
  * Where an ask opens, its card's and a wide screen's landing alike: the
  * session whose pane draws it, else the session that asked.
  */
-export const askView = (item: AskItem): string =>
+const askView = (item: AskItem): string =>
   askOpens({ instanceId: item.instanceId, originInstanceId: item.origin });
 
 /* ── Naming ────────────────────────────────────────────────────────── */
@@ -1105,12 +1128,12 @@ class Home {
   }
 
   /**
-   * Needs you's rows as the hub last assembled them (hub needs-rows.ts):
-   * read on arrival, on a reconnect, and whenever a parked ask, an
-   * artifact waiting on you or a project's tasks move.
+   * The tasks waiting on you by themselves, as the hub last read them (hub
+   * needs-rows.ts): read on arrival, on a reconnect, and whenever a
+   * project's tasks move.
    */
   #rows = $state.raw<NeedsRow[]>([]);
-  /** What the rows were last read at: the asks, artifacts and tasks' change counts. */
+  /** What the rows were last read at: each project's tasks' change count. */
   #rowsRead: string | null = null;
   /** The reads of the rows so far: only the newest one's answer is kept. */
   #rowsAsked = 0;
@@ -1129,16 +1152,12 @@ class Home {
           this.#rowsRead = null;
           return;
         }
-        const mark = [
-          ...projectsStore.projects.map(
+        const mark = projectsStore.projects
+          .map(
             (project) =>
               `${project.id}:${tickersStore.tasksChangedOf(project.id)}`
-          ),
-          ...asksStore.blocked.map((item) => item.request.requestId),
-          ...needsStore.artifactNeedsOpen.map(
-            (need) => `${need.artifactId}:${need.raisedAt}`
-          ),
-        ].join("\n");
+          )
+          .join("\n");
         if (mark === this.#rowsRead) {
           return;
         }
@@ -1412,8 +1431,8 @@ class Home {
         href: `?${INSTALL_PARAM}=${encodeURIComponent(one.id)}`,
         raisedAt: one.endedAt ?? one.startedAt,
       }));
-    /** A row's task as its head: its project marked, waiting since its work stopped. */
-    const taskHead = (task: NeedsRowTask, since: number): TaskItem => {
+    /** A task waiting on you, its project marked. */
+    const taskItem = ({ task, at }: NeedsRow): TaskItem => {
       const project = projectsStore.projects.find(
         (one) => one.id === task.projectId
       );
@@ -1429,7 +1448,7 @@ class Home {
           ? { name: project.name, hue: markHue(folderOf(project)) }
           : null,
         href: `/project/${encodeURIComponent(task.projectId)}?task=${encodeURIComponent(task.id)}`,
-        raisedAt: since,
+        raisedAt: at,
       };
     };
     // The artifacts waiting on you, each under its session as an ask is;
@@ -1492,22 +1511,14 @@ class Home {
       toolUpdatesStore.updates,
       toolUpdatesStore.releases
     );
-    // One row per piece of stopped work, in the hub's order (needs-rows.ts):
-    // a task and its questions, or a session's questions, together.
-    const { work, grouped } = workEntries(
-      this.#rows,
-      asks,
-      artifacts,
-      taskHead
-    );
-    // An ask or artifact the hub's last read has not grouped yet stands alone until the next read.
-    const loose = [...asks, ...artifacts].filter(
-      (one) => !grouped.has(one.key)
-    );
+    // Each conversation with what waits on you in it, and each task waiting
+    // on you by itself (needs-rows.ts).
+    const conversations = conversationsOf([...asks, ...artifacts]);
+    const tasks = this.#rows.map(taskItem);
     // Newest first; an item with no time of its own (an onboarding step) leads.
     return [
-      ...work,
-      ...loose,
+      ...conversations,
+      ...tasks,
       ...signIns,
       ...tools,
       ...caps,
@@ -1560,17 +1571,11 @@ class Home {
    */
   readonly landing = $derived.by<string | null>(() =>
     landingOf({
-      waits: this.needs
-        .flatMap((entry) => (entry.kind === "work" ? entry.items : [entry]))
-        .flatMap((item) => {
-          if (item.kind === "ask") {
-            return [{ opens: askView(item), raisedAt: item.raisedAt }];
-          }
-          if (item.kind === "artifact") {
-            return [{ opens: item.instanceId, raisedAt: item.raisedAt }];
-          }
-          return [];
-        }),
+      waits: this.needs.flatMap((entry) =>
+        entry.kind === "conversation"
+          ? [{ opens: entry.instanceId, raisedAt: entry.raisedAt }]
+          : []
+      ),
       rows: boardStore.runningInstances,
       pulseAt: boardStore.pulseAt,
       listed: (id) => boardStore.instanceIndex.byId.has(id),
@@ -1616,44 +1621,43 @@ function workingNow(): BoardRow[] {
 }
 
 /**
- * The hub's rows (needs-rows.ts) as Needs you's entries: each row's items
- * found among `asks` and `artifacts`, newest first, under its task's head
- * (`head`); a row of one item with no task is that item. `grouped`: the
- * keys of every item a row took.
+ * What waits on you in sessions, gathered by conversation (asks
+ * `conversationOf`): one entry for each, its items newest first, its title,
+ * mark and place its own session's, else its newest item's.
  */
-function workEntries(
-  rows: readonly NeedsRow[],
-  asks: readonly AskItem[],
-  artifacts: readonly ArtifactItem[],
-  head: (task: NeedsRowTask, since: number) => TaskItem
-): { grouped: Set<string>; work: NeedsEntry[] } {
-  const byKey = new Map<string, AskItem | ArtifactItem>([
-    ...asks.map((one) => [`ask:${one.request.requestId}`, one] as const),
-    ...artifacts.map((one) => [`artifact:${one.artifactId}`, one] as const),
-  ]);
-  const grouped = new Set<string>();
-  const work = rows.flatMap((row): NeedsEntry[] => {
-    const items = [
-      ...row.asks.map((id) => byKey.get(`ask:${id}`)),
-      ...row.artifacts.map((id) => byKey.get(`artifact:${id}`)),
-    ]
-      .filter((one) => one !== undefined)
-      .sort((a, b) => (b.raisedAt ?? 0) - (a.raisedAt ?? 0));
-    for (const one of items) {
-      grouped.add(one.key);
+function conversationsOf(waiting: readonly WaitingItem[]): ConversationItem[] {
+  const by = new Map<string, WaitingItem[]>();
+  for (const one of waiting) {
+    const top = asksStore.conversationOf(
+      one.kind === "ask" ? askView(one) : one.instanceId
+    );
+    by.set(top, [...(by.get(top) ?? []), one]);
+  }
+  return [...by].flatMap(([id, held]): ConversationItem[] => {
+    const items = held.toSorted(
+      (a, b) => (b.raisedAt ?? 0) - (a.raisedAt ?? 0)
+    );
+    const [newest] = items;
+    if (!newest) {
+      return [];
     }
-    const task = row.task ? head(row.task, row.since) : null;
-    if (!task) {
-      return items.length > 1
-        ? [{ kind: "work", key: row.key, task, items, raisedAt: row.at }]
-        : items;
-    }
-    if (items.length === 0) {
-      return task.reason ? [task] : [];
-    }
-    return [{ kind: "work", key: row.key, task, items, raisedAt: row.at }];
+    const row = boardStore.instanceIndex.byId.get(id);
+    return [
+      {
+        kind: "conversation",
+        key: `conversation:${id}`,
+        instanceId: id,
+        title: row ? instanceTitle(row) : sessionName(id),
+        cwd: row?.cwd || newest.cwd,
+        machineId: row?.machineId ?? newest.machineId,
+        project: row ? projectMarkOfRow(row) : newest.project,
+        items,
+        raisedAt: newest.raisedAt ?? 0,
+        stale: items.every((one) => one.stale),
+        waiting: waitingIn(items),
+      },
+    ];
   });
-  return { grouped, work };
 }
 
 export const home = new Home();

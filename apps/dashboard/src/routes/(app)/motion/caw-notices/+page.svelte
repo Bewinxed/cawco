@@ -30,6 +30,8 @@
   import type { CawFeed } from "#lib/cawco/home/caw-feed.svelte.js";
   import type {
     AskItem,
+    ConversationItem,
+    NeedsEntry,
     NeedsItem,
   } from "#lib/cawco/home/home-state.svelte.js";
   import { markHue } from "#lib/cawco/mark.js";
@@ -316,7 +318,21 @@
       stale: false,
     };
   };
-  const NEEDS: NeedsItem[] = [
+  /** A conversation with its one ask waiting, as home-state gathers it. */
+  const conversation = (one: AskItem): ConversationItem => ({
+    kind: "conversation",
+    key: `conversation:${one.instanceId}`,
+    instanceId: one.instanceId,
+    title: one.title,
+    cwd: one.cwd,
+    machineId: one.machineId,
+    project: one.project,
+    items: [one],
+    raisedAt: one.raisedAt ?? 0,
+    stale: false,
+    waiting: 1,
+  });
+  const NEEDS: NeedsEntry[] = [
     ask({
       key: "s1",
       title: "Answer a question in anbar",
@@ -353,9 +369,9 @@
       summary: "Run bun run build in apps/dashboard",
       minutes: 3,
     }),
-  ];
+  ].map(conversation);
 
-  let needs = $state.raw<NeedsItem[]>([]);
+  let needs = $state.raw<NeedsEntry[]>([]);
   let updated = $state.raw<Notice | null>(null);
   let moved = $state.raw<MovedLogin[]>([]);
   /** Bumped by Reset: a fresh panel, its fold shut. */

@@ -569,12 +569,17 @@ import type { TailnetServing } from "./tailnet-https";
  * 113: a harness may be `agy` (Antigravity, tsk-340), in a trigger's
  *    source and every other value that names a harness. A page built for
  *    112 reads the harnesses closed, so it reloads first.
+ * 114: `GET /api/needs-rows` answers only the tasks waiting on the person
+ *    by themselves, each `{ key, task, at }`; a session's questions and an
+ *    artifact's picks are gathered by the page under their conversation
+ *    (core needs-rows.ts). A page built for 113 reads each row's asks, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 113;
+export const WIRE_PROTOCOL = 114;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

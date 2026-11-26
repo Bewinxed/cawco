@@ -1,9 +1,8 @@
 /**
- * What a Needs you row says of a piece of stopped work the hub grouped
- * (hub needs-rows.ts, the dashboard's NeedsWork): a task its questions
- * stand under, when the task itself is not waiting on the person.
+ * What a Needs you row says of a conversation with things waiting on the
+ * person in it (the dashboard's ConversationRow): how many.
  */
 export const needsRowWords = {
-  /** A task whose questions wait on the person while it is in `stage`: its row's line. */
-  taskQuestions: (stage: string) => `Stage: ${stage}`,
+  /** How many things wait on the person in one conversation, said when more than one does. */
+  waiting: (count: number) => `${count} waiting`,
 };

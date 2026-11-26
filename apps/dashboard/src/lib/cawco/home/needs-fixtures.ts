@@ -1,22 +1,26 @@
 /**
- * What Needs you holds while a task's build waits on the owner, shaped as
- * the hub lists it (hub needs-rows.ts, home-state's items): a task in
- * Working with a session's question and a decision page of two open cards
- * about it, a question standing on a pin of another page, a permission, and
- * a task in review. The shaping frames of tsk-521 (NeedsAnswerInRow,
- * NeedsAnswerBeside) draw Caw's panel on it.
+ * What Needs you holds while a build waits on the owner, shaped as
+ * home-state gathers it: four conversations with what waits in each (a
+ * delegate's question and its decision page of two open cards under the
+ * build's conversation; a question on a pin; a design graph's pick; a
+ * permission), a machine that stopped answering, and a task in review.
+ * The states of tsk-521 (ConversationAsks) draw Caw's panel and the
+ * conversations on it.
  */
 
 import type { ParkedCard, ParkedItem } from "@cawco/core/parked";
 import { presentPermission } from "@cawco/core/permission-presentation";
+import { contactWords } from "@cawco/core/words/contact";
 import { markHue } from "../mark";
 import { TWO_DIRECTIONS } from "../transcript/parked-fixtures";
-import type {
-  ArtifactItem,
-  AskItem,
-  NeedsEntry,
-  ProjectMarking,
-  WorkItem,
+import {
+  type ArtifactItem,
+  type AskItem,
+  type ConversationItem,
+  type NeedsEntry,
+  type ProjectMarking,
+  type WaitingItem,
+  waitingIn,
 } from "./home-state.svelte";
 
 const CWD = "/home/omar/cockpit";
@@ -273,26 +277,6 @@ const CHECK_PERMISSION: AskItem = {
   stale: false,
 };
 
-/** The build's task and what waits on him about it. */
-const ANTIGRAVITY_WORK: WorkItem = {
-  kind: "work",
-  key: "work:tsk-340",
-  raisedAt: ago(4),
-  task: {
-    kind: "task",
-    key: "task:tsk-340",
-    href: "/p/cawco-dev/tasks/tsk-340",
-    place: PROJECT.name,
-    project: PROJECT,
-    raisedAt: ago(52),
-    reason: null,
-    stage: "Working",
-    taskId: "tsk-340",
-    title: "Route Antigravity sign-ins through the hub",
-  },
-  items: [ACCOUNT_QUESTION, BILLING_PAGE],
-};
-
 /** A design graph of the dark pass: which grey hovered rows take at night. */
 const HOVER_GRAPH: ArtifactItem = {
   kind: "artifact",
@@ -328,12 +312,75 @@ export const PICKS: Record<string, ParkedItem[]> = {
   [HOVER_GRAPH.artifactId]: [TWO_DIRECTIONS],
 };
 
+/** A conversation and what waits on him in it, newest first. */
+const conversation = (
+  instanceId: string,
+  title: string,
+  newest: WaitingItem,
+  ...rest: WaitingItem[]
+): ConversationItem => {
+  const items = [newest, ...rest];
+  return {
+    kind: "conversation",
+    key: `conversation:${instanceId}`,
+    instanceId,
+    title,
+    cwd: CWD,
+    machineId: newest.machineId,
+    project: PROJECT,
+    items,
+    raisedAt: newest.raisedAt ?? 0,
+    stale: false,
+    waiting: waitingIn(items),
+  };
+};
+
+/** The build's conversation: its delegate's question and decision page. */
+const ANTIGRAVITY = conversation(
+  "s-antigravity",
+  "Route Antigravity sign-ins through the hub",
+  ACCOUNT_QUESTION,
+  BILLING_PAGE
+);
+
+/** Each conversation's own words, by its session: what the chat shows above its composer. */
+export const CHATS: Record<string, { agent: string; you: string }> = {
+  "s-antigravity": {
+    you: "Route the Antigravity sign-ins through the hub, and tell me what you need.",
+    agent:
+      "The harness's sign-in step waits on two things from you: which account it signs in with, and how its sessions are billed.",
+  },
+  "s-ask-routine-failures": {
+    you: "Shape the routine form: what happens when a run fails?",
+    agent:
+      "I left a question on pin 3 of the routines page: whether a routine that failed twice keeps running.",
+  },
+  "s-dark-pass": {
+    you: "Do a dark pass over the board's rows.",
+    agent: "Two greys for hovered rows at night are on the graph to pick from.",
+  },
+  "s-ask-check": {
+    you: "The tray chip overflows at narrow widths. Fix it.",
+    agent: "Fixed. I want to run the repo's checks before I finish.",
+  },
+};
+
 /** Needs you, newest first. */
 export const NEEDS: NeedsEntry[] = [
-  ANTIGRAVITY_WORK,
-  PIN_QUESTION,
-  HOVER_GRAPH,
-  CHECK_PERMISSION,
+  ANTIGRAVITY,
+  {
+    kind: "machine",
+    key: "machine:omars-macbook-pro",
+    name: MACBOOK.name,
+    hub: false,
+    minutes: 10,
+    title: contactWords.lostTitle(MACBOOK.name, false),
+    place: contactWords.lostMeta,
+    raisedAt: ago(8),
+  },
+  conversation("s-ask-routine-failures", "Routines shape", PIN_QUESTION),
+  conversation("s-dark-pass", "Dark pass", HOVER_GRAPH),
+  conversation("s-ask-check", "Fix the tray chip overflow", CHECK_PERMISSION),
   {
     kind: "task",
     key: "task:tsk-519",

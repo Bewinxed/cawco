@@ -85,9 +85,9 @@ export interface ParkedQueueInput {
   /** The pane is on screen and the hub holds the session's row: only then is the list read. */
   onScreen: () => boolean;
   /**
-   * Other sessions whose open picks this pane's composer parks too, its
-   * conversation being the one he is in (tsk-521, home/chat-asks): each
-   * artifact of theirs waiting on him. Empty while it is not his.
+   * The delegates under the session whose open picks its composer parks
+   * too (tsk-521): each with an artifact waiting on him. Their every pick
+   * parks here, quick or enlarged, since their panels are not this pane's.
    */
   others?: () => string[];
   /** The item the composer stands at, by its id (core `parkedId`); null while it stands at none of these. */
@@ -97,9 +97,11 @@ export interface ParkedQueueInput {
 export class ParkedQueue {
   /** The hub's last list, oldest first; empty before the first read lands. */
   items = $state<ParkedItem[]>([]);
-  /** The hub's last list of each other session it parks the picks of, by that session. */
+  /** The session's own list has been read since the pane came on screen. */
+  ownRead = $state(false);
+  /** The hub's last list of each delegate it parks the picks of, by that delegate. */
   othersItems = $state<Record<string, ParkedItem[]>>({});
-  /** Every other session it parks the picks of has been read since they were named. */
+  /** Every delegate it parks the picks of has been read since they were named. */
   othersRead = $state(true);
   /** The artifact whose doc the pane holds, and its choices as the doc says them now. */
   held = $state<{
@@ -131,7 +133,7 @@ export class ParkedQueue {
     })
   );
 
-  /** Other sessions' items still waiting on him, each with its session: what the composer parks after its own. */
+  /** The delegates' items still waiting on him, each with its delegate: what the composer parks with its own. */
   readonly othersOpen = $derived.by(() =>
     Object.entries(this.othersItems).flatMap(([instance, items]) =>
       items
@@ -200,7 +202,7 @@ export class ParkedQueue {
       needsStore.questionsMoved();
       this.#read(input.instanceId());
     });
-    // Each other session whose picks it parks, read with its own.
+    // Each delegate whose picks it parks, read with its own.
     $effect(() => {
       const others = input.others?.() ?? [];
       if (!input.onScreen()) {
@@ -308,7 +310,7 @@ export class ParkedQueue {
   #askedOthers = 0;
 
   /**
-   * Each other session's list read again; a session no longer named drops
+   * Each delegate's list read again; a delegate no longer named drops
    * out, and one whose read fails keeps its last list, said in the log.
    */
   #readOthers(others: string[]): void {
@@ -333,7 +335,7 @@ export class ParkedQueue {
               this.othersRead = true;
             }
           }),
-        "read another session's parked picks"
+        "read a delegate's parked picks"
       );
     }
   }
@@ -343,11 +345,17 @@ export class ParkedQueue {
     this.#asked += 1;
     const asked = this.#asked;
     detach(
-      hubData(hub.api.instances({ id }).parked.get()).then((read) => {
-        if (asked === this.#asked) {
-          this.items = read.items;
-        }
-      }),
+      hubData(hub.api.instances({ id }).parked.get())
+        .then((read) => {
+          if (asked === this.#asked) {
+            this.items = read.items;
+          }
+        })
+        .finally(() => {
+          if (asked === this.#asked) {
+            this.ownRead = true;
+          }
+        }),
       "read parked picks"
     );
   }
