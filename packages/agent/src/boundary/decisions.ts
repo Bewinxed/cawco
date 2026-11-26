@@ -21,6 +21,7 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { workspaceNeeds } from "@cawco/core/workspace-needs";
 import { workspaceSpills } from "@cawco/core/workspace-policy";
+import { Effect, RcMap, Scope } from "effect";
 import { z } from "zod";
 import { ensureView, layerOf, viewArgv } from "../layer";
 import { gateOf } from "./exec";
@@ -417,11 +418,30 @@ const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
   await writeWhole(path, `${JSON.stringify(all)}\n`, 0o644);
 };
 
-/** Each workspace's gate this agent holds up: how many of its steps hold it, and its write ({@link behindGate}). */
-const gates = new Map<string, { count: number; readonly up: Promise<void> }>();
-
 /** Each workspace's gate's writes, up and down, one at a time in the order asked ({@link behindGate}): a step after a gate's way down puts it up again only once it is down. */
 const gateWrites = makeKeyedLock<string>();
+
+/**
+ * Each workspace's gate this agent holds up, counted: written at its first
+ * holder, removed once its last lets go, and taken again from the start by
+ * a step after that ({@link behindGate}).
+ */
+const gates = Effect.runSync(
+  RcMap.make({
+    lookup: (id: string) =>
+      Effect.acquireRelease(
+        gateWrites.withLock(
+          id,
+          Effect.promise(() => writeStateFile(gateOf(id), String(process.pid)))
+        ),
+        () =>
+          gateWrites.withLock(
+            id,
+            Effect.promise(() => rm(gateOf(id), { force: true }))
+          )
+      ),
+  }).pipe(Scope.provide(Scope.makeUnsafe()))
+);
 
 /**
  * Runs `step` with workspace `id`'s gate up ({@link gateOf}): an executor that
@@ -431,30 +451,11 @@ const gateWrites = makeKeyedLock<string>();
  * boundary over) leaves it up for the outer one, and it comes down once the
  * last of them ends, never while one still runs.
  */
-export const behindGate = async <T>(
-  id: string,
-  step: () => Promise<T>
-): Promise<T> => {
-  let hold = gates.get(id);
-  if (hold) {
-    hold.count += 1;
-  } else {
-    hold = {
-      count: 1,
-      up: gateWrites.run(id, () =>
-        writeStateFile(gateOf(id), String(process.pid))
-      ),
-    };
-    gates.set(id, hold);
-  }
-  try {
-    await hold.up;
-    return await step();
-  } finally {
-    hold.count -= 1;
-    if (hold.count === 0 && gates.get(id) === hold) {
-      gates.delete(id);
-      await gateWrites.run(id, () => rm(gateOf(id), { force: true }));
-    }
-  }
-};
+export const behindGate = <T>(id: string, step: () => Promise<T>): Promise<T> =>
+  // The promise edge of a step behind the gate (ensure.ts, looks.ts, stop.ts).
+  Effect.runPromise(
+    RcMap.get(gates, id).pipe(
+      Effect.andThen(Effect.promise(() => step())),
+      Effect.scoped
+    )
+  );

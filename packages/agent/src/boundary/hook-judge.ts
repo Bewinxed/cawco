@@ -9,12 +9,12 @@ import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join } from "node:path";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import { workspaceClaudeTmpDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
-import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Deferred, Effect, Result } from "effect";
 import { bunScriptRuntime } from "../bun-runtime";
 import { JUDGE_FORM_LENGTH } from "../proc-id";
 import {
@@ -308,54 +308,52 @@ const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
 
 /**
  * What the judge at `socket` answers to {@link JUDGE_BUILD_QUESTION}, word
- * for word, or why it answered nothing; unanswered when it said nothing in
- * as long as a hook gives it ({@link HOOK_LIMIT_S}).
+ * for word, or why it answered nothing; {@link Unanswered} when it said
+ * nothing in as long as a hook gives it ({@link HOOK_LIMIT_S}). Its
+ * connection is closed once the answer is whole, or the read let go.
  */
-const judgeSays = (socket: string): Promise<Bounded<string>> =>
-  readWithin(
+const judgeSays = (socket: string): Effect.Effect<string, Unanswered> =>
+  boundedRead(
     HOOK_LIMIT_S * 1000,
-    (signal) =>
-      new Promise<string>((resolve) => {
-        const chunks: Buffer[] = [];
-        const connection = createConnection(socket);
-        signal.addEventListener("abort", () => connection.destroy(), {
-          once: true,
-        });
-        connection.on("connect", () => {
-          connection.write(`${JUDGE_BUILD_QUESTION}\n`);
-        });
-        // Its answer is whole at its end mark (protocol.ts
-        // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
-        // macOS at times never sent.
-        connection.on("data", (chunk: Buffer) => {
-          chunks.push(chunk);
-          const read = Buffer.concat(chunks);
-          const end = read.indexOf(JUDGE_ANSWER_END);
-          if (end >= 0) {
-            connection.destroy();
-            resolve(read.subarray(0, end).toString("utf8"));
-          }
-        });
-        connection.on("end", () => {
-          resolve(Buffer.concat(chunks).toString("utf8"));
-        });
-        connection.on("error", (error) => {
-          resolve(`nothing (${error.message})`);
-        });
-      })
+    Effect.gen(function* () {
+      const answer = yield* Deferred.make<string>();
+      const said = (words: string) =>
+        Deferred.doneUnsafe(answer, Effect.succeed(words));
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const chunks: Buffer[] = [];
+          const connection = createConnection(socket);
+          connection.on("connect", () => {
+            connection.write(`${JUDGE_BUILD_QUESTION}\n`);
+          });
+          // Its answer is whole at its end mark (protocol.ts
+          // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
+          // macOS at times never sent.
+          connection.on("data", (chunk: Buffer) => {
+            chunks.push(chunk);
+            const read = Buffer.concat(chunks);
+            const end = read.indexOf(JUDGE_ANSWER_END);
+            if (end >= 0) {
+              said(read.subarray(0, end).toString("utf8"));
+            }
+          });
+          connection.on("end", () => {
+            said(Buffer.concat(chunks).toString("utf8"));
+          });
+          connection.on("error", (error) => {
+            said(`nothing (${error.message})`);
+          });
+          return connection;
+        }),
+        (connection) => Effect.sync(() => connection.destroy())
+      );
+      return yield* Deferred.await(answer);
+    }).pipe(Effect.scoped)
   );
 
-/** What a judge said, in words a law's line quotes. */
-const judgeWords = (read: Bounded<string>): string => {
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      return `no answer within ${HOOK_LIMIT_S} s`;
-    default:
-      unhandled("read", read);
-  }
-};
+/** A judge's answer, or that it gave none in time, in words a law's line quotes. */
+const judgeWords = (read: Result.Result<string, Unanswered>): string =>
+  Result.isSuccess(read) ? read.success : `no answer within ${HOOK_LIMIT_S} s`;
 
 /** A judge's socket file name (`judgeFor`): its form. */
 export const JUDGE_SOCKET = /^judge-([0-9a-f]+)\.sock$/u;
@@ -371,22 +369,24 @@ export interface JudgeAnswer {
 }
 
 /** Asks the judge workspace `id`'s hook names which build it runs ({@link JUDGE_BUILD_QUESTION}). */
-export const judgeAnswer = async (
-  id: string,
-  build: string
-): Promise<JudgeAnswer> => {
-  const hook = await readFile(join(stateDir(id), "hook"), "utf8").catch(
-    () => ""
+export const judgeAnswer = (id: string, build: string): Promise<JudgeAnswer> =>
+  // The promise edge of the judge's answer (looks.ts).
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const hook = yield* Effect.promise(() =>
+        readFile(join(stateDir(id), "hook"), "utf8").catch(() => "")
+      );
+      const socket = HOOK_JUDGE.exec(hook)?.[1];
+      if (!socket) {
+        return { answers: false, socket, words: "its hook names no judge" };
+      }
+      const read = yield* Effect.result(judgeSays(socket));
+      return {
+        answers:
+          Result.isSuccess(read) &&
+          read.success === `${JUDGE_ALLOWS}\n${build}`,
+        socket,
+        words: `its hook's judge at ${socket} answered ${JSON.stringify(judgeWords(read))}`,
+      };
+    })
   );
-  const socket = HOOK_JUDGE.exec(hook)?.[1];
-  if (!socket) {
-    return { answers: false, socket, words: "its hook names no judge" };
-  }
-  const read = await judgeSays(socket);
-  return {
-    answers:
-      read.kind === "answered" && read.value === `${JUDGE_ALLOWS}\n${build}`,
-    socket,
-    words: `its hook's judge at ${socket} answered ${JSON.stringify(judgeWords(read))}`,
-  };
-};

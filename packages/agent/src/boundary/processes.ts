@@ -15,6 +15,7 @@ import {
 } from "@cawco/core/process-identity";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
+import { Effect, type Fiber, Schedule } from "effect";
 import { MEMBERSHIP_PREFIX, membershipName } from "../boundary-policy";
 import { workspaceRecords } from "../workspace-records";
 import { commandsOf } from "./exec";
@@ -191,8 +192,8 @@ const endPreTagLeftovers = async (): Promise<number | undefined> => {
   return left.length;
 };
 
-/** The pre-tag look's timer ({@link lookAtPreTag}), while one is left. */
-let preTagTimer: ReturnType<typeof setInterval> | undefined;
+/** The pre-tag look's fiber ({@link lookAtPreTag}), once started: it ends once none is left. */
+let preTagLooks: Fiber.Fiber<number | undefined> | undefined;
 
 /**
  * macOS: ends pre-tag leftovers ({@link endPreTagLeftovers}) as the agent
@@ -200,37 +201,35 @@ let preTagTimer: ReturnType<typeof setInterval> | undefined;
  * left; once none is, never again.
  */
 export const lookAtPreTag = (): void => {
-  if (process.platform !== "darwin" || preTagTimer) {
+  if (process.platform !== "darwin" || preTagLooks) {
     return;
   }
-  let looking = false;
-  const look = () => {
-    if (looking) {
-      return;
-    }
-    looking = true;
-    endPreTagLeftovers()
-      .then((left) => {
-        if (left === undefined) {
-          console.warn(
-            "[workspace] a workspace's records are damaged, so no boundary started before this build's membership names is ended on this look"
-          );
-        } else if (left === 0 && preTagTimer) {
-          clearInterval(preTagTimer);
-        }
-      })
-      .catch((error: unknown) => {
+  // How many are left, or none known when the look could not tell.
+  const look = Effect.promise(async (): Promise<number | undefined> => {
+    try {
+      const left = await endPreTagLeftovers();
+      if (left === undefined) {
         console.warn(
-          `[workspace] boundaries started before this build's membership names could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+          "[workspace] a workspace's records are damaged, so no boundary started before this build's membership names is ended on this look"
         );
+      }
+      return left;
+    } catch (error) {
+      console.warn(
+        `[workspace] boundaries started before this build's membership names could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  });
+  // Now, then each QUIET_SWEEP_MS after the last look ended, until one
+  // finds none left.
+  preTagLooks = Effect.runFork(
+    look.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced(QUIET_SWEEP_MS),
+        until: (left) => left === 0,
       })
-      .finally(() => {
-        looking = false;
-      });
-  };
-  preTagTimer = setInterval(look, QUIET_SWEEP_MS);
-  preTagTimer.unref();
-  look();
+    )
+  );
 };
 
 /**

@@ -98,6 +98,7 @@ import {
   systemProgram,
 } from "@cawco/core/workspace-needs";
 import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
+import { Effect } from "effect";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
 import { ensureBoundary } from "./boundary/ensure";
@@ -2366,19 +2367,30 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
       (await processesWithin(roots)).filter((one) => one.pid !== process.pid)
     );
   const killed = new Map<number, string>();
-  for (let pass = 0; pass < LEFT_INSIDE_PASSES; pass += 1) {
-    const fresh = (await read()).filter(
+  // One pass: what is CawCo's and not killed yet, killed and given time to
+  // leave; whether it found any. Up to LEFT_INSIDE_PASSES, while each finds some.
+  const pass = Effect.gen(function* () {
+    const fresh = (yield* Effect.promise(read)).filter(
       (one) => !(one.owner || killed.has(one.pid))
     );
     if (fresh.length === 0) {
-      break;
+      return false;
     }
     for (const one of fresh) {
       signalPid(listedPid(one.pid), "SIGKILL");
       killed.set(one.pid, one.command);
     }
-    await Bun.sleep(LEFT_INSIDE_SETTLE_MS);
-  }
+    yield* Effect.sleep(LEFT_INSIDE_SETTLE_MS);
+    return true;
+  });
+  await Effect.runPromise(
+    pass.pipe(
+      Effect.repeat({
+        times: LEFT_INSIDE_PASSES - 1,
+        while: (found) => found,
+      })
+    )
+  );
   if (killed.size > 0) {
     console.info(
       `[workspace] ${workspace.id}: ended ${killed.size} process(es) left running from its clone or scratch dir once its boundary was stopped: ${[...killed].map(([pid, command]) => `pid ${pid} (${cutShort(command, 200)})`).join("; ")}`

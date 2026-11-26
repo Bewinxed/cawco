@@ -15,6 +15,7 @@ import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { Effect, type Fiber } from "effect";
 import { z } from "zod";
 import { closeGithubDoor } from "../github-door";
 import { closeGitDoor } from "../hub-git";
@@ -321,28 +322,33 @@ export const accountsChangedHere = (): void => {
   recheckNarrowed("accounts").catch(() => undefined);
 };
 
-let narrowTimer: ReturnType<typeof setInterval> | undefined;
+/** The narrowing look's fiber, once started ({@link lookForNarrowing}). */
+let narrowLooks: Fiber.Fiber<never> | undefined;
 
-/** Looks at the boundaries in use for a narrowed access each {@link NARROW_LOOK_MS} ({@link recheckNarrowed}'s list, its last item). */
+/** Looks at the boundaries in use for a narrowed access each {@link NARROW_LOOK_MS} ({@link recheckNarrowed}'s list, its last item), the first a wait after it starts. */
 const lookForNarrowing = (): void => {
-  if (narrowTimer) {
+  if (narrowLooks) {
     return;
   }
-  narrowTimer = setInterval(() => {
+  const look = Effect.promise(async () => {
     if (narrowLook) {
       return;
     }
-    inUseNow()
-      .then((ids) =>
-        ids.length > 0 ? recheckNarrowed("look", ids) : undefined
-      )
-      .catch((error: unknown) => {
-        console.warn(
-          `[workspace] the boundaries in use could not be looked at for a narrowed access: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-  }, NARROW_LOOK_MS);
-  narrowTimer.unref();
+    try {
+      const ids = await inUseNow();
+      if (ids.length > 0) {
+        await recheckNarrowed("look", ids);
+      }
+    } catch (error) {
+      console.warn(
+        `[workspace] the boundaries in use could not be looked at for a narrowed access: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  });
+  // Once per agent, for as long as it runs; each look's failure is said in it.
+  narrowLooks = Effect.runFork(
+    look.pipe(Effect.delay(NARROW_LOOK_MS), Effect.forever)
+  );
 };
 
 let holders: BoundaryHolders | undefined;
@@ -610,7 +616,8 @@ const repairJudge = async (
   );
 };
 
-let quietTimer: ReturnType<typeof setInterval> | undefined;
+/** The quiet sweep's fiber, once started ({@link watchQuietBoundaries}). */
+let quietSweeps: Fiber.Fiber<never> | undefined;
 
 /**
  * Starts looking for quiet boundaries every {@link QUIET_SWEEP_MS}
@@ -623,31 +630,27 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
   lookForNarrowing();
-  if (quietTimer) {
+  if (quietSweeps) {
     return;
   }
   lookAtPreTag();
-  let looking = false;
-  quietTimer = setInterval(() => {
-    if (looking) {
-      return;
-    }
-    looking = true;
+  const sweep = Effect.promise(async () => {
     // Each macOS boundary's folder looked at too: a deletion its watchers
     // missed closes its boundary within a sweep (watch.ts `watchCloneOf`).
     lookAtEveryFolder();
-    sweepQuiet()
-      .then(async () =>
-        judgesAnswer((await procsHeld()).filter((proc) => proc.alive))
-      )
-      .catch((error: unknown) => {
-        console.warn(
-          `[workspace] the quiet boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        looking = false;
-      });
-  }, QUIET_SWEEP_MS);
-  quietTimer.unref();
+    try {
+      await sweepQuiet();
+      await judgesAnswer((await procsHeld()).filter((proc) => proc.alive));
+    } catch (error) {
+      console.warn(
+        `[workspace] the quiet boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  });
+  // Once per agent, for as long as it runs: a sweep each QUIET_SWEEP_MS
+  // after the last one ended, the first a wait after it starts; each sweep's
+  // failure is said in it.
+  quietSweeps = Effect.runFork(
+    sweep.pipe(Effect.delay(QUIET_SWEEP_MS), Effect.forever)
+  );
 };

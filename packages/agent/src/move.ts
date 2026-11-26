@@ -21,6 +21,7 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
@@ -48,6 +49,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import { Effect, Fiber, Schema } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { holdingRemote, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
@@ -117,9 +119,12 @@ const CAWCO_IDENTITY = (): Record<string, string> => {
 // ── Runs ───────────────────────────────────────────────────────────────────
 
 /** A step that stopped because the job was cancelled. */
-class MoveCancelled extends Error {
+class MoveCancelled extends Schema.TaggedError<MoveCancelled>()(
+  "MoveCancelled",
+  { message: Schema.String }
+) {
   constructor() {
-    super("The move was cancelled.");
+    super({ message: "The move was cancelled." });
   }
 }
 
@@ -127,14 +132,15 @@ class MoveCancelled extends Error {
  * A step's failure as the hub reads it: its own words on the first line, the
  * tool's last line after it.
  */
-class StepFailed extends Error {
-  constructor(message: string, detail?: string, options?: ErrorOptions) {
-    super(
-      withoutCredential(
+class StepFailed extends Schema.TaggedError<StepFailed>()("StepFailed", {
+  message: Schema.String,
+}) {
+  constructor(message: string, detail?: string) {
+    super({
+      message: withoutCredential(
         detail?.trim() ? `${message}\n${detail.trim()}` : message
       ),
-      options
-    );
+    });
   }
 }
 
@@ -152,7 +158,8 @@ interface Run {
  */
 class Step<T> {
   readonly answered = new Map<string, { at: number; result: T }>();
-  readonly flights = new Map<string, Promise<T>>();
+  /** The run in flight per job: whoever asks for the step meanwhile gets its answer. */
+  readonly flights = makeJoin<string, T>();
   readonly stage: string;
 
   constructor(stage: string) {
@@ -176,54 +183,56 @@ const runStep = <T>(
 ): Promise<T> => {
   const running = runs.get(jobId);
   const job = jobId.slice(0, 8);
-  const inFlight = flights.get(jobId);
-  if (inFlight) {
-    console.info(
-      `[move] ${job} ${stage}: asked again, waiting on the run in flight`
-    );
-    return inFlight;
-  }
-  if (running) {
+  if (running && running.stage !== stage) {
     return Promise.reject(
       new StepFailed(
         `This machine is still at the move's ${running.stage} step.`
       )
     );
   }
-  const kept = answered.get(jobId);
-  if (kept && Date.now() - kept.at < ANSWER_KEPT_MS) {
-    return Promise.resolve(kept.result);
-  }
-  const run: Run = {
-    stage,
-    cancelled: false,
-    children: new Set(),
-    promise: Promise.resolve(),
-  };
-  const promise = (async () => {
-    console.info(`[move] ${job} ${stage}: started`);
-    try {
-      const result = await work(run);
-      if (run.cancelled) {
-        throw new MoveCancelled();
-      }
-      answered.set(jobId, { at: Date.now(), result });
-      console.info(`[move] ${job} ${stage}: done`);
-      return result;
-    } catch (error) {
-      console.warn(
-        `[move] ${job} ${stage}: ${run.cancelled ? "cancelled" : `failed: ${withoutCredential(error instanceof Error ? error.message : String(error)).replaceAll("\n", " — ")}`}`
-      );
-      throw error;
-    } finally {
-      runs.delete(jobId);
-      flights.delete(jobId);
+  if (running) {
+    console.info(
+      `[move] ${job} ${stage}: asked again, waiting on the run in flight`
+    );
+  } else {
+    const kept = answered.get(jobId);
+    if (kept && Date.now() - kept.at < ANSWER_KEPT_MS) {
+      return Promise.resolve(kept.result);
     }
-  })();
-  run.promise = promise;
-  runs.set(jobId, run);
-  flights.set(jobId, promise);
-  return promise;
+  }
+  /** The step's run, started only when none is in flight; it holds the job's {@link runs} entry until it ends. */
+  const start = async (): Promise<T> => {
+    const run: Run = {
+      stage,
+      cancelled: false,
+      children: new Set(),
+      promise: Promise.resolve(),
+    };
+    runs.set(jobId, run);
+    const promise = (async () => {
+      console.info(`[move] ${job} ${stage}: started`);
+      try {
+        const result = await work(run);
+        if (run.cancelled) {
+          throw new MoveCancelled();
+        }
+        answered.set(jobId, { at: Date.now(), result });
+        console.info(`[move] ${job} ${stage}: done`);
+        return result;
+      } catch (error) {
+        console.warn(
+          `[move] ${job} ${stage}: ${run.cancelled ? "cancelled" : `failed: ${withoutCredential(error instanceof Error ? error.message : String(error)).replaceAll("\n", " — ")}`}`
+        );
+        throw error;
+      } finally {
+        runs.delete(jobId);
+      }
+    })();
+    run.promise = promise;
+    return await promise;
+  };
+  // The promise edge of the step: the run in flight, or this one started.
+  return flights.runPromise(jobId, start);
 };
 
 /** Stops the job's step running here: its processes end, and it answers cancelled. */
@@ -283,27 +292,48 @@ const exec = async (
   if (run?.cancelled) {
     throw new MoveCancelled();
   }
-  const child = Bun.spawn(argv, {
-    cwd: options.cwd,
-    env: options.env ?? plainEnv(),
-    stdin: options.input === undefined ? "ignore" : new Blob([options.input]),
-    stdout: options.discardStdout ? "ignore" : "pipe",
-    stderr: "pipe",
-  });
-  run?.children.add(child);
-  const decoder = new TextDecoder();
-  let stderr = "";
-  const reading = (async () => {
-    for await (const chunk of child.stderr) {
-      const text = decoder.decode(chunk, { stream: true });
-      stderr = (stderr + text).slice(-8000);
-      options.onStderr?.(text);
-    }
-  })();
-  const stdout = child.stdout ? await new Response(child.stdout).text() : "";
-  await reading;
-  const code = await child.exited;
-  run?.children.delete(child);
+  // The process is the run's while it lives (a Cancel kills it), and is
+  // killed if reading it fails before it exits.
+  const { code, stdout, stderr } = await Effect.runPromise(
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const child = Bun.spawn(argv, {
+          cwd: options.cwd,
+          env: options.env ?? plainEnv(),
+          stdin:
+            options.input === undefined ? "ignore" : new Blob([options.input]),
+          stdout: options.discardStdout ? "ignore" : "pipe",
+          stderr: "pipe",
+        });
+        run?.children.add(child);
+        return child;
+      }),
+      (child) =>
+        Effect.promise(async () => {
+          const decoder = new TextDecoder();
+          let tail = "";
+          const reading = (async () => {
+            for await (const chunk of child.stderr) {
+              const text = decoder.decode(chunk, { stream: true });
+              tail = (tail + text).slice(-8000);
+              options.onStderr?.(text);
+            }
+          })();
+          const out = child.stdout
+            ? await new Response(child.stdout).text()
+            : "";
+          await reading;
+          return { code: await child.exited, stdout: out, stderr: tail };
+        }),
+      (child) =>
+        Effect.sync(() => {
+          run?.children.delete(child);
+          if (child.exitCode === null) {
+            child.kill("SIGKILL");
+          }
+        })
+    )
+  );
   if (run?.cancelled) {
     throw new MoveCancelled();
   }
@@ -1532,9 +1562,14 @@ const lfsStep = (
         ...(file ? { file } : {}),
       });
     };
-    const ticker = setInterval(() => {
-      tail().catch(() => undefined);
-    }, 250);
+    // The progress read each 250 ms after the last read ended, while the
+    // pull runs; a read that fails is let go, the next one reads again.
+    const ticker = Effect.runFork(
+      Effect.promise(() => tail().catch(() => undefined)).pipe(
+        Effect.delay(250),
+        Effect.forever
+      )
+    );
     try {
       // The snapshot's tree, so its new large files are pulled and checked out too.
       await must(
@@ -1551,7 +1586,7 @@ const lfsStep = (
         cwd: path,
         env,
       });
-      clearInterval(ticker);
+      await Effect.runPromise(Fiber.interrupt(ticker));
       await tail();
       feed.end();
       if (pulled.code !== 0) {
@@ -1569,7 +1604,7 @@ const lfsStep = (
       });
       return stage;
     } finally {
-      clearInterval(ticker);
+      await Effect.runPromise(Fiber.interrupt(ticker));
       await uncommit(undefined, path, snapshot).catch(() => undefined);
       await rm(scratch, { recursive: true, force: true });
     }

@@ -23,6 +23,7 @@ import {
 import { PolicySchema } from "@cawco/core/stored-shapes";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type { Policy } from "@cawco/core/workspace-judge";
+import { Effect, Fiber, FiberMap, Option, Scope } from "effect";
 import { z } from "zod";
 import { reportDamaged } from "../damaged-records";
 import { type HeldProc, KeeperPool } from "../keepers";
@@ -304,21 +305,34 @@ export const running = async (
   return proc?.pid === held.pid ? proc : undefined;
 };
 
-/** Each workspace's start of a boundary under way: one at a time, and whatever ensures one meanwhile waits for it. */
-const starting = new Map<string, Promise<Boundary>>();
+/**
+ * Each workspace's start of a boundary under way: one at a time, and
+ * whatever ensures one meanwhile waits for it. Its fiber waits on the start
+ * and leaves the map as the start ends.
+ */
+const starting = Effect.runSync(
+  FiberMap.make<string, Boundary>().pipe(Scope.provide(Scope.makeUnsafe()))
+);
 
 /** Workspace `id`'s start under way, if any. */
-export const startUnderWay = (id: string): Promise<Boundary> | undefined =>
-  starting.get(id);
+export const startUnderWay = (id: string): Promise<Boundary> | undefined => {
+  const underWay = FiberMap.getUnsafe(starting, id);
+  // The promise edge of the start under way (ensure.ts, holding.ts, control.ts, looks.ts).
+  return Option.isSome(underWay)
+    ? Effect.runPromise(Fiber.join(underWay.value))
+    : undefined;
+};
 
 /** Whether a start of workspace `id`'s boundary is under way. */
-export const isStarting = (id: string): boolean => starting.has(id);
+export const isStarting = (id: string): boolean =>
+  Option.isSome(FiberMap.getUnsafe(starting, id));
 
 /**
- * Keeps `underWay` as workspace `id`'s start under way until `work` settles:
- * the one way a start is recorded, so none forgets its end. Whatever ensures
- * one meanwhile waits for `underWay`; `work` is what its caller goes on with,
- * and `ended`, if any, runs in the step the entry goes. Answers `work`.
+ * Keeps `underWay` as workspace `id`'s start under way until it settles: the
+ * one way a start is recorded, so none forgets its end. Whatever ensures one
+ * meanwhile waits for `underWay`; `work` is what its caller goes on with,
+ * and `ended`, if any, runs once `work` settles. Answers `work`. Each caller
+ * has found no start under way first; one already recorded stays.
  */
 export const withStart = <T>(
   id: string,
@@ -326,11 +340,15 @@ export const withStart = <T>(
   work: Promise<T>,
   ended?: () => void
 ): Promise<T> => {
-  starting.set(id, underWay);
-  return work.finally(() => {
-    starting.delete(id);
-    ended?.();
-  });
+  Effect.runSync(
+    FiberMap.run(
+      starting,
+      id,
+      Effect.promise(() => underWay),
+      { onlyIfMissing: true }
+    )
+  );
+  return ended ? work.finally(ended) : work;
 };
 
 /** Where an older boundary still running beside the current one is recorded ({@link Retiring}). */
@@ -354,12 +372,21 @@ export const readRetiring = async (id: string): Promise<Retiring[]> => {
   return records.filter((record): record is Retiring => Boolean(record));
 };
 
-/** Each workspace's close under way (quiet, looks.ts `closeQuietly`, or an archive's, holding.ts `closedWhile`); it never rejects. An ensure waits for it. */
-const closing = new Map<string, Promise<void>>();
+/**
+ * Each workspace's close under way (quiet, looks.ts `closeQuietly`, or an
+ * archive's, holding.ts `closedWhile`): the fiber that waits on it, which
+ * never fails. An ensure waits for it. A close that replaces another waits
+ * for that one first (holding.ts `closedWhile`), so the one on record ends
+ * last; the one it replaced runs on for whoever waits on it already.
+ */
+const closing = new Map<string, Fiber.Fiber<void>>();
 
 /** Workspace `id`'s close under way, if any. */
-export const closeUnderWay = (id: string): Promise<void> | undefined =>
-  closing.get(id);
+export const closeUnderWay = (id: string): Promise<void> | undefined => {
+  const underWay = closing.get(id);
+  // The promise edge of the close under way (ensure.ts, holding.ts, looks.ts, workspace.ts).
+  return underWay && Effect.runPromise(Fiber.join(underWay));
+};
 
 /** Whether a close of workspace `id`'s boundary is under way. */
 export const isClosing = (id: string): boolean => closing.has(id);
@@ -374,9 +401,10 @@ export const withClose = <T>(
   underWay: Promise<void>,
   work: Promise<T>
 ): Promise<T> => {
-  closing.set(id, underWay);
+  const fiber = Effect.runFork(Effect.promise(() => underWay));
+  closing.set(id, fiber);
   return work.finally(() => {
-    if (closing.get(id) === underWay) {
+    if (closing.get(id) === fiber) {
       closing.delete(id);
     }
   });

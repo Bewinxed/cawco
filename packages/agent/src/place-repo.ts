@@ -28,13 +28,12 @@
 import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { unhandled } from "@cawco/core/unhandled";
 import {
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLargeFile,
@@ -43,6 +42,7 @@ import {
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import { Effect, Schema } from "effect";
 import { repoTop } from "./repo-top";
 import { credentialIn } from "./secret-text";
 
@@ -83,30 +83,39 @@ const ignoreBlock = (leftOut: readonly PlaceLeftOut[]): string =>
         .map((each) => ignoreLine(each.path))
         .join("\n")}\n`;
 
+/** git that did not finish within the place's time for it: its words say which. */
+class GitLate extends Schema.TaggedError<GitLate>()("GitLate", {
+  message: Schema.String,
+}) {}
+
 /**
  * `work` within what is left of `deadline`, named `what` in the error a
- * late or failed run throws.
+ * late or failed run throws: let go at the deadline, its signal aborted.
  */
-const within = async <T>(
+const within = <T>(
   deadline: number,
   what: string,
   work: (signal: AbortSignal) => Promise<T>
 ): Promise<T> => {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) {
-    throw new Error(`git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`);
-  }
-  const ran = await readWithin(remaining, work);
-  switch (ran.kind) {
-    case "answered":
-      return ran.value;
-    case "unanswered":
-      throw new Error(
-        `${what} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
-      );
-    default:
-      unhandled("read", ran);
-  }
+  // The promise edge of one git run (this file's place steps).
+  return Effect.runPromise(
+    remaining <= 0
+      ? Effect.fail(
+          new GitLate({
+            message: `git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`,
+          })
+        )
+      : boundedRead(remaining, Effect.promise(work)).pipe(
+          Effect.catchTag("Unanswered", () =>
+            Effect.fail(
+              new GitLate({
+                message: `${what} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`,
+              })
+            )
+          )
+        )
+  );
 };
 
 /** git as `safe-git.ts` says, in `cwd`, its pathspecs read literally (a file named `*` is that file). */

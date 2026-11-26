@@ -37,6 +37,7 @@ import { makeFolder } from "@cawco/core/folders";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { folderStepWords } from "@cawco/core/words/folder-move";
+import { Schema } from "effect";
 import type { z } from "zod";
 import {
   TreeEndSchema,
@@ -158,7 +159,14 @@ const parsed = <S extends z.ZodType>(
 ): z.output<S> => schema.parse(JSON.parse(decoder.decode(payload)));
 
 /** A failure the copy names in words a stage line can quote. */
-export class TreeRefused extends Error {}
+export class TreeRefused extends Schema.TaggedError<TreeRefused>()(
+  "TreeRefused",
+  { message: Schema.String }
+) {
+  constructor(words: string) {
+    super({ message: words });
+  }
+}
 
 const refuse = (words: string): never => {
   throw new TreeRefused(words);
@@ -441,10 +449,12 @@ const gitDiffers = (a: GitFacts, b: GitFacts): string | undefined => {
 // ── The sending side ───────────────────────────────────────────────────────
 
 /** What stops a copy before its first byte, by kind: its sender words it ({@link SendOptions.blocked}). */
-class TreeBlocked extends Error {
+class TreeBlocked extends Schema.TaggedError<TreeBlocked>()("TreeBlocked", {
+  message: Schema.String,
+}) {
   readonly block: FolderMoveBlock;
   constructor(block: FolderMoveBlock, words: string) {
-    super(words);
+    super({ message: words });
     this.block = block;
   }
 }

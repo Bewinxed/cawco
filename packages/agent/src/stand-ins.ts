@@ -53,6 +53,7 @@ import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
 import { isGitDir } from "./git-dir";
@@ -266,17 +267,25 @@ export const keepStandInsListed = async (
   }
   const dir = dirname(exclude);
   await makeFolder(dir);
-  let settle: ReturnType<typeof setTimeout> | undefined;
+  // The listing again once the changes have settled: each change starts the
+  // wait over, the listing it ends starts let go, what fails said.
+  let settle: Fiber.Fiber<void> | undefined;
+  const settleUndone = (): void => {
+    if (settle) {
+      Effect.runFork(Fiber.interrupt(settle));
+    }
+  };
   const relist = (): void => {
-    clearTimeout(settle);
-    settle = setTimeout(() => {
-      listStandIns(ref, false).catch((error: unknown) => {
-        console.warn(
-          `[workspace] ${ref.id}: its clone's stand-ins could not be listed again in its info/exclude: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-    }, EXCLUDE_SETTLE_MS);
-    settle.unref();
+    settleUndone();
+    settle = Effect.runFork(
+      Effect.promise(() =>
+        listStandIns(ref, false).catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${ref.id}: its clone's stand-ins could not be listed again in its info/exclude: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+      ).pipe(Effect.delay(EXCLUDE_SETTLE_MS))
+    );
   };
   const watcher = watch(dir, (_event, name) => {
     if (name === null || name === basename(exclude)) {
@@ -289,7 +298,7 @@ export const keepStandInsListed = async (
   });
   relist();
   return () => {
-    clearTimeout(settle);
+    settleUndone();
     watcher.close();
   };
 };

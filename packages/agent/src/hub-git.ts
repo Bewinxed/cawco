@@ -48,7 +48,7 @@
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
 
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
@@ -76,6 +76,7 @@ import { gitDoorWords } from "@cawco/core/words/git-door";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
 import { hubGitLogin, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, isHubRemote } from "./git/hub-remote";
 import {
@@ -432,69 +433,92 @@ const runOnHost = (
   args: readonly string[],
   env: Record<string, string>,
   { input, silenceMs = HOST_RUN_SILENCE_MS }: HostRunOptions = {}
-): Promise<HostRun> =>
-  new Promise((resolve) => {
-    const run = inCopySync(ref.id, ref.path, safeGitArgv([...args]));
-    const [file = "git", ...rest] = run.argv;
-    const child = spawn(file, rest, {
-      cwd: run.cwd,
-      env: {
-        ...env,
-        ...SAFE_GIT_ENV,
-        GIT_DIR: join(ref.path, ".git"),
-        GIT_LFS_FORCE_PROGRESS: "1",
-      },
-      detached: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    child.stdin.on("error", () => undefined);
-    child.stdin.end(input);
-    let out = "";
-    const err = newTail();
-    let silent = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = () => {
-      silent = true;
-      const leader = spawnedPid(child);
-      if (leader !== undefined && child.exitCode === null) {
-        try {
-          signalGroup(leader, "SIGKILL");
-        } catch (error) {
-          console.warn(
-            `[hub-git] ${ref.id}: git ${args[0]} said nothing and could not be stopped: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
+): Promise<HostRun> => {
+  let out = "";
+  const err = newTail();
+  let silent = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const run = inCopySync(ref.id, ref.path, safeGitArgv([...args]));
+  const [file = "git", ...rest] = run.argv;
+  /** The whole group stopped: the run's own, or its silence's, end. */
+  const stopGroup = (child: ChildProcess): void => {
+    const leader = spawnedPid(child);
+    if (leader !== undefined && child.exitCode === null) {
+      try {
+        signalGroup(leader, "SIGKILL");
+      } catch (error) {
+        console.warn(
+          `[hub-git] ${ref.id}: git ${args[0]} said nothing and could not be stopped: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
-    };
-    const heard = () => {
-      clearTimeout(timer);
-      timer = setTimeout(stop, silenceMs);
-    };
-    heard();
-    child.stdout.on("data", (chunk: Buffer) => {
-      out += chunk.toString();
-      heard();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      writeTail(err, chunk.toString(), HOST_RUN_ERR_KEPT);
-      heard();
-    });
-    child.on("error", (error) => {
-      writeTail(err, `\n${error.message}`, HOST_RUN_ERR_KEPT);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
-      resolve({
-        code: silent ? 128 : (code ?? 128),
-        out,
-        err: silent
-          ? `${saidTail(err)}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
-          : saidTail(err),
-        silent,
-      });
-    });
-  });
+    }
+  };
+  const ran = Effect.acquireUseRelease(
+    Effect.sync(() =>
+      spawn(file, rest, {
+        cwd: run.cwd,
+        env: {
+          ...env,
+          ...SAFE_GIT_ENV,
+          GIT_DIR: join(ref.path, ".git"),
+          GIT_LFS_FORCE_PROGRESS: "1",
+        },
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+    ),
+    (child) =>
+      Effect.callback<number | null>((resume) => {
+        child.stdin.on("error", () => undefined);
+        child.stdin.end(input);
+        // Silence is timed by a timer each chunk sets again; its end is a
+        // kill, nothing awaited.
+        const heard = () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            silent = true;
+            stopGroup(child);
+          }, silenceMs);
+        };
+        heard();
+        child.stdout.on("data", (chunk: Buffer) => {
+          out += chunk.toString();
+          heard();
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          writeTail(err, chunk.toString(), HOST_RUN_ERR_KEPT);
+          heard();
+        });
+        child.on("error", (error) => {
+          writeTail(err, `\n${error.message}`, HOST_RUN_ERR_KEPT);
+        });
+        child.on("close", (code) => resume(Effect.succeed(code)));
+      }),
+    // Its timer cleared, and the group stopped if the run is let go before
+    // it closed.
+    (child) =>
+      Effect.sync(() => {
+        clearTimeout(timer);
+        stopGroup(child);
+      })
+  );
+  // The promise edge of one run on the host (this door's fetches and pushes).
+  return Effect.runPromise(
+    ran.pipe(
+      Effect.map((code): HostRun => {
+        const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
+        return {
+          code: silent ? 128 : (code ?? 128),
+          out,
+          err: silent
+            ? `${saidTail(err)}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
+            : saidTail(err),
+          silent,
+        };
+      })
+    )
+  );
+};
 
 /**
  * How long the door waits on the host's credential helpers for a remote's
@@ -1726,13 +1750,20 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
  * Stops serving workspace `id`'s git door. The dir it is in goes once the
  * workspace's judges are gone too (boundary/stop.ts `closeBoundary`).
  */
-export const closeGitDoor = async (id: string): Promise<void> => {
+export const closeGitDoor = (id: string): Promise<void> => {
   const server = doors.get(id);
   doors.delete(id);
-  if (server) {
-    await new Promise<void>((done) => server.close(() => done()));
-  }
-  await rm(gitDoorOf(id), { force: true });
+  // The promise edge of the door's close (boundary/stop.ts).
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      if (server) {
+        yield* Effect.callback<void>((resume) => {
+          server.close(() => resume(Effect.void));
+        });
+      }
+      yield* Effect.promise(() => rm(gitDoorOf(id), { force: true }));
+    })
+  );
 };
 
 /**

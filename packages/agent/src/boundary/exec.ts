@@ -7,6 +7,7 @@ import { constants } from "node:fs";
 import { lstat, open as openFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceClaudeTmpDir,
@@ -18,6 +19,7 @@ import type { Pid } from "@cawco/core/signal";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
+import { Deferred, Effect, Schema } from "effect";
 import {
   AGENT_SOCKET_ENV,
   hostCaEnv,
@@ -93,55 +95,64 @@ export const ready = (
   procId: string,
   line: string,
   what: string
-): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const said: string[] = [];
-    const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
-    let stop = (): void => undefined;
-    const finish = (outcome: Error | number): void => {
-      clearTimeout(timer);
-      stop();
-      if (typeof outcome === "number") {
-        resolve(outcome);
-      } else {
-        reject(outcome);
-      }
-    };
-    const timer = setTimeout(
-      () =>
-        finish(
-          new Error(
-            `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`
-          )
-        ),
-      WORKSPACE_BOUNDARY_START_TIMEOUT_MS
+): Promise<number> => {
+  const said: string[] = [];
+  const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
+  const heard = Effect.gen(function* () {
+    const outcome = yield* Deferred.make<number, Unstarted>();
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        client.subscribe(
+          procId,
+          {
+            line: (event) => {
+              const text = event.data.trim();
+              if (text === line) {
+                Deferred.doneUnsafe(outcome, Effect.succeed(event.seq));
+              } else if (text) {
+                said.push(text);
+              }
+            },
+            exit: (code, signal, _pid, stderr) => {
+              const reason = stderrReason(stderr);
+              if (reason && !said.includes(reason)) {
+                said.push(reason);
+              }
+              Deferred.doneUnsafe(
+                outcome,
+                Effect.fail(
+                  new Unstarted({
+                    message: `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`,
+                  })
+                )
+              );
+            },
+          },
+          0
+        )
+      ),
+      (stop) => Effect.sync(stop)
     );
-    stop = client.subscribe(
-      procId,
-      {
-        line: (event) => {
-          const text = event.data.trim();
-          if (text === line) {
-            finish(event.seq);
-          } else if (text) {
-            said.push(text);
-          }
-        },
-        exit: (code, signal, _pid, stderr) => {
-          const reason = stderrReason(stderr);
-          if (reason && !said.includes(reason)) {
-            said.push(reason);
-          }
-          finish(
-            new Error(
-              `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`
-            )
-          );
-        },
-      },
-      0
-    );
-  });
+    return yield* Deferred.await(outcome);
+  }).pipe(Effect.scoped);
+  // The promise edge of a boundary's or a judge's start (ensure.ts, judge-process.ts).
+  return Effect.runPromise(
+    boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.fail(
+          new Unstarted({
+            message: `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`,
+          })
+        )
+      )
+    )
+  );
+};
+
+/** A process that did not say it was ready: it exited first, or said nothing in time. Its words name it and what it said. */
+class Unstarted extends Schema.TaggedError<Unstarted>()("Unstarted", {
+  message: Schema.String,
+}) {}
 
 /**
  * What every command runs with besides its caller's environment: the

@@ -6,6 +6,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import {
   commandLines,
@@ -14,8 +15,8 @@ import {
   processLineage,
 } from "@cawco/core/process-identity";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
-import { until } from "@cawco/core/until";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { Effect } from "effect";
 import { membershipName } from "../boundary-policy";
 import { commandsOf } from "./exec";
 import type { Seen } from "./place-guard";
@@ -331,15 +332,15 @@ const AGENT_LOOK_MS = 200;
  * session's lane holds its next turn (session.ts queues a session's controls
  * in order), so nothing it starts after is swept.
  */
-const endWorkspaceWork = async (
+const endWorkspaceWork = Effect.fnUntraced(function* (
   instanceId: string,
   workspace: string
-): Promise<{ ended: number[]; left: number[] }> => {
+) {
   const ended = new Set<number>();
   const left = new Set<number>();
   for (;;) {
-    const round = await endWork(
-      async () => (await workspaceWork(instanceId, workspace)).now
+    const round = yield* endWork(() =>
+      workspaceWork(instanceId, workspace).then(({ now }) => now)
     );
     for (const pid of round.ended) {
       ended.add(pid);
@@ -347,15 +348,20 @@ const endWorkspaceWork = async (
     for (const pid of round.left) {
       left.add(pid);
     }
-    const { agents, later } = await workspaceWork(instanceId, workspace);
+    const { agents, later } = yield* Effect.promise(() =>
+      workspaceWork(instanceId, workspace)
+    );
     if (later.length === 0) {
       return { ended: [...ended], left: [...left] };
     }
-    while (agents.some((pid) => agentExecutors.get(workspace)?.has(pid))) {
-      await Bun.sleep(AGENT_LOOK_MS);
-    }
+    yield* lookUntil(
+      { every: AGENT_LOOK_MS, until: (running: boolean) => !running },
+      Effect.sync(() =>
+        agents.some((pid) => agentExecutors.get(workspace)?.has(pid))
+      )
+    );
   }
-};
+});
 
 /** Of `ones`, those still running as the same process. */
 const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
@@ -391,48 +397,50 @@ export const endSessionWork = (
   instanceId: string,
   workspace: string | undefined
 ): Promise<{ ended: number[]; left: number[] }> => {
+  // The promise edge of the session's work ended (session.ts).
   if (process.platform !== "darwin") {
-    return endWork(() => sessionWork(instanceId));
+    return Effect.runPromise(endWork(() => sessionWork(instanceId)));
   }
   if (!workspace || workspaceIdKindOf(workspace) === "place") {
     return Promise.resolve({ ended: [], left: [] });
   }
-  return endWorkspaceWork(instanceId, workspace);
+  return Effect.runPromise(endWorkspaceWork(instanceId, workspace));
 };
 
 /** {@link endSessionWork}'s ending of the work `read` reads, read again for its kill. */
-const endWork = async (
+const endWork = Effect.fnUntraced(function* (
   read: () => Promise<Worker[]>
-): Promise<{ ended: number[]; left: number[] }> => {
-  const first = await read();
+): Effect.fn.Return<{ ended: number[]; left: number[] }> {
+  const first = yield* Effect.promise(read);
   if (first.length === 0) {
     return { ended: [], left: [] };
   }
   for (const one of first) {
     signalPid(listedPid(one.pid), "SIGTERM");
   }
-  let ending = first;
-  await until(
-    async () => {
-      ending = await stillRunning(ending);
-      return ending.length === 0;
-    },
-    { deadline: Date.now() + WORK_GRACE_MS, every: 50 }
-  );
-  const last = await read();
+  /** `ones` looked at every 50 ms until none runs or `ms` pass: those still running. */
+  const goneWithin = (ones: readonly Worker[], ms: number) => {
+    let running = ones;
+    return lookUntil(
+      {
+        every: 50,
+        deadlineMs: ms,
+        until: (still: readonly Worker[]) => still.length === 0,
+      },
+      Effect.promise(async () => {
+        running = await stillRunning(running);
+        return running;
+      })
+    ).pipe(Effect.map(() => running));
+  };
+  yield* goneWithin(first, WORK_GRACE_MS);
+  const last = yield* Effect.promise(read);
   for (const one of last) {
     signalPid(listedPid(one.pid), "SIGKILL");
   }
-  let left = last;
-  await until(
-    async () => {
-      left = await stillRunning(left);
-      return left.length === 0;
-    },
-    { deadline: Date.now() + KILL_WAIT_MS, every: 50 }
-  );
+  const left = yield* goneWithin(last, KILL_WAIT_MS);
   return {
     ended: [...new Set([...first, ...last].map((one) => one.pid))],
     left: left.map((one) => one.pid),
   };
-};
+});

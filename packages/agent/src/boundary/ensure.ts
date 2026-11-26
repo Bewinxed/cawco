@@ -118,6 +118,7 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
+import { Deferred, Effect, Fiber, Schema } from "effect";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
 import { isGitDir } from "../git-dir";
@@ -1631,11 +1632,11 @@ const REARM_CONCURRENCY = 16;
  */
 let armState = initialHandover();
 
-/** Each workspace's arming under way or done, by id ({@link hookArmed}). */
-const rearming = new Map<string, Promise<void>>();
+/** Each workspace's arming under way or done, by id ({@link hookArmed}): the fiber it runs on, which never fails. */
+const rearming = new Map<string, Fiber.Fiber<void>>();
 
-/** Settled each time the start-up reading moves, for a gate waiting on it. */
-let readingMoved = Promise.withResolvers<void>();
+/** Done each time the start-up reading moves, for a gate waiting on it; a fresh one then waits for the next move. */
+let readingMoved = Deferred.makeUnsafe<void>();
 
 /** The workspaces the last whole reading found, with the clone each runs in. */
 let readRefs = new Map<string, WorkspaceRef>();
@@ -1649,14 +1650,15 @@ const armLimit = atMost(REARM_CONCURRENCY);
  * Its reading is tried again every {@link KEEPERS_ASK_AGAIN_MS}, and the
  * refusal lasts until one is whole.
  */
-class ArmingBlocked extends Error {
-  readonly workspace: string;
+class ArmingBlocked extends Schema.TaggedError<ArmingBlocked>()(
+  "ArmingBlocked",
+  { message: Schema.String, workspace: Schema.String }
+) {
   constructor(workspace: string, why: string) {
-    super(
-      `Sessions in this workspace can't start yet: this machine's workspaces could not be read at its start (${why}). Nothing was changed; they're read again every ${KEEPERS_ASK_AGAIN_MS / 1000} s, and a start goes once a reading is whole.`
-    );
-    this.name = "ArmingBlocked";
-    this.workspace = workspace;
+    super({
+      workspace,
+      message: `Sessions in this workspace can't start yet: this machine's workspaces could not be read at its start (${why}). Nothing was changed; they're read again every ${KEEPERS_ASK_AGAIN_MS / 1000} s, and a start goes once a reading is whole.`,
+    });
   }
 }
 
@@ -1668,14 +1670,21 @@ export const armedWorkspaces = (): HandoverState["workspaces"] =>
   armState.workspaces;
 
 /** Workspace `id`'s arming under way or done, if any ({@link hookArmed}). */
-export const armingOf = (id: string): Promise<void> | undefined =>
-  rearming.get(id);
+export const armingOf = (id: string): Promise<void> | undefined => {
+  const arming = rearming.get(id);
+  // The promise edge of the arming's fiber (control.ts, looks.ts).
+  return arming && Effect.runPromise(Fiber.join(arming));
+};
 
 /** Every workspace's arming under way or done, now. */
-export const allArming = (): Promise<void>[] => [...rearming.values()];
+export const allArming = (): Promise<void>[] =>
+  // The promise edge of each arming's fiber (looks.ts).
+  [...rearming.values()].map((arming) => Effect.runPromise(Fiber.join(arming)));
 
 /** Settles the next time the start-up reading moves. */
-export const nextReading = (): Promise<void> => readingMoved.promise;
+export const nextReading = (): Promise<void> =>
+  // The promise edge of the reading's next move (control.ts).
+  Effect.runPromise(Deferred.await(readingMoved));
 
 /** One step of the arming, its commands run in order. */
 export const armStep = (event: HandoverEvent): void => {
@@ -1686,8 +1695,8 @@ export const armStep = (event: HandoverEvent): void => {
     obeyArming(command);
   }
   if (armState.arming !== before) {
-    readingMoved.resolve();
-    readingMoved = Promise.withResolvers<void>();
+    Deferred.doneUnsafe(readingMoved, Effect.void);
+    readingMoved = Deferred.makeUnsafe<void>();
   }
 };
 
@@ -1708,7 +1717,12 @@ const obeyArming = (command: HandoverCommand): void => {
       );
       return;
     case "arm":
-      rearming.set(command.id, armOne(command.id, command.how));
+      // Let go: armOne says what fails and never rejects; its fiber is kept
+      // for whatever waits on the arming.
+      rearming.set(
+        command.id,
+        Effect.runFork(Effect.promise(() => armOne(command.id, command.how)))
+      );
       return;
     case "say":
       console.warn(command.words);
@@ -1784,20 +1798,27 @@ const armOne = async (
  * on its own workspace's alone. While the start-up reading is blocked it
  * refuses by name ({@link ArmingBlocked}).
  */
-export const hookArmed = async (id: string): Promise<void> => {
-  for (;;) {
-    const phase = armState.arming;
-    if (phase.kind === "blocked") {
-      throw new ArmingBlocked(id, phase.why);
-    }
-    if (phase.kind !== "listing") {
-      break;
-    }
-    await readingMoved.promise;
-  }
-  armStep({ kind: "arm-need", id });
-  await rearming.get(id);
-};
+export const hookArmed = (id: string): Promise<void> =>
+  // The promise edge of the wait for a workspace's arming (session.ts).
+  Effect.runPromise(
+    Effect.gen(function* () {
+      for (;;) {
+        const phase = armState.arming;
+        if (phase.kind === "blocked") {
+          return yield* new ArmingBlocked(id, phase.why);
+        }
+        if (phase.kind !== "listing") {
+          break;
+        }
+        yield* Deferred.await(readingMoved);
+      }
+      armStep({ kind: "arm-need", id });
+      const arming = rearming.get(id);
+      if (arming) {
+        yield* Fiber.join(arming);
+      }
+    })
+  );
 
 /**
  * One reading of the workspaces for the handover's arming: each one's

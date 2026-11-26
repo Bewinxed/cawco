@@ -11,10 +11,13 @@
  * An answer is given only once the whole group has gone, so what runs
  * next (an update's put-back) never runs beside it.
  */
+
 import { type Bounded, readWhileHeard, readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import type { Ran } from "@cawco/core/run-captured";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { spawnTethered, untether } from "@cawco/core/tether";
+import { Effect, Fiber } from "effect";
 
 /**
  * How long a group asked to end (SIGTERM) is given before it is killed:
@@ -24,7 +27,10 @@ import { spawnTethered, untether } from "@cawco/core/tether";
 const GROUP_GRACE_MS = 5000;
 
 /** Each group this process leads that still runs, by its leader: what it ends when it is asked to end ({@link endEveryGroup}). */
-const liveGroups = new Map<Pid, { end: () => void; gone: Promise<unknown> }>();
+const liveGroups = new Map<
+  Pid,
+  { readonly end: () => void; readonly gone: Fiber.Fiber<unknown> }
+>();
 
 /** Every process in `leader`'s group ended: asked, then killed `graceMs` later if any of it still runs. Never throws. */
 const endWholeGroup = (leader: Pid, graceMs: number): void => {
@@ -42,9 +48,17 @@ const endWholeGroup = (leader: Pid, graceMs: number): void => {
 };
 
 /** Waits for `gone`, a group's own end, as long as its ending can take: its grace and as long again. */
-const awaitGone = async (gone: Promise<unknown>, graceMs: number) => {
-  await readWithin(graceMs * 2, () => gone);
-};
+const awaitGone = (
+  gone: Fiber.Fiber<unknown>,
+  graceMs: number
+): Promise<void> =>
+  // The promise edge of the wait (runGroupWithin, endEveryGroup).
+  Effect.runPromise(
+    boundedRead(graceMs * 2, Fiber.await(gone)).pipe(
+      Effect.asVoid,
+      Effect.catchTag("Unanswered", () => Effect.void)
+    )
+  );
 
 /**
  * Runs `argv` as its group's leader with `env` (and `cwd`), both output
@@ -70,7 +84,8 @@ export const runGroupWithin = async (
   }
 ): Promise<Bounded<Ran>> => {
   const graceMs = options.graceMs ?? GROUP_GRACE_MS;
-  let gone: Promise<unknown> = Promise.resolve();
+  // Ends once the group's run has settled, however it ended; none ran yet.
+  let gone: Fiber.Fiber<unknown> = Effect.runFork(Effect.void);
   const read = (signal: AbortSignal, heard?: () => void): Promise<Ran> => {
     const child = spawnTethered(argv, {
       env: options.env,
@@ -96,9 +111,11 @@ export const runGroupWithin = async (
         liveGroups.delete(leader);
       }
     });
-    gone = work.catch(() => undefined);
+    // The run's settling, waited on and never failing: its outcome is the caller's.
+    const settled = Effect.runFork(Effect.exit(Effect.promise(() => work)));
+    gone = settled;
     if (leader) {
-      liveGroups.set(leader, { end, gone });
+      liveGroups.set(leader, { end, gone: settled });
     }
     if (signal.aborted) {
       end();

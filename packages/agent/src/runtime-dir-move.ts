@@ -15,6 +15,7 @@ import { lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { cp, lstat, open, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder, makeFolderSync } from "@cawco/core/folders";
 import {
   isRedactionStoreName,
@@ -36,6 +37,7 @@ import {
   signal as signalPid,
 } from "@cawco/core/signal";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import { Effect, Schema } from "effect";
 
 /** The database an OpenCode 2.0 data home holds: what makes a home a store. */
 const DATABASE = join("opencode", "opencode.db");
@@ -104,21 +106,19 @@ const send = async (
   signalPid(identified, sig);
 };
 
-/** Waits up to `ms` for the process to end; whether it did. */
-const ended = async (
+/** How often {@link ended} looks whether the process has gone. */
+const GONE_LOOK_MS = 200;
+
+/** Looks every {@link GONE_LOOK_MS}, up to `ms`, for the process to end; whether it did. */
+const ended = (
   pid: number,
   start: string,
   ms: number
-): Promise<boolean> => {
-  const deadline = Date.now() + ms;
-  while (await runs(pid, start)) {
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await Bun.sleep(200);
-  }
-  return true;
-};
+): Effect.Effect<boolean> =>
+  lookUntil(
+    { every: GONE_LOOK_MS, deadlineMs: ms, until: (alive: boolean) => !alive },
+    Effect.promise(() => runs(pid, start))
+  ).pipe(Effect.map((looked) => looked.kind === "found"));
 
 /**
  * Every server on `home` ended, so its database is still while it is
@@ -126,23 +126,31 @@ const ended = async (
  * ended. Its sessions' records stay; the agent's start finds the server gone
  * and the next turn starts one on the new home.
  */
-const endServersOn = async (home: string, account: string): Promise<void> => {
-  for (const { pid, start } of await serversOn(home)) {
+/** A server on an account's data home that would not end, so the home cannot move. */
+class HomeHeld extends Schema.TaggedError<HomeHeld>()("HomeHeld", {
+  message: Schema.String,
+}) {}
+
+const endServersOn = Effect.fnUntraced(function* (
+  home: string,
+  account: string
+) {
+  for (const { pid, start } of yield* Effect.promise(() => serversOn(home))) {
     console.info(
       `[opencode] account ${account}'s server ${pid} runs on its data home in the runtime dir; ending it so the home moves still`
     );
-    await send(pid, start, "SIGTERM");
-    if (await ended(pid, start, TERM_GRACE_MS)) {
+    yield* Effect.promise(() => send(pid, start, "SIGTERM"));
+    if (yield* ended(pid, start, TERM_GRACE_MS)) {
       continue;
     }
-    await send(pid, start, "SIGKILL");
-    if (!(await ended(pid, start, KILL_GRACE_MS))) {
-      throw new Error(
-        `Account ${account}'s OpenCode server ${pid} on ${home} did not end after SIGKILL, so its data home cannot move.`
-      );
+    yield* Effect.promise(() => send(pid, start, "SIGKILL"));
+    if (!(yield* ended(pid, start, KILL_GRACE_MS))) {
+      return yield* new HomeHeld({
+        message: `Account ${account}'s OpenCode server ${pid} on ${home} did not end after SIGKILL, so its data home cannot move.`,
+      });
     }
   }
-};
+});
 
 /** Flushes `path` (a file or a folder) to the disk. */
 const flush = async (path: string): Promise<void> => {
@@ -223,7 +231,7 @@ export const moveOpencodeAccountHomes = async (): Promise<void> => {
       );
       continue;
     }
-    await endServersOn(from, account);
+    await Effect.runPromise(endServersOn(from, account));
     await moveHome(account, from, to);
     console.info(
       `[opencode] moved account ${account}'s data home from ${from} to ${to}`

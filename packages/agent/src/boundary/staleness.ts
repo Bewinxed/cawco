@@ -4,6 +4,7 @@
  */
 
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { Effect, Fiber } from "effect";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
 import { isStarting, readRetiring } from "./state";
@@ -114,7 +115,8 @@ export const markKeptRunning = (id: string, kept: KeptRunning): void => {
   keptRunning.set(id, kept);
 };
 
-let staleTimer: ReturnType<typeof setInterval> | undefined;
+/** The look's fiber while any workspace waits ({@link lookEvery}). */
+let staleLooks: Fiber.Fiber<never> | undefined;
 
 /** Puts workspace `ref` among the waiting to be replaced ({@link stubbed}). */
 export const markStubbed = (ref: WorkspaceRef): void => {
@@ -145,11 +147,14 @@ export const forgetStubbed = (id: string): void => {
  * stop.ts sits under what `look` ends up calling: the look itself is passed.
  */
 export const lookEvery = (look: () => void): void => {
-  if (staleTimer) {
+  if (staleLooks) {
     return;
   }
-  staleTimer = setInterval(look, STALE_LOOK_MS);
-  staleTimer.unref();
+  // Each STALE_LOOK_MS, the first a wait after it starts; `look` starts its
+  // look and says what fails itself. Interrupted by {@link stopLooking}.
+  staleLooks = Effect.runFork(
+    Effect.sync(look).pipe(Effect.delay(STALE_LOOK_MS), Effect.forever)
+  );
 };
 
 const stopLooking = (): void => {
@@ -157,10 +162,10 @@ const stopLooking = (): void => {
     stale.size === 0 &&
     retiring.size === 0 &&
     stubbed.size === 0 &&
-    staleTimer
+    staleLooks
   ) {
-    clearInterval(staleTimer);
-    staleTimer = undefined;
+    Effect.runFork(Fiber.interrupt(staleLooks));
+    staleLooks = undefined;
   }
 };
 

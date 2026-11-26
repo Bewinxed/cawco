@@ -75,6 +75,8 @@ import {
 import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { cloneDenies } from "@cawco/core/clone-denies";
+import { makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { copiedFolderSync } from "@cawco/core/object-pool";
 import { claudeHome } from "@cawco/core/paths/claude";
@@ -100,6 +102,7 @@ import type {
 import { resolveDenied } from "@cawco/core/workspace-judge";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
+import { Clock, Effect, Schema } from "effect";
 import { z } from "zod";
 import { removeTree } from "./remove-tree";
 
@@ -771,10 +774,19 @@ export const inView = (id: string, pid: number): boolean => {
   );
 };
 
-const viewing = new Map<string, Promise<number>>();
+/** Each workspace's view starting: whatever ensures it meanwhile shares the one start. */
+const viewing = makeJoin<string, number, ViewRefused>();
 
 /** How long a view's holder has to name its namespace. */
 const VIEW_START_MS = 10_000;
+
+/** How often {@link startView} looks whether the holder has named its namespace. */
+const VIEW_LOOK_MS = 20;
+
+/** A view that could not be started: its words name the workspace, its folder and why. */
+class ViewRefused extends Schema.TaggedError<ViewRefused>()("ViewRefused", {
+  message: Schema.String,
+}) {}
 
 /**
  * Workspace `id`'s view, running: a live member's pid. With none, the
@@ -786,31 +798,36 @@ export const ensureView = (id: string, layer: Layer): Promise<number> => {
   if (member) {
     return Promise.resolve(member.pid);
   }
-  const pending = viewing.get(id);
-  if (pending) {
-    return pending;
-  }
-  const started = startView(id, layer).finally(() => viewing.delete(id));
-  viewing.set(id, started);
-  return started;
+  // The promise edge of the view's start, shared by every caller while it runs.
+  return Effect.runPromise(viewing.run(id, startView(id, layer)));
 };
 
-const startView = async (id: string, layer: Layer): Promise<number> => {
+/** What the holder has done so far, as {@link startView} looks: named its namespace, or exited. */
+type HolderLook =
+  | { readonly kind: "named"; readonly record: ViewRecord }
+  | { readonly kind: "exited"; readonly code: number };
+
+const startView = Effect.fnUntraced(function* (id: string, layer: Layer) {
   // Each program the view runs on, found before anything of it is made.
   const bwrap = systemProgram("bwrap");
   const perl = systemProgram("perl");
   systemProgram("nsenter");
-  for (const mount of layer.mounts ?? []) {
-    await makeFolder(mount.upper, { mode: 0o700 });
-    await makeFolder(mount.work, { mode: 0o700 });
-    // The stand-ins layer's mount point, empty: what an earlier agent made
-    // there on the host goes.
-    await removeTree(standInsDir(mount));
-    await makeFolder(standInsDir(mount), { mode: 0o700 });
-  }
-  const standIns = await standInsOf(id, layer);
-  await rm(viewFile(id), { force: true });
+  const standIns = yield* Effect.promise(async () => {
+    for (const mount of layer.mounts ?? []) {
+      await makeFolder(mount.upper, { mode: 0o700 });
+      await makeFolder(mount.work, { mode: 0o700 });
+      // The stand-ins layer's mount point, empty: what an earlier agent made
+      // there on the host goes.
+      await removeTree(standInsDir(mount));
+      await makeFolder(standInsDir(mount), { mode: 0o700 });
+    }
+    const made = await standInsOf(id, layer);
+    await rm(viewFile(id), { force: true });
+    return made;
+  });
   const env = { ...hostEnvironment(), PATH: trustedPath() };
+  // The holder outlives this start and the agent: the view is the
+  // workspace's, ended by its archive ({@link endView}), or here once refused.
   const holder = Bun.spawn(
     [
       bwrap,
@@ -827,44 +844,63 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
     { env, stdin: "pipe", stdout: "ignore", stderr: "pipe", detached: true }
   );
   holder.unref();
-  const refuse = async (why: string): Promise<never> => {
-    // The holder reads the end of its stdin and leaves; bwrap, if it never
-    // got as far, is killed.
-    await holder.stdin.end();
-    signalPid(listedPid(holder.pid), "SIGKILL");
-    await rm(viewFile(id), { force: true });
-    throw new Error(`workspace ${id}'s view of ${layer.folder} ${why}`);
-  };
-  const deadline = Date.now() + VIEW_START_MS;
-  while (Date.now() < deadline) {
-    const record = readViewRecord(id);
-    if (record && nsOf(record.pid, "mnt") === record.mnt) {
-      const said = await mountView(
-        record,
-        viewPlan(id, layer, standIns),
-        env,
-        perl
-      );
-      if (said !== undefined) {
-        return await refuse(`was not mounted: ${said}`);
-      }
-      holder.stdin.write(`${VIEW_MOUNTED}\n`);
+  const refuse = (why: string) =>
+    Effect.promise(async () => {
+      // The holder reads the end of its stdin and leaves; bwrap, if it never
+      // got as far, is killed.
       await holder.stdin.end();
-      await openWorkDirs(layer);
-      return record.pid;
-    }
-    if (holder.exitCode !== null) {
-      const said = (await new Response(holder.stderr).text()).trim();
-      return await refuse(
-        `did not start: bwrap exited ${holder.exitCode}${said ? `: ${said}` : ""}`
-      );
-    }
-    await Bun.sleep(20);
-  }
-  return await refuse(
-    `did not name its namespace within ${VIEW_START_MS / 1000} s`
+      signalPid(listedPid(holder.pid), "SIGKILL");
+      await rm(viewFile(id), { force: true });
+    }).pipe(
+      Effect.andThen(
+        new ViewRefused({
+          message: `workspace ${id}'s view of ${layer.folder} ${why}`,
+        })
+      )
+    );
+  const looked = yield* lookUntil(
+    { every: VIEW_LOOK_MS, deadlineMs: VIEW_START_MS },
+    Effect.sync((): HolderLook | undefined => {
+      const record = readViewRecord(id);
+      if (record && nsOf(record.pid, "mnt") === record.mnt) {
+        return { kind: "named", record };
+      }
+      return holder.exitCode === null
+        ? undefined
+        : { kind: "exited", code: holder.exitCode };
+    })
   );
-};
+  if (looked.kind === "deadline") {
+    return yield* refuse(
+      `did not name its namespace within ${VIEW_START_MS / 1000} s`
+    );
+  }
+  const seen = looked.value;
+  if (seen.kind === "exited") {
+    const said = (yield* Effect.promise(() =>
+      new Response(holder.stderr).text()
+    )).trim();
+    return yield* refuse(
+      `did not start: bwrap exited ${seen.code}${said ? `: ${said}` : ""}`
+    );
+  }
+  const { record } = seen;
+  const said = yield* mountView(
+    record,
+    viewPlan(id, layer, standIns),
+    env,
+    perl
+  );
+  if (said !== undefined) {
+    return yield* refuse(`was not mounted: ${said}`);
+  }
+  yield* Effect.promise(async () => {
+    holder.stdin.write(`${VIEW_MOUNTED}\n`);
+    await holder.stdin.end();
+    await openWorkDirs(layer);
+  });
+  return record.pid;
+});
 
 /**
  * The setns(2) and mount(2) syscall numbers of each architecture CawCo
@@ -1072,12 +1108,12 @@ const refusal = (at: string, code: number, kind: MountKind): string => {
  * wrote the record, never bwrap's own, which stays in the host's
  * namespaces. Its refusal's words when it refused, none when all are made.
  */
-const mountView = async (
+const mountView = Effect.fnUntraced(function* (
   record: ViewRecord,
   mounts: readonly ViewMount[],
   env: Record<string, string>,
   perl: string
-): Promise<string | undefined> => {
+) {
   const numbers =
     process.arch === "x64" || process.arch === "arm64"
       ? SYSCALLS[process.arch]
@@ -1103,29 +1139,43 @@ const mountView = async (
           ]),
         ]
   );
-  const mounter = Bun.spawn(
-    [
-      perl,
-      "-e",
-      MOUNTER,
-      String(numbers.setns),
-      String(numbers.mount),
-      String(record.pid),
-      ...(record.user === nsOf(process.pid, "user") ? [] : ["user"]),
-      "mnt",
-    ],
-    {
-      env,
-      stdin: new Blob([words.map((word) => `${word}\0`).join("")]),
-      stdout: "pipe",
-      stderr: "pipe",
-    }
+  // Killed if the start is let go before it exits.
+  const [code, said, failed] = yield* Effect.acquireUseRelease(
+    Effect.sync(() =>
+      Bun.spawn(
+        [
+          perl,
+          "-e",
+          MOUNTER,
+          String(numbers.setns),
+          String(numbers.mount),
+          String(record.pid),
+          ...(record.user === nsOf(process.pid, "user") ? [] : ["user"]),
+          "mnt",
+        ],
+        {
+          env,
+          stdin: new Blob([words.map((word) => `${word}\0`).join("")]),
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      )
+    ),
+    (mounter) =>
+      Effect.promise(() =>
+        Promise.all([
+          mounter.exited,
+          new Response(mounter.stdout).text(),
+          new Response(mounter.stderr).text(),
+        ])
+      ),
+    (mounter) =>
+      Effect.sync(() => {
+        if (mounter.exitCode === null) {
+          mounter.kill("SIGKILL");
+        }
+      })
   );
-  const [code, said, failed] = await Promise.all([
-    mounter.exited,
-    new Response(mounter.stdout).text(),
-    new Response(mounter.stderr).text(),
-  ]);
   if (code === 0) {
     return;
   }
@@ -1135,7 +1185,7 @@ const mountView = async (
     return refusal(at, Number(errno), MountKindSchema.parse(kind));
   }
   return failed.trim() || `the mounter exited ${code}`;
-};
+});
 
 /**
  * Moves into its first word, inside the view, and runs the rest in place of
@@ -1213,35 +1263,59 @@ export interface ViewProcess {
  * with its command line as it was read before its kill, and those that
  * would not go.
  */
-export const endView = async (
+export const endView = (
   id: string
-): Promise<{ ended: ViewProcess[]; left: number[] }> => {
+): Promise<{ ended: ViewProcess[]; left: number[] }> =>
+  // The promise edge of the view's end (workspace.ts's archive).
+  Effect.runPromise(endViewNow(id));
+
+/** How long {@link endViewNow} gives what it killed before it reads the view's members again. */
+const VIEW_KILL_SETTLE_MS = 50;
+
+const endViewNow = Effect.fnUntraced(function* (
+  id: string
+): Effect.fn.Return<{ ended: ViewProcess[]; left: number[] }> {
   const record = readViewRecord(id);
   if (!record) {
     return { ended: [], left: [] };
   }
-  const deadline = Date.now() + VIEW_END_MS;
+  const started = yield* Clock.currentTimeMillis;
   const ended = new Map<number, string>();
   // Read again each round, mark and all: once its last process is gone, the
   // namespace's number may be another's within the same round.
-  let left = viewMembers(id, record);
-  while (left.length > 0 && Date.now() < deadline) {
-    const named = await Promise.all(
-      left
-        .filter((pid) => !ended.has(pid))
-        .map(async (pid) => [pid, (await commandLine(pid)) ?? ""] as const)
+  const round = Effect.fnUntraced(function* (members: readonly number[]) {
+    const named = yield* Effect.promise(() =>
+      Promise.all(
+        members
+          .filter((pid) => !ended.has(pid))
+          .map(async (pid) => [pid, (await commandLine(pid)) ?? ""] as const)
+      )
     );
     for (const [pid, command] of named) {
       ended.set(pid, command);
     }
-    for (const pid of left) {
+    for (const pid of members) {
       signalPid(listedPid(pid), "SIGKILL");
     }
-    await Bun.sleep(50);
-    left = viewMembers(id, record);
-  }
+    yield* Effect.sleep(VIEW_KILL_SETTLE_MS);
+    return viewMembers(id, record);
+  });
+  const first = viewMembers(id, record);
+  const left =
+    first.length === 0
+      ? first
+      : yield* round(first).pipe(
+          Effect.repeat({
+            while: (members) =>
+              Clock.currentTimeMillis.pipe(
+                Effect.map(
+                  (now) => members.length > 0 && now - started < VIEW_END_MS
+                )
+              ),
+          })
+        );
   if (left.length === 0) {
-    await rm(viewFile(id), { force: true });
+    yield* Effect.promise(() => rm(viewFile(id), { force: true }));
   }
   return {
     ended: [...ended]
@@ -1249,7 +1323,7 @@ export const endView = async (
       .map(([pid, command]) => ({ pid, command })),
     left,
   };
-};
+});
 
 // ----------------------------------------------------------------- the copy
 
@@ -1330,7 +1404,8 @@ const cloneFolder = async (
   return true;
 };
 
-const owning = new Map<string, Promise<void>>();
+/** Each workspace's own clone of its modules being made: one at a time, shared by whoever asks meanwhile. */
+const owning = makeJoin<string, void>();
 
 /**
  * The copy's own clone of F's root `node_modules`, made beside the link and
@@ -1338,12 +1413,9 @@ const owning = new Map<string, Promise<void>>();
  * Once per workspace at a time; again after an agent restart cut one short
  * (its partial clone is removed first).
  */
-export const ownModules = (id: string): Promise<void> => {
-  const pending = owning.get(id);
-  if (pending) {
-    return pending;
-  }
-  const work = (async () => {
+export const ownModules = (id: string): Promise<void> =>
+  // The promise edge of the clone, shared by every caller while it runs.
+  owning.runPromise(id, async () => {
     const layer = await readLayer(id);
     if (!(layer?.form === "copy" && layer.modules === "linked")) {
       return;
@@ -1369,10 +1441,7 @@ export const ownModules = (id: string): Promise<void> => {
     console.info(
       `[workspace] ${id}: its own clone of ${source} is in place of the link`
     );
-  })().finally(() => owning.delete(id));
-  owning.set(id, work);
-  return work;
-};
+  });
 
 // --------------------------------------------------------------- the making
 
