@@ -30,6 +30,14 @@
  * changes): each path it names that the policy refuses refuses the call,
  * with the reason the model reads.
  *
+ * The hook also runs before each compaction (`PreCompact`): Claude Code
+ * reads its instruction files again once it has compacted, mid-turn, into
+ * the request after it, and judges no tool call on the way. A compaction is
+ * answered by the instruction files the session reads from the clone
+ * (`workspace-judge.ts` `judgeInstructions`): one that leads to a file the
+ * workspace does not read refuses it, and the CLI goes on uncompacted, with
+ * the instruction files it read at the turn's start.
+ *
  * It is a plain script on Bun, never a module of cawco: cawco's own start-up
  * took over 30s on a loaded machine. The agent writes this file, the judge
  * and the protocol (boundary/protocol.ts) beside it into the workspace's
@@ -91,7 +99,7 @@ const {
 } = handed;
 
 /** The copy the agent wrote beside this script (`JUDGE_SCRIPT`). */
-const { judgeCall, readPolicy }: Judge = await import(
+const { judgeCall, judgeInstructions, readPolicy }: Judge = await import(
   join(import.meta.dir, "workspace-judge.ts")
 );
 
@@ -131,6 +139,45 @@ const throughExecutor = (
   })}`;
 };
 
+/**
+ * The answer to a compaction in folder `cwd`: refused while an instruction
+ * file the session reads from the clone leads to a file the workspace does
+ * not read, which the CLI would read into the request after it.
+ */
+const compaction = (cwd: unknown): string => {
+  if (typeof cwd !== "string") {
+    throw new Error("the compaction names no working directory");
+  }
+  const verdict = judgeInstructions(readPolicy(policyFile), {
+    harness: "claude",
+    cwd,
+    refusing: "this compaction",
+  });
+  return verdict.ok ? `${JUDGE_ALLOWS}\n` : refuse(verdict.reason);
+};
+
+/** The answer to shell call `call` from a CLI whose shell prefix is `shellPrefix` (in hex). */
+const shellCall = (
+  call: Record<string, unknown>,
+  shellPrefix: string
+): string => {
+  // Monitor's websocket form runs no command, so there is nothing to bound.
+  if (typeof call.command !== "string") {
+    return `${JUDGE_ALLOWS}\n`;
+  }
+  if (shellPrefix === JUDGE_NO_PREFIX) {
+    return throughExecutor(call, call.command);
+  }
+  if (!HEX.test(shellPrefix)) {
+    throw new Error("the hook sent no shell prefix");
+  }
+  // No decision: the CLI's own permission flow goes on, on the command as
+  // written, and its prefix runs it inside.
+  return Buffer.from(shellPrefix, "hex").toString("utf8") === prefix
+    ? `${JUDGE_ALLOWS}\n`
+    : refuse(UNPREFIXED);
+};
+
 /** The answer to one call, as the hook's JSON input names it, from a CLI whose shell prefix is `shellPrefix` (in hex). */
 const answer = (text: string, shellPrefix: string): string => {
   try {
@@ -152,6 +199,9 @@ const answer = (text: string, shellPrefix: string): string => {
       tool_name: field("tool_name"),
       transcript_path: field("transcript_path"),
     };
+    if (field("hook_event_name") === "PreCompact") {
+      return compaction(input.cwd);
+    }
     if (typeof input.tool_name !== "string") {
       throw new Error("the call names no tool");
     }
@@ -163,21 +213,7 @@ const answer = (text: string, shellPrefix: string): string => {
       );
     }
     if (SHELL_TOOLS.has(input.tool_name)) {
-      // Monitor's websocket form runs no command, so there is nothing to bound.
-      if (typeof call.command !== "string") {
-        return `${JUDGE_ALLOWS}\n`;
-      }
-      if (shellPrefix === JUDGE_NO_PREFIX) {
-        return throughExecutor(call, call.command);
-      }
-      if (!HEX.test(shellPrefix)) {
-        throw new Error("the hook sent no shell prefix");
-      }
-      // No decision: the CLI's own permission flow goes on, on the command
-      // as written, and its prefix runs it inside.
-      return Buffer.from(shellPrefix, "hex").toString("utf8") === prefix
-        ? `${JUDGE_ALLOWS}\n`
-        : refuse(UNPREFIXED);
+      return shellCall(call, shellPrefix);
     }
     if (typeof input.cwd !== "string") {
       throw new Error("the call names no working directory");

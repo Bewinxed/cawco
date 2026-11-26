@@ -32,6 +32,14 @@ const HOOKED_TOOLS =
 const HOOK_ARGS = ["-T"];
 
 /**
+ * The compactions the hook runs before (`PreCompact`'s matcher, its
+ * `trigger`): the person's `/compact` and the CLI's own. Named, rather than
+ * left to match every one, so the hook's entry is known on a command line
+ * ({@link LAUNCHED_COMPACT_HOOK}).
+ */
+const COMPACT_TRIGGERS = "manual|auto";
+
+/**
  * The `query()` options that bound a claude session, none for a session with
  * no boundary: flag settings with a PreToolUse hook on {@link HOOKED_TOOLS},
  * and the hook events in the stream, which is how the session hears that the
@@ -49,32 +57,44 @@ const HOOK_ARGS = ["-T"];
  * 2) or a perl gone (it cannot start) among them: "To block the action
  * instead, set `"onFailure": "block"`" (/hooks, "Block the action when a
  * hook fails").
+ *
+ * The same hook runs before each compaction ({@link COMPACT_TRIGGERS}):
+ * Claude Code reads its instruction files again once it has compacted
+ * (InstructionsLoaded's `load_reason` "compact"), mid-turn, with no tool
+ * call between, so a link made since the turn began would reach the request
+ * after it. The judge refuses the compaction while an instruction file in
+ * the clone leads to a file the workspace does not read (boundary-judge.ts),
+ * and the hook's exit 2 blocks it ("Reactive compact blocked by PreCompact
+ * hook", Claude Code 2.1.326, whose threshold compaction runs as its
+ * reactive one), even when the request cannot go out uncompacted: the CLI
+ * compacts past a block only in its own remote sessions
+ * (`CLAUDE_CODE_REMOTE`), which CawCo never starts. The turn then ends
+ * "Prompt is too long" with no request carrying the file, and the next turn
+ * is refused (agent session.ts `holdInstructions`); the project's
+ * `assets/tsk-528/probe`, `cc-compact-full` and `cc-compact-ptl`.
  */
-export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
-  boundary
-    ? {
-        includeHookEvents: true,
-        settings: {
-          disableAllHooks: false,
-          hooks: {
-            PreToolUse: [
-              {
-                matcher: HOOKED_TOOLS,
-                hooks: [
-                  {
-                    type: "command" as const,
-                    command: perl(),
-                    args: [...HOOK_ARGS, boundary.hook],
-                    onFailure: "block" as const,
-                    timeout: HOOK_TIMEOUT_S,
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      }
-    : {};
+export const claudeBoundaryOptions = (boundary: Boundary | undefined) => {
+  if (!boundary) {
+    return {};
+  }
+  const hook = {
+    type: "command" as const,
+    command: perl(),
+    args: [...HOOK_ARGS, boundary.hook],
+    onFailure: "block" as const,
+    timeout: HOOK_TIMEOUT_S,
+  };
+  return {
+    includeHookEvents: true,
+    settings: {
+      disableAllHooks: false,
+      hooks: {
+        PreToolUse: [{ matcher: HOOKED_TOOLS, hooks: [hook] }],
+        PreCompact: [{ matcher: COMPACT_TRIGGERS, hooks: [hook] }],
+      },
+    },
+  };
+};
 
 /** The matchers the hook has been launched on that judge the file tools: every tool, as builds before this one wrote it, and {@link HOOKED_TOOLS}. */
 const GATING_MATCHERS = new Set(["*", HOOKED_TOOLS]);
@@ -102,6 +122,16 @@ const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/u;
 /** One word of a command ../../core/src/shell-quote.ts `shellQuote` built: `'…'`, with `'\''` for a quote. */
 const QUOTED_WORD = /'((?:[^']|'\\'')*)'/gu;
 
+/**
+ * A `PreCompact` entry on {@link COMPACT_TRIGGERS}: its command, still
+ * JSON-quoted, and its exec form's `args`. The boundary's is the one that
+ * runs the tools' hook; a project's placed hook may stand before it.
+ */
+const LAUNCHED_COMPACT_HOOK = new RegExp(
+  `"matcher":"${escapeRegExp(COMPACT_TRIGGERS)}","hooks":\\[\\{"type":"command","command":(${JSON_STRING}),"args":(\\[(?:${JSON_STRING}(?:,${JSON_STRING})*)?\\])`,
+  "gu"
+);
+
 const HOOK_EVENTS_FLAG = /(^| )--include-hook-events( |$)/u;
 
 const QUOTED_WORDS = /^(?:'(?:[^']|'\\'')*' ?)+$/u;
@@ -114,6 +144,13 @@ export interface LaunchedHook {
    * transcript, as a `hook_non_blocking_error` record.
    */
   readonly events: boolean;
+  /**
+   * Whether the hook runs before each compaction too ({@link COMPACT_TRIGGERS}).
+   * One launched before it did lets a compaction read an instruction file
+   * linked out of the workspace mid-turn: such a CLI is relaunched onto the
+   * hook that runs there ({@link hookFailsOpen}).
+   */
+  readonly gatesCompaction: boolean;
   /**
    * Whether the hook judges the CLI's file tools and MCP calls
    * ({@link GATING_MATCHERS}). One launched on `Bash|Monitor` alone leaves
@@ -142,6 +179,20 @@ export interface LaunchedHook {
   readonly prefixed: boolean;
 }
 
+/** Whether `commandLine` runs the hook `command` with `args` before each compaction too ({@link LAUNCHED_COMPACT_HOOK}). */
+const compactionHooked = (
+  commandLine: string,
+  command: string,
+  args: readonly string[]
+): boolean =>
+  [...commandLine.matchAll(LAUNCHED_COMPACT_HOOK)].some(
+    ([, quoted, quotedArgs]) =>
+      quoted !== undefined &&
+      quotedArgs !== undefined &&
+      z.string().parse(JSON.parse(quoted)) === command &&
+      Bun.deepEquals(z.array(z.string()).parse(JSON.parse(quotedArgs)), args)
+  );
+
 /**
  * The boundary hook the claude CLI `pid` was launched with, read off its
  * command line (the `--settings` JSON {@link claudeBoundaryOptions} wrote);
@@ -165,16 +216,33 @@ export const launchedHook = async (
   if (quotedArgs) {
     const args = z.array(z.string()).parse(JSON.parse(quotedArgs));
     const hook = args.at(-1);
-    return command === perl() &&
+    if (!(
+      command === perl() &&
       args.length === HOOK_ARGS.length + 1 &&
       HOOK_ARGS.every((arg, at) => args[at] === arg) &&
       hook?.endsWith("/hook")
-      ? { events, gatesFiles, names: [hook], needs: [], prefixed: true }
-      : "unknown";
+    )) {
+      return "unknown";
+    }
+    return {
+      events,
+      gatesCompaction: compactionHooked(commandLine, command, args),
+      gatesFiles,
+      names: [hook],
+      needs: [],
+      prefixed: true,
+    };
   }
   const hook = HOOK_COMMAND.exec(command)?.[1];
   if (hook) {
-    return { events, gatesFiles, names: [hook], needs: [], prefixed: false };
+    return {
+      events,
+      gatesCompaction: false,
+      gatesFiles,
+      names: [hook],
+      needs: [],
+      prefixed: false,
+    };
   }
   const words = QUOTED_WORDS.test(command)
     ? [...command.matchAll(QUOTED_WORD)].map(([, word]) =>
@@ -191,6 +259,7 @@ export const launchedHook = async (
   }
   return {
     events,
+    gatesCompaction: false,
     gatesFiles,
     names: [binary, verb],
     needs: [
@@ -210,6 +279,7 @@ export const workspaceHook = (
   boundary
     ? {
         events: true,
+        gatesCompaction: true,
         gatesFiles: true,
         names: [boundary.hook],
         needs: [],
@@ -220,14 +290,18 @@ export const workspaceHook = (
 /**
  * Whether a CLI running `hook` lets a call outside the workspace's policy or
  * its rules: its hook runs what can go missing ({@link LaunchedHook.needs}),
- * it runs on shell tools alone ({@link LaunchedHook.gatesFiles}), or the CLI
+ * it runs on shell tools alone ({@link LaunchedHook.gatesFiles}), it does
+ * not run before a compaction ({@link LaunchedHook.gatesCompaction}), or the CLI
  * runs its shell commands through no shell prefix of the workspace's
  * ({@link LaunchedHook.prefixed}), so its shell calls meet its permission
  * rules as the judge rewrote them, not as the model wrote them. Such a CLI
  * is relaunched onto the workspace's hook and prefix between turns.
  */
 export const hookFailsOpen = (hook: LaunchedHook): boolean =>
-  hook.needs.length > 0 || !hook.gatesFiles || !hook.prefixed;
+  hook.needs.length > 0 ||
+  !hook.gatesFiles ||
+  !hook.gatesCompaction ||
+  !hook.prefixed;
 
 /** The first thing `hook` needs that is no longer there to run, if any. */
 export const hookMissing = (hook: LaunchedHook): string | undefined =>
