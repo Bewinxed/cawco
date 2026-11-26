@@ -82,11 +82,19 @@ const modelsDevUrl = (): string =>
  * The providers whose models.dev catalogs price turns: Anthropic's (Claude
  * Code's models), OpenCode Zen's (`opencode`), OpenCode Go's, DeepSeek's own
  * API, and OpenAI's (ChatGPT's models, through OpenCode's `openai` and pi's
- * `openai-codex`). Each is kept under its own id: one model sold by two
+ * `openai-codex`), and Google's own (the Gemini models an Antigravity
+ * account lists, by which agy-canary.ts picks the cheapest). Each is kept under its own id: one model sold by two
  * providers costs what each charges. A turn on any other provider has no
  * price ({@link missingPricing}).
  */
-const CATALOGS = ["anthropic", "opencode", "opencode-go", "deepseek", "openai"];
+const CATALOGS = [
+  "anthropic",
+  "opencode",
+  "opencode-go",
+  "deepseek",
+  "openai",
+  "google",
+];
 
 /** The provider a model id names when it names none: Claude Code's bare `claude-*`. */
 const BARE_PROVIDER = "anthropic";

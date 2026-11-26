@@ -603,6 +603,8 @@ export const signInAcp = async (
 export interface KeyringGuard {
   readonly end: () => void;
   readonly home: string;
+  /** agy's own log file, when its launch names one (`--log-file`); else its home's log dir is read. */
+  readonly log?: string;
   /** Whether the home held a sign-in file before agy started. */
   readonly signedIn: boolean;
   /** When agy started: only its log lines since count. */
@@ -620,17 +622,19 @@ const KEYRING_SIGN_IN = "authenticated via keyring";
 const signInFileIn = (home: string): string =>
   join(home, AGY_APP_DATA, AGY_SIGN_IN_FILE);
 
-/** Whether any of `home`'s agy logs written since `since` says agy took the keyring's sign-in. */
-const keyringUsedSince = async (
-  home: string,
-  since: number
-): Promise<boolean> => {
-  const dir = join(home, AGY_APP_DATA, "log");
-  const names = await readdir(dir).catch((): string[] => []);
-  for (const name of names) {
-    const file = Bun.file(join(dir, name));
+/** Whether any agy log of the guard's written since its start says agy took the keyring's sign-in: its own log file, else each in its home's log dir. */
+const keyringUsedSince = async (guard: KeyringGuard): Promise<boolean> => {
+  const dir = join(guard.home, AGY_APP_DATA, "log");
+  const paths =
+    guard.log === undefined
+      ? (await readdir(dir).catch((): string[] => [])).map((name) =>
+          join(dir, name)
+        )
+      : [guard.log];
+  for (const path of paths) {
+    const file = Bun.file(path);
     if (
-      file.lastModified >= since &&
+      file.lastModified >= guard.since &&
       (await file.text().catch(() => "")).includes(KEYRING_SIGN_IN)
     ) {
       return true;
@@ -647,7 +651,7 @@ const keyringUsedSince = async (
  * it through the same chain.
  */
 export const refuseKeyring = async (guard: KeyringGuard): Promise<void> => {
-  if (guard.signedIn || !(await keyringUsedSince(guard.home, guard.since))) {
+  if (guard.signedIn || !(await keyringUsedSince(guard))) {
     return;
   }
   guard.end();

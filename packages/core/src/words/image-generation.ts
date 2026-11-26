@@ -155,6 +155,8 @@ export const imageGenerationWords = {
   /** Every Antigravity account on the machine misses part of its sign-in here: each one's refusal. */
   agyNoUsableAccount: (refused: readonly string[]) =>
     `No Antigravity account on this machine can sign in, so no image request was sent. ${refused.join(" ")}`,
+  /** The account lists no Google model priced on models.dev, so the run has no cheap model to hand the job on with. */
+  agyNoCheapModel: "This Antigravity account has no priced Gemini models.",
   /** A note: the plan is never readable on this route. */
   agyPlanUnread:
     "Antigravity CLI doesn't say which Google AI plan it is signed in on, so the plan wasn't checked; images need Pro or Ultra.",

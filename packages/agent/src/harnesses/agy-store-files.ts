@@ -272,6 +272,35 @@ export const deleteAgyConversation = async (
   await removeAgyNote(id);
 };
 
+// ------------------------------------------------------------ implicit
+
+/**
+ * The implicit trajectories store `store` holds: agy's
+ * `implicit/<uuid>.pb`, one written as each signed-in agy's language
+ * server starts, about 110 ms after its ACP server does and before any
+ * session opens (agy 1.5.18, the project's `assets/8a34ae57/`,
+ * 2026-11-26). Its name is a fresh UUID and its contents are encrypted, so
+ * whose it is is read only from when it appeared.
+ */
+export const implicitTrajectories = async (
+  store: AgyStore
+): Promise<Set<string>> =>
+  new Set(
+    (await readdir(join(store.dir, "implicit")).catch(unlessGone([])))
+      .filter((name) => name.endsWith(".pb"))
+      .map((name) => name.slice(0, -".pb".length))
+  );
+
+/** The implicit trajectories `ids` of store `store` removed: each a workspace only CawCo opened, with no agy left running in it. */
+export const deleteImplicitTrajectories = async (
+  store: AgyStore,
+  ids: Iterable<string>
+): Promise<void> => {
+  for (const id of ids) {
+    await rm(join(store.dir, "implicit", `${id}.pb`), { force: true });
+  }
+};
+
 /** Every transcript agy wrote on this machine, of every account's home and of agy's own: what search indexes. */
 export const listAgyTranscripts = async (): Promise<string[]> => {
   const paths: string[] = [];

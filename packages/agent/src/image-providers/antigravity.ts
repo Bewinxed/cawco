@@ -19,6 +19,7 @@ import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { Clock, Effect, type Scope } from "effect";
 import { runPromise } from "../daemon-runtime";
+import { agyHookHeld, onCheapestModel } from "../harnesses/agy-canary";
 import { promptAnswer } from "../harnesses/agy-frames";
 import { serveAgyJudge } from "../harnesses/agy-hook";
 import { agyImageRunAnswerTo } from "../harnesses/agy-judge";
@@ -36,6 +37,8 @@ import {
   accountStore,
   agyAccountIds,
   deleteAgyConversation,
+  deleteImplicitTrajectories,
+  implicitTrajectories,
 } from "../harnesses/agy-store-files";
 import { fromPromise } from "../rejected";
 import { toolGate } from "../tools";
@@ -58,15 +61,22 @@ import {
  * writes: it makes no request to Google of its own and never reads or holds
  * the account's Google login.
  *
+ * A run is held to what a session on the account is: it starts only once
+ * the account's hook is proven to hold (agy-canary.ts `agyHookHeld`), and
+ * its main agent, which only hands the job on, runs on the account's
+ * cheapest Google model at its lowest thinking level (agy-canary.ts
+ * `onCheapestModel`); the image's model is agy's subagent's own.
+ *
  * One run is one ACP session in the account's home, with a folder of its
- * own as the session's folder. The home's one hook asks the run's own
+ * own as the session's folder, where agy's log of the run is written too. The home's one hook asks the run's own
  * judge, which lets the main agent hand the image to agy's
  * `image-generator` subagent, that subagent's `generate_image` run on the
  * run's references, and reads of the run's folder, and denies the rest
  * (agy-judge.ts `agyImageRunAnswerTo`). The image is found by its bytes
  * ({@link madeImage}), and the run's conversations, its own and its
- * subagent's, are removed from the home as the run ends, so an image run
- * never shows as a conversation.
+ * subagent's, and the implicit trajectory its agy wrote as it started are
+ * removed from the home as the run ends, so an image run never shows as a
+ * conversation and leaves nothing of itself in the home.
  */
 
 /**
@@ -200,6 +210,9 @@ const conversationsOf = (heard: {
     ...heard.conversations,
   ]);
 
+/** agy's log of one run, in the run's folder (`--log-file`), so it goes with the folder. */
+const RUN_LOG = "agy.log";
+
 /** How long agy is given to end once signalled, before the run lets it go. */
 const AGY_END_MS = 10_000;
 
@@ -284,6 +297,11 @@ const runAgy = Effect.fn("runAgy")(function* (
     try: () => writeReferences(cwd, job.references),
     catch: imageRunFailed,
   });
+  // The account's hook, proven before agy starts, as a session's is: an
+  // account whose hook does not hold runs no image either.
+  yield* agyHookHeld(accountId).pipe(Effect.mapError(imageRunFailed));
+  const store = accountStore(accountId);
+  const log = join(cwd, RUN_LOG);
   const launch = yield* agyLaunch(
     accountId,
     `image-${crypto.randomUUID()}`,
@@ -292,15 +310,17 @@ const runAgy = Effect.fn("runAgy")(function* (
   ).pipe(Effect.mapError(imageRunFailed));
   /**
    * What the run heard: its session once opened, every conversation its
-   * hook was called from (its own and its subagent's), the agent's words,
-   * agy's last stderr line.
+   * hook was called from (its own and its subagent's), the implicit
+   * trajectories that appeared as its agy started, the agent's words, agy's
+   * last stderr line.
    */
   const heard: {
     conversations: Set<string>;
+    implicit: Set<string>;
     sessionId?: string;
     stderr: string;
     text: string;
-  } = { conversations: new Set(), text: "", stderr: "" };
+  } = { conversations: new Set(), implicit: new Set(), text: "", stderr: "" };
   yield* serveAgyJudge(launch.judgeSocket, (line) =>
     // An answer of the run's own, at once (the server takes a promise).
     Promise.resolve(
@@ -312,20 +332,21 @@ const runAgy = Effect.fn("runAgy")(function* (
       })
     )
   ).pipe(Effect.mapError(imageRunFailed));
-  // The conversations the run made, gone once agy has ended (the finalizer
-  // below this one runs first): none is a session of the person's. Set
-  // before the session opens, so a run interrupted mid-turn removes them too.
-  // Each is kept out of the home's shared files from now on, as a session's
-  // agy running on the same home may write it back (agy-store-files.ts).
+  // The conversations and implicit trajectories the run made, gone once agy
+  // has ended (the finalizer below this one runs first): none is a
+  // session's of the person's. Set before the session opens, so a run
+  // interrupted mid-turn removes them too. Each conversation is kept out of
+  // the home's shared files from now on, as a session's agy running on the
+  // same home may write it back (agy-store-files.ts).
   yield* Effect.addFinalizer(() =>
-    fromPromise(() =>
-      Promise.all(
+    fromPromise(async () => {
+      await Promise.all(
         [...conversationsOf(heard)].map((id) =>
-          deleteAgyConversation(accountStore(accountId), id)
+          deleteAgyConversation(store, id)
         )
-      )
-    ).pipe(
-      Effect.asVoid,
+      );
+      await deleteImplicitTrajectories(store, heard.implicit);
+    }).pipe(
       Effect.catch((error) =>
         Effect.logWarning(
           `[image] the run's conversations were not removed: ${error.message}`
@@ -333,6 +354,21 @@ const runAgy = Effect.fn("runAgy")(function* (
       )
     )
   );
+  // agy writes an implicit trajectory as it starts, before any session
+  // opens: the ones that appear from just before its start until its
+  // session has opened are the run's (agy-store-files.ts
+  // `implicitTrajectories`).
+  const implicitBefore = yield* Effect.promise(() =>
+    implicitTrajectories(store)
+  );
+  /** The implicit trajectories new since {@link implicitBefore}, noted as the run's. */
+  const noteImplicit = Effect.promise(async () => {
+    for (const id of await implicitTrajectories(store)) {
+      if (!implicitBefore.has(id)) {
+        heard.implicit.add(id);
+      }
+    }
+  });
   // The keyring guard's reading (agy-launch.ts `refuseKeyring`), as agy is
   // about to start.
   const signedIn = yield* fromPromise(() => signedInAt(launch.home)).pipe(
@@ -343,7 +379,12 @@ const runAgy = Effect.fn("runAgy")(function* (
     Effect.try({
       try: () =>
         startAcp(
-          { bin: launch.bin, args: launch.args, env: launch.env, cwd },
+          {
+            bin: launch.bin,
+            args: [...launch.args, "--log-file", log],
+            env: launch.env,
+            cwd,
+          },
           client({ name: "cawco" }).onNotification(
             methods.client.session.update,
             ({ params }: { params: SessionNotification }) => {
@@ -384,11 +425,12 @@ const runAgy = Effect.fn("runAgy")(function* (
       signInAcp(connection, launch.methodId, runtimeVersion, {
         end: () => endGroup(child),
         home: launch.home,
+        log,
         signedIn,
         since: startedAt,
       }),
     catch: imageRunFailed,
-  });
+  }).pipe(Effect.ensuring(noteImplicit));
   const opened = yield* Effect.tryPromise({
     try: () =>
       connection.agent.request(methods.agent.session.new, {
@@ -396,8 +438,17 @@ const runAgy = Effect.fn("runAgy")(function* (
         mcpServers: [],
       }),
     catch: imageRunFailed,
-  });
+  }).pipe(Effect.ensuring(noteImplicit));
   heard.sessionId = opened.sessionId;
+  const model = yield* Effect.tryPromise({
+    try: () => onCheapestModel(connection, opened),
+    catch: imageRunFailed,
+  });
+  if (model === undefined) {
+    return yield* Effect.fail(
+      imageRunFailed(new Error(imageGenerationWords.agyNoCheapModel))
+    );
+  }
   const answered = yield* fromPromise(() =>
     connection.agent.request(methods.agent.session.prompt, {
       sessionId: opened.sessionId,

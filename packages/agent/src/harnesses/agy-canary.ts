@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { rm, rmdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  type ClientConnection,
   client,
   methods,
   type SessionNotification,
@@ -132,6 +133,36 @@ const cheapestModel = (answer: unknown): string | undefined => {
     }
   }
   return best?.value;
+};
+
+/**
+ * Session `opened` (`session/new`'s answer) set to the account's cheapest
+ * Google model ({@link cheapestModel}) at the lowest thinking level agy
+ * offers it. The model set, or none when the account lists no priced
+ * Google model and agy's default stands.
+ */
+export const onCheapestModel = async (
+  connection: ClientConnection,
+  opened: { readonly sessionId: string }
+): Promise<string | undefined> => {
+  const { sessionId } = opened;
+  const model = cheapestModel(opened);
+  if (!model) {
+    return undefined;
+  }
+  const options: unknown = await connection.agent.request(
+    methods.agent.session.setConfigOption,
+    { sessionId, configId: "model", value: model }
+  );
+  const [lowest] = levelsOffered(options);
+  if (lowest) {
+    await connection.agent.request(methods.agent.session.setConfigOption, {
+      sessionId,
+      configId: "thought_level",
+      value: lowest,
+    });
+  }
+  return model;
 };
 
 /** The paths one check writes and reads, in its own scratch folder. */
@@ -322,21 +353,7 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
         );
         const { sessionId } = opened;
         made.sessionId = sessionId;
-        let options: unknown = opened;
-        const model = cheapestModel(opened);
-        if (model) {
-          options = await connection.agent.request(
-            methods.agent.session.setConfigOption,
-            { sessionId, configId: "model", value: model }
-          );
-        }
-        const [lowest] = levelsOffered(options);
-        if (lowest) {
-          await connection.agent.request(
-            methods.agent.session.setConfigOption,
-            { sessionId, configId: "thought_level", value: lowest }
-          );
-        }
+        await onCheapestModel(connection, opened);
         await connection.agent.request(methods.agent.session.prompt, {
           sessionId,
           prompt: [
