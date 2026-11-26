@@ -704,15 +704,34 @@ export class FleetLedger {
                 })),
               }
             : kept;
-        return [
-          id,
-          this.#forced.has(id) && value && typeof value === "object"
-            ? { ...value, force: true }
-            : value,
-        ];
+        return [id, this.#forcedAs(id, value)];
       })
     );
     return fleetConfigOf(items);
+  }
+
+  /**
+   * The config of the items held that carry no files (MCP servers, harness
+   * settings, hooks, memory documents, the policy, checkouts), from the
+   * ledger alone, each still-forced item forced: no skill or plugin that
+   * carries files is in it, and no file is read. What a caller that needs
+   * no file reads, in place of {@link config}.
+   */
+  fileless(): MachineFleetConfig {
+    return fleetConfigOf(
+      new Map(
+        [...this.#items]
+          .filter(([, { files }]) => !files)
+          .map(([id, { value }]) => [id, this.#forcedAs(id, value)])
+      )
+    );
+  }
+
+  /** Item `id`'s `value`, with `force` on it while a person's Overwrite has not been converged. */
+  #forcedAs(id: string, value: unknown): unknown {
+    return this.#forced.has(id) && value && typeof value === "object"
+      ? { ...value, force: true }
+      : value;
   }
 
   /** The bytes of item `id`'s file of content `hash`, from the pool; one the pool lost is thrown, naming the item. */

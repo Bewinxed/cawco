@@ -1132,15 +1132,14 @@ export class FleetConverger {
     return report;
   }
 
-  /** Each server's secret values by name, from the config in hand or else the one held (core fleet-secrets.ts). */
+  /** Each server's secret values by name, from the config in hand or else the rows held, which carry no files (fleet-ledger.ts `fileless`; core fleet-secrets.ts). */
   #mcpSecrets(incoming?: PlacedFleetConfig): Map<string, string[]> {
     const byName = new Map<string, string[]>();
+    const held = incoming ? undefined : this.#ledger.fileless();
     for (const row of [
-      ...(incoming?.mcp ?? this.#ledger.config().mcp),
+      ...(incoming?.mcp ?? held?.mcp ?? []),
       ...(incoming?.placedMcp ??
-        Object.values(this.#ledger.config().projects).flatMap(
-          (rows) => rows.mcp
-        )),
+        Object.values(held?.projects ?? {}).flatMap((rows) => rows.mcp)),
     ]) {
       byName.set(row.name, [
         ...(byName.get(row.name) ?? []),
