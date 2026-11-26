@@ -2522,26 +2522,29 @@ function locate(anchor: PageAnchor): AnchorFound<Element> | null {
 
 /**
  * A document's own elements (the page's, or a frame's), any overlay's left
- * out, with each one's own source and words as an anchor finds them by:
- * read once while the page's changes stand ({@link changesNow}), however
- * many anchors look, each part only once one asks for it.
+ * out, with each one's own source and words as an anchor finds them by,
+ * each part only once one asks for it. The elements and their sources are
+ * read once while the page's shape stands ({@link shapesNow}): words alone
+ * changing (a streamed reply, a morphing label) put no element in or out
+ * and move no source, so they read the page again only for its words
+ * ({@link changesNow}).
  */
 interface PageRead {
   elements: Element[];
   /** The elements by their own source's `file:line`. */
   sources?: Map<string, Element[]>;
-  /** The elements by their words ({@link textOf}). */
-  words?: Map<string, Element[]>;
+  /** The elements by their words ({@link textOf}), at the count of the page's changes they were read at. */
+  words?: { seen: number; by: Map<string, Element[]> };
 }
 let pageReads = new WeakMap<Document, PageRead>();
 let readAt = -1;
 
-/** `doc` read as {@link PageRead} says, at the count of the page's changes now. */
+/** `doc` read as {@link PageRead} says, at the count of the page's changes of more than words now. */
 function pageRead(doc: Document): PageRead {
-  const seen = changesNow(doc);
-  if (readAt !== seen) {
+  const shaped = shapesNow(doc);
+  if (readAt !== shaped) {
     pageReads = new WeakMap();
-    readAt = seen;
+    readAt = shaped;
   }
   let read = pageReads.get(doc);
   if (!read) {
@@ -2553,6 +2556,19 @@ function pageRead(doc: Document): PageRead {
     pageReads.set(doc, read);
   }
   return read;
+}
+
+/** `doc`'s elements by their words now ({@link PageRead}'s `words`). */
+function wordsRead(doc: Document): Map<string, Element[]> {
+  const read = pageRead(doc);
+  const seen = changesNow(doc);
+  if (read.words?.seen !== seen) {
+    read.words = {
+      seen,
+      by: byKey(read.elements, (el) => textOf(el) || null),
+    };
+  }
+  return read.words.by;
 }
 
 /** Each of `elements` under its `keyOf` (none where it gives null), in page order. */
@@ -2613,9 +2629,7 @@ function findAnchorHere(anchor: PageAnchor): AnchorFound<Element> | null {
     },
     textOf,
     byText: (within, text) => {
-      const read = pageRead(within);
-      read.words ??= byKey(read.elements, (el) => textOf(el) || null);
-      const matches = read.words.get(text) ?? [];
+      const matches = wordsRead(within).get(text) ?? [];
       // The deepest: the one holding no other match.
       return (
         matches.find(
