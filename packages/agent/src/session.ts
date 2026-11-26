@@ -240,7 +240,7 @@ import {
   runControl,
   SessionAddressRefused,
 } from "./harness";
-import { harnesses, harness as harnessOf } from "./harnesses";
+import { Harnesses, type HarnessRegistry } from "./harnesses";
 import {
   installCredential,
   installOf,
@@ -291,14 +291,16 @@ import { installTool, probeTools } from "./tools";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
 /** Every harness whose sessions live in a server that outlives the agent. */
-const serverAdapters = (): ServerHarness[] =>
-  harnesses().filter(isServerHarness);
+const serverAdapters = (registry: HarnessRegistry): ServerHarness[] =>
+  registry.all().filter(isServerHarness);
 
 /** The sessions those servers say are running: their own word on their turns ({@link ServerCustody.busyInstances}). */
-const serverBusyInstances = async (): Promise<string[]> =>
+const serverBusyInstances = async (
+  registry: HarnessRegistry
+): Promise<string[]> =>
   (
     await Promise.all(
-      serverAdapters().map((adapter) => adapter.custody.busyInstances())
+      serverAdapters(registry).map((adapter) => adapter.custody.busyInstances())
     )
   ).flat();
 
@@ -735,14 +737,15 @@ const dirOf = (arg: CatalogDir | undefined): string | undefined =>
  * (OpenCode's rows resume whatever it lists), so the register's is complete
  * without it.
  */
-export const resumableSessions = async (
+const resumableSessions = async (
+  registry: HarnessRegistry,
   from: "disk" | "server"
 ): Promise<{ lastModified: number; sessionId: string }[] | undefined> => {
   const found: { lastModified: number; sessionId: string }[] = [];
   let sawAny = false;
-  for (const adapter of harnesses().filter(
-    (one) => one.catalogFromServer === (from === "server")
-  )) {
+  for (const adapter of registry
+    .all()
+    .filter((one) => one.catalogFromServer === (from === "server"))) {
     try {
       for (const info of await adapter.listSessions()) {
         found.push({
@@ -835,9 +838,24 @@ export class SessionSupervisor {
   #custodyHarnesses: Map<string, HarnessKind> | undefined;
 
   readonly #ports: SupervisorPorts;
+  /** The harnesses its sessions run on ({@link Harnesses}). */
+  readonly #harnesses: HarnessRegistry;
 
-  constructor(ports: SupervisorPorts) {
+  constructor(ports: SupervisorPorts, harnesses: HarnessRegistry) {
     this.#ports = ports;
+    this.#harnesses = harnesses;
+    this.#carrier = harnesses
+      .all()
+      .find((adapter) => descriptorOf(adapter.kind).accountDir)
+      ?.carrier({
+        adopting: (instanceId) => this.#adopting.has(instanceId),
+        awakeForMove: (instanceId, session) =>
+          this.#awakeForMove(instanceId, session),
+        drop: (instanceId, how) => this.#live.drop(instanceId, how),
+        endWork: (instanceId, why) => this.#endWork(instanceId, why),
+        queued: (instanceId) => this.#queues.isBusy(instanceId),
+        running: (instanceId) => this.#live.sessions.get(instanceId),
+      });
     const queues = this.#queues;
     gaugeTables("supervisor", {
       asleep: this.#asleep,
@@ -866,7 +884,7 @@ export class SessionSupervisor {
       }
       return totals;
     });
-    for (const adapter of serverAdapters()) {
+    for (const adapter of serverAdapters(this.#harnesses)) {
       adapter.custody.setCustodyReadiness(() =>
         this.harnessCustodyReady(adapter.kind)
       );
@@ -892,7 +910,7 @@ export class SessionSupervisor {
     rows: { id: string; sessionId: string | null; cwd: string }[],
     claimed: string[]
   ): Promise<{ id: string; present: boolean | null }[]> {
-    const server = serverAdapters()[0]?.custody;
+    const server = serverAdapters(this.#harnesses)[0]?.custody;
     return await Promise.all(
       rows.map(async (row) => {
         try {
@@ -929,17 +947,14 @@ export class SessionSupervisor {
    * requests name (core `RegisterAckPayload.sessions`,
    * {@link CONTROL_CARRY_SESSIONS}).
    */
-  readonly #carrier = harnesses()
-    .find((adapter) => descriptorOf(adapter.kind).accountDir)
-    ?.carrier({
-      adopting: (instanceId) => this.#adopting.has(instanceId),
-      awakeForMove: (instanceId, session) =>
-        this.#awakeForMove(instanceId, session),
-      drop: (instanceId, how) => this.#live.drop(instanceId, how),
-      endWork: (instanceId, why) => this.#endWork(instanceId, why),
-      queued: (instanceId) => this.#queues.isBusy(instanceId),
-      running: (instanceId) => this.#live.sessions.get(instanceId),
-    });
+  readonly #carrier: SessionCarry | undefined;
+
+  /** The stored sessions a register names, read from `from` ({@link resumableSessions}). */
+  resumableSessions(
+    from: "disk" | "server"
+  ): ReturnType<typeof resumableSessions> {
+    return resumableSessions(this.#harnesses, from);
+  }
 
   /** The carry of sessions between account directories ({@link CONTROL_CARRY_SESSIONS}). */
   get carrier(): SessionCarry {
@@ -1695,7 +1710,7 @@ export class SessionSupervisor {
         processGeneration: pending.generation,
       });
     }
-    for (const address of serverAdapters().flatMap((adapter) =>
+    for (const address of serverAdapters(this.#harnesses).flatMap((adapter) =>
       adapter.custody.sessionAddresses()
     )) {
       addresses.set(address.instanceId, {
@@ -1845,7 +1860,7 @@ export class SessionSupervisor {
    * (awake.ts).
    */
   async turnsRunning(): Promise<string[]> {
-    const serverBusy = await serverBusyInstances();
+    const serverBusy = await serverBusyInstances(this.#harnesses);
     return [
       ...new Set([
         ...this.#live
@@ -1933,7 +1948,7 @@ export class SessionSupervisor {
         { reason: "workspace", ids: queued("workspace:") },
         { reason: "command", ids: queued("command:") },
       ],
-      ...harnesses().map((adapter) => adapter.restartHolds())
+      ...this.#harnesses.all().map((adapter) => adapter.restartHolds())
     );
   }
 
@@ -2053,7 +2068,7 @@ export class SessionSupervisor {
       return held;
     }
     if (traitsOf(session.harness).custody === "server") {
-      const busy = serverBusy ?? (await serverBusyInstances());
+      const busy = serverBusy ?? (await serverBusyInstances(this.#harnesses));
       if (busy.includes(instanceId)) {
         return {
           why: `the ${session.harness} server reports its turn running`,
@@ -2327,7 +2342,7 @@ export class SessionSupervisor {
    */
   async #restless(ids: string[]): Promise<Record<string, string>> {
     const restless: Record<string, string> = {};
-    const serverBusy = await serverBusyInstances();
+    const serverBusy = await serverBusyInstances(this.#harnesses);
     for (const instanceId of ids) {
       if (this.#queues.isBusy(instanceId)) {
         restless[instanceId] = "something sent to it is still on its way";
@@ -2362,7 +2377,7 @@ export class SessionSupervisor {
     if (carried.length === 0) {
       return;
     }
-    const serverBusy = await serverBusyInstances();
+    const serverBusy = await serverBusyInstances(this.#harnesses);
     const now = Date.now();
     for (const [instanceId, session] of carried) {
       const outdated = await session.outdated();
@@ -2684,7 +2699,7 @@ export class SessionSupervisor {
     message: NeutralMessage
   ): void {
     if (
-      harnessOf(kind)?.relaunchesOnManualCompact &&
+      this.#harnesses.of(kind)?.relaunchesOnManualCompact &&
       session &&
       message.type === "system" &&
       message.subtype === "compact_boundary" &&
@@ -2815,7 +2830,7 @@ export class SessionSupervisor {
     )) {
       throw new Error(spawnWords.startModel.unnamedAtMachine);
     }
-    const adapter = adapterFor(kind);
+    const adapter = adapterFor(this.#harnesses, kind);
     if (payload.resume && !payload.resume.fork) {
       this.#resumable.set(instanceId, {
         adapter,
@@ -3916,7 +3931,7 @@ export class SessionSupervisor {
         read: (keeper: string) => Promise<KeeperReading>;
       }
     | undefined {
-    const adoption = adoptionOf(kind);
+    const adoption = adoptionOf(this.#harnesses, kind);
     return adoption
       ? {
           keepers: () => adoption.custody.keepers(),
@@ -3942,7 +3957,7 @@ export class SessionSupervisor {
     spec: SpawnPayload,
     proc: Claimed["proc"]
   ): "attached" | "held" {
-    const adoption = adoptionOf(kind);
+    const adoption = adoptionOf(this.#harnesses, kind);
     if (!adoption) {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
@@ -4028,7 +4043,7 @@ export class SessionSupervisor {
       case "opencode-server":
         return {
           holder: "opencode-server",
-          instanceIds: serverAdapters().flatMap((adapter) =>
+          instanceIds: serverAdapters(this.#harnesses).flatMap((adapter) =>
             adapter.custody.sessionsOn(procId)
           ),
         };
@@ -4767,7 +4782,7 @@ export class SessionSupervisor {
       const kind = harness;
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
-      const custody = harnessOf(kind)?.custody;
+      const custody = this.#harnesses.of(kind)?.custody;
       if (custody?.kind === "server") {
         const stopped = await custody.stop({
           claimed: claimedSessionIds,
@@ -4927,6 +4942,7 @@ export class SessionSupervisor {
     try {
       if (control.method === CONTROL_LIST_SESSIONS) {
         const { sessions, unanswered, failed } = await listSessions(
+          this.#harnesses,
           control.args[0]
         );
         this.sink({
@@ -5087,7 +5103,7 @@ export class SessionSupervisor {
         return await this.#catalog(
           control.method,
           control.args,
-          adapterFor(kind)
+          adapterFor(this.#harnesses, kind)
         );
       }
       return await this.#harnessControl(control.method, control.args, kind);
@@ -5105,8 +5121,8 @@ export class SessionSupervisor {
     args: ControlArgs<K>,
     kind: HarnessKind | undefined
   ): Promise<ControlResult<K>> {
-    const named = kind ? [adapterFor(kind)] : [];
-    const owner = [...named, ...harnesses()].find(
+    const named = kind ? [adapterFor(this.#harnesses, kind)] : [];
+    const owner = [...named, ...this.#harnesses.all()].find(
       (adapter) => adapter.machineControls[method]
     );
     return runControl(owner?.machineControls ?? {}, method, args);
@@ -5173,7 +5189,7 @@ export class SessionSupervisor {
     });
     // A harness CLI installed here converges what the machine holds of
     // the fleet, as every harness already here did.
-    if (harnesses().some((adapter) => adapter.kind === id)) {
+    if (this.#harnesses.all().some((adapter) => adapter.kind === id)) {
       this.#fleet.reconverge();
     }
     return installed;
@@ -5265,8 +5281,11 @@ async function workdirFor(payload: SpawnPayload): Promise<string | undefined> {
 }
 
 /** The harness, when it keeps its children on sessiond ({@link KeeperCustody}). */
-function adoptionOf(kind: HarnessKind): KeeperHarness | undefined {
-  const adapter = adapterFor(kind);
+function adoptionOf(
+  registry: HarnessRegistry,
+  kind: HarnessKind
+): KeeperHarness | undefined {
+  const adapter = adapterFor(registry, kind);
   return isKeeperHarness(adapter) ? adapter : undefined;
 }
 
@@ -5280,7 +5299,10 @@ function adoptionOf(kind: HarnessKind): KeeperHarness | undefined {
  * Each one left out is said beside the answer (`unanswered`, `failed`),
  * never read as having none.
  */
-async function listSessions(options: SessionListAsk | null = null): Promise<{
+async function listSessions(
+  registry: HarnessRegistry,
+  options: SessionListAsk | null = null
+): Promise<{
   sessions: NeutralSessionInfo[];
   unanswered: HarnessUnanswered[];
   failed: HarnessFailed[];
@@ -5288,7 +5310,7 @@ async function listSessions(options: SessionListAsk | null = null): Promise<{
   const unanswered: HarnessUnanswered[] = [];
   const failed: HarnessFailed[] = [];
   const listed = await Promise.all(
-    harnesses().map(async (adapter) => {
+    registry.all().map(async (adapter) => {
       let read: Bounded<NeutralSessionInfo[]>;
       try {
         read = await readWithin(HARNESS_LISTING_MS, () =>
@@ -5372,8 +5394,8 @@ async function cloneRepo({
   return target;
 }
 
-function adapterFor(kind: HarnessKind): Harness {
-  const adapter = harnessOf(kind);
+function adapterFor(registry: HarnessRegistry, kind: HarnessKind): Harness {
+  const adapter = registry.of(kind);
   if (!adapter) {
     throw new Error(`no harness adapter for ${kind}`);
   }
@@ -5479,9 +5501,10 @@ export class Supervisor extends Context.Service<
 export const SupervisorLayer = Layer.effect(Supervisor)(
   Effect.gen(function* () {
     const { ports, supervising } = yield* DaemonLinks;
+    const harnesses = yield* Harnesses;
     return yield* Effect.acquireRelease(
       Effect.sync(() => {
-        const created = new SessionSupervisor(ports);
+        const created = new SessionSupervisor(ports, harnesses);
         // What a restart would cut is the supervisor's to say from here on
         // (restart.ts); the updater and `cawco service restart` read it.
         supervising.current = created;

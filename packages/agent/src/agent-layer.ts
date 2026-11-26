@@ -5,9 +5,9 @@
  * closes, in the reverse of the order they are built here:
  *
  *   built     the MCP gateway, the hub's loopback, the hub's env, the
- *             supervisor, its stages, canvas screens and previews, the
- *             updater, the keeper's watch, transcript search, passkeys,
- *             the browsers;
+ *             harnesses, the supervisor, its stages, canvas screens and
+ *             previews, the updater, the keeper's watch, transcript
+ *             search, passkeys, the browsers;
  *   released  the browsers (a move into a container aborted and awaited)
  *             first, then passkeys, search, the keeper's watch, the
  *             updater, the previews, canvas screens and stages, the
@@ -32,6 +32,7 @@ import { PasskeysLayer } from "./browser/passkey-capture";
 import { restoreShields } from "./browser/shield";
 import { CanvasScreensLayer } from "./canvas-screen";
 import { DaemonLinks } from "./daemon-links";
+import { HarnessesLayer } from "./harnesses";
 import { HubCarryLayer } from "./hub-loopback";
 import { KeeperWatchLayer } from "./keeper-watchdog";
 import { McpGatewayLayer } from "./mcp-oauth";
@@ -117,6 +118,7 @@ export const AgentLayer = BrowsersLayer.pipe(
   Layer.provideMerge(CanvasScreensLayer),
   Layer.provideMerge(StagesLayer),
   Layer.provideMerge(SupervisorLayer),
+  Layer.provideMerge(HarnessesLayer),
   Layer.provideMerge(HubEnvironmentLayer),
   Layer.provideMerge(HubCarryLayer),
   Layer.provideMerge(McpGatewayLayer)

@@ -4,6 +4,7 @@
  * spawn names which one it wants (`SpawnPayload.harness`, default `claude`).
  */
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import { Context, Layer } from "effect";
 import type { Harness } from "../harness";
 import { agyHarness } from "./agy";
 import { claudeHarness } from "./claude";
@@ -29,3 +30,26 @@ export const harnesses = (): Harness[] => [...registry.values()];
 /** A harness by kind; `undefined` when the daemon has no adapter for it. */
 export const harness = (kind: HarnessKind): Harness | undefined =>
   registry.get(kind);
+
+/** The registry as the supervisor reads it ({@link Harnesses}). */
+export interface HarnessRegistry {
+  /** Every harness this daemon has an adapter for. */
+  readonly all: () => Harness[];
+  /** A harness by kind; `undefined` when the daemon has no adapter for it. */
+  readonly of: (kind: HarnessKind) => Harness | undefined;
+}
+
+/**
+ * The harnesses, as a service: what the session supervisor is built with
+ * (session.ts `SupervisorLayer`). Its adapters hold what outlives the
+ * daemon (a kept OpenCode server generation, the sessions sessiond keeps),
+ * so the layer releases nothing.
+ */
+export class Harnesses extends Context.Service<Harnesses, HarnessRegistry>()(
+  "Harnesses"
+) {}
+
+export const HarnessesLayer = Layer.succeed(Harnesses)({
+  all: harnesses,
+  of: harness,
+});

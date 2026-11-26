@@ -391,11 +391,7 @@ import {
 } from "./runtime-dir-move";
 import { TranscriptSearch } from "./search";
 import { folderStands, foldersStand, sameFolderAs } from "./seen-folders";
-import {
-  resumableSessions,
-  type SessionSupervisor,
-  Supervisor,
-} from "./session";
+import { type SessionSupervisor, Supervisor } from "./session";
 import { setSessionLimits } from "./sessiond-client";
 import {
   closingStages,
@@ -1611,9 +1607,9 @@ const reconnectAfterHubRestart = async (
  * ({@link reportServedCatalog}). Custody is read first all the same, so an
  * OpenCode server that beat starts is never taken for one that survived.
  */
-const readSessions = async () => {
+const readSessions = async (supervisor: SessionSupervisor) => {
   const custody = await readCustody();
-  const catalog = await resumableSessions("disk");
+  const catalog = await supervisor.resumableSessions("disk");
   return { custody, catalog };
 };
 
@@ -1625,9 +1621,9 @@ const readSessions = async () => {
 const reportServedCatalog = async (
   socket: WebSocket,
   machine: string,
-  carried: () => string[]
+  supervisor: SessionSupervisor
 ): Promise<void> => {
-  const catalog = await resumableSessions("server");
+  const catalog = await supervisor.resumableSessions("server");
   if (!catalog || socket.readyState !== WebSocket.OPEN) {
     return;
   }
@@ -1636,7 +1632,7 @@ const reportServedCatalog = async (
     machineId: machine,
     payload: {
       at: Date.now(),
-      instances: carried(),
+      instances: supervisor.instanceIds,
       resumableAt: Object.fromEntries(
         catalog.map((entry) => [entry.sessionId, entry.lastModified])
       ),
@@ -1658,12 +1654,12 @@ const reportServedCatalog = async (
  * wait about that long on the harness probes after this same read, so it is no
  * staler than it was.
  */
-const sessionsReader = () => {
+const sessionsReader = (supervisor: SessionSupervisor) => {
   let latest: { at: number; read: ReturnType<typeof readSessions> } | undefined;
   return () => {
     const now = Date.now();
     if (!latest || now - latest.at > RESTART_WINDOW_MS) {
-      latest = { at: now, read: readSessions() };
+      latest = { at: now, read: readSessions(supervisor) };
     }
     return latest.read;
   };
@@ -1839,7 +1835,7 @@ const attach = (
           );
           waitForRegistration(
             Effect.sleep(command.retryIn).pipe(
-              Effect.andThen(Effect.tryPromise(readSessions)),
+              Effect.andThen(Effect.tryPromise(() => readSessions(supervisor))),
               Effect.andThen((snapshot) =>
                 Effect.sync(() => {
                   payload = registerPayload(snapshot);
@@ -2193,14 +2189,11 @@ const attach = (
         phase("registered, taking custody back");
         yield* Effect.logInfo(`registered with ${url}`);
         markLive();
-        reportServedCatalog(
-          socket,
-          identity.machineId,
-          () => supervisor.instanceIds
-        ).catch((error: unknown) =>
-          Effect.runFork(
-            Effect.logWarning(`server catalog not reported: ${String(error)}`)
-          )
+        reportServedCatalog(socket, identity.machineId, supervisor).catch(
+          (error: unknown) =>
+            Effect.runFork(
+              Effect.logWarning(`server catalog not reported: ${String(error)}`)
+            )
         );
       } else if (command.kind === "announce") {
         supervisor.reannounce();
@@ -3944,7 +3937,7 @@ const startDaemon = (rediscover = false) =>
     yield* Effect.logInfo(
       `cawco agent ${identity.machineId} connecting to ${url}`
     );
-    const sessions = sessionsReader();
+    const sessions = sessionsReader(supervisor);
     // A launch asks for its credential and account as it starts; the asks
     // outlive any one connection, as the supervisor does.
     const launchAsks = new LaunchAsks(identity.machineId);
