@@ -215,29 +215,33 @@ const moveHome = async (
  * move fails the start, so no server ever starts on an empty home while the
  * account's sessions are elsewhere.
  */
-export const moveOpencodeAccountHomes = async (): Promise<void> => {
-  await rm(stagingRoot(), { recursive: true, force: true });
+export const moveOpencodeAccountHomes = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    rm(stagingRoot(), { recursive: true, force: true })
+  );
   const old = join(sessionIdentityDir(), "opencode-accounts");
-  const accounts = await readdir(old).catch(unlessGone([]));
+  const accounts = yield* Effect.promise(() =>
+    readdir(old).catch(unlessGone([]))
+  );
   for (const account of accounts) {
     const from = join(old, account);
-    if (!(await there(join(from, DATABASE)))) {
+    if (!(yield* Effect.promise(() => there(join(from, DATABASE))))) {
       continue;
     }
     const to = opencodeAccountHome(account);
-    if (await there(join(to, DATABASE))) {
+    if (yield* Effect.promise(() => there(join(to, DATABASE)))) {
       console.warn(
         `[opencode] account ${account}'s data home is at ${to} already; the copy left at ${from} is not read`
       );
       continue;
     }
-    await Effect.runPromise(endServersOn(from, account));
-    await moveHome(account, from, to);
+    yield* endServersOn(from, account);
+    yield* Effect.promise(() => moveHome(account, from, to));
     console.info(
       `[opencode] moved account ${account}'s data home from ${from} to ${to}`
     );
   }
-};
+});
 
 /**
  * Each hub's redaction store in the runtime dir moved to

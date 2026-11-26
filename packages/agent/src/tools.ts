@@ -2256,14 +2256,14 @@ export type ToolRunEnd = ToolHeard & ({ code: number } | { line: string });
  * still going when this answers is the caller's to end, its own way (the
  * tether's pipe, its process group).
  */
-export const heardUntilSignedOut = async (
+export const heardUntilSignedOut = Effect.fnUntraced(function* (
   child: {
     exited: Promise<number>;
     stderr: ReadableStream<Uint8Array>;
     stdout: ReadableStream<Uint8Array>;
   },
   signedOut: readonly string[]
-): Promise<ToolRunEnd> => {
+): Effect.fn.Return<ToolRunEnd> {
   const heard: ToolHeard = { out: "", err: "" };
   /** Its first line holding a signed-out word, once one is said. */
   const saidOut = Deferred.makeUnsafe<string>();
@@ -2292,13 +2292,11 @@ export const heardUntilSignedOut = async (
     ]);
     return { code };
   };
-  // The promise edge of the race: the reads go on past a signed-out line,
-  // as the run does, for the caller to end.
-  const ended = await Effect.runPromise(
-    Effect.race(
-      Effect.promise(exited),
-      Deferred.await(saidOut).pipe(Effect.map((said) => ({ line: said })))
-    )
+  // The reads go on past a signed-out line, as the run does, for the caller
+  // to end.
+  const ended = yield* Effect.race(
+    Effect.promise(exited),
+    Deferred.await(saidOut).pipe(Effect.map((said) => ({ line: said })))
   );
   if ("line" in ended) {
     return { ...heard, ...ended };
@@ -2306,7 +2304,7 @@ export const heardUntilSignedOut = async (
   // Said as it ended, in the last chunk read.
   const line = signedOutLine(signedOut, heard);
   return line === undefined ? { ...heard, ...ended } : { ...heard, line };
-};
+});
 
 /** {@link toolSignin}'s read itself. */
 const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
@@ -2330,7 +2328,10 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
       stderr: "pipe",
       signal,
     });
-    const ended = await heardUntilSignedOut(child, words.signedOut);
+    // The promise edge of heardUntilSignedOut.
+    const ended = await Effect.runPromise(
+      heardUntilSignedOut(child, words.signedOut)
+    );
     untether(child.stdin);
     return ended;
   }).catch(() => undefined);

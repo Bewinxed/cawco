@@ -41,7 +41,7 @@ import {
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Layer, Scope } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { type BrowserPorts, wakeBrowser } from "./browser/browsers";
@@ -49,6 +49,7 @@ import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
 import { letGo } from "./hub-loopback";
 import {
+  bridgeClosed,
   closeBridge,
   reachWorkspace,
   WorkspaceDown,
@@ -324,13 +325,18 @@ export function servingPreviews(): ServingPreview[] {
 }
 
 /** Stops every preview and the browser listener: each bridge's whole group is killed before this returns, its end awaited by no one. */
-export function stopPreviews(): void {
+const stopPreviews = (): void => {
   for (const instanceId of [...previews.keys()]) {
     letGo("preview stop", () => stopPreview({ instanceId }));
   }
   browserListener?.listener.stop(true);
   browserListener = undefined;
-}
+};
+
+/** {@link stopPreviews} as the agent's layer closes (agent-layer.ts): first of what the supervisor's detach let go. */
+export const PreviewsLayer = Layer.effectDiscard(
+  Effect.addFinalizer(() => Effect.sync(stopPreviews))
+);
 
 /** A take-over view's socket on the browser listener: its frames out, its input in. */
 interface CdpSocket {
@@ -736,10 +742,7 @@ async function start(
   // goes with it, and the listener, which stops first.
   const scope = Effect.runSync(Scope.make());
   Effect.runSync(
-    Scope.addFinalizer(
-      scope,
-      Effect.promise(() => closeBridge(instanceId))
-    )
+    Scope.addFinalizer(scope, bridgeClosed(instanceId).pipe(Effect.orDie))
   );
   // A workspace no boundary runs refuses the preview in so many words. A
   // sheet's stage or a served preview's server is woken by its first

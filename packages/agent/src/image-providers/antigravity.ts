@@ -319,9 +319,7 @@ const runAgy = Effect.fn("runAgy")(function* (
   // out, it says so and then waits a minute for a login, so the run ends
   // where it says it (its tree ended as it is let go), and that line is
   // the refusal's reason.
-  const ended = yield* Effect.promise(() =>
-    heardUntilSignedOut(child, signedOut)
-  );
+  const ended = yield* heardUntilSignedOut(child, signedOut);
   if ("line" in ended) {
     return yield* Effect.fail(
       imageRunFailed(new Error(imageGenerationWords.agySignedOut(ended.line)))

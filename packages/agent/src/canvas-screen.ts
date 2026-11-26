@@ -21,7 +21,7 @@ import {
   type CanvasScreenOpen,
 } from "@cawco/core/canvas";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
-import { Duration, Effect, Fiber } from "effect";
+import { Duration, Effect, Fiber, Layer } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 
@@ -85,11 +85,16 @@ export async function openCanvasScreen(
 }
 
 /** Every held page closed: the daemon is going, and the hub opens another on its next write. */
-export function closeCanvasScreens(): void {
+const closeCanvasScreens = (): void => {
   for (const token of [...held.keys()]) {
     closeCanvasScreen({ token }).catch(console.error);
   }
-}
+};
+
+/** {@link closeCanvasScreens} as the agent's layer closes (agent-layer.ts), after the previews stop. */
+export const CanvasScreensLayer = Layer.effectDiscard(
+  Effect.addFinalizer(() => Effect.sync(closeCanvasScreens))
+);
 
 /** The page held under `token` closed; whether one was. */
 export async function closeCanvasScreen(

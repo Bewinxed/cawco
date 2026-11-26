@@ -15,7 +15,7 @@ import {
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Layer, Scope } from "effect";
 import { type AgentState, type HubHere, recordAgentState } from "./agent-state";
 
 /** How the loopback serves the hub, as the agent records it. */
@@ -541,8 +541,17 @@ export function followHub(tailnet: TailnetServing | undefined): void {
 }
 
 /** The agent is stopping: its loopback stops serving the hub. */
-export async function stopCarrying(): Promise<void> {
+const stopCarrying = Effect.promise(async () => {
   const was = carried;
   carried = undefined;
   await (await was?.loopback)?.stop();
-}
+});
+
+/**
+ * The hub on this computer's loopback, which each register starts
+ * ({@link carryHub}), stopped as the agent's layer closes (agent-layer.ts):
+ * after the supervisor detaches, before the MCP gateway stops.
+ */
+export const HubCarryLayer = Layer.effectDiscard(
+  Effect.addFinalizer(() => stopCarrying)
+);

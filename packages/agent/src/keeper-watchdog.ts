@@ -30,6 +30,7 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readInstallation } from "@cawco/core/binary-installation";
 import type {
   BinaryUpdateState,
   KeptProcess,
@@ -53,13 +54,18 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { cutShort } from "@cawco/core/words/helpers";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { BinaryUpdates } from "./binary-update";
 import {
   type KeeperJob,
   KeeperKept,
   keeperJob,
 } from "./service-manager/keeper-job";
-import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
+import {
+  dialKeeper,
+  KEEPER_WELCOME_MS,
+  serviceManaged,
+} from "./sessiond-client";
 
 /**
  * How often the keeper is dialled. Ours: a dial is one local socket open,
@@ -86,7 +92,7 @@ const KEEPER_GONE_MS = 30_000;
 const KEEPER_BACK_MS = 30_000;
 
 /** The restart the dashboard announces (`BinaryUpdateState.keeperRestart`). */
-export type KeeperRestart = NonNullable<BinaryUpdateState["keeperRestart"]>;
+type KeeperRestart = NonNullable<BinaryUpdateState["keeperRestart"]>;
 
 interface Row {
   args: string;
@@ -261,7 +267,7 @@ const wedgedLine = (
   return `session keeper ${streak.pid} (${found.keeper.version}${found.current ? "" : ", retiring"}) is wedged: alive under ${job.name}, ${found.endpoint} present, no welcome on ${streak.details.length} dials over ${minutes(silentForMs)} (${dials}); diagnostics in ${dir}; ${action} — the ${processes} it held end with it${which}`;
 };
 
-export interface KeeperWatchdogOptions {
+interface KeeperWatchdogOptions {
   /** Where each recovery's diagnostics go, one folder per recovery. */
   diagnosticsRoot?: string;
   /**
@@ -281,7 +287,7 @@ export interface KeeperWatchdogOptions {
 }
 
 /** Dials every keeper on {@link KEEPER_PROBE_MS} and recovers a wedged one. */
-export class KeeperWatchdog {
+class KeeperWatchdog {
   readonly #diagnosticsRoot: string;
   readonly #log: (line: string) => void;
   readonly #record: (restart: KeeperRestart) => Promise<void>;
@@ -354,7 +360,10 @@ export class KeeperWatchdog {
       await this.#notKept(found.endpoint);
       return;
     }
-    const { dial, accepted } = await dialKeeper(found.endpoint, welcomeMs);
+    // The promise edge of dialKeeper.
+    const { dial, accepted } = await Effect.runPromise(
+      dialKeeper(found.endpoint, welcomeMs)
+    );
     let detail: string;
     switch (dial.kind) {
       case "answered":
@@ -465,18 +474,19 @@ export class KeeperWatchdog {
           deadlineMs: KEEPER_BACK_MS,
           until: (welcomed: boolean) => welcomed,
         },
-        Effect.promise(async () => {
-          const { dial } = await dialKeeper(machineEndpoint(), 2000);
-          switch (dial.kind) {
-            case "answered":
-              return dial.value.welcomed;
-            case "unanswered":
-              // No welcome within this try's 2 s: the next try asks again.
-              return false;
-            default:
-              return unhandled("read", dial);
-          }
-        })
+        dialKeeper(machineEndpoint(), 2000).pipe(
+          Effect.map(({ dial }) => {
+            switch (dial.kind) {
+              case "answered":
+                return dial.value.welcomed;
+              case "unanswered":
+                // No welcome within this try's 2 s: the next try asks again.
+                return false;
+              default:
+                return unhandled("read", dial);
+            }
+          })
+        )
       )
     );
     const answered = back.kind === "found";
@@ -488,3 +498,41 @@ export class KeeperWatchdog {
     );
   }
 }
+
+/**
+ * The keeper's watch, as the agent's layer is built (agent-layer.ts), after
+ * the updater it writes its notices through: a keeper that is alive and
+ * answers nobody is restarted (or, retiring, removed) through the service
+ * manager, which is the only thing that runs it on a managed machine. A
+ * hand-run `cawco up` owns its keeper and has no manager to ask, so it has
+ * no watch. Stopped as the layer's scope closes.
+ */
+export const KeeperWatchLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    if (!serviceManaged()) {
+      return;
+    }
+    const updater = yield* BinaryUpdates;
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const watchdog = new KeeperWatchdog({
+          log: (line) => Effect.runFork(Effect.logWarning(line)),
+          // The notice rides the update state, which a binary install keeps.
+          record: async (restart) => {
+            if (await readInstallation()) {
+              await updater.noteKeeperRestart(restart);
+            }
+          },
+          kept: async (version, current, held, holding) => {
+            if (await readInstallation()) {
+              await updater.noteKeeperKept(version, current, held, holding);
+            }
+          },
+        });
+        watchdog.start();
+        return watchdog;
+      }),
+      (watchdog) => Effect.sync(() => watchdog.stop())
+    );
+  })
+);

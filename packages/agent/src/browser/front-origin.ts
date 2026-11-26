@@ -161,57 +161,55 @@ const notePage = (watch: Watch, info: unknown): boolean => {
  * that would not open does: with why.
  */
 const linked = (key: BrowserKey, watch: Watch) =>
-  Effect.tryPromise({
-    try: async (): Promise<Deferred.Deferred<void>> => {
-      const link = await CdpLink.open(watch.devtools);
-      const closed = Deferred.makeUnsafe<void>();
-      if (watch.closed) {
-        link.close();
-        return closed;
-      }
-      watch.link = link;
-      link.onEvent = (message) => {
-        const { targetInfo, targetId } = message.params ?? {};
-        let moved = false;
-        if (
-          message.method === "Target.targetCreated" ||
-          message.method === "Target.targetInfoChanged"
-        ) {
-          moved = notePage(watch, targetInfo);
-        } else if (
-          message.method === "Target.targetDestroyed" &&
-          typeof targetId === "string"
-        ) {
-          moved = watch.pages.delete(targetId);
-          if (watch.front === targetId) {
-            watch.front = undefined;
-          }
-        }
-        if (moved) {
-          show(key, watch);
-        }
-      };
-      link.onClose = () => {
-        if (watch.link === link) {
-          // Its pages were that Chromium's: the next link (a restart, a
-          // move onto the same port) lists its own.
-          watch.link = undefined;
-          watch.pages.clear();
-          watch.front = undefined;
-          show(key, watch);
-        }
-        Deferred.doneUnsafe(closed, Effect.void);
-      };
-      try {
-        await link.call("Target.setDiscoverTargets", { discover: true });
-      } catch (error) {
-        link.close();
-        throw error;
-      }
+  Effect.gen(function* () {
+    const link = yield* CdpLink.opened(watch.devtools);
+    const closed = Deferred.makeUnsafe<void>();
+    if (watch.closed) {
+      link.close();
       return closed;
-    },
-    catch: (error) => (error instanceof Error ? error.message : String(error)),
-  });
+    }
+    watch.link = link;
+    link.onEvent = (message) => {
+      const { targetInfo, targetId } = message.params ?? {};
+      let moved = false;
+      if (
+        message.method === "Target.targetCreated" ||
+        message.method === "Target.targetInfoChanged"
+      ) {
+        moved = notePage(watch, targetInfo);
+      } else if (
+        message.method === "Target.targetDestroyed" &&
+        typeof targetId === "string"
+      ) {
+        moved = watch.pages.delete(targetId);
+        if (watch.front === targetId) {
+          watch.front = undefined;
+        }
+      }
+      if (moved) {
+        show(key, watch);
+      }
+    };
+    link.onClose = () => {
+      if (watch.link === link) {
+        // Its pages were that Chromium's: the next link (a restart, a
+        // move onto the same port) lists its own.
+        watch.link = undefined;
+        watch.pages.clear();
+        watch.front = undefined;
+        show(key, watch);
+      }
+      Deferred.doneUnsafe(closed, Effect.void);
+    };
+    yield* link
+      .request("Target.setDiscoverTargets", { discover: true })
+      .pipe(Effect.tapError(() => Effect.sync(() => link.close())));
+    return closed;
+  }).pipe(
+    Effect.mapError((error: unknown) =>
+      error instanceof Error ? error.message : String(error)
+    )
+  );
 
 /**
  * The link failed (`why`): said with the wait before it opens again, then

@@ -20,7 +20,6 @@ import {
   CONTROL_SET_PROVIDER_KEY,
   UNLOCK_KEYCHAIN,
 } from "@cawco/core/accounts/controls";
-import { readInstallation } from "@cawco/core/binary-installation";
 import { AGENT_RESTARTING } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -38,7 +37,6 @@ import {
   PASSKEY_ADVERT_MAX_AGE_MS,
   PASSKEY_SCAN_START,
   PASSKEY_SCAN_STOP,
-  type PasskeyAdvertFrame,
 } from "@cawco/core/browser";
 import { PROBE_CAPABILITIES } from "@cawco/core/capabilities";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -103,12 +101,7 @@ import {
 } from "@cawco/core/limit-readings";
 import { endProcess } from "@cawco/core/listeners";
 import { createLoopProfiler, loopMinute } from "@cawco/core/loop-profile";
-import {
-  phase,
-  syncSection,
-  watchFromItsOwnThread,
-  watchLoop,
-} from "@cawco/core/loop-watch";
+import { phase, syncSection, watchLoop } from "@cawco/core/loop-watch";
 import { machineId } from "@cawco/core/machine-id";
 import {
   type InboundRefusal,
@@ -220,6 +213,7 @@ import { recordLimitReadingsWith, setSectionMarker } from "@cawco/jsonl-parser";
 import { namedAndMore } from "@cawco/providers/names";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
+  Context,
   Data,
   Deferred,
   Duration,
@@ -227,20 +221,21 @@ import {
   Exit,
   Fiber,
   FiberHandle,
+  Layer,
   Schedule,
 } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { claudeAuthNote, onSigninsChanged } from "./accounts";
 import { type Activity, desktopReadable, watchActivity } from "./activity";
+import { AgentLayer } from "./agent-layer";
 import type { AgentPorts } from "./agent-ports";
 import { recordAgentState } from "./agent-state";
 import { unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
-  BinaryUpdater,
-  hubRegistered,
+  type BinaryUpdater,
+  BinaryUpdates,
   latestBinaryUpdate,
-  reportBinaryUpdate,
 } from "./binary-update";
 import { rearmHooks, settleGonePlaces } from "./boundary/control";
 import { checkBoundaryHost } from "./boundary/decisions";
@@ -252,12 +247,10 @@ import {
   removeBrowser,
   startBrowser,
   stopBrowser,
-  stopBrowsers,
   viewerSession,
-  watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
-import { PasskeyCapture } from "./browser/passkey-capture";
+import { PasskeyCapture, Passkeys } from "./browser/passkey-capture";
 import { passkeyInjector, vhciAvailable } from "./browser/passkey-inject";
 import {
   certifyRelay,
@@ -275,7 +268,6 @@ import {
   browserViewers,
   handBackBrowser,
   heardPasskeyAdvert,
-  restoreShields,
   shieldBrowser,
 } from "./browser/shield";
 import { buildInfo } from "./build";
@@ -290,6 +282,7 @@ import {
   workspaceCreateLane,
   workspaceLane,
 } from "./control-lanes";
+import { DaemonLinks } from "./daemon-links";
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
@@ -329,7 +322,7 @@ import { ghAccounts, ghAccountToken, ghRepo, ghRepos } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
 import { cancelCommand, runFollowedCommand } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
-import { carryHub, followHub, stopCarrying } from "./hub-loopback";
+import { carryHub, followHub } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import {
@@ -341,12 +334,10 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
-import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { probeMachineCapabilities } from "./machine-capabilities";
-import { startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
   moveCancel,
@@ -370,7 +361,6 @@ import {
   dropOpencodeMarkers,
   endProviderSignIns,
   forgetProviderAccount,
-  freshen,
   freshenAll,
   homeStoresStamp,
   joinProviderAccount,
@@ -399,10 +389,14 @@ import {
   moveOpencodeAccountHomes,
   moveRedactionStores,
 } from "./runtime-dir-move";
-import { TranscriptSearchService } from "./search";
+import { TranscriptSearch } from "./search";
 import { folderStands, foldersStand, sameFolderAs } from "./seen-folders";
-import { resumableSessions, SessionSupervisor } from "./session";
-import { serviceManaged, setSessionLimits } from "./sessiond-client";
+import {
+  resumableSessions,
+  type SessionSupervisor,
+  Supervisor,
+} from "./session";
+import { setSessionLimits } from "./sessiond-client";
 import {
   closingStages,
   drawServed,
@@ -1678,6 +1672,8 @@ const sessionsReader = () => {
 const attach = (
   scanner: UsageScans,
   supervisor: SessionSupervisor,
+  /** The updater, told of each register ({@link BinaryUpdater.hubRegistered}). */
+  updater: BinaryUpdater,
   identity: MachineIdentity,
   url: string,
   sessions: () => ReturnType<typeof readSessions>,
@@ -2867,7 +2863,7 @@ const attach = (
         recordRegistered();
         // A machine waiting for its hub's build looks again: the hub may
         // have restarted into it (binary-update.ts `hubRegistered`).
-        hubRegistered();
+        updater.hubRegistered();
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).
@@ -3355,9 +3351,6 @@ const startDaemon = (rediscover = false) =>
     // is enough: each attempt calls `session` anew, in the same tick that
     // reads this.
     let hubUrl = url;
-    // The supervisor, from when it is made until it detaches: what the
-    // gateway and the updater ask what a restart would cut read it (restart.ts).
-    let supervising: SessionSupervisor | undefined;
     const machineIdValue = yield* Effect.promise(() => machineId());
     // What the modules send through, built before any of them starts; every
     // frame leaves on the hub connection that is up (`HubLine`).
@@ -3379,30 +3372,35 @@ const startDaemon = (rediscover = false) =>
       stage: framed,
       stageClone: framed,
     };
-    yield* Effect.acquireRelease(
-      Effect.promise(() =>
-        startMcpGateway(() => hubUrl, {
-          freshen: (accountId) => freshen(accountId, ports),
-          supervisorHolds: () => supervising?.restartHolds(),
-          browsers: ports,
-        })
-      ),
-      (listener) => Effect.sync(() => listener.stop(true))
+    // The supervisor, from when its layer makes it until it detaches: what
+    // the gateway and the updater ask what a restart would cut read it
+    // (restart.ts), and so does `cawco service restart` through the gateway.
+    const supervising: DaemonLinks["Service"]["supervising"] = {
+      current: undefined,
+    };
+    // Every service that holds live state, built once in this scope and
+    // released as it closes, in the order agent-layer.ts gives: the MCP
+    // gateway, the hub's loopback, the env, the supervisor (which outlives
+    // every connection: a hub restart must not kill running sessions), the
+    // updater, the keeper's watch, transcript search, passkeys, browsers.
+    const services = yield* Layer.build(
+      AgentLayer.pipe(
+        Layer.provide(
+          Layer.succeed(DaemonLinks)({
+            machineId: machineIdValue,
+            hubUrl: url,
+            hubNow: () => hubUrl,
+            ports,
+            frame: framed,
+            supervising,
+          })
+        )
+      )
     );
-    // Only now: its echo's kernel-picked port could otherwise be the
-    // gateway's (loop-watch.ts `watchFromItsOwnThread`).
-    watchFromItsOwnThread();
-    // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
-    yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
-    // Set for this process's own readers (core machine-id.ts `machineId` takes
-    // the id from here; git-credential.ts `hubOrigin`, move.ts and host-lfs.ts
-    // read the hub) and for what it starts with an env built from this one.
-    // A session gets the hub alone (core session-env.ts `sessionEnvironment`),
-    // pi's host gets it from its own env (pi-sessiond.ts), a host tool gets
-    // both (`hostEnvironment`), and a harness server (OpenCode's) gets no
-    // `CAWCO_*` at all (`serverEnvironment`).
-    process.env[CAWCO_ENV.machineId] = machineIdValue;
-    process.env[CAWCO_ENV.hubUrl] = url;
+    const supervisor = Context.get(services, Supervisor);
+    const updater = Context.get(services, BinaryUpdates);
+    const search = Context.get(services, TranscriptSearch);
+    const passkeyCapture = Context.get(services, Passkeys);
     // The sessions this daemon spawns carry the deny list in their own
     // options, and only they: what an earlier version wrote into the
     // person's own settings goes, once.
@@ -3428,30 +3426,6 @@ const startDaemon = (rediscover = false) =>
       os: `${platform()}-${arch()}`,
     };
 
-    // Outlives any one connection: a hub restart must not kill running sessions.
-    const supervisor = yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const created = new SessionSupervisor(ports);
-        // What a restart would cut is the supervisor's to say from here on
-        // (`restart.ts`); the updater and `cawco service restart` read it.
-        supervising = created;
-        return created;
-      }),
-      (running) =>
-        // Detached, not drained: the sessions outlive this daemon in sessiond,
-        // and the next one reattaches to them. See `SessionSupervisor.detach`.
-        Effect.logInfo(
-          `detaching ${running.instanceIds.length} session(s)`
-        ).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              running.detach();
-              supervising = undefined;
-            })
-          )
-        )
-    );
-
     // A workspace's boundary runs only while something holds it: a carried
     // session bounded there, a preview of a port in it (and, read by
     // boundary/ itself, an attached CLI, a command in flight, a live work
@@ -3474,11 +3448,7 @@ const startDaemon = (rediscover = false) =>
     const scanner = yield* Effect.sync(() => new UsageScans());
     supervisor.declareControl(PROBE_CAPABILITIES, probeMachineCapabilities);
 
-    // Updates arrive only as signed builds from the hub: this one object owns
-    // the update tick, the "Install now" command and the policy the hub pushes.
-    const updater = new BinaryUpdater(reportBinaryUpdate, () =>
-      supervising?.restartHolds()
-    );
+    // The updater's controls (binary-update.ts `BinaryUpdatesLayer`).
     supervisor.declareControl(UPDATE_CAWCO, (command) =>
       updater.installNow(command ?? {})
     );
@@ -3486,8 +3456,6 @@ const startDaemon = (rediscover = false) =>
       updater.configure()
     );
     supervisor.declareControl(CANCEL_BINARY_UPDATE, () => updater.cancel());
-    yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
-    yield* Effect.forkScoped(Effect.promise(() => updater.start()));
 
     // Provider accounts: their controls, the agent's own refresh of every
     // OAuth sign-in (the store's only writer, which also writes each
@@ -3508,35 +3476,6 @@ const startDaemon = (rediscover = false) =>
       )
     );
 
-    // A keeper that is alive and answers nobody is restarted (or, retiring,
-    // removed) through the service manager, which is the only thing that runs
-    // it on a managed machine; a hand-run `cawco up` owns its keeper and has
-    // no manager to ask.
-    if (serviceManaged()) {
-      const watchdog = new KeeperWatchdog({
-        log: (line) => Effect.runFork(Effect.logWarning(line)),
-        // The notice rides the update state, which a binary install keeps.
-        record: async (restart) => {
-          if (await readInstallation()) {
-            await updater.noteKeeperRestart(restart);
-          }
-        },
-        kept: async (version, current, held, holding) => {
-          if (await readInstallation()) {
-            await updater.noteKeeperKept(version, current, held, holding);
-          }
-        },
-      });
-      watchdog.start();
-      yield* Effect.addFinalizer(() => Effect.sync(() => watchdog.stop()));
-    }
-
-    // Transcript search index: FTS5-backed BM25 search over transcripts, in
-    // a process of its own (search/process.ts). Created once, syncs every ten
-    // minutes in the background and before a search, outlives reconnects.
-    const search = new TranscriptSearchService();
-    search.start();
-    yield* Effect.addFinalizer(() => Effect.sync(() => search.close()));
     // A deleted transcript's words leave the index with it (a purge).
     supervisor.onTranscriptDeleted((sessionId) => search.forget(sessionId));
     // The agent's memory, by what holds it (memory.ts): once its first usage
@@ -3767,16 +3706,7 @@ const startDaemon = (rediscover = false) =>
     });
 
     // Capture side: scan for the phone's FIDO BLE advert while the hub
-    // asks, and send each one hub-ward for relay (passkey-capture.ts).
-    // Lazy: nothing scans until the hub says so.
-    const passkeyCapture = new PasskeyCapture((advert) =>
-      framed({
-        kind: "passkey_advert",
-        serviceData: advert.serviceData.toString("base64"),
-        rssi: advert.rssi,
-        capturedAt: Date.now(),
-      } satisfies PasskeyAdvertFrame)
-    );
+    // asks (passkey-capture.ts `PasskeysLayer`).
     supervisor.declareControl(PASSKEY_SCAN_START, async ({ key }) => {
       if (!(await PasskeyCapture.available())) {
         throw new Error("No BLE scanner available on this machine");
@@ -3790,51 +3720,6 @@ const startDaemon = (rediscover = false) =>
       console.info(`[passkey] BLE scan stopped for ${key}`);
       return Promise.resolve(true);
     });
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        passkeyCapture.stopAll();
-        passkeyInjector.stop();
-      })
-    );
-    // The records' watch and tick end with the daemon's scope, and one that
-    // is still starting as it ends is stopped the moment it is ready.
-    let unwatchBrowsers: (() => void) | undefined;
-    let browsersEnded = false;
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        browsersEnded = true;
-        unwatchBrowsers?.();
-      })
-    );
-    yield* Effect.forkScoped(
-      Effect.promise(() =>
-        // The take-overs held before a restart are held again first (their
-        // gates start closed as the registry makes them, browsers.ts
-        // `gateFor`), so a browser the registry then reads back as stopped
-        // has its take-over released and its gate opened.
-        restoreShields(ports)
-          .catch((error: unknown) =>
-            console.warn(`[browser] take-overs not restored: ${String(error)}`)
-          )
-          .then(() => watchBrowsers(ports))
-          .then(
-            (stop) => {
-              unwatchBrowsers = stop;
-              if (browsersEnded) {
-                stop();
-              }
-            },
-            // Its gate is every session's one door to a browser: an agent
-            // without it ends, to be started again (core listeners.ts).
-            (error: unknown) =>
-              endProcess("[browser] the browsers are not served", error)
-          )
-      )
-    );
-    // A browser's move into a container under way as the agent stops is
-    // aborted and its own failure path awaited, so nothing it made is left
-    // on the runtime (browsers.ts `stopBrowsers`).
-    yield* Effect.addFinalizer(() => Effect.promise(() => stopBrowsers()));
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):
     // started, stopped, its certificate renewed; read back from its container.
     supervisor.declareControl(RELAY_START, async (args) =>
@@ -4074,6 +3959,7 @@ const startDaemon = (rediscover = false) =>
           attach(
             scanner,
             supervisor,
+            updater,
             identity,
             hubUrl,
             sessions,
@@ -4183,7 +4069,7 @@ export const runDaemon = (rediscover = false): void => {
       // data home still in the runtime dir, a tmpfs every reboot empties,
       // moved to disk (runtime-dir-move.ts). One that cannot move fails the
       // start below, and its service manager starts the agent again.
-      Effect.andThen(Effect.promise(() => moveOpencodeAccountHomes())),
+      Effect.andThen(moveOpencodeAccountHomes.pipe(Effect.orDie)),
       // Before anything can start a session: the machine's copies of the
       // fleet's hooks in the shape their readers read (hook-fields-move.ts),
       // so no session starts without them. One that cannot be written fails

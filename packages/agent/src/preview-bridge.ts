@@ -176,12 +176,17 @@ const inGroup = (pgid: number): number[] =>
  * anything else runs, so every open asked for before it takes down what it
  * made once its spawn settles, and this waits its turn behind them.
  *
- * The promise edge of {@link teardown} in the preview's turn.
+ * {@link teardown} in the preview's turn.
  */
-export const closeBridge = (instanceId: string): Promise<void> => {
-  stops.set(instanceId, (stops.get(instanceId) ?? 0) + 1);
-  return Effect.runPromise(turns.withLock(instanceId, teardown(instanceId)));
-};
+export const bridgeClosed = (instanceId: string): Effect.Effect<void, Error> =>
+  Effect.suspend(() => {
+    stops.set(instanceId, (stops.get(instanceId) ?? 0) + 1);
+    return turns.withLock(instanceId, teardown(instanceId));
+  });
+
+/** The promise edge of {@link bridgeClosed}. */
+export const closeBridge = (instanceId: string): Promise<void> =>
+  Effect.runPromise(bridgeClosed(instanceId));
 
 /** Kills `instanceId`'s registered bridge, its whole group, and removes its socket. */
 const teardown = (instanceId: string): Effect.Effect<void, Error> =>

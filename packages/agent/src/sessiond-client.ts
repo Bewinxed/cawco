@@ -225,10 +225,10 @@ const WELCOME_LINE = /"type"\s*:\s*"welcome"/u;
  * answered ({@link KeeperDial}), or unanswered; `accepted` says how far an
  * unanswered dial got (its connect completed, or did not).
  */
-export const dialKeeper = async (
+export const dialKeeper = Effect.fnUntraced(function* (
   endpoint: string,
   timeoutMs: number
-): Promise<{ dial: Bounded<KeeperDial>; accepted: boolean }> => {
+): Effect.fn.Return<{ dial: Bounded<KeeperDial>; accepted: boolean }> {
   let accepted = false;
   const welcome = Effect.callback<KeeperDial>((resume) => {
     // Listeners before the dial, as in core `answers`.
@@ -263,24 +263,21 @@ export const dialKeeper = async (
     // Let go at the deadline: the dial ends with it.
     return Effect.sync(() => socket.destroy());
   });
-  // The promise edge of the dial within its deadline.
-  const dial = await Effect.runPromise(
-    boundedRead(timeoutMs, welcome).pipe(
-      Effect.match({
-        onSuccess: (value): Bounded<KeeperDial> => ({
-          kind: "answered",
-          value,
-        }),
-        onFailure: ({ after, reason }): Bounded<KeeperDial> => ({
-          kind: "unanswered",
-          after,
-          reason,
-        }),
-      })
-    )
+  const dial = yield* boundedRead(timeoutMs, welcome).pipe(
+    Effect.match({
+      onSuccess: (value): Bounded<KeeperDial> => ({
+        kind: "answered",
+        value,
+      }),
+      onFailure: ({ after, reason }): Bounded<KeeperDial> => ({
+        kind: "unanswered",
+        after,
+        reason,
+      }),
+    })
   );
   return { dial, accepted };
-};
+});
 
 /**
  * Defined only in the published package's bundle (scripts/build-binary.ts),
@@ -622,7 +619,7 @@ export class SessiondClient {
       timedEffect(
         boundedRead(
           timeoutMs,
-          SessiondClient.#dialing(endpoint).pipe(
+          SessiondClient.dial(endpoint).pipe(
             Effect.mapError((error) =>
               error instanceof Gone
                 ? new EndedFirst({ what: error.message })
@@ -654,18 +651,10 @@ export class SessiondClient {
   /**
    * One dial of the keeper at `endpoint`, waited on for the keeper's own
    * word: its welcome, its refusal (a thrown errno or capability refusal),
-   * its connection's end ({@link Gone}), or `signal`, which interrupts it.
-   * The promise edge of {@link SessiondClient.#dialing}.
+   * its connection's end ({@link Gone}); its first word settles it, and
+   * interrupted, the socket is let go.
    */
-  static dial(endpoint: string, signal?: AbortSignal): Promise<SessiondClient> {
-    return Effect.runPromise(
-      SessiondClient.#dialing(endpoint),
-      signal ? { signal } : undefined
-    );
-  }
-
-  /** {@link SessiondClient.dial}: its first word settles it; interrupted, the socket is let go. */
-  static #dialing(endpoint: string): Effect.Effect<SessiondClient, Error> {
+  static dial(endpoint: string): Effect.Effect<SessiondClient, Error> {
     return Effect.callback<SessiondClient, Error>((resume) => {
       // Same ordering rule as core `answers`: listeners before dial.
       const socket = new Socket();
@@ -1116,21 +1105,31 @@ export class SessiondClient {
   }
 
   /** Ask again what is alive. Answered with a fresh `welcome`. */
+  listed(): Effect.Effect<SessiondWelcomeInfo, Error> {
+    return Effect.suspend(() => {
+      // An ended connection failed its waiters as it closed: one queued now
+      // would wait for a welcome that never comes.
+      if (this.#closed) {
+        return Effect.fail(keeperEnded("this listing was asked"));
+      }
+      try {
+        this.#send({ type: "list" });
+      } catch (error) {
+        return Effect.fail(
+          error instanceof Error ? error : new Error(String(error))
+        );
+      }
+      const listed = Deferred.makeUnsafe<SessiondWelcomeInfo, Error>();
+      this.#welcomeWaiters.push((answer) =>
+        Deferred.doneUnsafe(listed, answer)
+      );
+      return Deferred.await(listed);
+    });
+  }
+
+  /** The promise edge of {@link listed}. */
   list(): Promise<SessiondWelcomeInfo> {
-    // An ended connection failed its waiters as it closed: one queued now
-    // would wait for a welcome that never comes.
-    if (this.#closed) {
-      return Promise.reject(keeperEnded("this listing was asked"));
-    }
-    try {
-      this.#send({ type: "list" });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    const listed = Deferred.makeUnsafe<SessiondWelcomeInfo, Error>();
-    this.#welcomeWaiters.push((answer) => Deferred.doneUnsafe(listed, answer));
-    // The promise edge of the wait for its welcome.
-    return Effect.runPromise(Deferred.await(listed));
+    return Effect.runPromise(this.listed());
   }
 
   close(): void {

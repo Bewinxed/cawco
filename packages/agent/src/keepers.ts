@@ -102,10 +102,7 @@ export class KeeperPool {
     Cache.makeWith(
       (endpoint: string) =>
         // Waits on the keeper's welcome or its end, as every reading here does.
-        Effect.tryPromise({
-          try: () => SessiondClient.dial(endpoint),
-          catch: (error) => error,
-        }),
+        SessiondClient.dial(endpoint),
       {
         capacity: Number.POSITIVE_INFINITY,
         timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),

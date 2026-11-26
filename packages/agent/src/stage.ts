@@ -163,6 +163,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Layer,
   Predicate,
   Pull,
   Schedule,
@@ -2851,8 +2852,13 @@ export async function unpin(tree: string): Promise<void> {
  * restart started every pin's server and stage host again at every agent
  * start, 13 times on obelisk on 19 Nov, each a load spike of its own.
  */
-export function endStages(): void {
+const endStages = (): void => {
   for (const stage of [...stages.values()]) {
     stopOne(stage);
   }
-}
+};
+
+/** {@link endStages} as the agent's layer closes (agent-layer.ts), before the supervisor detaches. */
+export const StagesLayer = Layer.effectDiscard(
+  Effect.addFinalizer(() => Effect.sync(endStages))
+);

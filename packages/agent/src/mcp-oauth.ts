@@ -5,16 +5,20 @@ import {
 } from "@cawco/core/binary-updates";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { portHolder } from "@cawco/core/live-processes";
+import { watchFromItsOwnThread } from "@cawco/core/loop-watch";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { shortId } from "@cawco/core/short-id";
 import { updatesWords } from "@cawco/core/words/updates";
+import { Effect, Layer } from "effect";
 import type { BrowserPorts } from "./browser/browsers";
+import { DaemonLinks } from "./daemon-links";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { fieldOf } from "./json-field";
 import { GATE_PATH } from "./mcp-gate";
 import { HOSTED_PATH, mcpHost } from "./mcp-host";
+import { freshen as freshenAccount } from "./provider-accounts";
 import {
   fenced,
   holdRestart,
@@ -493,10 +497,7 @@ interface Gateway {
   readonly supervisorHolds: SupervisorHolds;
 }
 
-export const startMcpGateway = async (
-  hubUrl: () => string,
-  gateway: Gateway
-) => {
+const startMcpGateway = async (hubUrl: () => string, gateway: Gateway) => {
   // Shared servers an agent before this one left running are ended first,
   // and the set it served is served from now, before the first sync.
   await mcpHost.sweep();
@@ -573,3 +574,26 @@ export const startMcpGateway = async (
     throw error;
   }
 };
+
+/**
+ * The MCP gateway, served from when the agent's layer is built (agent-layer.ts)
+ * until its scope closes, which stops it last of the agent's services. Then
+ * the loop's watch from its own thread starts: its echo's kernel-picked port
+ * could otherwise be the gateway's (core loop-watch.ts).
+ */
+export const McpGatewayLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const { hubNow, ports, supervising } = yield* DaemonLinks;
+    yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        startMcpGateway(hubNow, {
+          freshen: (accountId) => freshenAccount(accountId, ports),
+          supervisorHolds: () => supervising.current?.restartHolds(),
+          browsers: ports,
+        })
+      ),
+      (listener) => Effect.sync(() => listener.stop(true))
+    );
+    watchFromItsOwnThread();
+  })
+);

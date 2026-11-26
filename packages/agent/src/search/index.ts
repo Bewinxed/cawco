@@ -22,7 +22,15 @@ import {
 } from "@cawco/core/find";
 import { inFlight } from "@cawco/core/loop-watch";
 import { unhandled } from "@cawco/core/unhandled";
-import { Deferred, Effect, Exit, Fiber, Schedule } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Schedule,
+} from "effect";
 import { SearchProcess } from "./process";
 
 /**
@@ -380,3 +388,26 @@ export class TranscriptSearchService {
     this.#writer.close();
   }
 }
+
+/** The machine's transcript search ({@link TranscriptSearchService}). */
+export class TranscriptSearch extends Context.Service<
+  TranscriptSearch,
+  TranscriptSearchService
+>()("TranscriptSearch") {}
+
+/**
+ * Transcript search: FTS5-backed BM25 search over transcripts, in a process
+ * of its own (process.ts). Made and started as the agent's layer is built
+ * (agent-layer.ts), it syncs every ten minutes in the background and before
+ * a search, outlives reconnects, and closes as the layer's scope does.
+ */
+export const TranscriptSearchLayer = Layer.effect(TranscriptSearch)(
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const search = new TranscriptSearchService();
+      search.start();
+      return search;
+    }),
+    (search) => Effect.sync(() => search.close())
+  )
+);

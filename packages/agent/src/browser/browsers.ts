@@ -989,13 +989,15 @@ const goOn = (signal: AbortSignal): void => {
  * awaited, so the container and volume it made are removed before the agent
  * exits. A step under way (an image build among them) runs to its end first.
  */
-export const stopBrowsers = async (): Promise<void> => {
+export const stopBrowsers: Effect.Effect<void> = Effect.suspend(() => {
   stopping = true;
-  if (moving) {
-    moving.abort.abort();
-    await Effect.runPromise(Deferred.await(moving.done));
+  const under = moving;
+  if (!under) {
+    return Effect.void;
   }
-};
+  under.abort.abort();
+  return Deferred.await(under.done);
+});
 
 /**
  * The container `into` names made on `container`, `signIns` written into its

@@ -184,7 +184,15 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { judgeInstructions, readPolicy } from "@cawco/core/workspace-judge";
-import { Deferred, Effect, Exit, Schema, Semaphore } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Schema,
+  Semaphore,
+} from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
@@ -194,11 +202,7 @@ import { sandboxOf } from "./boundary/sandboxes";
 import type { Boundary } from "./boundary/state";
 import { endSessionWork } from "./boundary/work";
 import { closeBrowserDoor, forgetBrowserDoor } from "./browser/door";
-import {
-  closeCanvasScreen,
-  closeCanvasScreens,
-  openCanvasScreen,
-} from "./canvas-screen";
+import { closeCanvasScreen, openCanvasScreen } from "./canvas-screen";
 import {
   type MovedTranscript,
   onCatalogMoved,
@@ -211,6 +215,7 @@ import {
   type MachineControl,
   type MachineControls,
 } from "./control-lanes";
+import { DaemonLinks } from "./daemon-links";
 import { reportDamaged } from "./damaged-records";
 import { forgetFirstSession } from "./first-session";
 import { FleetConverger } from "./fleet-converger";
@@ -256,7 +261,7 @@ import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { noticeMessage } from "./notices";
 import { Outbox } from "./outbox";
-import { startPreview, stopPreview, stopPreviews } from "./preview";
+import { startPreview, stopPreview } from "./preview";
 import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
@@ -279,7 +284,6 @@ import {
   procEpoch,
 } from "./sessiond-client";
 import { SpinOffs } from "./spin-offs";
-import { endStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { beginToolSignin, completeToolSignin } from "./tool-signin";
@@ -2430,11 +2434,6 @@ export class SessionSupervisor {
    * down still takes its children with it. Neither is a restart.
    */
   detach(): void {
-    stopPreviews();
-    closeCanvasScreens();
-    // A stage speaks to this daemon alone (its stdout): each is ended, and
-    // the next daemon starts it on its first use.
-    endStages();
     for (const instanceId of [...this.#live.sessions.keys()]) {
       this.#live.drop(instanceId, { why: "detached" });
     }
@@ -5409,10 +5408,11 @@ function endHeld(instanceId: string, pid?: number): Promise<boolean> {
               deadlineMs: 10_000,
               until: (alive: boolean) => !alive,
             },
-            Effect.promise(async () =>
-              (await client.list()).procs.some(
-                (proc) => proc.pid === child.pid && proc.alive
-              )
+            client.listed().pipe(
+              Effect.map(({ procs }) =>
+                procs.some((proc) => proc.pid === child.pid && proc.alive)
+              ),
+              Effect.orDie
             )
           )
         );
@@ -5462,3 +5462,42 @@ async function admit(
     );
   }
 }
+
+/** The machine's one session supervisor ({@link SessionSupervisor}). */
+export class Supervisor extends Context.Service<
+  Supervisor,
+  SessionSupervisor
+>()("Supervisor") {}
+
+/**
+ * The supervisor, made as the agent's layer is built (agent-layer.ts) and
+ * outliving every connection: a hub restart must not kill running sessions.
+ * Released after every service built on it, it detaches rather than drains:
+ * the sessions outlive this daemon in sessiond, and the next one reattaches
+ * to them ({@link SessionSupervisor.detach}).
+ */
+export const SupervisorLayer = Layer.effect(Supervisor)(
+  Effect.gen(function* () {
+    const { ports, supervising } = yield* DaemonLinks;
+    return yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const created = new SessionSupervisor(ports);
+        // What a restart would cut is the supervisor's to say from here on
+        // (restart.ts); the updater and `cawco service restart` read it.
+        supervising.current = created;
+        return created;
+      }),
+      (running) =>
+        Effect.logInfo(
+          `detaching ${running.instanceIds.length} session(s)`
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              running.detach();
+              supervising.current = undefined;
+            })
+          )
+        )
+    );
+  })
+);

@@ -103,9 +103,10 @@ import {
   hubRoutes,
   reached,
 } from "@cawco/hub/client";
-import { Effect, Fiber, Schedule, Schema } from "effect";
+import { Context, Effect, Fiber, Layer, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary/control";
+import { DaemonLinks } from "./daemon-links";
 import { provenFetch } from "./hub-proof";
 import {
   type KeeperConnection,
@@ -329,20 +330,8 @@ async function fenceHub(hub: string, ms: number): Promise<void> {
 
 let latest: BinaryUpdateState | undefined;
 export const latestBinaryUpdate = (): BinaryUpdateState | undefined => latest;
-export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
+const reportBinaryUpdate = (state: BinaryUpdateState): void => {
   latest = state;
-};
-
-/** This agent's updater, once it has started: the one a register with the hub tells ({@link hubRegistered}). */
-let startedUpdater: BinaryUpdater | undefined;
-/**
- * This agent registered with its hub (daemon.ts, at every register ack): the
- * hub restarted, or this agent reconnected. A machine waiting for its hub
- * looks again now rather than at its next tick, for a hub that restarted may
- * run the build it waits for.
- */
-export const hubRegistered = (): void => {
-  startedUpdater?.hubRegistered();
 };
 
 /**
@@ -837,7 +826,6 @@ export class BinaryUpdater {
     this.#hostsHub = installation.role === "hub";
     this.#power = watchPower();
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
-    startedUpdater = this;
     this.#ticks = [
       everyFixed(POLL_MS, () => this.tick()),
       everyFixed(WATCH_MS, () => this.#watch()),
@@ -873,7 +861,12 @@ export class BinaryUpdater {
     return this.#state;
   }
 
-  /** The agent registered with its hub ({@link hubRegistered}): a machine waiting for its hub looks again now. */
+  /**
+   * This agent registered with its hub (daemon.ts, at every register ack):
+   * the hub restarted, or this agent reconnected. A machine waiting for its
+   * hub looks again now rather than at its next tick, for a hub that
+   * restarted may run the build it waits for.
+   */
   hubRegistered(): void {
     if (this.#state.phase === "waiting-for-hub") {
       letGo(() => this.tick());
@@ -2554,3 +2547,33 @@ async function ownWrapper(): Promise<void> {
     console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
   }
 }
+
+/** This agent's updater ({@link BinaryUpdater}). */
+export class BinaryUpdates extends Context.Service<
+  BinaryUpdates,
+  BinaryUpdater
+>()("BinaryUpdates") {}
+
+/**
+ * The updater: the one object that owns the update tick, the "Install now"
+ * command and the policy the hub pushes, since updates arrive only as signed
+ * builds from the hub. Made as the agent's layer is built (agent-layer.ts),
+ * after the supervisor whose holds it reads, and started in its scope; its
+ * start is interrupted and its ticks stopped as that scope closes.
+ */
+export const BinaryUpdatesLayer = Layer.effect(BinaryUpdates)(
+  Effect.gen(function* () {
+    const { supervising } = yield* DaemonLinks;
+    const updater = yield* Effect.acquireRelease(
+      Effect.sync(
+        () =>
+          new BinaryUpdater(reportBinaryUpdate, () =>
+            supervising.current?.restartHolds()
+          )
+      ),
+      (made) => Effect.sync(() => made.stop())
+    );
+    yield* Effect.forkScoped(Effect.promise(() => updater.start()));
+    return updater;
+  })
+);

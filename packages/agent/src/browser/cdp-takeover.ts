@@ -123,6 +123,10 @@ const CALL_MS = 15_000;
 /** Why a call on a {@link CdpLink} whose connection closed got no answer. */
 const LINK_CLOSED = "The browser's DevTools connection closed.";
 
+/** What a step threw, as an `Error`. */
+const thrown = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
+
 /**
  * One CDP connection of the daemon's own, at the browser's level, with
  * flat sessions: calls answered by id, events handed to `onEvent`.
@@ -156,30 +160,46 @@ export class CdpLink {
   }
 
   /** The browser-level connection of the Chromium whose DevTools answer at `devtools` (`http://127.0.0.1:<port>`). */
-  static async open(devtools: string): Promise<CdpLink> {
-    const read = await readWithin(CALL_MS, (signal) =>
-      fetch(`${devtools}/json/version`, { signal }).then(async (response) =>
-        DevtoolsVersion.parse(await response.json())
-      )
-    );
-    if (read.kind === "unanswered") {
-      throw new Error(
-        `The browser's DevTools at ${devtools} did not answer within ${CALL_MS / 1000} s.`
-      );
-    }
-    const url = read.value.webSocketDebuggerUrl;
-    if (!url) {
-      throw new Error(`The browser's DevTools at ${devtools} named no socket.`);
-    }
-    const socket = new WebSocket(url);
-    await Effect.runPromise(
-      Effect.callback<void, Error>((resume) => {
+  static opened(devtools: string): Effect.Effect<CdpLink, Error> {
+    return Effect.gen(function* () {
+      const read = yield* Effect.tryPromise({
+        try: () =>
+          readWithin(CALL_MS, (signal) =>
+            fetch(`${devtools}/json/version`, { signal }).then(
+              async (response) => DevtoolsVersion.parse(await response.json())
+            )
+          ),
+        catch: thrown,
+      });
+      if (read.kind === "unanswered") {
+        return yield* Effect.fail(
+          new Error(
+            `The browser's DevTools at ${devtools} did not answer within ${CALL_MS / 1000} s.`
+          )
+        );
+      }
+      const url = read.value.webSocketDebuggerUrl;
+      if (!url) {
+        return yield* Effect.fail(
+          new Error(`The browser's DevTools at ${devtools} named no socket.`)
+        );
+      }
+      const socket = yield* Effect.try({
+        try: () => new WebSocket(url),
+        catch: thrown,
+      });
+      yield* Effect.callback<void, Error>((resume) => {
         socket.onopen = () => resume(Effect.void);
         socket.onerror = () =>
           resume(Effect.fail(new Error(`${url} did not open.`)));
-      })
-    );
-    return new CdpLink(socket);
+      });
+      return new CdpLink(socket);
+    });
+  }
+
+  /** The promise edge of {@link CdpLink.opened}. */
+  static open(devtools: string): Promise<CdpLink> {
+    return Effect.runPromise(CdpLink.opened(devtools));
   }
 
   /**

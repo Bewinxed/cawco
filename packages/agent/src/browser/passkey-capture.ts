@@ -29,10 +29,12 @@ import {
   createInterface,
   type Interface as ReadlineInterface,
 } from "node:readline";
-import type { BrowserKey } from "@cawco/core/browser";
+import type { BrowserKey, PasskeyAdvertFrame } from "@cawco/core/browser";
 import { recordLimitReading } from "@cawco/core/limit-readings";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
+import { DaemonLinks } from "../daemon-links";
 import { detectPasskeyRelay } from "./passkey-detect";
+import { passkeyInjector } from "./passkey-inject";
 
 /** What `file` printed, given 5 s, or why it failed. */
 const printed = Effect.fnUntraced(function* (file: string, args: string[]) {
@@ -509,3 +511,39 @@ export class PasskeyCapture {
     await this.#starting;
   }
 }
+
+/** The machine's passkey scans ({@link PasskeyCapture}). */
+export class Passkeys extends Context.Service<Passkeys, PasskeyCapture>()(
+  "Passkeys"
+) {}
+
+/**
+ * The capture side of the passkey relay, made as the agent's layer is built
+ * (agent-layer.ts): it scans for the phone's FIDO BLE advert while the hub
+ * asks and sends each one hub-ward for relay. Lazy: nothing scans until the
+ * hub says so. As the layer's scope closes, every scan stops and the inject
+ * side's virtual adapter (passkey-inject.ts) with it.
+ */
+export const PasskeysLayer = Layer.effect(Passkeys)(
+  Effect.gen(function* () {
+    const { frame } = yield* DaemonLinks;
+    return yield* Effect.acquireRelease(
+      Effect.sync(
+        () =>
+          new PasskeyCapture((advert) =>
+            frame({
+              kind: "passkey_advert",
+              serviceData: advert.serviceData.toString("base64"),
+              rssi: advert.rssi,
+              capturedAt: Date.now(),
+            } satisfies PasskeyAdvertFrame)
+          )
+      ),
+      (capture) =>
+        Effect.sync(() => {
+          capture.stopAll();
+          passkeyInjector.stop();
+        })
+    );
+  })
+);
