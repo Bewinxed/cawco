@@ -13,6 +13,8 @@ import { toolSpec } from "@cawco/core/tools";
 import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import type { Subprocess } from "bun";
+import { Clock, Effect, type Scope } from "effect";
 import { z } from "zod";
 import {
   heardUntilSignedOut,
@@ -21,7 +23,13 @@ import {
   toolEnv,
 } from "../tools";
 import { ratioOf } from "./aspect";
-import type { ImageJob, ImageProvider, MadeImage } from "./provider";
+import {
+  type ImageJob,
+  type ImageProvider,
+  type ImageRunFailed,
+  imageRunFailed,
+  type MadeImage,
+} from "./provider";
 
 /**
  * Gemini through the Antigravity CLI on this machine (`agy`), on the
@@ -256,89 +264,108 @@ const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
  * error after writing it is said in a note (agy 1.5.0 on Pro ended
  * `NOT_FOUND (code 404)` after its image, measured).
  */
-const runAgy = async (
+const runAgy = Effect.fn("runAgy")(function* (
   bin: string,
   signedOut: readonly string[],
-  job: ImageJob,
-  signal: AbortSignal
-): Promise<MadeImage> => {
-  const cwd = await mkdtemp(join(tmpdir(), "cawco-agy-image-"));
-  const since = Date.now() - 1000;
-  try {
-    const paths = await writeReferences(cwd, job.references);
-    // Its whole process tree is ended when the orchestration stops
-    // waiting: agy starts a language server of its own beside it. On Linux
-    // and macOS it leads a process group of its own, signalled whole; on
-    // Windows, which has no process groups, `taskkill /T` ends the process
-    // and every process it started.
-    const grouped = platform() !== "win32";
-    const child = Bun.spawn(
-      [
-        bin,
-        "-p",
-        promptOf(job, paths),
-        "--output-format",
-        "json",
-        "--json-schema",
-        ANSWER_SCHEMA,
-        "--print-timeout",
-        PRINT_TIMEOUT,
-      ],
-      {
-        cwd,
-        env: toolEnv(),
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        ...(grouped ? { detached: true } : {}),
-      }
+  job: ImageJob
+): Effect.fn.Return<MadeImage, ImageRunFailed, Scope.Scope> {
+  const cwd = yield* Effect.acquireRelease(
+    Effect.tryPromise({
+      try: () => mkdtemp(join(tmpdir(), "cawco-agy-image-")),
+      catch: imageRunFailed,
+    }),
+    (made) => Effect.promise(() => rm(made, { recursive: true, force: true }))
+  );
+  const since = (yield* Clock.currentTimeMillis) - 1000;
+  const paths = yield* Effect.tryPromise({
+    try: () => writeReferences(cwd, job.references),
+    catch: imageRunFailed,
+  });
+  // Its whole process tree is ended when the orchestration stops
+  // waiting: agy starts a language server of its own beside it. On Linux
+  // and macOS it leads a process group of its own, signalled whole; on
+  // Windows, which has no process groups, `taskkill /T` ends the process
+  // and every process it started.
+  const grouped = platform() !== "win32";
+  const child = yield* Effect.acquireRelease(
+    Effect.try({
+      try: () =>
+        Bun.spawn(
+          [
+            bin,
+            "-p",
+            promptOf(job, paths),
+            "--output-format",
+            "json",
+            "--json-schema",
+            ANSWER_SCHEMA,
+            "--print-timeout",
+            PRINT_TIMEOUT,
+          ],
+          {
+            cwd,
+            env: toolEnv(),
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+            ...(grouped ? { detached: true } : {}),
+          }
+        ),
+      catch: imageRunFailed,
+    }),
+    (started) => Effect.sync(() => stopTree(started, grouped))
+  );
+  // Read as every run of agy is (tools.ts `heardUntilSignedOut`): signed
+  // out, it says so and then waits a minute for a login, so the run ends
+  // where it says it (its tree ended as it is let go), and that line is
+  // the refusal's reason.
+  const ended = yield* Effect.promise(() =>
+    heardUntilSignedOut(child, signedOut)
+  );
+  if ("line" in ended) {
+    return yield* Effect.fail(
+      imageRunFailed(new Error(imageGenerationWords.agySignedOut(ended.line)))
     );
-    const leader = spawnedPid(child);
-    const stop = () => {
-      if (leader === undefined || child.exitCode !== null) {
-        return;
-      }
-      if (grouped) {
-        signalGroup(leader, "SIGTERM");
-        return;
-      }
-      Bun.spawn(
-        [systemProgram("taskkill"), "/PID", String(leader), "/T", "/F"],
-        {
-          env: process.env,
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-        }
-      );
-    };
-    signal.addEventListener("abort", stop, { once: true });
-    // Read as every run of agy is (tools.ts `heardUntilSignedOut`): signed
-    // out, it says so and then waits a minute for a login, so the run ends
-    // where it says it, and that line is the refusal's reason.
-    const ended = await heardUntilSignedOut(child, signedOut);
-    if ("line" in ended) {
-      stop();
-      throw new Error(imageGenerationWords.agySignedOut(ended.line));
-    }
-    const { code, out, err } = ended;
-    const envelope = envelopeOf(out);
-    const bytes = await madeImage(envelope, cwd, since, job.references);
-    if (!bytes) {
-      throw noImage(envelope, err);
-    }
-    const notes =
-      code === 0 && envelope?.status === "SUCCESS"
-        ? []
-        : [
-            imageGenerationWords.agyEndedAfterImage(
-              envelope?.error ?? `exit ${code}`
-            ),
-          ];
-    return { bytes, notes };
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
   }
+  const { code, out, err } = ended;
+  const envelope = envelopeOf(out);
+  const bytes = yield* Effect.tryPromise({
+    try: () => madeImage(envelope, cwd, since, job.references),
+    catch: imageRunFailed,
+  });
+  if (!bytes) {
+    return yield* Effect.fail(imageRunFailed(noImage(envelope, err)));
+  }
+  const notes =
+    code === 0 && envelope?.status === "SUCCESS"
+      ? []
+      : [
+          imageGenerationWords.agyEndedAfterImage(
+            envelope?.error ?? `exit ${code}`
+          ),
+        ];
+  return { bytes, notes };
+}, Effect.scoped);
+
+/**
+ * agy's whole process tree ended, while agy still runs: its group on Linux
+ * and macOS, `taskkill /T` on Windows.
+ */
+const stopTree = (child: Subprocess, grouped: boolean): void => {
+  const leader = spawnedPid(child);
+  if (leader === undefined || child.exitCode !== null) {
+    return;
+  }
+  if (grouped) {
+    signalGroup(leader, "SIGTERM");
+    return;
+  }
+  Bun.spawn([systemProgram("taskkill"), "/PID", String(leader), "/T", "/F"], {
+    env: process.env,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  });
 };
 
 /**
@@ -383,20 +410,23 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
   return {
     ready: true,
     notes,
-    generate: async (job, signal) => {
-      const made = await runAgy(bin, spec.signin?.signedOut ?? [], job, signal);
-      return {
-        bytes: made.bytes,
-        notes: [
-          ...(job.quality === "auto"
-            ? []
-            : [
-                imageGenerationWords.qualityIgnored("antigravity", job.quality),
-              ]),
-          ...made.notes,
-        ],
-      };
-    },
+    generate: (job) =>
+      runAgy(bin, spec.signin?.signedOut ?? [], job).pipe(
+        Effect.map((made) => ({
+          bytes: made.bytes,
+          notes: [
+            ...(job.quality === "auto"
+              ? []
+              : [
+                  imageGenerationWords.qualityIgnored(
+                    "antigravity",
+                    job.quality
+                  ),
+                ]),
+            ...made.notes,
+          ],
+        }))
+      ),
   };
 }
 

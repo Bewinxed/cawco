@@ -13,15 +13,18 @@
  * why ({@link ProviderAccountReading.error}); the hub keeps that reading.
  */
 import type { ProviderAccountReading } from "@cawco/core/accounts";
+import { failureOf } from "@cawco/core/detach";
+import { makeJoin } from "@cawco/core/effect/join";
 import { accountIds, credentialAccountIds } from "@cawco/core/paths/claude";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type { LimitWindow } from "@cawco/core/usage/types";
+import { Cause, Clock, Duration, Effect, Fiber } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import type { HarnessContext } from "./harness";
-import { freshen, readHeld } from "./provider-accounts";
-import { readAnthropicUsage } from "./usage/anthropic";
-import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
-import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
+import { freshened, readHeld } from "./provider-accounts";
+import { anthropicUsage } from "./usage/anthropic";
+import { chatgptClaims, chatgptUsage } from "./usage/chatgpt";
+import { openCodeGoLimits } from "./usage/opencode-go";
 
 /** How often a signed-in account's windows are read with nothing running on it. */
 const PROVIDER_READ_INTERVAL_MS = 5 * 60_000;
@@ -41,9 +44,10 @@ const METERED = new Set(["openai-codex", "opencode-go"]);
 
 const last = new Map<string, ProviderAccountReading>();
 const attempted = new Map<string, number>();
-const soon = new Map<string, ReturnType<typeof setTimeout>>();
+/** Each account's read set going by a turn's end, while it waits to start ({@link readAccountSoon}). */
+const soon = new Map<string, Fiber.Fiber<void>>();
 /** Each account's read under way: a second ask joins it. */
-const inFlight = new Map<string, Promise<ProviderAccountReading | undefined>>();
+const inFlight = makeJoin<string, ProviderAccountReading | undefined>();
 
 /**
  * OpenCode Go's windows as the windows placement and at-limit read: its
@@ -63,76 +67,77 @@ type Read =
   | { ok: true; plan: string | null; windows: LimitWindow[] }
   | { ok: false; error: string };
 
-const readWindows = async (
+const readWindows = Effect.fn("readWindows")(function* (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">
-): Promise<Read | undefined> => {
+) {
   if (accountIds().includes(accountId)) {
-    return await readAnthropicUsage(accountId);
+    return yield* anthropicUsage(accountId);
   }
   const held = readHeld(accountId);
   if (!(held && METERED.has(held.provider))) {
-    return undefined;
+    return;
   }
   if (held.provider === "openai-codex") {
-    await freshen(accountId, ports, true).catch(() => undefined);
+    // A refresh that fails leaves the token as it is; the read says the rest.
+    yield* freshened(accountId, ports, true).pipe(Effect.ignore);
     const now = readHeld(accountId);
     if (now?.credential.type !== "oauth") {
-      return { ok: false, error: "the account holds no ChatGPT sign-in here" };
+      return {
+        ok: false,
+        error: "the account holds no ChatGPT sign-in here",
+      } satisfies Read;
     }
     const claims = chatgptClaims(now.credential.access);
     if (!claims.accountId) {
-      return { ok: false, error: "the token names no ChatGPT account" };
+      return {
+        ok: false,
+        error: "the token names no ChatGPT account",
+      } satisfies Read;
     }
-    return await readChatgptUsage(now.credential.access, claims.accountId);
+    return yield* chatgptUsage(now.credential.access, claims.accountId);
   }
   if (held.credential.type !== "api_key") {
-    return { ok: false, error: "the account holds no OpenCode Go key here" };
+    return {
+      ok: false,
+      error: "the account holds no OpenCode Go key here",
+    } satisfies Read;
   }
-  const go = await fetchOpenCodeGoLimits(held.credential.key ?? null);
+  const go = yield* openCodeGoLimits(held.credential.key ?? null);
   if (!go) {
-    return { ok: false, error: "the account holds no OpenCode Go key here" };
+    return {
+      ok: false,
+      error: "the account holds no OpenCode Go key here",
+    } satisfies Read;
   }
   return go.error && !go.stale
-    ? { ok: false, error: go.error }
-    : { ok: true, plan: "OpenCode Go", windows: goWindows(go.windows) };
-};
-
-/**
- * Reads one account's windows now, joining a read of it already under way;
- * undefined for an account whose provider has none, or that has no store
- * here. The hub's on-demand read (core accounts/controls.ts
- * `CONTROL_READ_ACCOUNT_USAGE`) and the beats alike.
- */
-export const readAccountUsage = (
-  accountId: string,
-  ports: Pick<AgentPorts, "borrowAsk">
-): Promise<ProviderAccountReading | undefined> => {
-  const running = inFlight.get(accountId);
-  if (running) {
-    return running;
-  }
-  const read = readOne(accountId, ports).finally(() => {
-    inFlight.delete(accountId);
-  });
-  inFlight.set(accountId, read);
-  return read;
-};
+    ? ({ ok: false, error: go.error } satisfies Read)
+    : ({
+        ok: true,
+        plan: "OpenCode Go",
+        windows: goWindows(go.windows),
+      } satisfies Read);
+});
 
 /** One read of the account, kept as its last good one when it answered. */
-const readOne = async (
+const readOne = Effect.fn("readOne")(function* (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">
-): Promise<ProviderAccountReading | undefined> => {
-  attempted.set(accountId, Date.now());
-  const read = await readWindows(accountId, ports).catch(
-    (error: unknown): Read => ({
+) {
+  attempted.set(accountId, yield* Clock.currentTimeMillis);
+  // Any way the read fails, a defect among them, is its answer: the last
+  // good windows stand, with why.
+  const failedRead = (error: unknown) =>
+    Effect.succeed<Read>({
       ok: false,
       error: error instanceof Error ? error.message : String(error),
-    })
+    });
+  const read: Read | undefined = yield* readWindows(accountId, ports).pipe(
+    Effect.catch(failedRead),
+    Effect.catchDefect(failedRead)
   );
   if (!read) {
-    return undefined;
+    return;
   }
   const prior = last.get(accountId);
   if (!read.ok) {
@@ -142,18 +147,37 @@ const readOne = async (
       plan: prior?.plan ?? null,
       readAt: prior?.readAt ?? 0,
       error: read.error,
-    };
+    } satisfies ProviderAccountReading;
   }
   const reading: ProviderAccountReading = {
     accountId,
     windows: read.windows,
     plan: read.plan,
-    readAt: Date.now(),
+    readAt: yield* Clock.currentTimeMillis,
     error: null,
   };
   last.set(accountId, reading);
   return reading;
-};
+});
+
+/**
+ * Reads one account's windows now, joining a read of it already under way;
+ * undefined for an account whose provider has none, or that has no store
+ * here. The hub's on-demand read (core accounts/controls.ts
+ * `CONTROL_READ_ACCOUNT_USAGE`) and the beats alike.
+ */
+const accountUsage = (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Effect.Effect<ProviderAccountReading | undefined> =>
+  inFlight.run(accountId, readOne(accountId, ports));
+
+/** The promise edge of {@link accountUsage}. */
+export const readAccountUsage = (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<ProviderAccountReading | undefined> =>
+  Effect.runPromise(accountUsage(accountId, ports));
 
 /** Every metered account whose last read is 5 minutes old or more, read now. */
 export const readDueProviderAccounts = async (
@@ -174,39 +198,61 @@ export const readDueProviderAccounts = async (
 /**
  * A turn on the account just ended: its windows are read shortly, once for a
  * burst and no sooner than {@link TURN_READ_SPACING_MS} after its last read,
- * and sent on `emit`, the session's line to the hub.
+ * and sent on `emit`, the session's line to the hub. The wait is a fiber of
+ * its own, interrupted by the next turn's end while it still waits; once
+ * the read starts, it runs to its end.
  */
 const readAccountSoon = (
   accountId: string,
   emit: HarnessContext["emit"]
 ): void => {
-  clearTimeout(soon.get(accountId));
+  const waiting = soon.get(accountId);
+  if (waiting) {
+    Effect.runFork(Fiber.interrupt(waiting));
+  }
   const spaced =
     (attempted.get(accountId) ?? 0) + TURN_READ_SPACING_MS - Date.now();
-  const timer = setTimeout(
-    () => {
-      soon.delete(accountId);
-      readAccountUsage(accountId, {
+  const read = Effect.sleep(
+    Duration.millis(Math.max(AFTER_TURN_MS, spaced))
+  ).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        soon.delete(accountId);
+      })
+    ),
+    Effect.andThen(
+      accountUsage(accountId, {
         borrowAsk: (frame) =>
           emit({ verb: "frames", machineId: "", payload: frame }),
-      })
-        .then((reading) => {
-          if (reading) {
-            emit({
-              verb: "usage",
-              machineId: "",
-              payload: { accounts: [reading] },
-            });
-          }
-        })
-        .catch((error: unknown) =>
-          console.warn(`[provider-usage] ${accountId}: ${String(error)}`)
-        );
-    },
-    Math.max(AFTER_TURN_MS, spaced)
+      }).pipe(
+        Effect.tap((reading) =>
+          Effect.sync(() => {
+            if (reading) {
+              emit({
+                verb: "usage",
+                machineId: "",
+                payload: { accounts: [reading] },
+              });
+            }
+          })
+        ),
+        // Once it has started, a later turn's end does not cut it short.
+        Effect.uninterruptible
+      )
+    ),
+    // A wait cut short by the next turn's end says nothing; a read that failed says why.
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.void
+        : Effect.sync(() =>
+            console.warn(
+              `[provider-usage] ${accountId}: ${failureOf(Cause.squash(cause))}`
+            )
+          )
+    ),
+    Effect.asVoid
   );
-  timer.unref?.();
-  soon.set(accountId, timer);
+  soon.set(accountId, Effect.runFork(read));
 };
 
 /** The machine's OpenCode Go key, for the usage screens' per-machine Go reading: its first Go account's. */

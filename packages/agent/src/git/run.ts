@@ -5,7 +5,7 @@
  */
 
 import { join } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { recordedPool } from "@cawco/core/object-pool";
 import { runCaptured } from "@cawco/core/run-captured";
 import {
@@ -15,8 +15,8 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { unhandled } from "@cawco/core/unhandled";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
+import { Effect, Schema } from "effect";
 import { cloneHolding } from "../workspace-records";
 import { withoutCredential } from "./hub-credential";
 
@@ -113,14 +113,15 @@ export const fetchDefaultBranch = async (
 export type Git = (root: string, ...args: string[]) => Promise<string>;
 
 /** A git run by {@link gitUntil} that exited non-zero: its status, which some commands answer by (`ls-remote --exit-code`'s 2 for no matching ref). */
-export class GitExited extends Error {
-  readonly exitCode: number;
-  constructor(message: string, exitCode: number) {
-    super(message);
-    this.name = "GitExited";
-    this.exitCode = exitCode;
-  }
-}
+export class GitExited extends Schema.TaggedError<GitExited>()("GitExited", {
+  message: Schema.String,
+  exitCode: Schema.Number,
+}) {}
+
+/** A git run by {@link gitUntil} that did not end in its exit: a signal ended it, or it did not start. */
+class GitDidNotRun extends Schema.TaggedError<GitDidNotRun>()("GitDidNotRun", {
+  message: Schema.String,
+}) {}
 
 /** An argv run in a workspace's copy, in a directory there, with the directory its spawn starts in (workspace.ts `CopyAccess`). */
 type CopyRun = (
@@ -156,31 +157,40 @@ export const gitUntil =
     const run = access
       ? access.run(root, safeGitArgv(args))
       : { argv: safeGitArgv(args), cwd: root };
-    const ran = await readWithin(remaining, async (signal) => {
-      const { code, signalCode, stdout, stderr } = await runCaptured(run.argv, {
-        cwd: run.cwd,
-        env: { ...env, ...SAFE_GIT_ENV },
-        ...(input === undefined ? {} : { input }),
-        signal,
-        killSignal: "SIGKILL",
+    const ran = Effect.gen(function* () {
+      const { code, signalCode, stdout, stderr } = yield* Effect.tryPromise({
+        try: (signal) =>
+          runCaptured(run.argv, {
+            cwd: run.cwd,
+            env: { ...env, ...SAFE_GIT_ENV },
+            ...(input === undefined ? {} : { input }),
+            signal,
+            killSignal: "SIGKILL",
+          }),
+        catch: (cause) =>
+          new GitDidNotRun({
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
       });
       if (signalCode) {
-        throw new Error(`git ${args[0]} was ended by ${signalCode}`);
+        return yield* new GitDidNotRun({
+          message: `git ${args[0]} was ended by ${signalCode}`,
+        });
       }
       if (code !== 0) {
-        throw new GitExited(
-          `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`,
-          code
-        );
+        return yield* new GitExited({
+          message: `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`,
+          exitCode: code,
+        });
       }
       return stdout.trim();
     });
-    switch (ran.kind) {
-      case "answered":
-        return ran.value;
-      case "unanswered":
-        throw new Error(late);
-      default:
-        unhandled("read", ran);
-    }
+    // The promise edge of the run, inside the create's one deadline.
+    return await Effect.runPromise(
+      boundedRead(remaining, ran).pipe(
+        Effect.catchTag("Unanswered", () =>
+          Effect.fail(new GitDidNotRun({ message: late }))
+        )
+      )
+    );
   };

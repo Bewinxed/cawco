@@ -10,7 +10,12 @@ import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
 import { chatgptStanding, freshen, readHeld } from "../provider-accounts";
 import { chatgptBaseUrl, chatgptClaims } from "../usage/chatgpt";
-import type { ImageJob, ImageProvider, MadeImage } from "./provider";
+import {
+  generateWith,
+  type ImageJob,
+  type ImageProvider,
+  type MadeImage,
+} from "./provider";
 
 /** Native Codex's edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
 const MAX_EDIT_IMAGES = 5;
@@ -260,7 +265,8 @@ async function readiness(
       return {
         ready: true,
         notes: [],
-        generate: (job, signal) => askImage(auth, job, signal),
+        generate: (job) =>
+          generateWith((signal) => askImage(auth, job, signal)),
       };
     }
     blocked.push(standing.blocked);

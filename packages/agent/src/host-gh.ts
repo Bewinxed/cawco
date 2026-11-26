@@ -9,18 +9,19 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
 import type {
   GhAccount,
   GhRepo,
   GhRepoList,
   GhRepoLookup,
 } from "@cawco/core/connections";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { workspaceScratchRoot } from "@cawco/core/paths/roots";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import { repoIdentity } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { GhRepoSchema } from "@cawco/core/stored-shapes";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 
 /** Where a workspace writes, so nothing run on the host is found there. */
@@ -67,28 +68,47 @@ interface GhRun {
 
 /**
  * The host's gh run with `args`, with the host's environment as it is now
- * (core `hostEnvironment`); none when gh is not here.
+ * (core `hostEnvironment`), held while it is read: ended if the read is let
+ * go before gh exits. None when gh is not here.
  */
-const ghRun = async (args: string[]): Promise<GhRun | undefined> => {
-  const gh = await hostGh();
+const ghRunning = Effect.fn("ghRunning")(function* (args: string[]) {
+  const gh = yield* Effect.promise(hostGh);
   if (!gh) {
     return;
   }
   // Not spawnSync: gh reads its token from the login keychain, and a
   // spawnSync would wait on the keychain on the agent's JS thread.
-  const run = Bun.spawn([gh, ...args], {
-    env: hostEnvironment(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr] = await Promise.all([
-    new Response(run.stdout).text(),
-    new Response(run.stderr).text(),
-    run.exited,
-  ]);
-  return { exitCode: run.exitCode ?? 1, stdout, stderr };
-};
+  const run = yield* Effect.acquireRelease(
+    Effect.try({
+      try: () =>
+        Bun.spawn([gh, ...args], {
+          env: hostEnvironment(),
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        }),
+      catch: (error) => error,
+    }),
+    (started) =>
+      Effect.sync(() => {
+        if (started.exitCode === null && started.signalCode === null) {
+          started.kill();
+        }
+      })
+  );
+  const [stdout, stderr] = yield* Effect.promise(() =>
+    Promise.all([
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+      run.exited,
+    ])
+  );
+  return { exitCode: run.exitCode ?? 1, stdout, stderr } satisfies GhRun;
+}, Effect.scoped);
+
+/** The promise edge of {@link ghRunning}. */
+const ghRun = (args: string[]): Promise<GhRun | undefined> =>
+  Effect.runPromise(ghRunning(args));
 
 /**
  * What the host's gh prints for `args`, when it exits 0; none when gh is not
@@ -382,6 +402,11 @@ const OG_FIELD = /^og:(?:description|image)$/u;
 const WEB_URL = /^https?:$/u;
 const DOT_GIT_END = /\.git\/?$/u;
 
+/** A repository's web page whose read failed: its fetch, or its stream. */
+class PageUnread extends Schema.TaggedError<PageUnread>()("PageUnread", {
+  cause: Schema.Defect(),
+}) {}
+
 /** What a repository's web page says of itself; none of either where it says nothing. */
 interface PageSays {
   description: string | null;
@@ -403,16 +428,26 @@ const pageSays = async (url: string): Promise<PageSays> => {
   }
   page.username = "";
   page.password = "";
-  const read = await readWithin(PAGE_TIMEOUT_MS, (signal) =>
-    readPage(page, signal)
-  ).catch((cause: unknown) => {
-    // A page that fails says nothing: the row stands on what its URL holds.
-    console.warn(
-      `[gh-repo] ${page.host}'s page didn't answer: ${String(cause)}`
-    );
-    return { kind: "answered" as const, value: none };
-  });
-  return read.kind === "answered" ? read.value : none;
+  return await Effect.runPromise(
+    boundedRead(
+      PAGE_TIMEOUT_MS,
+      Effect.tryPromise({
+        try: (signal) => readPage(page, signal),
+        catch: (cause) => new PageUnread({ cause }),
+      })
+    ).pipe(
+      Effect.catchTag("Unanswered", () => Effect.succeed(none)),
+      // A page that fails says nothing: the row stands on what its URL holds.
+      Effect.catchTag("PageUnread", ({ cause }) =>
+        Effect.sync(() => {
+          console.warn(
+            `[gh-repo] ${page.host}'s page didn't answer: ${String(cause)}`
+          );
+          return none;
+        })
+      )
+    )
+  );
 };
 
 /** {@link pageSays}'s read of `page`, its fetch stopped by `signal`. */

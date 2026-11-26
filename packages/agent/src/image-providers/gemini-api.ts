@@ -5,7 +5,12 @@ import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { APICallError, generateText } from "ai";
 import { readHeld } from "../provider-accounts";
 import { ratioOf, sizeOf } from "./aspect";
-import type { ImageJob, ImageProvider, MadeImage } from "./provider";
+import {
+  generateWith,
+  type ImageJob,
+  type ImageProvider,
+  type MadeImage,
+} from "./provider";
 
 /**
  * Gemini on a Gemini API key, the official route billed per image
@@ -339,7 +344,8 @@ const readiness: ImageProvider["readiness"] = () => {
       ? {
           ready: true,
           notes: [],
-          generate: (job, signal) => askGemini(key, job, signal),
+          generate: (job) =>
+            generateWith((signal) => askGemini(key, job, signal)),
         }
       : { ready: false, reason: imageGenerationWords.geminiNoKey() }
   );

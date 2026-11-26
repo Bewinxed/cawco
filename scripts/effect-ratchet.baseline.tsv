@@ -3,7 +3,6 @@ backoff-loop	new Backoff(CAWCO_DIALS)	packages/agent/src/harnesses/claude.ts	1
 backoff-loop	new Backoff(ASK_AGAIN)	packages/hub/src/views/catalogs.ts	1
 backoff-loop	new Backoff(DIRECTORY_RELEASES)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(EVENT_FEED)	packages/agent/src/harnesses/opencode.ts	1
-backoff-loop	new Backoff(FAILED_READS)	packages/agent/src/usage/opencode-go.ts	1
 backoff-loop	new Backoff(GATE_SNAPSHOTS)	packages/agent/src/harnesses/opencode-session.ts	1
 backoff-loop	new Backoff(RECOVERY_TRIES)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(FAILED_READS)	packages/agent/src/usage/opencode-go.ts	1
@@ -39,6 +38,9 @@ error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	FramePictureRefusal	packages/agent/src/frame-picture.ts	1
 error-class	FleetDenialsRefused	packages/agent/src/denied-tools.ts	1
 error-class	GitExited	packages/agent/src/git/run.ts	1
+error-class	HarnessCannot	packages/agent/src/harness.ts	1
+error-class	HarnessRecoveryRefused	packages/agent/src/harness.ts	1
+error-class	HeldProcessRefused	packages/agent/src/harness.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
 error-class	HubUnreachable	packages/agent/src/binary-update.ts	1
 error-class	KeeperKept	packages/agent/src/service-manager/keeper-job.ts	1
@@ -111,6 +113,10 @@ hand-promise	new Promise	packages/agent/src/hub-git.ts	2
 hand-promise	new Promise	packages/agent/src/hub-command.ts	1
 hand-promise	new Promise	packages/agent/src/login.ts	1
 hand-promise	new Promise	packages/agent/src/provider-accounts.ts	3
+hand-promise	new Promise	packages/agent/src/hub-command.ts	1
+hand-promise	new Promise	packages/agent/src/hub-git.ts	2
+hand-promise	new Promise	packages/agent/src/mcp-host.ts	1
+hand-promise	new Promise	packages/agent/src/search/process.ts	2
 hand-promise	new Promise	packages/agent/src/session-containers.ts	1
 hand-promise	new Promise	packages/agent/src/session.ts	2
 hand-promise	new Promise	packages/agent/src/sessiond-client.ts	5
@@ -119,8 +125,6 @@ hand-promise	new Promise	packages/agent/src/search/process.ts	2
 hand-promise	new Promise	packages/agent/src/stage-host/host.ts	1
 hand-promise	new Promise	packages/agent/src/stage.ts	2
 hand-promise	new Promise	packages/agent/src/stores/client.ts	1
-hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
-hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/canvas.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/service.ts	1
 hand-promise	new Promise	packages/hub/src/browser-tools.ts	1
@@ -147,6 +151,7 @@ hand-promise	Promise.withResolvers	packages/agent/src/search/index.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/search/process.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/tools.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/usage/scans.ts	1
+hand-promise	Promise.withResolvers	packages/hub/src/tool-call-keys.ts	3
 hand-promise	Promise.withResolvers	packages/hub/src/welcome-converge.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/workspaces.ts	1
 per-key-chain	settleReads	packages/hub/src/sends.ts	1
@@ -178,6 +183,7 @@ promise-map	#signingIn	packages/hub/src/fleet-mcp.ts	1
 promise-map	#turns	packages/hub/src/meaning.ts	1
 promise-map	accountSyncs	packages/hub/src/account-probes.ts	1
 promise-map	asking	packages/agent/src/provider-accounts.ts	1
+promise-map	asking	packages/hub/src/preview-server/serve.ts	1
 promise-map	built	packages/hub/src/host-build.ts	1
 promise-map	asking	packages/hub/src/preview-server/serve.ts	1
 promise-map	byBoundary	packages/agent/src/preview-room.ts	1
@@ -196,6 +202,7 @@ promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/mcp-install.ts	1
 promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/provider-usage.ts	1
+promise-map	inFlight	packages/hub/src/favicon.ts	1
 promise-map	inFlight	packages/hub/src/place-repo.ts	1
 promise-map	inFlight	packages/hub/src/favicon.ts	1
 promise-map	installing	packages/agent/src/stage-install.ts	1
@@ -244,6 +251,7 @@ promise-map	reviving	packages/agent/src/browser/browsers.ts	1
 promise-map	remotes	packages/hub/src/project-offers.ts	1
 promise-map	reviving	packages/hub/src/preview-server/serve.ts	1
 promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
+promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
 promise-map	settleReads	packages/hub/src/sends.ts	1
 promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1

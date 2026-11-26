@@ -1,10 +1,11 @@
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { accountConfigDir } from "@cawco/core/paths/claude";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { LimitWindow } from "@cawco/core/usage/types";
+import { Clock, Effect, Schema } from "effect";
 import { z } from "zod";
-import { accountEnv, authStatusIn, bareEnv, notLockedAway } from "../accounts";
+import { accountEnv, authStatus, bareEnv, startable } from "../accounts";
 import { claudeHostVersion, claudeToStart } from "../claude-version";
 import { accountLogin } from "../move-login";
 
@@ -148,98 +149,123 @@ const failed = (error: string): Try => ({
   read: { ok: false, error },
 });
 
+/** A step of the read that failed before the endpoint answered: the login's read, the version's, the request itself. */
+class UsageUnread extends Schema.TaggedError<UsageUnread>()("UsageUnread", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+/** A failure of a step of the read as a {@link UsageUnread}, its words kept. */
+const unread = (cause: unknown): UsageUnread =>
+  new UsageUnread({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
+
+/** A promise step of the read, handed the read's signal, its rejection a {@link UsageUnread}. */
+const step = <A>(
+  run: (signal: AbortSignal) => Promise<A>
+): Effect.Effect<A, UsageUnread> =>
+  Effect.tryPromise({ try: run, catch: unread });
+
 /**
  * The account dir's login, as Claude Code keeps it; undefined when it holds
  * none it can read. A parse's own error is never passed on: it quotes the
  * text it read.
  */
-const loginOf = async (account: string): Promise<Login | undefined> => {
-  await notLockedAway(account, "read for its usage");
-  const secret = await accountLogin(account);
+const loginOf = Effect.fn("loginOf")(function* (account: string) {
+  yield* startable(account, "read for its usage");
+  const secret = yield* step(() => accountLogin(account));
   if (!secret) {
-    return undefined;
+    return;
   }
   let stored: unknown;
   try {
     stored = JSON.parse(secret);
   } catch {
-    return undefined;
+    return;
   }
   const parsed = LoginSchema.safeParse(stored);
   return parsed.success ? parsed.data.claudeAiOauth : undefined;
-};
+});
 
 /** The endpoint's answer to `login`'s token. */
-const ask = async (login: Login): Promise<Try> => {
-  const version = await claudeHostVersion();
+const ask = Effect.fn("ask")(function* (login: Login) {
+  const version = yield* step(claudeHostVersion);
   const said = version.kind === "answered" ? version.value : undefined;
   if (!said) {
     return failed(
       "Claude Code on this machine said no version, which the usage read names itself by"
     );
   }
-  const read = await readWithin(TIMEOUT_MS, async (signal): Promise<Try> => {
-    const response = await fetch(USAGE_URL, {
-      headers: {
-        Authorization: `Bearer ${login.accessToken}`,
-        "anthropic-beta": OAUTH_BETA,
-        "User-Agent": `claude-cli/${said} (external, cli)`,
-        "Content-Type": "application/json",
-        Accept: "application/json, text/plain, */*",
-      },
-      redirect: "error",
-      signal,
-    });
-    if (response.status === 401) {
-      await response.body?.cancel();
+  return yield* boundedRead(
+    TIMEOUT_MS,
+    step(async (signal): Promise<Try> => {
+      const response = await fetch(USAGE_URL, {
+        headers: {
+          Authorization: `Bearer ${login.accessToken}`,
+          "anthropic-beta": OAUTH_BETA,
+          "User-Agent": `claude-cli/${said} (external, cli)`,
+          "Content-Type": "application/json",
+          Accept: "application/json, text/plain, */*",
+        },
+        redirect: "error",
+        signal,
+      });
+      if (response.status === 401) {
+        await response.body?.cancel();
+        return {
+          kind: "stale",
+          why: "the endpoint refused its login (HTTP 401)",
+        };
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        return failed(
+          response.status === 429
+            ? "Anthropic's usage endpoint asked to be read less often (HTTP 429)"
+            : `Anthropic's usage endpoint answered HTTP ${response.status}`
+        );
+      }
+      const body = BodySchema.safeParse(await response.json());
+      if (!body.success) {
+        return failed(
+          `Anthropic's usage endpoint answered a body Claude Code's own schema does not read: ${body.error.message}`
+        );
+      }
+      if (!body.data.limits) {
+        return failed(
+          "Anthropic's usage endpoint answered with no limits rows, so its windows were not read"
+        );
+      }
       return {
-        kind: "stale",
-        why: "the endpoint refused its login (HTTP 401)",
+        kind: "read",
+        read: {
+          ok: true,
+          plan: login.subscriptionType ?? null,
+          windows: windowsOf(body.data.limits),
+        },
       };
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      return failed(
-        response.status === 429
-          ? "Anthropic's usage endpoint asked to be read less often (HTTP 429)"
-          : `Anthropic's usage endpoint answered HTTP ${response.status}`
-      );
-    }
-    const body = BodySchema.safeParse(await response.json());
-    if (!body.success) {
-      return failed(
-        `Anthropic's usage endpoint answered a body Claude Code's own schema does not read: ${body.error.message}`
-      );
-    }
-    if (!body.data.limits) {
-      return failed(
-        "Anthropic's usage endpoint answered with no limits rows, so its windows were not read"
-      );
-    }
-    return {
-      kind: "read",
-      read: {
-        ok: true,
-        plan: login.subscriptionType ?? null,
-        windows: windowsOf(body.data.limits),
-      },
-    };
-  });
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      return failed(
-        `Anthropic's usage endpoint did not answer within ${secondsOf(read.after)}s`
-      );
-    default:
-      unhandled("read", read);
-  }
-};
+    })
+  ).pipe(
+    Effect.catchTag("Unanswered", ({ after }) =>
+      Effect.succeed(
+        failed(
+          `Anthropic's usage endpoint did not answer within ${secondsOf(after)}s`
+        )
+      )
+    )
+  );
+});
 
 /** One read with the login the account's dir holds now. */
-const tryOnce = async (account: string): Promise<Try> => {
-  const login = await loginOf(account);
+/** What stops a read before the endpoint answers. */
+type Unread = UsageUnread | Effect.Error<ReturnType<typeof startable>>;
+
+const tryOnce = Effect.fn("tryOnce")(function* (
+  account: string
+): Effect.fn.Return<Try, Unread> {
+  const login = yield* loginOf(account);
   if (!login) {
     return failed(
       "the account's dir on this machine holds no Claude login this read can use"
@@ -256,39 +282,39 @@ const tryOnce = async (account: string): Promise<Try> => {
   }
   if (
     typeof login.expiresAt === "number" &&
-    login.expiresAt - Date.now() < EXPIRY_MARGIN_MS
+    login.expiresAt - (yield* Clock.currentTimeMillis) < EXPIRY_MARGIN_MS
   ) {
     return { kind: "stale", why: "its login is past its expiry" };
   }
-  return await ask(login);
-};
+  return yield* ask(login);
+});
 
 /**
  * Claude Code's own renewal of the dir's login: its `auth status`, which
  * renews a login near or past its expiry under Claude Code's lock. Its
  * answer is not read here: the read after it says whether the login works.
  */
-const renew = async (account: string): Promise<void> => {
-  await claudeToStart();
-  await authStatusIn(
+const renew = Effect.fn("renew")(function* (account: string) {
+  yield* step(claudeToStart);
+  yield* authStatus(
     { ...bareEnv(), ...accountEnv(account) },
     accountConfigDir(account)
-  );
-};
+  ).pipe(Effect.mapError(unread));
+});
 
 /**
  * The account's windows now, read with the login its dir holds on this
  * machine; undefined for a Console login, which has none.
  */
-export const readAnthropicUsage = async (
+export const anthropicUsage = Effect.fn("anthropicUsage")(function* (
   account: string
-): Promise<AnthropicUsageRead | undefined> => {
-  const first = await tryOnce(account);
+): Effect.fn.Return<AnthropicUsageRead | undefined, Unread> {
+  const first = yield* tryOnce(account);
   if (first.kind !== "stale") {
     return first.kind === "read" ? first.read : undefined;
   }
-  await renew(account);
-  const second = await tryOnce(account);
+  yield* renew(account);
+  const second = yield* tryOnce(account);
   switch (second.kind) {
     case "read":
       return second.read;
@@ -302,4 +328,4 @@ export const readAnthropicUsage = async (
     default:
       unhandled("second", second);
   }
-};
+});

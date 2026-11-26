@@ -6,8 +6,8 @@ import {
   type AccountSigninResult,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
+import { boundedRead, boundedWhileHeard } from "@cawco/core/effect/bounded";
 import {
   accountConfigDir,
   accountIds,
@@ -33,11 +33,13 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { cutShort, lastLines as lastLinesOf } from "@cawco/core/words/helpers";
 import type { Subprocess } from "bun";
+import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import type { z } from "zod";
 import {
   accountEnv,
   authStatusIn,
   bareEnv,
+  heldChild,
   linkUserLayer,
   probeAccount,
   removeAccountDir,
@@ -83,10 +85,10 @@ const AUTHORIZE_PARAMS = ["client_id", "code_challenge", "state"];
  */
 const LINKS = /https:\/\/\S+(?=\s)/gu;
 
-/** Long enough for the CLI to boot and print its link. */
+/** How long the CLI may go without a word while it boots and prints its link. */
 const LINK_TIMEOUT_MS = 30_000;
 
-/** Long enough for the CLI to exchange the code and store the login. */
+/** How long the CLI may go without a word while it exchanges the code and stores the login. */
 const EXCHANGE_TIMEOUT_MS = 60_000;
 
 /**
@@ -94,12 +96,11 @@ const EXCHANGE_TIMEOUT_MS = 60_000;
  * mints its own PKCE challenge and only the process that printed a link can
  * redeem that link's code.
  */
-interface SignIn {
-  readonly child: Subprocess;
-  /** Called on every chunk of output, while something is waiting on it. */
-  heard?: () => void;
+interface SignIn extends TerminalRun {
   /** Everything the CLI has printed, ANSI and all. */
   output: string;
+  /** What the sign-in holds, its terminal and its CLI: closing it ends both. */
+  readonly scope: Scope.Closeable;
   readonly terminal: Bun.Terminal;
 }
 
@@ -111,9 +112,9 @@ export interface LoginChallenge {
   url: string;
 }
 
+/** Ends the sign-in: its scope closed, the CLI killed and its terminal closed. */
 const end = (signIn: SignIn) => {
-  signIn.child.kill();
-  signIn.terminal.close();
+  Effect.runFork(Scope.close(signIn.scope, Exit.void));
 };
 
 /**
@@ -272,47 +273,92 @@ const noLink = (
   return `${what} Nothing was signed in or out. If Claude Code there is out of date, update it from its row in ${configurePage("cli-tools")}, then open the sign-in link again. Its screen said:\n${lastLines(signIn)}`;
 };
 
+/** A CLI run under a pseudo-terminal, as a sign-in reads it (this file's, tool-signin.ts's). */
+export interface TerminalRun {
+  readonly child: Subprocess;
+  /** Called on every chunk of output, while something is waiting on it. */
+  heard?: () => void;
+}
+
 /**
  * Answered true once `done` holds, answered with `done()` once the CLI
- * exits; unanswered when neither happened within `ms`.
+ * exits; `quiet` when neither happened and the CLI printed nothing for
+ * `quietMs`.
  */
+export const heardUntil = (
+  run: TerminalRun,
+  done: () => boolean,
+  quietMs: number
+): Effect.Effect<boolean | "quiet"> =>
+  boundedWhileHeard(quietMs, (heard) =>
+    Effect.callback<boolean>((resume) => {
+      run.heard = () => {
+        Effect.runSync(heard);
+        if (done()) {
+          resume(Effect.succeed(true));
+        }
+      };
+      // Bun's `exited` settles with the exit and never rejects.
+      run.child.exited.then(() => resume(Effect.sync(done)));
+      if (done()) {
+        resume(Effect.succeed(true));
+      }
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          run.heard = undefined;
+        })
+      )
+    )
+  ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed("quiet" as const)));
+
+/** The promise edge of {@link heardUntil}. */
 const until = (
   signIn: SignIn,
   done: () => boolean,
-  ms: number
-): Promise<Bounded<boolean>> =>
-  readWithin(
-    ms,
-    (signal) =>
-      new Promise<boolean>((resolve) => {
-        let settled = false;
-        const settle = (answer: boolean) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          signIn.heard = undefined;
-          resolve(answer);
-        };
-        signal.addEventListener(
-          "abort",
-          () => {
-            signIn.heard = undefined;
-          },
-          { once: true }
-        );
-        signIn.heard = () => {
-          if (done()) {
-            settle(true);
-          }
-        };
-        detach(
-          signIn.child.exited.then(() => settle(done())),
-          "then"
-        );
-        signIn.heard();
-      })
+  quietMs: number
+): Promise<boolean | "quiet"> =>
+  Effect.runPromise(heardUntil(signIn, done, quietMs));
+
+/**
+ * A CLI's terminal and the CLI itself, opened in `scope`, which ends both
+ * when it closes (the CLI killed first); `output` hears what it prints.
+ * What did open is closed when the CLI does not start, and its error
+ * thrown.
+ */
+export const openInTerminal = (
+  scope: Scope.Closeable,
+  spawn: (terminal: Bun.Terminal) => Subprocess,
+  output: (bytes: Uint8Array) => void
+): { child: Subprocess; terminal: Bun.Terminal } => {
+  const opened = Effect.runSyncExit(
+    Effect.gen(function* () {
+      const terminal = yield* Effect.acquireRelease(
+        Effect.sync(
+          () =>
+            new Bun.Terminal({
+              // Wide enough that the link is never wrapped across lines.
+              cols: 4096,
+              data(_terminal, bytes) {
+                output(bytes);
+              },
+            })
+        ),
+        (made) => Effect.sync(() => made.close())
+      );
+      const child = yield* Effect.acquireRelease(
+        Effect.try({ try: () => spawn(terminal), catch: (error) => error }),
+        (started) => Effect.sync(() => started.kill())
+      );
+      return { child, terminal };
+    }).pipe(Scope.provide(scope))
   );
+  if (Exit.isFailure(opened)) {
+    Effect.runFork(Scope.close(scope, opened));
+    throw Cause.squash(opened.cause);
+  }
+  return opened.value;
+};
 
 /**
  * Starts `claude auth login` in an account's config dir and hands back the
@@ -331,41 +377,48 @@ const beginSignIn = async (
   const executable = await claudeToStart();
   const decoder = new TextDecoder();
   let signIn: SignIn | undefined;
-  const terminal = new Bun.Terminal({
-    // Wide enough that the link is never wrapped across lines.
-    cols: 4096,
-    data(_terminal, bytes) {
+  const scope = Scope.makeUnsafe();
+  const { child, terminal } = openInTerminal(
+    scope,
+    (opened) =>
+      Bun.spawn(
+        [
+          executable,
+          "auth",
+          "login",
+          ...(kind === "console" ? ["--console"] : []),
+        ],
+        {
+          // `true` as the browser: the link is for the reader's browser, not
+          // one on this machine.
+          env: { ...bareEnv(), ...accountEnv(account), BROWSER: "true" },
+          terminal: opened,
+        }
+      ),
+    (bytes) => {
       if (signIn) {
         signIn.output += decoder.decode(bytes, { stream: true });
         signIn.heard?.();
       }
-    },
-  });
-  signIn = {
-    child: Bun.spawn(
-      [
-        executable,
-        "auth",
-        "login",
-        ...(kind === "console" ? ["--console"] : []),
-      ],
-      {
-        // `true` as the browser: the link is for the reader's browser, not
-        // one on this machine.
-        env: { ...bareEnv(), ...accountEnv(account), BROWSER: "true" },
-        terminal,
-      }
-    ),
-    output: "",
-    terminal,
-  };
+    }
+  );
+  signIn = { child, terminal, scope, output: "" };
   inFlight.set(account, signIn);
   const current = signIn;
   const { pid } = current.child;
   await markLogin(account, pid);
-  detach(
-    current.child.exited.then(() => unmarkLogin(account, pid)),
-    "then"
+  // Let go: the marker goes once the CLI ends, however that comes.
+  Effect.runFork(
+    Effect.promise(() => current.child.exited).pipe(
+      Effect.andThen(Effect.sync(() => unmarkLogin(account, pid))),
+      Effect.catchCause((cause) =>
+        Effect.sync(() =>
+          console.warn(
+            `[login] ${account}'s sign-in marker: ${failureOf(Cause.squash(cause))}`
+          )
+        )
+      )
+    )
   );
 
   // Ready once its authorize link is on the screen, whatever its prompt says.
@@ -376,20 +429,13 @@ const beginSignIn = async (
   );
   const links = authorizeLinks(current);
   let failure: string | undefined;
-  switch (shown.kind) {
-    case "answered":
-      // A link printed by a CLI that then ended is one no process can redeem.
-      if (ended(current)) {
-        failure = noLink(current, "ended");
-      } else if (links.length > 1) {
-        failure = noLink(current, "several");
-      }
-      break;
-    case "unanswered":
-      failure = noLink(current, "timeout");
-      break;
-    default:
-      unhandled("read", shown);
+  if (shown === "quiet") {
+    failure = noLink(current, "timeout");
+  } else if (ended(current)) {
+    // A link printed by a CLI that then ended is one no process can redeem.
+    failure = noLink(current, "ended");
+  } else if (links.length > 1) {
+    failure = noLink(current, "several");
   }
   const [url] = links;
   if (failure !== undefined || !url) {
@@ -440,20 +486,15 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
   end(signIn);
   // The terminal echoed the code back: shown as what it was, never itself.
   const screen = `Open the sign-in link again for a new code. Its screen said:\n${lastLines(signIn, from).replaceAll(trimmed, "(the pasted code)")}`;
-  switch (exited.kind) {
-    case "answered":
-      if (exitCode !== 0) {
-        throw new Error(
-          `Claude Code's sign-in on this machine ended without signing in (exit ${exitCode}). ${screen}`
-        );
-      }
-      break;
-    case "unanswered":
-      throw new Error(
-        `Claude Code on this machine didn't finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s, so the sign-in stopped. ${screen}`
-      );
-    default:
-      unhandled("read", exited);
+  if (exited === "quiet") {
+    throw new Error(
+      `Claude Code on this machine didn't finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s, so the sign-in stopped. ${screen}`
+    );
+  }
+  if (exitCode !== 0) {
+    throw new Error(
+      `Claude Code's sign-in on this machine ended without signing in (exit ${exitCode}). ${screen}`
+    );
   }
   // Signed in is what the dir's `claude auth status` says, not the screen.
   const dir = accountConfigDir(account);
@@ -505,30 +546,55 @@ const logout = async (account: string): Promise<void> => {
     }
     throw error;
   }
-  const ran = await readWithin(LOGOUT_MS, async (signal) => {
-    const child = Bun.spawn([executable, "auth", "logout"], {
-      env: { ...bareEnv(), ...accountEnv(account) },
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "pipe",
-      signal,
-    });
-    if ((await child.exited) !== 0) {
-      const why = Bun.stripANSI(await new Response(child.stderr).text()).trim();
-      throw new Error(why || "`claude auth logout` did not finish.");
-    }
-  });
-  switch (ran.kind) {
-    case "answered":
-      return;
-    case "unanswered":
-      throw new Error(
-        `\`claude auth logout\` did not answer within ${LOGOUT_MS / 1000} s; whether the account signed out is not known.`
-      );
-    default:
-      unhandled("read", ran);
-  }
+  // The promise edge of {@link signOut}.
+  await Effect.runPromise(signOut(executable, account));
 };
+
+/** `claude auth logout` that did not sign out: its own words, or none. */
+class LogoutFailed extends Schema.TaggedError<LogoutFailed>()("LogoutFailed", {
+  message: Schema.String,
+}) {}
+
+/** `claude auth logout` in the account's dir, within {@link LOGOUT_MS}: held for the read, killed when it is let go. */
+const signOut = Effect.fn("signOut")(function* (
+  executable: string,
+  account: string
+) {
+  yield* boundedRead(
+    LOGOUT_MS,
+    Effect.gen(function* () {
+      const child = yield* heldChild(
+        () =>
+          Bun.spawn([executable, "auth", "logout"], {
+            env: { ...bareEnv(), ...accountEnv(account) },
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "pipe",
+          }),
+        (cause) =>
+          new LogoutFailed({
+            message: cause instanceof Error ? cause.message : String(cause),
+          })
+      );
+      if ((yield* Effect.promise(() => child.exited)) !== 0) {
+        const why = Bun.stripANSI(
+          yield* Effect.promise(() => new Response(child.stderr).text())
+        ).trim();
+        return yield* new LogoutFailed({
+          message: why || "`claude auth logout` did not finish.",
+        });
+      }
+    }).pipe(Effect.scoped)
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new LogoutFailed({
+          message: `\`claude auth logout\` did not answer within ${LOGOUT_MS / 1000} s; whether the account signed out is not known.`,
+        })
+      )
+    )
+  );
+});
 
 /** How long `claude auth logout` may take to answer. */
 const LOGOUT_MS = 30_000;

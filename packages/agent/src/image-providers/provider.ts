@@ -2,6 +2,7 @@ import type {
   ImageProviderId,
   ImageQuality,
 } from "@cawco/core/image-generation";
+import { Effect, Schema } from "effect";
 import type { AgentPorts } from "../agent-ports";
 
 /** One reference image, admitted through the workspace's gate and read. */
@@ -38,7 +39,8 @@ export interface MadeImage {
  */
 type Readiness =
   | {
-      generate: (job: ImageJob, signal: AbortSignal) => Promise<MadeImage>;
+      /** The run; interrupted (the one image timeout, image-generation.ts), it ends. */
+      generate: (job: ImageJob) => Effect.Effect<MadeImage, ImageRunFailed>;
       notes: string[];
       ready: true;
     }
@@ -60,3 +62,22 @@ export interface ImageProvider {
   /** The most reference images it takes; 0 takes none. */
   references: number;
 }
+
+/** A provider's run that made no image: its refusal in words, as the provider said it. */
+export class ImageRunFailed extends Schema.TaggedError<ImageRunFailed>()(
+  "ImageRunFailed",
+  { message: Schema.String, cause: Schema.Defect() }
+) {}
+
+/** A failure of a provider's run as an {@link ImageRunFailed}, its words kept. */
+export const imageRunFailed = (cause: unknown): ImageRunFailed =>
+  new ImageRunFailed({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
+
+/** A provider's request, handed the run's signal, as its `generate`: aborted when the run is interrupted. */
+export const generateWith = (
+  request: (signal: AbortSignal) => Promise<MadeImage>
+): Effect.Effect<MadeImage, ImageRunFailed> =>
+  Effect.tryPromise({ try: request, catch: imageRunFailed });

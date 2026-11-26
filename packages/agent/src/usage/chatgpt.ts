@@ -1,7 +1,7 @@
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import type { LimitWindow } from "@cawco/core/usage/types";
+import { Effect } from "effect";
 import { z } from "zod";
 
 /**
@@ -120,60 +120,71 @@ export type ChatgptUsageRead =
   | { ok: true; plan: string | null; windows: LimitWindow[] }
   | { ok: false; status: number | null; error: string };
 
-/** Reads one sign-in's windows with its access token and ChatGPT account id. */
-export const readChatgptUsage = async (
+/**
+ * Reads one sign-in's windows with its access token and ChatGPT account id.
+ * Every way it fails is its answer (`ok: false`, a wire shape the hub
+ * keeps), so it never fails itself.
+ */
+export const chatgptUsage = Effect.fn("chatgptUsage")(
+  (
+    accessToken: string,
+    chatgptAccountId: string
+  ): Effect.Effect<ChatgptUsageRead> =>
+    boundedRead(
+      TIMEOUT_MS,
+      Effect.tryPromise({
+        try: async (signal): Promise<ChatgptUsageRead> => {
+          const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "ChatGPT-Account-Id": chatgptAccountId,
+              accept: "application/json",
+            },
+            redirect: "error",
+            signal,
+          });
+          if (!response.ok) {
+            await response.body?.cancel();
+            return {
+              ok: false,
+              status: response.status,
+              error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+            };
+          }
+          const body = UsageRaw.parse(await response.json());
+          return {
+            ok: true,
+            plan: body.plan_type ?? null,
+            windows: chatgptWindows(body),
+          };
+        },
+        catch: (error): ChatgptUsageRead => ({
+          ok: false,
+          status: null,
+          error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+      })
+    ).pipe(
+      Effect.catchTag("Unanswered", ({ after }) => {
+        // No reading: the caller keeps the last one it holds.
+        const error = `ChatGPT's usage endpoint did not answer within ${secondsOf(after)}s`;
+        console.warn(`[usage] ${error}; the last reading stands`);
+        return Effect.succeed<ChatgptUsageRead>({
+          ok: false,
+          status: null,
+          error,
+        });
+      }),
+      Effect.catch((read) => Effect.succeed(read))
+    )
+);
+
+/** The promise edge of {@link chatgptUsage}. */
+export const readChatgptUsage = (
   accessToken: string,
   chatgptAccountId: string
-): Promise<ChatgptUsageRead> => {
-  try {
-    const read = await readWithin(
-      TIMEOUT_MS,
-      async (signal): Promise<ChatgptUsageRead> => {
-        const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "ChatGPT-Account-Id": chatgptAccountId,
-            accept: "application/json",
-          },
-          redirect: "error",
-          signal,
-        });
-        if (!response.ok) {
-          await response.body?.cancel();
-          return {
-            ok: false,
-            status: response.status,
-            error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
-          };
-        }
-        const body = UsageRaw.parse(await response.json());
-        return {
-          ok: true,
-          plan: body.plan_type ?? null,
-          windows: chatgptWindows(body),
-        };
-      }
-    );
-    switch (read.kind) {
-      case "answered":
-        return read.value;
-      case "unanswered": {
-        // No reading: the caller keeps the last one it holds.
-        const error = `ChatGPT's usage endpoint did not answer within ${secondsOf(read.after)}s`;
-        console.warn(`[usage] ${error}; the last reading stands`);
-        return { ok: false, status: null, error };
-      }
-      default:
-        unhandled("read", read);
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      status: null,
-      error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-};
+): Promise<ChatgptUsageRead> =>
+  Effect.runPromise(chatgptUsage(accessToken, chatgptAccountId));
 
 /** The claims of a ChatGPT access token CawCo reads: never the token itself. */
 export interface ChatgptClaims {

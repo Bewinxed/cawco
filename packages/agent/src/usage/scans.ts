@@ -4,14 +4,15 @@
  * and what its store holds said in the memory line.
  */
 import type { UsageBucket } from "@cawco/core/usage/types";
+import { Deferred, Effect } from "effect";
 import { gauge } from "../memory";
 import { storeWork } from "../stores/client";
 import type { UsageGauges } from "../stores/usage-host";
 
 export class UsageScans {
-  readonly #firstScan = Promise.withResolvers<void>();
-  /** Settles once the first scan, full or incremental, has ended. */
-  readonly scanned = this.#firstScan.promise;
+  readonly #firstScan = Deferred.makeUnsafe<void>();
+  /** Settles once the first scan, full or incremental, has ended: the promise edge of its {@link Deferred}. */
+  readonly scanned = Effect.runPromise(Deferred.await(this.#firstScan));
   /** The store as the last scan left it. */
   #gauges: UsageGauges = { dbMB: 0, rowIndexKeys: 0 };
 
@@ -27,7 +28,7 @@ export class UsageScans {
       this.#gauges = gauges;
       return buckets;
     } finally {
-      this.#firstScan.resolve();
+      Deferred.doneUnsafe(this.#firstScan, Effect.void);
     }
   }
 }

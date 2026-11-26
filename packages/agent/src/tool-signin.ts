@@ -1,6 +1,4 @@
 import { homedir } from "node:os";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
 import {
   type ToolSigninChallenge,
   type ToolSigninSpec,
@@ -8,10 +6,10 @@ import {
   type ToolStatus,
   toolSpec,
 } from "@cawco/core/tools";
-import { unhandled } from "@cawco/core/unhandled";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
-import type { Subprocess } from "bun";
+import { Duration, Effect, Exit, Scope } from "effect";
+import { heardUntil, openInTerminal, type TerminalRun } from "./login";
 import { probeToolStatus, signinMoved, toolBinary, toolEnv } from "./tools";
 
 /**
@@ -25,34 +23,36 @@ import { probeToolStatus, signinMoved, toolBinary, toolEnv } from "./tools";
  * service of its own.
  */
 
-/** How long the sign-in may take to show its link. */
+/** How long the sign-in may go without a word before it shows its link. */
 const LINK_MS = 60_000;
 /** How long a sign-in waits for its code before it is ended. */
 const KEEP_MS = 10 * 60_000;
-/** How long the tool may take to finish once the code is typed. */
+/** How long the tool may go without a word once the code is typed, before it ends. */
 const EXCHANGE_MS = 120_000;
 /** How many of the screen's last lines a refusal quotes. */
 const SCREEN_LINES = 6;
 
 /** One tool's sign-in, waiting for its code. */
-interface Waiting {
-  readonly child: Subprocess;
-  /** Ends it, unless it was used, once {@link KEEP_MS} pass. */
-  readonly expiry: ReturnType<typeof setTimeout>;
-  /** Called on every chunk of output, while something is waiting on it. */
-  heard?: () => void;
+interface Waiting extends TerminalRun {
   /** Everything it printed, ANSI and all. */
   output: string;
+  /**
+   * What the sign-in holds: its terminal, its tool, and the wait that ends
+   * it once {@link KEEP_MS} pass unused. Closing it ends all three.
+   */
+  readonly scope: Scope.Closeable;
   readonly terminal: Bun.Terminal;
 }
 
 /** The sign-ins waiting for a code, by tool id. */
 const waiting = new Map<string, Waiting>();
 
+/**
+ * Ends the sign-in: its scope closed, the tool killed and its terminal
+ * closed at once, then its expiry's wait let go.
+ */
 const end = (one: Waiting): void => {
-  clearTimeout(one.expiry);
-  one.child.kill();
-  one.terminal.close();
+  Effect.runFork(Scope.close(one.scope, Exit.void));
 };
 
 /** Ends every waiting sign-in, for the daemon's exit: the tool outlives its terminal otherwise. */
@@ -97,49 +97,21 @@ const screen = (one: Waiting, from = 0, code?: string): string => {
 const ended = (one: Waiting): boolean =>
   one.child.exitCode !== null || one.child.signalCode !== null;
 
-/** Whether `done` held, on each chunk the tool printed or when it ended, within `ms`. */
-const until = async (
+/**
+ * Whether `done` held, on each chunk the tool printed or when it ended; let
+ * go once `quietMs` pass with nothing printed, and answered by `done` then.
+ * The promise edge of login.ts `heardUntil`.
+ */
+const until = (
   one: Waiting,
   done: () => boolean,
-  ms: number
-): Promise<boolean> => {
-  const read = await readWithin(
-    ms,
-    (signal) =>
-      new Promise<boolean>((resolve) => {
-        let settled = false;
-        const settle = (answer: boolean) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          one.heard = undefined;
-          resolve(answer);
-        };
-        signal.addEventListener("abort", () => settle(done()), {
-          once: true,
-        });
-        one.heard = () => {
-          if (done()) {
-            settle(true);
-          }
-        };
-        detach(
-          one.child.exited.then(() => settle(done())),
-          "then"
-        );
-        one.heard();
-      })
+  quietMs: number
+): Promise<boolean> =>
+  Effect.runPromise(
+    heardUntil(one, done, quietMs).pipe(
+      Effect.map((answer) => (answer === "quiet" ? done() : answer))
+    )
   );
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      return done();
-    default:
-      return unhandled("read", read);
-  }
-};
 
 /** The tool asked for, with its own sign-in, and its binary here; else why not, in words. */
 const signinTool = async (
@@ -173,33 +145,39 @@ export const beginToolSignin = async (
   const decoder = new TextDecoder();
   // Its screen, read into the sign-in's own record whether or not it still waits.
   let heard: Waiting | undefined;
-  const terminal = new Bun.Terminal({
-    // Wide enough that the link is never wrapped across lines.
-    cols: 4096,
-    data(_terminal, bytes) {
+  const scope = Scope.makeUnsafe();
+  // Forked first, so the scope lets it go last: closing ends the tool and
+  // its terminal before anything else.
+  Effect.runFork(
+    Effect.sleep(Duration.millis(KEEP_MS)).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          if (heard && waiting.get(toolId) === heard) {
+            waiting.delete(toolId);
+          }
+        })
+      ),
+      Effect.andThen(Scope.close(scope, Exit.void)),
+      Effect.forkIn(scope)
+    )
+  );
+  const opened = openInTerminal(
+    scope,
+    (terminal) =>
+      Bun.spawn([bin, ...words.login], {
+        // No display: the link is for the person's browser, not one here.
+        env: { ...toolEnv(), DISPLAY: undefined, WAYLAND_DISPLAY: undefined },
+        cwd: homedir(),
+        terminal,
+      }),
+    (bytes) => {
       if (heard) {
         heard.output += decoder.decode(bytes, { stream: true });
         heard.heard?.();
       }
-    },
-  });
-  const child = Bun.spawn([bin, ...words.login], {
-    // No display: the link is for the person's browser, not one here.
-    env: { ...toolEnv(), DISPLAY: undefined, WAYLAND_DISPLAY: undefined },
-    cwd: homedir(),
-    terminal,
-  });
-  const one: Waiting = {
-    child,
-    terminal,
-    output: "",
-    expiry: setTimeout(() => {
-      if (waiting.get(toolId) === one) {
-        waiting.delete(toolId);
-      }
-      end(one);
-    }, KEEP_MS),
-  };
+    }
+  );
+  const one: Waiting = { ...opened, scope, output: "" };
   heard = one;
   waiting.set(toolId, one);
   await until(one, () => signinLinks(one, words).length > 0, LINK_MS);

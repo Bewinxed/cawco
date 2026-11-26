@@ -1,8 +1,8 @@
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
-import { readWithin } from "@cawco/core/bounded";
+import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
+import { Clock, Effect, Result, Schema } from "effect";
 import { z } from "zod";
 
 /**
@@ -38,6 +38,9 @@ const CACHE_TTL_MS = 180_000;
  * A failed read, read again: from 2 min, doubling to 30. Never given up: the
  * reading is the daemon's usage tick, which a key's removal ends, and its
  * failure is shown on the account as its last good windows marked stale.
+ * The count lives in the key's state across reads, each read one try
+ * that its caller starts ({@link fetchOpenCodeGoLimits}): a wait between
+ * calls, not a retry inside one, so it is `backoffWait` on that count.
  */
 const FAILED_READS: BackoffPolicy = {
   firstMs: 2 * MINUTE_MS,
@@ -78,7 +81,7 @@ interface KeyState {
   coolingUntil: number;
   failed: OpenCodeGoLimits | null;
   /** Its reads that failed in a row ({@link FAILED_READS}). */
-  failures: Backoff;
+  failures: number;
   lastGood: OpenCodeGoLimits | null;
 }
 
@@ -106,15 +109,45 @@ function windowsOf(body: GoUsageResponse): LimitWindow[] {
   });
 }
 
-/**
- * The Go windows for one OpenCode Go key (an account's, held by the agent);
- * null for no key: no plan, so nothing to meter. A failed read is served as
- * the last good windows marked stale, with the error attached, and is not
- * read again until its wait ({@link FAILED_READS}) is out.
- */
-export async function fetchOpenCodeGoLimits(
+/** A read of the usage endpoint that failed before it answered: its fetch, or its answer's shape. */
+class GoReadFailed extends Schema.TaggedError<GoReadFailed>()("GoReadFailed", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+/** The usage endpoint's answer to `key`, within {@link TIMEOUT_MS}: its windows, or the HTTP status it refused with. */
+const readGo = Effect.fn("readGo")((key: string) =>
+  boundedRead(
+    TIMEOUT_MS,
+    Effect.tryPromise({
+      try: async (signal) => {
+        const res = await fetch(usageUrl(), {
+          headers: { Authorization: `Bearer ${key}` },
+          redirect: "error",
+          signal,
+        });
+        if (!res.ok) {
+          await res.body?.cancel();
+          return { ok: false as const, status: res.status };
+        }
+        return {
+          ok: true as const,
+          windows: windowsOf(GoUsageResponse.parse(await res.json())),
+        };
+      },
+      catch: (cause) =>
+        new GoReadFailed({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    })
+  )
+);
+
+/** {@link fetchOpenCodeGoLimits} as an Effect. */
+export const openCodeGoLimits = Effect.fn("openCodeGoLimits")(function* (
   key: string | null
-): Promise<OpenCodeGoLimits | null> {
+) {
   if (!key) {
     return null;
   }
@@ -122,11 +155,11 @@ export async function fetchOpenCodeGoLimits(
     cached: null,
     coolingUntil: 0,
     failed: null,
-    failures: new Backoff(FAILED_READS),
+    failures: 0,
     lastGood: null,
   };
   states.set(key, state);
-  const now = Date.now();
+  const now = yield* Clock.currentTimeMillis;
   if (state.failed && now < state.coolingUntil) {
     return state.failed;
   }
@@ -134,58 +167,48 @@ export async function fetchOpenCodeGoLimits(
     return state.cached.value;
   }
 
+  const read = yield* Effect.result(readGo(key));
   let error: string;
-  try {
-    const read = await readWithin(TIMEOUT_MS, async (signal) => {
-      const res = await fetch(usageUrl(), {
-        headers: { Authorization: `Bearer ${key}` },
-        redirect: "error",
-        signal,
-      });
-      if (!res.ok) {
-        await res.body?.cancel();
-        return { ok: false as const, status: res.status };
-      }
-      return {
-        ok: true as const,
-        windows: windowsOf(GoUsageResponse.parse(await res.json())),
+  if (Result.isSuccess(read)) {
+    if (read.success.ok) {
+      const value: OpenCodeGoLimits = {
+        error: null,
+        fetchedAt: yield* Clock.currentTimeMillis,
+        windows: read.success.windows,
       };
-    });
-    switch (read.kind) {
-      case "answered":
-        if (read.value.ok) {
-          const value: OpenCodeGoLimits = {
-            error: null,
-            fetchedAt: Date.now(),
-            windows: read.value.windows,
-          };
-          state.cached = { at: value.fetchedAt, value };
-          state.lastGood = value;
-          state.failed = null;
-          state.failures.succeeded();
-          return value;
-        }
-        error = `HTTP ${read.value.status}`;
-        break;
-      case "unanswered":
-        // No reading: the last good windows stand, marked stale below.
-        error = `no answer within ${secondsOf(read.after)}s`;
-        console.warn(
-          `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
-        );
-        break;
-      default:
-        unhandled("read", read);
+      state.cached = { at: value.fetchedAt, value };
+      state.lastGood = value;
+      state.failed = null;
+      state.failures = 0;
+      return value;
     }
-  } catch (cause) {
-    error = cause instanceof Error ? cause.message : String(cause);
+    error = `HTTP ${read.success.status}`;
+  } else if (read.failure._tag === "Unanswered") {
+    // No reading: the last good windows stand, marked stale below.
+    error = `no answer within ${secondsOf(read.failure.after)}s`;
+    console.warn(
+      `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
+    );
+  } else {
+    error = read.failure.message;
   }
 
+  const failedAt = yield* Clock.currentTimeMillis;
   state.failed = state.lastGood
     ? { ...state.lastGood, stale: true, error }
-    : { error, fetchedAt: Date.now(), windows: [] };
-  const step = state.failures.failed();
-  state.coolingUntil =
-    Date.now() + (step.kind === "wait" ? step.ms : FAILED_READS.mostMs);
+    : { error, fetchedAt: failedAt, windows: [] };
+  state.failures += 1;
+  state.coolingUntil = failedAt + backoffWait(FAILED_READS, state.failures);
   return state.failed;
-}
+});
+
+/**
+ * The Go windows for one OpenCode Go key (an account's, held by the agent);
+ * null for no key: no plan, so nothing to meter. A failed read is served as
+ * the last good windows marked stale, with the error attached, and is not
+ * read again until its wait ({@link FAILED_READS}) is out. The promise edge
+ * of {@link openCodeGoLimits}.
+ */
+export const fetchOpenCodeGoLimits = (
+  key: string | null
+): Promise<OpenCodeGoLimits | null> => Effect.runPromise(openCodeGoLimits(key));

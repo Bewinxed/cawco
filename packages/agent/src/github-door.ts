@@ -18,6 +18,7 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceDoorDir } from "@cawco/core/paths/workspace";
+import { Effect, Exit, Scope } from "effect";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 
@@ -103,7 +104,8 @@ const serve = async (request: Request): Promise<Response> => {
   return forward(request, host, url, await hostGhToken());
 };
 
-const doors = new Map<string, ReturnType<typeof Bun.serve>>();
+/** Each workspace's door, by its id: the scope that holds its listener. */
+const doors = new Map<string, Scope.Closeable>();
 
 /** Serves workspace `id`'s GitHub door, once per agent: a socket an earlier agent left is replaced. */
 export const openGithubDoor = async (id: string): Promise<void> => {
@@ -113,27 +115,37 @@ export const openGithubDoor = async (id: string): Promise<void> => {
   const path = githubDoorOf(id);
   await socketPlace(path, "the workspace's GitHub door");
   await rm(path, { force: true });
-  doors.set(
-    id,
-    Bun.serve({
-      unix: path,
-      fetch: (request) =>
-        serve(request).catch((error: unknown) =>
-          Response.json(
-            {
-              message: `cawco: this workspace's GitHub door could not reach GitHub: ${error instanceof Error ? error.message : String(error)}`,
-            },
-            { status: 502 }
-          )
-        ),
-    })
+  const scope = Scope.makeUnsafe();
+  // The listener is held by the door's scope: closing it stops serving.
+  Effect.runSync(
+    Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          unix: path,
+          fetch: (request) =>
+            serve(request).catch((error: unknown) =>
+              Response.json(
+                {
+                  message: `cawco: this workspace's GitHub door could not reach GitHub: ${error instanceof Error ? error.message : String(error)}`,
+                },
+                { status: 502 }
+              )
+            ),
+        })
+      ),
+      (server) => Effect.promise(() => server.stop(true))
+    ).pipe(Scope.provide(scope))
   );
+  doors.set(id, scope);
 };
 
 /** Stops serving workspace `id`'s GitHub door. */
 export const closeGithubDoor = async (id: string): Promise<void> => {
-  const server = doors.get(id);
+  const scope = doors.get(id);
   doors.delete(id);
-  await server?.stop(true);
+  if (scope) {
+    // The promise edge of the door's close.
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
   await rm(githubDoorOf(id), { force: true });
 };

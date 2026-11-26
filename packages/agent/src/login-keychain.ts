@@ -29,8 +29,9 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Gone } from "@cawco/core/bounded";
+import { Gone } from "@cawco/core/effect/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { Effect, Schema, type Scope } from "effect";
 import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
 
 /** This machine's login keychain, under HOME: the one `unlockKeychain` unlocks. */
@@ -67,38 +68,77 @@ if (read === -25294) {
   console.log((status[0] & 1) === 0 ? "locked" : "unlocked");
 }`;
 
+/** The lock read that did not say locked or unlocked: its OSStatus, or what it printed instead. */
+export class LockUnread extends Schema.TaggedError<LockUnread>()("LockUnread", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 /**
  * Whether the keychain at `path` is locked for this agent's security session,
- * read in a child process ({@link LOCK_STATUS}). `signal` ends the read: its
- * caller's deadline (core `readWithin`), which then answers it unanswered.
- * A child ended by a signal is {@link Gone}; any refusal throws with its
- * OSStatus. macOS only.
+ * read in a child process ({@link LOCK_STATUS}), held while it is read:
+ * ended when the read is let go before it answered (its caller's deadline,
+ * core effect/bounded). A child ended by a signal is {@link Gone}; any
+ * refusal is {@link LockUnread} with its OSStatus. macOS only.
  */
-export const keychainLocked = async (
-  path: string,
-  signal?: AbortSignal
-): Promise<boolean> => {
-  const child = Bun.spawn([bunScriptRuntime(), "-e", LOCK_STATUS], {
-    env: { ...hostEnvironment(), ...BUN_SCRIPT_ENV, CAWCO_KEYCHAIN: path },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    ...(signal ? { signal } : {}),
-  });
-  const [out, err] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+export const keychainLockState = Effect.fn("keychainLockState")(function* (
+  path: string
+): Effect.fn.Return<boolean, Gone | LockUnread, Scope.Scope> {
+  const child = yield* Effect.acquireRelease(
+    Effect.try({
+      try: () =>
+        Bun.spawn([bunScriptRuntime(), "-e", LOCK_STATUS], {
+          env: {
+            ...hostEnvironment(),
+            ...BUN_SCRIPT_ENV,
+            CAWCO_KEYCHAIN: path,
+          },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        }),
+      catch: (cause) =>
+        new LockUnread({
+          message: `The lock read of ${path} did not start: ${cause instanceof Error ? cause.message : String(cause)}`,
+          cause,
+        }),
+    }),
+    (started) =>
+      Effect.sync(() => {
+        if (started.exitCode === null && started.signalCode === null) {
+          started.kill();
+        }
+      })
+  );
+  const [out, err] = yield* Effect.promise(() =>
+    Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+  );
   if (child.signalCode !== null) {
-    throw new Gone(`the lock read of ${path} (${child.signalCode})`);
+    return yield* new Gone({
+      what: `the lock read of ${path} (${child.signalCode})`,
+    });
   }
   const word = out.trim();
   if (child.exitCode === 0 && (word === "locked" || word === "unlocked")) {
     return word === "locked";
   }
-  throw new Error(
-    err.trim() ||
-      `The lock read of ${path} exited ${child.exitCode} and said ${word || "nothing"}.`
-  );
-};
+  return yield* new LockUnread({
+    message:
+      err.trim() ||
+      `The lock read of ${path} exited ${child.exitCode} and said ${word || "nothing"}.`,
+  });
+}, Effect.scoped);
+
+/**
+ * The promise edge of {@link keychainLockState}. `signal` ends the read:
+ * the child is ended with it, and the read rejects.
+ */
+export const keychainLocked = (
+  path: string,
+  signal?: AbortSignal
+): Promise<boolean> =>
+  Effect.runPromise(keychainLockState(path), signal ? { signal } : undefined);

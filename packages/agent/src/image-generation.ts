@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { lstat, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import {
   type GeneratedImage,
@@ -12,15 +12,17 @@ import {
   type ImageGenerationRequest,
   offersModelChoice,
 } from "@cawco/core/image-generation";
-import { unhandled } from "@cawco/core/unhandled";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { Effect } from "effect";
 import { imageSize } from "image-size";
 import type { AgentPorts } from "./agent-ports";
-import type {
-  ImageProvider,
-  MadeImage,
-  ReferenceImage,
+import {
+  type ImageProvider,
+  type ImageRunFailed,
+  imageRunFailed,
+  type MadeImage,
+  type ReferenceImage,
 } from "./image-providers/provider";
 import { imageProvider } from "./image-providers/registry";
 import {
@@ -249,20 +251,23 @@ function readImage(
   return { format, width: read.width, height: read.height };
 }
 
-/** The provider's run, bounded by the one image timeout. */
-async function made(
+/**
+ * The provider's run, bounded by the one image timeout: past it the run is
+ * interrupted, which ends it. The promise edge of the run.
+ */
+function made(
   provider: ImageProvider,
-  run: (signal: AbortSignal) => Promise<MadeImage>
+  run: Effect.Effect<MadeImage, ImageRunFailed>
 ): Promise<MadeImage> {
-  const read = await readWithin(IMAGE_GENERATION_TIMEOUT_MS, run);
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      throw new Error(imageGenerationWords.timedOut(provider.id));
-    default:
-      return unhandled("read", read);
-  }
+  return Effect.runPromise(
+    boundedRead(IMAGE_GENERATION_TIMEOUT_MS, run).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.fail(
+          imageRunFailed(new Error(imageGenerationWords.timedOut(provider.id)))
+        )
+      )
+    )
+  );
 }
 
 /**
@@ -320,17 +325,15 @@ export async function generateImage(
   }
   activeOutputs.add(output);
   try {
-    const image = await made(provider, (signal) =>
-      readiness.generate(
-        {
-          prompt: args.prompt,
-          model,
-          quality: args.quality,
-          size: args.size,
-          references: read,
-        },
-        signal
-      )
+    const image = await made(
+      provider,
+      readiness.generate({
+        prompt: args.prompt,
+        model,
+        quality: args.quality,
+        size: args.size,
+        references: read,
+      })
     ).catch((error: unknown) => {
       throw refusal(provider, error);
     });

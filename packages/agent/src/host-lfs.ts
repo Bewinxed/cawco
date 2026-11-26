@@ -18,8 +18,8 @@
  */
 
 import { spawn } from "node:child_process";
-import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -34,6 +34,7 @@ import {
   refusalText,
   unwrap,
 } from "@cawco/hub/client";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 import { toHttpBase } from "./discovery";
 import { holdDeclaredSecret } from "./git/hub-credential";
@@ -79,31 +80,64 @@ export const declaredLfs = async (
   return declared ?? undefined;
 };
 
+/** The hub that did not say what it was asked: its refusal, a request that failed, or no answer in time. */
+class HubDidNotSay extends Schema.TaggedError<HubDidNotSay>()("HubDidNotSay", {
+  message: Schema.String,
+}) {}
+
 /**
- * The hub's JSON answer to `url`, within {@link HUB_MS}; throws, saying
+ * The hub's JSON answer to `request`, within {@link HUB_MS}; fails, saying
  * `what` it did not say, when it answers otherwise or not at all.
  */
-const askHub = async <A extends HubAnswer>(
+const hubSays = <A extends HubAnswer>(
   hub: string,
   request: (client: HubClient) => Promise<A>,
   what: string
-): Promise<HubData<A>> => {
-  const read = await readWithin(HUB_MS, (signal) =>
-    request(
-      hubClient(hub, (url, init) => provenFetch(url, { ...init, signal }))
+): Effect.Effect<HubData<A>, HubDidNotSay> =>
+  boundedRead(
+    HUB_MS,
+    Effect.tryPromise({
+      try: (signal) =>
+        request(
+          hubClient(hub, (url, init) => provenFetch(url, { ...init, signal }))
+        ),
+      catch: (cause) =>
+        new HubDidNotSay({
+          message: cause instanceof Error ? cause.message : String(cause),
+        }),
+    })
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new HubDidNotSay({
+          message: `the hub did not say ${what} within ${HUB_MS / 1000}s`,
+        })
+      )
+    ),
+    Effect.flatMap((answer) =>
+      Effect.try({
+        try: () =>
+          unwrap(
+            answer,
+            (refusal) =>
+              new Error(
+                `the hub did not say ${what} (${refusal.status}: ${refusalText(refusal).trim()})`
+              )
+          ),
+        catch: (cause) =>
+          new HubDidNotSay({
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
+      })
     )
   );
-  if (read.kind === "unanswered") {
-    throw new Error(`the hub did not say ${what} within ${HUB_MS / 1000}s`);
-  }
-  return unwrap(
-    read.value,
-    (refusal) =>
-      new Error(
-        `the hub did not say ${what} (${refusal.status}: ${refusalText(refusal).trim()})`
-      )
-  );
-};
+
+/** The promise edge of {@link hubSays}. */
+const askHub = <A extends HubAnswer>(
+  hub: string,
+  request: (client: HubClient) => Promise<A>,
+  what: string
+): Promise<HubData<A>> => Effect.runPromise(hubSays(hub, request, what));
 
 /** The project workspace `id` belongs to, as the hub named it at its cut (boundary/looks.ts `setProject`); none for none. */
 export const workspaceProjectOf = async (
@@ -191,44 +225,48 @@ export const hostSigns = async (endpoint: string): Promise<boolean> => {
   // git waits on is git's child, and stopping git alone left it running (on
   // macOS, an osxkeychain waiting on another's lock, one per door
   // connection, hub-git.ts `HOST_RUN_SILENCE_MS`).
-  const read = await readWithin(
-    HELPER_MS,
-    (signal) =>
-      new Promise<boolean>((resolve) => {
-        const [file = "git", ...args] = safeGitArgv(["credential", "fill"]);
-        const child = spawn(file, args, {
-          env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-          detached: true,
-          stdio: ["pipe", "pipe", "ignore"],
-        });
-        const stop = () => {
-          const leader = spawnedPid(child);
-          if (leader !== undefined && child.exitCode === null) {
-            try {
-              signalGroup(leader, "SIGKILL");
-            } catch {
-              // Gone between the look and the signal.
-            }
-          }
-        };
-        signal.addEventListener("abort", stop, { once: true });
-        let out = "";
-        child.stdout.on("data", (chunk: Buffer) => {
-          out += chunk.toString();
-        });
-        child.on("error", () => resolve(false));
-        child.on("close", (code) => {
-          signal.removeEventListener("abort", stop);
-          resolve(code === 0 && PASSWORD.test(out));
-        });
-        child.stdin.on("error", () => undefined);
-        child.stdin.end(
-          `protocol=${url.protocol.slice(0, -1)}\nhost=${url.host}\n\n`
-        );
-      })
+  return await Effect.runPromise(
+    boundedRead(HELPER_MS, credentialFill(url)).pipe(
+      Effect.catchTag("Unanswered", () => Effect.succeed(false))
+    )
   );
-  return read.kind === "answered" && read.value;
 };
+
+/**
+ * `git credential fill` for `url`'s host: whether a helper gave a password.
+ * Interrupted (its read let go), the whole group is killed.
+ */
+const credentialFill = (url: URL): Effect.Effect<boolean> =>
+  Effect.callback<boolean>((resume) => {
+    const [file = "git", ...args] = safeGitArgv(["credential", "fill"]);
+    const child = spawn(file, args, {
+      env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+      detached: true,
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.on("error", () => resume(Effect.succeed(false)));
+    child.on("close", (code) => {
+      resume(Effect.succeed(code === 0 && PASSWORD.test(out)));
+    });
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(
+      `protocol=${url.protocol.slice(0, -1)}\nhost=${url.host}\n\n`
+    );
+    return Effect.sync(() => {
+      const leader = spawnedPid(child);
+      if (leader !== undefined && child.exitCode === null) {
+        try {
+          signalGroup(leader, "SIGKILL");
+        } catch {
+          // Gone between the look and the signal.
+        }
+      }
+    });
+  });
 
 const PASSWORD = /^password=./mu;
 

@@ -10,6 +10,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { ratesFingerprint, refreshPricing } from "@cawco/core/usage/pricing";
 import { BUCKET_MS, bucketStart, totalTokens } from "@cawco/core/usage/tokens";
 import type { UsageBucket, UsageTokens } from "@cawco/core/usage/types";
+import { Effect } from "effect";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
@@ -245,6 +246,13 @@ const YIELD_MS = 8;
 /** Usage records one turn of the loop folds in ({@link UsageScanner}). Ours: a few milliseconds of them. */
 const INGEST_PART = 500;
 
+/**
+ * A turn of the loop for whatever else waits on it: the promise edge of
+ * `Effect.yieldNow`, which Effect's default scheduler hands on with
+ * `setImmediate`, after the I/O that came due.
+ */
+const loopTurn = (): Promise<void> => Effect.runPromise(Effect.yieldNow);
+
 /** The id an `INSERT … RETURNING id` gave: such an insert always returns its row. */
 const inserted = (row: { id: number } | null): number => {
   if (!row) {
@@ -274,7 +282,7 @@ const eachLine = async (
     // the loop gets no turn between them unless given one, and a 413 MB
     // transcript's first read held it 560 ms.
     if (performance.now() - turnAt > YIELD_MS) {
-      await new Promise((resolve) => setImmediate(resolve));
+      await loopTurn();
       turnAt = performance.now();
     }
     let start = 0;
@@ -675,7 +683,7 @@ export class UsageScanner {
       for (const rec of records.slice(at, at + INGEST_PART)) {
         this.#ingest(rec);
       }
-      await new Promise((resolve) => setImmediate(resolve));
+      await loopTurn();
     }
     this.#putFile.run(path, info.mtimeMs, info.size, next);
   }

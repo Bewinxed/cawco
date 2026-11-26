@@ -8,7 +8,7 @@ import {
   type HomeLoginMoved,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -18,12 +18,14 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 import {
   accountEnv,
   authStatusIn,
   bareEnv,
   HOME_SERVICE,
+  heldChild,
   keychainService,
   keychainUser,
   kindOf,
@@ -130,44 +132,67 @@ interface Store {
 /** How long one `security` run may take to answer. */
 const SECURITY_MS = 20_000;
 
+/** A `security` run that gave no answer within {@link SECURITY_MS}, or did not start. */
+class SecurityUnanswered extends Schema.TaggedError<SecurityUnanswered>()(
+  "SecurityUnanswered",
+  { message: Schema.String }
+) {}
+
 /**
- * Runs `security`, its output read and never logged. Throws when it gave no
- * answer within {@link SECURITY_MS}: the keychain's word was not read, and
- * the move refuses on it.
+ * Runs `security`, its output read and never logged, held while it is read
+ * and killed when the read is let go. Fails when it gave no answer within
+ * {@link SECURITY_MS}: the keychain's word was not read, and the move
+ * refuses on it.
  */
-const security = async (
+const securityRun = Effect.fn("securityRun")(function* (
   args: string[],
   input?: string
-): Promise<{ code: number; stdout: string }> => {
-  const read = await readWithin(SECURITY_MS, async (signal) => {
-    const child = Bun.spawn(["security", ...args], {
-      env: hostEnvironment(),
-      stdin: input === undefined ? "ignore" : "pipe",
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-    });
-    if (input !== undefined && child.stdin) {
-      child.stdin.write(input);
-      await child.stdin.end();
-    }
-    const [stdout, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return { code, stdout };
-  });
-  switch (read.kind) {
-    case "unanswered":
-      throw new Error(
-        `The keychain's \`security ${args[0]}\` did not answer within ${SECURITY_MS / 1000} s; nothing was read from it.`
+) {
+  return yield* boundedRead(
+    SECURITY_MS,
+    Effect.gen(function* () {
+      const child = yield* heldChild(
+        () =>
+          Bun.spawn(["security", ...args], {
+            env: hostEnvironment(),
+            stdin: input === undefined ? "ignore" : "pipe",
+            stdout: "pipe",
+            stderr: "ignore",
+          }),
+        (cause) =>
+          new SecurityUnanswered({
+            message: cause instanceof Error ? cause.message : String(cause),
+          })
       );
-    case "answered":
-      return read.value;
-    default:
-      unhandled("read", read);
-  }
-};
+      return yield* Effect.promise(async () => {
+        if (input !== undefined && child.stdin) {
+          child.stdin.write(input);
+          await child.stdin.end();
+        }
+        const [stdout, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          child.exited,
+        ]);
+        return { code, stdout };
+      });
+    }).pipe(Effect.scoped)
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new SecurityUnanswered({
+          message: `The keychain's \`security ${args[0]}\` did not answer within ${SECURITY_MS / 1000} s; nothing was read from it.`,
+        })
+      )
+    )
+  );
+});
+
+/** The promise edge of {@link securityRun}. */
+const security = (
+  args: string[],
+  input?: string
+): Promise<{ code: number; stdout: string }> =>
+  Effect.runPromise(securityRun(args, input));
 
 const findItem = async (service: string): Promise<string | undefined> => {
   const read = await security([

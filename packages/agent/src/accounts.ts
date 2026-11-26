@@ -19,7 +19,8 @@ import {
   type AccountReport,
   identityOf,
 } from "@cawco/core/accounts";
-import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { boundedRead, Gone, Unanswered } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
@@ -39,11 +40,17 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
+import type { Subprocess } from "bun";
+import { Effect, Schema, type Scope } from "effect";
 import { z } from "zod";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import { keychainLocked, loginKeychainPath } from "./login-keychain";
+import {
+  keychainLockState,
+  type LockUnread,
+  loginKeychainPath,
+} from "./login-keychain";
 import { probeStarted } from "./probe-count";
 
 /**
@@ -221,83 +228,135 @@ const statusIn = (
  * sentence. Not run, and `locked`, when the dir's login is in the locked
  * login keychain ({@link lockedAway}).
  */
-export const authStatusIn = async (
+export const authStatus = Effect.fn("authStatus")(function* (
   env: Record<string, string | undefined>,
   dir: string
-): Promise<AuthStatus> => {
-  const read = await authStatusRead(env, dir);
-  return read.kind === "answered"
-    ? read.value
-    : { kind: "unread", why: noAuthAnswer(dir, read) };
-};
-
-const authStatusRead = async (
-  env: Record<string, string | undefined>,
-  dir: string
-): Promise<Bounded<AuthStatus>> => {
-  let executable: string;
-  try {
-    executable = await claudeToStart();
-  } catch (error) {
-    if (error instanceof ClaudeRefused) {
-      return {
-        kind: "answered",
-        value: {
-          kind: "unread",
-          why: authStatusNotRun(dir, error.message),
-        },
-      };
-    }
-    throw error;
-  }
-  return readWithin<AuthStatus>(AUTH_STATUS_TIMEOUT_MS, async (signal) => {
-    if (await lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR), signal)) {
-      return {
-        kind: "locked",
-        why: `\`claude auth status\` was not run for ${dir}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it. Its sign-in was not read.`,
-      };
-    }
-    const child = Bun.spawn([executable, "auth", "status", "--json"], {
-      env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-    });
-    const [output] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    if (child.signalCode !== null) {
-      throw new Gone(`claude auth status for ${dir} (${child.signalCode})`);
-    }
-    const status = statusIn(output);
-    if (!status) {
-      return {
-        kind: "unread",
-        why: `Claude Code answered \`claude auth status\` for ${dir} with no JSON carrying a loggedIn (exit ${child.exitCode}). Its sign-in was not read.`,
-      };
-    }
-    // It "Exits with code 0 if logged in, 1 if not"
-    // (https://code.claude.com/docs/en/cli): an exit that says otherwise
-    // than its JSON leaves neither read.
-    if (status.loggedIn !== (child.exitCode === 0)) {
-      return {
-        kind: "unread",
-        why: `Claude Code answered \`claude auth status\` for ${dir} with loggedIn ${status.loggedIn} but exit ${child.exitCode}, which say opposite things. Its sign-in was not read.`,
-      };
-    }
-    const identity = signedInAs(status, env.CLAUDE_CONFIG_DIR);
+) {
+  const executable = yield* Effect.tryPromise({
+    try: () => claudeToStart(),
+    catch: (error) => error,
+  }).pipe(
+    Effect.catchIf(
+      (error): error is ClaudeRefused => error instanceof ClaudeRefused,
+      (error) => Effect.succeed({ refused: error.message })
+    )
+  );
+  if (typeof executable !== "string") {
     return {
-      kind: "signin",
-      loggedIn: status.loggedIn,
-      ...(typeof status.authMethod === "string"
-        ? { authMethod: status.authMethod }
-        : {}),
-      ...(identity ? { identity } : {}),
+      kind: "unread",
+      why: authStatusNotRun(dir, executable.refused),
+    } satisfies AuthStatus;
+  }
+  return yield* boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    statusOfDir(executable, env, dir)
+  ).pipe(
+    Effect.catchTag("Unanswered", (none) =>
+      Effect.succeed<AuthStatus>({
+        kind: "unread",
+        why: noAuthAnswer(dir, none),
+      })
+    )
+  );
+});
+
+/** The promise edge of {@link authStatus}. */
+export const authStatusIn = (
+  env: Record<string, string | undefined>,
+  dir: string
+): Promise<AuthStatus> => Effect.runPromise(authStatus(env, dir));
+
+/** `claude auth status --json` that did not start. */
+class AuthStatusFailed extends Schema.TaggedError<AuthStatusFailed>()(
+  "AuthStatusFailed",
+  { message: Schema.String, cause: Schema.Defect() }
+) {}
+
+/**
+ * {@link authStatus}'s read, inside its deadline: the keychain looks first
+ * ({@link lockedAway}), then `executable auth status --json`, held for the
+ * read and ended when the deadline lets it go.
+ */
+const statusOfDir = Effect.fn("statusOfDir")(function* (
+  executable: string,
+  env: Record<string, string | undefined>,
+  dir: string
+): Effect.fn.Return<
+  AuthStatus,
+  Gone | LockUnread | KeychainLookFailed | AuthStatusFailed,
+  Scope.Scope
+> {
+  if (yield* lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR))) {
+    return {
+      kind: "locked",
+      why: `\`claude auth status\` was not run for ${dir}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it. Its sign-in was not read.`,
     };
-  });
-};
+  }
+  const child = yield* heldChild(
+    () =>
+      Bun.spawn([executable, "auth", "status", "--json"], {
+        env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "ignore",
+      }),
+    (cause) =>
+      new AuthStatusFailed({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      })
+  );
+  const [output] = yield* Effect.promise(() =>
+    Promise.all([new Response(child.stdout).text(), child.exited])
+  );
+  if (child.signalCode !== null) {
+    return yield* new Gone({
+      what: `claude auth status for ${dir} (${child.signalCode})`,
+    });
+  }
+  const status = statusIn(output);
+  if (!status) {
+    return {
+      kind: "unread",
+      why: `Claude Code answered \`claude auth status\` for ${dir} with no JSON carrying a loggedIn (exit ${child.exitCode}). Its sign-in was not read.`,
+    };
+  }
+  // It "Exits with code 0 if logged in, 1 if not"
+  // (https://code.claude.com/docs/en/cli): an exit that says otherwise
+  // than its JSON leaves neither read.
+  if (status.loggedIn !== (child.exitCode === 0)) {
+    return {
+      kind: "unread",
+      why: `Claude Code answered \`claude auth status\` for ${dir} with loggedIn ${status.loggedIn} but exit ${child.exitCode}, which say opposite things. Its sign-in was not read.`,
+    };
+  }
+  const identity = signedInAs(status, env.CLAUDE_CONFIG_DIR);
+  return {
+    kind: "signin",
+    loggedIn: status.loggedIn,
+    ...(typeof status.authMethod === "string"
+      ? { authMethod: status.authMethod }
+      : {}),
+    ...(identity ? { identity } : {}),
+  };
+}, Effect.scoped);
+
+/**
+ * A child `spawn` starts, held for a read in the caller's scope: ended
+ * when the scope closes while it still runs, as a spawn's `signal` ended
+ * it. A spawn that throws fails with `failed`'s error.
+ */
+export const heldChild = <C extends Subprocess, E>(
+  spawn: () => C,
+  failed: (cause: unknown) => E
+): Effect.Effect<C, E, Scope.Scope> =>
+  Effect.acquireRelease(Effect.try({ try: spawn, catch: failed }), (child) =>
+    Effect.sync(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill();
+      }
+    })
+  );
 
 /** A dir signed in through `claude auth login --console` reports a method other than claude.ai. */
 export const kindOf = (
@@ -469,34 +528,53 @@ const serviceOf = (configDir: string | undefined): string =>
         .digest("hex")
         .slice(0, 8)}`;
 
+/** A keychain look that did not start. */
+class KeychainLookFailed extends Schema.TaggedError<KeychainLookFailed>()(
+  "KeychainLookFailed",
+  { message: Schema.String, cause: Schema.Defect() }
+) {}
+
 /**
  * Whether the keychain holds the login item filed under `service`: its
  * attributes only (no `-w`), which read while the keychain is locked and
  * never touch the secret, so no prompt rises. A missing item exits 44.
- * `signal` ends it: the deadline of the read it is part of.
+ * The look is held for the read it is part of, and ended with it.
  */
-const keychainHolds = async (
-  service: string,
-  signal: AbortSignal
-): Promise<boolean> => {
-  const child = Bun.spawn(
-    ["security", "find-generic-password", "-a", keychainUser(), "-s", service],
-    {
-      env: hostEnvironment(),
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-      signal,
-    }
+const keychainHolds = Effect.fn("keychainHolds")(function* (
+  service: string
+): Effect.fn.Return<boolean, Gone | KeychainLookFailed, Scope.Scope> {
+  const child = yield* heldChild(
+    () =>
+      Bun.spawn(
+        [
+          "security",
+          "find-generic-password",
+          "-a",
+          keychainUser(),
+          "-s",
+          service,
+        ],
+        {
+          env: hostEnvironment(),
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }
+      ),
+    (cause) =>
+      new KeychainLookFailed({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      })
   );
-  await child.exited;
+  yield* Effect.promise(() => child.exited);
   if (child.signalCode !== null) {
-    throw new Gone(
-      `security find-generic-password -s ${service} (${child.signalCode})`
-    );
+    return yield* new Gone({
+      what: `security find-generic-password -s ${service} (${child.signalCode})`,
+    });
   }
   return child.exitCode === 0;
-};
+}, Effect.scoped);
 
 /**
  * The login keychain's lock as one read answers it to every account read
@@ -505,27 +583,24 @@ const keychainHolds = async (
  * deadline is the sign-in budget, so it never outlives the reads that wait
  * on it; each of those is bounded by its own as well.
  */
-let lockRead: Promise<Bounded<boolean>> | undefined;
+const lockReads = makeJoin<"login", boolean, Gone | LockUnread>();
 
-const loginLocked = async (): Promise<boolean> => {
-  lockRead ??= readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
-    keychainLocked(loginKeychainPath(), signal)
-  ).finally(() => {
-    lockRead = undefined;
-  });
-  const read = await lockRead;
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      // The account read waiting on it ends unanswered with it.
-      throw new Gone(
-        `the login keychain's lock read (${read.reason}, after ${read.after} ms)`
-      );
-    default:
-      unhandled("read", read);
-  }
-};
+const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
+  "login",
+  boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    keychainLockState(loginKeychainPath())
+  ).pipe(
+    // The account read waiting on it ends unanswered with it.
+    Effect.catchTag("Unanswered", ({ reason, after }) =>
+      Effect.fail(
+        new Gone({
+          what: `the login keychain's lock read (${reason}, after ${after} ms)`,
+        })
+      )
+    )
+  )
+);
 
 /**
  * Whether the login filed under `service` is in the login keychain while it
@@ -536,15 +611,14 @@ const loginLocked = async (): Promise<boolean> => {
  * session and waits on it, so nothing that runs it in the background is
  * started on such a login. The item is read first: the lock is read only of
  * a keychain that holds one. Both looks run in processes of their own, off
- * the agent's JS thread, inside the deadline `signal` carries.
+ * the agent's JS thread, inside the deadline of the read they are part of.
  */
-const lockedAway = async (
-  service: string,
-  signal: AbortSignal
-): Promise<boolean> =>
-  platform() === "darwin" &&
-  (await keychainHolds(service, signal)) &&
-  (await loginLocked());
+const lockedAway = Effect.fn("lockedAway")(function* (service: string) {
+  if (platform() !== "darwin") {
+    return false;
+  }
+  return (yield* keychainHolds(service)) && (yield* loginLocked);
+});
 
 /**
  * The machine's word on Claude, from its account dirs alone: authenticated
@@ -607,34 +681,39 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
 /** How long a probe may take to be answered at initialize. */
 const PROBE_TIMEOUT_MS = 60_000;
 
+/** Why an account dir's Claude Code is not started, in a sentence. */
+class NotStarted extends Schema.TaggedError<NotStarted>()("NotStarted", {
+  message: Schema.String,
+}) {}
+
 /**
- * Throws the sentence why an account dir's Claude Code is not started
+ * Fails with the sentence why an account dir's Claude Code is not started
  * (`done`: "probed", "checked"): its login is in the locked login keychain
- * ({@link lockedAway}), or the keychain's look gave no answer in time.
+ * ({@link lockedAway}), or the keychain's look gave no answer in time. A
+ * look that failed otherwise fails with its own error.
  */
-export const notLockedAway = async (
+export const startable = Effect.fn("startable")(function* (
   account: string,
   done: string
-): Promise<void> => {
-  const away = await readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
-    lockedAway(keychainService(account), signal)
+) {
+  const away = yield* boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    lockedAway(keychainService(account))
+  ).pipe(
+    Effect.catchTag("Unanswered", ({ after }: Unanswered) =>
+      Effect.fail(
+        new NotStarted({
+          message: `${accountConfigDir(account)} was not ${done}: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${after} ms).`,
+        })
+      )
+    )
   );
-  switch (away.kind) {
-    case "unanswered":
-      throw new Error(
-        `${accountConfigDir(account)} was not ${done}: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${away.after} ms).`
-      );
-    case "answered":
-      if (away.value) {
-        throw new Error(
-          `${accountConfigDir(account)} was not ${done}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
-        );
-      }
-      return;
-    default:
-      unhandled("read", away);
+  if (away) {
+    return yield* new NotStarted({
+      message: `${accountConfigDir(account)} was not ${done}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`,
+    });
   }
-};
+});
 
 /** How long a check's one turn may take to end. */
 const CHECK_TIMEOUT_MS = 90_000;
@@ -659,12 +738,51 @@ const CHECK_PROMPT = "Reply with OK.";
  * answered nor was refused in {@link CHECK_TIMEOUT_MS} (or never started),
  * which says nothing of the account.
  */
-export const checkAccount = async (account: string): Promise<AccountCheck> => {
-  await notLockedAway(account, "checked");
-  const handle = query({
+export const checkAccount = (account: string): Promise<AccountCheck> =>
+  Effect.runPromise(accountCheck(account));
+
+/** Another module's promise step: its rejection kept as it is, for the promise edge to give on. */
+const asIs = <A>(run: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: run, catch: (error) => error });
+
+/** Claude Code that gave no answer within a read's time: its words say which read. */
+class ClaudeUnanswered extends Schema.TaggedError<ClaudeUnanswered>()(
+  "ClaudeUnanswered",
+  { message: Schema.String }
+) {}
+
+/** A read's "no answer in time" among failures of any shape (another module's rejection, {@link asIs}). */
+const isUnanswered = (error: unknown): error is Unanswered =>
+  error instanceof Unanswered;
+
+/** A session of the agent SDK held for one read: closed when the read ends, however it ends. */
+const heldQuery = (
+  params: Parameters<typeof query>[0]
+): Effect.Effect<ReturnType<typeof query>, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => query(params)),
+    (handle) => Effect.sync(() => handle.close())
+  );
+
+/** A held session's initialize response within {@link PROBE_TIMEOUT_MS}; past it, `late` is the failure. */
+const initialized = (handle: ReturnType<typeof query>, late: string) =>
+  boundedRead(
+    PROBE_TIMEOUT_MS,
+    asIs(() => handle.initializationResult())
+  ).pipe(
+    Effect.catchIf(isUnanswered, () =>
+      Effect.fail(new ClaudeUnanswered({ message: late }))
+    )
+  );
+
+/** {@link checkAccount}'s run, its promise edge. */
+const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
+  yield* startable(account, "checked");
+  const executable = yield* asIs(claudeToStart);
+  const handle = yield* heldQuery({
     prompt: CHECK_PROMPT,
     options: {
-      pathToClaudeCodeExecutable: await claudeToStart(),
+      pathToClaudeCodeExecutable: executable,
       env: envFor(account),
       settingSources: [],
       strictMcpConfig: true,
@@ -677,8 +795,9 @@ export const checkAccount = async (account: string): Promise<AccountCheck> => {
       systemPrompt: CHECK_PROMPT,
     },
   });
-  try {
-    const read = await readWithin(CHECK_TIMEOUT_MS, async () => {
+  return yield* boundedRead(
+    CHECK_TIMEOUT_MS,
+    asIs(async (): Promise<AccountCheck> => {
       for await (const message of handle) {
         if (
           message.type === "assistant" &&
@@ -686,7 +805,7 @@ export const checkAccount = async (account: string): Promise<AccountCheck> => {
           message.error
         ) {
           return {
-            kind: "error" as const,
+            kind: "error",
             error: message.error,
             text: message.message.content
               .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -695,7 +814,7 @@ export const checkAccount = async (account: string): Promise<AccountCheck> => {
         }
         if (message.type === "result") {
           if (message.subtype === "success" && !message.is_error) {
-            return { kind: "answered" as const };
+            return { kind: "answered" };
           }
           throw new Error(
             `Claude Code ended the check's turn without an answer (${message.subtype})`
@@ -703,21 +822,17 @@ export const checkAccount = async (account: string): Promise<AccountCheck> => {
         }
       }
       throw new Error("Claude Code ended before the check's turn did");
-    });
-    switch (read.kind) {
-      case "unanswered":
-        throw new Error(
-          `Claude Code did not end the check's turn within ${CHECK_TIMEOUT_MS / 1000}s`
-        );
-      case "answered":
-        return read.value;
-      default:
-        unhandled("read", read);
-    }
-  } finally {
-    handle.close();
-  }
-};
+    })
+  ).pipe(
+    Effect.catchIf(isUnanswered, () =>
+      Effect.fail(
+        new ClaudeUnanswered({
+          message: `Claude Code did not end the check's turn within ${CHECK_TIMEOUT_MS / 1000}s`,
+        })
+      )
+    )
+  );
+}, Effect.scoped);
 
 /**
  * One dir's initialize response, read by a session that never takes a turn:
@@ -729,12 +844,17 @@ export const checkAccount = async (account: string): Promise<AccountCheck> => {
  * login keychain ({@link lockedAway}): it throws that sentence. Its identity
  * carries the organization id the dir's `auth status` names.
  */
-export const probeAccount = async (account: string): Promise<AccountProbe> => {
-  await notLockedAway(account, "probed");
-  const handle = query({
+export const probeAccount = (account: string): Promise<AccountProbe> =>
+  Effect.runPromise(accountProbe(account));
+
+/** {@link probeAccount}'s run, its promise edge. */
+const accountProbe = Effect.fn("accountProbe")(function* (account: string) {
+  yield* startable(account, "probed");
+  const executable = yield* asIs(claudeToStart);
+  const handle = yield* heldQuery({
     prompt: idle,
     options: {
-      pathToClaudeCodeExecutable: await claudeToStart(),
+      pathToClaudeCodeExecutable: executable,
       env: envFor(account),
       settingSources: [],
       strictMcpConfig: true,
@@ -742,40 +862,34 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
       persistSession: false,
     },
   });
-  try {
-    const read = await readWithin(PROBE_TIMEOUT_MS, () =>
-      handle.initializationResult()
-    );
-    let init: Awaited<ReturnType<typeof handle.initializationResult>>;
-    switch (read.kind) {
-      case "unanswered":
-        throw new Error(
-          `Claude Code did not answer initialize within ${PROBE_TIMEOUT_MS / 1000}s`
-        );
-      case "answered":
-        init = read.value;
-        break;
-      default:
-        unhandled("read", read);
-    }
-    // Who it is, keyed on its organization's id, which only `auth status`
-    // names: read now, so the id is this login's ({@link dirIdentity}).
-    await readAccount(account);
-    const identity = dirIdentity(
-      accountConfigDir(account),
-      identityOf(init.account)
-    );
-    return {
-      models: init.models,
-      ...(identity ? { identity } : {}),
-      ...(init.account.subscriptionType
-        ? { subscriptionType: init.account.subscriptionType }
-        : {}),
-    };
-  } finally {
-    handle.close();
-  }
-};
+  const init = yield* initialized(
+    handle,
+    `Claude Code did not answer initialize within ${PROBE_TIMEOUT_MS / 1000}s`
+  );
+  // Who it is, keyed on its organization's id, which only `auth status`
+  // names: read now, so the id is this login's ({@link dirIdentity}).
+  yield* asIs(() => readAccount(account));
+  const identity = dirIdentity(
+    accountConfigDir(account),
+    identityOf(init.account)
+  );
+  return {
+    models: init.models,
+    ...(identity ? { identity } : {}),
+    ...(init.account.subscriptionType
+      ? { subscriptionType: init.account.subscriptionType }
+      : {}),
+  } satisfies AccountProbe;
+}, Effect.scoped);
+
+/** What decides a session's `/` menu in a folder (claude.ts `folderLaunch`). */
+interface FolderLaunch {
+  additionalDirectories: string[];
+  extraArgs: Record<string, string | null>;
+  model?: string;
+  plugins?: { path: string; type: "local" }[];
+  settings: Record<string, unknown>;
+}
 
 /**
  * The `/` menu a Claude session started in `cwd` on `account` (none: the
@@ -791,25 +905,28 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
  * of the folder's or the fleet's; an MCP server's prompts join a session's
  * list as its servers connect (`commands_changed`).
  */
-export const folderCommands = async (
+export const folderCommands = (
   cwd: string,
   account: string | undefined,
-  launch: {
-    additionalDirectories: string[];
-    extraArgs: Record<string, string | null>;
-    model?: string;
-    plugins?: { path: string; type: "local" }[];
-    settings: Record<string, unknown>;
-  }
-): Promise<SlashCommand[]> => {
+  launch: FolderLaunch
+): Promise<SlashCommand[]> =>
+  Effect.runPromise(commandsOfFolder(cwd, account, launch));
+
+/** {@link folderCommands}'s run, its promise edge. */
+const commandsOfFolder = Effect.fn("commandsOfFolder")(function* (
+  cwd: string,
+  account: string | undefined,
+  launch: FolderLaunch
+) {
   if (account) {
-    await notLockedAway(account, "read for its commands");
+    yield* startable(account, "read for its commands");
   }
-  const handle = query({
+  const executable = yield* asIs(claudeToStart);
+  const handle = yield* heldQuery({
     prompt: idle,
     options: {
       cwd,
-      pathToClaudeCodeExecutable: await claudeToStart(),
+      pathToClaudeCodeExecutable: executable,
       env: account ? envFor(account) : bareEnv(),
       ...launch,
       settings: { ...launch.settings, disableAllHooks: true },
@@ -818,24 +935,12 @@ export const folderCommands = async (
       persistSession: false,
     },
   });
-  try {
-    const read = await readWithin(PROBE_TIMEOUT_MS, () =>
-      handle.initializationResult()
-    );
-    switch (read.kind) {
-      case "unanswered":
-        throw new Error(
-          `Claude Code did not list the commands of ${cwd} within ${PROBE_TIMEOUT_MS / 1000}s`
-        );
-      case "answered":
-        return read.value.commands;
-      default:
-        unhandled("read", read);
-    }
-  } finally {
-    handle.close();
-  }
-};
+  const init = yield* initialized(
+    handle,
+    `Claude Code did not list the commands of ${cwd} within ${PROBE_TIMEOUT_MS / 1000}s`
+  );
+  return init.commands;
+}, Effect.scoped);
 
 /**
  * Links the fleet's user layer (core paths/claude.ts) into an account's dir: each

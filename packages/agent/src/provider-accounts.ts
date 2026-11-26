@@ -32,7 +32,9 @@ import {
   providersOpenedBy,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Bounded } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import { descriptorOf } from "@cawco/core/harness/kinds";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
@@ -59,6 +61,17 @@ import type {
   OAuthCredential,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import {
+  Cache,
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Predicate,
+  Schema,
+} from "effect";
 import { z } from "zod";
 import { removeAccountDir } from "./accounts";
 import type { AgentPorts, OpencodeOwnCredential } from "./agent-ports";
@@ -228,7 +241,7 @@ class AccountStore implements CredentialStore {
   modify(
     providerId: string,
     fn: (current: Credential | undefined) => Promise<Credential | undefined>,
-    _options?: AuthOperationOptions
+    options?: AuthOperationOptions
   ): Promise<Credential | undefined> {
     if (providerId !== this.#provider) {
       return Promise.reject(
@@ -237,11 +250,18 @@ class AccountStore implements CredentialStore {
         )
       );
     }
-    return serial(this.#account, async () => {
-      const current = readHeld(this.#account);
+    const account = this.#account;
+    const change = Effect.gen(function* () {
+      const current = readHeld(account);
       const was =
         current?.provider === providerId ? current.credential : undefined;
-      const next = await fn(was);
+      // pi-ai's refresh, when it is one (auth/resolve.js
+      // `refreshStoredOAuthCredential`): inside the account's turn, so two
+      // asks never both spend one refresh token.
+      const next = yield* Effect.tryPromise({
+        try: () => fn(was),
+        catch: (error) => error,
+      });
       // pi-ai's refresh answers its own fields only: who the sign-in is
       // stays on it while it is the same grant (the same refresh token; a
       // Copilot refresh keeps its GitHub token). A new sign-in written over
@@ -256,13 +276,22 @@ class AccountStore implements CredentialStore {
           ? { ...next, [IDENTITY]: kept }
           : next;
       if (written !== undefined) {
-        await writeHeld(this.#account, {
-          provider: providerId,
-          credential: written,
+        yield* Effect.tryPromise({
+          try: () =>
+            writeHeld(account, { provider: providerId, credential: written }),
+          catch: (error) => error,
         });
       }
       return written ?? current?.credential;
     });
+    // The promise edge of the account's read, change and write: one turn of
+    // its lock, whose wait `options.signal` may let go of (pi-ai's "signal
+    // cancels only the wait for the lock"); from the read to the write
+    // nothing cuts it, since a refresh may already have rotated the token.
+    return Effect.runPromise(
+      writing.withLock(account, Effect.uninterruptible(change)),
+      options?.signal ? { signal: options.signal } : undefined
+    );
   }
 
   delete(providerId: string, _options?: AuthOperationOptions): Promise<void> {
@@ -274,73 +303,194 @@ class AccountStore implements CredentialStore {
   }
 }
 
-const runtimes = new Map<string, Promise<ModelRuntime>>();
+/**
+ * The agent's pi-ai runtime over each account's store, by account and
+ * provider, kept once made; one that failed to be made is not kept, and
+ * the next ask makes it again.
+ */
+const runtimes = Effect.runSync(
+  Cache.makeWith(
+    (key: string) => {
+      const [accountId = "", provider = ""] = key.split("\u0000");
+      return Effect.tryPromise({
+        try: () =>
+          ModelRuntime.create({
+            refreshOnCreate: false,
+            credentials: new AccountStore(accountId, provider),
+          }),
+        catch: (error) => error,
+      });
+    },
+    {
+      capacity: Number.POSITIVE_INFINITY,
+      timeToLive: (exit) =>
+        Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,
+    }
+  )
+);
 
 /** The agent's pi-ai runtime over one account's store: its login, refresh and request auth. */
-const runtimeOf = (accountId: string, provider: string) => {
-  const key = `${accountId}\u0000${provider}`;
-  let runtime = runtimes.get(key);
-  if (!runtime) {
-    runtime = ModelRuntime.create({
-      refreshOnCreate: false,
-      credentials: new AccountStore(accountId, provider),
-    });
-    runtime.catch(() => runtimes.delete(key));
-    runtimes.set(key, runtime);
-  }
-  return runtime;
-};
+const runtimeFor = (
+  accountId: string,
+  provider: string
+): Effect.Effect<ModelRuntime, unknown> =>
+  Cache.get(runtimes, `${accountId}\u0000${provider}`);
+
+/** The promise edge of {@link runtimeFor}. */
+const runtimeOf = (
+  accountId: string,
+  provider: string
+): Promise<ModelRuntime> => Effect.runPromise(runtimeFor(accountId, provider));
 
 /** How long before its expiry an OAuth credential is refreshed. */
 const FRESH_FOR_MS = 15 * 60_000;
+
+/** A refresh the provider answered with no (its refresh token refused, the grant revoked): the sign-in wants signing in again. */
+export class RefreshRefused extends Schema.TaggedError<RefreshRefused>()(
+  "RefreshRefused",
+  { account: Schema.String, message: Schema.String, cause: Schema.Defect() }
+) {}
+
+/** A refresh that got no answer: pi-ai's own bound on it ran out, or the provider was not reached. Tried again later. */
+export class RefreshUnanswered extends Schema.TaggedError<RefreshUnanswered>()(
+  "RefreshUnanswered",
+  { account: Schema.String, message: Schema.String, cause: Schema.Defect() }
+) {}
+
+/** A lender's fresh access token the hub did not bring: the lender said no, or the store is no longer its borrowed sign-in. */
+export class LendRefused extends Schema.TaggedError<LendRefused>()(
+  "LendRefused",
+  { account: Schema.String, message: Schema.String }
+) {}
+
+/** A lender's fresh access token the hub brought no word of within {@link LEND_WAIT_MS}. */
+export class LendUnanswered extends Schema.TaggedError<LendUnanswered>()(
+  "LendUnanswered",
+  { account: Schema.String, message: Schema.String }
+) {}
+
+/** Why a refresh did not happen ({@link freshened}). */
+export type RefreshFailed =
+  RefreshRefused | RefreshUnanswered | LendRefused | LendUnanswered;
+
+/**
+ * Whether a refresh's failure is no answer: anywhere along its causes a
+ * timeout or an abort (pi-ai bounds the refresh with
+ * `AbortSignal.timeout`), or a system error with a code (a connection
+ * refused or reset, a name not resolved). Anything else is the provider's
+ * answer.
+ */
+const unansweredCause = (error: unknown): boolean => {
+  let at: unknown = error;
+  for (let depth = 0; depth < 8 && at !== undefined; depth += 1) {
+    if (
+      at instanceof Error &&
+      (at.name === "TimeoutError" || at.name === "AbortError")
+    ) {
+      return true;
+    }
+    if (Predicate.hasProperty(at, "code") && Predicate.isString(at.code)) {
+      return true;
+    }
+    at = Predicate.hasProperty(at, "cause") ? at.cause : undefined;
+  }
+  return false;
+};
+
+/** A refresh's failure, typed as an answer or none, its words kept. */
+const refreshFailed =
+  (account: string) =>
+  (cause: unknown): RefreshRefused | RefreshUnanswered => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return unansweredCause(cause)
+      ? new RefreshUnanswered({ account, message, cause })
+      : new RefreshRefused({ account, message, cause });
+  };
 
 /**
  * Refreshes the account's OAuth credential through pi-ai's own refresh when
  * it has less than {@link FRESH_FOR_MS} left; a key, or a credential with
  * time left, is left as it is. Every refresh of every account goes through
- * here, one at a time per account. A borrowed sign-in is never refreshed
- * here: a fresh access token is asked of its lender ({@link borrowFresh}).
- * `periodic`: asked by a timer, not by something that needs the sign-in now.
+ * here, one at a time per account: pi-ai refreshes inside the store's
+ * `modify`, which holds the account's turn of {@link writing}. A borrowed
+ * sign-in is never refreshed here: a fresh access token is asked of its
+ * lender ({@link borrowFresh}). `periodic`: asked by a timer, not by
+ * something that needs the sign-in now.
  */
-export const freshen = async (
+export const freshened = Effect.fn("freshened")(function* (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">,
   periodic = false
-): Promise<void> => {
+): Effect.fn.Return<void, RefreshFailed> {
   const held = readHeld(accountId);
   if (held?.credential.type !== "oauth") {
     return;
   }
-  if (held.credential.expires - Date.now() > FRESH_FOR_MS) {
+  if (
+    held.credential.expires - (yield* Clock.currentTimeMillis) >
+    FRESH_FOR_MS
+  ) {
     return;
   }
   const lender = lenderOf(held.credential);
   if (lender) {
-    await borrowFresh(
+    return yield* borrowFresh(
       accountId,
       lender,
       held.credential.access,
       periodic,
       ports
     );
-    return;
   }
-  const runtime = await runtimeOf(accountId, held.provider);
-  await runtime.getAuth(held.provider, { minOAuthValidityMs: FRESH_FOR_MS });
+  const runtime = yield* runtimeFor(accountId, held.provider).pipe(
+    Effect.mapError(refreshFailed(accountId))
+  );
+  yield* Effect.tryPromise({
+    try: () =>
+      runtime.getAuth(held.provider, { minOAuthValidityMs: FRESH_FOR_MS }),
+    catch: refreshFailed(accountId),
+  });
+});
+
+/** The promise edge of {@link freshened}: it rejects with the typed failure, whose words are the refresh's own. */
+export const freshen = (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">,
+  periodic = false
+): Promise<void> => Effect.runPromise(freshened(accountId, ports, periodic));
+
+/** How a refresh that did not happen is said in the log. */
+const REFRESH_FAILED_SAID: Record<RefreshFailed["_tag"], string> = {
+  RefreshRefused: "refresh refused",
+  RefreshUnanswered: "refresh got no answer",
+  LendRefused: "lend refused",
+  LendUnanswered: "lend got no answer",
 };
 
-/** Keeps every OAuth credential on the machine fresh; a failure is said and tried again next time. */
-export const freshenAll = async (
+/** Keeps every OAuth credential on the machine fresh, one after another; a failure is said and tried again next time. */
+const freshenEvery = Effect.fn("freshenEvery")(function* (
   ports: Pick<AgentPorts, "borrowAsk">
-): Promise<void> => {
-  for (const account of credentialAccountIds()) {
-    await freshen(account, ports, true).catch((error: unknown) =>
-      console.warn(
-        `[accounts] ${account}: refresh failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
-  }
-};
+) {
+  yield* Effect.forEach(
+    credentialAccountIds(),
+    (account) =>
+      freshened(account, ports, true).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            console.warn(
+              `[accounts] ${account}: ${REFRESH_FAILED_SAID[error._tag]}: ${error.message}`
+            )
+          )
+        )
+      ),
+    { discard: true }
+  );
+});
+
+/** The promise edge of {@link freshenEvery}. */
+export const freshenAll = (
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<void> => Effect.runPromise(freshenEvery(ports));
 
 // ── Who a credential is ──────────────────────────────────────────────────
 
@@ -404,54 +554,68 @@ const GITHUB_IDENTITY_MS = 15_000;
 /** GitHub's answer to who a token is: the login is all that is read. */
 const GITHUB_USER = z.object({ login: z.unknown() });
 
-const githubIdentity = async (
+/** Who a Copilot sign-in is, not read from GitHub: no token to ask with, a refusal, no answer in time, or no user named. */
+class IdentityUnread extends Schema.TaggedError<IdentityUnread>()(
+  "IdentityUnread",
+  { message: Schema.String }
+) {}
+
+const githubIdentity = Effect.fn("githubIdentity")(function* (
   credential: OAuthCredential
-): Promise<AccountIdentity> => {
+) {
   const domain = githubDomain(credential);
   const token = credential.refresh;
   if (!token) {
-    throw new Error("The Copilot sign-in holds no GitHub token.");
-  }
-  const read = await readWithin(GITHUB_IDENTITY_MS, async (signal) => {
-    const response = await fetch(`https://api.${domain}/user`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "CawCo",
-        ...GITHUB_API_VERSION_HEADER,
-      },
-      signal,
+    return yield* new IdentityUnread({
+      message: "The Copilot sign-in holds no GitHub token.",
     });
-    if (!response.ok) {
-      throw new Error(
-        `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
-      );
-    }
-    return GITHUB_USER.parse(await response.json());
-  });
-  let user: z.infer<typeof GITHUB_USER>;
-  switch (read.kind) {
-    case "answered":
-      user = read.value;
-      break;
-    case "unanswered":
-      throw new Error(
-        `GitHub (${domain}) did not answer within ${GITHUB_IDENTITY_MS / 1000} s when asked who the Copilot sign-in is.`
-      );
-    default:
-      unhandled("read", read);
   }
+  const user = yield* boundedRead(
+    GITHUB_IDENTITY_MS,
+    Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(`https://api.${domain}/user`, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "User-Agent": "CawCo",
+            ...GITHUB_API_VERSION_HEADER,
+          },
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(
+            `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
+          );
+        }
+        return GITHUB_USER.parse(await response.json());
+      },
+      catch: (cause) =>
+        new IdentityUnread({
+          message: cause instanceof Error ? cause.message : String(cause),
+        }),
+    })
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new IdentityUnread({
+          message: `GitHub (${domain}) did not answer within ${GITHUB_IDENTITY_MS / 1000} s when asked who the Copilot sign-in is.`,
+        })
+      )
+    )
+  );
   if (typeof user.login !== "string" || !user.login) {
-    throw new Error(
-      `GitHub (${domain}) named no user for the Copilot sign-in.`
-    );
+    return yield* new IdentityUnread({
+      message: `GitHub (${domain}) named no user for the Copilot sign-in.`,
+    });
   }
   return providerIdentity(user.login, `github:${domain}`);
-};
+});
 
 /**
  * The credential with who it is kept on it, read from the provider where its
- * token names nobody: Copilot's, from GitHub. Any other as it is.
+ * token names nobody: Copilot's, from GitHub ({@link githubIdentity}, run at
+ * its promise edge here). Any other as it is.
  */
 const withIdentity = async (
   provider: string,
@@ -460,7 +624,10 @@ const withIdentity = async (
   provider === "github-copilot" &&
   credential.type === "oauth" &&
   !keptIdentity(credential)
-    ? { ...credential, [IDENTITY]: await githubIdentity(credential) }
+    ? {
+        ...credential,
+        [IDENTITY]: await Effect.runPromise(githubIdentity(credential)),
+      }
     : credential;
 
 /** Who a credential is, as far as it says. */
@@ -568,93 +735,82 @@ const borrowedCredential = (
 /** How long the hub gets to bring a lender's fresh access token. */
 const LEND_WAIT_MS = 60_000;
 
-/** Asks waiting on the hub's answer, by request id. */
+/** Asks waiting on the hub's answer, by request id: settled by {@link accountLent}. */
 const lendWaits = new Map<
   string,
   {
     accountId: string;
+    answered: Deferred.Deferred<void, LendRefused>;
     lender: string;
-    settle: (outcome: Error | undefined) => void;
   }
 >();
 /** The ask under way per account: callers at once share it. */
-const asking = new Map<string, Promise<void>>();
+const asking = makeJoin<string, void, LendRefused | LendUnanswered>();
 /**
  * Why the last ask for each account failed, with the access token it was
  * asked for: a timer does not ask again for the same token
- * ({@link freshen}'s `periodic`), so a lender that is away is said once, not
- * every minute. Something that needs the sign-in now asks again.
+ * ({@link freshened}'s `periodic`), so a lender that is away is said once,
+ * not every minute. Something that needs the sign-in now asks again.
  */
 const lendRefused = new Map<string, { access: string; why: string }>();
 
 /**
+ * One ask of the hub for a lender's fresh access token: sent, and its
+ * answer waited for ({@link accountLent}); the wait is dropped however it
+ * ends.
+ */
+const askLender = (
+  accountId: string,
+  lender: string,
+  { borrowAsk }: Pick<AgentPorts, "borrowAsk">
+): Effect.Effect<void, LendRefused> =>
+  Effect.suspend(() => {
+    const requestId = randomUUID();
+    const answered = Deferred.makeUnsafe<void, LendRefused>();
+    lendWaits.set(requestId, { accountId, lender, answered });
+    borrowAsk({ kind: "account_borrow", accountId, lender, requestId });
+    return Deferred.await(answered).pipe(
+      Effect.ensuring(Effect.sync(() => lendWaits.delete(requestId)))
+    );
+  });
+
+/**
  * A borrowed sign-in near its expiry: a fresh access token asked of its
- * lender through the hub, written into the account's store when it comes.
+ * lender through the hub, written into the account's store when it comes,
+ * within {@link LEND_WAIT_MS}.
  */
 const borrowFresh = (
   accountId: string,
   lender: string,
   access: string,
   periodic: boolean,
-  { borrowAsk }: Pick<AgentPorts, "borrowAsk">
-): Promise<void> => {
-  const refused = lendRefused.get(accountId);
-  if (periodic && refused?.access === access) {
-    return Promise.resolve();
-  }
-  const under = asking.get(accountId);
-  if (under) {
-    return under;
-  }
-  const ask = readWithin(
-    LEND_WAIT_MS,
-    (signal) =>
-      new Promise<void>((resolve, reject) => {
-        const requestId = randomUUID();
-        signal.addEventListener("abort", () => lendWaits.delete(requestId), {
-          once: true,
-        });
-        lendWaits.set(requestId, {
-          accountId,
-          lender,
-          settle: (outcome) => {
-            lendWaits.delete(requestId);
-            if (outcome) {
-              reject(outcome);
-            } else {
-              resolve();
-            }
-          },
-        });
-        borrowAsk({ kind: "account_borrow", accountId, lender, requestId });
-      })
-  )
-    .then((read) => {
-      switch (read.kind) {
-        case "answered":
-          return;
-        case "unanswered":
-          throw new Error(
-            `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`
-          );
-        default:
-          unhandled("read", read);
-      }
-    })
-    .then(
-      () => {
-        lendRefused.delete(accountId);
-      },
-      (error: unknown) => {
-        const why = error instanceof Error ? error.message : String(error);
-        lendRefused.set(accountId, { access, why });
-        throw error instanceof Error ? error : new Error(why);
-      }
-    )
-    .finally(() => asking.delete(accountId));
-  asking.set(accountId, ask);
-  return ask;
-};
+  ports: Pick<AgentPorts, "borrowAsk">
+): Effect.Effect<void, LendRefused | LendUnanswered> =>
+  Effect.suspend(() => {
+    const refused = lendRefused.get(accountId);
+    if (periodic && refused?.access === access) {
+      return Effect.void;
+    }
+    return asking.run(
+      accountId,
+      boundedRead(LEND_WAIT_MS, askLender(accountId, lender, ports)).pipe(
+        Effect.catchTag("Unanswered", () =>
+          Effect.fail(
+            new LendUnanswered({
+              account: accountId,
+              message: `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`,
+            })
+          )
+        ),
+        Effect.tap(() => Effect.sync(() => lendRefused.delete(accountId))),
+        Effect.tapError((error) =>
+          Effect.sync(() =>
+            lendRefused.set(accountId, { access, why: error.message })
+          )
+        )
+      )
+    );
+  });
 
 /**
  * The hub's answer to a borrower: a lender's fresh access token written into
@@ -671,8 +827,15 @@ export const accountLent = async (
   if (!target) {
     return { written: false };
   }
+  const settle = (outcome: Effect.Effect<void, LendRefused>) => {
+    if (wait) {
+      Deferred.doneUnsafe(wait.answered, outcome);
+    }
+  };
   if ("error" in answer) {
-    wait?.settle(new Error(answer.error));
+    settle(
+      Effect.fail(new LendRefused({ account: target, message: answer.error }))
+    );
     return { written: false };
   }
   const written = await serial(target, async () => {
@@ -695,11 +858,14 @@ export const accountLent = async (
   });
   if (written) {
     lendRefused.delete(target);
-    wait?.settle(undefined);
+    settle(Effect.void);
   } else {
-    wait?.settle(
-      new Error(
-        `Account ${target}'s store here is not a borrowed sign-in of ${answer.identity.email} any more.`
+    settle(
+      Effect.fail(
+        new LendRefused({
+          account: target,
+          message: `Account ${target}'s store here is not a borrowed sign-in of ${answer.identity.email} any more.`,
+        })
       )
     );
   }
@@ -761,101 +927,154 @@ const DEVICE_LABEL = /device|headless/iu;
 const RESOLVED_KEY = /^[!$]/u;
 const DEVICE_FLOW_TIMED_OUT = /Device flow timed out|expired/iu;
 
+/** A sign-in not started: the account holds another provider here, or it ended before it showed anything. */
+class SignInRefused extends Schema.TaggedError<SignInRefused>()(
+  "SignInRefused",
+  { message: Schema.String }
+) {}
+
+/** What a sign-in's run came to: signed in, its device code expired, or why it failed. */
+type SignInEnd = "done" | "expired" | Error;
+
 interface SignIn {
-  readonly abort: AbortController;
-  /** A code the sign-in asked to have pasted, when it asks for one. */
-  code?: (code: string) => void;
-  readonly done: Promise<"done" | "expired" | Error>;
+  /** A code the sign-in asks to have pasted, when it asks for one: given once. */
+  readonly code: Deferred.Deferred<string>;
   readonly expiresAt: number | null;
+  /** pi-ai's sign-in, running: interrupted, its signal aborts it. */
+  readonly login: Fiber.Fiber<SignInEnd>;
   readonly provider: string;
 }
 
 const signIns = new Map<string, SignIn>();
+
+/** Ends the account's sign-in, if one waits: its run interrupted, its entry gone. */
+const endSignIn = (accountId: string): void => {
+  const signIn = signIns.get(accountId);
+  signIns.delete(accountId);
+  if (signIn) {
+    Effect.runFork(Fiber.interrupt(signIn.login));
+  }
+};
+
+/**
+ * pi-ai's own OAuth sign-in for `provider` into the account's store, run on
+ * a fiber of its own that outlives this call: it waits on the person. Its
+ * challenge (a device code, or a link) is said on `shown`; a code it asks to
+ * have pasted is read from `code`.
+ */
+const runLogin = (
+  runtime: ModelRuntime,
+  provider: string,
+  shown: Deferred.Deferred<ProviderSigninChallenge>,
+  code: Deferred.Deferred<string>
+): Fiber.Fiber<SignInEnd> =>
+  Effect.runFork(
+    Effect.tryPromise({
+      try: (signal) =>
+        runtime.login(provider, "oauth", {
+          signal,
+          prompt: (prompt) => {
+            if (prompt.type === "select") {
+              const device = prompt.options.find(
+                (option) =>
+                  DEVICE_OPTION.test(option.id) ||
+                  DEVICE_LABEL.test(option.label)
+              );
+              return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
+            }
+            if (prompt.type === "manual_code") {
+              // The promise edge of the wait for the pasted code.
+              return Effect.runPromise(Deferred.await(code));
+            }
+            // A question the sign-in asks with a default (Copilot's enterprise
+            // domain): the default.
+            return Promise.resolve("");
+          },
+          notify: (event) => {
+            if (event.type === "device_code") {
+              Deferred.doneUnsafe(
+                shown,
+                Effect.succeed({
+                  verificationUrl: event.verificationUri,
+                  userCode: event.userCode,
+                  expiresAt:
+                    Date.now() + (event.expiresInSeconds ?? 900) * 1000,
+                })
+              );
+            } else if (event.type === "auth_url") {
+              Deferred.doneUnsafe(shown, Effect.succeed({ url: event.url }));
+            }
+          },
+        }),
+      catch: (error): SignInEnd => {
+        const failed =
+          error instanceof Error ? error : new Error(String(error));
+        return DEVICE_FLOW_TIMED_OUT.test(failed.message) ? "expired" : failed;
+      },
+    }).pipe(
+      Effect.as<SignInEnd>("done"),
+      Effect.catch((ended) => Effect.succeed(ended))
+    )
+  );
+
+/** How a sign-in's run ended, an interrupted one as its own failure. */
+const endOf = (exit: Exit.Exit<SignInEnd>, provider: string): SignInEnd =>
+  Exit.isSuccess(exit)
+    ? exit.value
+    : new Error(`${provider}'s sign-in was ended before it finished.`);
 
 /**
  * Starts pi-ai's own OAuth sign-in for `provider` into the account's store:
  * its device-code method where it has one, so the person can finish it on
  * any device; else its link, after which they paste the code it ends on.
  */
-export const beginProviderLogin = async (
+const beginSignIn = Effect.fn("beginSignIn")(function* (
   accountId: string,
   provider: string
-): Promise<ProviderSigninChallenge> => {
-  signIns.get(accountId)?.abort.abort();
-  signIns.delete(accountId);
+) {
+  endSignIn(accountId);
   const held = readHeld(accountId);
   if (held && held.provider !== provider) {
-    throw new Error(
-      `This account holds ${held.provider} on this machine, not ${provider}.`
-    );
+    return yield* new SignInRefused({
+      message: `This account holds ${held.provider} on this machine, not ${provider}.`,
+    });
   }
-  const runtime = await runtimeOf(accountId, provider);
-  const abort = new AbortController();
-  let shown: (challenge: ProviderSigninChallenge) => void = () => undefined;
-  const challenge = new Promise<ProviderSigninChallenge>((resolve) => {
-    shown = resolve;
-  });
-  const signIn: { code?: (code: string) => void } = {};
-  const login = runtime.login(provider, "oauth", {
-    signal: abort.signal,
-    prompt: (prompt) => {
-      if (prompt.type === "select") {
-        const device = prompt.options.find(
-          (option) =>
-            DEVICE_OPTION.test(option.id) || DEVICE_LABEL.test(option.label)
-        );
-        return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
-      }
-      if (prompt.type === "manual_code") {
-        return new Promise<string>((resolve) => {
-          signIn.code = resolve;
-        });
-      }
-      // A question the sign-in asks with a default (Copilot's enterprise
-      // domain): the default.
-      return Promise.resolve("");
-    },
-    notify: (event) => {
-      if (event.type === "device_code") {
-        shown({
-          verificationUrl: event.verificationUri,
-          userCode: event.userCode,
-          expiresAt: Date.now() + (event.expiresInSeconds ?? 900) * 1000,
-        });
-      } else if (event.type === "auth_url") {
-        shown({ url: event.url });
-      }
-    },
-  });
-  const done = login.then(
-    () => "done" as const,
-    (error: unknown) => {
-      const failed = error instanceof Error ? error : new Error(String(error));
-      return DEVICE_FLOW_TIMED_OUT.test(failed.message)
-        ? ("expired" as const)
-        : failed;
-    }
+  const runtime = yield* runtimeFor(accountId, provider);
+  const shown = Deferred.makeUnsafe<ProviderSigninChallenge>();
+  const code = Deferred.makeUnsafe<string>();
+  const login = runLogin(runtime, provider, shown, code);
+  // Whichever comes first: the challenge, or the sign-in's end. Waiting on
+  // the end lets go of the wait alone; the sign-in runs on.
+  const first = yield* Effect.raceFirst(
+    Deferred.await(shown).pipe(Effect.map((said) => ({ challenge: said }))),
+    Fiber.await(login).pipe(
+      Effect.map((exit) => ({ ended: endOf(exit, provider) }))
+    )
   );
-  const first = await Promise.race([
-    challenge,
-    done.then((ended) => ({ ended })),
-  ]);
   if ("ended" in first) {
-    throw first.ended instanceof Error
-      ? first.ended
-      : new Error(`${provider}'s sign-in ended before it showed anything.`);
+    // pi-ai's own refusal as it said it, else that it ended unseen.
+    return yield* first.ended instanceof Error
+      ? Effect.fail(first.ended)
+      : new SignInRefused({
+          message: `${provider}'s sign-in ended before it showed anything.`,
+        });
   }
+  const { challenge } = first;
   signIns.set(accountId, {
-    abort,
-    done,
+    code,
+    login,
     provider,
-    expiresAt: "expiresAt" in first ? first.expiresAt : null,
-    get code() {
-      return signIn.code;
-    },
+    expiresAt: "expiresAt" in challenge ? challenge.expiresAt : null,
   });
-  return first;
-};
+  return challenge;
+});
+
+/** The promise edge of {@link beginSignIn}. */
+export const beginProviderLogin = (
+  accountId: string,
+  provider: string
+): Promise<ProviderSigninChallenge> =>
+  Effect.runPromise(beginSignIn(accountId, provider));
 
 /** A sign-in finished: who it is, kept or signed straight out as someone else's. */
 const settled = async (
@@ -903,21 +1122,22 @@ export const completeProviderLogin = async (
     return { state: "expired" };
   }
   if (code) {
-    signIn.code?.(code.trim());
+    Deferred.doneUnsafe(signIn.code, Effect.succeed(code.trim()));
   }
-  const read = await readWithin(COMPLETE_WAIT_MS, () => signIn.done);
-  let outcome: Awaited<typeof signIn.done>;
-  switch (read.kind) {
-    case "answered":
-      outcome = read.value;
-      break;
-    case "unanswered":
-      // Not finished yet: the sign-in still waits for the person.
-      return signIn.expiresAt === null || Date.now() < signIn.expiresAt
-        ? { state: "pending" }
-        : { state: "expired" };
-    default:
-      unhandled("read", read);
+  // Not finished yet within the wait: the sign-in still waits for the
+  // person, and runs on.
+  const outcome = await Effect.runPromise(
+    boundedRead(
+      COMPLETE_WAIT_MS,
+      Fiber.await(signIn.login).pipe(
+        Effect.map((exit) => endOf(exit, signIn.provider))
+      )
+    ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(undefined)))
+  );
+  if (outcome === undefined) {
+    return signIn.expiresAt === null || Date.now() < signIn.expiresAt
+      ? { state: "pending" }
+      : { state: "expired" };
   }
   signIns.delete(accountId);
   if (outcome === "expired") {
@@ -931,10 +1151,9 @@ export const completeProviderLogin = async (
 
 /** Ends every sign-in still waiting, for the daemon's exit. */
 export const endProviderSignIns = (): void => {
-  for (const signIn of signIns.values()) {
-    signIn.abort.abort();
+  for (const accountId of [...signIns.keys()]) {
+    endSignIn(accountId);
   }
-  signIns.clear();
 };
 
 /**
@@ -1147,7 +1366,9 @@ const piCredentialOf = (
 const opencodeCredentialFrom = (
   value: Record<string, unknown>
 ): HeldCredential | undefined => {
-  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const metadata = Predicate.isObject(value.metadata)
+    ? value.metadata
+    : undefined;
   if (
     value.key === OPENCODE_MARKER ||
     value.access === OPENCODE_MARKER ||
@@ -1595,19 +1816,22 @@ const dropStore = async (
   ports: Pick<AgentPorts, "opencodeAccounts">,
   signOut: boolean
 ): Promise<void> => {
-  signIns.get(accountId)?.abort.abort();
-  signIns.delete(accountId);
+  endSignIn(accountId);
   await carryOutOpencode(accountId, ports);
   const held = signOut ? readHeld(accountId) : undefined;
   // A borrowed sign-in is its lender's grant: dropped here, never signed out.
   if (held && !lenderOf(held.credential)) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
   }
-  for (const key of runtimes.keys()) {
-    if (key.startsWith(`${accountId}\u0000`)) {
-      runtimes.delete(key);
-    }
-  }
+  Effect.runSync(
+    Effect.forEach(
+      [...Effect.runSync(Cache.keys(runtimes))].filter((key) =>
+        key.startsWith(`${accountId}\u0000`)
+      ),
+      (key) => Cache.invalidate(runtimes, key),
+      { discard: true }
+    )
+  );
   await removeAccount(accountId);
 };
 
@@ -1677,9 +1901,6 @@ const OAUTH_METHODS: Readonly<Record<string, string>> = {
   "github-copilot": "device",
   xai: "device",
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** An OpenCode 2.0 credential (`Credential.CreateInput`'s `integrationID` and `value`). */
 export interface OpencodeCredential {
