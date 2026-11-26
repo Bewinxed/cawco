@@ -15,6 +15,7 @@
  * links its socket under a fixed `/tmp/codex-daemon-<uid>/` outside CawCo's
  * dirs.
  */
+
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { deniedToolsOn } from "@cawco/core/delegate-types";
 import type { SessionCredentialInstall } from "@cawco/core/harness";
@@ -86,6 +87,7 @@ import {
 import { commandEnv } from "./command-env";
 import { credentialControls } from "./credential-controls";
 import { sessionMemory } from "./session-memory";
+import { sessionOpened } from "./session-opened";
 import { listedSkillFiles } from "./skill-files";
 
 /** The machine's keepers as Codex's app-servers reach them. */
@@ -396,10 +398,17 @@ class CodexSession implements HarnessSession {
     this.#launchSkills = spec.skills ?? [];
   }
 
-  /** A thread this connection now follows. */
+  /**
+   * A thread this connection now follows, said as the session's `init`: the
+   * hub's word that the session is up (session-opened.ts).
+   */
   #adopted(thread: V2.Thread): void {
     this.sessionId = thread.id;
-    this.#ctx.session(thread.id);
+    sessionOpened(this.#ctx, (message) => this.#emit(message), thread.id, {
+      cwd: this.#ctx.cwd,
+      model: this.#model,
+      permissionMode: this.#mode,
+    });
   }
 
   /**

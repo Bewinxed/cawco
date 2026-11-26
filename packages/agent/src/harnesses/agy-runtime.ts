@@ -41,6 +41,7 @@
  *   again there at once; one that did ends naming it, and the next message
  *   goes to the new conversation.
  */
+
 import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
@@ -148,6 +149,7 @@ import {
   writtenResult,
 } from "./agy-transcript";
 import { credentialControls } from "./credential-controls";
+import { sessionOpened } from "./session-opened";
 
 /** A start's command, as the host was handed it. */
 type AgyStart = Extract<AgyHostCommand, { type: "start" }>;
@@ -631,19 +633,15 @@ class AgySession {
   /**
    * The conversation the session runs in, said, and CawCo's note of where it
    * runs kept (agy-notes.ts). Its `init` is the hub's word that the session
-   * is up, as pi's and OpenCode's say it (pi-runtime.ts, opencode.ts): the
-   * row reads running, its work item too, and the row names the
-   * conversation, a new one set aside included (hub session-signals.ts).
+   * is up, as every adapter's is (session-opened.ts): the row reads running,
+   * its work item too, and the row names the conversation, a new one set
+   * aside included (hub session-signals.ts).
    */
   #adopted(sessionId: string): void {
     this.sessionId = sessionId;
-    this.#ctx.session(sessionId);
-    this.#emit({
-      type: "system",
-      subtype: "init",
-      session_id: sessionId,
+    sessionOpened(this.#ctx, (message) => this.#emit(message), sessionId, {
       cwd: this.#start.spec.cwd,
-      ...(this.#model ? { model: this.#model } : {}),
+      model: this.#model,
       permissionMode: this.#mode,
     });
     const { accountId, dir } = this.#start.launch;

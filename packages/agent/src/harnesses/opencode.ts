@@ -277,6 +277,7 @@ import {
   turnWasOpen,
 } from "./opencode-session";
 import { opensTurn, toTranscript } from "./opencode-transcript";
+import { sessionOpened } from "./session-opened";
 
 /** A reattach's read the server did not answer in time: undecided, so the reattach tries again, within its budget (`#recover`). */
 class ReattachUnanswered extends Schema.TaggedError<ReattachUnanswered>()(
@@ -6640,14 +6641,10 @@ class OpencodeHarness implements Harness<"opencode"> {
       if (owner.procId !== slot.owner.active?.procId) {
         this.#handoffIdle().catch(console.warn);
       }
-      ctx.session(sessionId);
-      ctx.frame({
-        type: "system",
-        subtype: "init",
-        session_id: sessionId,
+      sessionOpened(ctx, (message) => ctx.frame(message), sessionId, {
         cwd: ctx.cwd,
-        ...(spec.model ? { model: spec.model } : {}),
-        ...(spec.permissionMode ? { permissionMode: spec.permissionMode } : {}),
+        model: spec.model,
+        permissionMode: spec.permissionMode,
       });
       session.sayEffort();
       detach(

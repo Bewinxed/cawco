@@ -133,6 +133,7 @@ import {
 } from "./pi-services";
 import { PI_ASKS_NOTHING, piOpenTurns } from "./pi-sessiond";
 import { sessionMemory } from "./session-memory";
+import { sessionOpened } from "./session-opened";
 
 type BashExec = BashOperations["exec"];
 
@@ -1400,11 +1401,7 @@ class PiSession implements HarnessSession {
     this.sessionId = session.sessionId;
     this.#answers.watch(session.agent);
     session.subscribe((event) => this.#handle(event));
-    ctx.session(session.sessionId);
-    ctx.frame({
-      type: "system",
-      subtype: "init",
-      session_id: session.sessionId,
+    sessionOpened(ctx, (message) => ctx.frame(message), session.sessionId, {
       cwd: ctx.cwd,
       ...(session.model ? { model: piModelValue(session.model) } : {}),
     });

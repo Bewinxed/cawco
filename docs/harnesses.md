@@ -161,8 +161,9 @@ a harness's own commands carry the session's identity (agent
 **Running.** A session reads running, and its work item too, on its
 `system`/`init` frame naming its conversation (hub
 `agent-socket/session-signals.ts`): Claude Code's CLI says it, and pi's,
-OpenCode's and Antigravity's adapters say it as each conversation opens
-(Antigravity: `agy-runtime.ts` `#adopted`).
+OpenCode's, Antigravity's and Codex's adapters say it as each conversation
+opens or is taken up again, through agent `harnesses/session-opened.ts`
+`sessionOpened`.
 
 **Permission modes and asks.** Whether it takes modes is descriptor
 `permissionModes`; which it takes, its `permissionModes` capability, drawn
