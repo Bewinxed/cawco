@@ -46,8 +46,10 @@ import type {
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { askWords } from "@cawco/core/words/asks";
 import { connectAnsweredWords } from "@cawco/core/words/connect-lines";
+import { Deferred, Effect } from "effect";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";
+import type { HubLifetimeShape } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
 
@@ -85,6 +87,8 @@ export interface ConnectAsksDeps {
    * named): its harness's answer, or none in time. Never rejects.
    */
   readonly heal: (actor: InstanceRow, server: string) => Promise<FleetMcpTook>;
+  /** The hub's lifetime, which a call waiting on the person's answer awaits it on. */
+  readonly lifetime: HubLifetimeShape;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: ArrivingAsk) => void;
   /** The fleet's MCP servers that sign in with OAuth and reach `actor`'s sessions, by name. */
@@ -94,9 +98,9 @@ export interface ConnectAsksDeps {
 }
 
 interface Waiter {
+  /** The call's answer, settled once: the person's, or its session's take after a sign-in. */
+  answer: Deferred.Deferred<ConnectAnswer, Error>;
   instanceId: string;
-  reject: (error: Error) => void;
-  resolve: (answer: ConnectAnswer) => void;
   server: string;
   /** The hub signed in to the server: the card is down, and the call waits for the session's take. */
   signedIn: boolean;
@@ -151,6 +155,16 @@ const refuseDenied = (server: string, denials: SessionDenials): void => {
  * server's tools are in the session's tool list, else refused in its
  * harness's words, or because its machine did not say.
  */
+/** Answers `waiter`'s call with `answer`. */
+const resolveWaiter = (waiter: Waiter, answer: ConnectAnswer): void => {
+  Deferred.doneUnsafe(waiter.answer, Effect.succeed(answer));
+};
+
+/** Answers `waiter`'s call with a refusal in `error`'s words. */
+const rejectWaiter = (waiter: Waiter, error: Error): void => {
+  Deferred.doneUnsafe(waiter.answer, Effect.fail(error));
+};
+
 const answerFromTake = (
   waiter: Waiter,
   took: FleetMcpTook,
@@ -162,10 +176,10 @@ const answerFromTake = (
       ? took.servers.find((one) => one.name === server)
       : undefined;
   if (!taken) {
-    waiter.reject(new Error(askWords.connectTakeUnanswered(server)));
+    rejectWaiter(waiter, new Error(askWords.connectTakeUnanswered(server)));
   } else if (taken.holds) {
     const now = facts(server);
-    waiter.resolve({
+    resolveWaiter(waiter, {
       outcome: "connected",
       server,
       as: now.as,
@@ -173,7 +187,7 @@ const answerFromTake = (
     });
   } else {
     const said = `${taken.status}${taken.error ? `, ${taken.error}` : ""}`;
-    waiter.reject(new Error(askWords.connectNotTaken(server, said)));
+    rejectWaiter(waiter, new Error(askWords.connectNotTaken(server, said)));
   }
 };
 
@@ -202,15 +216,15 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
       refuseSecondAsk(waiting, actor.id, "connect");
       const facts = deps.facts(server);
       const requestId = crypto.randomUUID();
-      const answered = new Promise<ConnectAnswer>((resolve, reject) => {
-        waiting.set(requestId, {
-          instanceId: actor.id,
-          resolve,
-          reject,
-          server,
-          signedIn: facts.signedIn,
-        });
+      const answer = Deferred.makeUnsafe<ConnectAnswer, Error>();
+      waiting.set(requestId, {
+        answer,
+        instanceId: actor.id,
+        server,
+        signedIn: facts.signedIn,
       });
+      // The promise edge of the wait for the call's answer.
+      const answered = deps.lifetime.run(Deferred.await(answer));
       if (facts.signedIn) {
         // Signed in already: no card, and the session's own reading of the
         // server answers, as a sign-in's take does ({@link taking}).
@@ -273,7 +287,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
       }
       waiting.delete(requestId);
       deps.settle(requestId);
-      waiter.resolve({
+      resolveWaiter(waiter, {
         outcome: "declined",
         server: waiter.server,
         words: result.message.trim(),
@@ -334,7 +348,8 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
           continue;
         }
         waiting.delete(requestId);
-        waiter.reject(
+        rejectWaiter(
+          waiter,
           new Error(
             waiter.signedIn
               ? askWords.connectTakeUnanswered(waiter.server)

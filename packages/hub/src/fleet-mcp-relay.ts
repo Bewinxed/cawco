@@ -1,15 +1,17 @@
 import { backoffWait } from "@cawco/core/backoff";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
+import { type Join, makeJoin } from "@cawco/core/effect/join";
 import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { Effect, Schema, Semaphore } from "effect";
 import { object, record, safeParse, string, unknown } from "valibot";
 import { z } from "zod";
+import type { HubLifetimeShape } from "./lifetime";
 
 /**
  * The fleet's sessions on one signed-in MCP server, as the upstream sees
@@ -125,25 +127,21 @@ export interface KeptSessions {
 }
 
 /** The upstream's own answer to a request the hub made for every session: relayed to whoever asked. */
-class Refused extends Error {
-  readonly status: number;
-  readonly text: string;
-  readonly contentType: string | null;
-  constructor(status: number, text: string, contentType: string | null) {
-    super(`The upstream answered HTTP ${status}.`);
-    this.status = status;
-    this.text = text;
-    this.contentType = contentType;
-  }
-}
+class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  contentType: Schema.NullOr(Schema.String),
+  message: Schema.String,
+  status: Schema.Number,
+  text: Schema.String,
+}) {}
 /** The upstream's JSON-RPC error to a request the hub made for every session. */
-class RpcError extends Error {
-  readonly error: unknown;
-  constructor(error: unknown) {
-    super("The upstream answered with an error.");
-    this.error = error;
-  }
-}
+class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
+  error: Schema.Unknown,
+  message: Schema.String,
+}) {}
+
+/** {@link RpcError} with the upstream's `error`. */
+const rpcError = (error: unknown): RpcError =>
+  new RpcError({ error, message: "The upstream answered with an error." });
 
 interface Lister {
   protocol: string;
@@ -167,6 +165,8 @@ interface Downstream {
 }
 
 interface ServerState {
+  /** The gate's one turn: while the upstream is limiting, its requests go through it one at a time, in the order they came. */
+  gate: Semaphore.Semaphore;
   generation: string;
   /** The last items each list method came to, to tell sessions when a fetch found them changed. */
   known: Map<string, unknown[]>;
@@ -174,10 +174,15 @@ interface ServerState {
   limited: boolean;
   listening?: AbortController;
   lister?: Promise<Lister>;
-  lists: Map<string, { at: number; listed: Promise<Listed> }>;
+  /** How many times each list method's kept items went: a fetch begun before is no longer this method's to keep or join. */
+  listGens: Map<string, number>;
+  /** Each list method's fetch under way, shared by every session that asks meanwhile, by method and {@link listGens}. */
+  listing: Join<string, Listed, unknown>;
+  /** Each list method's kept items, and when the fetch that found them began ({@link LISTING_TTL_MS}). */
+  lists: Map<string, { at: number; items: unknown[] }>;
   /** 429s in a row that named no wait. */
   misses: number;
-  queue: Promise<void>;
+  /** Requests waiting at the gate or holding its turn. */
   queued: number;
   sessions: Map<string, Downstream>;
   streams: Set<ReadableStreamDefaultController<Uint8Array>>;
@@ -191,16 +196,49 @@ interface ServerState {
  * every session: said to whoever asked as its own answer (504), never as the
  * upstream's refusal.
  */
-class NoAnswer extends Error {
-  constructor(after: number) {
-    super(
-      `The upstream MCP server did not answer within ${secondsOf(after)} s. Retry the request.`
-    );
-  }
-}
+class NoAnswer extends Schema.TaggedError<NoAnswer>()("NoAnswer", {
+  message: Schema.String,
+}) {}
+
+/** {@link NoAnswer} after `after` ms. */
+const noAnswer = (after: number): NoAnswer =>
+  new NoAnswer({
+    message: `The upstream MCP server did not answer within ${secondsOf(after)} s. Retry the request.`,
+  });
+
+/** A held request the upstream answered 429 again: its turn goes once more, after the gate's wait. */
+class Limited extends Schema.TaggedError<Limited>()("Limited", {}) {}
 
 /** An answer the gate let through, or the 429 that held it. */
 type Attempted<T> = { taken: T } | { limited: Headers };
+
+/** A promise step of the relay as an Effect, failing with whatever it threw. */
+const step = <A>(run: (signal: AbortSignal) => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: (error: unknown) => error });
+
+/** Fails with the asker's abort once it let go. */
+const stillAsked = (signal: AbortSignal | undefined) =>
+  Effect.try({
+    try: () => signal?.throwIfAborted(),
+    catch: (error: unknown) => error,
+  });
+
+/** How many times `method`'s kept items went ({@link ServerState.listGens}). */
+const listGen = (state: ServerState, method: string): number =>
+  state.listGens.get(method) ?? 0;
+
+/** `method`'s kept items go, and a fetch of it begun before is neither joined nor kept. */
+const forgetList = (state: ServerState, method: string): void => {
+  state.lists.delete(method);
+  state.listGens.set(method, listGen(state, method) + 1);
+};
+
+/** Every list's kept items go ({@link forgetList}). */
+const forgetLists = (state: ServerState): void => {
+  for (const method of Object.keys(LIST_METHODS)) {
+    forgetList(state, method);
+  }
+};
 
 const encoder = new TextEncoder();
 
@@ -249,11 +287,12 @@ const CARRIAGE_RETURN = /\r$/u;
 
 /** An upstream answer that is not a JSON-RPC message: relayed as it came. */
 const refused = async (response: Response) =>
-  new Refused(
-    response.status,
-    await response.text(),
-    response.headers.get("Content-Type")
-  );
+  new Refused({
+    status: response.status,
+    text: await response.text(),
+    contentType: response.headers.get("Content-Type"),
+    message: `The upstream answered HTTP ${response.status}.`,
+  });
 
 /** The `initialize` result of an answer, or the upstream's refusal of it. */
 const initialized = async (
@@ -264,7 +303,7 @@ const initialized = async (
     throw await refused(response);
   }
   if (reply?.error !== undefined || !reply?.result) {
-    throw new RpcError(
+    throw rpcError(
       reply?.error ?? { code: -32_603, message: "No initialize result." }
     );
   }
@@ -280,11 +319,13 @@ const rpcAnswer = (
 export class FleetMcpRelay {
   readonly #servers = new Map<string, ServerState>();
   readonly #kept: KeptSessions;
+  readonly #lifetime: HubLifetimeShape;
   #ids = 0;
   #pruned = 0;
 
-  constructor(kept: KeptSessions) {
+  constructor(kept: KeptSessions, lifetime: HubLifetimeShape) {
     this.#kept = kept;
+    this.#lifetime = lifetime;
     this.#prune();
   }
 
@@ -321,7 +362,7 @@ export class FleetMcpRelay {
     state.listening?.abort();
     state.listening = undefined;
     state.lister = undefined;
-    state.lists.clear();
+    forgetLists(state);
     state.known.clear();
     state.until = 0;
     state.misses = 0;
@@ -341,10 +382,12 @@ export class FleetMcpRelay {
         generation,
         until: 0,
         limited: false,
-        queue: Promise.resolve(),
+        gate: Semaphore.makeUnsafe(1),
         queued: 0,
         misses: 0,
+        listing: makeJoin<string, Listed, unknown>(),
         lists: new Map(),
+        listGens: new Map(),
         known: new Map(),
         sessions: new Map(),
         streams: new Set(),
@@ -381,6 +424,7 @@ export class FleetMcpRelay {
     }
     const opening = (async (): Promise<Lister> => {
       const { response, reply } = await upstreamRpc(
+        this.#lifetime,
         name,
         state,
         upstream,
@@ -403,6 +447,7 @@ export class FleetMcpRelay {
           ? result.protocolVersion
           : LATEST_PROTOCOL_VERSION;
       const told = await upstreamRpc(
+        this.#lifetime,
         name,
         state,
         upstream,
@@ -411,7 +456,7 @@ export class FleetMcpRelay {
       );
       await told.response.body?.cancel();
       const lister = { session, protocol, result };
-      listenForChanges(name, state, upstream, lister);
+      listenForChanges(this.#lifetime, name, state, upstream, lister);
       return lister;
     })();
     state.lister = opening;
@@ -423,7 +468,12 @@ export class FleetMcpRelay {
     return opening;
   }
 
-  /** One list for every session: fetched once however many ask, every page of it. */
+  /**
+   * One list for every session: fetched once however many ask, every page
+   * of it, and its items kept for {@link LISTING_TTL_MS} from the fetch's
+   * start. An answer that is the upstream's error is that ask's alone, and
+   * nothing is kept.
+   */
   #list(
     name: string,
     state: ServerState,
@@ -432,11 +482,13 @@ export class FleetMcpRelay {
   ): Promise<Listed> {
     const kept = state.lists.get(method);
     if (kept && Date.now() - kept.at < LISTING_TTL_MS) {
-      return kept.listed;
+      return Promise.resolve({ items: kept.items });
     }
     const key = LIST_METHODS[method];
-    const listed = this.#fetchList(name, state, upstream, method).then(
-      (answer) => {
+    const gen = listGen(state, method);
+    const at = Date.now();
+    const fetched = step(() =>
+      this.#fetchList(name, state, upstream, method).then((answer) => {
         if ("items" in answer) {
           const now = answer.items;
           const before = state.known.get(method);
@@ -447,20 +499,17 @@ export class FleetMcpRelay {
           if (before !== undefined && !Bun.deepEquals(before, now)) {
             broadcast(state, changedBy(method));
           }
+          if (listGen(state, method) === gen) {
+            state.lists.set(method, { at, items: now });
+          }
         }
         return answer;
-      }
+      })
     );
-    const entry = { at: Date.now(), listed };
-    state.lists.set(method, entry);
-    const drop = () => {
-      if (state.lists.get(method) === entry) {
-        state.lists.delete(method);
-      }
-    };
-    // Only a list is kept: an error is the upstream's answer to this ask alone.
-    listed.then((answer) => "error" in answer && drop(), drop);
-    return listed;
+    // The promise edge of the list's one fetch, joined by every session asking while it runs.
+    return this.#lifetime.run(
+      state.listing.run(`${method}\u0000${gen}`, fetched)
+    );
   }
 
   /** Every page of one list, on the lister's session; one whose session ended upstream opens a new one, once. */
@@ -477,6 +526,7 @@ export class FleetMcpRelay {
     let cursor: unknown;
     do {
       const { response, reply } = await upstreamRpc(
+        this.#lifetime,
         name,
         state,
         upstream,
@@ -533,6 +583,7 @@ export class FleetMcpRelay {
         return null;
       }
       const { response, reply } = await upstreamRpc(
+        this.#lifetime,
         name,
         state,
         upstream,
@@ -551,6 +602,7 @@ export class FleetMcpRelay {
       const result = await initialized(response, reply);
       const session = response.headers.get("Mcp-Session-Id");
       const told = await upstreamRpc(
+        this.#lifetime,
         name,
         state,
         upstream,
@@ -602,7 +654,7 @@ export class FleetMcpRelay {
     if (session) {
       headers.set("Mcp-Session-Id", session);
     }
-    const response = await sendUpstream(name, state, upstream, {
+    const response = await sendUpstream(this.#lifetime, name, state, upstream, {
       method: request.method,
       headers,
       body,
@@ -795,7 +847,7 @@ export class FleetMcpRelay {
       if (id) {
         this.#kept.delete(id);
       }
-      closeUpstream(name, state, upstream, downstream);
+      closeUpstream(this.#lifetime, name, state, upstream, downstream);
       return new Response(null, { status: 200 });
     }
     const local = single
@@ -825,6 +877,7 @@ export class FleetMcpRelay {
  * ends takes the lister with it, so the next list opens both again.
  */
 function listenForChanges(
+  lifetime: HubLifetimeShape,
   name: string,
   state: ServerState,
   upstream: Upstream,
@@ -840,7 +893,7 @@ function listenForChanges(
   headers.set("MCP-Protocol-Version", lister.protocol);
   let opened = false;
   (async () => {
-    const response = await sendUpstream(name, state, upstream, {
+    const response = await sendUpstream(lifetime, name, state, upstream, {
       method: "GET",
       headers,
       signal: control.signal,
@@ -866,13 +919,14 @@ function listenForChanges(
       state.listening = undefined;
       if (opened && !control.signal.aborted) {
         state.lister = undefined;
-        state.lists.clear();
+        forgetLists(state);
       }
     });
 }
 
 /** A closed session's upstream session closes too; nothing waits on it. */
 function closeUpstream(
+  lifetime: HubLifetimeShape,
   name: string,
   state: ServerState,
   upstream: Upstream,
@@ -887,7 +941,7 @@ function closeUpstream(
     if (!session) {
       return;
     }
-    const response = await sendUpstream(name, state, upstream, {
+    const response = await sendUpstream(lifetime, name, state, upstream, {
       method: "DELETE",
       headers: new Headers({ "Mcp-Session-Id": session }),
     });
@@ -902,13 +956,17 @@ function closeUpstream(
  * a herd released at once would only be refused again.
  */
 function sendUpstream(
+  lifetime: HubLifetimeShape,
   name: string,
   state: ServerState,
   upstream: Upstream,
   exchange: Exchange
 ): Promise<Response> {
-  return sendTaking(name, state, upstream, exchange, (response) =>
-    Promise.resolve(response)
+  // The promise edge of a request through the gate.
+  return lifetime.run(
+    sendTaking(name, state, upstream, exchange, (response) =>
+      Promise.resolve(response)
+    )
   );
 }
 
@@ -918,7 +976,8 @@ function sendUpstream(
  * may also carry list changes. Each attempt, its reply read included, has
  * {@link LISTER_TIMEOUT_MS}; none in that time is {@link NoAnswer}.
  */
-async function upstreamRpc(
+function upstreamRpc(
+  lifetime: HubLifetimeShape,
   name: string,
   state: ServerState,
   upstream: Upstream,
@@ -935,78 +994,82 @@ async function upstreamRpc(
   if (lister.protocol) {
     headers.set("MCP-Protocol-Version", lister.protocol);
   }
-  return await sendTaking(
-    name,
-    state,
-    upstream,
-    { method: "POST", headers, body: JSON.stringify(message) },
-    async (response) => {
-      if (message.id === undefined) {
-        await response.body?.cancel();
-        return { response };
-      }
-      if (!response.ok) {
-        // Its refusal is read later (`refused`): read whole now, inside the time.
-        return { response: await wholeResponse(response) };
-      }
-      if (!(
-        response.headers.get("Content-Type")?.includes("text/event-stream") &&
-        response.body
-      )) {
-        const reply = parse(await response.text());
-        return { response, reply: Array.isArray(reply) ? undefined : reply };
-      }
-      return {
-        response,
-        reply: await replyOn(name, state, response.body, message.id),
-      };
-    },
-    LISTER_TIMEOUT_MS
+  // The promise edge of a request through the gate.
+  return lifetime.run(
+    sendTaking(
+      name,
+      state,
+      upstream,
+      { method: "POST", headers, body: JSON.stringify(message) },
+      async (response) => {
+        if (message.id === undefined) {
+          await response.body?.cancel();
+          return { response };
+        }
+        if (!response.ok) {
+          // Its refusal is read later (`refused`): read whole now, inside the time.
+          return { response: await wholeResponse(response) };
+        }
+        if (!(
+          response.headers.get("Content-Type")?.includes("text/event-stream") &&
+          response.body
+        )) {
+          const reply = parse(await response.text());
+          return { response, reply: Array.isArray(reply) ? undefined : reply };
+        }
+        return {
+          response,
+          reply: await replyOn(name, state, response.body, message.id),
+        };
+      },
+      LISTER_TIMEOUT_MS
+    )
   );
 }
 
 /**
  * {@link sendUpstream}, with what is wanted of the answer read by `take` as part
  * of each attempt: inside `ms` when given, so an answer whose reply never
- * comes within it is {@link NoAnswer}.
+ * comes within it is {@link NoAnswer}. A request that meets the gate shut
+ * waits its turn ({@link ServerState.gate}), counted in `queued` from before
+ * it waits until its turn ends: the gate opens once none is left.
  */
-async function sendTaking<T>(
+function sendTaking<T>(
   name: string,
   state: ServerState,
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
   ms?: number
-): Promise<T> {
-  if (!state.limited) {
-    const taken = await attemptUpstream(
-      name,
-      state,
-      upstream,
-      exchange,
-      take,
-      ms
-    );
-    if (taken) {
-      return taken.taken;
+): Effect.Effect<T, unknown> {
+  return Effect.gen(function* () {
+    if (!state.limited) {
+      const taken = yield* attemptUpstream(
+        name,
+        state,
+        upstream,
+        exchange,
+        take,
+        ms
+      );
+      if (taken) {
+        return taken.taken;
+      }
     }
-  }
-  state.queued += 1;
-  const turn = state.queue.then(() =>
-    heldTurn(name, state, upstream, exchange, take, ms)
-  );
-  state.queue = turn.then(
-    () => undefined,
-    () => undefined
-  );
-  try {
-    return await turn;
-  } finally {
-    state.queued -= 1;
-    if (state.queued === 0) {
-      state.limited = false;
-    }
-  }
+    state.queued += 1;
+    return yield* state.gate
+      .withPermit(heldTurn(name, state, upstream, exchange, take, ms))
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            state.queued -= 1;
+            if (state.queued === 0) {
+              state.limited = false;
+            }
+          })
+        )
+      );
+  });
 }
 
 /** The message answering `id` on an event stream, read until it comes; the stream's notifications heard on the way. */
@@ -1084,24 +1147,29 @@ function tapListChanges(
   );
 }
 
-/** A held request's turn: sent after the wait, again after each 429. */
-async function heldTurn<T>(
+/**
+ * A held request's turn: sent once the gate's wait has passed, and again,
+ * after the wait the next 429 named, for as long as the upstream answers
+ * 429. The asker is looked at before each wait and after it: one that let
+ * go is not sent.
+ */
+function heldTurn<T>(
   name: string,
   state: ServerState,
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
   ms?: number
-): Promise<T> {
-  for (;;) {
-    exchange.signal?.throwIfAborted();
+): Effect.Effect<T, unknown> {
+  const turn = Effect.gen(function* () {
+    yield* stillAsked(exchange.signal);
     const wait = state.until - Date.now();
     if (wait > 0) {
       // Pacing, not a read: the gate's own wait, then the asker is looked at again.
-      await Bun.sleep(wait);
-      exchange.signal?.throwIfAborted();
+      yield* Effect.sleep(wait);
+      yield* stillAsked(exchange.signal);
     }
-    const taken = await attemptUpstream(
+    const taken = yield* attemptUpstream(
       name,
       state,
       upstream,
@@ -1109,10 +1177,12 @@ async function heldTurn<T>(
       take,
       ms
     );
-    if (taken) {
-      return taken.taken;
+    if (!taken) {
+      return yield* new Limited();
     }
-  }
+    return taken.taken;
+  });
+  return Effect.retry(turn, { while: (error) => error instanceof Limited });
 }
 
 /** The upstream said a list changed: the kept one goes, and every session hears it. */
@@ -1122,7 +1192,7 @@ function listChanged(name: string, state: ServerState, method: string): void {
     return;
   }
   for (const list of lists) {
-    state.lists.delete(list);
+    forgetList(state, list);
     state.known.delete(list);
   }
   console.info(`[fleet-mcp] ${name}: the upstream says ${method}`);
@@ -1213,22 +1283,26 @@ function broadcast(state: ServerState, method: string): void {
 }
 
 /**
- * One send, its answer taken by `take` (inside `ms` when given); undefined
- * when the upstream answered 429, the gate then holding its requests for
- * the wait it named.
+ * One send, its answer taken by `take` (inside `ms` when given, through the
+ * house's bounded read); undefined when the upstream answered 429, the gate
+ * then holding its requests for the wait it named. The asker letting go
+ * aborts the send.
  */
-async function attemptUpstream<T>(
+function attemptUpstream<T>(
   name: string,
   state: ServerState,
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
   ms?: number
-): Promise<{ taken: T } | undefined> {
-  const once = async (signal?: AbortSignal): Promise<Attempted<T>> => {
-    const response = await upstream(
-      signal ? { ...exchange, signal } : exchange
-    );
+): Effect.Effect<{ taken: T } | undefined, unknown> {
+  const once = step(async (signal): Promise<Attempted<T>> => {
+    const response = await upstream({
+      ...exchange,
+      signal: exchange.signal
+        ? AbortSignal.any([signal, exchange.signal])
+        : signal,
+    });
     if (response.status === 429) {
       await response.body?.cancel();
       return { limited: response.headers };
@@ -1237,39 +1311,31 @@ async function attemptUpstream<T>(
       state.misses = 0;
     }
     return { taken: await take(response) };
-  };
-  let attempted: Attempted<T>;
-  if (ms === undefined) {
-    attempted = await once();
-  } else {
-    const outcome = await readWithin(ms, once, {
-      ...(exchange.signal ? { signal: exchange.signal } : {}),
-    });
-    switch (outcome.kind) {
-      case "answered":
-        attempted = outcome.value;
-        break;
-      case "unanswered":
-        throw new NoAnswer(outcome.after);
-      default:
-        unhandled("read", outcome);
+  });
+  return Effect.gen(function* () {
+    const attempted =
+      ms === undefined
+        ? yield* once
+        : yield* boundedRead(ms, once).pipe(
+            Effect.mapError((error) =>
+              error instanceof Unanswered ? noAnswer(error.after) : error
+            )
+          );
+    if ("taken" in attempted) {
+      return attempted;
     }
-  }
-  if ("taken" in attempted) {
-    return attempted;
-  }
-  state.limited = true;
-  const named = namedWait(attempted.limited);
-  const hold = named ?? backoffWait(LIMITED_HOLDS, state.misses + 1);
-  if (named === undefined) {
-    state.misses += 1;
-  }
-  const until = Date.now() + hold;
-  if (until > state.until) {
-    state.until = until;
-    console.info(
-      `[fleet-mcp] ${name}: the upstream answered 429; its requests wait ${(hold / 1000).toFixed(1)} s (${named === undefined ? "backoff" : "its own wait"}), then go one at a time`
-    );
-  }
-  return undefined;
+    state.limited = true;
+    const named = namedWait(attempted.limited);
+    const hold = named ?? backoffWait(LIMITED_HOLDS, state.misses + 1);
+    if (named === undefined) {
+      state.misses += 1;
+    }
+    const until = Date.now() + hold;
+    if (until > state.until) {
+      state.until = until;
+      console.info(
+        `[fleet-mcp] ${name}: the upstream answered 429; its requests wait ${(hold / 1000).toFixed(1)} s (${named === undefined ? "backoff" : "its own wait"}), then go one at a time`
+      );
+    }
+  });
 }

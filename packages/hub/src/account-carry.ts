@@ -6,7 +6,7 @@ import {
   CONTROL_FORGET_PROVIDER_ACCOUNT,
 } from "@cawco/core/accounts/controls";
 import { RESTART_WAIT_CAP_MS, waitedOut } from "@cawco/core/binary-updates";
-import { detach } from "@cawco/core/detach";
+import { lookUntil } from "@cawco/core/effect/poll";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type {
@@ -22,11 +22,11 @@ import {
 } from "@cawco/core/session/controls";
 import { noticeWords } from "@cawco/core/words/notices";
 import { workWords } from "@cawco/core/words/work";
+import { Effect, type Fiber } from "effect";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { AccountLeave } from "./db/accounts";
 import { MOVE_ENDED_ORIGIN } from "./hub-words";
-import type { HubTimer } from "./lifetime";
 import type { Kept } from "./limit-decision";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
@@ -176,7 +176,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
         }
         continue;
       }
-      ctx.lifetime.cancel(laterWaits.get(row.id)?.timer);
+      laterWaits.get(row.id)?.wait.interruptUnsafe();
       laterWaits.delete(row.id);
       if (outcome?.state === "carried") {
         keepEnded(row.id, outcome.ended, ended);
@@ -208,13 +208,16 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
   /**
    * The moves held only by work a session's process holds for later (a
    * background task, a one-time wake-up: {@link Kept.later}), by instance id:
-   * since when each was first held, and its timer. Once it has waited out the
+   * since when each was first held, and its wait. Once it has waited out the
    * restart bound (core `waitedOut`, the rule auto-update waits by) it is
    * tried again with `endLater` ({@link endLaterNow}), which ends that work
    * with the process. A completion before then starts the turn whose end the
    * move takes, as it always has.
    */
-  const laterWaits = new Map<string, { since: number; timer: HubTimer }>();
+  const laterWaits = new Map<
+    string,
+    { since: number; wait: Fiber.Fiber<void> }
+  >();
   /** The rows whose next carry ends what their process holds for later: their wait is over. */
   const endLaterNow = new Set<string>();
 
@@ -227,21 +230,23 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     if (laterWaits.has(instanceId)) {
       return;
     }
-    laterWaits.set(instanceId, {
-      since,
-      timer: ctx.lifetime.after(
-        "account carry restart wait",
-        Math.max(0, since + RESTART_WAIT_CAP_MS - Date.now()),
-        () => {
-          laterWaits.delete(instanceId);
-          if (waitedOut(since)) {
-            detach(retryLaterMove(instanceId), "move past its wait");
-          } else {
-            waitForLater(instanceId, since);
-          }
-        }
-      ),
-    });
+    // Waited again while the clock says it is not yet out (a timer that
+    // ran early), then the move is carried.
+    const waitOut = Effect.suspend(() =>
+      Effect.sleep(Math.max(0, since + RESTART_WAIT_CAP_MS - Date.now()))
+    ).pipe(Effect.repeat({ until: () => waitedOut(since) }));
+    const wait = ctx.lifetime.fork(
+      "account carry restart wait",
+      waitOut.pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            laterWaits.delete(instanceId);
+          })
+        ),
+        Effect.andThen(Effect.promise(() => retryLaterMove(instanceId)))
+      )
+    );
+    laterWaits.set(instanceId, { since, wait });
   };
 
   /**
@@ -799,50 +804,59 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       ) {
         continue;
       }
-      detach(
-        ctx.callAgent(
-          machineId,
-          CONTROL_SLEEP,
-          [],
-          ctx.SLEEP_TIMEOUT_MS,
-          undefined,
-          row.id
-        ),
-        "sleep request"
+      ctx.lifetime.fork(
+        "sleep request",
+        Effect.promise(() =>
+          ctx.callAgent(
+            machineId,
+            CONTROL_SLEEP,
+            [],
+            ctx.SLEEP_TIMEOUT_MS,
+            undefined,
+            row.id
+          )
+        )
       );
     }
   };
-  /** Whether {@link leaveAccounts} is running: one at a time. */
-  let leavingNow = false;
-  let leaveTicker: HubTimer | undefined;
+  /** The tick that signs removed accounts out, while one is left ({@link tickLeaves}). */
+  let leaveTicker: Fiber.Fiber<unknown> | undefined;
   /**
    * Starts the tick that signs removed accounts out where processes kept
-   * them ({@link leaveAccounts}); it stops once none is left. A hub that
-   * starts with one in its database starts it at once.
+   * them ({@link leaveAccounts}): every `MOVE_TICK_MS` after the last pass
+   * ended, one pass at a time, the first a tick from now; it stops once
+   * none is left. A hub that starts with one in its
+   * database starts it at once.
    */
   const tickLeaves = (): void => {
-    leaveTicker ??= ctx.lifetime.every(
-      "account carry leaves tick",
-      ctx.MOVE_TICK_MS,
-      () => {
-        if (
-          ctx.db.accounts.leaves().length === 0 &&
-          ctx.pendingCodexLeaves().length === 0
-        ) {
-          ctx.lifetime.cancel(leaveTicker);
-          leaveTicker = undefined;
-          return;
-        }
-        if (leavingNow) {
-          return;
-        }
-        leavingNow = true;
-        leaveAccounts()
-          .catch(console.error)
-          .finally(() => {
-            leavingNow = false;
-          });
+    const pass = Effect.suspend(() => {
+      if (
+        ctx.db.accounts.leaves().length === 0 &&
+        ctx.pendingCodexLeaves().length === 0
+      ) {
+        return Effect.succeed(true);
       }
+      return Effect.tryPromise({
+        try: () => leaveAccounts(),
+        catch: (error) => error,
+      }).pipe(
+        Effect.catch((error) => Effect.sync(() => console.error(error))),
+        Effect.as(undefined)
+      );
+    });
+    if (leaveTicker !== undefined) {
+      return;
+    }
+    leaveTicker = ctx.lifetime.fork(
+      "account carry leaves tick",
+      Effect.sleep(ctx.MOVE_TICK_MS).pipe(
+        Effect.andThen(lookUntil({ every: ctx.MOVE_TICK_MS }, pass)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            leaveTicker = undefined;
+          })
+        )
+      )
     );
   };
 

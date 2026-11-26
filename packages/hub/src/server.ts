@@ -3112,6 +3112,7 @@ export const createServer = (
       };
     },
     facts: (server) => fleetMcp.askFacts(server),
+    lifetime,
     // Its session's own reading of the server, taken again if broken.
     heal: (actor, server) =>
       callAgent(

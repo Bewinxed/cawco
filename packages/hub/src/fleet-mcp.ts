@@ -1,11 +1,18 @@
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
+import {
+  type BackoffTries,
+  backoffSchedule,
+} from "@cawco/core/effect/backoff-schedule";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import {
   CAWCO_OAUTH_URL,
   type FleetMcpServer,
   type MachineFleetConfig,
 } from "@cawco/core/fleet";
 import type { ConnectAccess, ConnectAccessSet } from "@cawco/core/frames";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
@@ -21,12 +28,23 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import {
+  Clock,
+  Duration,
+  Effect,
+  type Exit,
+  Fiber,
+  Pull,
+  Ref,
+  Schedule,
+  Schema,
+} from "effect";
 import { problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { SIGN_IN_TAKEN } from "./db/mcp-servers";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 /**
@@ -174,16 +192,81 @@ type McpServerRow = NonNullable<ReturnType<DbShape["getMcpServer"]>>;
  * a 5xx. Thrown, not returned: {@link reach} is the MCP SDK's `fetchFn`, whose
  * callers take a Response or an error.
  */
-class Unreachable extends Error {}
+class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", {
+  message: Schema.String,
+  /** What the fetch threw, when it threw. */
+  cause: Schema.optional(Schema.Unknown),
+}) {}
 
 const unreachable = (error: unknown): boolean => error instanceof Unreachable;
 
+/** A fetch that threw before any answer came: {@link Unreachable}, what it threw its cause. */
+const noResponse = (error: unknown): Unreachable =>
+  new Unreachable({
+    message: `No response (${error instanceof Error ? error.message : String(error)}).`,
+    cause: error,
+  });
+
 /** The hub holds no sign-in for the server: answered as the 503 `mcp-signed-out`. */
-class SignedOut extends Error {}
+class SignedOut extends Schema.TaggedError<SignedOut>()("SignedOut", {
+  message: Schema.String,
+}) {}
 
 /** A request the sign-in could not serve now, the sign-in kept: answered 502, to retry. */
-class NotNow extends Error {}
+class NotNow extends Schema.TaggedError<NotNow>()("NotNow", {
+  message: Schema.String,
+}) {}
 
+/** The hub's words for a sign-in it no longer holds. */
+const signedOut = (): SignedOut => new SignedOut({ message: "Signed out." });
+
+/** A server's sign-in changed under a renewal: whatever it got is not this sign-in's. */
+const changedMeanwhile = (): NotNow =>
+  new NotNow({
+    message:
+      "This server changed while its sign-in was renewed. Retry the request.",
+  });
+
+/**
+ * One token request that left the sign-in standing, in the provider's
+ * words: tried again ({@link RENEW_TRIES}). `unanswered`: no answer came,
+ * so the provider may have rotated the refresh token then.
+ */
+class RenewFailed extends Schema.TaggedError<RenewFailed>()("RenewFailed", {
+  unanswered: Schema.Boolean,
+  words: Schema.String,
+}) {}
+
+/** A renewal's way out of its tries: the tokens kept, or why it stops with the sign-in as it is now. */
+type Renewed = { kept: OAuthRow } | { stopped: SignedOut | NotNow };
+
+/** What one token request came to: {@link Renewed}, a refusal that ends the sign-in, or a failure to try again. */
+type Tried = Renewed | { ended: string } | { failed: RenewFailed };
+
+/** How a probe went: the server did not answer (its re-probes go on), or anything else. */
+type Probed = "unanswered" | "done";
+
+/** A server the hub could not reach: the config it tried, and the fiber probing it again ({@link REPROBES}). */
+interface Reprobing {
+  config: McpServerRow["config"];
+  fiber?: Fiber.Fiber<unknown, unknown>;
+  /** Its own probe is running: what that probe settles ends it from within. */
+  probing: boolean;
+}
+
+/**
+ * A server whose last renewal landed on none of its tries: no renewal before
+ * `until`. `next` is the step of its {@link RENEW_COOLING} schedule, whose
+ * state is the cool-down's series: it starts over once a renewal lands.
+ */
+interface Cooling {
+  next: (
+    now: number,
+    input: unknown
+  ) => Pull.Pull<[BackoffTries, Duration.Duration], never, BackoffTries>;
+  until: number;
+  why: string;
+}
 /** A sign-in that ended without the person: when, which server, and why. */
 interface SignInEnded {
   at: Date;
@@ -266,14 +349,11 @@ const reachWithin = async (
     try {
       response = await fetch(input, { ...init, signal });
     } catch (error) {
-      throw new Unreachable(
-        `No response (${error instanceof Error ? error.message : String(error)}).`,
-        { cause: error }
-      );
+      throw noResponse(error);
     }
     if (response.status >= 500) {
       await response.body?.cancel();
-      throw new Unreachable(`HTTP ${response.status}.`);
+      throw new Unreachable({ message: `HTTP ${response.status}.` });
     }
     return await take(response);
   });
@@ -281,7 +361,9 @@ const reachWithin = async (
     case "answered":
       return reached.value;
     case "unanswered":
-      throw new Unreachable(`No answer within ${secondsOf(reached.after)} s.`);
+      throw new Unreachable({
+        message: `No answer within ${secondsOf(reached.after)} s.`,
+      });
     default:
       unhandled("read", reached);
   }
@@ -353,7 +435,7 @@ const reachToken =
       async (response) => {
         if (response.status === 429 || response.status === 408) {
           await response.body?.cancel();
-          throw new Unreachable(`HTTP ${response.status}.`);
+          throw new Unreachable({ message: `HTTP ${response.status}.` });
         }
         heard(response.status);
         return await oauthShaped(response);
@@ -375,22 +457,25 @@ export class FleetMcp {
   readonly #db: DbShape;
   readonly #changed: () => void;
   readonly #lifetime: HubLifetimeShape;
-  readonly #probing = new Map<string, Promise<void>>();
-  /** One per server the hub could not reach: the config it tried, its tries ({@link REPROBES}), and the next. */
-  readonly #reprobes = new Map<
+  /** One probe at a time per server, each after the one before it: a save is probed as it is now. */
+  readonly #probing = makeKeyedLock<string>();
+  /** One per server the hub could not reach ({@link Reprobing}). */
+  readonly #reprobes = new Map<string, Reprobing>();
+  /**
+   * The one refresh under way per server, on a fiber of its own: every
+   * request that needs one waits on it, and one that stops waiting leaves it
+   * running. Its exit is its value, so its failure is no fiber's failure.
+   */
+  readonly #refreshing = new Map<
     string,
-    { config: McpServerRow["config"]; tries: Backoff; timer?: HubTimer }
+    Fiber.Fiber<Exit.Exit<OAuthRow, SignedOut | NotNow>>
   >();
-  /** The one refresh under way per server: every request that needs one waits on it. */
-  readonly #refreshing = new Map<string, Promise<OAuthRow>>();
-  /** A server whose last refresh landed on none of its tries: no refresh before `until` ({@link RENEW_COOLING}). */
-  readonly #cooling = new Map<
-    string,
-    { rounds: Backoff; until: number; why: string }
-  >();
+  /** A server whose last refresh landed on none of its tries ({@link Cooling}). */
+  readonly #cooling = new Map<string, Cooling>();
   /** When each server's access token was issued here, to tell a fresh token's refusal from an old one's. */
   readonly #issued = new Map<string, number>();
-  readonly #signingIn = new Map<string, Promise<SignInStart>>();
+  /** A sign-in's start shared by every ask for the same server and access while it runs. */
+  readonly #signingIn = makeJoin<string, SignInStart, unknown>();
   /** Every session's requests to a signed-in server, through the hub's one identity there. */
   readonly #relay: FleetMcpRelay;
   readonly #ports: SignInPorts;
@@ -405,17 +490,38 @@ export class FleetMcp {
     this.#changed = changed;
     this.#lifetime = lifetime;
     this.#ports = ports;
-    this.#relay = new FleetMcpRelay({
-      get: (id, server) => db.getMcpSession(id, server),
-      put: (id, server, init) => db.putMcpSession({ id, server, init }),
-      touch: (id) => db.touchMcpSession(id),
-      delete: (id) => db.deleteMcpSession(id),
-      prune: (before) => db.pruneMcpSessions(before),
-    });
+    this.#relay = new FleetMcpRelay(
+      {
+        get: (id, server) => db.getMcpSession(id, server),
+        put: (id, server, init) => db.putMcpSession({ id, server, init }),
+        touch: (id) => db.touchMcpSession(id),
+        delete: (id) => db.deleteMcpSession(id),
+        prune: (before) => db.pruneMcpSessions(before),
+      },
+      lifetime
+    );
   }
 
-  async ready(): Promise<void> {
-    await Promise.all(this.#probing.values());
+  /** The promise edge of every probe under way: settles once each server's turn that holds or waits now has ended. */
+  ready(): Promise<void> {
+    return this.#lifetime.run(
+      Effect.forEach(this.#probing.busy(), (name) => this.#probed(name), {
+        concurrency: "unbounded",
+        discard: true,
+      })
+    );
+  }
+
+  /** Waits out `name`'s probes under way and asked for, whatever they come to. */
+  #probed(name: string): Effect.Effect<void> {
+    return this.#probing.withLock(name, Effect.void);
+  }
+
+  /** The promise edge of {@link #probed}: nothing to wait for (no probe under way) settles on this step's end, as an await of none did. */
+  async #probesDone(name: string): Promise<void> {
+    if (this.#probing.isBusy(name)) {
+      await this.#lifetime.run(this.#probed(name));
+    }
   }
 
   #server(name: string) {
@@ -436,19 +542,31 @@ export class FleetMcp {
     );
   }
 
+  /** The promise edge of {@link #probeNow}. */
   probe(name: string): Promise<void> {
-    const running = this.#probing.get(name);
-    if (running !== undefined) {
-      return running.then(() => this.probe(name));
-    }
-    // This probe stands in for a scheduled one; an unreachable answer schedules the next.
-    this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
-    // A put (its config, or its switch) starts the relay over: sessions that
-    // take the server again read it as it is now, not a list kept before.
-    this.#relay.reset(name);
-    const probing = this.#probe(name).finally(() => this.#probing.delete(name));
-    this.#probing.set(name, probing);
-    return probing;
+    return this.#lifetime.run(this.#probeNow(name)).then(() => undefined);
+  }
+
+  /**
+   * Probes `name` in its turn: at once when no probe of it runs, else after
+   * those asked for before. A put (its config, or its switch) starts the
+   * relay over as its probe begins: sessions that take the server again
+   * read it as it is now, not a list kept before. A server re-probed on its
+   * own ({@link #reprobe}) goes on with its series whatever this probe
+   * finds: one that answers ends it, one that does not leaves its next try
+   * where it was.
+   */
+  #probeNow(name: string): Effect.Effect<Probed, unknown> {
+    return this.#probing.withLock(
+      name,
+      Effect.suspend(() => {
+        this.#relay.reset(name);
+        return Effect.tryPromise({
+          try: () => this.#probe(name),
+          catch: (error) => error,
+        });
+      })
+    );
   }
 
   /** A removed server is probed no more. */
@@ -456,8 +574,7 @@ export class FleetMcp {
     this.#relay.reset(name);
     this.#cooling.delete(name);
     this.#issued.delete(name);
-    this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
-    this.#reprobes.delete(name);
+    this.#reprobed(name);
   }
 
   /** What a probe can change, to tell the fleet only when a re-probe changed it. */
@@ -471,63 +588,132 @@ export class FleetMcp {
   }
 
   /**
+   * `name` is re-probed no more: it settled, it left, or another config
+   * starts over. Its fiber stops, unless it is the one probing: that probe
+   * ends its series from within, once its run ends.
+   */
+  #reprobed(name: string): void {
+    const held = this.#reprobes.get(name);
+    this.#reprobes.delete(name);
+    if (held && !held.probing) {
+      held.fiber?.interruptUnsafe();
+    }
+  }
+
+  /**
    * Backs off per server while the same config stays unreachable
-   * ({@link REPROBES}); another config starts over. Past a day it stops:
-   * a server never settled says so, and saving it again probes it again.
+   * ({@link REPROBES}): one fiber per server probes it again after each
+   * wait, the probe that found it unreachable its series' first failure;
+   * another config starts over. Past a day it stops: a server never
+   * settled says so, and saving it again probes it again.
    */
   #reprobe(name: string, config: McpServerRow["config"]): void {
-    const previous = this.#reprobes.get(name);
-    const tries =
-      previous && Bun.deepEquals(previous.config, config)
-        ? previous.tries
-        : new Backoff(REPROBES);
-    const step = tries.failed();
-    if (step.kind === "gave-up") {
-      // Held no more: the next probe (its save) starts over.
-      this.#reprobes.delete(name);
-      console.warn(
-        `[fleet-mcp] ${name} has not answered for ${Math.round(step.failingMs / HOUR_MS)} h over ${step.tries} probes; the hub stops probing it until it is saved again`
-      );
-      const server = this.#db.getMcpServer(name);
-      if (server?.authError) {
-        this.#db.setMcpAuth(
-          name,
-          server.authMode,
-          "The hub could not reach this server for a day and stopped trying. Check its URL, then save it again."
-        );
-      }
+    const held = this.#reprobes.get(name);
+    if (held && Bun.deepEquals(held.config, config)) {
       return;
     }
-    const delay = step.ms;
-    const timer = this.#lifetime.after(
+    this.#reprobed(name);
+    const series: Reprobing = { config, probing: false };
+    this.#reprobes.set(name, series);
+    let found = true;
+    const again = Effect.suspend(() => {
+      if (found) {
+        found = false;
+        return Effect.fail(new Unreachable({ message: "Not reached." }));
+      }
+      return this.#probeAgain(name, series);
+    });
+    const waits = backoffSchedule(REPROBES).pipe(
+      Schedule.modifyDelay(({ duration }) =>
+        Effect.sync(() => {
+          console.info(
+            `[fleet-mcp] ${name} did not answer; probing again in ${Math.round(Duration.toMillis(duration) / 1000)} s`
+          );
+          return duration;
+        })
+      )
+    );
+    const fiber = this.#lifetime.fork(
       "fleet MCP server probed again",
-      delay,
-      () => {
-        if (!this.#db.getMcpServer(name)) {
-          this.forget(name);
-          return;
-        }
-        const before = this.#auth(name);
-        this.probe(name).then(
-          () => {
-            if (!Bun.deepEquals(this.#auth(name), before)) {
-              this.#changed();
+      Effect.retryOrElse(again, waits, (_unreached, tries) =>
+        Effect.sync(() => this.#gaveUp(name, series, tries))
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (this.#reprobes.get(name) === series) {
+              this.#reprobes.delete(name);
             }
-          },
-          (error: unknown) => {
+          })
+        )
+      )
+    );
+    series.fiber = fiber;
+  }
+
+  /**
+   * One re-probe of `name` by its `series`: none once another probe settled
+   * it or another config took its place, none for a server that left. The
+   * fleet is told when it changed what a probe can change. Fails, to try
+   * again, while it stays unreachable.
+   */
+  #probeAgain(
+    name: string,
+    series: Reprobing
+  ): Effect.Effect<void, Unreachable> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#reprobes.get(name) !== series) {
+        return;
+      }
+      if (!this.#db.getMcpServer(name)) {
+        this.#reprobes.delete(name);
+        this.forget(name);
+        return;
+      }
+      const before = this.#auth(name);
+      series.probing = true;
+      const probed = yield* this.#probeNow(name).pipe(
+        Effect.catch((error) =>
+          Effect.sync((): Probed => {
             // Its words only: a fetch error carries the address, which may hold a key.
             console.warn(
               `[fleet-mcp] ${name} re-probe failed:`,
               error instanceof Error ? error.message : "not an Error"
             );
-          }
-        );
+            return "done";
+          })
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            series.probing = false;
+          })
+        )
+      );
+      if (!Bun.deepEquals(this.#auth(name), before)) {
+        this.#changed();
       }
+      if (probed === "unanswered" && this.#reprobes.get(name) === series) {
+        return yield* new Unreachable({ message: "Not reached." });
+      }
+    });
+  }
+
+  /** `name`'s re-probes gave up ({@link REPROBES}): held no more, so the next probe (its save) starts over. */
+  #gaveUp(name: string, series: Reprobing, tries: BackoffTries): void {
+    if (this.#reprobes.get(name) !== series) {
+      return;
+    }
+    this.#reprobes.delete(name);
+    console.warn(
+      `[fleet-mcp] ${name} has not answered for ${Math.round(tries.failingMs / HOUR_MS)} h over ${tries.tries} probes; the hub stops probing it until it is saved again`
     );
-    this.#reprobes.set(name, { config, tries, timer });
-    console.info(
-      `[fleet-mcp] ${name} did not answer; probing again in ${Math.round(delay / 1000)} s`
-    );
+    const server = this.#db.getMcpServer(name);
+    if (server?.authError) {
+      this.#db.setMcpAuth(
+        name,
+        server.authMode,
+        "The hub could not reach this server for a day and stopped trying. Check its URL, then save it again."
+      );
+    }
   }
 
   /**
@@ -552,14 +738,14 @@ export class FleetMcp {
     this.#reprobe(server.name, config);
   }
 
-  async #probe(name: string): Promise<void> {
+  async #probe(name: string): Promise<Probed> {
     const { config } = this.#server(name);
     // A stdio server runs on each machine and has nothing for the hub to
     // reach: settled at once, or the "not reached yet" a put leaves on it
     // (db `putMcpServer`) keeps it off every machine.
     if (!("url" in config)) {
       this.#db.setMcpAuth(name, "direct");
-      return;
+      return "done";
     }
     const fresh = () => {
       const latest = this.#db.getMcpServer(name);
@@ -590,14 +776,14 @@ export class FleetMcp {
       });
       const { resourceMetadataUrl } = extractWWWAuthenticateParams(response);
       if (!fresh()) {
-        return;
+        return "done";
       }
       if (response.status >= 300 && response.status < 400) {
         throw new Error("The server redirected the initialize request.");
       }
       if (response.status !== 401 || !resourceMetadataUrl) {
         this.#direct(name, response.status);
-        return;
+        return "done";
       }
       // Mark OAuth before discovery: a metadata failure must never sync the upstream to a harness.
       this.#db.setMcpAuth(name, "oauth");
@@ -617,25 +803,26 @@ export class FleetMcp {
         throw new Error("Authorization server metadata is unavailable.");
       }
       if (!fresh()) {
-        return;
+        return "done";
       }
       this.#discovered(name, config.url, resource, issuer, metadata);
     } catch (error) {
       const latest = fresh();
       if (!latest) {
-        return;
+        return "done";
       }
       if (unreachable(error)) {
         this.#unanswered(latest, config);
-        return;
+        return "unanswered";
       }
-      this.#reprobes.delete(name);
+      this.#reprobed(name);
       this.#db.setMcpAuth(
         name,
         latest.authMode,
         "The hub could not discover this server’s authorization. Check its URL and retry saving the server."
       );
     }
+    return "done";
   }
 
   /** The server answered without asking for a sign-in: it is called directly, and a sign-in it had goes. */
@@ -647,7 +834,7 @@ export class FleetMcp {
     }
     this.#db.setMcpAuth(name, "direct");
     this.#db.deleteMcpOauth(name);
-    this.#reprobes.delete(name);
+    this.#reprobed(name);
   }
 
   /**
@@ -686,7 +873,7 @@ export class FleetMcp {
       ...(lost ? { endedAt: lost.at, endedWhy: lost.why } : {}),
     });
     this.#db.setMcpAuth(name, "oauth");
-    this.#reprobes.delete(name);
+    this.#reprobed(name);
     if (lost) {
       this.#told(name, lost.at, lost.why);
     }
@@ -765,20 +952,20 @@ export class FleetMcp {
    * asks for the access the last sign-in did, else every scope it names.
    */
   start(name: string, access?: ConnectAccess): Promise<SignInStart> {
-    const key = `${name}\u0000${access ?? ""}`;
-    const running = this.#signingIn.get(key);
-    if (running !== undefined) {
-      return running;
-    }
-    const starting = this.#start(name, access).finally(() =>
-      this.#signingIn.delete(key)
+    // The promise edge of a sign-in's start, joined by every ask for the same access while it runs.
+    return this.#lifetime.run(
+      this.#signingIn.run(
+        `${name}\u0000${access ?? ""}`,
+        Effect.tryPromise({
+          try: () => this.#start(name, access),
+          catch: (error) => error,
+        })
+      )
     );
-    this.#signingIn.set(key, starting);
-    return starting;
   }
 
   async #start(name: string, asked?: ConnectAccess): Promise<SignInStart> {
-    await this.#probing.get(name);
+    await this.#probesDone(name);
     const server = this.#server(name);
     if (!server.enabled) {
       throw new Error(mcpWords.enableBeforeSignIn);
@@ -936,31 +1123,43 @@ export class FleetMcp {
 
   /**
    * The one refresh per server: a request that needs one joins the one under
-   * way, so two never spend one rotating refresh token. Its outcome is logged
-   * by the refresh itself, whoever still waits on it. A server whose last
-   * refresh landed on none of its tries waits out its cool-down first.
+   * way, so two never spend one rotating refresh token. It runs on a fiber
+   * of its own, started here, and goes on whoever stops waiting; its
+   * outcome is logged by the refresh itself. A server whose last refresh
+   * landed on none of its tries waits out its cool-down first. Answers the
+   * wait for it.
    */
-  #refresh(name: string, because: string): Promise<OAuthRow> {
-    const running = this.#refreshing.get(name);
-    if (running !== undefined) {
-      return running;
-    }
-    const cooling = this.#cooling.get(name);
-    if (cooling && cooling.until > Date.now()) {
-      const later = Promise.reject(
-        new NotNow(
-          `This server's sign-in stands, but renewing it got ${cooling.why}; the hub tries again in ${Math.ceil((cooling.until - Date.now()) / 1000)} s. Retry the request then.`
-        )
+  #refresh(
+    name: string,
+    because: string
+  ): Effect.Effect<Effect.Effect<OAuthRow, SignedOut | NotNow>> {
+    return Effect.sync(() => {
+      const running = this.#refreshing.get(name);
+      if (running !== undefined) {
+        return joinRenewal(running);
+      }
+      const cooling = this.#cooling.get(name);
+      if (cooling && cooling.until > Date.now()) {
+        return Effect.fail(
+          new NotNow({
+            message: `This server's sign-in stands, but renewing it got ${cooling.why}; the hub tries again in ${Math.ceil((cooling.until - Date.now()) / 1000)} s. Retry the request then.`,
+          })
+        );
+      }
+      const flight = this.#lifetime.fork(
+        "fleet MCP sign-in renewed",
+        Effect.exit(this.#renew(name, because))
       );
-      later.catch(() => undefined);
-      return later;
-    }
-    const flight = this.#renew(name, because).finally(() =>
-      this.#refreshing.delete(name)
-    );
-    flight.catch(() => undefined);
-    this.#refreshing.set(name, flight);
-    return flight;
+      if (flight.pollUnsafe() === undefined) {
+        this.#refreshing.set(name, flight);
+        flight.addObserver(() => {
+          if (this.#refreshing.get(name) === flight) {
+            this.#refreshing.delete(name);
+          }
+        });
+      }
+      return joinRenewal(flight);
+    });
   }
 
   /**
@@ -970,121 +1169,155 @@ export class FleetMcp {
    * comes back. Only `invalid_grant` or `invalid_token` from the token
    * endpoint ends it ({@link #end}), in the provider's words.
    */
-  async #renew(name: string, because: string): Promise<OAuthRow> {
-    const row = this.#db.getMcpOauth(name);
-    const held = row?.tokens;
-    if (!(row && held)) {
-      throw new SignedOut("Signed out.");
-    }
-    const spent = held.refresh_token;
-    const client = row.tokenClient;
-    if (!(spent && client)) {
-      this.#end(
-        name,
-        held,
-        `The provider issued no refresh token, and ${because}.`
-      );
-      throw new SignedOut("Signed out.");
-    }
-    /** Tries that got no answer: a rotation the provider may have made then. */
-    let unanswered = 0;
-    let last = "";
-    const tries = new Backoff(RENEW_TRIES);
-    for (;;) {
-      const tried = await this.#try(row, client, spent);
-      if ("kept" in tried) {
-        return tried.kept;
+  #renew(
+    name: string,
+    because: string
+  ): Effect.Effect<OAuthRow, SignedOut | NotNow> {
+    return Effect.gen({ self: this }, function* () {
+      const row = this.#db.getMcpOauth(name);
+      const held = row?.tokens;
+      if (!(row && held)) {
+        return yield* signedOut();
       }
-      if ("ended" in tried) {
-        this.#end(name, held, endedWords(tried.ended, unanswered));
-        throw new SignedOut("Signed out.");
-      }
-      unanswered += tried.unanswered ? 1 : 0;
-      last = tried.failed;
-      if (!this.#current(row)) {
-        throw new NotNow(
-          "This server changed while its sign-in was renewed. Retry the request."
+      const spent = held.refresh_token;
+      const client = row.tokenClient;
+      if (!(spent && client)) {
+        this.#end(
+          name,
+          held,
+          `The provider issued no refresh token, and ${because}.`
         );
+        return yield* signedOut();
       }
-      const step = tries.failed();
-      if (step.kind === "gave-up") {
-        break;
-      }
-      console.warn(
-        `[fleet-mcp] ${name}: renewing the sign-in got ${last}; the sign-in stands, and the hub tries again in ${(step.ms / 1000).toFixed(1)} s`
+      /** Tries that got no answer: a rotation the provider may have made then. */
+      const unanswered = yield* Ref.make(0);
+      /** Tries that left the sign-in standing. */
+      const failed = yield* Ref.make(0);
+      const once = Effect.gen({ self: this }, function* () {
+        const tried = yield* this.#try(row, client, spent);
+        if ("ended" in tried) {
+          this.#end(
+            name,
+            held,
+            endedWords(tried.ended, yield* Ref.get(unanswered))
+          );
+          return { stopped: signedOut() } satisfies Renewed;
+        }
+        if (!("failed" in tried)) {
+          return tried;
+        }
+        yield* Ref.update(failed, (n) => n + 1);
+        if (tried.failed.unanswered) {
+          yield* Ref.update(unanswered, (n) => n + 1);
+        }
+        if (!this.#current(row)) {
+          return { stopped: changedMeanwhile() } satisfies Renewed;
+        }
+        return yield* tried.failed;
+      });
+      const waits = backoffSchedule(RENEW_TRIES).pipe(
+        Schedule.modifyDelay(({ duration, input }) =>
+          Effect.sync(() => {
+            console.warn(
+              `[fleet-mcp] ${name}: renewing the sign-in got ${input instanceof RenewFailed ? input.words : "a failure"}; the sign-in stands, and the hub tries again in ${(Duration.toMillis(duration) / 1000).toFixed(1)} s`
+            );
+            return duration;
+          })
+        )
       );
-      await this.#lifetime.sleep(step.ms);
-    }
-    if (this.#coolDown(name, held, last, tries.tries)) {
-      throw new SignedOut("Signed out.");
-    }
-    throw new NotNow(
-      `This server's sign-in stands, but renewing it got ${last}. Retry the request.`
-    );
+      const renewed: Renewed = yield* Effect.retry(once, waits).pipe(
+        Effect.catchTag("RenewFailed", (last) =>
+          Effect.flatMap(Ref.get(failed), (tries) =>
+            this.#coolDown(name, held, last.words, tries)
+          )
+        )
+      );
+      if ("kept" in renewed) {
+        return renewed.kept;
+      }
+      return yield* renewed.stopped;
+    });
   }
 
   /**
    * A renewal that landed on none of its `tried` tries: the next waits,
    * longer each time ({@link RENEW_COOLING}), the sign-in kept. Renewals
    * that have failed for a day end it, as a refusal does, so the person is
-   * asked to sign in again: whether it ended.
+   * asked to sign in again.
    */
   #coolDown(
     name: string,
     held: NonNullable<OAuthRow["tokens"]>,
     why: string,
     tried: number
-  ): boolean {
-    const rounds =
-      this.#cooling.get(name)?.rounds ?? new Backoff(RENEW_COOLING);
-    const step = rounds.failed();
-    if (step.kind === "gave-up") {
-      this.#end(
-        name,
-        held,
-        `Renewing it failed for ${Math.round(step.failingMs / HOUR_MS)} h, ${step.tries} times in a row, the last with ${why}.`
+  ): Effect.Effect<Renewed> {
+    return Effect.gen({ self: this }, function* () {
+      const next =
+        this.#cooling.get(name)?.next ??
+        (yield* Schedule.toStep(backoffSchedule(RENEW_COOLING)));
+      const now = yield* Clock.currentTimeMillis;
+      const step = yield* next(now, why).pipe(
+        Effect.map(([, delay]) => ({ ms: Duration.toMillis(delay) })),
+        Pull.catchDone((tries) => Effect.succeed({ gaveUp: tries }))
       );
-      return true;
-    }
-    this.#cooling.set(name, { rounds, until: Date.now() + step.ms, why });
-    console.warn(
-      `[fleet-mcp] ${name}: renewing the sign-in got ${why} on all ${tried} tries; the sign-in stands, requests that need it are answered 502 to retry, and the hub tries again in ${Math.round(step.ms / 1000)} s`
-    );
-    return false;
+      if ("gaveUp" in step) {
+        this.#end(
+          name,
+          held,
+          `Renewing it failed for ${Math.round(step.gaveUp.failingMs / HOUR_MS)} h, ${step.gaveUp.tries} times in a row, the last with ${why}.`
+        );
+        return { stopped: signedOut() } satisfies Renewed;
+      }
+      this.#cooling.set(name, { next, until: Date.now() + step.ms, why });
+      console.warn(
+        `[fleet-mcp] ${name}: renewing the sign-in got ${why} on all ${tried} tries; the sign-in stands, requests that need it are answered 502 to retry, and the hub tries again in ${Math.round(step.ms / 1000)} s`
+      );
+      return {
+        stopped: new NotNow({
+          message: `This server's sign-in stands, but renewing it got ${why}. Retry the request.`,
+        }),
+      } satisfies Renewed;
+    });
   }
 
   /**
    * One token request: the tokens kept, the refusal that ends the sign-in
    * in the provider's words, or a failure that leaves it standing.
    */
-  async #try(
+  #try(
     row: OAuthRow,
     client: NonNullable<OAuthRow["tokenClient"]>,
     spent: string
-  ): Promise<
-    | { kept: OAuthRow }
-    | { ended: string }
-    | { failed: string; unanswered: boolean }
-  > {
+  ): Effect.Effect<Tried> {
     const heard: { status: number | null } = { status: null };
-    let tokens: NonNullable<OAuthRow["tokens"]>;
-    try {
-      tokens = await refreshAuthorization(row.issuer, {
-        metadata: row.metadata,
-        clientInformation: client,
-        refreshToken: spent,
-        resource: new URL(row.resource.resource),
-        fetchFn: reachToken((status) => {
-          heard.status = status;
+    return Effect.tryPromise({
+      try: () =>
+        refreshAuthorization(row.issuer, {
+          metadata: row.metadata,
+          clientInformation: client,
+          refreshToken: spent,
+          resource: new URL(row.resource.resource),
+          fetchFn: reachToken((status) => {
+            heard.status = status;
+          }),
         }),
-      });
-    } catch (error) {
-      const words = refusalWords(error, heard.status);
-      return error instanceof OAuthError && ENDING.has(error.errorCode)
-        ? { ended: words }
-        : { failed: words, unanswered: error instanceof Unreachable };
-    }
-    return { kept: this.#keep(row, spent, tokens) };
+      catch: (error) => error,
+    }).pipe(
+      Effect.match({
+        onFailure: (error): Tried => {
+          const words = refusalWords(error, heard.status);
+          return error instanceof OAuthError && ENDING.has(error.errorCode)
+            ? { ended: words }
+            : {
+                failed: new RenewFailed({
+                  words,
+                  unanswered: error instanceof Unreachable,
+                }),
+              };
+        },
+        onSuccess: (tokens): Tried => this.#keep(row, spent, tokens),
+      })
+    );
   }
 
   /**
@@ -1096,18 +1329,13 @@ export class FleetMcp {
     row: OAuthRow,
     spent: string,
     tokens: NonNullable<OAuthRow["tokens"]>
-  ): OAuthRow {
+  ): Renewed {
     const latest = this.#db.getMcpOauth(row.name);
     if (!(latest && this.#current(row))) {
-      throw new NotNow(
-        "This server changed while its sign-in was renewed. Retry the request."
-      );
+      return { stopped: changedMeanwhile() };
     }
     if (latest.tokens?.refresh_token !== spent) {
-      if (latest.tokens) {
-        return latest;
-      }
-      throw new SignedOut("Signed out.");
+      return latest.tokens ? { kept: latest } : { stopped: signedOut() };
     }
     const kept: OAuthRow = {
       ...latest,
@@ -1125,7 +1353,7 @@ export class FleetMcp {
     console.info(
       `[fleet-mcp] ${row.name}: sign-in renewed${tokens.refresh_token === spent ? "" : ", its refresh token rotated"}${tokens.expires_in === undefined ? "" : `; the access token is good for ${tokens.expires_in} s`}`
     );
-    return kept;
+    return { kept };
   }
 
   /**
@@ -1173,22 +1401,24 @@ export class FleetMcp {
    * more than {@link REFRESH_AHEAD_MS} left; renewed behind the request
    * while it still has {@link EXPIRY_MARGIN_MS}; else after the renewal.
    */
-  async #usable(name: string): Promise<OAuthRow> {
-    const row = this.#db.getMcpOauth(name);
-    if (!row?.tokens) {
-      throw new SignedOut("Signed out.");
-    }
-    const left = row.expiresAt
-      ? row.expiresAt.getTime() - Date.now()
-      : Number.POSITIVE_INFINITY;
-    if (left > REFRESH_AHEAD_MS) {
-      return row;
-    }
-    const renewed = this.#refresh(name, "its access token expired");
-    if (left > EXPIRY_MARGIN_MS) {
-      return row;
-    }
-    return await renewalWithin(renewed);
+  #usable(name: string): Effect.Effect<OAuthRow, SignedOut | NotNow> {
+    return Effect.gen({ self: this }, function* () {
+      const row = this.#db.getMcpOauth(name);
+      if (!row?.tokens) {
+        return yield* signedOut();
+      }
+      const left = row.expiresAt
+        ? row.expiresAt.getTime() - Date.now()
+        : Number.POSITIVE_INFINITY;
+      if (left > REFRESH_AHEAD_MS) {
+        return row;
+      }
+      const renewed = yield* this.#refresh(name, "its access token expired");
+      if (left > EXPIRY_MARGIN_MS) {
+        return row;
+      }
+      return yield* renewalWithin(renewed);
+    });
   }
 
   /**
@@ -1196,34 +1426,39 @@ export class FleetMcp {
    * is sent instead; else the refresh, one per server. A token issued
    * moments ago is not renewed again ({@link FRESH_TOKEN_MS}).
    */
-  async #refused(
+  #refused(
     name: string,
     token: string,
     words: string
-  ): Promise<OAuthRow> {
-    const latest = this.#db.getMcpOauth(name);
-    if (!latest?.tokens) {
-      throw new SignedOut("Signed out.");
-    }
-    if (latest.tokens.access_token !== token) {
-      return latest;
-    }
-    const issued = this.#issued.get(name);
-    if (
-      !this.#refreshing.has(name) &&
-      issued !== undefined &&
-      Date.now() - issued < FRESH_TOKEN_MS
-    ) {
-      console.warn(
-        `[fleet-mcp] ${name}: the server refused an access token issued ${Math.round((Date.now() - issued) / 1000)} s ago (${words}); the sign-in stands, and the request is answered 502 to retry`
+  ): Effect.Effect<OAuthRow, SignedOut | NotNow> {
+    return Effect.gen({ self: this }, function* () {
+      const latest = this.#db.getMcpOauth(name);
+      if (!latest?.tokens) {
+        return yield* signedOut();
+      }
+      if (latest.tokens.access_token !== token) {
+        return latest;
+      }
+      const issued = this.#issued.get(name);
+      if (
+        !this.#refreshing.has(name) &&
+        issued !== undefined &&
+        Date.now() - issued < FRESH_TOKEN_MS
+      ) {
+        console.warn(
+          `[fleet-mcp] ${name}: the server refused an access token issued ${Math.round((Date.now() - issued) / 1000)} s ago (${words}); the sign-in stands, and the request is answered 502 to retry`
+        );
+        return yield* new NotNow({
+          message: `The server refused the sign-in's new access token (${words}). Retry the request.`,
+        });
+      }
+      return yield* renewalWithin(
+        yield* this.#refresh(
+          name,
+          `the server refused its access token (${words})`
+        )
       );
-      throw new NotNow(
-        `The server refused the sign-in's new access token (${words}). Retry the request.`
-      );
-    }
-    return await renewalWithin(
-      this.#refresh(name, `the server refused its access token (${words})`)
-    );
+    });
   }
 
   /**
@@ -1254,14 +1489,17 @@ export class FleetMcp {
         redirect: "error",
       });
     };
-    let row = await this.#usable(name);
+    // The promise edges of the sign-in's token and its renewal: the relay calls upstream with promises.
+    let row = await this.#lifetime.run(this.#usable(name));
     let response = await call(row);
     if (response.status !== 401) {
       return response;
     }
     const said = bearerWords(response);
     await response.body?.cancel();
-    row = await this.#refused(name, row.tokens?.access_token ?? "", said);
+    row = await this.#lifetime.run(
+      this.#refused(name, row.tokens?.access_token ?? "", said)
+    );
     response = await call(row);
     if (response.status === 401) {
       const again = bearerWords(response);
@@ -1269,15 +1507,15 @@ export class FleetMcp {
       console.warn(
         `[fleet-mcp] ${name}: the server refused the sign-in's renewed access token too (${again}); the sign-in stands, and the request is answered 502 to retry`
       );
-      throw new NotNow(
-        `The server refused the sign-in's access token (${again}). Retry the request.`
-      );
+      throw new NotNow({
+        message: `The server refused the sign-in's access token (${again}). Retry the request.`,
+      });
     }
     return response;
   }
 
   async forward(name: string, request: Request) {
-    await this.#probing.get(name);
+    await this.#probesDone(name);
     const server = this.#db.getMcpServer(name);
     if (!server) {
       return problem(404, {
@@ -1339,13 +1577,23 @@ function scopesOf(row: OAuthRow): string[] {
   return row.resource.scopes_supported ?? row.metadata.scopes_supported ?? [];
 }
 
+/** A refresh's outcome, from its fiber's exit. */
+const joinRenewal = (
+  flight: Fiber.Fiber<Exit.Exit<OAuthRow, SignedOut | NotNow>>
+): Effect.Effect<OAuthRow, SignedOut | NotNow> =>
+  Effect.flatMap(Fiber.join(flight), (exit) => exit);
+
 /** A refresh, waited on for at most {@link REFRESH_WAIT_MS}; it goes on past that. */
-async function renewalWithin(renewal: Promise<OAuthRow>): Promise<OAuthRow> {
-  const waited = await readWithin(REFRESH_WAIT_MS, () => renewal);
-  if (waited.kind === "answered") {
-    return waited.value;
-  }
-  throw new NotNow(
-    "This server's sign-in is being renewed and the provider has not answered yet. Retry the request."
+const renewalWithin = (
+  renewal: Effect.Effect<OAuthRow, SignedOut | NotNow>
+): Effect.Effect<OAuthRow, SignedOut | NotNow> =>
+  boundedRead(REFRESH_WAIT_MS, renewal).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new NotNow({
+          message:
+            "This server's sign-in is being renewed and the provider has not answered yet. Retry the request.",
+        })
+      )
+    )
   );
-}

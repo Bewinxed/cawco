@@ -73,7 +73,8 @@ import {
   connectionToolName,
   parseConnectionTool,
 } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -129,6 +130,7 @@ import {
   McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { Effect, type Fiber, Schema } from "effect";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import {
@@ -275,8 +277,9 @@ const CALL_MS = 5 * 60_000;
 /**
  * The MCP SDK times every request out itself (60 s when not given,
  * `DEFAULT_REQUEST_TIMEOUT_MSEC`), with an McpError that reads as the
- * server's answer. Each request here is given readWithin's signal and this,
- * the longest timer a JavaScript clock holds, so readWithin alone decides.
+ * server's answer. Each request here is given its bounded read's signal and
+ * this, the longest timer a JavaScript clock holds, so the bounded read
+ * alone decides.
  */
 const SDK_CLOCK_OFF = 2 ** 31 - 1;
 
@@ -385,12 +388,33 @@ export interface ConnectionsDeps {
   readonly wrote: (actor: InstanceRow, answer: string) => void;
 }
 
+/**
+ * `read` given `ms` to answer (the house's bounded read), its outcome as
+ * `Bounded`: a connection's calls answer "not answered in time" as a value,
+ * which leaves the connection's state as it was.
+ */
+const boundedOf = <A>(
+  ms: number,
+  read: Effect.Effect<A, unknown>
+): Effect.Effect<Bounded<A>, unknown> =>
+  boundedRead(ms, read).pipe(
+    Effect.map((value): Bounded<A> => ({ kind: "answered", value })),
+    Effect.catchIf(
+      (error): error is Unanswered => error instanceof Unanswered,
+      ({ after, reason }) =>
+        Effect.succeed<Bounded<A>>({ kind: "unanswered", after, reason })
+    )
+  );
+
 const misfit = (message: string): never => {
-  throw new ConnectionProblem(message);
+  throw new ConnectionProblem({ message });
 };
 
 /** A refusal in words, for the caller: a route answers it as a 400. */
-export class ConnectionProblem extends Error {}
+export class ConnectionProblem extends Schema.TaggedError<ConnectionProblem>()(
+  "ConnectionProblem",
+  { message: Schema.String }
+) {}
 
 /** Why a stdio connection cannot be made, or nothing when it can. */
 const stdioProblem = (input: ConnectionInput): string | undefined => {
@@ -700,8 +724,12 @@ const NO_SECRET = "the hub holds no key for it";
 
 export const createConnections = (deps: ConnectionsDeps) => {
   const { db } = deps;
-  /** Each connection's live client, by row id; a connect shared by concurrent calls. */
-  const clients = new Map<string, Promise<Bounded<Client>>>();
+  /** Each connection's client once connected, by row id: kept until its transport closes or it is let go. */
+  const clients = new Map<string, Client>();
+  /** Each connection's connect under way, shared by every call meanwhile, by row id and {@link clientGens}. */
+  const connecting = makeJoin<string, Bounded<Client>, unknown>();
+  /** How many times each connection's client was let go: a connect begun before is closed once it lands, never kept. */
+  const clientGens = new Map<string, number>();
   /** Each connection's tools as it last listed them, by row id. */
   const listed = new Map<string, Tool[]>();
 
@@ -805,7 +833,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): GitHubClient => githubApp(r, app).octokit;
 
   /** A token's refresh under way (a Linear app's, a code sign-in's), by row id: two callers share one. */
-  const refreshing = new Map<string, Promise<string>>();
+  const refreshing = makeJoin<string, string, unknown>();
 
   /** Each `gh` connection's last token read from its machine, by row id, and when. */
   const ghRead = new Map<string, { at: number; token: string }>();
@@ -858,9 +886,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): Promise<string> => {
     if (!tokens) {
       return Promise.reject(
-        new ConnectionProblem(
-          `${r.name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`
-        )
+        new ConnectionProblem({
+          message: `${r.name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`,
+        })
       );
     }
     if (
@@ -869,15 +897,16 @@ export const createConnections = (deps: ConnectionsDeps) => {
     ) {
       return Promise.resolve(tokens.access_token);
     }
-    const under = refreshing.get(r.id);
-    if (under !== undefined) {
-      return under;
-    }
-    const refreshed = refresh(tokens.refresh_token);
-    refreshing.set(r.id, refreshed);
-    const done = () => refreshing.delete(r.id);
-    refreshed.then(done, done);
-    return refreshed;
+    // The promise edge of the connection's one refresh, joined by every call meanwhile.
+    return deps.lifetime.run(
+      refreshing.run(
+        r.id,
+        Effect.tryPromise({
+          try: () => refresh(tokens.refresh_token),
+          catch: (error) => error,
+        })
+      )
+    );
   };
 
   /**
@@ -924,9 +953,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const { app, tokens } = sealed;
     if (app?.service !== "linear") {
       return Promise.reject(
-        new ConnectionProblem(
-          `${r.name} needs its Linear app: set its client id and client secret.`
-        )
+        new ConnectionProblem({
+          message: `${r.name} needs its Linear app: set its client id and client secret.`,
+        })
       );
     }
     return accessRefreshed(r, tokens, async (refreshToken) => {
@@ -957,9 +986,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
           `Linear refused to refresh its sign-in (${said}). Sign in again.`
         );
         // biome-ignore lint/style/useErrorCause: the token response may carry tokens; only scrubbed words go on
-        throw new ConnectionProblem(
-          `${r.name}: Linear refused to refresh its sign-in (${said}). Sign in again.`
-        );
+        throw new ConnectionProblem({
+          message: `${r.name}: Linear refused to refresh its sign-in (${said}). Sign in again.`,
+        });
       }
     });
   };
@@ -1031,9 +1060,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
         `GitHub refused the app's token (${said}). Sign in to register it again.`
       );
       // biome-ignore lint/style/useErrorCause: GitHub's error may echo the JWT; only scrubbed words go on
-      throw new ConnectionProblem(
-        `${r.name}: GitHub refused the app's token (${said}). Sign in to register it again.`
-      );
+      throw new ConnectionProblem({
+        message: `${r.name}: GitHub refused the app's token (${said}). Sign in to register it again.`,
+      });
     }
   };
 
@@ -1126,27 +1155,32 @@ export const createConnections = (deps: ConnectionsDeps) => {
     deps.changed();
   };
 
-  /** Closes and forgets a connection's client: its next call connects again. */
+  /**
+   * Closes a client let go, whatever its close comes to: on the hub's
+   * lifetime, or, once the lifetime has closed (its releases run then, and
+   * nothing forks after close), at once.
+   */
+  const closeClient = (client: Client): void => {
+    if (deps.lifetime.closed()) {
+      client.close().catch(() => undefined);
+      return;
+    }
+    deps.lifetime.fork(
+      "connection client close",
+      Effect.tryPromise({
+        try: () => client.close(),
+        catch: () => "unclosed",
+      }).pipe(Effect.ignore)
+    );
+  };
+
+  /** Closes and forgets a connection's client, and one connecting: its next call connects again. */
   const drop = (id: string) => {
+    clientGens.set(id, (clientGens.get(id) ?? 0) + 1);
     const client = clients.get(id);
     clients.delete(id);
     if (client !== undefined) {
-      detach(
-        client
-          .then((connected) => {
-            switch (connected.kind) {
-              case "answered":
-                return connected.value.close();
-              case "unanswered":
-                // It never connected: the SDK closed it when it was let go.
-                return;
-              default:
-                unhandled("read", connected);
-            }
-          })
-          .catch(() => undefined),
-        "connection client close"
-      );
+      closeClient(client);
     }
   };
 
@@ -1287,38 +1321,75 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return db.byId(r.id) ?? r;
   };
 
-  const connect = async (r: ConnectionRow): Promise<Bounded<Client>> => {
-    if (r.auth === "oauth") {
-      await oauthRefreshed(r);
-    }
-    const client = new Client(
-      { name: "CawCo hub", version: "1.0.0" },
-      {
-        // The server's own word that its tools changed re-lists them here,
-        // so sessions' lists follow it.
-        listChanged: {
-          tools: {
-            onChanged: (error, tools) => {
-              if (!error && tools) {
-                keepListing(r.id, tools);
-              }
+  const connect = (r: ConnectionRow): Effect.Effect<Bounded<Client>, unknown> =>
+    Effect.gen(function* () {
+      if (r.auth === "oauth") {
+        yield* Effect.tryPromise({
+          try: () => oauthRefreshed(r),
+          catch: (error) => error,
+        });
+      }
+      const client = new Client(
+        { name: "CawCo hub", version: "1.0.0" },
+        {
+          // The server's own word that its tools changed re-lists them here,
+          // so sessions' lists follow it.
+          listChanged: {
+            tools: {
+              onChanged: (error, tools) => {
+                if (!error && tools) {
+                  keepListing(r.id, tools);
+                }
+              },
             },
           },
+        }
+      );
+      const connected = Effect.tryPromise({
+        try: async (signal) => {
+          // An app's token is minted, a gh token read or a code sign-in's
+          // refreshed, within the same time.
+          const bearer = await bearerOf(r);
+          if (bearer) {
+            appExpiry.set(r.id, bearer.expiresAt);
+          }
+          const transport = transportOf(r, bearer?.token);
+          // The SDK's own clock (60 s unless given) never decides: the bounded read does.
+          await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
+          return client;
         },
-      }
-    );
-    return readWithin(CONNECT_MS, async (signal) => {
-      // An app's token is minted, a gh token read or a code sign-in's
-      // refreshed, within the same time.
-      const bearer = await bearerOf(r);
-      if (bearer) {
-        appExpiry.set(r.id, bearer.expiresAt);
-      }
-      const transport = transportOf(r, bearer?.token);
-      // The SDK's own clock (60 s unless given) never decides: readWithin does.
-      await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
-      return client;
+        catch: (error) => error,
+      });
+      return yield* boundedOf(CONNECT_MS, connected);
     });
+
+  /**
+   * A connect that landed: its client kept for every later call, unless it
+   * was let go while it connected (or the hub closed), when it is closed.
+   * A connect not answered in time keeps nothing.
+   */
+  const landed = (
+    id: string,
+    gen: number,
+    connected: Bounded<Client>
+  ): Bounded<Client> => {
+    if (connected.kind !== "answered") {
+      return connected;
+    }
+    const client = connected.value;
+    if ((clientGens.get(id) ?? 0) !== gen || deps.lifetime.closed()) {
+      closeClient(client);
+      return connected;
+    }
+    clients.set(id, client);
+    // A stdio process that exits, or a stream the server ends: the next
+    // call connects again instead of finding a dead client.
+    client.onclose = () => {
+      if (clients.get(id) === client) {
+        clients.delete(id);
+      }
+    };
+    return connected;
   };
 
   /**
@@ -1326,41 +1397,30 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * transport closes, or when it did not connect in time. An app's client
    * is let go before its token runs out, and the next connects with a new.
    */
-  const clientOf = (r: ConnectionRow): Promise<Bounded<Client>> => {
-    if (
-      (appExpiry.get(r.id) ?? Number.POSITIVE_INFINITY) <=
-      Date.now() + APP_TOKEN_EARLY_MS
-    ) {
-      appExpiry.delete(r.id);
-      drop(r.id);
-    }
-    const live = clients.get(r.id);
-    if (live !== undefined) {
-      return live;
-    }
-    const connecting = connect(r);
-    clients.set(r.id, connecting);
-    const release = () => {
-      if (clients.get(r.id) === connecting) {
-        clients.delete(r.id);
+  const clientOf = (
+    r: ConnectionRow
+  ): Effect.Effect<Bounded<Client>, unknown> =>
+    Effect.suspend(() => {
+      if (
+        (appExpiry.get(r.id) ?? Number.POSITIVE_INFINITY) <=
+        Date.now() + APP_TOKEN_EARLY_MS
+      ) {
+        appExpiry.delete(r.id);
+        drop(r.id);
       }
-    };
-    connecting.then((connected) => {
-      switch (connected.kind) {
-        case "answered":
-          // A stdio process that exits, or a stream the server ends: the next
-          // call connects again instead of finding a dead client.
-          connected.value.onclose = release;
-          return;
-        case "unanswered":
-          release();
-          return;
-        default:
-          unhandled("read", connected);
+      const live = clients.get(r.id);
+      if (live !== undefined) {
+        return Effect.succeed<Bounded<Client>>({
+          kind: "answered",
+          value: live,
+        });
       }
-    }, release);
-    return connecting;
-  };
+      const gen = clientGens.get(r.id) ?? 0;
+      return connecting.run(
+        `${r.id}\u0000${gen}`,
+        connect(r).pipe(Effect.map((connected) => landed(r.id, gen, connected)))
+      );
+    });
 
   /** Keeps a connection's tool list, telling sessions' lists when it moved. */
   const keepListing = (id: string, tools: Tool[]) => {
@@ -1388,29 +1448,27 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (r.state === "needs-sign-in") {
       misfit(`${r.name} is not signed in: ${r.reason ?? NO_SECRET}.`);
     }
-    const once = async (): Promise<Bounded<T>> => {
-      const connected = await clientOf(r);
-      switch (connected.kind) {
-        case "answered":
-          break;
-        case "unanswered":
-          return connected;
-        default:
-          unhandled("read", connected);
-      }
-      const answer = await readWithin(ms, (signal) =>
-        use(connected.value, signal)
+    // The promise edge of one use: its callers are routes and tools.
+    const once = (): Promise<Bounded<T>> =>
+      deps.lifetime.run(
+        Effect.gen(function* () {
+          const connected = yield* clientOf(r);
+          if (connected.kind === "unanswered") {
+            return connected;
+          }
+          const answer = yield* boundedOf(
+            ms,
+            Effect.tryPromise({
+              try: (signal) => use(connected.value, signal),
+              catch: (error) => error,
+            })
+          );
+          if (answer.kind === "answered") {
+            setState(r, "signed-in", null);
+          }
+          return answer;
+        })
       );
-      switch (answer.kind) {
-        case "answered":
-          setState(r, "signed-in", null);
-          return answer;
-        case "unanswered":
-          return answer;
-        default:
-          unhandled("read", answer);
-      }
-    };
     const reused = clients.has(r.id);
     try {
       return await once();
@@ -1453,9 +1511,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   /** "<name> did not answer within N s": a use of a connection that was not answered. */
   const unanswered = (r: ConnectionRow, after: number): ConnectionProblem =>
-    new ConnectionProblem(
-      `${r.name} did not answer within ${secondsOf(after)} s.`
-    );
+    new ConnectionProblem({
+      message: `${r.name} did not answer within ${secondsOf(after)} s.`,
+    });
 
   /**
    * What a failed use of a row's client becomes, the row's state moved with
@@ -1471,7 +1529,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       300
     );
     if (error instanceof McpError) {
-      return new ConnectionProblem(`${r.name} answered: ${said}`);
+      return new ConnectionProblem({ message: `${r.name} answered: ${said}` });
     }
     drop(r.id);
     if (refusedSignIn(error)) {
@@ -1484,12 +1542,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
         r.auth === "gh" ? "error" : "needs-sign-in",
         `The service refused the sign-in. ${again}`
       );
-      return new ConnectionProblem(
-        `${r.name} refused the hub's sign-in. ${again}`
-      );
+      return new ConnectionProblem({
+        message: `${r.name} refused the hub's sign-in. ${again}`,
+      });
     }
     setState(r, "error", said);
-    return new ConnectionProblem(`${r.name} could not be reached: ${said}`);
+    return new ConnectionProblem({
+      message: `${r.name} could not be reached: ${said}`,
+    });
   };
 
   const listAll = async (
@@ -2310,29 +2370,37 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   // --- GitHub with a code (device flow) -------------------------------------
 
-  /** Each code sign-in's next poll, by row id. */
-  const devicePolls = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Each code sign-in's next poll while it waits for its time, by row id; its poll, once begun, is its own. */
+  const devicePolls = new Map<string, Fiber.Fiber<void>>();
+
+  /** Stops `id`'s next poll, if it has not begun. */
+  const stopDevicePoll = (id: string) => {
+    devicePolls.get(id)?.interruptUnsafe();
+    devicePolls.delete(id);
+  };
 
   /** Polls `id`'s code sign-in after `seconds`, the least GitHub's `interval` allows. */
   const pollDeviceIn = (id: string, seconds: number) => {
-    deps.lifetime.cancel(devicePolls.get(id));
-    devicePolls.set(
-      id,
-      deps.lifetime.after(
-        "connection device sign-in poll",
-        seconds * 1000,
-        () => {
-          devicePolls.delete(id);
-          detach(devicePoll(id), "connection code sign-in poll");
-        }
+    stopDevicePoll(id);
+    const next: Fiber.Fiber<void> = deps.lifetime.fork(
+      "connection device sign-in poll",
+      Effect.sleep(seconds * 1000).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (devicePolls.get(id) === next) {
+              devicePolls.delete(id);
+            }
+          })
+        ),
+        Effect.andThen(Effect.promise(() => devicePoll(id)))
       )
     );
+    devicePolls.set(id, next);
   };
 
   /** Lets go of a code sign-in under way: its code, and the row's sign-in. */
   const endDevice = (id: string) => {
-    deps.lifetime.cancel(devicePolls.get(id));
-    devicePolls.delete(id);
+    stopDevicePoll(id);
     reseal(id, (sealed) => ({ ...sealed, device: undefined }));
     db.update(id, {
       signInState: null,
@@ -2608,9 +2676,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     } catch (error) {
       setState(r, "error", "The hub could not discover its sign-in.");
       // biome-ignore lint/style/useErrorCause: upstream OAuth errors may carry token responses; only scrubbed words go on
-      throw new ConnectionProblem(
-        `${name}'s sign-in could not start: ${cutShort(scrub(r, error instanceof Error ? error.message : String(error)), 300)}`
-      );
+      throw new ConnectionProblem({
+        message: `${name}'s sign-in could not start: ${cutShort(scrub(r, error instanceof Error ? error.message : String(error)), 300)}`,
+      });
     }
     if (!authorizationUrl) {
       return misfit(`${name}'s server asked for no sign-in.`);
@@ -2682,9 +2750,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
       setState(r, "needs-sign-in", `Linear refused the sign-in (${said}).`);
       // biome-ignore lint/style/useErrorCause: the token response may carry tokens; only scrubbed words go on
-      throw new ConnectionProblem(
-        `Linear refused this sign-in (${said}). Start sign-in again.`
-      );
+      throw new ConnectionProblem({
+        message: `Linear refused this sign-in (${said}). Start sign-in again.`,
+      });
     }
   };
 
@@ -2719,9 +2787,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
         "The authorization server refused the sign-in."
       );
       // biome-ignore lint/style/useErrorCause: upstream OAuth errors may carry token responses
-      throw new ConnectionProblem(
-        "The authorization server refused this sign-in. Start sign-in again."
-      );
+      throw new ConnectionProblem({
+        message:
+          "The authorization server refused this sign-in. Start sign-in again.",
+      });
     }
   };
 
@@ -2934,8 +3003,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     githubApps.delete(r.id);
     appExpiry.delete(r.id);
     ghRead.delete(r.id);
-    deps.lifetime.cancel(devicePolls.get(r.id));
-    devicePolls.delete(r.id);
+    stopDevicePoll(r.id);
     const restore =
       deps.trash(name) ?? misfit(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);
@@ -2951,7 +3019,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const returned = (name: string): ConnectionView => {
     const r = row(name);
     if (r.state !== "needs-sign-in") {
-      detach(probe(name), `connection ${name} back from the trash`);
+      deps.lifetime.fork(
+        "connection back from the trash looked at",
+        Effect.promise(() => probe(name))
+      );
     }
     deps.projectsWritten(name, []);
     console.info(`[connections] ${name} back from the trash`);
@@ -3025,7 +3096,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
           pollDeviceIn(r.id, device.interval);
         }
         if (r.state !== "needs-sign-in") {
-          detach(probe(r.name), `connection ${r.name} first look`);
+          deps.lifetime.fork(
+            "connection looked at first",
+            Effect.promise(() => probe(r.name))
+          );
         }
       }
     },

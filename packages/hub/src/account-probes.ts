@@ -11,24 +11,24 @@ import {
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_ACCOUNT_USAGE,
 } from "@cawco/core/accounts/controls";
-import { backoffStep } from "@cawco/core/backoff";
-import { detach } from "@cawco/core/detach";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { makeJoin } from "@cawco/core/effect/join";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import { Effect, type Fiber, Schema } from "effect";
 import type { AccountProber } from "./accounts";
 import {
   checkRefusal,
   noteProviderReading,
   PROBE_RETRIES,
-  probeRetryDelay,
   REFUSAL_CHECK_EVERY_MS,
   reconcileAccounts,
   refusalsDue,
   usageLimits,
 } from "./accounts";
 import type { ClosureContext } from "./closure-context";
-import type { HubTimer } from "./lifetime";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { unreachable } from "./unreachable";
 
@@ -51,6 +51,12 @@ export type AccountProbesContext = Pick<
   | "unansweredFault"
   | "workItems"
 >;
+
+/** A pass of a machine's account report whose catalog probe could not be read: tried again ({@link PROBE_RETRIES}). */
+class ProbesFailed extends Schema.TaggedError<ProbesFailed>()(
+  "ProbesFailed",
+  {}
+) {}
 
 export const createAccountProbes = (ctx: AccountProbesContext) => {
   /**
@@ -187,7 +193,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    */
   const REFUSAL_CHECK_TIMEOUT_MS = 2 * MINUTE_MS;
   /** The check of each account under way now, by account id: a second ask joins it ({@link checkRefused}). */
-  const refusalChecks = new Map<string, Promise<RefusalVerdict>>();
+  const refusalChecks = makeJoin<string, RefusalVerdict, unknown>();
   /**
    * Whether Claude Code still refuses `accountId` account-wide (accounts.ts
    * `checkRefusal`): one turn as the account on a connected machine its
@@ -197,13 +203,23 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * account at a time: the hourly look ({@link checkDueRefusals}) and
    * Configure → Accounts' Check again share it.
    */
-  const checkRefused = (accountId: string): Promise<RefusalVerdict> => {
-    const running = refusalChecks.get(accountId);
-    if (running !== undefined) {
-      return running;
-    }
+  const refusalCheck = (
+    accountId: string
+  ): Effect.Effect<RefusalVerdict, unknown> =>
+    refusalChecks.run(
+      accountId,
+      Effect.tryPromise({
+        try: () => checkAccount(accountId),
+        catch: (error) => error,
+      })
+    );
+  /** The promise edge of {@link refusalCheck}. */
+  const checkRefused = (accountId: string): Promise<RefusalVerdict> =>
+    ctx.lifetime.run(refusalCheck(accountId));
+  /** One check of `accountId`, said in the log and told to every screen ({@link checkRefused}). */
+  const checkAccount = (accountId: string): Promise<RefusalVerdict> => {
     const named = ctx.accountWords(accountId);
-    const run = checkRefusal(
+    return checkRefusal(
       ctx.db,
       accountId,
       async (machineId, account) => {
@@ -244,38 +260,34 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       },
       (machineId) => ctx.registry.agent(machineId) !== undefined,
       ctx.machineName
-    )
-      .then((verdict) => {
-        switch (verdict.kind) {
-          case "back":
-            console.info(
-              `[accounts] ${named} is back on ${verdict.machines.map(ctx.machineName).join(", ")}: a turn as it was answered, so Claude Code no longer refuses it, and new sessions are placed on it again.`
-            );
-            for (const machineId of verdict.machines) {
-              publishUsage(machineId);
-            }
-            break;
-          case "refused":
-            console.info(
-              `[accounts] ${named} is still refused: ${verdict.reason}. It is checked again within ${REFUSAL_CHECK_EVERY_MS / HOUR_MS} hour, or on Check again in ${configurePage("accounts")}.`
-            );
-            publishUsage();
-            break;
-          case "none":
-            console.warn(
-              `[accounts] ${named}'s check gave no verdict (${verdict.why}); it stays out of placement until a check is answered.`
-            );
-            break;
-          case "not-refused":
-            break;
-          default:
-            throw unreachable(verdict);
-        }
-        return verdict;
-      })
-      .finally(() => refusalChecks.delete(accountId));
-    refusalChecks.set(accountId, run);
-    return run;
+    ).then((verdict) => {
+      switch (verdict.kind) {
+        case "back":
+          console.info(
+            `[accounts] ${named} is back on ${verdict.machines.map(ctx.machineName).join(", ")}: a turn as it was answered, so Claude Code no longer refuses it, and new sessions are placed on it again.`
+          );
+          for (const machineId of verdict.machines) {
+            publishUsage(machineId);
+          }
+          break;
+        case "refused":
+          console.info(
+            `[accounts] ${named} is still refused: ${verdict.reason}. It is checked again within ${REFUSAL_CHECK_EVERY_MS / HOUR_MS} hour, or on Check again in ${configurePage("accounts")}.`
+          );
+          publishUsage();
+          break;
+        case "none":
+          console.warn(
+            `[accounts] ${named}'s check gave no verdict (${verdict.why}); it stays out of placement until a check is answered.`
+          );
+          break;
+        case "not-refused":
+          break;
+        default:
+          throw unreachable(verdict);
+      }
+      return verdict;
+    });
   };
   /**
    * Checks each account refused account-wide whose hour has come
@@ -287,7 +299,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    */
   const checkDueRefusals = (): void => {
     for (const accountId of refusalsDue(ctx.db, Date.now())) {
-      detach(checkRefused(accountId), "account refusal check");
+      ctx.lifetime.fork("account refusal check", refusalCheck(accountId));
     }
   };
   /** How often the hub looks for refused accounts due a check: well under their hour, so one is checked close to it. */
@@ -295,9 +307,10 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
 
   /**
    * Each machine's last account report of each kind (its Claude dirs, its
-   * provider stores), squared with the hub's accounts one at a time. A
-   * probe that failed is tried again on accounts.ts `probeRetryDelay`,
-   * while the machine is connected; a new report starts over.
+   * provider stores), squared with the hub's accounts one at a time per
+   * machine and kind. A pass whose probe failed is tried again on
+   * accounts.ts `PROBE_RETRIES`, while the machine is connected; a new
+   * report starts the series over.
    *
    * A report the same as the last one taken on this connection says
    * nothing new and is not taken: a machine says its stores again with
@@ -309,7 +322,6 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
   const accountSyncs = new Map<
     string,
     {
-      attempt: number;
       /**
        * Undefined until the machine's connection has named its stores: those
        * read, and those Claude Code gave no answer for (`unread`).
@@ -317,10 +329,12 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       reports: { reports: AccountReport[]; unread: string[] } | undefined;
       /** When `reports` came in: a sign-in settled since is not theirs to undo. */
       receivedAt: number;
-      running: Promise<void>;
-      timer?: HubTimer;
+      /** The passes of the report taken last, and their tries again. */
+      series?: Fiber.Fiber<void>;
     }
   >();
+  /** One pass at a time per machine and kind. */
+  const accountPasses = makeKeyedLock<string>();
   /** A machine's new connection: its first report of each kind is taken. */
   const freshAccountReports = (machineId: string): void => {
     for (const harness of ["claude", "providers"] as const) {
@@ -330,42 +344,37 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       }
     }
   };
-  const syncAccounts = (
+  /**
+   * One pass of the report `sync` holds, in its turn. Fails, to be tried
+   * again, when a probe it needed could not be read and the machine is
+   * still connected. A pass after a new connection began, before that
+   * connection's own report, does nothing.
+   */
+  const accountPass = (
     machineId: string,
     harness: "claude" | "providers",
-    reports?: { reports: AccountReport[]; unread: string[] }
-  ): void => {
-    const key = `${machineId}\u0000${harness}`;
-    const sync = accountSyncs.get(key) ?? {
-      attempt: 0,
-      reports: undefined,
-      receivedAt: 0,
-      running: Promise.resolve(),
-    };
-    if (reports && sync.reports && Bun.deepEquals(reports, sync.reports)) {
-      return;
+    key: string,
+    sync: {
+      reports?: { reports: AccountReport[]; unread: string[] };
+      receivedAt: number;
     }
-    if (reports) {
-      sync.reports = reports;
-      sync.receivedAt = Date.now();
-      sync.attempt = 0;
-      ctx.lifetime.cancel(sync.timer);
-    }
-    accountSyncs.set(key, sync);
-    sync.running = sync.running
-      .then(async () => {
-        // A retry after a new connection began waits for that connection's
-        // own report.
-        if (!sync.reports) {
+  ): Effect.Effect<void, ProbesFailed> =>
+    accountPasses.withLock(
+      key,
+      Effect.gen(function* () {
+        const { reports } = sync;
+        if (!reports) {
           return;
         }
-        const { changed, failed } = await reconcileAccounts(
-          ctx.db,
-          machineId,
-          harness,
-          sync.reports,
-          sync.receivedAt,
-          probeAccount
+        const { changed, failed } = yield* Effect.promise(() =>
+          reconcileAccounts(
+            ctx.db,
+            machineId,
+            harness,
+            reports,
+            sync.receivedAt,
+            probeAccount
+          )
         );
         if (changed) {
           publishUsage(machineId);
@@ -375,30 +384,56 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           ctx.dispatcher.machineOnline(machineId);
           // Likewise a project's held triggers, which start where its
           // account is signed in (lead-home.ts).
-          if (ctx.triggers) {
-            detach(
-              ctx.triggers.machineOnline(machineId),
-              "run the projects' held triggers"
+          const { triggers } = ctx;
+          if (triggers) {
+            ctx.lifetime.fork(
+              "run the projects' held triggers",
+              Effect.promise(() => triggers.machineOnline(machineId))
             );
           }
         }
         if (failed && ctx.registry.agent(machineId)) {
-          if (
-            backoffStep(PROBE_RETRIES, sync.attempt + 1, 0).kind === "gave-up"
-          ) {
-            console.warn(
-              `[accounts] ${machineId} ${harness}: probes failed ${sync.attempt + 1} times in a row; none is tried again until the machine reports its accounts anew`
-            );
-            return;
-          }
-          const delay = probeRetryDelay(sync.attempt);
-          sync.attempt += 1;
-          sync.timer = ctx.lifetime.after("account probe retried", delay, () =>
-            syncAccounts(machineId, harness)
-          );
+          return yield* new ProbesFailed();
         }
-      })
-      .catch(console.error);
+      }).pipe(
+        // A pass runs whole once begun: a new report's series waits its turn, never cuts a pass in two.
+        Effect.uninterruptible
+      )
+    );
+  const syncAccounts = (
+    machineId: string,
+    harness: "claude" | "providers",
+    reports?: { reports: AccountReport[]; unread: string[] }
+  ): void => {
+    const key = `${machineId}\u0000${harness}`;
+    const sync = accountSyncs.get(key) ?? {
+      reports: undefined,
+      receivedAt: 0,
+    };
+    if (reports && sync.reports && Bun.deepEquals(reports, sync.reports)) {
+      return;
+    }
+    if (reports) {
+      sync.reports = reports;
+      sync.receivedAt = Date.now();
+    }
+    accountSyncs.set(key, sync);
+    // A new report starts the series over: the one before stops at its
+    // next wait, or once its pass under way ends.
+    sync.series?.interruptUnsafe();
+    sync.series = ctx.lifetime.fork(
+      "account probe retried",
+      Effect.retryOrElse(
+        accountPass(machineId, harness, key, sync),
+        backoffSchedule(PROBE_RETRIES),
+        (_failed, tries) =>
+          Effect.sync(() => {
+            console.warn(
+              `[accounts] ${machineId} ${harness}: probes failed ${tries.tries} times in a row; none is tried again until the machine reports its accounts anew`
+            );
+          })
+      )
+    );
   };
   /** The words each stopped session's work item last went out with ({@link publishStalls}). */
   const stallsShown = new Map<string, string>();

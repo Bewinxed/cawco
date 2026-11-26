@@ -19,6 +19,7 @@ import {
   sameIdentity,
 } from "@cawco/core/accounts";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
+import { makeJoin } from "@cawco/core/effect/join";
 import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
@@ -176,8 +177,8 @@ const CATALOG_FRESH_MS = HOUR_MS;
 /** How a {@link refreshCatalog} went. */
 type CatalogRead = "held" | "read" | "failed";
 
-/** The probe each account's catalog waits on now: one at a time per account. */
-const probing = new Map<string, Promise<CatalogRead>>();
+/** The probe each account's catalog waits on now: one at a time per account, shared by every read that asks meanwhile. */
+const probing = makeJoin<string, CatalogRead>();
 
 /**
  * How long after its `attempt`th failure in a row (from 0) a probe of an
@@ -196,7 +197,7 @@ export const PROBE_RETRIES: BackoffPolicy = {
   // About a day at its cap: a machine's next accounts report starts over.
   giveUp: { afterTries: 55 },
 };
-export const probeRetryDelay = (attempt: number): number =>
+const probeRetryDelay = (attempt: number): number =>
   backoffWait(PROBE_RETRIES, attempt + 1);
 
 /** Each account whose last probe failed: how many failed in a row, and when one may be tried again. */
@@ -257,13 +258,11 @@ export const refreshCatalog = (
   ) {
     return Promise.resolve("held");
   }
-  const reading =
-    probing.get(account.id) ??
-    probeCatalog(db, machineId, account, probe).finally(() =>
-      probing.delete(account.id)
-    );
-  probing.set(account.id, reading);
-  return reading;
+  // The promise edge of the account's one probe: this module's callers are
+  // promise code, and it is given no lifetime of the hub's to run it on.
+  return probing.runPromise(account.id, () =>
+    probeCatalog(db, machineId, account, probe)
+  );
 };
 
 /**

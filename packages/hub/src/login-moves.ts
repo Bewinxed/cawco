@@ -14,10 +14,10 @@ import {
   CONTROL_MOVE_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import type { Bounded } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
+import { Effect } from "effect";
 import type { ClosureContext } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
 import type { LoginMoveResults } from "./hub-shapes";
@@ -83,16 +83,18 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     }
     // The machine's `asleep` frame carries the outcome; a refusal means the
     // session is not at rest.
-    detach(
-      ctx.callAgent(
-        row.machineId,
-        CONTROL_SLEEP,
-        [],
-        SLEEP_TIMEOUT_MS,
-        undefined,
-        row.id
-      ),
-      "sleep request"
+    ctx.lifetime.fork(
+      "sleep request",
+      Effect.promise(() =>
+        ctx.callAgent(
+          row.machineId,
+          CONTROL_SLEEP,
+          [],
+          SLEEP_TIMEOUT_MS,
+          undefined,
+          row.id
+        )
+      )
     );
   };
 
@@ -316,14 +318,16 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     accountId: string,
     answer: LentAccess | { error: string }
   ): void => {
-    detach(
-      ctx.callAgent(
-        borrower,
-        CONTROL_ACCOUNT_LENT,
-        [requestId, answer, accountId],
-        SIGNIN_TIMEOUT_MS
-      ),
-      "lent sign-in"
+    ctx.lifetime.fork(
+      "lent sign-in",
+      Effect.promise(() =>
+        ctx.callAgent(
+          borrower,
+          CONTROL_ACCOUNT_LENT,
+          [requestId, answer, accountId],
+          SIGNIN_TIMEOUT_MS
+        )
+      )
     );
   };
 
@@ -401,16 +405,21 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     }
     awaitingLender.delete(lender);
     for (const { accountId, borrower } of waiting.values()) {
-      lendOnce(accountId, lender)
-        .then((answer) => {
-          if (!("error" in answer)) {
-            console.log(
-              `[hub] ${ctx.machineName(lender)} is back: ${ctx.machineName(borrower)}'s borrowed sign-in of account ${accountId} refreshed`
-            );
-            answerBorrower(borrower, null, accountId, answer);
-          }
-        })
-        .catch(console.error);
+      ctx.lifetime.fork(
+        "lent sign-in refreshed",
+        Effect.promise(() => lendOnce(accountId, lender)).pipe(
+          Effect.flatMap((answer) =>
+            Effect.sync(() => {
+              if (!("error" in answer)) {
+                console.log(
+                  `[hub] ${ctx.machineName(lender)} is back: ${ctx.machineName(borrower)}'s borrowed sign-in of account ${accountId} refreshed`
+                );
+                answerBorrower(borrower, null, accountId, answer);
+              }
+            })
+          )
+        )
+      );
     }
   };
 
@@ -542,7 +551,10 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       const now = status.get(instanceId);
       if (!(now && mayRun(now))) {
         // Each re-pin runs on its own; one not done is tried at the next tick.
-        detach(repinMovedFrom(instanceId, machineId), "login move re-pin");
+        ctx.lifetime.fork(
+          "login move re-pin",
+          Effect.promise(() => repinMovedFrom(instanceId, machineId))
+        );
         continue;
       }
       // Not known yet (a hub just started): asked once its machine says.
@@ -551,16 +563,18 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       }
       // The machine's `asleep` frame files the row; a refusal is a session not
       // at rest yet, asked again next tick.
-      detach(
-        ctx.callAgent(
-          machineId,
-          CONTROL_SLEEP,
-          [],
-          SLEEP_TIMEOUT_MS,
-          undefined,
-          instanceId
-        ),
-        "sleep request"
+      ctx.lifetime.fork(
+        "sleep request",
+        Effect.promise(() =>
+          ctx.callAgent(
+            machineId,
+            CONTROL_SLEEP,
+            [],
+            SLEEP_TIMEOUT_MS,
+            undefined,
+            instanceId
+          )
+        )
       );
     }
   };
@@ -681,8 +695,12 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         moveTicker = undefined;
         return;
       }
+      // Each move's step is let go: the tick itself waits on none.
       for (const move of moves) {
-        advanceMove(move).catch(console.error);
+        ctx.lifetime.fork(
+          "login move advanced",
+          Effect.promise(() => advanceMove(move))
+        );
       }
       sleepMovedFrom();
     });

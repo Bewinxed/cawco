@@ -30,6 +30,7 @@ import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { Deferred, Effect } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
@@ -74,9 +75,10 @@ const KEPT_FAILURE = z.object({ code: z.string(), detail: z.string() });
 interface Running {
   chunks: Uint8Array[];
   ended: boolean;
-  head: PromiseWithResolvers<{ headers: [string, string][]; status: number }>;
-  /** Settles when a chunk comes or the answer ends. */
-  moved: PromiseWithResolvers<void>;
+  /** Its answer's status and headers, once it has them. */
+  head: Deferred.Deferred<{ headers: [string, string][]; status: number }>;
+  /** Settles when a chunk comes or the answer ends; a new one waits for the next. */
+  moved: Deferred.Deferred<void>;
 }
 
 /** Statuses whose response carries no body (Fetch: "null body status"). */
@@ -84,13 +86,17 @@ const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
 const moved = (running: Running): void => {
   const was = running.moved;
-  running.moved = Promise.withResolvers();
-  was.resolve();
+  running.moved = Deferred.makeUnsafe();
+  Deferred.doneUnsafe(was, Effect.void);
 };
 
 /** A running call's answer, from its first byte, as it comes. */
-const follow = async (running: Running): Promise<Response> => {
-  const { status, headers } = await running.head.promise;
+const follow = async (
+  lifetime: HubLifetimeShape,
+  running: Running
+): Promise<Response> => {
+  // The promise edges of the waits for its head and each next chunk: a Response's stream pulls with promises.
+  const { status, headers } = await lifetime.run(Deferred.await(running.head));
   if (NULL_BODY.has(status)) {
     return new Response(null, { status, headers });
   }
@@ -99,7 +105,7 @@ const follow = async (running: Running): Promise<Response> => {
     new ReadableStream<Uint8Array>({
       async pull(controller) {
         while (next >= running.chunks.length && !running.ended) {
-          await running.moved.promise;
+          await lifetime.run(Deferred.await(running.moved));
         }
         const chunk = running.chunks[next];
         if (chunk) {
@@ -158,7 +164,10 @@ export const createToolCallKeys = ({
     const headers = [...response.headers].filter(
       ([name]) => name.toLowerCase() !== "content-length"
     );
-    running.head.resolve({ status: response.status, headers });
+    Deferred.doneUnsafe(
+      running.head,
+      Effect.succeed({ status: response.status, headers })
+    );
     try {
       if (response.body) {
         for await (const chunk of response.body) {
@@ -232,7 +241,7 @@ export const createToolCallKeys = ({
       console.info(
         `[tool-call-keys] ${url.pathname} sent again while it runs: answered as it answers`
       );
-      return await follow(already);
+      return await follow(lifetime, already);
     }
     if (!db.take(id, Date.now())) {
       return kept(id, url.pathname) ?? refused(INTERRUPTED_CALL);
@@ -240,8 +249,8 @@ export const createToolCallKeys = ({
     const running: Running = {
       chunks: [],
       ended: false,
-      head: Promise.withResolvers(),
-      moved: Promise.withResolvers(),
+      head: Deferred.makeUnsafe(),
+      moved: Deferred.makeUnsafe(),
     };
     live.set(id, running);
     let response: Response;
@@ -254,12 +263,11 @@ export const createToolCallKeys = ({
         detail: error instanceof Error ? error.message : String(error),
       });
     }
-    keep(id, running, response).catch((error: unknown) =>
-      console.warn(
-        `[tool-call-keys] a keyed call's answer was not kept: ${error instanceof Error ? error.message : String(error)}`
-      )
+    lifetime.fork(
+      "keyed tool call's answer kept",
+      Effect.promise(() => keep(id, running, response))
     );
-    return await follow(running);
+    return await follow(lifetime, running);
   };
 
   /**
