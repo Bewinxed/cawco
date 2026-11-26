@@ -237,6 +237,20 @@ export const helperIsLive = async (): Promise<boolean> =>
   (await liveHelper()) !== undefined;
 
 /**
+ * Whether this machine may yet run the build before the one this process
+ * runs from: a trial is open, an update helper is applying or rolling back,
+ * or this build's trial ended undecided (`unconfirmedVersion`), the rule the
+ * agent's prune at start keeps the build before by (agent binary-update.ts
+ * `#pruneAtStart`). What this build moved on disk keeps the form the build
+ * before reads until it answers no. A machine with no installation (run
+ * from source) has no build before: no.
+ */
+export const buildBeforeMayReturn = async (): Promise<boolean> =>
+  (await readTrial()) !== undefined ||
+  (await helperIsLive()) ||
+  (await readUpdateState())?.unconfirmedVersion === runtimeVersion;
+
+/**
  * The phases in which the update state's `availableVersion` is a build staged
  * under `versions/` for an install that has not reached its helper's lock:
  * waiting for work in flight or for its moment (`ready`), for a keeper's

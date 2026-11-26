@@ -3,7 +3,7 @@
  * (core paths/fleet.ts `fleetConvergedFile`): each item's hash as a converge
  * wrote it, and the report that converge came to. It is the converge's
  * basis: an item a delta carries whose hash this already holds is not
- * written again (fleet-desired.ts `apply`), so an agent that starts again
+ * written again (fleet-ledger.ts `apply`), so an agent that starts again
  * converges only what moved while it was away, with no probe; the report is
  * the one a partial converge lays its parts over (session.ts
  * `#convergeSoon`).
