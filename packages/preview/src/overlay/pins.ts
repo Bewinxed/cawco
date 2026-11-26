@@ -731,9 +731,13 @@ export function startPins(deps: PinsDeps): Pins {
       }
       const read = deps.anchorOf(found.el);
       const now = reread(pin.id, pin.anchor, read, found.by);
-      if (now || pin.movedAt) {
+      const anchor = now ?? madeAs(pin.anchor, read);
+      // A place is written only as this view reads it back: one it would
+      // find nothing by stands missing on the next draw, is moved aside, is
+      // found again here, and is written again, for ever.
+      if ((now || pin.movedAt) && deps.locate(anchor)?.el === found.el) {
         const { movedAt: _moved, ...rest } = pin;
-        moves.push({ ...rest, anchor: now ?? madeAs(pin.anchor, read) });
+        moves.push({ ...rest, anchor });
       }
     }
     return moves;

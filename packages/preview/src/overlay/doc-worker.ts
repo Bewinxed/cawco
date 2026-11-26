@@ -33,6 +33,13 @@ import {
   watchSilence,
 } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
+import {
+  carryOver,
+  clearOfRetired,
+  MESSAGE_REPLACED,
+  type Retired,
+  retiredFrom,
+} from "@cawco/core/doc-swap";
 import { cutShort } from "@cawco/core/words/helpers";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
@@ -66,6 +73,8 @@ const post = (message: FromWorker) => worker.postMessage(message);
 const PAGE = Symbol("page");
 const SEED = Symbol("seed");
 const REPLICA = Symbol("replica");
+/** The person's writes on a replaced doc, written onto the fresh one (core `carryOver`): the page's own, as `local`. */
+const CARRIED = Symbol("carried");
 
 /** Whether the page is shown, as the page tells it: the silence watch reads it. */
 const shownListeners = new Set<() => void>();
@@ -303,16 +312,24 @@ const keepOnDevice = () => {
   own._db.catch(loaded);
 };
 
-/** A fresh doc numbered `next` in place of the one held; the device keeps the old one's no longer. */
-const replaceDoc = (next: number) => {
+/**
+ * A fresh doc numbered `next` in place of the one held; the device keeps
+ * the old one's no longer. A doc the hub replaced stands for its carry
+ * ({@link replacedBy}), and the fresh client is none of its record's
+ * (`retired`).
+ */
+const replaceDoc = (next: number, retired: Retired | null = null) => {
   quiet?.stop();
   quiet = null;
   provider?.destroy();
   provider = null;
   kept = null;
   // Its device copy lets go with it (y-indexeddb destroys on the doc's destroy).
-  doc.destroy();
+  if (replacing?.stale !== doc) {
+    doc.destroy();
+  }
   doc = new Doc();
+  clearOfRetired(doc, retired);
   hubHolds = new Map();
   generation = next;
   watch(doc, generation);
@@ -368,6 +385,13 @@ const connect = () => {
   });
   own.on("sync", (isSynced: boolean) => {
     if (isSynced && own === provider) {
+      // The hub's new doc is in: what the person wrote that it never took is written onto it.
+      if (replacing) {
+        const { stale, retired } = replacing;
+        replacing = null;
+        carryOver(stale, doc, retired, CARRIED);
+        stale.destroy();
+      }
       // The hub's doc is in after a refusal: what of the person's the
       // refused doc held that it doesn't is the page's to keep aside.
       if (refusing) {
@@ -389,6 +413,14 @@ const connect = () => {
         queueMicrotask(() => refused(reason));
       }
     });
+  // The hub's word that the doc this holds was replaced (core doc-swap.ts).
+  own.messageHandlers[MESSAGE_REPLACED] = (_encoder, decoder) => {
+    const retired = retiredFrom(decoder);
+    if (own === provider) {
+      // Out of y-websocket's own message handling first.
+      queueMicrotask(() => replacedBy(retired));
+    }
+  };
   own.on("connection-close", (event) => {
     if (own !== provider || stalls.reopening() || silence.reopening()) {
       return;
@@ -422,6 +454,31 @@ const refused = (reason: string) => {
   replaceDoc(generation + 1);
   post({ type: "refused", generation, reason });
   (refusedCopy?.clearData() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => {
+      if (provider === null) {
+        keepOnDevice();
+        connect();
+      }
+    });
+};
+
+/** The doc the hub replaced and its record, until the fresh doc has the hub's (core `carryOver`). */
+let replacing: { stale: Doc; retired: Retired } | null = null;
+
+/**
+ * The hub replaced the doc (core doc-swap.ts): the old one is kept until
+ * the fresh one has the hub's, to carry what the person wrote on it
+ * across, and the worker goes on in a fresh doc on a socket of its own,
+ * the device's copy of the old one cleared first, as after a refusal.
+ */
+const replacedBy = (retired: Retired) => {
+  const oldCopy = kept;
+  replacing?.stale.destroy();
+  replacing = { stale: doc, retired };
+  replaceDoc(generation + 1, retired);
+  post({ type: "replaced", generation });
+  (oldCopy?.clearData() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => {
       if (provider === null) {

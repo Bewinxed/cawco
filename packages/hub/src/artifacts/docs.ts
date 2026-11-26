@@ -29,6 +29,15 @@
  * A snapshot costs the whole doc (95 ms for a 13 MB page, 177 ms for a
  * 19,000-element canvas), so it runs on the hub's admission once the
  * person's burst is over, never inside an update.
+ *
+ * A snapshot keeps every deleted item (Yjs drops none: core doc-swap.ts),
+ * so a doc whose history outweighs its content is shed instead
+ * (shed.ts): the log becomes a new doc holding its live values alone, and
+ * every joined client is told it was replaced ({@link ArtifactClient.replaced})
+ * and let go, to join the new doc afresh. A device that joins later with
+ * the old doc is told the same as it syncs ({@link ArtifactDocs.outdated}).
+ * A held next version, or an artifact one is held for, keeps its history:
+ * merging one into the other reads the structs they share since the fork.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
 import type { ChoiceEntry } from "@cawco/core/choices";
@@ -46,7 +55,15 @@ import {
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { mapsOf, PIN_MAPS } from "@cawco/core/doc-maps";
 import { getMeta } from "@cawco/core/doc-meta";
+import {
+  clearOfRetired,
+  namesRetired,
+  type Retired,
+  readRetired,
+  updateNamesRetired,
+} from "@cawco/core/doc-swap";
 import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
+import { docSwapWords } from "@cawco/core/words/doc-swap";
 import {
   type AbstractType,
   applyUpdate,
@@ -69,6 +86,7 @@ import {
   mapKeysOf,
 } from "./doc-parts";
 import { createGate, type Gate } from "./gate";
+import { shedLine, shedOf } from "./shed";
 
 /**
  * A component's tuned timing written as a choice entry (the canvas page's
@@ -127,6 +145,12 @@ export interface ArtifactClient {
    * where the marks stand (core `DocMeta.placer`).
    */
   placer?: MainView;
+  /**
+   * Tells it the doc it holds was replaced, with `retired`, the record of
+   * what the hub let go (core doc-swap.ts `MESSAGE_REPLACED`), and ends its
+   * socket: nothing more it sends is kept, and it joins the new doc afresh.
+   */
+  replaced: (retired: Uint8Array) => void;
   /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
   screen: boolean;
   send: (update: Uint8Array) => void;
@@ -151,6 +175,8 @@ interface Loaded {
   logged: number;
   /** Its pins, each read again once a change touched it ({@link keepPins}). */
   pins: PinsKept;
+  /** What the hub let go each time it replaced the doc (core doc-swap.ts `Retired`), as kept and as read; null for a doc never replaced. */
+  retired: { bytes: Uint8Array; read: Retired } | null;
 }
 
 /** A doc's pins whole, kept as it takes each transaction: what {@link ArtifactDocs.pins} hands out. */
@@ -226,6 +252,16 @@ export interface ArtifactDocs {
    * person's picks) stays beside it.
    */
   merge: (from: string, to: string, origin: ChangeOrigin) => void;
+  /**
+   * The record of what the hub let go (core doc-swap.ts `Retired`), to tell
+   * a client its doc was replaced, when what it sent names a client of a
+   * replaced doc: its sync step 1's state vector (`vector`) or an update it
+   * sent (`update`). Null when it holds the doc the hub holds.
+   */
+  outdated: (
+    id: string,
+    sent: { vector: Map<number, number> } | { update: Uint8Array }
+  ) => Uint8Array | null;
   /**
    * Every pin of the artifact's doc, whole (core `readPins`), as it stands
    * now: each pin read again only once a change touched one of its parts.
@@ -379,13 +415,43 @@ export const createArtifactDocs = (deps: {
           priority: "background",
           run: () => {
             if (loaded.get(id) === entry && entry.logged >= COMPACT_AT) {
-              deps.db.compact(id, encodeStateAsUpdate(entry.doc));
-              entry.logged = 1;
+              compact(id, entry);
             }
           },
         });
       }
     );
+  };
+
+  /**
+   * The log of `id` replaced by one snapshot: the doc as it stands, or, when
+   * its history outweighs its content, a new doc of its live values (shed.ts),
+   * every client told it was replaced and the doc let go, to load anew. A
+   * held next version and the artifact it is held for keep their history:
+   * {@link ArtifactDocs.merge} reads the structs they share since the fork.
+   */
+  const compact = (id: string, entry: Loaded) => {
+    const whole = encodeStateAsUpdate(entry.doc);
+    const row = deps.db.get(id);
+    const forked =
+      !row || row.heldFor !== null || deps.db.heldOf(id) !== undefined;
+    const shed = forked
+      ? null
+      : shedOf(entry.doc, whole, entry.retired?.bytes ?? null);
+    if (!shed) {
+      deps.db.compact(id, whole);
+      entry.logged = 1;
+      return;
+    }
+    deps.db.shed(id, shed.live, shed.retired);
+    console.log(shedLine(id, shed));
+    loaded.delete(id);
+    const clients = [...entry.clients];
+    entry.clients.clear();
+    unload(entry);
+    for (const client of clients) {
+      client.replaced(shed.retired);
+    }
   };
 
   /** The doc's gate let go: a refusal left it holding what the doc never took, or nobody writes. */
@@ -430,6 +496,10 @@ export const createArtifactDocs = (deps: {
       return known;
     }
     const doc = new Doc();
+    const kept = deps.db.retired(id);
+    const retired = kept ? { bytes: kept, read: readRetired(kept) } : null;
+    // A client the replaced docs held names them: the hub's own is never one.
+    clearOfRetired(doc, retired?.read ?? null);
     for (const name of MAPS) {
       doc.getMap(name);
     }
@@ -445,6 +515,7 @@ export const createArtifactDocs = (deps: {
       clients: new Set(),
       logged: updates.length,
       pins: keepPins(doc, entries),
+      retired,
     };
     const roots = new Map<unknown, string>(
       MAPS.map((name) => [doc.getMap(name), name])
@@ -569,9 +640,24 @@ export const createArtifactDocs = (deps: {
         sleep(id, entry);
       }
     },
+    outdated: (id, sent) => {
+      const { retired } = load(id);
+      if (!retired) {
+        return null;
+      }
+      const old =
+        "vector" in sent
+          ? namesRetired(retired.read, sent.vector)
+          : updateNamesRetired(retired.read, sent.update);
+      return old ? retired.bytes : null;
+    },
     pins: (id) => load(id).pins.read(),
     problem: (id, update, agent) => {
       const entry = load(id);
+      // Writes made on a replaced doc: its client takes the new one (sync.ts), and keeps them by value.
+      if (entry.retired && updateNamesRetired(entry.retired.read, update)) {
+        return docSwapWords.copyReplaced;
+      }
       entry.gate ??= createGate(entry.doc);
       const why = entry.gate.problem(update, agent);
       if (why) {

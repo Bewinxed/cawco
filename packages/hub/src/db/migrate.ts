@@ -46,7 +46,7 @@ import { placeLinkItems } from "./link-items";
 import { logMachineColumnsUnread } from "./machine-columns-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
-import { FILE_HASHES } from "./migration-names";
+import { ARTIFACT_HISTORIES_SHED, FILE_HASHES } from "./migration-names";
 import { logMovesUnread } from "./move-states-unread";
 import { logOutputsUnread } from "./outputs-unread";
 import { logOwedSendsUnread } from "./owed-sends-unread";
@@ -60,6 +60,7 @@ import { sealAtRest } from "./seal-at-rest";
 import { placeSealedFacts } from "./sealed-facts-unread";
 import { logSendOriginsUnread } from "./send-origins-unread";
 import { logPlansUnread } from "./session-plans-unread";
+import { shedArtifactHistoriesOnce } from "./shed-artifact-histories";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 import { logTrackerCursorsUnread } from "./tracker-cursors-unread";
 import { logWaitHistoryUnread } from "./wait-history-unread";
@@ -488,6 +489,14 @@ export const MIGRATION_STEPS: readonly Step[] = [
     at: "opened",
     run: (db) => {
       rehashStoredFilesOnce(db, FILE_HASHES);
+    },
+  },
+  {
+    name: ARTIFACT_HISTORIES_SHED,
+    after: "latest",
+    at: "opened",
+    run: (db) => {
+      shedArtifactHistoriesOnce(db, ARTIFACT_HISTORIES_SHED);
     },
   },
 ];

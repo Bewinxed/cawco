@@ -26,13 +26,21 @@
  * one client's updates in clock order only, so each later one would wait
  * on the refused one for ever. The writer goes on in a fresh doc (a new
  * client) on a socket of its own, its refused writes kept aside.
+ *
+ * A client that holds a doc the hub has since replaced (docs.ts, shed.ts),
+ * as its sync step 1 or an update it sends says (docs.ts `outdated`), is
+ * told so ({@link replaced}): its socket takes nothing more and is closed,
+ * and the client takes the new doc in a fresh one, its own writes carried
+ * across by value (core doc-swap.ts).
  */
 import { rm } from "node:fs/promises";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { getMeta, setMeta } from "@cawco/core/doc-meta";
+import { DOC_REPLACED, replacedMessage } from "@cawco/core/doc-swap";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { writeStateFile } from "@cawco/core/state-file";
+import { docSwapWords } from "@cawco/core/words/doc-swap";
 import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -52,7 +60,7 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import { applyUpdate, type Doc, Map as YMap } from "yjs";
+import { applyUpdate, type Doc, decodeStateVector, Map as YMap } from "yjs";
 import type { StoreKey } from "../db/page-stores";
 import type { ArtifactClient, ArtifactDocs } from "./docs";
 import { picturePath } from "./page-store";
@@ -89,6 +97,29 @@ const refusal = (why: string): Uint8Array => {
   writeVarUint(encoder, MESSAGE_AUTH);
   writePermissionDenied(encoder, why);
   return toUint8Array(encoder);
+};
+
+/**
+ * A socket whose client holds a replaced doc told so, with `retired`, the
+ * hub's record of what it let go (core doc-swap.ts `MESSAGE_REPLACED`), and
+ * closed with core `DOC_REPLACED`: nothing more it sends is kept. A client
+ * that knows the message takes the new doc on it; one from before it was
+ * known hears the close, which y-websocket does not reopen.
+ */
+const replaced = (
+  socket: {
+    readonly data: { refused?: true };
+    send: (message: Uint8Array) => void;
+    close: (code?: number, reason?: string) => void;
+  },
+  retired: Uint8Array
+) => {
+  if (socket.data.refused) {
+    return;
+  }
+  socket.data.refused = true;
+  socket.send(replacedMessage(retired));
+  socket.close(DOC_REPLACED, docSwapWords.copyReplaced);
 };
 
 /** What the listener keeps on an artifact's socket. */
@@ -393,6 +424,7 @@ export const takeSentWrites = (
     client: {
       beat: () => undefined,
       close: () => undefined,
+      replaced: () => undefined,
       screen: false,
       send: () => undefined,
     },
@@ -413,8 +445,10 @@ export interface ArtifactSocketEnd {
  * One y-websocket message from a client of `doc`: its sync step 1 answered
  * with the hub's step 2, its step 2 or update handed to `take`, and an
  * update `take` refuses told to it as a {@link refusal}, after which nothing
- * more it sends is kept (see the top). Awareness, auth and awareness
- * queries are read and ignored.
+ * more it sends is kept (see the top). A step 1 or an update that names a
+ * replaced doc (`outdated`, an artifact's) is told as {@link replaced}
+ * instead, and nothing of it is answered or kept. Awareness, auth and
+ * awareness queries are read and ignored.
  */
 const readSync = (
   message: Buffer,
@@ -422,8 +456,12 @@ const readSync = (
   socket: {
     readonly data: { refused?: true };
     send: (message: Uint8Array) => void;
+    close: (code?: number, reason?: string) => void;
   },
-  take: (update: Uint8Array) => string | null
+  take: (update: Uint8Array) => string | null,
+  outdated?: (
+    sent: { vector: Map<number, number> } | { update: Uint8Array }
+  ) => Uint8Array | null
 ): void => {
   const decoder = createDecoder(new Uint8Array(message));
   if (readVarUint(decoder) !== MESSAGE_SYNC) {
@@ -432,6 +470,11 @@ const readSync = (
   const kind = readVarUint(decoder);
   if (kind === messageYjsSyncStep1) {
     const vector = readVarUint8Array(decoder);
+    const retired = outdated?.({ vector: decodeStateVector(vector) });
+    if (retired) {
+      replaced(socket, retired);
+      return;
+    }
     socket.send(syncMessage((encoder) => writeSyncStep2(encoder, doc, vector)));
     return;
   }
@@ -441,7 +484,13 @@ const readSync = (
   ) {
     return;
   }
-  const why = take(readVarUint8Array(decoder));
+  const update = readVarUint8Array(decoder);
+  const retired = outdated?.({ update });
+  if (retired) {
+    replaced(socket, retired);
+    return;
+  }
+  const why = take(update);
   if (why) {
     socket.data.refused = true;
     socket.send(refusal(why));
@@ -460,6 +509,7 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       ...(socket.data.placer
         ? { placer: { id: socket.data.placer, shown: true } }
         : {}),
+      replaced: (retired) => replaced(socket, retired),
       send: (update) =>
         socket.send(syncMessage((encoder) => writeUpdate(encoder, update))),
     };
@@ -484,8 +534,12 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       }
       return;
     }
-    readSync(message, docs.doc(artifactId), socket, (update) =>
-      takeUpdate(docs, artifactId, update, origin)
+    readSync(
+      message,
+      docs.doc(artifactId),
+      socket,
+      (update) => takeUpdate(docs, artifactId, update, origin),
+      (sent) => docs.outdated(artifactId, sent)
     );
   },
   close(socket: ArtifactSocketEnd, code?: number) {

@@ -35,6 +35,13 @@ import {
 } from "@cawco/core/doc-link";
 import type { ArtifactChanges } from "@cawco/core/doc-meta";
 import { docMeta, getMeta } from "@cawco/core/doc-meta";
+import {
+  carryOver,
+  clearOfRetired,
+  MESSAGE_REPLACED,
+  type Retired,
+  retiredFrom,
+} from "@cawco/core/doc-swap";
 import type { StageState } from "@cawco/core/stage";
 import {
   keepTuned,
@@ -280,7 +287,11 @@ export const askAgain = (
  * all and its note), so each is kept aside where it was made; then the pane
  * goes on in a fresh doc, a new Yjs client, on a socket of its own, as the
  * page's overlay does (Yjs takes one client's updates in clock order only,
- * so the old one's would all wait on the refused write).
+ * so the old one's would all wait on the refused write). A doc the hub has
+ * replaced since (core doc-swap.ts: the hub's `MESSAGE_REPLACED`) is let go
+ * the same way, its device copy with it, and every write of the person's
+ * the hub never took is written onto the fresh doc by value once it holds
+ * the hub's (core `carryOver`).
  */
 export function joinArtifact(
   instanceId: string,
@@ -297,6 +308,8 @@ export function joinArtifact(
   let gone = false;
   /** A refusal's reason and a copy of the refused doc, until the fresh doc has the hub's (core `lostWrites`). */
   let refusing: { refused: Doc; why: string } | null = null;
+  /** The doc the hub replaced and its record, until the fresh doc has the hub's (core `carryOver`). */
+  let replacing: { stale: Doc; retired: Retired } | null = null;
   /** The pane is closing its own socket (Try again, a rejoin, its end): not a drop. */
   let closingOurs = false;
   /** Running from a drop until a sync: says the link down at its end. */
@@ -399,6 +412,13 @@ export function joinArtifact(
       }
       clearDown();
       changed(viewOf(into));
+      // The hub's new doc is in: what the person wrote that it never took is written onto it.
+      if (replacing && into === doc) {
+        const { stale, retired } = replacing;
+        replacing = null;
+        carryOver(stale, into, retired, "carried");
+        stale.destroy();
+      }
       // The hub's doc is in after a refusal: what of the person's it holds
       // not is theirs to keep aside.
       if (refusing && into === doc) {
@@ -421,6 +441,14 @@ export function joinArtifact(
           refusedBy(reason, into);
         }
       });
+    // The hub's word that the doc this holds was replaced (core doc-swap.ts).
+    joined.messageHandlers[MESSAGE_REPLACED] = (_encoder, decoder) => {
+      const retired = retiredFrom(decoder);
+      if (joined === provider) {
+        // Out of y-websocket's own message handling first.
+        queueMicrotask(() => replacedBy(retired, into));
+      }
+    };
     joined.on("connection-close", (event: CloseEvent | null) => {
       // The artifact was removed: nothing of it is kept on the device, and it is no drop to say.
       if (event?.code === ARTIFACT_GONE) {
@@ -466,11 +494,27 @@ export function joinArtifact(
   }
 
   /**
-   * After a refused write: a fresh doc of the hub's, a new Yjs client on a
-   * socket of its own, the device's copy of the old one cleared first so
-   * the refused write never comes back into it.
+   * The hub replaced the doc `from` holds: it is kept until the fresh doc
+   * has the hub's, to carry what the person wrote on it across, and the
+   * pane goes on in a fresh doc ({@link again}).
    */
-  function again() {
+  function replacedBy(retired: Retired, from: Doc) {
+    if (gone || from !== doc) {
+      return;
+    }
+    replacing?.stale.destroy();
+    replacing = { stale: from, retired };
+    again(retired);
+  }
+
+  /**
+   * After a refused write or a replaced doc: a fresh doc of the hub's, a
+   * new Yjs client on a socket of its own, the device's copy of the old one
+   * cleared first so the refused write or the replaced doc never comes back
+   * into it. A replaced doc stands for its carry ({@link replacedBy}), and
+   * the fresh client is none the replaced docs held (`retired`).
+   */
+  function again(retired?: Retired) {
     if (gone) {
       return;
     }
@@ -479,8 +523,11 @@ export function joinArtifact(
     ours(() => provider.destroy());
     const refusedCopy = kept;
     kept = null;
-    doc.destroy();
+    if (replacing?.stale !== doc) {
+      doc.destroy();
+    }
     doc = new Doc();
+    clearOfRetired(doc, retired ?? null);
     const fresh = doc;
     (refusedCopy?.clearData() ?? Promise.resolve())
       .catch(() => undefined)
@@ -581,6 +628,8 @@ export function joinArtifact(
       gone = true;
       refusing?.refused.destroy();
       refusing = null;
+      replacing?.stale.destroy();
+      replacing = null;
       clearDown();
       stalls.stop();
       quiet.stop();

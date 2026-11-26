@@ -547,6 +547,9 @@ const heard = (message: FromWorker) => {
       restart(message.generation);
       watchers?.refused(message.reason);
       return;
+    case "replaced":
+      restart(message.generation);
+      return;
     case "refused-writes":
       keepRefused(message.writes, message.reason || "The hub didn't keep it.");
       return;

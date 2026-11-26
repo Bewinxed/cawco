@@ -26,3 +26,5 @@ export const SKILL_PLUGIN_VERSIONS = "skill_plugin_versions";
 export const SSH_MACHINES_HUB = "ssh_machines_hub";
 /** db/migrate.ts's `opened` step, rehash-stored-files.ts. */
 export const FILE_HASHES = `file_hashes:${FILE_HASH_SCHEME}`;
+/** db/migrate.ts's `opened` step, shed-artifact-histories.ts. */
+export const ARTIFACT_HISTORIES_SHED = "artifact_histories_shed";

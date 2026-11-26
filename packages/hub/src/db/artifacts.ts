@@ -18,6 +18,7 @@ import {
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifactChanges,
+  artifactRetired,
   artifacts,
   artifactUpdates,
   shownPreviews,
@@ -319,6 +320,22 @@ export interface ArtifactsDb {
   ) =>
     | { from: SourceKey | null; row: ArtifactRow; to: SourceKey | null }
     | undefined;
+  /**
+   * What the hub let go each time it replaced the artifact's doc
+   * (schema.ts `artifactRetired`, core doc-swap.ts `Retired`); null for a
+   * doc never replaced.
+   */
+  readonly retired: (id: string) => Uint8Array | null;
+  /**
+   * Replaces the log with `snapshot`, a new doc holding the old one's live
+   * content alone, and keeps `retired`, the record of what it let go
+   * (artifacts/shed.ts), in one transaction.
+   */
+  readonly shed: (
+    id: string,
+    snapshot: Uint8Array,
+    retired: Uint8Array
+  ) => void;
   /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other, as the show `revision` (`PreviewTarget.revision`). */
   readonly show: (
     instanceId: string,
@@ -403,6 +420,38 @@ const dropArtifactRows = (
   return gone;
 };
 
+/**
+ * An artifact's log replaced by one snapshot at the seq it had reached, and
+ * `retired`, when given, kept as the record of a shed doc
+ * ({@link ArtifactsDb.shed}), in one transaction.
+ */
+export const replaceLog = (
+  db: BunSQLiteDatabase,
+  id: string,
+  snapshot: Uint8Array,
+  retired: Uint8Array | null
+) => {
+  db.transaction((tx) => {
+    const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();
+    if (!row) {
+      return;
+    }
+    tx.delete(artifactUpdates).where(eq(artifactUpdates.artifactId, id)).run();
+    tx.insert(artifactUpdates)
+      .values({ artifactId: id, seq: row.seq, update: snapshot })
+      .run();
+    if (retired) {
+      tx.insert(artifactRetired)
+        .values({ artifactId: id, retired })
+        .onConflictDoUpdate({
+          target: artifactRetired.artifactId,
+          set: { retired },
+        })
+        .run();
+    }
+  });
+};
+
 export const artifactsDb = (
   db: BunSQLiteDatabase,
   {
@@ -471,20 +520,14 @@ export const artifactsDb = (
       .get();
     return row && artifactOf(row);
   },
-  compact: (id, snapshot) => {
-    db.transaction((tx) => {
-      const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();
-      if (!row) {
-        return;
-      }
-      tx.delete(artifactUpdates)
-        .where(eq(artifactUpdates.artifactId, id))
-        .run();
-      tx.insert(artifactUpdates)
-        .values({ artifactId: id, seq: row.seq, update: snapshot })
-        .run();
-    });
-  },
+  retired: (id) =>
+    db
+      .select({ retired: artifactRetired.retired })
+      .from(artifactRetired)
+      .where(eq(artifactRetired.artifactId, id))
+      .get()?.retired ?? null,
+  shed: (id, snapshot, retired) => replaceLog(db, id, snapshot, retired),
+  compact: (id, snapshot) => replaceLog(db, id, snapshot, null),
   create: ({ source, ...row }) => {
     const made = db
       .insert(artifacts)

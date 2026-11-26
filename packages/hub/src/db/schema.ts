@@ -6196,6 +6196,21 @@ export const artifactUpdates = sqliteTable(
 );
 
 /**
+ * What the hub let go each time it replaced an artifact's doc with one
+ * holding its live content alone (artifacts/shed.ts, core doc-swap.ts
+ * `Retired`): every client and deletion the replaced docs held, and the
+ * client that wrote the doc now. A device whose copy names one of those
+ * clients holds a replaced doc, and is told to take the new one. None for
+ * an artifact whose doc was never replaced.
+ */
+export const artifactRetired = sqliteTable("artifact_retired", {
+  artifactId: text("artifact_id")
+    .primaryKey()
+    .references(() => artifacts.id, { onDelete: "cascade" }),
+  retired: yjsUpdate("retired").notNull(),
+});
+
+/**
  * A page's store (artifacts/page-stores.ts): the Yjs document a page on
  * the design graph keeps its own state in, over y-websocket, as its update
  * log, kept as {@link artifactUpdates} is (appended in order, one snapshot

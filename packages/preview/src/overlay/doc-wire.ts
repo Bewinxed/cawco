@@ -93,6 +93,12 @@ export type FromWorker =
    */
   | { generation: number; reason: string; type: "refused" }
   /**
+   * The hub replaced the doc (core doc-swap.ts): it started again as
+   * `generation`, and what the person wrote on the old one the hub never
+   * took is written onto it by value once it holds the hub's.
+   */
+  | { generation: number; type: "replaced" }
+  /**
    * The hub's doc is in after a refusal: the person's writes the refused
    * doc held that it doesn't (core `lostWrites`), and the hub's reason.
    */
