@@ -123,10 +123,8 @@ hand-promise	new Promise	packages/hub/src/artifacts/service.ts	1
 hand-promise	new Promise	packages/hub/src/browser-tools.ts	1
 hand-promise	new Promise	packages/hub/src/context-reads.ts	1
 hand-promise	new Promise	packages/hub/src/continuations.ts	1
+hand-promise	new Promise	packages/hub/src/connect-asks.ts	1
 hand-promise	new Promise	packages/hub/src/favicon.ts	1
-hand-promise	new Promise	packages/hub/src/fleet-fetches.ts	1
-hand-promise	new Promise	packages/hub/src/fleet-watch.ts	1
-hand-promise	new Promise	packages/hub/src/folder-move-relay.ts	2
 hand-promise	new Promise	packages/hub/src/host-build.ts	1
 hand-promise	new Promise	packages/hub/src/law-tasks.ts	1
 hand-promise	new Promise	packages/hub/src/lifetime.ts	3
@@ -135,10 +133,6 @@ hand-promise	new Promise	packages/hub/src/project-stops.ts	1
 hand-promise	new Promise	packages/hub/src/server.ts	2
 hand-promise	new Promise	packages/hub/src/ssh-add.ts	1
 hand-promise	new Promise	packages/hub/src/ssh-tunnels.ts	1
-hand-promise	new Promise	packages/hub/src/tool-facts.ts	1
-hand-promise	new Promise	packages/hub/src/views/wire.ts	1
-hand-promise	new Promise	packages/hub/src/stream-relay.ts	1
-hand-promise	new Promise	packages/hub/src/wire-socket.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary-host.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
@@ -219,8 +213,6 @@ promise-map	reviving	packages/hub/src/preview-server/serve.ts	1
 promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
 promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
-promise-map	skillFetches	packages/hub/src/fleet-sources.ts	1
-promise-map	settleReads	packages/hub/src/sends.ts	1
 promise-map	starting	packages/agent/src/boundary/state.ts	1
 promise-map	viewing	packages/agent/src/layer.ts	1
 promise-map	warming	packages/agent/src/stage.ts	1
