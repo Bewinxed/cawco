@@ -8,6 +8,7 @@ import type { HubContext } from "../hub-context";
 import { nextTurn } from "../lifetime";
 import { outlivesSession } from "../pending";
 import { UNREAD } from "../sends";
+import { speaksContract } from "../speaks-contract";
 import type { MachineReturn } from "./machine-return";
 import {
   heldProcesses,
@@ -83,7 +84,6 @@ export type MachineReturnContext = Pick<
   | "settleLaunchesOn"
   | "settlePending"
   | "socketAddress"
-  | "speaksContract"
   | "sshRecordOf"
   | "streamRelay"
   | "streams"
@@ -235,7 +235,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // written the fleet's policy its welcome carries (READY,
     // fleet-sync.ts); one older is online as it registers, its
     // starts held until it installs this hub's build (`startHold`).
-    const speaks = ctx.speaksContract(agentFrame.build?.protocol);
+    const speaks = speaksContract(agentFrame.build?.protocol);
     ctx.db.upsertAgent({
       machineId: message.machineId,
       hostname: agentFrame.hostname ?? message.machineId,

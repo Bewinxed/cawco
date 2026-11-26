@@ -7,8 +7,10 @@
  */
 import type { DamagedRecordReport, DamagedRow } from "@cawco/core/protocol";
 import { damagedWords } from "@cawco/core/words/damaged";
+import { Context, Effect, Layer } from "effect";
+import { Db } from "./db";
 
-export interface DamagedRecords {
+export interface DamagedRecordsShape {
   /**
    * Takes a beat's list for `machineId`; answers the sessions whose rows it
    * moved (damaged before or after), none when it is the last one again.
@@ -28,9 +30,9 @@ export interface DamagedRecords {
   ) => (Row & { damaged?: DamagedRow })[];
 }
 
-export const damagedRecordsOf = (
+const damagedRecordsOf = (
   workItemsIn: (workspaceId: string) => { instanceId: string }[]
-): DamagedRecords => {
+): DamagedRecordsShape => {
   const byMachine = new Map<string, DamagedRecordReport[]>();
 
   /** Each session a damaged record belongs to; a workspace's damage is said first. */
@@ -100,3 +102,19 @@ export const damagedRecordsOf = (
     },
   };
 };
+
+/**
+ * Each machine's damaged records (`damagedRecordsOf`), as one of the hub's
+ * services: built once, from its layer, by `createServer` (hub-layer.ts).
+ */
+export class DamagedRecords extends Context.Service<
+  DamagedRecords,
+  DamagedRecordsShape
+>()("DamagedRecords") {}
+
+export const DamagedRecordsLayer = Layer.effect(DamagedRecords)(
+  Effect.gen(function* () {
+    const db = yield* Db;
+    return damagedRecordsOf((workspaceId) => db.workItemsIn(workspaceId));
+  })
+);

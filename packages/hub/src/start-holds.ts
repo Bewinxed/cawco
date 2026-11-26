@@ -7,6 +7,7 @@ import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
 import type { HubTimer } from "./lifetime";
 import { UNREAD } from "./sends";
+import { speaksContract } from "./speaks-contract";
 import { blockWords } from "./work-items";
 
 /**
@@ -47,7 +48,6 @@ export type StartHoldsContext = Pick<
   | "releaseOwed"
   | "replaceAtWake"
   | "sessionName"
-  | "speaksContract"
   | "startSent"
   | "startsFreed"
   | "tellEndedByMove"
@@ -104,7 +104,7 @@ export const createStartHolds = (
         words: `${ctx.machineName(machineId)} is installing an update`,
       };
     }
-    if (!ctx.speaksContract(ctx.agentProtocols.get(machineId))) {
+    if (!speaksContract(ctx.agentProtocols.get(machineId))) {
       return {
         kind: "build",
         words: updatesWords.olderBuild(

@@ -46,7 +46,7 @@ import type {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
-import type { ArrivingAsk, PreviewFrame } from "@cawco/core/frames";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -119,7 +119,6 @@ import type { createBrowsers } from "./browsers";
 import type { Caw, createCaw } from "./caw";
 import type { createConnectAsks } from "./connect-asks";
 import type { createConnections } from "./connections";
-import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction, MovedLine } from "./db/at-limit";
@@ -185,7 +184,6 @@ import type { createMemory } from "./memory";
 import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
 import type { NeedsRows } from "./needs-rows";
-import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
 import type { OffersWaiting } from "./offers-waiting";
 import type { OpenAsks } from "./open-asks";
@@ -195,7 +193,7 @@ import type { AnswerFrom, PendingShape } from "./pending";
 import type { PlacementInput, TaskAccounts } from "./placement";
 import type { PlanChangeCalls } from "./plan-change-calls";
 import type { createPlans } from "./plans";
-import type { createPreviewListeners, PreviewTarget } from "./preview";
+import type { createPreviewListeners } from "./preview";
 import type { createPreviewService } from "./preview-service";
 import type { PreviewUnavailableOf } from "./preview-unavailable";
 import type { createCaps } from "./project-caps";
@@ -243,7 +241,6 @@ import type { turnUsageOf } from "./turn-usage";
 import type { TypeProposals } from "./type-proposals";
 import type { UsabilityFeedback } from "./usability-feedback";
 import type { UsageCounter } from "./usage-count";
-import type { ViewChanges } from "./views/changes";
 import type { WelcomeConverge } from "./welcome-converge";
 import type {
   ClientPayload,
@@ -472,7 +469,6 @@ export interface ClosureContext {
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   cutTurn: (instanceId: string, cause: string) => void;
-  damagedRecords: ReturnType<typeof damagedRecordsOf>;
   db: DbShape;
   decisions: ReturnType<typeof createDecisions>;
   decisionsChanged: (projectId: string) => void;
@@ -837,11 +833,6 @@ export interface ClosureContext {
     store,
     storeProvider,
   }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
-  /** What a session's account line says of a move that didn't happen, while it runs where it stayed (limit-moves.ts). */
-  moveRefusalOf: (row: {
-    accountId?: string | null;
-    id: string;
-  }) => string | undefined;
   moveResults: LoginMoveResults;
   moveRowsToAccount: (
     machineId: string,
@@ -907,7 +898,6 @@ export interface ClosureContext {
     instanceId: string,
     neutral: { atLimit?: true | undefined; is_error?: boolean | undefined }
   ) => void;
-  noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
   /** The hub's offers waiting on the person, as Needs you lists them (offers-waiting.ts). */
   offersWaiting: OffersWaiting;
@@ -1212,8 +1202,6 @@ export interface ClosureContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
-  /** Each session's sends still pending, by count (sends.ts `pendingSends`). */
-  sendsPending: { count: (instanceId: string) => number };
   /** A frame to a client's socket (wire-socket.ts). */
   sendToClient: SendToClient;
   sentFrame: (arg0: SendPayload) => SentMessage;
@@ -1256,11 +1244,6 @@ export interface ClosureContext {
     bound: string | null | undefined,
     shared: boolean
   ) => string | undefined;
-  shownFrame: (
-    instanceId: string,
-    target: PreviewTarget,
-    open: boolean
-  ) => PreviewFrame;
   /**
    * The sign-ins a session in `harness` can run on: Codex's own for a
    * Codex session (account-signin.ts `signinsFor`, placement.ts
@@ -1291,7 +1274,6 @@ export interface ClosureContext {
   skillChoices: Map<string, string[]>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
   socketAddress: (ws: AuthSocket) => string | null;
-  speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshRecordOf: (ws: AuthSocket) => string | undefined;
   sshTunnels: SshTunnels;
@@ -1426,8 +1408,6 @@ export interface ClosureContext {
   /** Something a tool listing reads beside its session moved (a connection, a delegate type, an area, the fleet): every listing made again, every open list looked at (delegation-mcp.ts). */
   toolInputsChanged: () => void;
   toolReleases: ToolReleases;
-  /** Sessions an input of whose own tool list moved (db board-log.ts `tools`): their lists alone looked at again (delegation-mcp.ts). */
-  toolsMoved: (ids: readonly string[]) => void;
   touched: Map<string, number>;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
@@ -1464,8 +1444,6 @@ export interface ClosureContext {
   /** Agents' usability feedback on CawCo's tools (usability-feedback.ts). */
   usabilityFeedback: UsabilityFeedback;
   usageCounter: UsageCounter;
-  /** What the change log says moved, told to the views thread (views/client.ts). */
-  viewsHear: (changes: ViewChanges) => void;
   wakeForSend: (
     agent: MachineSocket,
     machineId: string,

@@ -1,16 +1,18 @@
 /**
- * What the hub holds in memory about each machine a register rebuilds ({@link createMachineRuntime}).
+ * What the hub holds in memory about each machine a register rebuilds
+ * (`make`), as one of its services: built once, from its layer, by
+ * `createServer` (hub-layer.ts).
  */
 
 import type { BinaryUpdatePhaseDropped } from "@cawco/core/agent-reads";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { BuildInfo, SessionCustody } from "@cawco/core/protocol";
+import { Context, Effect, Layer } from "effect";
+import { MachineWords } from "./machine-words";
 import { WatchedMap } from "./watched-map";
 
 /** `machineName`: a machine as a sentence names it, for the log. */
-export const createMachineRuntime = (
-  machineName: (machineId: string) => string
-) => {
+const make = (machineName: (machineId: string) => string) => {
   /** Each machine's custody report: the board lays its status as it moves. */
   const machineCustody = new WatchedMap<string, SessionCustody>();
 
@@ -74,3 +76,14 @@ export const createMachineRuntime = (
     agentProtocols,
   };
 };
+
+export class MachineRuntime extends Context.Service<
+  MachineRuntime,
+  ReturnType<typeof make>
+>()("MachineRuntime") {}
+
+export const MachineRuntimeLayer = Layer.effect(MachineRuntime)(
+  Effect.gen(function* () {
+    return make((yield* MachineWords).machineName);
+  })
+);

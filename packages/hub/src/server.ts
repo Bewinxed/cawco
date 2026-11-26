@@ -171,7 +171,6 @@ import {
   relaunchOf,
   startRefused,
 } from "@cawco/core/relaunch";
-import { protocolRange } from "@cawco/core/runtime";
 import {
   CONTROL_ACKNOWLEDGE_ADDRESS,
   CONTROL_GET_SESSION_INFO,
@@ -353,7 +352,7 @@ import { createAtLimit } from "./at-limit";
 import { mergeBeats } from "./beat-merge";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
-import { createBoard } from "./board";
+import { Board } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
 import { answered as browserAnswered } from "./browser-answered";
@@ -386,8 +385,9 @@ import { connectionRoutes, createConnections } from "./connections";
 import { createContextReads } from "./context-reads";
 import { createContinuations } from "./continuations";
 import { createCutTurns } from "./cut-turns";
-import { damagedRecordsOf } from "./damaged-rows";
+import { DamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
+import { createDashboardGreeting } from "./dashboard-greeting";
 import {
   dashboardHosts,
   dashboardOrigins,
@@ -553,7 +553,7 @@ import {
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { nameAwayMachine, reconnectingFor } from "./machine-reads";
-import { createMachineRuntime } from "./machine-runtime";
+import { MachineRuntime } from "./machine-runtime";
 import { MachineWords } from "./machine-words";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
@@ -760,6 +760,7 @@ import {
   peekKind,
   peekParent,
 } from "./spawns";
+import { speaksContract } from "./speaks-contract";
 import {
   CLIENT_ADDRESS_HEADER,
   createSshDoor,
@@ -1318,7 +1319,8 @@ export const createServer = (
     )
   );
   // The machines in the hub's sentences (machine-words.ts), its handover's
-  // state (handover-state.ts) and its calls to machines (machine-calls.ts).
+  // state (handover-state.ts), its calls to machines (machine-calls.ts) and
+  // its board (board.ts), started below once what it lays is made.
   const {
     awayError,
     machineFault,
@@ -1330,6 +1332,7 @@ export const createServer = (
   const handoverState = Context.get(services, HandoverState);
   const { machinePresence } = handoverState;
   const machineCalls = Context.get(services, MachineCalls);
+  const board = Context.get(services, Board);
   const {
     FORGET_CREDENTIALS_TIMEOUT_MS,
     asRead,
@@ -1633,7 +1636,6 @@ export const createServer = (
     startModelOf: () => startModelOf,
     startingSetOf: () => startingSetOf,
     projectAtFolder: () => projectAtFolder,
-    sendsPending: () => sendsPending,
     storedRecent: () => storedRecent,
     typeSettingsOf: () => typeSettingsOf,
     ownMachineIdRead: () => ownMachineIdRead,
@@ -1729,7 +1731,6 @@ export const createServer = (
     owedOn: () => owedOn,
     pickWithMove: () => pickWithMove,
     refuseMove: () => refuseMove,
-    moveRefusalOf: () => moveRefusalOf,
     forgetMoveRefusal: () => forgetMoveRefusal,
     ownDefaultOf: () => ownDefaultOf,
     refusedHarness: () => refusedHarness,
@@ -1758,7 +1759,6 @@ export const createServer = (
     nameFromFirstTurn: () => nameFromFirstTurn,
     sendLines: () => sendLines,
     mcpChanges: () => mcpChanges,
-    toolsMoved: () => toolsMovedPort.now(),
     toolInputsChanged: () => toolInputsChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
@@ -1776,7 +1776,6 @@ export const createServer = (
     board: () => board,
     launches: () => launches,
     processFailed: () => processFailed,
-    speaksContract: () => speaksContract,
     startsFreed: () => startsFreedPort.now(),
     startSent: () => startSentPort.now(),
     homeMovedAccountOn: () => homeMovedAccountOn,
@@ -1791,13 +1790,9 @@ export const createServer = (
     browsers: () => browsers,
     passkeyRelay: () => passkeyRelay,
     continuationTable: () => continuationTable,
-    damagedRecords: () => damagedRecords,
-    viewsHear: () => viewsThread.hear,
     hubRun: () => hubRun,
     machineCustody: () => machineCustody,
-    noticesSeen: () => noticesSeen,
     owedAfterBoard: () => owedAfterBoard,
-    shownFrame: () => shownFrame,
     delegateWaits: () => delegateWaits,
     homeLoginMoveOf: () => homeLoginMoveOf,
     inCustody: () => inCustody,
@@ -2228,8 +2223,7 @@ export const createServer = (
     rebalanceNotices,
     syncAccounts,
   } = createAccountProbes(ctx);
-  const board = createBoard(ctx);
-  const { greetDashboard, withSessionPresence } = board;
+  const greetDashboard = createDashboardGreeting(ctx);
 
   /**
    * Recent's stored transcripts (stored-recent.ts): the views thread keeps
@@ -2298,7 +2292,7 @@ export const createServer = (
     heardBinaryUpdate,
     machineCustody,
     forget: forgetMachineRuntime,
-  } = createMachineRuntime((machineId) => machineName(machineId));
+  } = Context.get(services, MachineRuntime);
   const { createOrJoinProject, leadHome, newProject, workPlaceOf } =
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
@@ -3405,9 +3399,7 @@ export const createServer = (
   };
 
   /** Each machine's damaged records, laid over the rows they belong to. */
-  const damagedRecords = damagedRecordsOf((workspaceId) =>
-    db.workItemsIn(workspaceId)
-  );
+  const damagedRecords = Context.get(services, DamagedRecords);
 
   /**
    * Machines the owner paused until a time (machine-pause.ts). As a pause
@@ -3441,13 +3433,6 @@ export const createServer = (
     door: createSshDoor(lifetime, (port) => previewListeners.servedAt(port)),
   });
 
-  /** Whether an agent's contract range holds this hub's (core runtime.ts `protocolRange`). */
-  const speaksContract = (
-    range: { max: number; min: number } | undefined
-  ): boolean =>
-    range !== undefined &&
-    range.min <= protocolRange.max &&
-    range.max >= protocolRange.min;
   /**
    * The hub's own work that waits for a machine's held starts to end (a
    * continuation, {@link StartsHeld}) goes on: bound once that work exists
@@ -7614,11 +7599,40 @@ export const createServer = (
 
   // The board read whole, once everything it lays its rows from is made;
   // from here on each keeper's word and each write moves only its entries.
-  board.start();
-  registry.onPresence((machineId) => board.machineMoved(machineId));
-  heldSessions.hear((id) => board.sessionsMoved([id]));
-  machineCustody.hear(board.machineStatusMoved);
-  binaryUpdateStates.hear(board.machineStatusMoved);
+  // What it is handed of a keeper made below is read when it publishes.
+  board.start({
+    rows: {
+      queuedSends: (instanceId) => sendsPending.count(instanceId),
+      moveRefusal: (row) => moveRefusalOf(row),
+      stall: (instanceId) => stallOfPort.now()(instanceId),
+      stalledNow: () => stalledNowPort.now()(),
+    },
+    machines: {
+      fleetReady: (machineId) => fleetSyncs.isReady(machineId),
+      lostAt: (machineId) => contact.lostAt(machineId),
+      ownMachineId: () => ownMachineIdRead,
+    },
+    lists: {
+      handoffs: () => Object.fromEntries(handoffs),
+      continuations: () => continuationTable(),
+      noticesSeen: {
+        damaged: () => noticesSeen.damaged(),
+        ids: () => noticesSeen.ids(),
+      },
+      previewSettings: () => previewListeners.settings(),
+      shownFrame: (instanceId, target, open) =>
+        shownFrame(instanceId, target, open),
+    },
+    followers: {
+      viewsHear: (changes) => viewsThread.hear(changes),
+      followSessions: (ids) => workItems.followSessions(ids),
+      toolInputsChanged: () => toolInputsChangedPort.now()(),
+      toolsMoved: (ids) => toolsMovedPort.now()(ids),
+      ruleFactsMoved: () => ruleEngine.forgetFacts(),
+      laneSessionsMoved: (ids) => artifactLane.sessionsMoved(ids),
+      tabMoved: (move) => artifactSessions.moved(move),
+    },
+  });
   // Each machine's update state, kept as it moves (db `keepBinaryUpdate`):
   // what the update list and its row say once it is offline, and through
   // this hub's restart. Its socket's close forgets the live one alone.
@@ -7628,9 +7642,7 @@ export const createServer = (
       db.keepBinaryUpdate(machineId, state);
     }
   });
-  agentProtocols.hear(board.machineStatusMoved);
   handoffs.hear(() => board.listMoved("handoffs"));
-  previewTargets.hear(() => board.listMoved("previews"));
   /**
    * Sessions an input of whose own tool list moved (db board-log.ts
    * `tools`): their open lists looked at, once the MCP server exists below.
@@ -11771,7 +11783,7 @@ export const createServer = (
       instances: board.rows,
       machines: board.machines,
       ...sessionReads(db, (rows) =>
-        withSessionPresence(rows).map((row) => {
+        board.withSessionPresence(rows).map((row) => {
           const stall = stallOfPort.now()(row.id);
           return stall ? { ...row, stalled: stall } : row;
         })

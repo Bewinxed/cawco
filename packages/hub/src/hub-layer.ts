@@ -14,8 +14,10 @@
 import { Effect, Layer } from "effect";
 import { AdmissionLayer } from "./admission";
 import { PageStoresLayer } from "./artifacts/page-stores";
+import { BoardLayer } from "./board";
 import { openBrowserPass } from "./browser-passes";
 import { DASHBOARD_PORT } from "./config";
+import { DamagedRecordsLayer } from "./damaged-rows";
 import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
 import { Db } from "./db";
 import { HandoverStateLayer } from "./handover-state";
@@ -26,6 +28,7 @@ import { LawsLayer } from "./laws";
 import { HubLifetime } from "./lifetime";
 import { MachineCallsLayer } from "./machine-calls";
 import { MachineCredentialsLayer } from "./machine-credentials";
+import { MachineRuntimeLayer } from "./machine-runtime";
 import { MachineWordsLayer } from "./machine-words";
 import { PreviewLinkLayer } from "./preview-control";
 import { Registry } from "./registry";
@@ -82,6 +85,7 @@ const HubAuthLayer = Layer.effect(HubAuth)(
 
 /** The services the others here read: made first, and kept in what the layer gives. */
 const FirstLayer = Layer.mergeAll(
+  DamagedRecordsLayer,
   HandoverStateLayer,
   HubRecordLayer,
   MachineWordsLayer,
@@ -89,12 +93,14 @@ const FirstLayer = Layer.mergeAll(
   TailnetHttpsLayer
 );
 
-export const HubLayer = Layer.mergeAll(
+/** The services made from the first ones: kept in what the layer gives too. */
+const SecondLayer = Layer.mergeAll(
   AdmissionLayer,
   HubAuthLayer,
   LawsLayer,
   MachineCallsLayer,
   MachineCredentialsLayer,
+  MachineRuntimeLayer,
   PageStoresLayer,
   PreviewLinkLayer,
   SessionRuntimeLayer,
@@ -102,3 +108,6 @@ export const HubLayer = Layer.mergeAll(
   ToolFactsLayer,
   TriggerSettingsLayer
 ).pipe(Layer.provideMerge(FirstLayer));
+
+/** The board (board.ts) reads the laws and the sessions' and machines' runtime, so it is made last. */
+export const HubLayer = BoardLayer.pipe(Layer.provideMerge(SecondLayer));

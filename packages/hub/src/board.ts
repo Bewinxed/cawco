@@ -19,8 +19,11 @@
  *
  * Each change takes a version (one numbering per hub run): a dashboard that
  * reconnects names the version it holds and is sent what moved since.
+ *
+ * One of the hub's services, built once from its layer (hub-layer.ts). What
+ * it reads of the keepers the hub's closure makes, and whom it tells what
+ * moved, it is handed as it starts ({@link BoardKeepers}).
  */
-import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { BoardChanges, BoardKeyed } from "@cawco/core/frames";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { syncSection } from "@cawco/core/loop-watch";
@@ -32,66 +35,47 @@ import type {
   MachineStatus,
   SessionCustody,
 } from "@cawco/core/protocol";
-import { WIRE_PROTOCOL } from "@cawco/core/stream";
+import { Context, Effect, Layer } from "effect";
 import { withAncestors } from "./board-ancestors";
 import {
+  type BoardKeepers,
   type BoardList,
   type BoardListValues,
   type BoardRow,
   type BoardShape,
   laidRow,
 } from "./board-shape";
+import { DamagedRecords, type DamagedRecordsShape } from "./damaged-rows";
+import { Db, type DbShape } from "./db";
 import type { BoardChangeKind } from "./db/board-log";
 import type { BoardInstanceRow } from "./db/instances";
 import { listedAt, listedUntil } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
-import type { HubContext } from "./hub-context";
-import type { HubTimer } from "./lifetime";
+import { HandoverState } from "./handover-state";
+import { Laws } from "./laws";
+import { HubLifetime, type HubLifetimeShape, type HubTimer } from "./lifetime";
+import { MachineRuntime } from "./machine-runtime";
 import { previewTargets } from "./preview";
+import { Registry, type RegistryShape } from "./registry";
+import { SessionRuntime } from "./session-runtime";
+import { speaksContract } from "./speaks-contract";
 import { createViewChanges, VIEW_OF } from "./views/changes";
 import { isHubParent } from "./work-item-state";
 
-export type BoardContext = Pick<
-  HubContext,
-  | "agentProtocols"
-  | "artifactLane"
-  | "artifactSessions"
-  | "binaryUpdateStates"
-  | "browsers"
-  | "contact"
-  | "continuationTable"
-  | "damagedRecords"
-  | "db"
-  | "viewsHear"
-  | "fleetSyncs"
-  | "handoffs"
-  | "heldSessions"
-  | "hubBuild"
-  | "hubRun"
-  | "laws"
-  | "lifetime"
-  | "machineCustody"
-  | "machinePresence"
-  | "moveRefusalOf"
-  | "moves"
-  | "noticesSeen"
-  | "owedAfterBoard"
-  | "ownMachineIdRead"
-  | "previewListeners"
-  | "pulses"
-  | "registry"
-  | "ruleEngine"
-  | "sendToClient"
-  | "sendsPending"
-  | "storedRecent"
-  | "shownFrame"
-  | "speaksContract"
-  | "stallOf"
-  | "stalledNow"
-  | "toolInputsChanged"
-  | "toolsMoved"
-  | "workItems"
->;
+/** What the board reads of the hub's services, each when it lays an entry: what its layer builds it from. */
+interface BoardDeps {
+  damagedRecords: DamagedRecordsShape;
+  db: DbShape;
+  heldSessions: SessionRuntime["Service"]["heldSessions"];
+  laws: Laws["Service"];
+  lifetime: HubLifetimeShape;
+  machinePresence: HandoverState["Service"]["machinePresence"];
+  machines: Pick<
+    MachineRuntime["Service"],
+    "agentProtocols" | "binaryUpdateStates" | "machineCustody"
+  >;
+  registry: RegistryShape;
+}
 
 /** How many removals a collection keeps the version of, for a page that reconnects. */
 // @limit recording: hub.board-removals-since until 2026-12-03
@@ -170,8 +154,27 @@ const keyedChanges = <Entry>(): BoardKeyed<Entry> => ({
   removed: [],
 });
 
-export const createBoard = (ctx: BoardContext): BoardShape => {
+const make = ({
+  damagedRecords,
+  db,
+  heldSessions,
+  laws,
+  lifetime,
+  machinePresence,
+  machines: { agentProtocols, binaryUpdateStates, machineCustody },
+  registry,
+}: BoardDeps): BoardShape => {
   /* ---- what each entry is laid from ---- */
+
+  /** What the board reads of the closure's keepers, and whom it tells: handed as it starts. */
+  let keepers: BoardKeepers | undefined;
+  /** The keepers, read as an entry is laid or a publish tells: never before the board starts. */
+  const keepersNow = (): BoardKeepers => {
+    if (!keepers) {
+      throw new Error("the board was read before it started");
+    }
+    return keepers;
+  };
 
   /**
    * Every listed row as the database holds it, by id. Read whole once, as
@@ -234,7 +237,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
    * closes its scratch hub) publishes nothing after.
    */
   const schedule = (): void => {
-    ctx.lifetime.jobs.want({
+    lifetime.jobs.want({
       key: "board publish",
       name: "board publish",
       priority: "person",
@@ -267,10 +270,10 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     rows: Row[]
   ): Row[] =>
     rows.map((row) => {
-      const held = ctx.heldSessions.get(row.id);
+      const held = heldSessions.get(row.id);
       if (
         held &&
-        ctx.registry.agent(row.machineId) &&
+        registry.agent(row.machineId) &&
         (row.status === "sleeping" || row.status === "error")
       ) {
         return {
@@ -279,7 +282,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
           held: { since: held.since, reason: held.reason },
         };
       }
-      return ctx.registry.agent(row.machineId) ||
+      return registry.agent(row.machineId) ||
         (row.status !== "running" &&
           row.status !== "starting" &&
           row.status !== "sleeping")
@@ -326,22 +329,23 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
    * `running` as now. A row that breaks it is left out, logged and filed
    * (laws.ts), and every other row goes.
    */
-  const asBoard = (rows: BoardInstanceRow[]): BoardRow[] =>
-    ctx.damagedRecords
+  const asBoard = (rows: BoardInstanceRow[]): BoardRow[] => {
+    const keeper = keepersNow().rows;
+    return damagedRecords
       .overlay(withSessionPresence(rows))
       .flatMap(({ workLive: _workLive, ...row }) => {
-        const queued = ctx.sendsPending.count(row.id);
-        const refused = ctx.moveRefusalOf(row);
-        const stall = stalled.has(row.id) ? ctx.stallOf(row.id) : undefined;
+        const queued = keeper.queuedSends(row.id);
+        const refused = keeper.moveRefusal(row);
+        const stall = stalled.has(row.id) ? keeper.stall(row.id) : undefined;
         const laid = laidRow(row, {
           runningDelegates: delegateCounts.get(row.id) ?? 0,
           ...(queued > 0 ? { queuedSends: queued } : {}),
-          ...owedMoveOf(row, ctx.db.owedMoves.get(row.id)),
+          ...owedMoveOf(row, db.owedMoves.get(row.id)),
           ...(refused === undefined ? {} : { moveRefused: refused }),
           ...(stall ? { stalled: stall } : {}),
         });
-        return ctx.laws.holds(
-          laid.status !== "running" || ctx.registry.agent(laid.machineId),
+        return laws.holds(
+          laid.status !== "running" || registry.agent(laid.machineId),
           "running-session-machine-connected",
           () =>
             `Session ${laid.id} was about to be served running on machine ${laid.machineId}, which holds no socket at the hub.`,
@@ -350,6 +354,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
           ? [laid]
           : [];
       });
+  };
 
   /** Rows by id for the board's ancestors: the board's own first, then the database's. */
   const boardRowsByIds = (ids: string[]): Map<string, BoardInstanceRow> => {
@@ -365,7 +370,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     }
     if (unread.length > 0) {
       const read = new Map(
-        ctx.db.boardAncestors(unread).map((row) => [row.id, row] as const)
+        db.boardAncestors(unread).map((row) => [row.id, row] as const)
       );
       for (const id of unread) {
         const row = read.get(id) ?? null;
@@ -386,9 +391,9 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     if (at <= now || at >= ageOutAt) {
       return;
     }
-    ctx.lifetime.cancel(ageOut);
+    lifetime.cancel(ageOut);
     ageOutAt = at;
-    ageOut = ctx.lifetime.after("board rows aged out", at - now, () => {
+    ageOut = lifetime.after("board rows aged out", at - now, () => {
       ageOutAt = Number.POSITIVE_INFINITY;
       membersOwed = true;
       schedule();
@@ -400,7 +405,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
    * makes for time alone.
    */
   const scheduleAgeOut = (now: number): void => {
-    ctx.lifetime.cancel(ageOut);
+    lifetime.cancel(ageOut);
     ageOutAt = Number.POSITIVE_INFINITY;
     let soonest = Number.POSITIVE_INFINITY;
     for (const row of base.values()) {
@@ -458,7 +463,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   /** The stored rows the change log named, read again by key. */
   const readWritten = (ids: string[]): void => {
     const fresh = new Map(
-      ctx.db.listedBoardInstancesByIds(ids).map((row) => [row.id, row] as const)
+      db.listedBoardInstancesByIds(ids).map((row) => [row.id, row] as const)
     );
     const now = Date.now();
     for (const id of ids) {
@@ -486,7 +491,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** The running delegates read again; each session whose count moved is laid again. */
   const readDelegates = (): void => {
-    const next = ctx.db.runningDelegateCounts();
+    const next = db.runningDelegateCounts();
     for (const id of new Set([...delegateCounts.keys(), ...next.keys()])) {
       if (delegateCounts.get(id) !== next.get(id)) {
         sessionsOwed.add(id);
@@ -497,7 +502,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** The stalled sessions read again; each, before and after, is laid again. */
   const readStalls = (): void => {
-    const next = new Set(ctx.stalledNow());
+    const next = new Set(keepersNow().rows.stalledNow());
     for (const id of new Set([...stalled, ...next])) {
       sessionsOwed.add(id);
     }
@@ -508,31 +513,31 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** A machine's live status ({@link MachineStatus}); undefined when the hub knows none. */
   const statusOf = (machineId: string): MachineStatus | undefined => {
-    const lastSeenAt = ctx.db.machineSeen(machineId);
+    const lastSeenAt = db.machineSeen(machineId);
     if (lastSeenAt === undefined) {
       return undefined;
     }
-    const custody = ctx.machineCustody.get(machineId);
+    const custody = machineCustody.get(machineId);
     const visibleCustody: SessionCustody | undefined =
       custody?.state === "available"
         ? {
             ...custody,
-            instances: ctx.db
+            instances: db
               .getInstancesByIds(custody.instances)
               .map((owner) => owner.id),
           }
         : custody;
-    const away = ctx.machinePresence(machineId);
-    const linked = ctx.registry.agent(machineId);
-    const update = ctx.binaryUpdateStates.get(machineId);
+    const away = machinePresence(machineId);
+    const linked = registry.agent(machineId);
+    const update = binaryUpdateStates.get(machineId);
     // Online while its agent holds a link and, when it speaks this hub's
     // contract, once it has answered its welcome (fleet-sync.ts).
     const online =
       linked &&
-      (ctx.fleetSyncs.isReady(machineId) ||
-        !ctx.speaksContract(ctx.agentProtocols.get(machineId)));
+      (keepersNow().machines.fleetReady(machineId) ||
+        !speaksContract(agentProtocols.get(machineId)));
     // Offline, its update as it last said it, kept (db `keptBinaryUpdates`).
-    const [kept] = update || online ? [] : ctx.db.keptBinaryUpdates(machineId);
+    const [kept] = update || online ? [] : db.keptBinaryUpdates(machineId);
     return {
       machineId,
       lastSeenAt,
@@ -542,7 +547,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       reconnectingUntil:
         away.kind === "reconnecting" && !linked ? away.until : null,
       status: online ? "online" : "offline",
-      lostAt: ctx.contact.lostAt(machineId),
+      lostAt: keepersNow().machines.lostAt(machineId),
       ...(update ? { binaryUpdate: update } : {}),
       ...(kept
         ? { lastBinaryUpdate: { seenAt: kept.lastSeenAt, state: kept.state } }
@@ -552,8 +557,13 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** A machine's facts, the hub's own reading of whether it runs there laid on. */
   const factsOf = (machineId: string): MachineFacts | undefined => {
-    const facts = ctx.db.machineFactsOf(machineId);
-    return facts && { ...facts, hostsHub: machineId === ctx.ownMachineIdRead };
+    const facts = db.machineFactsOf(machineId);
+    return (
+      facts && {
+        ...facts,
+        hostsHub: machineId === keepersNow().machines.ownMachineId(),
+      }
+    );
   };
 
   /* ---- the lists ---- */
@@ -562,23 +572,23 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   const readList: { [List in BoardList]: () => BoardListValues[List] } = {
     previews: () =>
       [...previewTargets].map(([id, target]) =>
-        ctx.shownFrame(id, target, false)
+        keepersNow().lists.shownFrame(id, target, false)
       ),
-    handoffs: () => Object.fromEntries(ctx.handoffs),
+    handoffs: () => keepersNow().lists.handoffs(),
     // Carried so a dashboard follows a continuation it started over the
     // socket rather than over the request that started it.
-    continuations: () => ctx.continuationTable(),
+    continuations: () => keepersNow().lists.continuations(),
     // Every former id, whole: a session folded into its continuation
     // leaves a tab on its id for the session it is now.
-    formerIds: () => ctx.db.formerIds(),
+    formerIds: () => db.formerIds(),
     // A notice acknowledged on one device leaves every other one live, and
     // is never shown after a reload.
-    noticesSeen: () => ctx.noticesSeen.ids(),
+    noticesSeen: () => keepersNow().lists.noticesSeen.ids(),
     // A damaged record says so, and notices are off until it is reset.
-    noticesDamaged: () => ctx.noticesSeen.damaged(),
+    noticesDamaged: () => keepersNow().lists.noticesSeen.damaged(),
     // The fleet's preview mode: a switch moves every origin, so a decision
     // page a dashboard loaded on its own (PageFrame) loads again.
-    previewSettings: () => ctx.previewListeners.settings(),
+    previewSettings: () => keepersNow().lists.previewSettings(),
   };
 
   const LISTS: readonly BoardList[] = [
@@ -663,7 +673,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
 
   /** The change log, sorted into what each collection owes, and what the views hear. */
   const takeLog = (): void => {
-    for (const change of ctx.db.takeBoardChanges()) {
+    for (const change of db.takeBoardChanges()) {
       owedBy[change.kind](change.id);
       const view = VIEW_OF[change.kind];
       if (view) {
@@ -676,7 +686,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   const followWritten = (ids: string[]): void => {
     if (ids.length > 0) {
       syncSection("publish: work items followed", () =>
-        ctx.workItems.followSessions(new Set(ids))
+        keepersNow().followers.followSessions(new Set(ids))
       );
     }
   };
@@ -785,7 +795,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     // asks it anything (views/client.ts: one ordered line of messages).
     const heard = viewsOwed.take();
     if (heard && announce) {
-      ctx.viewsHear(heard);
+      keepersNow().followers.viewsHear(heard);
     }
     const at = version + 1;
     const changes = layOwed(at);
@@ -807,13 +817,17 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     // A tool list follows its inputs alone (delegation-mcp.ts `look`): a
     // fleet one moved looks at every list, a session's own at its list.
     if (toolInputsMoved) {
-      syncSection("publish: tool inputs moved", () => ctx.toolInputsChanged());
+      syncSection("publish: tool inputs moved", () =>
+        keepersNow().followers.toolInputsChanged()
+      );
     } else if (toolsMoved.length > 0) {
-      syncSection("publish: tool lists owed", () => ctx.toolsMoved(toolsMoved));
+      syncSection("publish: tool lists owed", () =>
+        keepersNow().followers.toolsMoved(toolsMoved)
+      );
     }
     if (movedNow) {
       syncSection("publish: broadcast", () =>
-        ctx.registry.broadcastBoard({
+        registry.broadcastBoard({
           verb: "frames",
           machineId: "",
           payload: { kind: "board", version, ...changes },
@@ -866,7 +880,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       changes.machineStatus = status;
     }
     const inventory = syncSection("publish: inventories laid", () =>
-      layMachines(inventoryOwed, inventories, ctx.db.machineInventory, at)
+      layMachines(inventoryOwed, inventories, db.machineInventory, at)
     );
     if (moved(inventory)) {
       changes.inventories = inventory;
@@ -897,13 +911,13 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     if (sessionsMovedNow) {
       // A session's model, project or harness can move under a live rule.
       syncSection("publish: rule facts forgotten", () =>
-        ctx.ruleEngine.forgetFacts()
+        keepersNow().followers.ruleFactsMoved()
       );
       // A session ending ends its artifacts' asks (Needs you's rule 4):
       // the lane hears which sessions moved, and reads again only for one
       // it read.
       syncSection("publish: artifact lane moved", () =>
-        ctx.artifactLane.sessionsMoved([
+        keepersNow().followers.laneSessionsMoved([
           ...written,
           ...(changes.sessions?.upserts.map((row) => row.id) ?? []),
           ...(changes.sessions?.removed ?? []),
@@ -915,37 +929,70 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     // when a preview opened or closed.
     syncSection("publish: artifact tabs refreshed", () => {
       if (machinesMovedNow) {
-        ctx.artifactSessions.moved({ kind: "machines" });
+        keepersNow().followers.tabMoved({ kind: "machines" });
       }
       if (changes.previews !== undefined) {
-        ctx.artifactSessions.moved({ kind: "shown" });
+        keepersNow().followers.tabMoved({ kind: "shown" });
       }
       for (const row of changes.sessions?.upserts ?? []) {
-        ctx.artifactSessions.moved({ kind: "session", instanceId: row.id });
+        keepersNow().followers.tabMoved({
+          kind: "session",
+          instanceId: row.id,
+        });
       }
       for (const id of changes.sessions?.removed ?? []) {
-        ctx.artifactSessions.moved({ kind: "session", instanceId: id });
+        keepersNow().followers.tabMoved({ kind: "session", instanceId: id });
       }
     });
   };
 
+  /* ---- what the keepers say moved ---- */
+
+  const listMoved: BoardShape["listMoved"] = (list) => {
+    listsOwed.add(list);
+    schedule();
+  };
+
+  const machineMoved: BoardShape["machineMoved"] = (machineId) => {
+    statusOwed.add(machineId);
+    for (const row of members.values()) {
+      if (row.machineId === machineId) {
+        sessionsOwed.add(row.id);
+      }
+    }
+    schedule();
+  };
+
+  const machineStatusMoved: BoardShape["machineStatusMoved"] = (machineId) => {
+    statusOwed.add(machineId);
+    schedule();
+  };
+
+  const sessionsMoved: BoardShape["sessionsMoved"] = (ids) => {
+    for (const id of ids) {
+      sessionsOwed.add(id);
+    }
+    schedule();
+  };
+
   /* ---- start ---- */
 
-  const start = (): void => {
+  const start = (handed: BoardKeepers): void => {
     if (started) {
       return;
     }
     started = true;
+    keepers = handed;
     // The board read whole once; the log emptied first, so nothing written
     // before this is laid twice.
-    ctx.db.takeBoardChanges();
-    for (const row of ctx.db.listBoardInstances()) {
+    db.takeBoardChanges();
+    for (const row of db.listBoardInstances()) {
       base.set(row.id, row);
     }
-    delegateCounts = ctx.db.runningDelegateCounts();
-    stalled = new Set(ctx.stalledNow());
+    delegateCounts = db.runningDelegateCounts();
+    stalled = new Set(keepersNow().rows.stalledNow());
     membersOwed = true;
-    for (const { machineId } of ctx.db.machineFacts()) {
+    for (const { machineId } of db.machineFacts()) {
       factsOwed.add(machineId);
       statusOwed.add(machineId);
       inventoryOwed.add(machineId);
@@ -954,7 +1001,15 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       listsOwed.add(list);
     }
     flushOnce(false);
-    ctx.db.onLogged(schedule);
+    db.onLogged(schedule);
+    // From here on, each of the hub's services that keeps what an entry is
+    // laid from says what moved.
+    registry.onPresence(machineMoved);
+    heldSessions.hear((id) => sessionsMoved([id]));
+    machineCustody.hear(machineStatusMoved);
+    binaryUpdateStates.hear(machineStatusMoved);
+    agentProtocols.hear(machineStatusMoved);
+    previewTargets.hear(() => listMoved("previews"));
   };
 
   /** Takes what is owed now, before a read. */
@@ -972,7 +1027,7 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       ...facts,
       ...status,
       ...inventories.entries.get(facts.machineId),
-      lastSeenAt: ctx.db.machineSeen(facts.machineId) ?? status.lastSeenAt,
+      lastSeenAt: db.machineSeen(facts.machineId) ?? status.lastSeenAt,
     };
   };
 
@@ -1029,79 +1084,15 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     };
   };
 
-  /**
-   * A dashboard's first frames, as its socket opens: the board, before it is
-   * asked for (whole, or what moved since the version it named), followed by
-   * an update about to restart the hub, when one is, and Recent's stored
-   * transcripts. Then the fleet's browsers, whole, to a page on this wire: a
-   * browser view paints from them and follows each `browser_list` frame
-   * after, never polling. Then each passkey QR still in time, which the
-   * take-over view draws over its stream.
-   */
-  const greetDashboard: BoardShape["greetDashboard"] = (ws, older, held) => {
-    syncSection("dashboard greeted: board", () => {
-      settle();
-      const since =
-        held && held.hubRun === ctx.hubRun && !older
-          ? movedSince(held.version)
-          : undefined;
-      ctx.sendToClient(ws, {
-        verb: "frames",
-        machineId: "",
-        payload: {
-          kind: "instances",
-          protocol: WIRE_PROTOCOL,
-          // `hubBuild` lets a client tell a hub that is behind from a
-          // machine that is.
-          hubBuild: ctx.hubBuild,
-          // The numbering this socket's streams count in: a page of the
-          // same run resumes from its `seq`.
-          hubRun: ctx.hubRun,
-          version,
-          // A screen that connects is handed every move; each change after
-          // arrives on the `moves` frame.
-          moves: ctx.moves.table(),
-          // Seed now-state once per connection; updates have per-session frames.
-          pulses: Object.fromEntries(ctx.pulses),
-          ...(since && held ? { since: held.version, ...since } : whole()),
-        },
-      } satisfies HubEnvelope<"frames">);
-    });
-    syncSection("dashboard greeted: owed frames", () => {
-      for (const payload of ctx.owedAfterBoard()) {
-        ctx.sendToClient(ws, {
-          verb: "frames",
-          machineId: "hub",
-          payload,
-        } satisfies HubEnvelope<"frames">);
-      }
-    });
-    // Then Recent's stored transcripts, whole (stored-recent.ts).
-    syncSection("dashboard greeted: stored transcripts", () =>
-      ctx.sendToClient(ws, {
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "stored", stored: ctx.storedRecent.now() },
-      } satisfies HubEnvelope<"frames">)
-    );
-    if (!older) {
-      syncSection("dashboard greeted: browsers", () => {
-        ctx.sendToClient(ws, {
-          verb: "frames",
-          machineId: "hub",
-          payload: { kind: "browser_list", browsers: ctx.browsers.list() },
-        } satisfies HubEnvelope<"frames">);
-        // Then each passkey QR still in time, so a page opened or reloaded
-        // after the prompt appeared still shows it over the take-over.
-        for (const payload of ctx.browsers.passkeyQrs()) {
-          ctx.sendToClient(ws, {
-            verb: "frames",
-            machineId: "hub",
-            payload,
-          } satisfies HubEnvelope<"frames">);
-        }
-      });
-    }
+  /** The board as a socket's first frame carries it (board-shape.ts `firstFrame`). */
+  const firstFrame: BoardShape["firstFrame"] = (since) => {
+    settle();
+    const movedNow = since === undefined ? undefined : movedSince(since);
+    return {
+      version,
+      changes:
+        since !== undefined && movedNow ? { since, ...movedNow } : whole(),
+    };
   };
 
   /** Recent's stored list's sessions the board does not list, laid as the board's (board-shape.ts `storedRows`). */
@@ -1113,11 +1104,8 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
   };
 
   return {
-    greetDashboard,
-    listMoved: (list) => {
-      listsOwed.add(list);
-      schedule();
-    },
+    firstFrame,
+    listMoved,
     machine: (machineId) => {
       settle();
       const facts = machineFacts.entries.get(machineId);
@@ -1127,34 +1115,18 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
       settle();
       return factsInOrder().flatMap((facts) => machineWhole(facts) ?? []);
     },
-    machineMoved: (machineId) => {
-      statusOwed.add(machineId);
-      for (const row of members.values()) {
-        if (row.machineId === machineId) {
-          sessionsOwed.add(row.id);
-        }
-      }
-      schedule();
-    },
+    machineMoved,
     machineFactsMoved: (machineId) => {
       factsOwed.add(machineId);
       schedule();
     },
-    machineStatusMoved: (machineId) => {
-      statusOwed.add(machineId);
-      schedule();
-    },
+    machineStatusMoved,
     rows: () => {
       settle();
       return [...sessions.entries.values()];
     },
     runningDelegates: (id) => delegateCounts.get(id) ?? 0,
-    sessionsMoved: (ids) => {
-      for (const id of ids) {
-        sessionsOwed.add(id);
-      }
-      schedule();
-    },
+    sessionsMoved,
     settle,
     start,
     stallsMoved: () => {
@@ -1165,3 +1137,26 @@ export const createBoard = (ctx: BoardContext): BoardShape => {
     withSessionPresence,
   };
 };
+
+/**
+ * The board (`make`), as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts), and started there once what it
+ * lays its rows from is made.
+ */
+export class Board extends Context.Service<Board, BoardShape>()("Board") {}
+
+export const BoardLayer = Layer.effect(Board)(
+  Effect.gen(function* () {
+    const sessions = yield* SessionRuntime;
+    return make({
+      damagedRecords: yield* DamagedRecords,
+      db: yield* Db,
+      heldSessions: sessions.heldSessions,
+      laws: yield* Laws,
+      lifetime: yield* HubLifetime,
+      machinePresence: (yield* HandoverState).machinePresence,
+      machines: yield* MachineRuntime,
+      registry: yield* Registry,
+    });
+  })
+);
