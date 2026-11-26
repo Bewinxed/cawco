@@ -13,6 +13,7 @@
  * barrel's icons with Solar alone (hub decision-host.ts), never meets it.
  */
 export { default as LogoAntigravity } from "~icons/logos/antigravity";
+export { default as SvgAntigravity } from "~icons/logos/antigravity?raw";
 export { default as SvgCerebras } from "~icons/logos/cerebras-icon?raw";
 export { default as LogoClaude } from "~icons/logos/claude-icon";
 export { default as SvgClaude } from "~icons/logos/claude-icon?raw";

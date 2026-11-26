@@ -32,6 +32,7 @@
     type Account,
     type AccountJoined,
     CLAUDE_PROVIDER,
+    choiceKey,
     DEFAULT_AT_LIMIT,
     defaultRouting,
     isChatgptPlan,
@@ -105,6 +106,7 @@
     heldFlow,
     pasteFlow,
   } from "./flows.svelte";
+  import GcpPlaceFields from "./GcpPlaceFields.svelte";
   import KeyPanel from "./KeyPanel.svelte";
   import {
     type AccountMachine,
@@ -132,7 +134,7 @@
 
   // ── Provider ───────────────────────────────────────────────────────────
   const choices = $derived(choicesOf());
-  const keyOf = (one: ProviderChoice) => `${one.provider}:${one.kind}`;
+  const keyOf = (one: ProviderChoice) => choiceKey(one);
   let query = $state("");
   const shownChoices = $derived.by(() => {
     const asked = query.trim().toLowerCase();
@@ -181,7 +183,7 @@
   });
   const picked = untrack(() => {
     const asked = resumed
-      ? `${resumed.provider}:${resumed.kind}`
+      ? choiceKey({ ...resumed, agy: resumed.agy?.method })
       : page.url.searchParams.get("choice");
     return choicesOf().find((one) => keyOf(one) === asked) ?? null;
   });
@@ -225,6 +227,19 @@
   let creating: Promise<string> | null = null;
   /** The colour the account is made in: the first its provider's accounts don't wear. */
   let hue = $state<AccountHue>(resumed?.hue ?? "orange");
+  /**
+   * An Antigravity method that runs in a Google Cloud project and location
+   * (Gemini Enterprise, Agent Platform): asked before the account is made,
+   * kept with it for good (core `Account.agy`).
+   */
+  const needsPlace = $derived(
+    choice?.agy === "oauth-business" || choice?.agy === "agent-platform"
+  );
+  let gcpProject = $state(resumed?.agy?.gcp?.project ?? "");
+  let gcpLocation = $state(resumed?.agy?.gcp?.location ?? "");
+  const placeGiven = $derived(
+    !needsPlace || (gcpProject.trim() !== "" && gcpLocation.trim() !== "")
+  );
   /** Where the flows of this setup's sign-ins are kept: its account, or the row picked before it. */
   const root = $derived(createdId ?? `new:${choice ? keyOf(choice) : "none"}`);
 
@@ -237,11 +252,17 @@
     if (!row) {
       return Promise.reject(new Error(words.chooseFirst));
     }
+    const place = needsPlace
+      ? { project: gcpProject.trim(), location: gcpLocation.trim() }
+      : undefined;
     creating ??= createAccount({
       provider: row.provider,
       kind: row.kind,
       hue,
       setupStep: "signIn",
+      ...(row.agy
+        ? { agy: { method: row.agy, ...(place ? { gcp: place } : {}) } }
+        : {}),
     }).then(
       (made) => {
         adoptFlows(`new:${keyOf(row)}`, made.id);
@@ -516,6 +537,8 @@
   const canGo = $derived(
     at === "provider" ? false : at !== "signIn" || signedIn > 0
   );
+  /** Gemini Enterprise: Google sends the browser back to the machine, so the address it lands on is pasted, not a code. */
+  const address = $derived(choice?.agy === "oauth-business");
   /** A key not yet on any machine: Send key is the step's one primary, not Continue. */
   const keyFirst = $derived(
     at === "signIn" && choice?.signin === "api-key" && signedIn === 0
@@ -984,14 +1007,24 @@
         {/if}
       </div>
     {/if}
+    {#if needsPlace}
+      <GcpPlaceFields
+        locked={createdId !== null}
+        bind:project={gcpProject}
+        bind:location={gcpLocation}
+      />
+    {/if}
     {#if choice?.signin === "api-key"}
       <KeyPanel
         account={ensureAccount}
+        connect={choice.agy !== undefined}
+        keyless={choice.agy === "agent-platform"}
         {machines}
         onjoined={(one) => {
           keyJoined = one;
         }}
         primary={keyFirst}
+        ready={placeGiven}
       />
     {:else}
       <ul
@@ -1010,8 +1043,8 @@
           {@const paste = pasteOn(machine.machineId)}
           {@const device = deviceOn(machine.machineId)}
           {@const block =
-            choice?.signin === "paste-code"
-              ? harnessBlockOf(machine, "claude")
+            choice?.signin === "paste-code" && choice.harnesses[0]
+              ? harnessBlockOf(machine, choice.harnesses[0])
               : null}
           {@const rows = rowsOn(machine)}
           {#if choice?.signin === "device-code" && rows.others.length > 0}
@@ -1129,6 +1162,7 @@
                 {:else if !(asked || block)}
                   <Button
                     data-box
+                    disabled={!placeGiven}
                     label={words.signIn}
                     onclick={() => pasteFor(machine.machineId).open()}
                     size="sm"
@@ -1181,7 +1215,9 @@
                   <Input
                     data-account-setup-code
                     aria-invalid={paste.problem ? "true" : undefined}
-                    aria-label={words.codeFor(name)}
+                    aria-label={address
+                      ? words.addressFor(name)
+                      : words.codeFor(name)}
                     autocomplete="off"
                     flex="code"
                     measure="shrink"
@@ -1192,7 +1228,7 @@
                         paste.done();
                       }
                     }}
-                    placeholder={words.pasteCode}
+                    placeholder={address ? words.pasteAddress : words.pasteCode}
                     spellcheck="false"
                     bind:value={paste.code}
                   />

@@ -5,6 +5,10 @@
    * box per machine (an offline one can't take it), and Send key. What each
    * machine made of it stands on its row; the field empties once it is sent.
    * With one machine (the account page's popover) there is nothing to tick.
+   *
+   * An Antigravity key method says Connect (`connect`); Agent Platform takes
+   * no key at all (`keyless`), only the machines, each connected on its own
+   * gcloud credentials, and waits on its Google Cloud place (`ready`).
    */
   import type { AccountJoined } from "@cawco/core/accounts";
   import { accountsWords } from "@cawco/core/words/accounts";
@@ -29,6 +33,9 @@
     onjoined,
     onsent,
     primary = true,
+    connect = false,
+    keyless = false,
+    ready = true,
   }: {
     /** The account's id, making it first where the setup has not yet. */
     account: () => Promise<string>;
@@ -39,6 +46,12 @@
     onsent?: () => void;
     /** Send key is the step's primary; once a key is on a machine, Continue is. */
     primary?: boolean;
+    /** An Antigravity key method: its press says Connect. */
+    connect?: boolean;
+    /** No key to type: the machines alone are connected (Agent Platform). */
+    keyless?: boolean;
+    /** Whatever the press needs besides the key is given. */
+    ready?: boolean;
   } = $props();
 
   const words = accountsWords.key;
@@ -65,8 +78,22 @@
     )
   );
 
+  /** Whether the press has all it needs: a key (none for a keyless one), its other fields, a machine. */
+  const sendable = $derived(
+    ready && (keyless || key.trim() !== "") && targets.length > 0
+  );
+  const sendWords = $derived(
+    connect
+      ? {
+          label: words.connect,
+          pending: words.connecting,
+          done: words.connected,
+        }
+      : { label: words.send, pending: words.sending, done: words.sent }
+  );
+
   async function send() {
-    if (sending || key.trim() === "" || targets.length === 0) {
+    if (sending || !sendable) {
       return;
     }
     sending = true;
@@ -75,7 +102,7 @@
       const accountId = await account();
       const { machines: answers } = await sendAccountKey(
         accountId,
-        key.trim(),
+        keyless ? undefined : key.trim(),
         targets.map((machine) => machine.machineId)
       );
       key = "";
@@ -118,7 +145,7 @@
     <span
       data-slot="ok"
       class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"
-      ><Check /><span>{words.sent}</span></span
+      ><Check /><span>{sendWords.done}</span></span
     >
   {:else if result}
     <span
@@ -140,33 +167,35 @@
     send();
   }}
 >
-  <InputGroup.Root>
-    <InputGroup.Input
-      aria-label={words.label}
-      autocomplete="off"
-      id="{id}-key"
-      placeholder={words.placeholder}
-      spellcheck="false"
-      type={shown ? "text" : "password"}
-      bind:value={key}
-    />
-    <InputGroup.Addon align="inline-end">
-      <InputGroup.Button
-        aria-label={shown ? words.hide : words.show}
-        aria-pressed={shown}
-        onclick={() => {
-          shown = !shown;
-        }}
-        size="icon-xs"
-      >
-        {#if shown}
-          <IconEyeClosed />
-        {:else}
-          <IconEye />
-        {/if}
-      </InputGroup.Button>
-    </InputGroup.Addon>
-  </InputGroup.Root>
+  {#if !keyless}
+    <InputGroup.Root>
+      <InputGroup.Input
+        aria-label={words.label}
+        autocomplete="off"
+        id="{id}-key"
+        placeholder={words.placeholder}
+        spellcheck="false"
+        type={shown ? "text" : "password"}
+        bind:value={key}
+      />
+      <InputGroup.Addon align="inline-end">
+        <InputGroup.Button
+          aria-label={shown ? words.hide : words.show}
+          aria-pressed={shown}
+          onclick={() => {
+            shown = !shown;
+          }}
+          size="icon-xs"
+        >
+          {#if shown}
+            <IconEyeClosed />
+          {:else}
+            <IconEye />
+          {/if}
+        </InputGroup.Button>
+      </InputGroup.Addon>
+    </InputGroup.Root>
+  {/if}
 
   {#if !one}
     <ul
@@ -223,10 +252,10 @@
 
   <div data-slot="send" class="flex flex-wrap items-center gap-space-3">
     <Button
-      disabled={key.trim() === "" || targets.length === 0}
-      label={words.send}
+      disabled={!sendable}
+      label={sendWords.label}
       pending={sending}
-      pendingLabel={words.sending}
+      pendingLabel={sendWords.pending}
       size="sm"
       type="submit"
       variant={primary ? "default" : "outline"}

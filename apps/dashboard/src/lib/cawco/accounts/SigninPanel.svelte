@@ -31,7 +31,10 @@
     online,
     expected = null,
     got,
+    address = false,
   }: {
+    /** Gemini Enterprise: the address Google sent the browser back to is pasted, not a code. */
+    address?: boolean;
     flow: PasteSignin;
     machine: string;
     online: boolean;
@@ -130,7 +133,9 @@
           : "outline"}
       />
     {/if}
-    <span class="type-meta text-ink-muted">{words.thenPaste}</span>
+    <span class="type-meta text-ink-muted"
+      >{address ? words.thenPasteAddress : words.thenPaste}</span
+    >
   </div>
   {#if flow.problem && flow.url === null}
     <!-- No link to paste a code from: the refusal stands under the way on,
@@ -150,11 +155,13 @@
         ? `${codeId}-problem`
         : undefined}
       aria-invalid={flow.problem && flow.url ? "true" : undefined}
-      aria-label={words.codeLabel}
+      aria-label={address ? words.addressLabel : words.codeLabel}
       autocomplete="off"
       class="flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
-      placeholder={words.codePlaceholder}
+      placeholder={address
+        ? accountsWords.setup.pasteAddress
+        : words.codePlaceholder}
       spellcheck="false"
       bind:ref={field}
       bind:value={flow.code}

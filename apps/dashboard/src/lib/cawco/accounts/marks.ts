@@ -14,6 +14,7 @@
  * accounts glyph.
  */
 import {
+  SvgAntigravity as antigravity,
   SvgBaseten as baseten,
   SvgBedrock as bedrock,
   SvgCerebras as cerebras,
@@ -46,6 +47,7 @@ import {
 /** Account provider id (pi-ai's, or OpenCode's own) → its mark's source. */
 const SOURCES: Record<string, string> = {
   anthropic: claude,
+  antigravity,
   "openai-codex": openai,
   openai,
   "azure-openai-responses": openai,

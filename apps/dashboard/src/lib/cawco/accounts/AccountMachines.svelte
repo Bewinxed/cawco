@@ -434,6 +434,8 @@
                   {:else if key}
                     <KeyPanel
                       account={own}
+                      connect={account.agy !== undefined}
+                      keyless={account.agy?.method === "agent-platform"}
                       machines={[machine]}
                       onsent={() => {
                         sent.set(machine.machineId, true);
@@ -457,6 +459,7 @@
                       </p>
                     {/if}
                     <SigninPanel
+                      address={account.agy?.method === "oauth-business"}
                       expected={account.email}
                       {flow}
                       machine={name}

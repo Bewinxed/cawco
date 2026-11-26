@@ -228,7 +228,11 @@ export const accountsWords = {
     openLink: "Open sign-in link",
     opening: "Opening…",
     thenPaste: "then paste the code",
+    /** Gemini Enterprise's: Google sends the browser back to the machine, whose address is pasted. */
+    thenPasteAddress: "then paste the redirect URL",
     codeLabel: "Code from the sign-in page",
+    /** Gemini Enterprise's field: the address the browser was sent back to. */
+    addressLabel: "Redirect URL",
     codePlaceholder: "Code",
     done: "Done",
     checking: "Checking…",
@@ -288,6 +292,10 @@ export const accountsWords = {
     send: "Send key",
     sending: "Sending…",
     sent: "Key sent",
+    /** An Antigravity key method's press: the key, or none for Agent Platform, set up on the machines ticked. */
+    connect: "Connect",
+    connecting: "Connecting…",
+    connected: "Connected",
     otherKey:
       "That's a different key from this account's; it was taken back off.",
     notTaken: "The machine didn't take the key.",
@@ -335,6 +343,15 @@ export const accountsWords = {
     signInOn: (machine: string) => `Sign in on ${machine}`,
     codeFor: (machine: string) => `Code for ${machine}`,
     pasteCode: "Paste the code",
+    /** Gemini Enterprise: the address the browser was sent back to, pasted in place of a code (words decided by Gemini 4 Neon, the project's `assets/b6a2f599/neon-ui-answer.md`). */
+    addressFor: (machine: string) => `Redirect URL for ${machine}`,
+    pasteAddress: "http://localhost:...",
+    /** The Google Cloud project and location a Gemini Enterprise or Agent Platform account runs in. */
+    gcpProject: "Google Cloud project",
+    gcpLocation: "Location",
+    /** What each field takes, in its own empty field. */
+    gcpProjectExample: "my-project",
+    gcpLocationExample: "us-central1",
     mismatch: (machine: string, who: string | null) =>
       `${machine} signed in as ${who ?? "another account"}, so it signed out again. Open the link again and sign in as the account you're adding.`,
     none: (harnesses: string) =>

@@ -28,6 +28,7 @@ import type {
   RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
+import type { AgyAccountRecord } from "@cawco/core/harness/agy-account";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { hub } from "#lib/platform/hub.js";
 import {
@@ -167,6 +168,8 @@ export const createAccount = (body: {
   label?: string;
   /** Made by the setup: the step it stands at, until it is done. */
   setupStep?: AccountSetupStep;
+  /** An Antigravity account: its sign-in method and Google Cloud place, for good. */
+  agy?: AgyAccountRecord;
 }): Promise<Account> => accountsWrite(hubData(hub.api.accounts.post(body)));
 
 /** Changes an account's nickname (null: its email), colour, order or limits. */
@@ -386,14 +389,18 @@ export type KeyDelivery =
   | { machineId: string; result: ProviderSigninResult }
   | { machineId: string; error: string };
 
-/** Relays a key account's key to each machine named; the hub never keeps it. */
+/** Relays a key account's key to each machine named (none: an Agent Platform account, connected on gcloud's credentials there); the hub never keeps it. */
 export const sendAccountKey = (
   id: string,
-  key: string,
+  key: string | undefined,
   machineIds: string[]
 ): Promise<{ machines: KeyDelivery[] }> =>
   accountsWrite(
-    hubData(hub.api.accounts({ id }).key.post({ key, machineIds }))
+    hubData(
+      hub.api
+        .accounts({ id })
+        .key.post({ ...(key === undefined ? {} : { key }), machineIds })
+    )
   );
 
 /** The Configure page a refused start is put right on, by the hub's code for why. */

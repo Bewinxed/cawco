@@ -246,6 +246,17 @@ export const providerChoices = (
 };
 
 /**
+ * The key a picker row is told apart by, and an account's row found by:
+ * its provider, its kind, and an Antigravity row's method.
+ */
+export const choiceKey = (choice: {
+  agy?: AgyMethod;
+  kind: AccountKind;
+  provider: AccountProvider;
+}): string =>
+  `${choice.provider}:${choice.kind}${choice.agy ? `:${choice.agy}` : ""}`;
+
+/**
  * Who an account is: an email in an organization, the organization known by
  * its id (`orgId`), never its name, which is a display name: an org renamed
  * is the same org, and two orgs can share a name. Claude: as `claude auth

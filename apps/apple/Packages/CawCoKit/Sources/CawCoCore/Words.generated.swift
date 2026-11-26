@@ -413,7 +413,13 @@ public enum Words {
 
             public static let thenPaste = "then paste the code"
 
+            /// Gemini Enterprise's: Google sends the browser back to the machine, whose address is pasted.
+            public static let thenPasteAddress = "then paste the redirect URL"
+
             public static let codeLabel = "Code from the sign-in page"
+
+            /// Gemini Enterprise's field: the address the browser was sent back to.
+            public static let addressLabel = "Redirect URL"
 
             public static let codePlaceholder = "Code"
 
@@ -503,12 +509,19 @@ public enum Words {
 
             public static let sent = "Key sent"
 
+            /// An Antigravity key method's press: the key, or none for Agent Platform, set up on the machines ticked.
+            public static let connect = "Connect"
+
+            public static let connecting = "Connecting…"
+
+            public static let connected = "Connected"
+
             public static let otherKey = "That's a different key from this account's; it was taken back off."
 
             public static let notTaken = "The machine didn't take the key."
 
             /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["label": label, "placeholder": placeholder, "show": show, "hide": hide, "shown": shown, "machines": machines, "offline": offline, "send": send, "sending": sending, "sent": sent, "otherKey": otherKey, "notTaken": notTaken]
+            public static let byKey: [String: String] = ["label": label, "placeholder": placeholder, "show": show, "hide": hide, "shown": shown, "machines": machines, "offline": offline, "send": send, "sending": sending, "sent": sent, "connect": connect, "connecting": connecting, "connected": connected, "otherKey": otherKey, "notTaken": notTaken]
         }
 
         public enum Setup {
@@ -594,6 +607,23 @@ public enum Words {
             }
 
             public static let pasteCode = "Paste the code"
+
+            /// Gemini Enterprise: the address the browser was sent back to, pasted in place of a code (words decided by Gemini 4 Neon, the project's `assets/b6a2f599/neon-ui-answer.md`).
+            public static func addressFor(machine: String) -> String {
+                "Redirect URL for \(machine)"
+            }
+
+            public static let pasteAddress = "http://localhost:..."
+
+            /// The Google Cloud project and location a Gemini Enterprise or Agent Platform account runs in.
+            public static let gcpProject = "Google Cloud project"
+
+            public static let gcpLocation = "Location"
+
+            /// What each field takes, in its own empty field.
+            public static let gcpProjectExample = "my-project"
+
+            public static let gcpLocationExample = "us-central1"
 
             public static func mismatch(machine: String, who: String?) -> String {
                 "\(machine) signed in as \(who ?? "another account"), so it signed out again. Open the link again and sign in as the account you're adding."
