@@ -116,6 +116,7 @@ import {
   saidTail,
   writeTail,
 } from "@cawco/core/words/helpers";
+import { mcpGateWords } from "@cawco/core/words/mcp-gate";
 import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
@@ -1102,21 +1103,15 @@ class McpHost {
     const server = decodeURIComponent(name);
     const caller = this.#caller(id, request);
     if (!caller) {
-      return refusal(
-        401,
-        "This MCP gate answers only a session it was opened for, while that session runs."
-      );
+      return refusal(401, mcpGateWords.notOpened);
     }
     if (server === MCP_SERVER_NAME) {
       if (caller === "host key") {
-        return refusal(403, "CawCo's server answers a session's gate token.");
+        return refusal(403, mcpGateWords.needsSessionToken);
       }
       const credential = sessionCredentialOf(caller.instanceId);
       if (!credential) {
-        return refusal(
-          503,
-          `${caller.instanceId}'s CawCo credential is not proved on this machine yet.`
-        );
+        return refusal(503, mcpGateWords.notProved(caller.instanceId));
       }
       const own = delegationMcp(caller.instanceId, credential);
       return { remote: { url: own.url, headers: own.headers ?? {} } };

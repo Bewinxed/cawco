@@ -92,6 +92,8 @@ export const agyWords = {
   noFleetLink: (link: string) => `Couldn't link the fleet into ${link}.`,
   /** A session dir CawCo couldn't copy the account's agy setup into. */
   noSessionDir: (dir: string) => `Couldn't set up ${dir}.`,
+  /** A session CawCo opened no MCP gate for, so it can reach none of its tools. Decided by Gemini 4 Neon (the project's `assets/9a2f4c11/neon-answer.md`), as are `noSessionDir` and `callCancelled`. */
+  noGate: "Couldn't start without an MCP relay.",
   /** agy's own sign-in refused the account's method, in agy's words. */
   signInRefused: (said: string) => `Antigravity sign-in failed: ${said}`,
   /**

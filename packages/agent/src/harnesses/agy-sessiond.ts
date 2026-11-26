@@ -448,9 +448,7 @@ const mcpServersOf = async (
 ): Promise<AgyMcpServer[]> => {
   const gate = ctx.mcpGate;
   if (!gate) {
-    throw new Error(
-      "An Antigravity session reaches its MCP servers through its gate, and this one has none."
-    );
+    throw new Error(agyWords.noGate);
   }
   const own = agyServer(MCP_SERVER_NAME, gatedCawco(gate));
   if (!withFleet || spec.fence) {

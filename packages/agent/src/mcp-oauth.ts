@@ -9,6 +9,7 @@ import { watchFromItsOwnThread } from "@cawco/core/loop-watch";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { shortId } from "@cawco/core/short-id";
+import { mcpGateWords } from "@cawco/core/words/mcp-gate";
 import { updatesWords } from "@cawco/core/words/updates";
 import { Effect, Layer } from "effect";
 import type { BrowserPorts } from "./browser/browsers";
@@ -523,7 +524,7 @@ const upstreamOf = (request: Request, remote: Remote): URL | Response => {
   const endpoint = new URL(named, server);
   return endpoint.origin === server.origin
     ? endpoint
-    : new Response("An SSE server's endpoint is on its own origin.", {
+    : new Response(mcpGateWords.sseOffOrigin, {
         status: 400,
       });
 };
@@ -614,7 +615,10 @@ async function passOn(
     });
   } catch (error) {
     return new Response(
-      `The ${decodeURIComponent(name)} MCP server could not be reached: ${error instanceof Error ? error.message : String(error)}`,
+      mcpGateWords.unreachable(
+        decodeURIComponent(name),
+        error instanceof Error ? error.message : String(error)
+      ),
       { status: 502 }
     );
   }
@@ -658,7 +662,7 @@ async function gateRoute(
 ): Promise<Response> {
   const incoming = new URL(request.url);
   if (incoming.hostname !== "127.0.0.1" || request.headers.has("Origin")) {
-    return new Response("A session's MCP gate answers its harness only.", {
+    return new Response(mcpGateWords.harnessOnly, {
       status: 403,
     });
   }
