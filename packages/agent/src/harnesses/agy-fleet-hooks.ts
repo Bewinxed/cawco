@@ -129,6 +129,8 @@ export class AgyFleetHooks {
   /** The MCP servers the session started with, by name. */
   readonly #servers: readonly string[];
   readonly #sessionId: () => string | null;
+  /** The session's workspace boundary, when it runs in one: each hook runs inside it, through its shell prefix. */
+  readonly #boundary: { readonly prefix: string } | undefined;
   /** Ends every hook still running as the session ends. */
   readonly #abort = new AbortController();
   /** What `SessionStart` hooks said, for the session's next prompt. */
@@ -139,11 +141,13 @@ export class AgyFleetHooks {
   constructor(
     cwd: string,
     servers: readonly string[],
-    sessionId: () => string | null
+    sessionId: () => string | null,
+    boundary: { readonly prefix: string } | undefined
   ) {
     this.#cwd = cwd;
     this.#servers = servers;
     this.#sessionId = sessionId;
+    this.#boundary = boundary;
   }
 
   async #run(
@@ -161,6 +165,7 @@ export class AgyFleetHooks {
         cwd: this.#cwd,
         signal: this.#abort.signal,
         sessionId: this.#sessionId() ?? "",
+        ...(this.#boundary ? { boundary: this.#boundary } : {}),
       }
     );
   }
@@ -168,8 +173,10 @@ export class AgyFleetHooks {
   /**
    * The answer to one line CawCo's hook sent: before a call, the judge's,
    * then the fleet's `PreToolUse` hooks' on a call the judge lets run;
-   * after one, `{}` once the fleet's `PostToolUse` hooks have run. A
-   * line that is no call agy hands a hook is denied.
+   * after one, `{}` once the fleet's `PostToolUse` hooks have run. The
+   * answer before a call is noted for the session by the call's id (its
+   * proof of each command, agy-runtime.ts). A line that is no call agy
+   * hands a hook is denied.
    */
   async answer(
     line: string,
@@ -186,6 +193,13 @@ export class AgyFleetHooks {
       await this.#after(call, line);
       return {};
     }
+    const answer = await this.#before(call, session);
+    session.noted(call.toolCall.id, call.toolCall.name, answer);
+    return answer;
+  }
+
+  /** The judge's answer to a call, then the fleet's `PreToolUse` hooks' on one the judge lets run. */
+  async #before(call: AgyHookInput, session: AgySession): Promise<AgyAnswer> {
     const judged = agyAnswer(call, session);
     if (judged.decision === "deny") {
       return judged;

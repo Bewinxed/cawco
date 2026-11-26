@@ -3,10 +3,12 @@
  * acp`, one per session, held by a CawCo host the keeper keeps
  * (agy-sessiond.ts, agy-host.ts, agy-runtime.ts), in a home CawCo keeps per
  * Antigravity account and launched as that account's one sign-in method
- * says (agy-launch.ts). Plain sessions run here, the fleet reaching them
- * (agy-fleet.ts); a work item's session,
- * stored conversations and adoption's proof are the later
- * items of tsk-340, and each refuses until then in its own words.
+ * says (agy-launch.ts), once the account's hook check passed
+ * (agy-canary.ts), the fleet reaching them (agy-fleet.ts). A work item's
+ * session runs in its workspace's boundary through CawCo's hook and judge
+ * (agy-judge.ts, agy-runtime.ts). Stored conversations and adoption's proof
+ * are the later items of tsk-340, and each refuses until then in its own
+ * words.
  */
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
@@ -96,17 +98,6 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
 
 /** Why each stored-conversation member refuses until agy's store is read. */
 const NO_STORE = "CawCo doesn't read Antigravity's stored conversations yet.";
-
-/**
- * Whether `spec` is a work item's session, which agy runs none of until its
- * workspace boundary is proven (tsk-340 item 4): a delegate's workspace, or
- * a host-scope delegate's scratch.
- */
-const isWorkItem = (spec: SpawnPayload, ctx: HarnessContext): boolean =>
-  spec.workspace !== undefined ||
-  spec.hostScratch !== undefined ||
-  ctx.boundary !== undefined ||
-  ctx.hostTmp !== undefined;
 
 /**
  * The models every Antigravity account here offers, read live in its own
@@ -209,7 +200,7 @@ class AgyHarness implements Harness<"agy"> {
     return [];
   }
 
-  /** agy's saved outputs stay in its home, which no workspace reads (descriptor `spills`). */
+  /** agy's saved outputs are its conversation's, read through its judge (descriptor `spills`). */
   readonly spill = cannot(
     "Antigravity keeps an output too large for its model in its own home."
   );
@@ -221,18 +212,16 @@ class AgyHarness implements Harness<"agy"> {
   readonly machineControls = {};
 
   /**
-   * A plain session on its account: a work item, a fork and a clean start
-   * refused in words first. The fleet's baseline and every session's
-   * own-list, subagent and question denials beside the spawn's own, as
-   * every harness takes them, held by the session's judge in agy's names.
+   * A session on its account, a work item's in its workspace: a fork and a
+   * clean start refused in words first. The fleet's baseline and every
+   * session's own-list, subagent and question denials beside the spawn's
+   * own, as every harness takes them, held by the session's judge in agy's
+   * names.
    */
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
-    if (isWorkItem(spec, ctx)) {
-      throw new Error(agyWords.noWorkItems);
-    }
     if (spec.resume?.fork) {
       throw new Error(agyWords.noFork);
     }

@@ -8,11 +8,13 @@ import { join } from "node:path";
 import { readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { makeFolder } from "@cawco/core/folders";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { currentKeeper } from "@cawco/core/keepers";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   workspaceAccountsFile,
+  workspaceInstructionHoldsFile,
   workspaceSpillsFile,
 } from "@cawco/core/paths/workspace";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
@@ -40,6 +42,18 @@ export const addSpill = async (id: string, dir: string): Promise<void> => {
   await keepSpill(dir);
   await addListed(id, workspaceSpillsFile(id), dir);
 };
+
+/**
+ * Adds `harness` to the harnesses whose instruction files workspace `id`
+ * holds read-only ({@link workspaceInstructionHoldsFile}), once, for the
+ * workspace's whole life: its denies then hold them as they stand at each
+ * start (core workspace-policy.ts `workspaceDenies`), and its boundary is
+ * handed over the first time, its form changed with its policy.
+ */
+export const addInstructionHold = (
+  id: string,
+  harness: HarnessKind
+): Promise<void> => addListed(id, workspaceInstructionHoldsFile(id), harness);
 
 /** Adds `item` to the workspace's list record at `file` unless it is listed already. */
 const addListed = async (

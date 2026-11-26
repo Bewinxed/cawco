@@ -224,6 +224,17 @@ export const workspaceAccountsFile = (id: string): string =>
 export const workspaceSpillsFile = (id: string): string =>
   join(workspaceStateDir(id), "spills.json");
 
+/**
+ * The harnesses whose instruction files a workspace holds read-only, a JSON
+ * list of harness kinds the agent adds to as a session of one whose files
+ * are held spawns there (`boundaryFor`; core workspace-judge.ts
+ * `heldInstructions`), so the workspace's denies hold them
+ * (`workspaceDenies`) for the rest of its life. In the state dir, which
+ * nothing inside the boundary writes.
+ */
+export const workspaceInstructionHoldsFile = (id: string): string =>
+  join(workspaceStateDir(id), "instruction-holds.json");
+
 /** The dir in a workspace's state dir that holds each {@link workspaceSpillDir}. */
 export const SPILLS_DIR_NAME = "spills";
 

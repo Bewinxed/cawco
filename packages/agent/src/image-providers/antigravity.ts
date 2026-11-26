@@ -275,7 +275,8 @@ const runAgy = Effect.fn("runAgy")(function* (
   const launch = yield* agyLaunch(
     accountId,
     `image-${crypto.randomUUID()}`,
-    {}
+    {},
+    false
   ).pipe(Effect.mapError(imageRunFailed));
   /**
    * What the run heard: its session once opened, every conversation its

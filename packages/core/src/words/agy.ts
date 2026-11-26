@@ -1,11 +1,13 @@
 /**
  * What CawCo says of an Antigravity session it refuses or ends (agent
- * harnesses/agy-launch.ts, agy-runtime.ts, agy-sessiond.ts): an account
- * that cannot start one, a session kind Antigravity runs none of yet, and a
- * turn that ends without a reply or at the account's quota. Read by the
- * agent alone; the app draws none of it. Decided by Gemini 4 Neon on
- * 2026-11-26 (the project's `assets/eb689d78/neon-answer.md`; the picture
- * strings, `assets/046b2a6e/neon-answer.md`).
+ * harnesses/agy-launch.ts, agy-runtime.ts, agy-sessiond.ts, agy-canary.ts,
+ * agy-judge.ts): an account that cannot start one, a workspace session
+ * stopped or a write it refused, and a turn that ends without a reply or at
+ * the account's quota. Read by the agent alone; the app draws none of it.
+ * Decided by Gemini 4 Neon on 2026-11-26 (the project's
+ * `assets/eb689d78/neon-answer.md`; the picture strings,
+ * `assets/046b2a6e/neon-answer.md`; the workspace words,
+ * `assets/9eb4dcba/neon-answer.md`).
  */
 
 export const agyWords = {
@@ -23,8 +25,31 @@ export const agyWords = {
   /** Agent Platform with neither a key nor a project and location. */
   noPlatformAccess:
     "This Agent Platform account needs an API key, or a Google Cloud project and location.",
-  /** A work item's session, which Antigravity runs none of yet. */
-  noWorkItems: "Antigravity can't run work items yet. Use another agent.",
+  /**
+   * A workspace session asked to start below its clone's root, where agy
+   * would read project config from folders no workspace denies hold.
+   */
+  notAtRoot: "Antigravity must start at the clone's root.",
+  /**
+   * The account's hook check showed agy does not run CawCo's hook, or does
+   * not obey it (`why`), so no session on the account starts.
+   */
+  hookNotHeld: (why: string) =>
+    `Antigravity didn't follow the safety hook on this account (${why}).`,
+  /** The account's hook check could not finish (`why`); the next start runs it again. */
+  hookUnchecked: (why: string) =>
+    `Couldn't check the safety hook on this Antigravity account (${why}). Start again to retry.`,
+  /** A workspace command ran and agy did not say CawCo's hook rewrote it. */
+  commandNotRewritten:
+    "Session stopped. A command ran without the sandbox rewrite.",
+  /** A workspace command ran that CawCo's hook never judged. */
+  commandNotJudged: "Session stopped. A command ran without the safety hook.",
+  /**
+   * The model's words for a write to an instruction file a workspace holds
+   * read-only for Antigravity (`tool` as agy called it, `path` as named).
+   */
+  instructionsHeld: (tool: string, path: string) =>
+    `cawco: ${tool} did not run because ${path} is read-only in this session. Leave it unchanged and report any needed changes in your reply.`,
   /** A fork, which agy's ACP has no method for. */
   noFork: "Antigravity can't fork a session. Start a new one.",
   /** A fleet hook's `UserPromptSubmit` block, its reason in the hook's words. This line and the next as Gemini 4 Neon decided them (the project's `assets/5f081fab/neon-answer.md`). */

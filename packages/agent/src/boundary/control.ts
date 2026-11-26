@@ -4,12 +4,19 @@
  * in it.
  */
 import { readdir } from "node:fs/promises";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { instructionsHeld } from "@cawco/core/workspace-judge";
 import { recordAgentState } from "../agent-state";
 import { boundaryProcId, isBoundaryOf, isJudgeOf } from "../proc-id";
-import { addAccount, addSpill, behindGate } from "./decisions";
+import {
+  addAccount,
+  addInstructionHold,
+  addSpill,
+  behindGate,
+} from "./decisions";
 import {
   armedWorkspaces,
   armHook,
@@ -131,19 +138,25 @@ export const rearmHooks = async (): Promise<void> => {
  * to hand the model, is added too ({@link addSpill}): the workspace's first
  * session finds its own there already (first-session.ts, placed at the
  * cut), and a later session's hands the boundary over, its form changed
- * with its policy.
+ * with its policy. A harness whose instruction files are held where it runs
+ * (core workspace-judge.ts `instructionsHeld`) has them held from its first
+ * session there on ({@link addInstructionHold}).
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
   account: string | undefined,
   project?: string,
-  spill?: string
+  spill?: string,
+  harness?: HarnessKind
 ): Promise<Boundary | undefined> => {
   if (!workspace) {
     return;
   }
   if (account) {
     await addAccount(workspace.id, account);
+  }
+  if (harness && instructionsHeld(harness)) {
+    await addInstructionHold(workspace.id, harness);
   }
   if (project) {
     await setProject(workspace.id, project);

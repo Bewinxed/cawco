@@ -35,6 +35,20 @@ const isTextContent = Schema.is(TextContent);
 const RawOutput = Schema.Struct({ output: Schema.String });
 const isRawOutput = Schema.is(RawOutput);
 
+/**
+ * Whether a finished call's output opens with agy's word on CawCo's
+ * rewrite ({@link HOOK_NOTICE}), in its text content or its raw output:
+ * the proof that agy ran the command as the hook rewrote it.
+ */
+export const carriesHookNotice = (update: {
+  content?: readonly unknown[] | null;
+  rawOutput?: unknown;
+}): boolean =>
+  (update.content ?? []).some(
+    (part) => isTextContent(part) && HOOK_NOTICE.test(part.content.text)
+  ) ||
+  (isRawOutput(update.rawOutput) && HOOK_NOTICE.test(update.rawOutput.output));
+
 /** What a finished call said, as its result: its text content, else its raw output's, without CawCo's notice. */
 export const callResult = (update: {
   content?: readonly unknown[] | null;

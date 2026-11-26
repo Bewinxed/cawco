@@ -27,7 +27,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type ClientApp,
   type ClientConnection,
@@ -35,6 +35,7 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk";
+import { makeFolder } from "@cawco/core/folders";
 import {
   AGY_METHODS,
   AGY_PROVIDER,
@@ -305,15 +306,27 @@ export const agyArgs = (home: string): string[] => [
 ];
 
 /**
+ * agy's own temp dir for session `instanceId` in agy home `home`: beside the
+ * home, under the account's dir, which no workspace reads or writes. agy
+ * reads what lies in its `TMPDIR` without asking (the project's
+ * include-controls probe, 2026-11-26), so a workspace session's is its own
+ * and never the workspace's scratch.
+ */
+const ownTmp = (home: string, instanceId: string): string =>
+  join(dirname(home), "agy-tmp", instanceId);
+
+/**
  * What session `instanceId` on account `accountId` runs as: the installed
  * agy, its argv, its environment whole, its home, its judge's socket and
- * the method `authenticate` names. Refused before anything starts when agy
- * or the account's method cannot run it.
+ * the method `authenticate` names. A workspace session (`bounded`) runs
+ * agy on a temp dir of its own ({@link ownTmp}). Refused before anything
+ * starts when agy or the account's method cannot run it.
  */
 export const agyLaunch = Effect.fn("agyLaunch")(function* (
   accountId: string,
   instanceId: string,
-  extras: Readonly<Record<string, string>>
+  extras: Readonly<Record<string, string>>,
+  bounded: boolean
 ): Effect.fn.Return<AgyLaunch, AgyStartRefused> {
   const agy = yield* agyToStart();
   const signIn = yield* readAgySignIn(accountId);
@@ -322,14 +335,23 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   const judge = yield* agyJudgeEnv(judgeSocket).pipe(
     Effect.mapError((error) => refuse(error.why))
   );
+  const tmp = bounded ? ownTmp(home, instanceId) : undefined;
+  if (tmp) {
+    yield* Effect.promise(() => makeFolder(tmp, { mode: 0o700 }));
+  }
   const launch: AgyLaunch = {
     bin: agy.bin,
     args: agyArgs(home),
-    env: agyEnvironment(signIn, { ...extras, ...judge }),
+    env: agyEnvironment(signIn, {
+      ...extras,
+      ...judge,
+      ...(tmp ? { TMPDIR: tmp } : {}),
+    }),
     home,
     judgeSocket,
     methodId: signIn.method,
     ...(agy.version ? { version: agy.version } : {}),
+    ...(tmp ? { tmp } : {}),
   };
   return launch;
 });

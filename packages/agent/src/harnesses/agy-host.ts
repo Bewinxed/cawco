@@ -36,6 +36,7 @@ function begin(
     permissionResolved: (requestId, outcome) =>
       say({ type: "permissionResolved", requestId, outcome }),
     failed: (error) => say({ type: "failed", error: hostWords(error) }),
+    refused: (error) => say({ type: "refused", error }),
     rejected: (uuid, error) =>
       say({ type: "rejected", uuid, error: hostWords(error) }),
   }).then((made) => {

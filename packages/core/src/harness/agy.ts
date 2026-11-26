@@ -291,8 +291,11 @@ export const AGY = {
   permissionModes: SHARED_MODES,
   requiredOnEveryMachine: false,
   startsWithoutConversation: false,
-  // agy saves an output too large for its model in its home's
-  // `brain/<conversation>/`, which no workspace reads yet.
+  // agy saves an output too large for its model, and each background
+  // command's log, in its home's `brain/<conversation>/`, whose name it
+  // gives only once the conversation opens: a workspace session's own is
+  // read by its file tools through its judge (core workspace-judge.ts
+  // `Call.ownOutputs`), never by a spill folder of the workspace's.
   spills: false,
   storeOAuthProviders: {},
 

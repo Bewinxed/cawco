@@ -5,12 +5,14 @@
  * (pi-sessiond.ts): the ring read from the hub's mark, the host's state
  * read, each ask it still holds parked again.
  */
+import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
 import { inStartingSet } from "@cawco/core/delegate-types";
+import { BOUNDARY_RELAUNCH, SESSION_STOPPED } from "@cawco/core/harness";
 import {
   type AgyHostCommand,
   type AgyHostEvent,
@@ -24,25 +26,33 @@ import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { CONTROL_SET_PERMISSION_MODE } from "@cawco/core/session/controls";
-import type { PermissionResult } from "@cawco/core/session-messages";
+import type {
+  NeutralMessage,
+  PermissionResult,
+} from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { agyWords } from "@cawco/core/words/agy";
+import { readPolicy } from "@cawco/core/workspace-judge";
 import { Effect } from "effect";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { fleetMcpAt } from "../fleet-mcp-set";
-import { sessionGitEnv } from "../git-credential";
+import { gateForm } from "../gate-form";
 import {
   cannot,
   type HarnessContext,
   type HarnessSession,
+  HeldProcessRefused,
   type SessionControls,
 } from "../harness";
 import { KeeperPool } from "../keepers";
+import { enterSpawn } from "../layer";
 import { throughMcpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
+import { agyHookHeld } from "./agy-canary";
 import { agyDeniedTools } from "./agy-judge";
 import { agyLaunch, agyToStart } from "./agy-launch";
+import { commandEnv } from "./command-env";
 import { hostSnapshot } from "./host-line";
 import { HostedSession } from "./hosted-session";
 import { sessionMemory } from "./session-memory";
@@ -63,6 +73,10 @@ class AgyRemoteSession
   #running: string | undefined;
   /** The asks the host parked with this agent, by request id. */
   readonly #asks = new Set<string>();
+  /** The gate form the host says its judge started on, in a workspace. */
+  #hostForm: string | undefined;
+  /** Why this session was refused, once it has been: said once. */
+  #refusal: string | undefined;
 
   constructor(
     client: SessiondClient,
@@ -86,11 +100,74 @@ class AgyRemoteSession
   }
 
   protected override applySnapshot(value: unknown): void {
-    const state = agyHostState(value);
+    this.applyState(agyHostState(value));
+  }
+
+  /** The host's state applied: the shared part, its gate form, and a refusal it holds. */
+  applyState(state: AgyHostState): void {
     // An agent that takes the host back hears no `version` the host said
     // before its cursor: the host's state says it.
     this.#running = state.version ?? this.#running;
+    this.#hostForm = state.gateForm;
     this.applyShared(state);
+    if (state.refused !== undefined) {
+      this.#refuse(state.refused);
+    }
+  }
+
+  /**
+   * The session stopped for good as no longer to be trusted, in `words`:
+   * said in its transcript, its row and work item failed with them
+   * (`HarnessContext.refused`), and its host ended.
+   */
+  #refuse(words: string): void {
+    if (this.#refusal !== undefined) {
+      return;
+    }
+    this.#refusal = words;
+    this.ctx.frame({
+      type: "system",
+      subtype: SESSION_STOPPED,
+      uuid: `session-stopped-${this.ctx.instanceId}-refused`,
+      session_id: this.sessionId ?? "",
+      content: words,
+    });
+    this.ctx.refused?.(new HeldProcessRefused(words));
+    this.stop().catch((error: unknown) =>
+      console.warn(
+        `[agy] ${this.ctx.instanceId}: stopping after its refusal: ${String(error)}`
+      )
+    );
+  }
+
+  /**
+   * Asks the hub to relaunch a workspace session whose host judges by
+   * another gate than this build's ({@link gateForm}), as a pi host's is
+   * (pi-sessiond.ts `askRelaunch`): at the attach when no turn runs, and as
+   * each turn ends; the hub relaunches it only while it is idle.
+   */
+  askRelaunch(): void {
+    if (
+      this.ready &&
+      !this.exited &&
+      this.ctx.boundary &&
+      this.#hostForm !== gateForm("agy")
+    ) {
+      this.ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+    }
+  }
+
+  override attached(): void {
+    super.attached();
+    if (!this.busyNow) {
+      this.askRelaunch();
+    }
+  }
+
+  protected override afterFrame(message: NeutralMessage): void {
+    if (message.type === "result" && !this.busyNow) {
+      this.askRelaunch();
+    }
   }
 
   protected override ownEvent(_seq: number, event: AgyHostEvent): void {
@@ -106,6 +183,9 @@ class AgyRemoteSession
         if (this.#asks.delete(event.requestId)) {
           this.ctx.permissionResolved?.(event.requestId, event.outcome);
         }
+        return;
+      case "refused":
+        this.#refuse(event.error);
         return;
       // Every host's own, which the shared session reads (hosted-session.ts).
       case "frame":
@@ -256,14 +336,25 @@ const memoryOf = async (spec: SpawnPayload, cwd: string): Promise<string> =>
     .join("\n\n");
 
 /**
- * What agy's commands get of the session beyond its account's: git reaching
- * the hub's remote as this session, and its container runtimes through its
- * own doors.
+ * Refuses a workspace session that does not start at its clone's root: agy
+ * reads project config and rules from its folder and each one above it up
+ * to the repository's root, and the workspace holds them at the root alone
+ * (core clone-denies.ts, workspace-judge.ts `heldInstructions`). A place, a
+ * person's own folder, guards its config at any depth and starts anywhere.
  */
-const sessionExtras = (ctx: HarnessContext): Record<string, string> => ({
-  ...sessionGitEnv(),
-  ...ctx.containerEnv,
-});
+const atCloneRoot = async (ctx: HarnessContext): Promise<void> => {
+  const { boundary } = ctx;
+  if (!boundary) {
+    return;
+  }
+  const policy = readPolicy(boundary.policy);
+  if (
+    policy.protectConfig === undefined &&
+    (await realpath(ctx.cwd)) !== policy.clone
+  ) {
+    throw new Error(agyWords.notAtRoot);
+  }
+};
 
 /**
  * A new Antigravity session: its launch read from its account, its host
@@ -280,8 +371,17 @@ export const spawnAgy = async (
   if (!accountId) {
     throw new Error(agyWords.needsAccount);
   }
+  await atCloneRoot(ctx);
   const launch = await Effect.runPromise(
-    agyLaunch(accountId, ctx.instanceId, sessionExtras(ctx)).pipe(
+    agyHookHeld(accountId).pipe(
+      Effect.andThen(
+        agyLaunch(
+          accountId,
+          ctx.instanceId,
+          commandEnv(ctx),
+          ctx.boundary !== undefined
+        )
+      ),
       Effect.mapError((refused) => new Error(refused.message))
     )
   );
@@ -295,17 +395,23 @@ export const spawnAgy = async (
     typeof __CAWCO_RELEASE__ === "boolean" ? "agy-host.js" : "agy-host.ts"
   );
   const hubUrl = readEnv(CAWCO_ENV.hubUrl);
-  await client.spawnProc(procId, {
-    command: process.execPath,
-    args: standalone ? ["agy-host"] : [host],
-    cwd: ctx.cwd,
-    // The host reaches CawCo's tools through this agent's gateway; agy's own
-    // environment comes whole in the start, never from here.
-    env: {
-      [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
-      ...(hubUrl ? { [CAWCO_ENV.hubUrl]: hubUrl } : {}),
-    },
-  });
+  // In a Linux view of its folder, the host and its agy run inside it
+  // (layer.ts), so agy's file tools read and write the folder as its
+  // commands do.
+  await client.spawnProc(
+    procId,
+    enterSpawn(ctx.workspace, {
+      command: process.execPath,
+      args: standalone ? ["agy-host"] : [host],
+      cwd: ctx.cwd,
+      // The host reaches CawCo's tools through this agent's gateway; agy's own
+      // environment comes whole in the start, never from here.
+      env: {
+        [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
+        ...(hubUrl ? { [CAWCO_ENV.hubUrl]: hubUrl } : {}),
+      },
+    })
+  );
   const listed = await client.list();
   const proc = listed.procs.find((one) => one.procId === procId);
   if (!proc?.alive) {
@@ -329,6 +435,19 @@ export const spawnAgy = async (
       denied: [...denied],
       clientVersion: runtimeVersion,
       ...(memory ? { memory } : {}),
+      // A work item's session: every command through its executor, every
+      // file tool by its policy (agy-judge.ts), every fleet hook through its
+      // shell prefix (agy-fleet-hooks.ts), on this build's gate.
+      ...(ctx.boundary
+        ? {
+            workspace: {
+              exec: ctx.boundary.exec,
+              policy: ctx.boundary.policy,
+              prefix: ctx.boundary.prefix,
+            },
+            gateForm: gateForm("agy"),
+          }
+        : {}),
     });
     // Answered once the host has started agy and opened the session, or
     // with why it could not.

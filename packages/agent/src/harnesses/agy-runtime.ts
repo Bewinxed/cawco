@@ -41,7 +41,8 @@
  *   again there at once; one that did ends naming it, and the next message
  *   goes to the new conversation.
  */
-import { dirname } from "node:path";
+import { rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   type ClientConnection,
   type ContentBlock,
@@ -54,6 +55,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { makeFolder } from "@cawco/core/folders";
 import type { SessionCredentialInstall } from "@cawco/core/harness";
+import { AGY_TOOLS } from "@cawco/core/harness/agy";
 import type {
   AgyHostAsk,
   AgyHostCommand,
@@ -61,6 +63,7 @@ import type {
 } from "@cawco/core/harness/agy-host-state";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { type SharedMode, sharedModeNamed } from "@cawco/core/harness/modes";
+import { AGY_APP_DATA } from "@cawco/core/paths/harnesses";
 import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
@@ -81,6 +84,7 @@ import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
+import { readPolicy } from "@cawco/core/workspace-judge";
 import { Deferred, Effect, Exit, Scope, Semaphore } from "effect";
 import type { SessionControls, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
@@ -90,6 +94,7 @@ import {
   argsOf,
   askedCall,
   callResult,
+  carriesHookNotice,
   commandsOf,
   currentOption,
   levelFor,
@@ -100,6 +105,7 @@ import {
   takesAppend,
 } from "./agy-frames";
 import { serveAgyJudge } from "./agy-hook";
+import type { AgyAnswer, AgySession as Judged } from "./agy-judge";
 import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
 import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
@@ -122,6 +128,8 @@ interface AgyHostContext {
     requestId: string,
     outcome: "answered" | "cancelled"
   ) => void;
+  /** The host stopped agy as no longer to be trusted, in words that say why. */
+  refused: (error: string) => void;
   /** A send agy refused. */
   rejected: (uuid: string, error: unknown) => void;
   session: (sessionId: string) => void;
@@ -240,6 +248,16 @@ class AgySession {
   #turn: Turn | undefined;
   /** The running turn's tool calls said as tool uses, by agy's id, and whether each result is said too. */
   readonly #calls = new Map<string, "running" | "ended">();
+  /** The tool each call agy began names, by agy's id, until it ends: a command's result is proven by it. */
+  readonly #callTools = new Map<string, string>();
+  /**
+   * In a workspace, each command the judge let run, by its call's id, until
+   * it ends: whether the judge rewrote it to run through the executor, so
+   * its result must carry agy's word on the rewrite ({@link #proven}).
+   */
+  readonly #ran = new Map<string, boolean>();
+  /** Why the host stopped agy as no longer to be trusted, once it has. */
+  #refused: string | undefined;
   #models: ModelInfo[] = [];
   #commands: SlashCommand[] = [];
   /** The last answer that named the session's config options: what thinking levels its model takes. */
@@ -261,14 +279,17 @@ class AgySession {
     this.#fleet = new AgyFleetHooks(
       start.spec.cwd,
       start.mcpServers.map((server) => server.name),
-      () => this.sessionId
+      () => this.sessionId,
+      start.workspace ? { prefix: start.workspace.prefix } : undefined
     );
   }
 
   /** The session the judge answers for, read afresh at each call. */
-  #judged() {
+  #judged(): Judged {
     const session = this;
     const denied = new Set(this.#start.denied);
+    const { home } = this.#start.launch;
+    const { workspace } = this.#start;
     return {
       denied,
       get mode() {
@@ -280,8 +301,80 @@ class AgySession {
       get personTurn() {
         return session.#prompts > 0;
       },
-      workspace: undefined,
+      noted: (callId, tool, answer) => this.#noted(callId, tool, answer),
+      // Where agy saves this conversation's outputs and background
+      // commands' logs (`<app-data>/brain/<id>/`, the project's
+      // `assets/3c6f6f4e/ppersist.summary.txt`), named from the
+      // conversation agy opened, never from a call.
+      get ownOutputs() {
+        return session.sessionId
+          ? join(home, AGY_APP_DATA, "brain", session.sessionId)
+          : undefined;
+      },
+      workspace: workspace
+        ? { exec: workspace.exec, policy: () => readPolicy(workspace.policy) }
+        : undefined,
     };
+  }
+
+  /** A command the judge let run in a workspace, kept for its result's proof ({@link #proven}). */
+  #noted(callId: string, tool: string, answer: AgyAnswer): void {
+    if (
+      !this.#start.workspace ||
+      AGY_TOOLS[tool] !== "shell" ||
+      answer.decision === "deny"
+    ) {
+      return;
+    }
+    // A hook agy ran twice for one call (issue #1462) rewrote it the first time.
+    const rewritten =
+      answer.overwrite?.CommandLine !== undefined ||
+      this.#ran.get(callId) === true;
+    this.#ran.set(callId, rewritten);
+  }
+
+  /**
+   * In a workspace, a command that ran is proven to have run through its
+   * executor (the project's `assets/50e9e4c3/agy-harness-decisions.md` §1
+   * decision 11): the judge let it run, and when the judge rewrote it, agy's
+   * word on the rewrite opens its output. One that is not stops the
+   * session as no longer to be trusted. Any other call proves nothing here.
+   */
+  #proven(
+    id: string,
+    update: { content?: readonly unknown[] | null; rawOutput?: unknown }
+  ): void {
+    const tool = this.#callTools.get(id);
+    const rewritten = this.#ran.get(id);
+    this.#callTools.delete(id);
+    this.#ran.delete(id);
+    if (
+      !this.#start.workspace ||
+      (rewritten === undefined &&
+        (tool === undefined || AGY_TOOLS[tool] !== "shell"))
+    ) {
+      return;
+    }
+    if (rewritten === undefined) {
+      this.#refuse(agyWords.commandNotJudged);
+    } else if (rewritten && !carriesHookNotice(update)) {
+      this.#refuse(agyWords.commandNotRewritten);
+    }
+  }
+
+  /** agy and all it started ended for good, as no longer to be trusted, and said so once in `words`. */
+  #refuse(words: string): void {
+    if (this.#refused !== undefined) {
+      return;
+    }
+    this.#refused = words;
+    console.warn(`[agy] ${this.#start.spec.instanceId}: ${words}`);
+    this.#endAgy();
+    this.#cancelAsks();
+    this.#ctx.refused(words);
+    this.#prompts = 0;
+    this.#turn = undefined;
+    this.#ctx.busy(false);
   }
 
   /** The judge served, agy started and signed in, and the session opened. */
@@ -405,6 +498,9 @@ class AgySession {
   }
 
   #connection(): ClientConnection {
+    if (this.#refused !== undefined) {
+      throw new Error(this.#refused);
+    }
     const agy = this.#agy;
     if (!agy || agy.ended) {
       throw new Error(agyWords.ended);
@@ -480,6 +576,12 @@ class AgySession {
         }
         if (update.status === "completed" || update.status === "failed") {
           this.#answered(update.toolCallId, update.status === "failed", update);
+          if (update.status === "completed") {
+            this.#proven(update.toolCallId, update);
+          } else {
+            this.#callTools.delete(update.toolCallId);
+            this.#ran.delete(update.toolCallId);
+          }
         }
         return;
       case "available_commands_update":
@@ -583,6 +685,7 @@ class AgySession {
       return;
     }
     this.#calls.set(id, "running");
+    this.#callTools.set(id, name);
     if (this.#turn) {
       this.#turn.said = true;
     }
@@ -825,7 +928,9 @@ class AgySession {
     } catch (error) {
       this.#prompts = Math.max(0, this.#prompts - 1);
       if (this.#prompts === 0) {
-        this.#endTurn("end_turn", { words: saidBy(error) });
+        // A session the host refused ends its turn in the refusal's words,
+        // not in the connection's close they caused.
+        this.#endTurn("end_turn", { words: this.#refused ?? saidBy(error) });
       }
       return;
     }
@@ -1004,6 +1109,10 @@ class AgySession {
     this.#fleet.end();
     this.#endAgy();
     await Effect.runPromise(Scope.close(this.#judge, Exit.void));
+    const { tmp } = this.#start.launch;
+    if (tmp) {
+      await rm(tmp, { recursive: true, force: true });
+    }
   }
 
   /** The host's state, as its snapshot says it. */
@@ -1014,6 +1123,8 @@ class AgySession {
       held: [...this.#unread],
       asks: [...this.#asks.values()].map((ask) => ask.asked),
       ...(this.#version ? { version: this.#version } : {}),
+      ...(this.#start.gateForm ? { gateForm: this.#start.gateForm } : {}),
+      ...(this.#refused === undefined ? {} : { refused: this.#refused }),
     };
   }
 

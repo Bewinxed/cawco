@@ -2956,9 +2956,10 @@ export class SessionSupervisor {
       const place = spec.workspace ?? (await cloneHolding(workdir));
       // A launch in a workspace keeps the tool results its harness saves in
       // a folder of its own, which its boundary reads (`Harness.spill`); a
-      // reattach launches nothing, and its folder is read already.
+      // reattach launches nothing, and its folder is read already. A harness
+      // that keeps no such folder (descriptor `spills`) is asked for none.
       const spill =
-        place && !spec.reattachOnly
+        place && !spec.reattachOnly && descriptorOf(adapter.kind).spills
           ? await adapter.spill(spec, workdir, place.id)
           : undefined;
       const holder: { session: HarnessSession | null } = { session: null };
@@ -3190,7 +3191,8 @@ export class SessionSupervisor {
         ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
         : undefined,
       spec.workspace ? spec.projectId : undefined,
-      spill
+      spill,
+      adapter.kind
     );
     // Its doors to the machine's container runtimes (session-containers.ts),
     // so what its work starts stops with it. A workspace's boundary reaches

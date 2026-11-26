@@ -1,7 +1,8 @@
 /**
- * The form of a harness host's file-tool gate: what a pi host or an OpenCode
- * server judges a workspace session's file tools and path arguments with,
- * fixed when it starts. A pi host runs the judge it imported at start, and
+ * The form of a harness host's file-tool gate: what a pi or Antigravity host
+ * or an OpenCode server judges a workspace session's file tools and path
+ * arguments with, fixed when it starts. A pi or Antigravity host runs the
+ * judge it imported at start, and
  * an OpenCode server keeps the judge module its bridge plugin first imported
  * (Bun caches it by path until the server ends). So a host started by
  * another build answers to that build's gate until it is relaunched.
@@ -12,7 +13,7 @@
  * arguments (`workspace-judge.ts`), and for OpenCode the bridge plugin's
  * source as well. Each host records the form it started with; one whose form
  * is not the agent's current one is relaunched onto the current gate the
- * first moment it is idle: a pi host between its session's turns
+ * first moment it is idle: a pi or Antigravity host between its session's turns
  * (`BOUNDARY_RELAUNCH`, as a Claude CLI on a hook that fails open is), an
  * OpenCode server through its replacement at rest (its launch carries the
  * form, `GATE_FORM_ENV`).
@@ -20,7 +21,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { HookHarness } from "@cawco/core/hooks";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { z } from "zod";
 
@@ -38,7 +39,7 @@ const judgeSource = (): string =>
  * `plugin` is the bridge plugin's source this agent writes.
  */
 // @limit measured: 16 hex characters are 64 bits of SHA-256; the gate forms one session holds, so two collide after about 2^32 names
-export const gateForm = (harness: HookHarness, plugin = ""): string =>
+export const gateForm = (harness: HarnessKind, plugin = ""): string =>
   createHash("sha256")
     .update([harness, judgeSource(), plugin].join("\0"))
     .digest("hex")

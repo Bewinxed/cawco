@@ -33,6 +33,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  statSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,6 +117,14 @@ export interface Call {
   readonly cwd: string;
   readonly harness: HarnessKind;
   readonly input: unknown;
+  /**
+   * agy: its conversation's own dir in its home (`<app-data>/brain/<id>`),
+   * where it saves a command's output too large for the model and each
+   * background command's log, and tells the model to read them there. Named
+   * by the session's host from the conversation agy opened for it, never by
+   * the model.
+   */
+  readonly ownOutputs?: string;
   readonly tool: string;
   /**
    * OpenCode: the dir its server saves a truncated tool output to
@@ -372,6 +381,20 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
     : policy.denyRead,
 });
 
+/**
+ * The policy an agy session judges by: the workspace's, with its own
+ * conversation's dir in its home readable ({@link Call.ownOutputs}), and
+ * nothing else of the home: no other conversation's, and not its settings,
+ * sign-in or hook.
+ */
+const agySession = (policy: Policy, call: Call): Policy =>
+  call.ownOutputs && isAbsolute(call.ownOutputs)
+    ? {
+        ...policy,
+        allowRead: [...policy.allowRead, resolveReal(call.ownOutputs)],
+      }
+    : policy;
+
 /** What each harness adds to the policy for its own sessions; see {@link sessionPolicy}. */
 const SESSION_POLICY: Record<
   HarnessKind,
@@ -381,7 +404,7 @@ const SESSION_POLICY: Record<
   opencode: opencodeSession,
   pi: undefined,
   codex: undefined,
-  agy: undefined,
+  agy: agySession,
 };
 
 /**
@@ -389,9 +412,8 @@ const SESSION_POLICY: Record<
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
  * OpenCode: {@link opencodeSession}. pi keeps its saved outputs in the
  * session's own folder, which the policy already reads. Codex saves none
- * (it keeps a large output's head and tail). agy keeps its saved outputs in
- * its home's `brain/<conversation>/`, which no workspace reads; none of them
- * is read back yet.
+ * (it keeps a large output's head and tail). agy: {@link agySession}; its
+ * commands, which run in the boundary, read none of the home.
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
   const session = SESSION_POLICY[call.harness];
@@ -855,6 +877,15 @@ export const judgeCall = (policy: Policy, call: Call): Verdict => {
  */
 interface InstructionFiles {
   /**
+   * Its instruction files at the clone's root, and every file of the
+   * workspace's they include, are held read-only in a workspace one of its
+   * sessions ran in ({@link heldInstructions}): it builds a prompt from them
+   * on turns it starts itself (agy: when a background command ends, at a
+   * one-time wake-up), which no check of CawCo's comes before, so what they
+   * name is fixed from the launch's check on.
+   */
+  readonly held: boolean;
+  /**
    * The include it expands while it reads one, the included path in group
    * 1: agy's `@[label](path)` (the project's `assets/cc1d4173/REPORT.md`),
    * each included file judged as the instruction file is, and read for its
@@ -883,14 +914,18 @@ interface InstructionFiles {
  * (the probe's `oc-midturn-watch`). pi 1.5.2: the first of its candidates in
  * each folder (resource-loader.js `loadContextFileFromDir`). Codex 0.169.0:
  * `AGENTS.override.md`, then `AGENTS.md`, from the repository's root down to
- * its folder. agy: `AGENTS.md` with its includes.
+ * its folder. agy 1.5.18: `AGENTS.md` and `GEMINI.md`, each with its
+ * includes, from the session's folder up to the repository's root alone
+ * (the project's `assets/cc1d4173/REPORT.md` and its include-controls
+ * probe), read as each prompt is built, its own turns' included.
  */
 const INSTRUCTIONS: Record<HarnessKind, InstructionFiles> = {
   claude: {
     names: ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"],
     nested: true,
+    held: false,
   },
-  opencode: { names: ["AGENTS.md"], nested: true },
+  opencode: { names: ["AGENTS.md"], nested: true, held: false },
   pi: {
     names: [
       "AGENTS.override.md",
@@ -900,14 +935,24 @@ const INSTRUCTIONS: Record<HarnessKind, InstructionFiles> = {
       "CLAUDE.MD",
     ],
     nested: false,
+    held: false,
   },
-  codex: { names: ["AGENTS.override.md", "AGENTS.md"], nested: false },
+  codex: {
+    names: ["AGENTS.override.md", "AGENTS.md"],
+    nested: false,
+    held: false,
+  },
   agy: {
-    names: ["AGENTS.md"],
+    names: ["AGENTS.md", "GEMINI.md"],
     nested: false,
     includes: /@\[[^\]\n]*\]\(([^)\n]+)\)/gu,
+    held: true,
   },
 };
+
+/** Whether `harness`'s instruction files are held read-only where its sessions run ({@link InstructionFiles.held}). */
+export const instructionsHeld = (harness: HarnessKind): boolean =>
+  INSTRUCTIONS[harness].held;
 
 /** `path` without `.` or `..` parts, as written: the folders a harness names on its way to it. */
 const lexical = (path: string): string => {
@@ -1082,7 +1127,12 @@ export const judgeInstructions = (
   );
   const unread = firstUnread(policy, harness, files, new Set());
   if (!unread) {
-    return ALLOWED;
+    const [link] = heldInstructions(policy, at.harness).links;
+    return link === undefined
+      ? ALLOWED
+      : refused(
+          `cawco: blocked ${at.refusing} because ${link} is a symlink on the path to a read-only ${at.harness} instruction file. Replace the symlink with the file it points to.`
+        );
   }
   const what =
     unread.file === unread.from
@@ -1091,4 +1141,116 @@ export const judgeInstructions = (
   return refused(
     `cawco: ${at.refusing} was refused: ${what}, and it leads to ${unread.real}, which this workspace does not read, so remove it or point it inside the clone (${policy.clone}).`
   );
+};
+
+/** What {@link heldInstructions} reads a clone's instruction files by: the workspace's clone, the home `~` names, and every root it writes. */
+export type HeldBy = Pick<Policy, "allowWrite" | "clone" | "home">;
+
+/**
+ * Every file `files` names at the clone's root, and every file they
+ * include, read for its own includes in turn, each as the harness names it
+ * (joined and cleaned as written, as agy's Go joins a path). Only a regular
+ * file is read for its includes.
+ */
+const instructionClosure = (by: HeldBy, files: InstructionFiles): string[] => {
+  const found = files.names.map((name) => join(by.clone, name));
+  // A for-of over an array reaches what is pushed onto it as it runs.
+  for (const file of found) {
+    if (!files.includes) {
+      break;
+    }
+    let text: string;
+    try {
+      if (!statSync(file).isFile()) {
+        continue;
+      }
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const match of text.matchAll(files.includes)) {
+      for (const path of against(match[1].trim(), [dirname(file)], by.home)) {
+        const named = lexical(path);
+        if (!found.includes(named)) {
+          found.push(named);
+        }
+      }
+    }
+  }
+  return found;
+};
+
+/** The first part of `path`, from the root down, that is a link in a dir the workspace writes, which a command could swap for another; none when it has none. */
+const writableLink = (by: HeldBy, path: string): string | undefined => {
+  let at = "";
+  for (const part of path.split("/").filter(Boolean)) {
+    at = `${at}/${part}`;
+    let link: boolean;
+    try {
+      link = lstatSync(at).isSymbolicLink();
+    } catch {
+      return;
+    }
+    if (link) {
+      try {
+        if (deepest(by.allowWrite, resolveReal(dirname(at))) !== undefined) {
+          return at;
+        }
+      } catch {
+        return at;
+      }
+    }
+  }
+};
+
+/** The files a workspace holds read-only for a harness ({@link heldInstructions}), and the links on the way to them it cannot hold. */
+export interface HeldInstructions {
+  /** Each instruction file and include the workspace writes, at its real path, there or not. */
+  readonly files: readonly string[];
+  /**
+   * Each link in a dir the workspace writes on the way to one of them: a
+   * bind holds what a link leads to, never the link, so a command could put
+   * another in its place ({@link judgeInstructions} refuses a launch and a
+   * turn while there is one).
+   */
+  readonly links: readonly string[];
+}
+
+/**
+ * What a workspace holds read-only while `harness` runs in it, when its
+ * instruction files are held ({@link InstructionFiles.held}): every file it
+ * reads as instructions at the clone's root and every file they include,
+ * read for its own includes in turn, that the workspace writes (`allowWrite`,
+ * at its real path), whether it is there or not, so no command or file
+ * tool changes what it names between the checks of each launch and turn
+ * ({@link judgeInstructions}) and a turn the harness starts itself. A file
+ * the workspace does not write is not its to change; one it does not read
+ * is refused by {@link judgeInstructions}. Nothing for any other harness.
+ */
+export const heldInstructions = (
+  by: HeldBy,
+  harness: HarnessKind
+): HeldInstructions => {
+  const files = INSTRUCTIONS[harness];
+  if (!files.held) {
+    return { files: [], links: [] };
+  }
+  const held = new Set<string>();
+  const links = new Set<string>();
+  for (const path of instructionClosure(by, files)) {
+    const link = writableLink(by, path);
+    if (link !== undefined) {
+      links.add(link);
+    }
+    let real: string;
+    try {
+      real = resolveReal(path);
+    } catch {
+      continue;
+    }
+    if (deepest(by.allowWrite, real) !== undefined) {
+      held.add(real);
+    }
+  }
+  return { files: [...held], links: [...links] };
 };

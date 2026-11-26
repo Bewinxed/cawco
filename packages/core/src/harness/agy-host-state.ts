@@ -51,6 +51,13 @@ const AGY_HOST_STATE = object({
   /** The asks agy raised that no answer has settled yet: an agent that takes the host back parks each again. */
   asks: array(ASK),
   busy: boolean(),
+  /**
+   * The gate form its judge started on (agent gate-form.ts `gateForm`), in a
+   * workspace: one of another form is relaunched at rest onto the agent's.
+   */
+  gateForm: optional(string()),
+  /** Why the host stopped agy as no longer to be trusted, once it has: an agent taking it back refuses the session in these words. */
+  refused: optional(string()),
   /** The sends the host handed agy that agy has not read yet, by uuid. */
   held: array(string()),
   sessionId: nullable(string()),
@@ -108,10 +115,24 @@ const LAUNCH = object({
    * running agy's `initialize` answer reads as outdated.
    */
   version: optional(string()),
+  /** agy's own temp dir (`TMPDIR`), made for this session alone and removed as its host ends. */
+  tmp: optional(string()),
 });
 
 /** What the host runs agy as ({@link LAUNCH}). */
 export type AgyLaunch = InferOutput<typeof LAUNCH>;
+
+/**
+ * A work item's workspace as its session's judge holds it to it (agent
+ * boundary/state.ts `Boundary`): the executor every command is rewritten
+ * to run through, the policy file every file tool is judged by, and the
+ * shell prefix every fleet hook runs through, inside the boundary.
+ */
+const WORKSPACE = object({
+  exec: string(),
+  policy: string(),
+  prefix: string(),
+});
 
 const AGY_HOST_COMMAND = variant("type", [
   object({
@@ -132,6 +153,10 @@ const AGY_HOST_COMMAND = variant("type", [
      * (agent harnesses/agy-fleet.ts), which agy reads again each turn.
      */
     memory: optional(string()),
+    /** Its workspace, when it is a work item's session in one. */
+    workspace: optional(WORKSPACE),
+    /** The gate form the agent expects its judge on, said back in its state. */
+    gateForm: optional(string()),
   }),
   ...HOST_COMMANDS,
   object({
@@ -159,6 +184,8 @@ const AGY_HOST_EVENT = variant("type", [
   }),
   /** The running agy's version as its `initialize` said it. */
   object({ type: literal("version"), version: string() }),
+  /** The host stopped agy as no longer to be trusted, in words that say why. */
+  object({ type: literal("refused"), error: string() }),
 ]);
 
 /** An event of an Antigravity host's line ({@link AGY_HOST_EVENT}). */

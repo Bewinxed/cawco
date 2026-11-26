@@ -74,6 +74,7 @@ import {
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
+import { harnessNamed } from "./harness/kinds";
 import { recordLimitReading } from "./limit-readings";
 import { alternatesText, copiedFolderSync, recordedPool } from "./object-pool";
 import {
@@ -99,6 +100,7 @@ import {
   workspaceAccountsFile,
   workspaceBorrowedObjectsFile,
   workspaceDoorDir,
+  workspaceInstructionHoldsFile,
   workspacePlaceFoldersFile,
   workspaceProjectFile,
   workspaceReadOnlyDir,
@@ -112,7 +114,12 @@ import { hostEnvironment } from "./session-env";
 import { readRecord } from "./state-file";
 import type { WorkspaceRef } from "./workspace/controls";
 import { workspaceIdKind, workspaceIdKindOf } from "./workspace-id";
-import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
+import {
+  heldInstructions,
+  type Policy,
+  resolveDenied,
+  resolveReal,
+} from "./workspace-judge";
 import { findProgram, hostJavaHome, startedPath } from "./workspace-needs";
 
 /**
@@ -405,12 +412,12 @@ export const workspaceDenies = async (
       return [];
     case "clone":
       if (copiedFolderSync(workspace.id)) {
-        return [];
+        return heldDenies(workspace, clone, []);
       }
-      return borrowing(
-        cloneDenies(clone),
+      return heldDenies(
+        workspace,
         clone,
-        await recordedPool(workspace.id)
+        borrowing(cloneDenies(clone), clone, await recordedPool(workspace.id))
       );
     case "place":
       return collapsed(await protectedIn(clone), clone, PROTECTED_MAX).map(
@@ -420,6 +427,79 @@ export const workspaceDenies = async (
         })
       );
   }
+};
+
+/** The harnesses whose instruction files workspace `id` holds ({@link workspaceInstructionHoldsFile}). */
+const instructionHolds = async (id: string) =>
+  (
+    (await readRecord(
+      workspaceInstructionHoldsFile(id),
+      z.array(z.unknown())
+    )) ?? []
+  ).flatMap((named) => {
+    const harness = harnessNamed(named);
+    return harness ? [harness] : [];
+  });
+
+/** Every root workspace `workspace` writes, each a real path: its clone, its scratch dir and the package caches. */
+const writeRoots = async (workspace: WorkspaceRef): Promise<string[]> =>
+  unique(
+    [
+      workspace.path,
+      workspaceScratchDir(workspace.id),
+      ...workspaceCaches(),
+      ...(await darwinUserDirs()),
+    ].map(resolveReal)
+  );
+
+/**
+ * `denies`, and every file a harness that ran in the workspace holds
+ * read-only (core workspace-judge.ts `heldInstructions`: its instruction
+ * files at the clone's root and the workspace's files they include), as it
+ * stands now, so the hold follows what they name as the person changes it
+ * between sessions. One the clone has is bound as it is; one it lacks
+ * stands in as an empty read-only dir, which no harness reads as
+ * instructions and git lists nowhere, so no command makes it in the hold's
+ * place and nothing of the hold shows as the delegate's work.
+ */
+const heldDenies = async (
+  workspace: WorkspaceRef,
+  clone: string,
+  denies: readonly CloneDeny[]
+): Promise<readonly CloneDeny[]> => {
+  const harnesses = await instructionHolds(workspace.id);
+  if (harnesses.length === 0) {
+    return denies;
+  }
+  const by = {
+    clone,
+    home: homedir(),
+    allowWrite: await writeRoots(workspace),
+  };
+  const named = new Set(denies.map((deny) => deny.path));
+  const held = harnesses
+    .flatMap((harness) => heldInstructions(by, harness).files)
+    .filter((path) => !named.has(path));
+  return [
+    ...denies,
+    ...(await Promise.all(
+      unique(held).map(async (path): Promise<CloneDeny> => ({
+        path,
+        empty: (await standsEmpty(path))
+          ? { kind: "dir", readOnly: true }
+          : { kind: "none" },
+      }))
+    )),
+  ];
+};
+
+/** Whether a held file is absent, or the empty dir that stands in for it: what it takes again at each start. */
+const standsEmpty = async (path: string): Promise<boolean> => {
+  const found = await lstat(path).catch(() => undefined);
+  return (
+    found === undefined ||
+    (found.isDirectory() && (await readdir(path)).length === 0)
+  );
 };
 
 /**
@@ -1438,11 +1518,7 @@ export const workspacePolicy = async (
   const mac = process.platform === "darwin";
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
   const javaHome = hostJavaHome();
-  const allowWrite = real([
-    workspace.path,
-    workspaceScratchDir(workspace.id),
-    ...caches,
-  ]);
+  const allowWrite = await writeRoots(workspace);
   const allowRead = unique([
     ...real([
       workspace.path,

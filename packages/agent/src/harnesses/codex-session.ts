@@ -49,7 +49,6 @@ import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { Deferred, Effect, Exit } from "effect";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
-import { sessionGitEnv } from "../git-credential";
 import type {
   HarnessContext,
   HarnessSession,
@@ -83,6 +82,7 @@ import {
   CodexPeer,
   type CodexServerRequest,
 } from "./codex-rpc";
+import { commandEnv } from "./command-env";
 import { credentialControls } from "./credential-controls";
 import { sessionMemory } from "./session-memory";
 import { listedSkillFiles } from "./skill-files";
@@ -1215,21 +1215,6 @@ class CodexSession implements HarnessSession {
 }
 
 /**
- * The app-server's environment beyond its home, which its commands take
- * (C-env): git reaching the hub's remote as this session
- * (git-credential.ts), its container runtimes through its own doors
- * (session-containers.ts), and a host-scope delegate's scratch as its
- * `TMPDIR` (host-scratch.ts). A workspace's commands run in its boundary,
- * whose `TMPDIR` is the boundary's own; Codex saves no output of its own to
- * read back (C-s).
- */
-const sessionExtras = (ctx: HarnessContext): Record<string, string> => ({
-  ...sessionGitEnv(),
-  ...ctx.containerEnv,
-  ...(ctx.hostTmp ? { TMPDIR: ctx.hostTmp } : {}),
-});
-
-/**
  * A session's developer instructions (thread/start `developerInstructions`,
  * C-g): the fleet's memory, the memory placed at its folder, and the hub's
  * documents for it, each headed by its path, as pi's loader takes them
@@ -1374,7 +1359,7 @@ export const spawnCodex = async (
       command: codex.bin,
       args: ["app-server"],
       cwd: ctx.cwd,
-      env: codexEnv(codex, accountId, sessionExtras(ctx)),
+      env: codexEnv(codex, accountId, commandEnv(ctx)),
     }
   );
   const held = await codexKeepers.holding(procId);

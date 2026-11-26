@@ -77,7 +77,12 @@ carries it.
 **Workspace boundary, shell.** Every shell command of a work item runs
 through the workspace's executor, inside the boundary: Claude Code through
 its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`), OpenCode through CawCo's
-plugin's `shell`, pi through `sessionBash`.
+plugin's `shell`, pi through `sessionBash`, Antigravity through its hook,
+whose judge rewrites each `run_command` to the executor and whose host
+stops a session whose command ran without that rewrite (agent
+`harnesses/agy-judge.ts`, `agy-runtime.ts` `#proven`). A harness that runs
+its tools itself proves its hook holds on each account before a session
+there starts (agent `harnesses/agy-canary.ts`).
 
 **Workspace boundary, files.** Every file tool and its path arguments are
 judged by the workspace's policy, whose table of each harness's file tools is
@@ -96,6 +101,21 @@ config on the host or hands its credential to a workspace. A harness that
 trusts a folder by itself (Codex's app-server does, for any folder it starts
 a writable thread in) is told the clone is untrusted before its first
 thread (agent `harnesses/codex-home.ts` `prepareHome`).
+
+**Instruction files and their includes.** What a harness reads as
+instructions from a clone, and each file it includes, is judged as a read of
+the session's own at every launch and before every send (core
+`workspace-judge.ts` `INSTRUCTIONS`, `judgeInstructions`; agent `session.ts`
+`holdInstructions`). A harness that builds a prompt on turns it starts
+itself, which no send comes before, has those files held read-only in the
+workspace from its first session there on (`INSTRUCTIONS` `held`,
+`heldInstructions`; core `workspace-policy.ts` `workspaceDenies`), a missing
+one standing in as an empty read-only dir.
+
+**Saved outputs.** A harness that saves an output too large for its model
+keeps it where its session alone reads it: a spill folder of the
+workspace's (descriptor `spills`, `Harness.spill`), or a dir its judge names
+for that session (core `workspace-judge.ts` `Call.ownOutputs`).
 
 **CawCo MCP and fleet MCP.** The session reaches CawCo's tools with its own
 credential (`HarnessContext.sessionCredential`), kept off argv. In a

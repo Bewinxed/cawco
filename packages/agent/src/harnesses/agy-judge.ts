@@ -39,7 +39,13 @@ import {
 import type { SharedMode } from "@cawco/core/harness/modes";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { unhandled } from "@cawco/core/unhandled";
-import { judgeCall, type Policy } from "@cawco/core/workspace-judge";
+import { agyWords } from "@cawco/core/words/agy";
+import {
+  heldInstructions,
+  judgeCall,
+  type Policy,
+  resolveReal,
+} from "@cawco/core/workspace-judge";
 import { Option, Schema } from "effect";
 
 /** What agy hands its `PreToolUse` hook on stdin (its hooks doc, "Input/Output Contract"). */
@@ -104,6 +110,18 @@ export interface AgySession {
   readonly denied: ReadonlySet<string>;
   /** Its permission mode, as CawCo names it (core harness/modes.ts `modeOn` has made `auto` Bypass). */
   readonly mode: SharedMode;
+  /**
+   * Each answer the judge gave, by the call's id, which is the id of the
+   * call's ACP `tool_call` (the project's `assets/3c6f6f4e/pa.summary.txt`):
+   * what the host's proof of each command reads (agy-runtime.ts).
+   */
+  readonly noted: (callId: string, tool: string, answer: AgyAnswer) => void;
+  /**
+   * Its conversation's own dir in its home, once agy has opened it: what
+   * agy saves of its outputs and background commands there is the session's
+   * to read (core workspace-judge.ts `Call.ownOutputs`).
+   */
+  readonly ownOutputs: string | undefined;
   /**
    * Whether a turn the person sent is running. agy starts turns by itself
    * when a background command or a wake-up ends, and a permission it raises
@@ -335,14 +353,46 @@ const refusedOutright = (
   }
   const { workspace } = session;
   if (workspace && kind !== "shell") {
-    const verdict = judgeCall(workspace.policy(), {
+    const policy = workspace.policy();
+    const held = heldFile(policy, kind, input);
+    if (held !== undefined) {
+      return agyWords.instructionsHeld(name, held);
+    }
+    const verdict = judgeCall(policy, {
       harness: AGY.kind,
       tool,
       input,
       cwd: call.cwd,
+      ...(session.ownOutputs ? { ownOutputs: session.ownOutputs } : {}),
     });
     return verdict.ok ? undefined : verdict.reason;
   }
+};
+
+/**
+ * The instruction file a write of `kind` would change, when it is one the
+ * workspace holds read-only for agy (core workspace-judge.ts
+ * `heldInstructions`): its `Path`, at its real path, among them.
+ */
+const heldFile = (
+  policy: Policy,
+  kind: AgyToolClass,
+  input: Readonly<Record<string, unknown>>
+): string | undefined => {
+  const path = input.Path;
+  if (kind !== "write" || typeof path !== "string") {
+    return;
+  }
+  let real: string;
+  try {
+    real = resolveReal(path);
+  } catch {
+    return;
+  }
+  return policy.protectConfig === undefined &&
+    heldInstructions(policy, AGY.kind).files.includes(real)
+    ? path
+    : undefined;
 };
 
 /** The judge's answer to one call, read from what agy handed the hook, for `session`. */
@@ -362,9 +412,18 @@ export const agyAnswer = (
   if (refused !== undefined || kind === undefined) {
     return deny(refused ?? `cawco: ${name} did not run.`);
   }
+  const { workspace } = session;
+  if (
+    workspace &&
+    kind === "shell" &&
+    typeof reach.input.CommandLine !== "string"
+  ) {
+    return deny(
+      `cawco: ${name} did not run because it had no command line. Retry with a command line.`
+    );
+  }
   const part = governed(kind);
   const action = part === undefined ? "run" : MODE_ACTION[session.mode][part];
-  const { workspace } = session;
   const overwrite =
     workspace && kind === "shell"
       ? throughExecutor(workspace.exec, reach.input)
