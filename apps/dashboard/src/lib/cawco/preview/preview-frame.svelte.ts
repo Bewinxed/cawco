@@ -131,13 +131,31 @@ export class PreviewFrame {
     return !!docked && warm.reached(docked);
   });
 
-  readonly frames = $derived.by(() => {
+  /** The current frame's address: the place it opens on the pane's origin. */
+  readonly src = $derived.by(
+    () =>
+      `${this.#deps.previewReach.paneOrigin}${this.#deps.previewReach.framePlace}`
+  );
+
+  /**
+   * The address the standing frame ({@link standing}) last held as the
+   * current one. It keeps it while the next one loads: given the new
+   * address, it would load the new page too, a second copy beside the one
+   * it bridges for.
+   */
+  #standingSrc = $state<string | null>(null);
+
+  /** Each frame by its key, with its own address: the one it replaces (while it stands) and the current one. */
+  readonly frames = $derived.by((): { key: string; src: string }[] => {
     if (this.unloaded) {
       return [];
     }
-    return this.standing === null || this.standing === this.frameKey
-      ? [this.frameKey]
-      : [this.standing, this.frameKey];
+    const current = { key: this.frameKey, src: this.src };
+    return this.standing === null ||
+      this.standing === this.frameKey ||
+      this.#standingSrc === null
+      ? [current]
+      : [{ key: this.standing, src: this.#standingSrc }, current];
   });
 
   /**
@@ -213,24 +231,36 @@ export class PreviewFrame {
   downProbe = $state(0);
 
   /**
-   * The origin whose page last said it is ready in the frame. While the
-   * frame still holds another origin's page (the panel moving to another
-   * artifact, served on its own origin), nothing is posted into it: the
-   * engine refuses a post whose target origin is not the page's, and logs
-   * it. The new page's ready says everything again.
+   * The page that last said it is ready: the frame's window it spoke from,
+   * and its origin. Readiness is that window's alone: a new frame (each
+   * load at a new revision is a new iframe, `frameKey`) holds the browser's
+   * blank first document, on the dashboard's own origin, until its page
+   * commits, and a frame holding another origin's page (the panel moving
+   * to another artifact) holds the wrong one; the engine refuses a post
+   * whose target origin is not the page's, and logs it. Nothing is posted
+   * until the page in the current frame says ready; its ready says
+   * everything again.
    */
-  readyFrom = "";
+  #readyPage: { origin: string; window: Window } | null = null;
 
-  /** To the page, on its own origin alone, once that origin's page said it is ready (`hello`, the answer to it, goes at once). */
+  /** The pane's origin while the current frame's page there has said it is ready; else null. */
+  readonly #readyOrigin = (): string | null => {
+    const origin = this.#deps.previewReach.paneOrigin;
+    const page = this.#readyPage;
+    return origin &&
+      page?.origin === origin &&
+      page.window === this.iframe?.contentWindow
+      ? origin
+      : null;
+  };
+
+  /** To the page, on its own origin alone, once the current frame's page said it is ready (`hello`, the answer to it, goes at once). */
   post = (message: object, hello = false) => {
-    if (
-      this.#deps.previewReach.paneOrigin &&
-      (hello || this.readyFrom === this.#deps.previewReach.paneOrigin)
-    ) {
-      this.iframe?.contentWindow?.postMessage(
-        message,
-        this.#deps.previewReach.paneOrigin
-      );
+    const origin = hello
+      ? this.#deps.previewReach.paneOrigin
+      : this.#readyOrigin();
+    if (origin) {
+      this.iframe?.contentWindow?.postMessage(message, origin);
     }
   };
 
@@ -315,6 +345,14 @@ export class PreviewFrame {
   constructor(deps: PreviewFrameDeps) {
     this.#deps = deps;
     this.unloaded = untrack(() => !this.#deps.onScreen());
+    // The frame shown keeps the address it holds: the one it stands on
+    // once the next frame loads ({@link frames}).
+    $effect(() => {
+      const { src } = this;
+      if (this.standing === this.frameKey) {
+        this.#standingSrc = src;
+      }
+    });
     $effect(() => {
       if (this.#deps.paneSubject.isCanvas) {
         return;
@@ -425,13 +463,7 @@ export class PreviewFrame {
       }
       return holdOpen(
         id,
-        frameHand(
-          () => this.iframe,
-          () =>
-            this.readyFrom === this.#deps.previewReach.paneOrigin
-              ? this.#deps.previewReach.paneOrigin
-              : null
-        )
+        frameHand(() => this.iframe, this.#readyOrigin)
       );
     });
     $effect(() => this.#tellHub());
@@ -514,6 +546,18 @@ export class PreviewFrame {
   #shown() {
     this.loaded = true;
     this.standing = this.frameKey;
+  }
+
+  /**
+   * Frame `key` was made: one made for the frame that stands in for the
+   * next (the frames moved into another box, the design graph's stage or
+   * out of it) holds no paint of the page it stood for, so it bridges
+   * nothing and goes.
+   */
+  made(key: string) {
+    if (key !== this.frameKey && key === this.standing) {
+      this.standing = null;
+    }
   }
 
   /**
@@ -675,9 +719,10 @@ export class PreviewFrame {
     this.proxyDown = null;
   }
 
-  /** The page said it is ready, from `origin`. */
+  /** The current frame's page said it is ready, from `origin`. */
   ready(origin: string) {
-    this.readyFrom = origin;
+    const from = this.iframe?.contentWindow;
+    this.#readyPage = from ? { origin, window: from } : null;
     this.connected = true;
     this.#shown();
   }

@@ -15,7 +15,7 @@
   import { shellWords } from "@cawco/core/words/shell";
   import { sideWords } from "@cawco/core/words/side";
   import { Portal } from "bits-ui";
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -1159,7 +1159,7 @@
 <!-- The page's frame (and, while a new one loads, the one it replaces): in
      the well, or in a component artifact's design graph's stage. -->
 {#snippet frameTags()}
-  {#each previewReach.paneOrigin ? previewFrame.frames : [] as key (key)}
+  {#each previewReach.paneOrigin ? previewFrame.frames : [] as { key, src } (key)}
     {@const current = key === previewFrame.frameKey}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
@@ -1179,7 +1179,7 @@
           previewFrame.announce();
         }
       }}
-      src={`${previewReach.paneOrigin}${previewReach.framePlace}`}
+      {src}
       data-scheme={paneSubject.themedFrame ? theme.resolved : undefined}
       title={sideWords.preview}
       {@attach (node) => {
@@ -1187,6 +1187,7 @@
           previewFrame.iframe = node;
         }
       }}
+      {@attach () => untrack(() => previewFrame.made(key))}
     ></iframe>
   {/each}
 {/snippet}
