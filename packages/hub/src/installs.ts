@@ -904,7 +904,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     const { install } = entry;
     mark(entry, "sign-in");
     const before = yield* Effect.promise(() =>
-      beforeSsh(install.target, install.port)
+      beforeSsh(install.target, install.port, deps.lifetime)
     );
     if (before?.kind === "host-key") {
       end(entry, "failed", {

@@ -24,7 +24,9 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
 import { DB_PATH } from "./config";
+import type { HubLifetimeShape } from "./lifetime";
 
 import { CONNECT_S } from "./ssh-tunnels";
 
@@ -359,8 +361,8 @@ type Knock =
  * address away with. A connect that fails reaches no server and costs the
  * hub nothing with it.
  */
-const knock = (address: string, port: number): Promise<Knock> =>
-  new Promise((resolve) => {
+const knock = (address: string, port: number): Effect.Effect<Knock> =>
+  Effect.callback<Knock>((resume) => {
     let connected = false;
     let heard = "";
     let done = false;
@@ -371,7 +373,7 @@ const knock = (address: string, port: number): Promise<Knock> =>
       }
       done = true;
       socket.destroy();
-      resolve(result);
+      resume(Effect.succeed(result));
     };
     const said = (): Knock =>
       heard.startsWith(PENALIZED_LINE)
@@ -393,6 +395,7 @@ const knock = (address: string, port: number): Promise<Knock> =>
     socket.once("error", (error: NodeJS.ErrnoException) =>
       end(connected ? said() : { kind: "failed", code: error.code ?? "EIO" })
     );
+    return Effect.sync(() => socket.destroy());
   });
 
 /** What stops an add before any `ssh` runs ({@link beforeSsh}). */
@@ -409,6 +412,7 @@ export type BeforeSsh =
  * ConnectTimeout. Penalized when its server turns this address away.
  */
 const reach = async (
+  lifetime: HubLifetimeShape,
   host: string,
   port: number
 ): Promise<BeforeSsh | undefined> => {
@@ -426,7 +430,7 @@ const reach = async (
   }
   let failed = "ENOTFOUND";
   for (const address of addresses) {
-    const heard = await knock(address, port);
+    const heard = await lifetime.run(knock(address, port));
     if (heard.kind === "greeted") {
       return;
     }
@@ -520,7 +524,9 @@ const knownKeys = async (to: SshDestination): Promise<Set<string> | null> => {
  */
 export const beforeSsh = async (
   target: string,
-  port: number | null
+  port: number | null,
+  /** The hub's lifetime: a knock waits on it. */
+  lifetime: HubLifetimeShape
 ): Promise<BeforeSsh | undefined> => {
   const to = await destinationOf(target, port);
   if (!to || to.proxied) {
@@ -551,5 +557,5 @@ export const beforeSsh = async (
         : { kind: "host-key" };
     }
   }
-  return await reach(to.host, to.port);
+  return await reach(lifetime, to.host, to.port);
 };

@@ -16,10 +16,11 @@
 import { rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
 import { makeFolder } from "@cawco/core/folders";
 import { previewServerSocket } from "@cawco/core/paths/hub";
 import { unhandled } from "@cawco/core/unhandled";
+import { Cause, Effect, Exit, FiberSet, Runtime } from "effect";
 import { dataOf, reached, refusalText, succeeded } from "../client";
 import { LOCAL_DASHBOARD_PORT } from "../config";
 import { labelOf, originFor } from "../preview-hosts";
@@ -34,10 +35,58 @@ import type { HubSays } from "./wire";
 /** How often an origin's use and a pass's use are said to the hub at most, ms: a minute (hub preview.ts `USE_WRITE_MS`, preview-access.ts `TOUCH_EVERY_MS`). */
 const SAID_EVERY_MS = 60_000;
 
-/** Boots the preview server: what `cawco preview` runs, and then stays up. */
-export const startPreviewServer = async (): Promise<void> => {
-  const store = openPreviewStore();
-  const doors = createTailnetDoors();
+/**
+ * The process's main fiber: `program` run as the preview server's whole
+ * life, its scope the server's. SIGTERM and SIGINT interrupt it, so every
+ * finalizer of its scope runs (the listeners stopped, the link and the store
+ * closed), and the process then exits 0, as a stop always did; a failure is
+ * said and exits 1. Effect's own `Runtime.makeRunMain`, which the platform
+ * runners (`NodeRuntime.runMain`) are made of. The hub's lifetime is the
+ * hub's: the preview server holds none of the hub's state
+ * (scripts/import-rules-check.ts `preview-reaches-hub`).
+ */
+const runMain = Runtime.makeRunMain(({ fiber }) => {
+  const stop = (): void => {
+    fiber.interruptUnsafe();
+  };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
+  fiber.addObserver((exit) => {
+    process.removeListener("SIGTERM", stop);
+    process.removeListener("SIGINT", stop);
+    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+      console.error(
+        `[preview] the preview server failed: ${Cause.pretty(exit.cause)}`
+      );
+      process.exit(1);
+    }
+    process.exit(0);
+  });
+});
+
+/** The preview server, for as long as its scope stands: what `cawco preview` runs. */
+const previewServer = Effect.gen(function* () {
+  const store = yield* Effect.acquireRelease(
+    Effect.sync(openPreviewStore),
+    (opened) => Effect.sync(() => opened.close())
+  );
+  /** Work started here and let go, interrupted when the server stops. */
+  const forked = yield* FiberSet.makeRuntime();
+  /** `work` let go, named `what`: a failure is said as `detach` says one (core detach.ts). */
+  const letGo = (what: string, work: Effect.Effect<unknown, unknown>): void => {
+    forked(
+      Effect.catchCause(work, (cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.void
+          : Effect.sync(() => {
+              console.warn(
+                `[${what}] failed: ${failureOf(Cause.squash(cause))}`
+              );
+            })
+      )
+    );
+  };
+  const doors = createTailnetDoors(letGo);
   /** The dashboards that may frame a preview: the operator's own address and the loopback's until the hub says them all. */
   let parents = [
     ...(readEnv(CAWCO_ENV.dashboardUrl)
@@ -65,7 +114,7 @@ export const startPreviewServer = async (): Promise<void> => {
   const heard = (said: HubSays): void => {
     switch (said.type) {
       case "ports":
-        detach(stand(), "preview listeners stood");
+        letGo("preview listeners stood", stand);
         return;
       case "parents":
         ({ parents } = said);
@@ -81,7 +130,7 @@ export const startPreviewServer = async (): Promise<void> => {
         unhandled("what the hub said", said);
     }
   };
-  const link = openHubLink(heard);
+  const link = yield* openHubLink(heard);
 
   const watch = (key: string): (() => void) => {
     const now = (viewers.get(key) ?? 0) + 1;
@@ -111,6 +160,7 @@ export const startPreviewServer = async (): Promise<void> => {
 
   // Late-bound: the listeners answer through serve, which reads their ports.
   const env = {
+    letGo,
     parents: () => parents,
     allow: (key: string, origin: string) => {
       const held = ancestors.get(key) ?? new Set<string>();
@@ -168,6 +218,7 @@ export const startPreviewServer = async (): Promise<void> => {
     },
   });
   const listeners = createListeners({
+    letGo,
     answer: async (request, server, key, lock) =>
       (await stale.movedOn(request, lock, key)) ??
       serve.answer(request, server, key, lock),
@@ -181,36 +232,53 @@ export const startPreviewServer = async (): Promise<void> => {
     },
   });
 
-  /** Every listener as the rows say now, and what didn't stand said to the hub. */
-  const stand = async (): Promise<void> => {
-    const stood = await listeners.stand(store.ports(), store.settings());
-    for (const { key, port, why } of stood.refused) {
-      console.warn(`[preview] port ${port} didn't open for ${key}: ${why}`);
-    }
-    if (stood.host) {
-      console.warn(`[preview] host mode didn't open: ${stood.host.why}`);
-    }
-    link.say({ type: "bound", ...stood });
-  };
+  yield* Effect.addFinalizer(() => listeners.stopAll);
 
-  link.onOpen(() => detach(stand(), "preview listeners stood"));
-  await stand();
+  /** Every listener as the rows say now, and what didn't stand said to the hub. */
+  const stand = Effect.suspend(() =>
+    listeners.stand(store.ports(), store.settings())
+  ).pipe(
+    Effect.flatMap((stood) =>
+      Effect.sync(() => {
+        for (const { key, port, why } of stood.refused) {
+          console.warn(`[preview] port ${port} didn't open for ${key}: ${why}`);
+        }
+        if (stood.host) {
+          console.warn(`[preview] host mode didn't open: ${stood.host.why}`);
+        }
+        link.say({ type: "bound", ...stood });
+      })
+    )
+  );
+
+  link.onOpen(() => letGo("preview listeners stood", stand));
+  yield* stand;
   // Its own socket, which says it stands (cli service.ts `probePreview`).
   const own = previewServerSocket();
-  await makeFolder(dirname(own), { mode: 0o700 });
-  await rm(own, { force: true });
-  const standing = Bun.serve({
-    unix: own,
-    fetch: () => new Response("the preview server stands\n"),
+  yield* Effect.promise(async () => {
+    await makeFolder(dirname(own), { mode: 0o700 });
+    await rm(own, { force: true });
   });
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      Bun.serve({
+        unix: own,
+        fetch: () => new Response("the preview server stands\n"),
+      })
+    ),
+    (standing) => Effect.sync(() => standing.stop(true))
+  );
   console.log("[preview] the preview server stands");
-  const stop = async () => {
-    link.close();
-    standing.stop(true);
-    await listeners.stopAll();
-    store.close();
-    process.exit(0);
-  };
-  process.on("SIGTERM", () => detach(stop(), "preview server stop"));
-  process.on("SIGINT", () => detach(stop(), "preview server stop"));
+  return yield* Effect.never;
+});
+
+/**
+ * Boots the preview server: what `cawco preview` runs, and then stays up.
+ * The promise edge of {@link previewServer}: it is handed to the process's
+ * main fiber ({@link runMain}), which holds it from then on, and a boot that
+ * fails ends the process with its cause said.
+ */
+export const startPreviewServer = (): Promise<void> => {
+  runMain(Effect.scoped(previewServer), { disableErrorReporting: true });
+  return Promise.resolve();
 };

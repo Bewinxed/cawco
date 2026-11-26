@@ -13,7 +13,6 @@
  * origin the rows give it takes it at once.
  */
 import { errnoCode } from "@cawco/core/absent";
-import { detach } from "@cawco/core/detach";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import {
   causeOf,
@@ -22,6 +21,7 @@ import {
   untransformed,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
+import { Effect, Semaphore } from "effect";
 import { ElysiaStatus } from "elysia";
 import { BIND_HOST, FLEET_PORTS, PREVIEW_PORTS } from "../config";
 import type { PassCheck } from "../preview-access";
@@ -52,10 +52,18 @@ export type Answer = (
 export interface ListenersEnv {
   answer: Answer;
   doors: TailnetDoors;
+  /** Work let go, named `what`, for as long as the server runs (main.ts). */
+  letGo: (what: string, work: Effect.Effect<unknown, unknown>) => void;
   /** The lock's passes and their use (store.ts, the link). */
   passes: PassCheck["passes"];
   /** Origin `key` was used now (a request). */
   used: (key: string) => void;
+}
+
+/** What a stand did not open: each origin's bind refused, and host mode's. */
+export interface Stood {
+  host: { held: boolean; why: string } | null;
+  refused: { key: string; port: number; held: boolean; why: string }[];
 }
 
 /** Why no origin may have `port` in mode `mode`; null when one may (hub preview-ports.ts `barred`). */
@@ -191,13 +199,22 @@ export const createListeners = (env: ListenersEnv) => {
       const holding = listen(port, () => undefined, portLock);
       const until = Date.now() + VACANT_HOLD_MS;
       vacant.set(port, { held: holding, until });
-      setTimeout(() => {
-        const stopping =
-          vacant.get(port)?.until === until ? takeVacant(port) : undefined;
-        if (stopping !== undefined) {
-          detach(stopping, "vacant preview port let go");
-        }
-      }, VACANT_HOLD_MS).unref();
+      env.letGo(
+        "vacant preview port let go",
+        Effect.sleep(VACANT_HOLD_MS).pipe(
+          Effect.andThen(
+            Effect.suspend(() => {
+              const stopping =
+                vacant.get(port)?.until === until
+                  ? takeVacant(port)
+                  : undefined;
+              return stopping === undefined
+                ? Effect.void
+                : Effect.promise(() => stopping);
+            })
+          )
+        )
+      );
     } catch (thrown) {
       previewFailed(HOP, null, `port ${port} wasn't held: ${causeOf(thrown)}`);
     }
@@ -342,8 +359,17 @@ export const createListeners = (env: ListenersEnv) => {
     return refused;
   };
 
-  /** Each `stand` waits for the one before: two never bind at once. */
-  let standing: Promise<unknown> = Promise.resolve();
+  /**
+   * One stand at a time, and every listener stopped after the last: one
+   * finishes stopping a port before another binds it. A stand begun runs to
+   * its end, so an interrupted caller never leaves a port half let go to
+   * the next.
+   */
+  const standing = Semaphore.makeUnsafe(1);
+  /** Whether every listener was stopped for good: a stand after it opens nothing. */
+  let stopped = false;
+  const alone = <A>(work: () => Promise<A>): Effect.Effect<A> =>
+    standing.withPermit(Effect.uninterruptible(Effect.promise(work)));
 
   return {
     /**
@@ -351,14 +377,14 @@ export const createListeners = (env: ListenersEnv) => {
      * port, a stale one stopped (its port held vacant), host mode's opened
      * or stopped. The binds that were refused, and host mode's refusal.
      */
-    stand(
+    stand: (
       ports: { key: string; port: number }[],
       settings: { mode: "port" | "host"; pattern: string | null }
-    ): Promise<{
-      refused: { key: string; port: number; held: boolean; why: string }[];
-      host: { held: boolean; why: string } | null;
-    }> {
-      const run = standing.then(async () => {
+    ): Effect.Effect<Stood> =>
+      alone(async () => {
+        if (stopped) {
+          return { refused: [], host: null };
+        }
         rows = new Map(ports.map(({ key, port }) => [key, port]));
         await letGoMoved();
         const hostRefused = await standHost(settings);
@@ -366,10 +392,7 @@ export const createListeners = (env: ListenersEnv) => {
           refused: await bindRows(ports, settings.mode),
           host: hostRefused,
         };
-      });
-      standing = run.catch(() => undefined);
-      return run;
-    },
+      }),
 
     /** Origin `key`'s port while its listener stands. */
     portOf: (key: string): number | undefined => held.get(key)?.port,
@@ -377,8 +400,9 @@ export const createListeners = (env: ListenersEnv) => {
     /** Host mode's pattern while its listener stands. */
     hostPattern: (): HostPattern | undefined => host?.pattern,
 
-    /** Every listener stopped, each kind. */
-    async stopAll(): Promise<void> {
+    /** Every listener stopped for good, each kind, once a stand under way has ended. */
+    stopAll: alone(async (): Promise<void> => {
+      stopped = true;
       const all = [
         ...held.values(),
         ...[...vacant.values()].map((one) => one.held),
@@ -388,6 +412,6 @@ export const createListeners = (env: ListenersEnv) => {
       vacant.clear();
       host = null;
       await Promise.all(all.map((one) => one.stop()));
-    },
+    }),
   };
 };

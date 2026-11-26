@@ -7,8 +7,8 @@
  * certificate the hub reads and hands it.
  */
 import { errnoCode } from "@cawco/core/absent";
-import { detach } from "@cawco/core/detach";
 import { causeOf } from "@cawco/preview/proxy";
+import { Effect } from "effect";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
 
 /** A certificate and its key, as Bun's `tls` takes them. */
@@ -58,24 +58,31 @@ interface Beside {
   port: number;
 }
 
-/** `server` stopped: at once with its connections (`now`), or once they finish. */
-const stopped = (server: Listening, now: boolean): void =>
-  detach(server.stop(now), "tailnet listener stop");
-
-/** A port's doors, then its TLS listener, stopped. */
-const stoppedHeld = (serving: Held | null, now: boolean): void => {
-  for (const door of serving?.doors ?? []) {
-    stopped(door, now);
-  }
-  if (serving) {
-    stopped(serving.secure, now);
-  }
-};
-
 /** Whether a bind failed because another listener holds the address and port. */
 const held = (thrown: unknown): boolean => errnoCode(thrown) === "EADDRINUSE";
 
-export const createTailnetDoors = () => {
+/** Work let go, named `what`: on the hub's lifetime, or the preview server's scope. */
+export type LetGo = (what: string, work: Effect.Effect<unknown>) => void;
+
+export const createTailnetDoors = (letGo: LetGo) => {
+  /** `server` stopped: at once with its connections (`now`), or once they finish. */
+  const stopped = (server: Listening, now: boolean): void => {
+    letGo(
+      "tailnet listener stop",
+      Effect.promise(() => server.stop(now))
+    );
+  };
+
+  /** A port's doors, then its TLS listener, stopped. */
+  const stoppedHeld = (serving: Held | null, now: boolean): void => {
+    for (const door of serving?.doors ?? []) {
+      stopped(door, now);
+    }
+    if (serving) {
+      stopped(serving.secure, now);
+    }
+  };
+
   const besides = new Set<Beside>();
   /** What the listeners serve with now, while serving. */
   let live: TailnetLive | null = null;

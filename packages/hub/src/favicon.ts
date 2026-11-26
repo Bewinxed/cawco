@@ -22,15 +22,17 @@ import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { isPublicDestination } from "@cawco/core/public-address";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
-import { unhandled } from "@cawco/core/unhandled";
+import { Effect, Result } from "effect";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
+import type { HubLifetimeShape } from "./lifetime";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 
@@ -101,16 +103,19 @@ const getOnce = (
   url: URL,
   cap: number,
   accept: string
-): Promise<Bounded<Answer | undefined>> =>
-  readWithin(TIMEOUT_MS, (signal) => fetchOnce(url, cap, accept, signal));
+): Effect.Effect<Answer | undefined, Unanswered> =>
+  boundedRead(TIMEOUT_MS, fetchOnce(url, cap, accept));
 
+/** One GET, as {@link getOnce} has it read; interrupted, the request is let go. */
 const fetchOnce = (
   url: URL,
   cap: number,
-  accept: string,
-  signal: AbortSignal
-): Promise<Answer | undefined> =>
-  new Promise((resolve) => {
+  accept: string
+): Effect.Effect<Answer | undefined> =>
+  Effect.callback<Answer | undefined>((resume, signal) => {
+    const done = (answer: Answer | undefined): void => {
+      resume(Effect.succeed(answer));
+    };
     const request = httpsGet(
       url,
       {
@@ -123,7 +128,7 @@ const fetchOnce = (
         const { location } = response.headers;
         if (code >= 300 && code < 400 && location) {
           response.destroy();
-          resolve({ kind: "redirect", location });
+          done({ kind: "redirect", location });
           return;
         }
         if (
@@ -131,7 +136,7 @@ const fetchOnce = (
           Number(response.headers["content-length"] ?? 0) > cap
         ) {
           response.destroy();
-          resolve(undefined);
+          done(undefined);
           return;
         }
         const chunks: Buffer[] = [];
@@ -140,22 +145,22 @@ const fetchOnce = (
           size += chunk.byteLength;
           if (size > cap) {
             response.destroy();
-            resolve(undefined);
+            done(undefined);
             return;
           }
           chunks.push(chunk);
         });
         response.on("end", () =>
-          resolve({
+          done({
             kind: "body",
             bytes: Buffer.concat(chunks),
             type: response.headers["content-type"] ?? "",
           })
         );
-        response.on("error", () => resolve(undefined));
+        response.on("error", () => done(undefined));
       }
     );
-    request.on("error", () => resolve(undefined));
+    request.on("error", () => done(undefined));
   });
 
 /**
@@ -163,39 +168,29 @@ const fetchOnce = (
  * {@link fetchable}. Answered undefined for anything but a 200 within `cap`;
  * unanswered when a hop did not answer in time.
  */
-const fetchCapped = async (
+const fetchCapped = (
   url: URL,
   cap: number,
   accept: string,
   hops = MAX_HOPS
-): Promise<Bounded<{ bytes: Buffer; type: string; url: URL } | undefined>> => {
-  if (!fetchable(url)) {
-    return { kind: "answered", value: undefined };
-  }
-  const asked = await getOnce(url, cap, accept);
-  switch (asked.kind) {
-    case "answered":
-      break;
-    case "unanswered":
-      return asked;
-    default:
-      unhandled("read", asked);
-  }
-  const answer = asked.value;
-  if (answer?.kind === "body") {
-    return {
-      kind: "answered",
-      value: { bytes: answer.bytes, type: answer.type, url },
-    };
-  }
-  if (answer?.kind !== "redirect" || hops === 0) {
-    return { kind: "answered", value: undefined };
-  }
-  const next = URL.parse(answer.location, url);
-  return next
-    ? await fetchCapped(next, cap, accept, hops - 1)
-    : { kind: "answered", value: undefined };
-};
+): Effect.Effect<
+  { bytes: Buffer; type: string; url: URL } | undefined,
+  Unanswered
+> =>
+  Effect.gen(function* () {
+    if (!fetchable(url)) {
+      return;
+    }
+    const answer = yield* getOnce(url, cap, accept);
+    if (answer?.kind === "body") {
+      return { bytes: answer.bytes, type: answer.type, url };
+    }
+    if (answer?.kind !== "redirect" || hops === 0) {
+      return;
+    }
+    const next = URL.parse(answer.location, url);
+    return next ? yield* fetchCapped(next, cap, accept, hops - 1) : undefined;
+  });
 
 /** The raster type `bytes` begin with; never SVG or anything a browser could run. */
 const sniff = (bytes: Uint8Array): string | undefined => {
@@ -263,51 +258,45 @@ interface Icon {
  * unanswered when no icon was found and a read did not answer in time, as
  * the site's icon is then not known.
  */
-const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
-  const home = new URL(`https://${host}/`);
-  /** The first read that went unanswered, if one did. */
-  let silent: Bounded<never> | undefined;
-  const pageRead = await fetchCapped(home, PAGE_CAP, "text/html");
-  let page: { bytes: Buffer; type: string; url: URL } | undefined;
-  switch (pageRead.kind) {
-    case "answered":
-      page = pageRead.value;
-      break;
-    case "unanswered":
-      silent = pageRead;
-      break;
-    default:
-      unhandled("read", pageRead);
-  }
-  const candidates = page?.type.includes("html")
-    ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
-    : [];
-  candidates.push(new URL("/favicon.ico", page?.url ?? home));
-  const tried = new Set<string>();
-  for (const candidate of candidates.slice(0, 4)) {
-    if (tried.has(candidate.href)) {
-      continue;
+const fetchIcon = (host: string): Effect.Effect<Icon | undefined, Unanswered> =>
+  Effect.gen(function* () {
+    const home = new URL(`https://${host}/`);
+    /** The first read that went unanswered, if one did. */
+    let silent: Unanswered | undefined;
+    const pageRead = yield* Effect.result(
+      fetchCapped(home, PAGE_CAP, "text/html")
+    );
+    let page: { bytes: Buffer; type: string; url: URL } | undefined;
+    if (Result.isSuccess(pageRead)) {
+      page = pageRead.success;
+    } else {
+      silent = pageRead.failure;
     }
-    tried.add(candidate.href);
-    const iconRead = await fetchCapped(candidate, ICON_CAP, "image/*");
-    switch (iconRead.kind) {
-      case "answered": {
-        const icon = iconRead.value;
-        const type = icon ? sniff(icon.bytes) : undefined;
-        if (icon && type) {
-          return { kind: "answered", value: { bytes: icon.bytes, type } };
-        }
-        break;
+    const candidates = page?.type.includes("html")
+      ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
+      : [];
+    candidates.push(new URL("/favicon.ico", page?.url ?? home));
+    const tried = new Set<string>();
+    for (const candidate of candidates.slice(0, 4)) {
+      if (tried.has(candidate.href)) {
+        continue;
       }
-      case "unanswered":
-        silent ??= iconRead;
-        break;
-      default:
-        unhandled("read", iconRead);
+      tried.add(candidate.href);
+      const iconRead = yield* Effect.result(
+        fetchCapped(candidate, ICON_CAP, "image/*")
+      );
+      if (Result.isFailure(iconRead)) {
+        silent ??= iconRead.failure;
+        continue;
+      }
+      const icon = iconRead.success;
+      const type = icon ? sniff(icon.bytes) : undefined;
+      if (icon && type) {
+        return { bytes: icon.bytes, type };
+      }
     }
-  }
-  return silent ?? { kind: "answered", value: undefined };
-};
+    return silent ? yield* silent : undefined;
+  });
 
 const MetaSchema = z.object({
   at: z.number(),
@@ -350,49 +339,45 @@ const remember = async (host: string, icon: Icon | undefined) => {
 };
 
 /** Reads in flight, by host: a board of chips for one site is one fetch. */
-const inFlight = new Map<string, Promise<Bounded<Icon | null>>>();
+const inFlight = makeJoin<string, Icon | null, Unanswered>();
 
 /**
  * The site's icon, or null when it has none. A site that did not answer in
  * time is kept as it was: nothing is written, and the read is unanswered.
  */
-const iconFor = (host: string): Promise<Bounded<Icon | null>> => {
-  const running = inFlight.get(host);
-  if (running !== undefined) {
-    return running;
-  }
-  const read = (async (): Promise<Bounded<Icon | null>> => {
-    const hit = await cached(host);
-    if (hit !== undefined) {
-      return { kind: "answered", value: hit };
-    }
-    const fetched = await fetchIcon(host).catch(
-      (): Bounded<Icon | undefined> => ({ kind: "answered", value: undefined })
-    );
-    switch (fetched.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        console.warn(
-          `[favicon] ${host}: did not answer within ${secondsOf(fetched.after)} s; nothing kept`
-        );
-        return fetched;
-      default:
-        unhandled("read", fetched);
-    }
-    const icon = fetched.value;
-    await remember(host, icon).catch((error: unknown) =>
-      console.warn(
-        `[favicon] ${host}: not kept — ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
-    return { kind: "answered", value: icon ?? null };
-  })().finally(() => inFlight.delete(host));
-  inFlight.set(host, read);
-  return read;
-};
+const iconFor = (host: string): Effect.Effect<Icon | null, Unanswered> =>
+  inFlight.run(
+    host,
+    Effect.gen(function* () {
+      const hit = yield* Effect.promise(() => cached(host));
+      if (hit !== undefined) {
+        return hit;
+      }
+      const icon = yield* fetchIcon(host).pipe(
+        Effect.catchDefect(() => Effect.succeed(undefined)),
+        Effect.tapError((unanswered) =>
+          Effect.sync(() =>
+            console.warn(
+              `[favicon] ${host}: did not answer within ${secondsOf(unanswered.after)} s; nothing kept`
+            )
+          )
+        )
+      );
+      // Its two files written together: an interrupted read keeps both or neither.
+      yield* Effect.uninterruptible(
+        Effect.promise(() =>
+          remember(host, icon).catch((error: unknown) =>
+            console.warn(
+              `[favicon] ${host}: not kept — ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+        )
+      );
+      return icon ?? null;
+    })
+  );
 
-export const faviconRoutes = () =>
+export const faviconRoutes = (lifetime: HubLifetimeShape) =>
   new Elysia().get(
     "/api/favicon",
     { query: t.Object({ host: t.String({ minLength: 1, maxLength: 253 }) }) },
@@ -404,24 +389,19 @@ export const faviconRoutes = () =>
           detail: "That host is not a public site name.",
         });
       }
-      const read = await iconFor(host);
+      const read = await lifetime.run(Effect.result(iconFor(host)));
       let icon: Icon | null | undefined;
-      switch (read.kind) {
-        case "answered":
-          icon = read.value;
-          break;
-        case "unanswered":
-          // The last icon kept for it stands, however old.
-          icon = await cached(host, true);
-          if (icon === undefined) {
-            return problem(504, {
-              code: "site-did-not-answer",
-              detail: `That site did not answer within ${secondsOf(read.after)} s.`,
-            });
-          }
-          break;
-        default:
-          unhandled("read", read);
+      if (Result.isSuccess(read)) {
+        icon = read.success;
+      } else {
+        // The last icon kept for it stands, however old.
+        icon = await cached(host, true);
+        if (icon === undefined) {
+          return problem(504, {
+            code: "site-did-not-answer",
+            detail: `That site did not answer within ${secondsOf(read.failure.after)} s.`,
+          });
+        }
       }
       if (!icon) {
         return problem(404, {

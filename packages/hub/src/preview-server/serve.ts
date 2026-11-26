@@ -20,6 +20,7 @@ import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import {
   FILE_VIEWER_ASSETS,
   fileViewerFile,
@@ -73,6 +74,7 @@ import {
   versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import { serveCanvas } from "../artifacts/canvas";
 import { folderFileAt, previewFolderOf } from "../artifacts/preview-folder";
@@ -151,6 +153,8 @@ export interface ServeEnv {
   ancestorsOf: (key: string | undefined) => string[];
   /** Host mode's pattern while its listener stands. */
   hostPattern: () => HostPattern | undefined;
+  /** Work let go, named `what`, for as long as the server runs (main.ts). */
+  letGo: (what: string, work: Effect.Effect<unknown, unknown>) => void;
   link: HubLink;
   /** The origins that may frame a preview: the dashboards (hub preview.ts `previewParents`). */
   parents: () => string[];
@@ -261,7 +265,8 @@ const hostOf = (at: Upstream): string =>
  */
 export const createUpstreams = (env: Pick<ServeEnv, "link">) => {
   const held = new Map<string, Upstream>();
-  const asking = new Map<string, Promise<Reached>>();
+  /** One ask of the hub per origin in flight, every request of it sharing it. */
+  const asking = makeJoin<string, Reached>();
   return {
     /** Where machine origin `key`'s row `row` is served now, as kept; undefined while it isn't. */
     held: (key: string, row: MachineRow): Upstream | undefined => {
@@ -274,38 +279,33 @@ export const createUpstreams = (env: Pick<ServeEnv, "link">) => {
       if (at?.for === sourceFor(row)) {
         return Promise.resolve({ ok: true, upstream: at });
       }
-      const already = asking.get(key);
-      if (already !== undefined) {
-        return already;
-      }
-      const asked = env.link.hub["__cawco-preview"]
-        .upstream({ key })
-        .get()
-        .then((sent): Reached => {
-          const answer = answered(sent);
-          if (!succeeded(answer)) {
-            return {
-              ok: false,
-              down: "machine",
-              error: `the hub answered ${answer.status}`,
-              stop: { kind: "failed" },
-            };
-          }
-          const said = dataOf(answer);
-          if (said.ok) {
-            held.set(key, said.upstream);
-          }
-          return said;
-        })
-        .catch((error: unknown): Reached => ({
-          ok: false,
-          down: "machine",
-          error: `the hub didn't answer: ${causeOf(error)}`,
-          stop: { kind: "failed" },
-        }))
-        .finally(() => asking.delete(key));
-      asking.set(key, asked);
-      return asked;
+      return asking.runPromise(key, () =>
+        env.link.hub["__cawco-preview"]
+          .upstream({ key })
+          .get()
+          .then((sent): Reached => {
+            const answer = answered(sent);
+            if (!succeeded(answer)) {
+              return {
+                ok: false,
+                down: "machine",
+                error: `the hub answered ${answer.status}`,
+                stop: { kind: "failed" },
+              };
+            }
+            const said = dataOf(answer);
+            if (said.ok) {
+              held.set(key, said.upstream);
+            }
+            return said;
+          })
+          .catch((error: unknown): Reached => ({
+            ok: false,
+            down: "machine",
+            error: `the hub didn't answer: ${causeOf(error)}`,
+            stop: { kind: "failed" },
+          }))
+      );
     },
     /** The listener at `at` didn't answer: forgotten here and at the hub, so the next request asks where it is now. */
     unreachable: (key: string, at: Upstream): void => {
@@ -379,34 +379,29 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
    * `PREVIEW_HELD_HEADER`), so a decision page's Preview waits on it as on
    * a server still compiling.
    */
-  const reviving = new Map<
-    string,
-    { answer: Promise<RevivedAnswer>; since: number }
-  >();
+  const reviving = makeJoin<string, RevivedAnswer>();
+  /** Since when each origin {@link reviving} holds has been cut again. */
+  const revivedSince = new Map<string, number>();
   /** The workspace machine origin `key` is served from, which its machine said is gone, cut again by the hub (wire.ts `REVIVE_PATH`), or why it can't be. */
-  const revive = (key: string): Promise<RevivedAnswer> => {
-    const under = reviving.get(key);
-    if (under) {
-      return under.answer;
-    }
-    const answer = env.link.hub["__cawco-preview"]
-      .revive({ key })
-      .post()
-      .then((sent): RevivedAnswer => {
-        const said = answered(sent);
-        return succeeded(said)
-          ? dataOf(said)
-          : { ok: false, down: "gone", why: null };
-      })
-      .catch((error: unknown): RevivedAnswer => ({
-        ok: false,
-        down: "machine",
-        why: `the hub didn't answer: ${causeOf(error)}`,
-      }))
-      .finally(() => reviving.delete(key));
-    reviving.set(key, { answer, since: Date.now() });
-    return answer;
-  };
+  const revive = (key: string): Promise<RevivedAnswer> =>
+    reviving.runPromise(key, () => {
+      revivedSince.set(key, Date.now());
+      return env.link.hub["__cawco-preview"]
+        .revive({ key })
+        .post()
+        .then((sent): RevivedAnswer => {
+          const said = answered(sent);
+          return succeeded(said)
+            ? dataOf(said)
+            : { ok: false, down: "gone", why: null };
+        })
+        .catch((error: unknown): RevivedAnswer => ({
+          ok: false,
+          down: "machine",
+          why: `the hub didn't answer: ${causeOf(error)}`,
+        }))
+        .finally(() => revivedSince.delete(key));
+    });
 
   /**
    * A hub-owned path on origin `key` relayed to the hub as the browser sent
@@ -915,7 +910,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     direct: boolean
   ): Promise<Response | undefined> {
     if (asksUpgrade(request) && !upstreams.held(key, row)) {
-      upstreams.reach(key, row).catch(() => undefined);
+      env.letGo(
+        "machine preview reached",
+        Effect.promise(() => upstreams.reach(key, row))
+      );
       return notUpYet();
     }
     heldWhileServed(server, request);
@@ -1140,8 +1138,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     const { pathname } = url;
     if (pathname === PREVIEW_PING_PATH) {
       // Its workspace cut again for an open: the page is held meanwhile.
-      const under = reviving.get(key);
-      return under ? ping(String(Date.now() - under.since)) : pingOrigin(key);
+      const since = revivedSince.get(key);
+      return since === undefined
+        ? pingOrigin(key)
+        : ping(String(Date.now() - since));
     }
     if (pathname === OVERLAY_PATH) {
       return overlayResponse(

@@ -37,7 +37,7 @@
  * nothing of Tailscale's.
  */
 import { hostname, userInfo } from "node:os";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
 import type {
   TailnetHttps,
   TailnetHttpsTodo,
@@ -53,6 +53,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/preview/proxy";
+import { Effect, Schedule } from "effect";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
@@ -148,7 +149,9 @@ export const createTailnetHttps = ({
   const run = (args: string[]) => runTailscale(bin, args, CALL_MS);
   let state: TailnetHttps = { state: "absent", host };
   /** The dashboard's port's HTTPS (tailnet-doors.ts); the preview ports' are the preview server's, handed {@link TailnetLive} on each change. */
-  const doors = createTailnetDoors();
+  const doors = createTailnetDoors((what, work) => {
+    lifetime.fork(what, work);
+  });
   const listeners: ((state: TailnetHttps) => void)[] = [];
 
   /** `tailscale status --json`, read. */
@@ -371,31 +374,40 @@ export const createTailnetHttps = ({
     }
   };
 
-  /** One check at a time: a slow certificate order never overlaps the next. */
-  let checking: Promise<void> | null = null;
-  const checkOnce = (): Promise<void> => {
-    checking ??= check().finally(() => {
-      checking = null;
-    });
-    return checking;
-  };
+  /** One check, its failure said and let go: the next goes on all the same. */
+  const checked = Effect.tryPromise({
+    try: check,
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        console.warn(`[tailnet check] failed: ${failureOf(error)}`);
+      })
+    )
+  );
+  /** Whether the checks run: one loop, so a slow certificate order never overlaps the next. */
+  let checking = false;
 
   return {
     /** Reads Tailscale now, then every {@link NEEDS_CHECK_MS} while a step stands, else every {@link CHECK_MS}. */
     start(): void {
-      const tick = (): void => {
-        detach(
-          checkOnce().finally(() => {
-            lifetime.after(
-              "tailnet https check",
-              state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS,
-              tick
-            );
-          }),
-          "tailnet check"
-        );
-      };
-      tick();
+      if (checking) {
+        return;
+      }
+      checking = true;
+      lifetime.fork(
+        "tailnet https check",
+        Effect.repeat(
+          checked,
+          Schedule.spaced(CHECK_MS).pipe(
+            Schedule.modifyDelay(() =>
+              Effect.succeed(
+                state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS
+              )
+            )
+          )
+        )
+      );
     },
 
     /** Where it stands now, as `GET /api/tailnet-https` answers. */

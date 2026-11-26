@@ -7,6 +7,7 @@ import {
   type Responder,
   type ServiceOptions,
 } from "@homebridge/ciao";
+import { Effect, Schedule } from "effect";
 import { BIND_HOST, HUB_VERSION } from "./config";
 import { lanInterfaces } from "./lan-interfaces";
 import type { HubLifetimeShape } from "./lifetime";
@@ -191,37 +192,39 @@ const move = async (
 };
 
 /**
- * Reads the interfaces every {@link FOLLOW_MS}, so the name follows them:
- * the Wi-Fi up after the hub, a cable in, the default route moved. What the
- * hub waits for is said once, when it changes. A platform that refuses the
- * multicast socket (a locked-down container) leaves the hub usable over an
- * explicit URL.
+ * Reads the interfaces now and again {@link FOLLOW_MS} after each read ends,
+ * so the name follows them: the Wi-Fi up after the hub, a cable in, the
+ * default route moved. What the hub waits for is said once, when it
+ * changes. A platform that refuses the multicast socket (a locked-down
+ * container) leaves the hub usable over an explicit URL.
  */
-const follow = async (
-  lifetime: Pick<HubLifetimeShape, "after">,
+const follow = (
   port: number,
-  addresses: Partial<ServiceOptions>,
-  said: string
-): Promise<void> => {
-  let saying = "";
-  try {
-    saying = await move(port, addresses);
-  } catch (error) {
-    saying = `[hub] mDNS waits: ${error instanceof Error ? error.message : String(error)}`;
-  }
-  if (saying && saying !== said) {
-    console.log(saying);
-  }
-  lifetime.after("mDNS interfaces read", FOLLOW_MS, () => {
-    follow(lifetime, port, addresses, saying).catch((error: Error) =>
-      console.log(`[hub] mDNS unavailable: ${error.message}`)
-    );
-  });
+  addresses: Partial<ServiceOptions>
+): Effect.Effect<void> => {
+  let said = "";
+  const read = Effect.promise(async (): Promise<string> => {
+    try {
+      return await move(port, addresses);
+    } catch (error) {
+      return `[hub] mDNS waits: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }).pipe(
+    Effect.flatMap((saying) =>
+      Effect.sync(() => {
+        if (saying && saying !== said) {
+          console.log(saying);
+        }
+        said = saying;
+      })
+    )
+  );
+  return Effect.asVoid(Effect.repeat(read, Schedule.spaced(FOLLOW_MS)));
 };
 
 export const advertise = (
   port: number,
-  lifetime: Pick<HubLifetimeShape, "after">
+  lifetime: Pick<HubLifetimeShape, "fork">
 ): void => {
   if (readEnv(CAWCO_ENV.noMdns) === "1") {
     console.log("[hub] mDNS advertisement disabled");
@@ -234,7 +237,5 @@ export const advertise = (
     );
     return;
   }
-  follow(lifetime, port, addresses, "").catch((error: Error) =>
-    console.log(`[hub] mDNS unavailable: ${error.message}`)
-  );
+  lifetime.fork("mDNS interfaces read", follow(port, addresses));
 };

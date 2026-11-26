@@ -7,33 +7,16 @@ backoff-loop	new Backoff(GATE_SNAPSHOTS)	packages/agent/src/harnesses/opencode-s
 backoff-loop	new Backoff(HAND_BACK)	packages/agent/src/browser/shield.ts	1
 backoff-loop	new Backoff(RECOVERY_TRIES)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(RELINK)	packages/agent/src/browser/front-origin.ts	1
-backoff-loop	new Backoff(RENEW_COOLING)	packages/hub/src/fleet-mcp.ts	1
-backoff-loop	new Backoff(RENEW_TRIES)	packages/hub/src/fleet-mcp.ts	1
-backoff-loop	new Backoff(REOPENS)	packages/hub/src/preview-server/link.ts	1
-backoff-loop	new Backoff(REPROBES)	packages/hub/src/fleet-mcp.ts	1
-backoff-loop	new Backoff(RELOOKS)	packages/hub/src/relay.ts	1
-backoff-loop	new Backoff(REOPENS)	packages/hub/src/preview-server/link.ts	1
-bare-run	Effect.runFork	packages/hub/src/clock.ts	8
-bare-run	Effect.runPromise	packages/hub/src/clock.ts	3
 bare-run	Effect.runPromise	packages/hub/src/index.ts	1
 bare-run	Effect.runPromise	packages/hub/src/landing-run.ts	1
 bare-run	Effect.runPromise	packages/hub/src/links.ts	1
 bare-run	Effect.runPromise	packages/hub/src/repo-publish.ts	1
-bare-run	Effect.runPromise	packages/hub/src/sync.ts	1
-bare-run	Effect.runPromise	packages/hub/src/usability-feedback.ts	1
-bare-run	Effect.runPromise	packages/hub/src/writes.ts	1
-bare-run	Effect.runSync	packages/hub/src/clock.ts	1
-bare-run	Effect.runSync	packages/hub/src/intake.ts	1
-bare-run	Effect.runPromise	packages/hub/src/session-calls.ts	1
-error-class	AgentTooOld	packages/hub/src/project-delete.ts	1
 error-class	ArmingBlocked	packages/agent/src/boundary/ensure.ts	1
 error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	BridgeStopped	packages/agent/src/preview-bridge.ts	1
 error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
-error-class	ConnectionProblem	packages/hub/src/connections.ts	1
-error-class	CommandStopped	packages/hub/src/machine-pause.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	FleetDenialsRefused	packages/agent/src/denied-tools.ts	1
@@ -120,19 +103,11 @@ hand-promise	new Promise	packages/agent/src/tool-signin.ts	1
 hand-promise	new Promise	packages/agent/src/usage/scanner.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/canvas.ts	2
 hand-promise	new Promise	packages/hub/src/artifacts/service.ts	1
-hand-promise	new Promise	packages/hub/src/browser-tools.ts	1
-hand-promise	new Promise	packages/hub/src/context-reads.ts	1
-hand-promise	new Promise	packages/hub/src/continuations.ts	1
-hand-promise	new Promise	packages/hub/src/connect-asks.ts	1
-hand-promise	new Promise	packages/hub/src/favicon.ts	1
 hand-promise	new Promise	packages/hub/src/host-build.ts	1
 hand-promise	new Promise	packages/hub/src/law-tasks.ts	1
 hand-promise	new Promise	packages/hub/src/lifetime.ts	3
-hand-promise	new Promise	packages/hub/src/preview-control.ts	1
 hand-promise	new Promise	packages/hub/src/project-stops.ts	1
 hand-promise	new Promise	packages/hub/src/server.ts	2
-hand-promise	new Promise	packages/hub/src/ssh-add.ts	1
-hand-promise	new Promise	packages/hub/src/ssh-tunnels.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary-host.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
@@ -149,7 +124,6 @@ hand-promise	Promise.withResolvers	packages/hub/src/welcome-converge.ts	1
 hand-promise	Promise.withResolvers	packages/hub/src/workspaces.ts	1
 per-key-chain	this.#marks	packages/agent/src/browser/gate.ts	1
 promise-chain	building	packages/hub/src/artifact-documents.ts	2
-promise-chain	standing	packages/hub/src/preview-server/listeners.ts	1
 promise-chain	this.#healing	packages/agent/src/fleet-converger.ts	1
 promise-map	#clients	packages/agent/src/keepers.ts	1
 promise-map	#fleetDenials	packages/agent/src/fleet-converger.ts	1
@@ -164,10 +138,8 @@ promise-map	#retiring	packages/agent/src/harnesses/opencode-server.ts	1
 promise-map	#turns	packages/hub/src/meaning.ts	1
 promise-map	#waves	packages/agent/src/harnesses/opencode-activity.ts	1
 promise-map	asking	packages/agent/src/provider-accounts.ts	1
-promise-map	asking	packages/hub/src/preview-server/serve.ts	1
 promise-map	built	packages/hub/src/host-build.ts	1
 promise-map	byBoundary	packages/agent/src/preview-room.ts	1
-promise-map	carried	packages/hub/src/ssh-tunnels.ts	1
 promise-map	closing	packages/agent/src/boundary/state.ts	1
 promise-map	discarding	packages/hub/src/workspaces.ts	1
 promise-map	doors	packages/agent/src/session-containers.ts	1
@@ -179,14 +151,11 @@ promise-map	importsKept	packages/agent/src/stage-host/host.ts	1
 promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/mcp-install.ts	1
 promise-map	inFlight	packages/agent/src/provider-usage.ts	1
-promise-map	inFlight	packages/hub/src/favicon.ts	1
 promise-map	inFlight	packages/hub/src/place-repo.ts	1
 promise-map	installing	packages/agent/src/stage-install.ts	1
 promise-map	installing	packages/agent/src/tools.ts	1
 promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
 promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
-promise-map	lists	packages/hub/src/fleet-mcp-relay.ts	1
-promise-map	live	packages/hub/src/call-keys.ts	1
 promise-map	liveGroups	packages/agent/src/group-run.ts	1
 promise-map	local	packages/agent/src/stage-host/host.ts	1
 promise-map	looksQueued	packages/hub/src/at-limit.ts	1
@@ -200,8 +169,6 @@ promise-map	owning	packages/agent/src/layer.ts	1
 promise-map	ownKept	packages/agent/src/stage-host/host.ts	1
 promise-map	passes	packages/agent/src/browser/dashboard-door.ts	1
 promise-map	pendingServerAttachments	packages/agent/src/harnesses/opencode.ts	1
-promise-map	pluginFetches	packages/hub/src/fleet-sources.ts	1
-promise-map	probing	packages/hub/src/accounts.ts	1
 promise-map	read	packages/agent/src/fleet-mcp-listing.ts	1
 promise-map	reading	packages/agent/src/stores/client.ts	1
 promise-map	rearming	packages/agent/src/boundary/ensure.ts	1
@@ -209,7 +176,6 @@ promise-map	reclosing	packages/hub/src/workspaces.ts	1
 promise-map	recutting	packages/hub/src/workspaces.ts	1
 promise-map	remotes	packages/hub/src/project-offers.ts	1
 promise-map	reviving	packages/agent/src/browser/browsers.ts	1
-promise-map	reviving	packages/hub/src/preview-server/serve.ts	1
 promise-map	runnerKept	packages/agent/src/stage-host/host.ts	1
 promise-map	runtimes	packages/agent/src/provider-accounts.ts	1
 promise-map	settleQueued	packages/hub/src/workspaces.ts	1
@@ -244,11 +210,6 @@ timed-loop	Bun.sleep	packages/agent/src/stage.ts	2
 timed-loop	Bun.sleep	packages/agent/src/tools.ts	1
 timed-loop	Bun.sleep	packages/agent/src/workspace.ts	1
 timed-loop	Bun.sleep	packages/hub/src/landing.ts	1
-timed-loop	Bun.sleep	packages/hub/src/ssh-tunnels.ts	2
-timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.ts	1
-timed-loop	Bun.sleep	packages/hub/src/wire-socket.ts	1
-timed-loop	ctx.lifetime.sleep	packages/hub/src/continuations.ts	3
-timed-loop	ctx.lifetime.sleep	packages/hub/src/cut-turns.ts	1
 timed-loop	delay	packages/agent/src/mcp-status.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/browser/passkey-inject.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/session.ts	1

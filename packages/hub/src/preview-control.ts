@@ -7,7 +7,7 @@
  */
 
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import type { PageFaultReport } from "@cawco/core/page-faults";
 import {
   PREVIEW_ENTER_PATH,
@@ -16,6 +16,7 @@ import {
 import type { Upstream } from "@cawco/core/preview/upstream";
 import { unhandled } from "@cawco/core/unhandled";
 import { causeOf, previewFailed } from "@cawco/preview/proxy";
+import { Deferred, Effect } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import type { ArtifactDocuments } from "./artifact-documents";
@@ -34,6 +35,7 @@ import type { StoreKey } from "./db/page-stores";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import type { PreviewsDb } from "./db/previews";
 import { hidden } from "./hidden";
+import type { HubLifetimeShape } from "./lifetime";
 import { PICK_WORDS } from "./person-acts";
 import type { PreviewListeners, PreviewServerHand } from "./preview";
 import { enter, lockedResponse, type PassLock } from "./preview-access";
@@ -172,6 +174,8 @@ const notServerResponse = () =>
 
 /** The hub's end of the link: what it says to the server, and what the server's stands answered. */
 export const createPreviewLink = (deps: {
+  /** The hub's lifetime: a wait on a stand's answer runs on it. */
+  lifetime: HubLifetimeShape;
   parents: () => string[];
   tailnet: () => TailnetLive | null;
 }) => {
@@ -179,7 +183,7 @@ export const createPreviewLink = (deps: {
   let linked: { id: string; send: (said: string) => void } | null = null;
   /** Each wait on the next stand's answer. */
   const waiting = new Set<
-    (said: Parameters<PreviewListeners["stood"]>[0]) => void
+    Deferred.Deferred<Parameters<PreviewListeners["stood"]>[0]>
   >();
 
   const say = (said: HubSays): void => {
@@ -188,24 +192,21 @@ export const createPreviewLink = (deps: {
 
   const hand: PreviewServerHand = {
     stand: () => say({ type: "ports" }),
-    stood: async () => {
+    // The promise edge of a wait on the next stand's answer, held from the
+    // call on: a stand said after it is answered to it.
+    stood: () => {
       if (!linked) {
-        return null;
+        return Promise.resolve(null);
       }
-      let heard:
-        ((said: Parameters<PreviewListeners["stood"]>[0]) => void) | undefined;
-      const read = await readWithin(
-        STOOD_MS,
-        () =>
-          new Promise<Parameters<PreviewListeners["stood"]>[0]>((done) => {
-            heard = done;
-            waiting.add(done);
-          })
+      const heard =
+        Deferred.makeUnsafe<Parameters<PreviewListeners["stood"]>[0]>();
+      waiting.add(heard);
+      return deps.lifetime.run(
+        boundedRead(STOOD_MS, Deferred.await(heard)).pipe(
+          Effect.catchTag("Unanswered", () => Effect.succeed(null)),
+          Effect.ensuring(Effect.sync(() => waiting.delete(heard)))
+        )
       );
-      if (heard) {
-        waiting.delete(heard);
-      }
-      return read.kind === "answered" ? read.value : null;
     },
   };
 
@@ -227,7 +228,7 @@ export const createPreviewLink = (deps: {
     /** The server's answer to a stand. */
     stood(said: Parameters<PreviewListeners["stood"]>[0]): void {
       for (const heard of waiting) {
-        heard(said);
+        Deferred.doneUnsafe(heard, Effect.succeed(said));
       }
     },
   };

@@ -450,7 +450,6 @@ catch-drops-reason	block	packages/agent/src/keepers.ts	1
 catch-drops-reason	block	packages/agent/src/place-push.ts	2
 catch-drops-reason	block	packages/agent/src/stage-host/host.ts	2
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
-catch-drops-reason	block	packages/hub/src/ssh-tunnels.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/address/Confetti.svelte	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/home/caw-still.svelte.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/home/Caw.svelte	2

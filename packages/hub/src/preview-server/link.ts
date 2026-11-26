@@ -6,8 +6,10 @@
  * waits on goes over the link, and what it says meanwhile (a use, a pass's
  * use) is dropped, its next one said after.
  */
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { openWebSocket } from "@cawco/preview/proxy";
+import { Effect, Schema, type Scope } from "effect";
 import { type HubClient, hubClient } from "../client";
 import { HUB_PORT } from "../config";
 import {
@@ -37,7 +39,6 @@ export const hubOrigin = (): string => `http://127.0.0.1:${HUB_PORT}`;
 
 /** The preview server's way to the hub, as {@link openHubLink} opens it. */
 export interface HubLink {
-  close: () => void;
   /** The hub's routes as Eden's typed client (client.ts), each request carrying the server's token. */
   hub: HubClient;
   /** Runs `listener` each time the link opens. */
@@ -47,68 +48,101 @@ export interface HubLink {
   token: string;
 }
 
-export const openHubLink = (heard: (said: HubSays) => void): HubLink => {
-  let socket: WebSocket | null = null;
-  const tries = new Backoff(REOPENS);
-  let ended = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const token = previewServerToken();
-  const listeners: (() => void)[] = [];
+/** The link closed before it opened: a failure of its series of opens. */
+class NotOpened extends Schema.TaggedError<NotOpened>()("NotOpened", {}) {}
 
-  const open = (): void => {
-    const ws = openWebSocket(`ws${hubOrigin().slice(4)}${CONTROL_PATH}`, {
-      headers: { [TOKEN_HEADER]: token },
-    });
-    socket = ws;
-    ws.addEventListener("open", () => {
-      tries.succeeded();
-      console.log("[preview] the hub's link is open");
-      for (const listener of listeners) {
-        listener();
-      }
-    });
-    ws.addEventListener("message", (event) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-      let said: unknown;
-      try {
-        said = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      if (isHubSays(said)) {
-        heard(said);
-      }
-    });
-    ws.addEventListener("close", () => {
-      if (socket === ws) {
-        socket = null;
-      }
-      if (ended) {
-        return;
-      }
-      const step = tries.failed();
-      timer = setTimeout(open, step.kind === "wait" ? step.ms : REOPENS.mostMs);
-    });
-  };
-  open();
+/**
+ * The link, held open for as long as the scope it is opened in, and closed
+ * with it.
+ */
+export const openHubLink = (
+  heard: (said: HubSays) => void
+): Effect.Effect<HubLink, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    let socket: WebSocket | null = null;
+    const token = previewServerToken();
+    const listeners: (() => void)[] = [];
 
-  return {
-    say(said: ServerSays): void {
-      if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(said));
-      }
-    },
-    onOpen(listener: () => void): void {
-      listeners.push(listener);
-    },
-    hub: hubClient(hubOrigin(), fetch, { headers: { [TOKEN_HEADER]: token } }),
-    token,
-    close(): void {
-      ended = true;
-      clearTimeout(timer);
-      socket?.close();
-    },
-  };
-};
+    /**
+     * One socket to the hub, followed until it closes: done when one that
+     * opened closes, {@link NotOpened} when it closed first. Interrupted, it
+     * closes the socket.
+     */
+    const connection = Effect.callback<void, NotOpened>((resume) => {
+      const ws = openWebSocket(`ws${hubOrigin().slice(4)}${CONTROL_PATH}`, {
+        headers: { [TOKEN_HEADER]: token },
+      });
+      socket = ws;
+      let opened = false;
+      ws.addEventListener("open", () => {
+        opened = true;
+        console.log("[preview] the hub's link is open");
+        for (const listener of listeners) {
+          listener();
+        }
+      });
+      ws.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+        let said: unknown;
+        try {
+          said = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        if (isHubSays(said)) {
+          heard(said);
+        }
+      });
+      ws.addEventListener("close", () => {
+        if (socket === ws) {
+          socket = null;
+        }
+        resume(opened ? Effect.void : Effect.fail(new NotOpened()));
+      });
+      return Effect.sync(() => ws.close());
+    });
+
+    /**
+     * Opens until one opens and later closes, each after its wait on
+     * {@link REOPENS}. `afterDrop`: a link that was open just closed, which
+     * counts as the series' first failure, so the open after it waits the
+     * first wait (the house backoff's `succeeded()` at the open, then
+     * `failed()` at the close).
+     */
+    const series = (afterDrop: boolean) => {
+      let dropped = afterDrop;
+      return Effect.retry(
+        Effect.suspend(() => {
+          if (dropped) {
+            dropped = false;
+            return Effect.fail(new NotOpened());
+          }
+          return connection;
+        }),
+        backoffSchedule(REOPENS)
+      );
+    };
+
+    yield* Effect.forkScoped(
+      series(false).pipe(
+        Effect.andThen(Effect.forever(Effect.suspend(() => series(true))))
+      )
+    );
+
+    return {
+      say(said: ServerSays): void {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(said));
+        }
+      },
+      onOpen(listener: () => void): void {
+        listeners.push(listener);
+      },
+      hub: hubClient(hubOrigin(), fetch, {
+        headers: { [TOKEN_HEADER]: token },
+      }),
+      token,
+    };
+  });

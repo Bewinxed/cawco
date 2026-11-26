@@ -28,8 +28,10 @@ import type { ArrivingAsk, BrowserAskFrame } from "@cawco/core/frames";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { browserAskWords } from "@cawco/core/words/browser";
+import { Deferred, Effect } from "effect";
 import { z } from "zod";
 import type { answered } from "./browser-answered";
+import type { HubLifetimeShape } from "./lifetime";
 import { defineTool } from "./mcp-tool";
 import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
 import type { ProblemsOf } from "./refusal";
@@ -90,6 +92,8 @@ export interface BrowserAsksDeps {
     ask: BrowserAskFrame,
     origin: string | null
   ) => void;
+  /** The hub's lifetime: a call waiting on the person waits on it. */
+  readonly lifetime: HubLifetimeShape;
   /**
    * The page of browser `key` on `machineId` that `actor` has open on
    * `origin` (core `BROWSER_PAGE`, agent shield.ts `askedPage`): the ask is
@@ -109,10 +113,10 @@ export interface BrowserAsksDeps {
 }
 
 interface Waiter {
+  /** The call's answer, or why it was refused, once the person gives it. */
+  answer: Deferred.Deferred<BrowserAskAnswer, Error>;
   ask: BrowserAskFrame;
   instanceId: string;
-  reject: (error: Error) => void;
-  resolve: (answer: BrowserAskAnswer) => void;
   /** The person took it: it is off every screen, and waits for the hand-back. */
   taken: boolean;
   /** The page the ask is pinned to: the one a take-over brings to the front. */
@@ -149,15 +153,13 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
         origin: input.origin,
         reason: input.reason,
       };
-      const answer = new Promise<BrowserAskAnswer>((resolve, reject) => {
-        waiting.set(requestId, {
-          ask,
-          instanceId: actor.id,
-          targetId,
-          resolve,
-          reject,
-          taken: false,
-        });
+      const answer = Deferred.makeUnsafe<BrowserAskAnswer, Error>();
+      waiting.set(requestId, {
+        answer,
+        ask,
+        instanceId: actor.id,
+        targetId,
+        taken: false,
       });
       deps.park(
         parkedToolAsk(actor, requestId, BROWSER_ASK_TOOL, input, {
@@ -168,7 +170,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       console.log(
         `[browser] ${actor.id} asks the person to take over ${key} on ${input.origin} (${requestId})`
       );
-      return await answer;
+      return await deps.lifetime.run(Deferred.await(answer));
     },
 
     /** The open ask `requestId` and the page it is pinned to, while its call waits (taken or not). */
@@ -212,7 +214,10 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       }
       waiting.delete(requestId);
       deps.settle(requestId);
-      waiter.resolve({ outcome: "declined", words: result.message.trim() });
+      Deferred.doneUnsafe(
+        waiter.answer,
+        Effect.succeed({ outcome: "declined", words: result.message.trim() })
+      );
       return Promise.resolve();
     },
 
@@ -251,7 +256,10 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
           if (!waiter.taken) {
             deps.settle(id);
           }
-          waiter.resolve({ outcome: "handed_back", origin });
+          Deferred.doneUnsafe(
+            waiter.answer,
+            Effect.succeed({ outcome: "handed_back", origin })
+          );
           deps.handedBack(waiter.instanceId, id, waiter.ask, origin);
         }
       }
@@ -264,9 +272,12 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
         return;
       }
       waiting.delete(requestId);
-      waiter.reject(
-        new Error(
-          "The browser ask was withdrawn before the person took it; nobody took over the browser."
+      Deferred.doneUnsafe(
+        waiter.answer,
+        Effect.fail(
+          new Error(
+            "The browser ask was withdrawn before the person took it; nobody took over the browser."
+          )
         )
       );
     },

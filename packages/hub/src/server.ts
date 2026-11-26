@@ -3034,6 +3034,7 @@ export const createServer = (
   // The person's view of a browser, on the hub's own origin
   // (browser-routes.ts): relayed to its machine's browser listener.
   const browserStream = createBrowserStream({
+    lifetime,
     artifact: (id) => db.artifacts.get(id),
     call: callAgent,
     callerOf: (request) => hubAuth.callerOf(request, null),
@@ -3065,6 +3066,7 @@ export const createServer = (
     },
   });
   const browserAsks = createBrowserAsks({
+    lifetime,
     browserFor: (actor) => browsers.browserFor(actor),
     // The asking door's page on the asked origin, on the browser's machine
     // (agent shield.ts `askedPage`), its browser woken first if it sleeps,
@@ -5780,6 +5782,7 @@ export const createServer = (
    * certificate, that the port rows moved), and what its stands answered.
    */
   const previewLink = createPreviewLink({
+    lifetime,
     parents: previewParents,
     tailnet: () => tailnetHttps.live(),
   });
@@ -5818,6 +5821,7 @@ export const createServer = (
   );
   /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
   const previewService = createPreviewService({
+    lifetime,
     address: (machineId) => registry.address(machineId),
     busyMs: BUSY_TIMEOUT_MS,
     call: callAgent,
@@ -14246,7 +14250,7 @@ export const createServer = (
                 identities.resolve(`Bearer ${credential}`)?.instanceId
             ),
         }),
-        faviconRoutes(),
+        faviconRoutes(lifetime),
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers),
         designOfferRoutes(designOffers, YOU_ACTOR),

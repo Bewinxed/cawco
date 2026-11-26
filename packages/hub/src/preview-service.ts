@@ -1,4 +1,3 @@
-import { detach } from "@cawco/core/detach";
 import { PREVIEW_START, PREVIEW_STOP } from "@cawco/core/preview/protocol";
 import {
   type ServingPreview,
@@ -10,8 +9,10 @@ import {
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { startRefused } from "@cawco/preview/proxy";
+import { Effect } from "effect";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { artifactOrigin, originOfKey } from "./db/previews";
+import type { HubLifetimeShape } from "./lifetime";
 import type { AgentCall } from "./machine-answers";
 import { loadedOnce, type PreviewReach } from "./preview";
 import { type MachineRow, servedByMachine } from "./preview-machine";
@@ -35,6 +36,8 @@ export interface PreviewServiceDeps {
   inUse: (key: string) => boolean;
   /** The server artifact `id`'s source moved off, let go once nothing else shows it (artifacts service `letGoMoved`). */
   letGoMoved: (id: string, before: ArtifactServed) => void;
+  /** The hub's lifetime: a listener told to go is told on it. */
+  lifetime: HubLifetimeShape;
   /** Why machine `machineId` is not connected, the cause alone. */
   offline: (machineId: string) => string;
   /** Why machine `machineId` starts nothing now (its pause), or undefined. */
@@ -90,14 +93,16 @@ export function createPreviewService(deps: PreviewServiceDeps) {
 
   /** Machine `machineId`'s listener for origin `key` told to go, the one start `token` opened alone. */
   const stop = (machineId: string, key: string, token: string): void => {
-    detach(
-      deps.call(
-        machineId,
-        PREVIEW_STOP,
-        [{ instanceId: key, token }],
-        deps.busyMs
-      ),
-      "preview listener stop"
+    deps.lifetime.fork(
+      "preview listener stop",
+      Effect.promise(() =>
+        deps.call(
+          machineId,
+          PREVIEW_STOP,
+          [{ instanceId: key, token }],
+          deps.busyMs
+        )
+      )
     );
   };
 

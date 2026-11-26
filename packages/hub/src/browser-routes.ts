@@ -36,7 +36,6 @@ import {
   browserMount,
   isBrowserKey,
 } from "@cawco/core/browser";
-import { detach } from "@cawco/core/detach";
 import { stunServer } from "@cawco/core/env-ports";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { HOUR_MS } from "@cawco/core/time";
@@ -50,6 +49,7 @@ import {
   proxyHeaders,
   RELAY_HEADER,
 } from "@cawco/preview/proxy";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ElysiaWS } from "elysia/ws";
@@ -58,6 +58,7 @@ import { answered } from "./browser-answered";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
+import type { HubLifetimeShape } from "./lifetime";
 import type { AgentCall, AwayProblem } from "./machine-answers";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
@@ -91,6 +92,8 @@ export interface BrowserStreamDeps {
   ) => Caller;
   /** The browsers a machine has reported (db browsers). */
   keysOf: (machineId: string) => BrowserKey[];
+  /** The hub's lifetime: a daemon told its views is told on it. */
+  lifetime: HubLifetimeShape;
   machineName: (machineId: string) => string;
   /** A credential of the fleet's stream relay, or null while it has none (stream-relay.ts). */
   mint: (userId: string, ttlMs: number) => BrowserRelay | null;
@@ -355,24 +358,29 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   };
 
   /** `place`'s daemon told it has `now` views (core `BROWSER_VIEWERS`). */
-  const tell = (place: Place, now: number): void =>
-    detach(
-      deps
-        .call(
+  const tell = (place: Place, now: number): void => {
+    deps.lifetime.fork(
+      "browser viewers",
+      Effect.promise(() =>
+        deps.call(
           place.machineId,
           BROWSER_VIEWERS,
           [{ key: place.key, count: now }],
           VIEWERS_MS
         )
-        .then((read) => {
-          if (read.kind === "unanswered" || !read.value.ok) {
-            console.warn(
-              `[browser] ${deps.machineName(place.machineId)} was not told ${place.key} has ${now} view${now === 1 ? "" : "s"}: ${read.kind === "unanswered" ? read.reason : (read.value.error ?? "refused")}`
-            );
-          }
-        }),
-      "browser viewers"
+      ).pipe(
+        Effect.flatMap((read) =>
+          Effect.sync(() => {
+            if (read.kind === "unanswered" || !read.value.ok) {
+              console.warn(
+                `[browser] ${deps.machineName(place.machineId)} was not told ${place.key} has ${now} view${now === 1 ? "" : "s"}: ${read.kind === "unanswered" ? read.reason : (read.value.error ?? "refused")}`
+              );
+            }
+          })
+        )
+      )
     );
+  };
 
   /** One more (or one fewer) view of `place`: the daemon told the count. */
   const count = (place: Place, by: 1 | -1): void => {

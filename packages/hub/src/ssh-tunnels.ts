@@ -52,9 +52,11 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { backoffWait } from "@cawco/core/backoff";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+import type { BackoffPolicy } from "@cawco/core/backoff";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { type Join, makeJoin } from "@cawco/core/effect/join";
+import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolderSync } from "@cawco/core/folders";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths/roots";
@@ -62,10 +64,19 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { spawnTethered, untether } from "@cawco/core/tether";
 import { unhandled } from "@cawco/core/unhandled";
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Schedule,
+  Schema,
+} from "effect";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import { hubIdKept } from "./hub-id";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 import type { SshDoor } from "./ssh-door";
 
 /**
@@ -112,7 +123,14 @@ export const sshOptions = (port: number | null): string[] => [
  * given up: a joined machine reaches this hub only through it, and it ends
  * when the machine is removed. Our choice.
  */
-const REOPENS = { firstMs: 1000, mostMs: 60_000 };
+const REOPENS: BackoffPolicy = {
+  firstMs: 1000,
+  mostMs: 60_000,
+  giveUp: {
+    never:
+      "a joined machine reaches this hub through this connection alone; it ends when the machine is removed",
+  },
+};
 /** A connection that stayed up this long starts its next retries from the first wait. Our choice. */
 const STEADY_MS = 60_000;
 /** How long a control command (`-O check`, `-O forward`, one over the master) gets to answer. Our choice. */
@@ -291,12 +309,12 @@ export interface SshTunnels {
 /** One connection the hub holds, or is opening. */
 interface Tunnel {
   /** Each machine port carried to one on the hub's loopback, on this connection. */
-  carried: Map<number, Promise<number>>;
+  carried: Carried;
   child: Bun.Subprocess | null;
-  failures: number;
+  /** What keeps the connection open, and opens it again after each drop. */
+  follower: Fiber.Fiber<void, Dropped> | undefined;
   readonly id: string;
   lines: Set<(text: string) => void>;
-  retry: HubTimer | undefined;
   /** From the start of an open until its `ssh` has exited. */
   running: boolean;
   /** The last end it logged, so a machine that stays away is said once. */
@@ -305,7 +323,7 @@ interface Tunnel {
   up: boolean;
   /** When it last came up this time round, or 0. */
   upAt: number;
-  waiters: ((outcome: TunnelOutcome) => void)[];
+  waiters: Deferred.Deferred<TunnelOutcome>[];
 }
 
 /** What a short command answered: its exit, its stdout and its stderr. */
@@ -315,28 +333,49 @@ interface Answer {
   out: string;
 }
 
-/** A short command's answer, or null when it did not answer within {@link CONTROL_MS}. */
-const control = async (
+/**
+ * A short command's answer, or null when it did not answer within
+ * {@link CONTROL_MS}. Its process is ended when it is let go: past the
+ * deadline, or interrupted.
+ */
+const control = (
   argv: string[],
   stdin?: string
-): Promise<Answer | null> => {
-  const ran = await readWithin(CONTROL_MS, async (signal) => {
-    const child = Bun.spawn(argv, {
-      env: hostEnvironment(),
-      stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { code, out: out.trim(), err: err.trim() };
-  });
-  return ran.kind === "answered" ? ran.value : null;
-};
+): Effect.Effect<Answer | null> =>
+  boundedRead(
+    CONTROL_MS,
+    Effect.scoped(
+      Effect.gen(function* () {
+        const child = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.spawn(argv, {
+              env: hostEnvironment(),
+              stdin:
+                stdin === undefined
+                  ? "ignore"
+                  : new TextEncoder().encode(stdin),
+              stdout: "pipe",
+              stderr: "pipe",
+            })
+          ),
+          (spawned) =>
+            Effect.sync(() => {
+              if (spawned.exitCode === null) {
+                spawned.kill();
+              }
+            })
+        );
+        const [out, err, code] = yield* Effect.promise(() =>
+          Promise.all([
+            new Response(child.stdout).text(),
+            new Response(child.stderr).text(),
+            child.exited,
+          ])
+        );
+        return { code, out: out.trim(), err: err.trim() };
+      })
+    )
+  ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(null)));
 
 /** What a short command said when it did not do what it was asked: its stderr, or its exit. */
 const saidBy = (answer: Answer | null): string =>
@@ -400,7 +439,7 @@ const onMachine = (
   target: string,
   script: string,
   stdin?: string
-): Promise<Answer | null> =>
+): Effect.Effect<Answer | null> =>
   control(
     [
       "ssh",
@@ -469,31 +508,25 @@ const refusalWords = (refusal: TunnelRefusal): string => {
 };
 
 /** Whether `master` answers on its control socket at `path`: signed in. False once it exits, or past {@link MASTER_READY_MS}. */
-const masterReady = async (
+const masterReady = (
   child: Bun.Subprocess,
   path: string,
   target: string
-): Promise<boolean> => {
-  const deadline = Date.now() + MASTER_READY_MS;
-  while (child.exitCode === null && Date.now() < deadline) {
-    if (existsSync(path)) {
-      const checked = await control([
-        "ssh",
-        "-S",
-        path,
-        "-O",
-        "check",
-        "--",
-        target,
-      ]);
-      if (checked?.code === 0) {
-        return true;
+): Effect.Effect<boolean> =>
+  lookUntil(
+    { every: Duration.millis(MASTER_POLL_MS), deadlineMs: MASTER_READY_MS },
+    Effect.suspend((): Effect.Effect<boolean | undefined> => {
+      if (child.exitCode !== null) {
+        return Effect.succeed(false);
       }
-    }
-    await Bun.sleep(MASTER_POLL_MS);
-  }
-  return false;
-};
+      if (!existsSync(path)) {
+        return Effect.succeed(undefined);
+      }
+      return control(["ssh", "-S", path, "-O", "check", "--", target]).pipe(
+        Effect.map((checked) => (checked?.code === 0 ? true : undefined))
+      );
+    })
+  ).pipe(Effect.map((looked) => looked.kind === "found" && looked.value));
 
 /**
  * Whether a `-O forward` that exited non-zero was the machine's server
@@ -502,46 +535,21 @@ const masterReady = async (
  * (exit 0) it carried the request and the server said no; when it does not,
  * the connection itself failed.
  */
-const refusedByServer = async (
+const refusedByServer = (
   path: string,
   target: string
-): Promise<boolean> =>
-  (await control(["ssh", "-S", path, "-O", "check", "--", target]))?.code === 0;
+): Effect.Effect<boolean> =>
+  control(["ssh", "-S", path, "-O", "check", "--", target]).pipe(
+    Effect.map((checked) => checked?.code === 0)
+  );
 
-/**
- * Where the machine binds a forward, before the hub is forwarded there: a
- * probe forward whose far end is a port nothing on this host answers (so
- * nothing behind it answers anyone), its listeners read, then cancelled by
- * the spec that made it (`-O cancel` by its allocated port answers "port not
- * forwarded" and leaves it, measured on OpenSSH 10.2). A refusal, or
- * nothing when it binds on its loopback alone.
- */
-const checkBinding = async (
+/** Where the machine binds the probe forward `probed` made: a refusal, or nothing when it binds on its loopback alone. */
+const readBinding = (
   path: string,
-  target: string
-): Promise<TunnelRefusal | null> => {
-  const probe = `127.0.0.1:0:127.0.0.1:${freePort()}`;
-  const probed = await control([
-    "ssh",
-    "-S",
-    path,
-    "-O",
-    "forward",
-    "-R",
-    probe,
-    "--",
-    target,
-  ]);
-  if (probed?.code !== 0) {
-    return (await refusedByServer(path, target))
-      ? { kind: "forwarding" }
-      : {
-          kind: "failed",
-          step: "forwarding a port on the machine",
-          said: saidBy(probed),
-        };
-  }
-  try {
+  target: string,
+  probed: Answer
+): Effect.Effect<TunnelRefusal | null> =>
+  Effect.gen(function* () {
     const port = Number(probed.out);
     if (!PORT_LINE.test(probed.out)) {
       return {
@@ -550,7 +558,7 @@ const checkBinding = async (
         said: `ssh named no port: ${probed.out}`,
       };
     }
-    const read = await onMachine(path, target, listenersOn(port));
+    const read = yield* onMachine(path, target, listenersOn(port));
     const bound = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
     if (bound.length === 0) {
       return {
@@ -561,20 +569,48 @@ const checkBinding = async (
     }
     const beyond = bound.filter((address) => !onLoopback(address));
     return beyond.length > 0 ? { kind: "exposed", bound: beyond } : null;
-  } finally {
-    await control([
+  });
+
+/**
+ * Where the machine binds a forward, before the hub is forwarded there: a
+ * probe forward whose far end is a port nothing on this host answers (so
+ * nothing behind it answers anyone), its listeners read, then cancelled by
+ * the spec that made it (`-O cancel` by its allocated port answers "port not
+ * forwarded" and leaves it, measured on OpenSSH 10.2). A refusal, or
+ * nothing when it binds on its loopback alone.
+ */
+const checkBinding = (
+  path: string,
+  target: string
+): Effect.Effect<TunnelRefusal | null> =>
+  Effect.gen(function* () {
+    const probe = `127.0.0.1:0:127.0.0.1:${freePort()}`;
+    const probed = yield* control([
       "ssh",
       "-S",
       path,
       "-O",
-      "cancel",
+      "forward",
       "-R",
       probe,
       "--",
       target,
     ]);
-  }
-};
+    if (probed?.code !== 0) {
+      return (yield* refusedByServer(path, target))
+        ? { kind: "forwarding" }
+        : {
+            kind: "failed",
+            step: "forwarding a port on the machine",
+            said: saidBy(probed),
+          };
+    }
+    return yield* readBinding(path, target, probed).pipe(
+      Effect.ensuring(
+        control(["ssh", "-S", path, "-O", "cancel", "-R", probe, "--", target])
+      )
+    );
+  });
 
 /**
  * Ends this hub's own earlier connection's session that still holds `port`
@@ -584,39 +620,60 @@ const checkBinding = async (
  * whatever it is (the person's own sshd, a session of theirs): the forward
  * then says the port is taken.
  */
-const endStale = async (
+const endStale = (
   path: string,
   target: string,
   port: number,
   session: string | null
-): Promise<TunnelRefusal | null> => {
-  if (!(session && SESSION.test(session))) {
-    return null;
-  }
-  const ended = await onMachine(path, target, endOwnOn(port, session));
-  if (ended?.code !== 0) {
-    return {
-      kind: "failed",
-      step: `freeing port ${port} on the machine`,
-      said: saidBy(ended),
-    };
-  }
-  if (!ended.out) {
-    return null;
-  }
-  console.info(
-    `[ssh] ${target}: ended the stale session holding port ${port} (pid ${ended.out.split("\n").join(", ")})`
-  );
-  const deadline = Date.now() + STALE_GONE_MS;
-  while (Date.now() < deadline) {
-    const read = await onMachine(path, target, listenersOn(port));
-    if (read?.code === 0 && !read.out) {
+): Effect.Effect<TunnelRefusal | null> =>
+  Effect.gen(function* () {
+    if (!(session && SESSION.test(session))) {
       return null;
     }
-    await Bun.sleep(MASTER_POLL_MS);
-  }
-  return null;
-};
+    const ended = yield* onMachine(path, target, endOwnOn(port, session));
+    if (ended?.code !== 0) {
+      return {
+        kind: "failed",
+        step: `freeing port ${port} on the machine`,
+        said: saidBy(ended),
+      };
+    }
+    if (!ended.out) {
+      return null;
+    }
+    console.info(
+      `[ssh] ${target}: ended the stale session holding port ${port} (pid ${ended.out.split("\n").join(", ")})`
+    );
+    yield* lookUntil(
+      { every: Duration.millis(MASTER_POLL_MS), deadlineMs: STALE_GONE_MS },
+      onMachine(path, target, listenersOn(port)).pipe(
+        Effect.map((read) => (read?.code === 0 && !read.out) || undefined)
+      )
+    );
+    return null;
+  });
+
+/**
+ * A held connection ended, and why: a failure of its series of opens, or,
+ * when it ended after holding {@link STEADY_MS}, the first failure of the
+ * next series.
+ */
+class Dropped extends Schema.TaggedError<Dropped>()("Dropped", {
+  machineId: Schema.String,
+  target: Schema.String,
+  why: Schema.String,
+}) {}
+
+/** The machine ports one connection carried, and the carries under way: a new connection starts with none. */
+interface Carried {
+  carrying: Join<number, number, Error>;
+  ports: Map<number, number>;
+}
+
+const noneCarried = (): Carried => ({
+  carrying: makeJoin<number, number, Error>(),
+  ports: new Map(),
+});
 
 export const createSshTunnels = ({
   db,
@@ -638,13 +695,12 @@ export const createSshTunnels = ({
     const made: Tunnel = {
       id,
       child: null,
+      follower: undefined,
       running: false,
       up: false,
       upAt: 0,
       stopped: false,
-      failures: 0,
-      retry: undefined,
-      carried: new Map(),
+      carried: noneCarried(),
       lines: new Set(),
       waiters: [],
       said: undefined,
@@ -657,7 +713,7 @@ export const createSshTunnels = ({
     const waiting = tunnel.waiters.splice(0);
     tunnel.lines.clear();
     for (const answer of waiting) {
-      answer(outcome);
+      Deferred.doneUnsafe(answer, Effect.succeed(outcome));
     }
   };
 
@@ -665,7 +721,7 @@ export const createSshTunnels = ({
     tunnel.up = true;
     tunnel.upAt = Date.now();
     tunnel.said = undefined;
-    tunnel.carried.clear();
+    tunnel.carried = noneCarried();
     console.info(
       `[ssh] ${row.target}: port ${port} on the machine is carried to this hub`
     );
@@ -677,114 +733,126 @@ export const createSshTunnels = ({
    * ran before the hub was killed outright): its master is told to exit,
    * which frees the port on the machine, and a stale socket is removed.
    */
-  const clearControl = async (path: string, target: string): Promise<void> => {
-    if (!existsSync(path)) {
-      return;
-    }
-    await control(["ssh", "-S", path, "-O", "exit", "--", target]);
-    rmSync(path, { force: true });
-  };
+  const clearControl = (path: string, target: string): Effect.Effect<void> =>
+    existsSync(path)
+      ? control(["ssh", "-S", path, "-O", "exit", "--", target]).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              rmSync(path, { force: true });
+            })
+          )
+        )
+      : Effect.void;
 
   /**
    * The machine's forward to the hub, once the master at `path` has signed
    * in: where it binds checked, its stale session ended, then the forward.
    * Answers the machine's port, or what it would not do.
    */
-  const forwardHub = async (
+  const forwardHub = (
     row: SshMachineRow,
     path: string
-  ): Promise<{ port: number } | { refusal: TunnelRefusal }> => {
-    const binding = await checkBinding(path, row.target);
-    if (binding) {
-      return { refusal: binding };
-    }
-    if (row.boxPort !== null) {
-      const stale = await endStale(
-        path,
-        row.target,
-        row.boxPort,
-        row.boxSession
-      );
-      if (stale) {
-        return { refusal: stale };
+  ): Effect.Effect<{ port: number } | { refusal: TunnelRefusal }> =>
+    Effect.gen(function* () {
+      const binding = yield* checkBinding(path, row.target);
+      if (binding) {
+        return { refusal: binding };
       }
-    }
-    const forwarded = await forwardDoor(row, path);
-    if ("port" in forwarded) {
-      await recordSession(row, path, forwarded.port);
-    }
-    return forwarded;
-  };
+      if (row.boxPort !== null) {
+        const stale = yield* endStale(
+          path,
+          row.target,
+          row.boxPort,
+          row.boxSession
+        );
+        if (stale) {
+          return { refusal: stale };
+        }
+      }
+      const forwarded = yield* forwardDoor(row, path);
+      if ("port" in forwarded) {
+        yield* recordSession(row, path, forwarded.port);
+      }
+      return forwarded;
+    });
 
   /**
    * The process on the machine holding this connection's forward, recorded
    * for the row: the one {@link endStale} may end when this connection has
    * died and left it there. None read, none recorded: then nothing is ended.
    */
-  const recordSession = async (
+  const recordSession = (
     row: SshMachineRow,
     path: string,
     port: number
-  ): Promise<void> => {
-    const read = await onMachine(path, row.target, holderOn(port));
-    const lines = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
-    const [session] = lines;
-    db.update(row.id, {
-      boxSession:
-        lines.length === 1 && session && SESSION.test(session) ? session : null,
-    });
-  };
+  ): Effect.Effect<void> =>
+    onMachine(path, row.target, holderOn(port)).pipe(
+      Effect.flatMap((read) =>
+        Effect.sync(() => {
+          const lines =
+            read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
+          const [session] = lines;
+          db.update(row.id, {
+            boxSession:
+              lines.length === 1 && session && SESSION.test(session)
+                ? session
+                : null,
+          });
+        })
+      )
+    );
 
   /** The forward itself: the machine's port, kept the first time, to the hub's door. */
-  const forwardDoor = async (
+  const forwardDoor = (
     row: SshMachineRow,
     path: string
-  ): Promise<{ port: number } | { refusal: TunnelRefusal }> => {
-    const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door.port(row.id, row.target)}`;
-    const answer = await control([
-      "ssh",
-      "-S",
-      path,
-      "-O",
-      "forward",
-      "-R",
-      spec,
-      "--",
-      row.target,
-    ]);
-    if (answer?.code !== 0) {
-      if (!(await refusedByServer(path, row.target))) {
+  ): Effect.Effect<{ port: number } | { refusal: TunnelRefusal }> =>
+    Effect.gen(function* () {
+      const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door.port(row.id, row.target)}`;
+      const answer = yield* control([
+        "ssh",
+        "-S",
+        path,
+        "-O",
+        "forward",
+        "-R",
+        spec,
+        "--",
+        row.target,
+      ]);
+      if (answer?.code !== 0) {
+        if (!(yield* refusedByServer(path, row.target))) {
+          return {
+            refusal: {
+              kind: "failed",
+              step: "forwarding the hub to the machine",
+              said: saidBy(answer),
+            },
+          };
+        }
+        return {
+          refusal:
+            row.boxPort === null
+              ? { kind: "forwarding" }
+              : { kind: "held", port: row.boxPort },
+        };
+      }
+      if (row.boxPort !== null) {
+        return { port: row.boxPort };
+      }
+      if (!PORT_LINE.test(answer.out)) {
         return {
           refusal: {
             kind: "failed",
             step: "forwarding the hub to the machine",
-            said: saidBy(answer),
+            said: `ssh named no port: ${answer.out}`,
           },
         };
       }
-      return {
-        refusal:
-          row.boxPort === null
-            ? { kind: "forwarding" }
-            : { kind: "held", port: row.boxPort },
-      };
-    }
-    if (row.boxPort !== null) {
-      return { port: row.boxPort };
-    }
-    if (!PORT_LINE.test(answer.out)) {
-      return {
-        refusal: {
-          kind: "failed",
-          step: "forwarding the hub to the machine",
-          said: `ssh named no port: ${answer.out}`,
-        },
-      };
-    }
-    const port = Number(answer.out);
-    db.update(row.id, { boxPort: port });
-    return { port };
-  };
+      const port = Number(answer.out);
+      db.update(row.id, { boxPort: port });
+      return { port };
+    });
 
   /** One line of `tunnel`'s `ssh`: kept for the add that waits on it, and for why a held one ended. */
   const hear = (
@@ -806,108 +874,221 @@ export const createSshTunnels = ({
   };
 
   /**
-   * A joined machine's connection that ended is opened again: after 1 s,
-   * doubling while it keeps failing, from 1 s again after one that held.
-   * Each new reason is said once.
-   */
-  const retry = (
-    tunnel: Tunnel,
-    row: SshMachineRow,
-    steady: boolean,
-    why: string
-  ): void => {
-    tunnel.failures = steady ? 1 : tunnel.failures + 1;
-    const wait = backoffWait(REOPENS, tunnel.failures);
-    if (tunnel.said !== why) {
-      tunnel.said = why;
-      console.warn(
-        `[ssh] ${row.target}: the connection that carries ${row.machineId} to this hub ended (${why}); it is opened again, from ${Math.round(wait / 1000)} s, until it holds`
-      );
-    }
-    tunnel.retry = lifetime.after("ssh tunnel opened again", wait, () => {
-      tunnel.retry = undefined;
-      detach(connect(tunnel), "ssh connection");
-    });
-  };
-
-  /**
    * Once `child`, the master, has signed in: the machine's forward to the
    * hub, and the connection up. What the machine would not do, or nothing;
    * a master refused, or not signed in in time, is ended: nothing holds it.
    */
-  const bringUp = async (
+  const bringUp = (
     tunnel: Tunnel,
     row: SshMachineRow,
     path: string,
     child: Bun.Subprocess
-  ): Promise<TunnelRefusal | null> => {
-    const ready = await masterReady(child, path, row.target);
-    const forwarded =
-      ready && !tunnel.stopped ? await forwardHub(row, path) : null;
-    if (forwarded && "port" in forwarded) {
-      cameUp(tunnel, row, forwarded.port);
-      return null;
-    }
-    end(child);
-    return forwarded?.refusal ?? null;
-  };
+  ): Effect.Effect<TunnelRefusal | null> =>
+    Effect.gen(function* () {
+      const ready = yield* masterReady(child, path, row.target);
+      const forwarded =
+        ready && !tunnel.stopped ? yield* forwardHub(row, path) : null;
+      if (forwarded && "port" in forwarded) {
+        cameUp(tunnel, row, forwarded.port);
+        return null;
+      }
+      end(child);
+      return forwarded?.refusal ?? null;
+    });
 
-  /** Opens `tunnel`'s connection once and follows it until `ssh` exits. */
-  const connect = async (tunnel: Tunnel): Promise<void> => {
-    const row = db.get(tunnel.id);
-    if (!row || tunnel.stopped || tunnel.running) {
-      return;
-    }
-    tunnel.running = true;
-    tunnel.upAt = 0;
-    makeFolderSync(controlDir(), { mode: 0o700 });
-    const path = controlPath(row.id);
-    await clearControl(path, row.target);
-    if (tunnel.stopped) {
-      tunnel.running = false;
-      settle(tunnel, { kind: "ended", code: null, lines: [], refusal: null });
-      return;
-    }
-    const child = master(row, path);
-    tunnel.child = child;
-    const heard: { lines: string[]; since: string[] } = {
-      lines: [],
-      since: [],
-    };
-    const reading = eachLine(child.stderr, (line) => hear(tunnel, heard, line));
-    const refusal = await bringUp(tunnel, row, path, child);
-    await reading;
-    const code = await child.exited;
-    untether(child.stdin);
-    const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
-    tunnel.child = null;
-    tunnel.running = false;
-    tunnel.up = false;
-    tunnel.carried.clear();
-    rmSync(path, { force: true });
-    const { lines, since } = heard;
-    settle(tunnel, { kind: "ended", code, lines, refusal });
-    const now = db.get(row.id);
+  /**
+   * `tunnel`'s master, run once and followed until `ssh` exits: its exit
+   * and what the machine refused; null when the tunnel stopped before it
+   * ran. The master is the scope's: ended with it, however it is left.
+   */
+  const runMaster = (
+    tunnel: Tunnel,
+    row: SshMachineRow,
+    path: string,
+    heard: { lines: string[]; since: string[] }
+  ) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* clearControl(path, row.target);
+        if (tunnel.stopped) {
+          return null;
+        }
+        const child = yield* Effect.acquireRelease(
+          Effect.sync(() => master(row, path)),
+          (spawned) =>
+            Effect.sync(() => {
+              end(spawned);
+              untether(spawned.stdin);
+            })
+        );
+        tunnel.child = child;
+        const reading = yield* Effect.forkScoped(
+          Effect.promise(() =>
+            eachLine(child.stderr, (line) => hear(tunnel, heard, line))
+          )
+        );
+        const refusal = yield* bringUp(tunnel, row, path, child);
+        yield* Fiber.join(reading);
+        const code = yield* Effect.promise(() => child.exited);
+        return { child, code, refusal };
+      })
+    );
+
+  /**
+   * Opens `tunnel`'s connection once and follows it until `ssh` exits.
+   * Fails with why when a joined machine's connection ended before it held
+   * {@link STEADY_MS}; answers why when it ended after holding it, and
+   * nothing when nothing opens it again (the tunnel stopped, the machine
+   * never joined, the hub closing). Whatever ends it, every add waiting on
+   * it is told how it came out.
+   */
+  const connect = (
+    tunnel: Tunnel
+  ): Effect.Effect<Dropped | undefined, Dropped> =>
+    Effect.gen(function* () {
+      const row = db.get(tunnel.id);
+      if (!row || tunnel.stopped || tunnel.running) {
+        return;
+      }
+      tunnel.running = true;
+      tunnel.upAt = 0;
+      makeFolderSync(controlDir(), { mode: 0o700 });
+      const path = controlPath(row.id);
+      const heard: { lines: string[]; since: string[] } = {
+        lines: [],
+        since: [],
+      };
+      const letGo = (): boolean => {
+        const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
+        tunnel.child = null;
+        tunnel.running = false;
+        tunnel.up = false;
+        tunnel.carried = noneCarried();
+        rmSync(path, { force: true });
+        return steady;
+      };
+      const ran = yield* runMaster(tunnel, row, path, heard).pipe(
+        Effect.onExit((exit) =>
+          Exit.isSuccess(exit)
+            ? Effect.void
+            : Effect.sync(() => {
+                letGo();
+                settle(tunnel, {
+                  kind: "ended",
+                  code: null,
+                  lines: heard.lines,
+                  refusal: null,
+                });
+              })
+        )
+      );
+      if (ran === null) {
+        tunnel.running = false;
+        settle(tunnel, { kind: "ended", code: null, lines: [], refusal: null });
+        return;
+      }
+      const steady = letGo();
+      settle(tunnel, {
+        kind: "ended",
+        code: ran.code,
+        lines: heard.lines,
+        refusal: ran.refusal,
+      });
+      const dropped = droppedBy(tunnel, row.id, ran, heard);
+      return dropped === undefined || steady ? dropped : yield* dropped;
+    });
+
+  /** Why `tunnel`'s master ended, as `ran` and `heard` say; nothing when nothing opens it again (it stopped, its machine never joined, the hub closing). */
+  const droppedBy = (
+    tunnel: Tunnel,
+    id: string,
+    ran: { child: Bun.Subprocess; code: number; refusal: TunnelRefusal | null },
+    heard: { lines: string[]; since: string[] }
+  ): Dropped | undefined => {
+    const now = db.get(id);
     if (tunnel.stopped || !now?.machineId || lifetime.closed()) {
       return;
     }
-    const exit = child.signalCode
+    const { child, code, refusal } = ran;
+    const exited = child.signalCode
       ? `ssh ended by ${child.signalCode}`
       : `ssh exited ${code}`;
-    retry(
-      tunnel,
-      now,
-      steady,
-      refusal
+    return new Dropped({
+      machineId: now.machineId,
+      target: now.target,
+      why: refusal
         ? `the machine refused: ${refusalWords(refusal)}`
-        : ((tunnel.upAt > 0 ? since : lines).at(-1) ?? exit)
+        : ((tunnel.upAt > 0 ? heard.since : heard.lines).at(-1) ?? exited),
+    });
+  };
+
+  /**
+   * A joined machine's connection that ended is opened again: after 1 s,
+   * doubling while it keeps failing ({@link REOPENS}). Each new reason is
+   * said once, with the wait before the next open.
+   */
+  const reopens = (tunnel: Tunnel) =>
+    backoffSchedule(REOPENS).pipe(
+      Schedule.setInputType<Dropped>(),
+      Schedule.modifyDelay(({ duration, input }) =>
+        Effect.sync(() => {
+          if (tunnel.said !== input.why) {
+            tunnel.said = input.why;
+            console.warn(
+              `[ssh] ${input.target}: the connection that carries ${input.machineId} to this hub ended (${input.why}); it is opened again, from ${Math.round(Duration.toMillis(duration) / 1000)} s, until it holds`
+            );
+          }
+          return duration;
+        })
+      )
     );
+
+  /**
+   * One series of opens of `tunnel`'s connection, each after its wait on
+   * {@link REOPENS}, until one holds and ends (that end answered) or nothing
+   * opens it again (nothing answered). `held`: one that held just ended,
+   * which counts as the series' first failure, so the open after it waits
+   * the first wait.
+   */
+  const series = (
+    tunnel: Tunnel,
+    held: Dropped | undefined
+  ): Effect.Effect<Dropped | undefined, Dropped> => {
+    let pending = held;
+    return Effect.retry(
+      Effect.suspend(() => {
+        const failed = pending;
+        pending = undefined;
+        return failed ? Effect.fail(failed) : connect(tunnel);
+      }),
+      reopens(tunnel)
+    );
+  };
+
+  /** `tunnel`'s connection, opened now and again after each drop for as long as it is held. */
+  const follow = (tunnel: Tunnel): Effect.Effect<void, Dropped> =>
+    Effect.gen(function* () {
+      let held = yield* series(tunnel, undefined);
+      while (held) {
+        held = yield* series(tunnel, held);
+      }
+    });
+
+  /** `tunnel`'s connection opened now, a wait for the next open cut short. */
+  const openNow = (tunnel: Tunnel): void => {
+    tunnel.follower?.interruptUnsafe();
+    const follower = lifetime.fork("ssh connection", follow(tunnel));
+    tunnel.follower = follower;
+    follower.addObserver(() => {
+      if (tunnel.follower === follower) {
+        tunnel.follower = undefined;
+      }
+    });
   };
 
   const stop = (tunnel: Tunnel): void => {
     tunnel.stopped = true;
-    lifetime.cancel(tunnel.retry);
-    tunnel.retry = undefined;
+    tunnel.follower?.interruptUnsafe();
     end(tunnel.child);
     tunnels.delete(tunnel.id);
   };
@@ -935,25 +1116,23 @@ export const createSshTunnels = ({
         db.create(row);
       }
       const tunnel = tunnelOf(row.id);
-      const outcome = new Promise<TunnelOutcome>((resolve) => {
-        const port = db.get(row.id)?.boxPort ?? null;
-        if (tunnel.up && port !== null) {
-          resolve({ kind: "up", port });
-          return;
-        }
+      const outcome = Deferred.makeUnsafe<TunnelOutcome>();
+      const port = db.get(row.id)?.boxPort ?? null;
+      if (tunnel.up && port !== null) {
+        Deferred.doneUnsafe(outcome, Effect.succeed({ kind: "up", port }));
+      } else {
         tunnel.lines.add(line);
-        tunnel.waiters.push(resolve);
+        tunnel.waiters.push(outcome);
         if (!tunnel.running) {
-          lifetime.cancel(tunnel.retry);
-          tunnel.retry = undefined;
-          detach(connect(tunnel), "ssh connection");
+          openNow(tunnel);
         }
-      });
+      }
       return {
         id: row.id,
         fresh: !held,
         machineId: row.machineId,
-        outcome,
+        // The promise edge of the add's wait on how the connection comes out.
+        outcome: lifetime.run(Deferred.await(outcome)),
       };
     },
     admit: async (id) => {
@@ -963,11 +1142,8 @@ export const createSshTunnels = ({
       }
       const key = randomBytes(32).toString("base64url");
       db.update(id, { pendingKey: key });
-      const kept = await onMachine(
-        controlPath(id),
-        row.target,
-        KEEP_KEY,
-        `${key}\n`
+      const kept = await lifetime.run(
+        onMachine(controlPath(id), row.target, KEEP_KEY, `${key}\n`)
       );
       return kept?.code === 0 ? undefined : saidBy(kept);
     },
@@ -1010,7 +1186,7 @@ export const createSshTunnels = ({
         db.remove(row.id);
       }
       for (const row of db.joined()) {
-        detach(connect(tunnelOf(row.id)), "ssh connection");
+        openNow(tunnelOf(row.id));
       }
     },
     forget: (machineId) => {
@@ -1034,35 +1210,40 @@ export const createSshTunnels = ({
           )
         );
       }
-      const held = tunnel.carried.get(port);
+      const at = tunnel.carried;
+      const held = at.ports.get(port);
       if (held !== undefined) {
-        return held;
+        return Promise.resolve(held);
       }
-      const carrying = (async () => {
-        const local = freePort();
-        const answer = await control([
-          "ssh",
-          "-S",
-          controlPath(row.id),
-          "-O",
-          "forward",
-          "-L",
-          `127.0.0.1:${local}:127.0.0.1:${port}`,
-          "--",
-          row.target,
-        ]);
-        if (answer?.code !== 0) {
-          throw new Error(
-            `the hub's SSH connection to ${row.target} did not carry port ${port}: ${saidBy(answer)}`
-          );
-        }
-        return local;
-      })();
-      tunnel.carried.set(port, carrying);
-      carrying.catch(() => {
-        tunnel.carried.delete(port);
-      });
-      return carrying;
+      // The promise edge of one carry, shared by every caller while it runs.
+      return lifetime.run(
+        at.carrying.run(
+          port,
+          Effect.gen(function* () {
+            const local = freePort();
+            const answer = yield* control([
+              "ssh",
+              "-S",
+              controlPath(row.id),
+              "-O",
+              "forward",
+              "-L",
+              `127.0.0.1:${local}:127.0.0.1:${port}`,
+              "--",
+              row.target,
+            ]);
+            if (answer?.code !== 0) {
+              return yield* Effect.fail(
+                new Error(
+                  `the hub's SSH connection to ${row.target} did not carry port ${port}: ${saidBy(answer)}`
+                )
+              );
+            }
+            at.ports.set(port, local);
+            return local;
+          })
+        )
+      );
     },
   };
 };
