@@ -12,6 +12,7 @@ import { stunServer } from "@cawco/core/env-ports";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { Effect } from "effect";
 import { getPublicIP } from "turn-server";
+import { runPromise } from "../daemon-runtime";
 
 /** How long a STUN binding has to be answered. */
 const STUN_MS = 3000;
@@ -58,7 +59,7 @@ export const routerAddress = async (): Promise<
     return;
   }
   // The promise edge of mappedBy, for the capability report.
-  const address = await Effect.runPromise(mappedBy(stunServer()));
+  const address = await runPromise(mappedBy(stunServer()));
   return address && isPublicAddress(address) ? { address, lan } : undefined;
 };
 
@@ -70,7 +71,7 @@ const asStun = (url: string): string => url.replace(TURN_SCHEME, "stun$1:");
 /** `relay.prove`: each of the relay's URLs that answered a STUN binding from this machine. */
 export const proveRelay = (urls: string[]): Promise<string[]> =>
   // The promise edge of the bindings through each URL, for the daemon.
-  Effect.runPromise(
+  runPromise(
     Effect.forEach(urls, (url) => mappedBy(asStun(url)), {
       concurrency: "unbounded",
     }).pipe(Effect.map((addresses) => urls.filter((_url, at) => addresses[at])))

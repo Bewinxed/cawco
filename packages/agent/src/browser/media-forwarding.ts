@@ -39,6 +39,8 @@ import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
 import { parse } from "yaml";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { MediaMeasurementSchema } from "../stored-shapes";
 import { type ColimaProfile, colimaProfileOf } from "./colima";
 import type { Runtime } from "./runtime";
@@ -403,7 +405,7 @@ const natForwards = async (port: number): Promise<MediaPath> => {
   const addresses = await machineAddresses();
   const host =
     addresses.find((one) => !one.includes(":")) ?? addresses[0] ?? "127.0.0.1";
-  return (await Effect.runPromise(tcpAnswers(host, port))) ? "udp+tcp" : "none";
+  return (await runPromise(tcpAnswers(host, port))) ? "udp+tcp" : "none";
 };
 
 /** What the host binds on every address for `port` now. */
@@ -464,14 +466,14 @@ export const measureMedia = async (
   if (!reader) {
     return;
   }
-  const looked = await Effect.runPromise(
+  const looked = await runPromise(
     lookUntil(
       {
         every: MEASURE_POLL_MS,
         deadlineMs: MEASURE_MS,
         until: (forwarded: MediaPath) => !carriesLess(forwarded, published),
       },
-      Effect.promise(() => reader.read(port))
+      fromPromise(() => reader.read(port))
     )
   );
   return looked.kind === "found" ? looked.value : looked.last;

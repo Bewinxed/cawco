@@ -24,6 +24,8 @@ import type { BrowserHostKind, BrowserKey } from "@cawco/core/browser";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { Deferred, Duration, Effect, Fiber, Schedule } from "effect";
 import { z } from "zod";
+import { runFork } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { CdpLink } from "./cdp-takeover";
 
 /**
@@ -221,7 +223,7 @@ const failed = (key: BrowserKey, watch: Watch, why: string, ms: number) =>
     yield* Effect.logWarning(
       `[browser] ${key}'s DevTools link failed (${why}); the browser is checked, and the link opened again ${Math.round(ms / 1000)} s after`
     );
-    yield* Effect.promise(() => watch.lost(key));
+    yield* fromPromise(() => watch.lost(key));
   });
 
 /**
@@ -252,13 +254,13 @@ const kept = (key: BrowserKey, watch: Watch): Effect.Effect<never> =>
   );
 
 const open = (key: BrowserKey, watch: Watch): void => {
-  watch.keeping = Effect.runFork(kept(key, watch));
+  watch.keeping = runFork(kept(key, watch));
 };
 
 const close = (key: BrowserKey, watch: Watch): void => {
   watch.closed = true;
   if (watch.keeping) {
-    Effect.runFork(Fiber.interrupt(watch.keeping));
+    runFork(Fiber.interrupt(watch.keeping));
   }
   watch.link?.close();
   watches.delete(key);

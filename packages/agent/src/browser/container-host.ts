@@ -59,6 +59,8 @@ import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { type BluezBus, standBluezBus, stopBluezBus } from "./bluez-bus";
 import {
   doorBind,
@@ -398,14 +400,14 @@ const startedOn = (
 
 /** Whether `url` answers 2xx within `ms`, asked again every {@link LIVE_POLL_MS}. */
 const answersWithin = (url: string, ms: number): Promise<boolean> =>
-  Effect.runPromise(
+  runPromise(
     lookUntil(
       {
         every: LIVE_POLL_MS,
         deadlineMs: ms,
         until: (answered: boolean) => answered,
       },
-      Effect.promise(() => httpAnswers(url, 2000))
+      fromPromise(() => httpAnswers(url, 2000))
     ).pipe(Effect.map((looked) => looked.kind === "found"))
   );
 
@@ -583,7 +585,7 @@ const forwardInto = (
       socket.destroy();
     });
   });
-  return Effect.runPromise(
+  return runPromise(
     Effect.callback<{ close: () => void; port: number }, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)));
       server.listen(0, "127.0.0.1", () => {
@@ -1249,14 +1251,14 @@ export class ContainerHost implements BrowserHost {
         Env: [`HOME=/home/${CHROMIUM_USER}`],
       });
       await launched.start({ Detach: true });
-      const looked = await Effect.runPromise(
+      const looked = await runPromise(
         lookUntil(
           {
             every: LIVE_POLL_MS,
             deadlineMs: CHROMIUM_MS,
             until: (at: { said: string }) => !at.said.startsWith("wait"),
           },
-          Effect.promise(() =>
+          fromPromise(() =>
             execIn(
               container,
               ["sh", "-c", TRACE_PORT, "sh", dir],

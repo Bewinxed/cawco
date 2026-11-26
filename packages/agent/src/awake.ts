@@ -55,9 +55,11 @@ import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { shortId } from "@cawco/core/short-id";
 import { type Pid, spawnedPid } from "@cawco/core/signal";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
+import { Effect, Schedule } from "effect";
 import { endGroup, holdCommand } from "./awake-hold";
 import { updateRunning } from "./binary-update";
 import { workspacesWithCommands } from "./boundary/processes";
+import { letGo } from "./daemon-runtime";
 import { commandsRunning } from "./hub-command";
 import { runsWorking } from "./leak-watch";
 import { toolEnv } from "./tools";
@@ -221,16 +223,10 @@ export const keepAwakeWhileWorking = (
     }
   };
 
-  let looking = false;
-  const tick = (): void => {
-    if (looking) {
-      return;
-    }
-    looking = true;
-    look().finally(() => {
-      looking = false;
-    });
-  };
-  setInterval(tick, LOOK_MS).unref();
-  tick();
+  // Now, and every LOOK_MS after the last look ended (look never rejects).
+  const looked = Effect.promise(look);
+  letGo(
+    "awake",
+    looked.pipe(Effect.andThen(Effect.repeat(looked, Schedule.spaced(LOOK_MS))))
+  );
 };

@@ -21,6 +21,7 @@ import { AGY_APP_DATA, AGY_OWN_APP_DATA } from "@cawco/core/paths/harnesses";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { agyWords } from "@cawco/core/words/agy";
 import { Effect } from "effect";
+import { runSync } from "../daemon-runtime";
 import { agySteps } from "./agy-history";
 import { agyTranscriptPath } from "./agy-store-files";
 
@@ -71,7 +72,7 @@ const tailSteps = (
   home: string,
   sessionId: string
 ): { error?: string; index: number; type: string }[] =>
-  Effect.runSync(
+  runSync(
     Effect.acquireUseRelease(
       Effect.try(() =>
         openSync(
@@ -104,7 +105,7 @@ const reading = <A>(
   file: string,
   work: (database: Database) => A
 ): A | undefined =>
-  Effect.runSync(
+  runSync(
     Effect.acquireUseRelease(
       Effect.try(() => new Database(file, { readonly: true })),
       (database) => Effect.try(() => work(database)),

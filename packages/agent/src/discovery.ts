@@ -11,6 +11,7 @@ import { Bonjour, type Service } from "bonjour-service";
 import { Effect } from "effect";
 import { z } from "zod";
 import { readConfig, writeConfig } from "./config";
+import { runPromise } from "./daemon-runtime";
 
 /**
  * The network rungs of hub discovery, shared between `cawco up`
@@ -149,9 +150,7 @@ export const firstToAnswer = (
 export const browseMdns = (): Promise<Bounded<string[]>> =>
   // Silence in the window is no hub answering in it, not "there is no hub":
   // the deadline's signal interrupts the browse, which stops it.
-  readWithin(MDNS_BROWSE_MS, (signal) =>
-    Effect.runPromise(firstHubHeard, { signal })
-  );
+  readWithin(MDNS_BROWSE_MS, (signal) => runPromise(firstHubHeard, { signal }));
 
 /** The first hub that answers the browse, by its IPv4 addresses; the browse stopped once one has, or once it is interrupted. */
 const firstHubHeard = Effect.callback<string[]>((resume) => {

@@ -216,6 +216,7 @@ import { recordLimitReadingsWith, setSectionMarker } from "@cawco/jsonl-parser";
 import { namedAndMore } from "@cawco/providers/names";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
+  Cause,
   Context,
   Data,
   Deferred,
@@ -286,6 +287,13 @@ import {
   workspaceLane,
 } from "./control-lanes";
 import { DaemonLinks } from "./daemon-links";
+import {
+  DaemonRuntimeLayer,
+  runFork,
+  runPromise,
+  runSync,
+  thrownOf,
+} from "./daemon-runtime";
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
@@ -371,7 +379,7 @@ import {
   dropOpencodeMarkers,
   endProviderSignIns,
   forgetProviderAccount,
-  freshenAll,
+  freshenEvery,
   homeStoresStamp,
   joinProviderAccount,
   lendAccount,
@@ -381,9 +389,9 @@ import {
   setProviderKey,
 } from "./provider-accounts";
 import {
+  dueProviderAccounts,
   machineGoKey,
   readAccountUsage,
-  readDueProviderAccounts,
 } from "./provider-usage";
 import {
   forgetRevoked,
@@ -391,6 +399,7 @@ import {
   redactConsole,
   storedHashes,
 } from "./redaction";
+import { fromPromise, Rejected } from "./rejected";
 import { removalRefusal, removeFolder } from "./remove-folder";
 import { repoRoot } from "./repo-top";
 import { fenced } from "./restart";
@@ -604,7 +613,7 @@ class LaunchAsks {
     this.#pending.set(requestId, { envelope, settle });
     this.#send?.(envelope);
     // The promise edge of the wait for the hub's grant.
-    return Effect.runPromise(awaitGrant(instanceId, Deferred.await(granted)));
+    return runPromise(awaitGrant(instanceId, Deferred.await(granted)));
   }
 
   /** A connection registered: every ask not yet answered goes on it, and every one after. */
@@ -657,10 +666,8 @@ const awaitGrant = (
 ): Effect.Effect<LaunchGrant> =>
   boundedRead(CUSTODY_BOUND_MS, granted).pipe(
     Effect.catchTag("Unanswered", () =>
-      Effect.sync(() =>
-        console.info(
-          `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
-        )
+      Effect.logInfo(
+        `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
       ).pipe(Effect.andThen(granted))
     )
   );
@@ -808,7 +815,7 @@ const noteClaudeAuth = (auth: AuthState | undefined): void => {
   claudeAuthNoted = true;
   const note = claudeAuthNote(auth);
   if (note) {
-    Effect.runFork(Effect.logWarning(note));
+    runSync(Effect.logWarning(note));
   }
 };
 
@@ -1122,8 +1129,12 @@ const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
  * `series` value (and therefore a new closure) every time {@link
  * Effect.forever} re-enters it.
  */
+/** What threw, as the reconnect's line says it: its stack, else its words. */
+const threw = (thrown: unknown): string =>
+  thrown instanceof Error ? (thrown.stack ?? thrown.message) : String(thrown);
+
 const reconnecting = <E extends { readonly reason: string }, R>(
-  session: (markLive: () => void) => Effect.Effect<never, E, R>,
+  session: (markLive: () => void) => Effect.Effect<never, E | Rejected, R>,
   /** The failure a connection that threw ends in, said as `reason`. */
   failed: (reason: string) => E,
   options?: {
@@ -1212,12 +1223,14 @@ const reconnecting = <E extends { readonly reason: string }, R>(
         // failure. Retried only as failures are, a defect ended the loop and
         // left the agent running with no hub link and nothing more said (run
         // A, 2026-10-15, after an EMFILE from a file watch).
+        // A promise of its own that rejected ends it the same way.
+        Effect.catchIf(
+          (error): error is Rejected => error instanceof Rejected,
+          ({ cause }) =>
+            Effect.fail(failed(`the hub connection threw: ${threw(cause)}`))
+        ),
         Effect.catchDefect((defect) =>
-          Effect.fail(
-            failed(
-              `the hub connection threw: ${defect instanceof Error ? (defect.stack ?? defect.message) : String(defect)}`
-            )
-          )
+          Effect.fail(failed(`the hub connection threw: ${threw(defect)}`))
         ),
         Effect.tapError((error) => {
           const at = now();
@@ -1573,9 +1586,7 @@ const readCustody = async (
       };
     });
   } catch (error) {
-    Effect.runFork(
-      Effect.logWarning(`session custody unavailable: ${String(error)}`)
-    );
+    runSync(Effect.logWarning(`session custody unavailable: ${String(error)}`));
     return { state: "unavailable", error: String(error) };
   }
 };
@@ -1608,7 +1619,7 @@ const reconnectAfterHubRestart = async (
       adapter
         .hubRestarted()
         .catch((error: unknown) =>
-          Effect.runFork(
+          runSync(
             Effect.logWarning(
               `${adapter.kind}: reconnecting to the restarted hub failed: ${String(error)}`
             )
@@ -1732,30 +1743,29 @@ const attach = (
     // The hub this socket reached, by its own word: what this machine's HTTP
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
-    yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
+    yield* recordJoinedHub(url, challenge.hubId);
     // This process holds the machine's hub link: it is the machine's agent
     // (machine-agent.ts).
     holdHubLink();
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
-    const { catalog } = yield* Effect.promise(() => reading);
+    const { catalog } = yield* fromPromise(() => reading);
     // Catalog reads may be cached across reconnects; process absence may not.
-    const custody = yield* Effect.promise(() =>
+    const custody = yield* fromPromise(() =>
       readCustody(supervisor.stopSequence, supervisor.custodyInstanceIds)
     );
-    const build = yield* Effect.promise(() => buildInfo());
-    const machineAgent = yield* Effect.promise(isMachineAgent);
+    const build = yield* fromPromise(() => buildInfo());
+    const machineAgent = yield* fromPromise(isMachineAgent);
     // The id this machine registered as with this hub last, when it was
     // another: the hub moves what it held for it to this one.
-    const registeredAs = (yield* Effect.promise(() => readConfig()))
-      ?.registeredAs;
+    const registeredAs = (yield* fromPromise(() => readConfig()))?.registeredAs;
     const formerMachineId =
       registeredAs?.hubId === challenge.hubId &&
       registeredAs.machineId !== identity.machineId
         ? registeredAs.machineId
         : undefined;
     // What it holds of the fleet, read back from disk before it says so.
-    yield* Effect.promise(() => supervisor.fleet.fleetLoaded());
+    yield* fromPromise(() => supervisor.fleet.fleetLoaded());
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
@@ -1818,7 +1828,7 @@ const attach = (
     const registrationWait = yield* FiberHandle.make<void>();
     const waitForRegistration = yield* FiberHandle.runtime(registrationWait)();
     const endRegistrationWait = (): void => {
-      Effect.runFork(FiberHandle.clear(registrationWait));
+      runFork(FiberHandle.clear(registrationWait));
     };
     /** The register goes out, and its ack is waited for {@link REGISTER_ACK_MS}. */
     const sendRegister = (): void => {
@@ -1853,7 +1863,7 @@ const attach = (
           );
           waitForRegistration(
             Effect.sleep(command.retryIn).pipe(
-              Effect.andThen(Effect.tryPromise(() => readSessions(supervisor))),
+              Effect.andThen(fromPromise(() => readSessions(supervisor))),
               Effect.andThen((snapshot) =>
                 Effect.sync(() => {
                   payload = registerPayload(snapshot);
@@ -1863,7 +1873,7 @@ const attach = (
               Effect.catch((error) =>
                 Effect.logWarning(
                   "a lapsed register's sessions could not be read again",
-                  error
+                  error.cause
                 )
               )
             )
@@ -1897,7 +1907,7 @@ const attach = (
         supervisor.loseCustody();
         recoveryController?.abort(new Error("Custody connection was lost."));
         agentStep({ kind: "link-lost" });
-        Effect.runFork(
+        runSync(
           Effect.logInfo(
             "hub connection lost: custody is recovered on the next register"
           )
@@ -2209,7 +2219,7 @@ const attach = (
         markLive();
         reportServedCatalog(socket, identity.machineId, supervisor).catch(
           (error: unknown) =>
-            Effect.runFork(
+            runSync(
               Effect.logWarning(`server catalog not reported: ${String(error)}`)
             )
         );
@@ -2296,7 +2306,7 @@ const attach = (
     // `claudeToStart`).
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(async () => {
+        fromPromise(async () => {
           // A login made, refreshed or moved in pi's or OpenCode's own store
           // reaches the hub too, which moves it into an account.
           const homeStores = await homeStoresStamp();
@@ -2659,7 +2669,7 @@ const attach = (
             release(command.id);
             return;
           case "say":
-            Effect.runFork(
+            runFork(
               command.level === "warn"
                 ? Effect.logWarning(command.words)
                 : Effect.logInfo(command.words)
@@ -2696,7 +2706,7 @@ const attach = (
 
       const custodyRecovered = () => {
         if (adopted.length > 0) {
-          Effect.runFork(
+          runSync(
             Effect.logInfo(
               `took custody of ${adopted.length} surviving session(s), each attached as it answers: ${adopted.join(", ")}`
             )
@@ -2704,7 +2714,7 @@ const attach = (
         }
         if (supervisor.completeCustody(epoch)) {
           phase("running");
-          Effect.runFork(
+          runSync(
             Effect.logInfo(
               `custody recovered: ${supervisor.instanceIds.length} session(s) attached, ${adopted.length} taken back this time`
             )
@@ -2784,7 +2794,7 @@ const attach = (
       if (envelope.verb !== "frames") {
         return false;
       }
-      Effect.runFork(
+      runSync(
         Effect.logWarning(
           `hub refused a frame from this machine: ${envelope.payload.message}`
         )
@@ -2798,7 +2808,7 @@ const attach = (
         return;
       }
       const stop = envelope.payload;
-      Effect.runFork(
+      runSync(
         Effect.logInfo(
           `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
         )
@@ -2971,18 +2981,18 @@ const attach = (
     const admission = (said: AdmissionPayload): void => {
       if (said.kind === "waiting") {
         heldSockets.add(socket);
-        Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
+        runSync(Effect.logWarning(`[admission] ${said.message}`));
         return;
       }
       if (said.kind === "refused") {
         refusedWith = { key: readMachineKey() };
-        Effect.runFork(
+        runSync(
           Effect.logWarning(
             `[admission] ${said.message} This machine connects again once it is given a key: add it over SSH from the hub's dashboard, or install it again.`
           )
         );
         writeMachineRefusal(said.message).catch((error: unknown) =>
-          Effect.runFork(
+          runSync(
             Effect.logError(
               `[admission] the refusal could not be written to ${machineRefusalPath()}: ${error instanceof Error ? error.message : String(error)}`
             )
@@ -2999,14 +3009,14 @@ const attach = (
       try {
         writeMachineKeySync(said.key);
       } catch (error) {
-        Effect.runFork(
+        runSync(
           Effect.logError(
             `[admission] the key could not be written to ${machineKeyPath()}: ${error instanceof Error ? error.message : String(error)}`
           )
         );
         return;
       }
-      Effect.runFork(
+      runSync(
         Effect.logInfo(
           `[admission] admitted: this machine's key is kept at ${machineKeyPath()}`
         )
@@ -3138,14 +3148,14 @@ const attach = (
         }
         if (silentSince === undefined || lastHeard >= silentSince) {
           silentSince = asked;
-          Effect.runFork(
+          runSync(
             Effect.logInfo(
               `hub link silent ${Date.now() - asked} ms after a ping: dropping it if the next ping goes unanswered too`
             )
           );
           return;
         }
-        Effect.runFork(
+        runSync(
           Effect.logWarning(
             `hub link silent ${Date.now() - silentSince} ms across two pings: dropping it as dead`
           )
@@ -3160,7 +3170,7 @@ const attach = (
 
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(async () => {
+        fromPromise(async () => {
           // `instances` rides every beat (not just register) so the hub can
           // reconcile session truth continuously — see HeartbeatPayload.
           // `binaryUpdate` rides it for the same reason: it is a live fact
@@ -3209,22 +3219,23 @@ const attach = (
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.gen(function* () {
-          const buckets = yield* Effect.promise(() => scanner.scan(Date.now()));
+          const buckets = yield* scanner.scan(Date.now());
           // The machine's OpenCode Go windows, from its Go account's key, and
           // every metered account's windows (Claude's, ChatGPT's, OpenCode
           // Go's), each every 5 minutes.
-          const openCodeGo = yield* Effect.promise(() =>
+          const openCodeGo = yield* fromPromise(() =>
             fetchOpenCodeGoLimits(machineGoKey())
           );
-          const accounts = yield* Effect.promise(() =>
-            readDueProviderAccounts(ports)
-          );
+          const accounts = yield* dueProviderAccounts(ports);
           send(socket, {
             verb: "usage",
             machineId: identity.machineId,
             payload: { buckets, openCodeGo, accounts },
           });
         }).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(`usage scan failed: ${error.message}`)
+          ),
           Effect.catchDefect((error) =>
             Effect.logWarning(
               `usage scan failed: ${error instanceof Error ? error.message : String(error)}`
@@ -3293,6 +3304,11 @@ const careForLaunchdLogs = async (start: boolean): Promise<void> => {
  */
 const startDaemon = (rediscover = false) =>
   Effect.gen(function* () {
+    // First, so it is released last: from here the clock's waits hold the
+    // process no longer, and at the scope's close, once every other release
+    // has run, what was let go is interrupted and every wait still held is
+    // cleared (daemon-runtime.ts).
+    yield* Layer.build(DaemonRuntimeLayer);
     // Every record read once, before anything reads one: what a crash left
     // damaged is in the log and on the first beat now, not at the next spawn.
     yield* Effect.promise(() =>
@@ -3331,7 +3347,7 @@ const startDaemon = (rediscover = false) =>
     // scratch dir), each a `c-` or `t-` link; nothing else.
     const deadLinks = sweepDeadShortLinks();
     if (deadLinks.length > 0) {
-      console.info(
+      yield* Effect.logInfo(
         `[agent] removed ${deadLinks.length} short name(s) in the socket root whose target is gone: ${deadLinks.join(", ")}`
       );
     }
@@ -3340,15 +3356,18 @@ const startDaemon = (rediscover = false) =>
     // its limits). A log whose service CawCo no longer has goes at start, and
     // each live one is capped now and on a timer (core launchd.ts).
     if (process.platform === "darwin") {
-      yield* Effect.promise(() => careForLaunchdLogs(true));
+      yield* fromPromise(() => careForLaunchdLogs(true));
       // Each LAUNCHD_LOG_CARE_MS after the last ended, the first a whole
       // wait after the one above; one that fails is said, and the next goes on.
       yield* Effect.forkScoped(
         Effect.sleep(LAUNCHD_LOG_CARE_MS).pipe(
           Effect.andThen(
-            Effect.tryPromise(() => careForLaunchdLogs(false)).pipe(
+            fromPromise(() => careForLaunchdLogs(false)).pipe(
               Effect.catch((error) =>
-                Effect.logWarning("the launchd logs were not cared for", error)
+                Effect.logWarning(
+                  "the launchd logs were not cared for",
+                  error.cause
+                )
               )
             )
           ),
@@ -3362,7 +3381,7 @@ const startDaemon = (rediscover = false) =>
     // is enough: each attempt calls `session` anew, in the same tick that
     // reads this.
     let hubUrl = url;
-    const machineIdValue = yield* Effect.promise(() => machineId());
+    const machineIdValue = yield* fromPromise(() => machineId());
     // What the modules send through, built before any of them starts; every
     // frame leaves on the hub connection that is up (`HubLine`).
     const hubLine = new HubLine();
@@ -3415,7 +3434,7 @@ const startDaemon = (rediscover = false) =>
     // The sessions this daemon spawns carry the deny list in their own
     // options, and only they: what an earlier version wrote into the
     // person's own settings goes, once.
-    const denied = yield* Effect.promise(() => dropWrittenDenials());
+    const denied = yield* fromPromise(() => dropWrittenDenials());
     if (denied.state === "dropped") {
       yield* Effect.logInfo(
         `took CawCo's denied tools out of ${userLayerPath("settings.json")}: ${denied.names.join(", ")}`
@@ -3424,7 +3443,7 @@ const startDaemon = (rediscover = false) =>
       yield* Effect.logWarning(denied.detail);
     }
     // Size the transcript line indexes from machine config (if set).
-    const machineConfig = yield* Effect.promise(() => readConfig());
+    const machineConfig = yield* fromPromise(() => readConfig());
     if (machineConfig?.transcriptCacheMb) {
       transcriptIndexes.configureBudget(
         machineConfig.transcriptCacheMb * 1024 * 1024
@@ -3473,16 +3492,16 @@ const startDaemon = (rediscover = false) =>
     // account's OpenCode store), the refresh pi sessions ask for, and
     // OpenCode's own store cleared of the markers CawCo kept there before.
     registerProviderAccounts(supervisor, ports);
-    yield* Effect.promise(() =>
-      dropOpencodeMarkers().catch((error: unknown) =>
-        console.warn(
-          `[accounts] OpenCode's own store kept CawCo's old markers: ${String(error)}`
+    yield* dropOpencodeMarkers().pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[accounts] OpenCode's own store kept CawCo's old markers: ${String(error.cause)}`
         )
       )
     );
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(() => freshenAll(ports)),
+        freshenEvery(ports),
         Schedule.spaced(ACCOUNT_REFRESH_INTERVAL)
       )
     );
@@ -3496,7 +3515,7 @@ const startDaemon = (rediscover = false) =>
       Effect.logInfo(syncSection("memory line (heap walk)", memoryLine))
     );
     yield* Effect.forkScoped(
-      Effect.promise(() => Promise.all([scanner.scanned, search.synced])).pipe(
+      fromPromise(() => Promise.all([scanner.scanned, search.synced])).pipe(
         Effect.andThen(logMemory)
       )
     );
@@ -3983,20 +4002,23 @@ const startDaemon = (rediscover = false) =>
       (reason) => new ConnectionLost({ url: hubUrl, reason }),
       {
         hubAnswers: () =>
-          Effect.promise(async () => {
+          fromPromise(async () => {
             const base = toHttpBase(hubUrl);
             if (!base) {
               return false;
             }
             const read = await hubIdAt(base);
             return read.kind === "answered" && read.value !== undefined;
-          }),
+          }).pipe(
+            // A probe that threw is no answer: the wait goes on.
+            Effect.orElseSucceed(() => false)
+          ),
         ...(rediscover && {
           rediscover: {
             onTrigger: () =>
-              Effect.promise(async () => {
+              fromPromise(async () => {
                 const winner = await rediscoverHub({
-                  log: (line) => Effect.runSync(Effect.logInfo(line)),
+                  log: (line) => runSync(Effect.logInfo(line)),
                 });
                 if (winner) {
                   hubUrl = toWsUrl(winner);
@@ -4006,8 +4028,10 @@ const startDaemon = (rediscover = false) =>
                 // malformed tailscale JSON) must never take the reconnect loop
                 // down with it — worst case is the pinned URL simply stays put
                 // and the backoff series it was already running continues.
-                Effect.catchDefect((defect) =>
-                  Effect.logWarning(`rediscovery failed: ${String(defect)}`)
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    `rediscovery failed: ${String(error.cause)}`
+                  )
                 )
               ),
           },
@@ -4069,37 +4093,42 @@ export const runDaemon = (rediscover = false): void => {
   // The JDK every workspace's Maestro runs on, looked for once (core
   // workspace-needs.ts `hostJavaHome`).
   hostJavaHome();
-  const daemon = Effect.runFork(
+  const daemon = runFork(
     // A daemon before this one that was killed or crashed left its logins
     // waiting; nothing else could ever end them. Ended before the daemon
     // starts, so no login of this one is mistaken for one of those.
-    Effect.promise(() => endOrphanedSignIns()).pipe(
+    endOrphanedSignIns().pipe(
       // Never rejects: what it cannot judge it leaves and says.
-      Effect.andThen(Effect.promise(() => removeCawcoSessionConfigs())),
+      Effect.andThen(fromPromise(() => removeCawcoSessionConfigs())),
       // Before anything can start a harness server: each account's OpenCode
       // data home still in the runtime dir, a tmpfs every reboot empties,
       // moved to disk (runtime-dir-move.ts). One that cannot move fails the
       // start below, and its service manager starts the agent again.
-      Effect.andThen(moveOpencodeAccountHomes.pipe(Effect.orDie)),
+      Effect.andThen(moveOpencodeAccountHomes),
       // Before anything can start a session: the machine's copies of the
       // fleet's hooks in the shape their readers read (hook-fields-move.ts),
       // so no session starts without them. One that cannot be written fails
       // the start below.
-      Effect.andThen(Effect.promise(() => moveHookFields())),
+      Effect.andThen(moveHookFields()),
       // Before anything reads a harness record, and before the fold below
       // writes the Claude Code sidecar: CawCo's records that earlier versions
       // kept in the person's agent config dirs moved into its data dir
       // (harness-records-move.ts). One that cannot be moved fails the start
       // below.
-      Effect.andThen(Effect.promise(() => moveHarnessRecords())),
+      Effect.andThen(moveHarnessRecords()),
       // Before anything can sync the fleet: the sidecar the agent kept before
       // CawCo was named CawCo folded into the current one
       // (fleet-sidecar-move.ts), so only the current one is ever read. One
       // that cannot be written fails the start below.
-      Effect.andThen(Effect.promise(() => moveLegacyFleetSidecar())),
+      Effect.andThen(moveLegacyFleetSidecar()),
       Effect.andThen(startDaemon(rediscover)),
-      Effect.catchDefect((error) =>
-        Effect.logError(
+      // Any failure of the start, a step's rejection or a defect alike.
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) {
+          return Effect.failCause(cause);
+        }
+        const error = thrownOf(cause);
+        return Effect.logError(
           `[daemon] ${error instanceof Error ? error.message : String(error)}`
         ).pipe(
           // Ended here, not left to end: work begun before the failure keeps
@@ -4108,14 +4137,14 @@ export const runDaemon = (rediscover = false): void => {
           // gateway could not listen stayed up, never registering, until its
           // rig gave up two minutes later.
           Effect.andThen(Effect.sync(() => process.exit(1)))
-        )
-      )
+        );
+      })
     )
   );
   const drain = (signal: NodeJS.Signals): void => {
     process.off(signal, drain);
     detach(
-      Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0)),
+      runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0)),
       "runPromise"
     );
   };

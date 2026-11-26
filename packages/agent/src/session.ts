@@ -210,6 +210,7 @@ import {
   type MachineControls,
 } from "./control-lanes";
 import { DaemonLinks } from "./daemon-links";
+import { every, runPromise, runSync } from "./daemon-runtime";
 import { reportDamaged } from "./damaged-records";
 import { forgetFirstSession } from "./first-session";
 import { FleetConverger } from "./fleet-converger";
@@ -258,6 +259,7 @@ import { Outbox } from "./outbox";
 import { startPreview, stopPreview } from "./preview";
 import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
+import { fromPromise } from "./rejected";
 import { removeTree } from "./remove-tree";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
@@ -483,9 +485,9 @@ const custodyProbe = <T>(
     signal.addEventListener("abort", cancel, { once: true });
     return Effect.sync(() => signal.removeEventListener("abort", cancel));
   });
-  return Effect.runPromise(
+  return runPromise(
     Effect.raceFirst(
-      Effect.promise(() => read),
+      fromPromise(() => read),
       aborted
     )
   );
@@ -892,11 +894,15 @@ export class SessionSupervisor {
         this.#leakFound(instanceIds, id, content, found),
       ended: (instanceIds, id) => this.#leakEnded(instanceIds, id),
     });
-    setInterval(() => {
-      this.#sweepIdle().catch((error: unknown) =>
-        warn(`the idle sweep failed: ${error}`)
-      );
-    }, IDLE_SWEEP_MS).unref();
+    every(
+      "idle sweep",
+      IDLE_SWEEP_MS,
+      Effect.promise(() =>
+        this.#sweepIdle().catch((error: unknown) =>
+          warn(`the idle sweep failed: ${error}`)
+        )
+      )
+    );
   }
 
   async removedSessionCustody(
@@ -1147,11 +1153,7 @@ export class SessionSupervisor {
    */
   #transcriptRead<T>(read: () => Promise<T>): Promise<T> {
     // The promise edge of a read in its turn; it settles as `read` does.
-    return Effect.runPromise(
-      this.#transcriptReads.withPermit(
-        Effect.tryPromise({ try: read, catch: (error) => error })
-      )
-    );
+    return runPromise(this.#transcriptReads.withPermit(fromPromise(read)));
   }
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
   readonly #failOpen = new Set<string>();
@@ -2134,19 +2136,19 @@ export class SessionSupervisor {
       )
     ).pipe(
       Effect.andThen(
-        Effect.sync(() => {
-          console.info(
+        Effect.suspend(() =>
+          Effect.logInfo(
             turnWords.turnEnded(
               instanceId,
               Math.round((Date.now() - since) / 1000)
             )
-          );
-          return {};
-        })
-      )
+          )
+        )
+      ),
+      Effect.as({})
     );
     // The promise edge of the wait, cut short by a stop.
-    return Effect.runPromise(
+    return runPromise(
       cuttable(this.#relaunchWaits, instanceId, ended).pipe(
         Effect.catch((stopped) => Effect.succeed({ stopped: stopped.message }))
       )
@@ -2189,7 +2191,7 @@ export class SessionSupervisor {
     if (left) {
       return { asleep: false, awake: left };
     }
-    Effect.runFork(
+    runSync(
       Effect.logInfo(
         `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped${retire ? ", for they ran an old version and its next start runs this machine's" : ""}`
       )
@@ -2297,7 +2299,7 @@ export class SessionSupervisor {
           return;
         }
         this.#outdatedSaid.add(outdated.uuid);
-        Effect.runFork(
+        runSync(
           Effect.logInfo(
             `${instanceId}: ${outdated.words} Not yet: ${slept.awake}.`
           )
@@ -2553,10 +2555,10 @@ export class SessionSupervisor {
     // Measured every ROOM_POLL_MS after the last measure ended, until there
     // is room; a stop cuts it, and the start fails with the stop's words.
     const roomMade = Effect.sleep(ROOM_POLL_MS).pipe(
-      Effect.andThen(Effect.promise(measure)),
+      Effect.andThen(fromPromise(measure)),
       Effect.repeat({ until: (measured) => measured.ok })
     );
-    await Effect.runPromise(cuttable(this.#roomWaits, instanceId, roomMade));
+    await runPromise(cuttable(this.#roomWaits, instanceId, roomMade));
     console.info(
       `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
     );
@@ -3304,7 +3306,7 @@ export class SessionSupervisor {
           previous.generation === processGeneration
         ) {
           // The promise edge of the wait for the hub's acknowledgement.
-          return Effect.runPromise(Deferred.await(previous.ack));
+          return runPromise(Deferred.await(previous.ack));
         }
         const pending = {
           sessionId,
@@ -3319,7 +3321,7 @@ export class SessionSupervisor {
           processGeneration,
         });
         // The promise edge of the wait for the hub's acknowledgement.
-        return Effect.runPromise(
+        return runPromise(
           Deferred.await(pending.ack).pipe(
             Effect.ensuring(
               Effect.sync(() => {
@@ -4862,7 +4864,7 @@ export class SessionSupervisor {
         // (inputs.ts `inputsHome`): nothing hands it files again.
         await removeTree(sessionScratchDir(instanceId));
       }
-      Effect.runFork(
+      runSync(
         Effect.logInfo(
           `[agent] stop session=${instanceId} request=${requestId ?? "none"} outcome=runner-gone elapsedMs=${Date.now() - stopStartedAt}`
         )
@@ -5412,7 +5414,7 @@ function endHeld(instanceId: string, pid?: number): Promise<boolean> {
       children.map(async ({ client, child }) => {
         await endProc(client, child.procId);
         // Listed now and every 100 ms after, for 10 s at most, until it is gone.
-        const gone = await Effect.runPromise(
+        const gone = await runPromise(
           lookUntil(
             {
               every: 100,

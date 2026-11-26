@@ -88,9 +88,11 @@ import {
 } from "@cawco/core/stream-relay";
 import { lastLines } from "@cawco/core/words/helpers";
 import type Docker from "dockerode";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { browserRuntime } from "./browsers";
 import { placementOf } from "./egress";
 import { pullImage } from "./image";
@@ -648,7 +650,7 @@ const waitLive = async (
   tls: boolean
 ): Promise<RelayPorts> => {
   // What is bound, read while coturn runs; its exit throws its last lines.
-  const looked = await Effect.runPromise(
+  const looked = await runPromise(
     lookUntil(
       {
         every: LIVE_POLL_MS,
@@ -656,7 +658,7 @@ const waitLive = async (
         until: (bound: RelayPorts) =>
           bound.udp && bound.tcp && (!tls || bound.tls),
       },
-      Effect.promise(async () => {
+      fromPromise(async () => {
         const inspected = await relayContainer(docker);
         if (!inspected?.State.Running) {
           const said = await logsOf(docker.getContainer(RELAY_CONTAINER)).catch(

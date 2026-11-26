@@ -5,6 +5,7 @@
 
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { Effect, Fiber } from "effect";
+import { runFork } from "../daemon-runtime";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
 import { isStarting, readRetiring } from "./state";
@@ -152,7 +153,7 @@ export const lookEvery = (look: () => void): void => {
   }
   // Each STALE_LOOK_MS, the first a wait after it starts; `look` starts its
   // look and says what fails itself. Interrupted by {@link stopLooking}.
-  staleLooks = Effect.runFork(
+  staleLooks = runFork(
     Effect.sync(look).pipe(Effect.delay(STALE_LOOK_MS), Effect.forever)
   );
 };
@@ -164,7 +165,7 @@ const stopLooking = (): void => {
     stubbed.size === 0 &&
     staleLooks
   ) {
-    Effect.runFork(Fiber.interrupt(staleLooks));
+    runFork(Fiber.interrupt(staleLooks));
     staleLooks = undefined;
   }
 };

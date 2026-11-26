@@ -20,8 +20,10 @@ import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
 import { type McpGate, throughMcpGate } from "../mcp-gate";
 import { MCP_CONNECT_MS } from "../mcp-status";
+import { fromPromise } from "../rejected";
 import { toolEnv } from "../tools";
 
 /**
@@ -132,30 +134,25 @@ export const piMcpList = async (
   // pi's list, run on its scratch agent dir: its output, or nothing when it
   // did not answer within its connect window (its process is stopped then).
   const list = Effect.fnUntraced(function* (dir: string) {
-    yield* Effect.tryPromise({
-      try: () =>
-        writeStateFile(
-          join(dir, "mcp.json"),
-          JSON.stringify({ mcpServers: servers })
-        ),
-      catch: (error) => error,
-    });
+    yield* fromPromise(() =>
+      writeStateFile(
+        join(dir, "mcp.json"),
+        JSON.stringify({ mcpServers: servers })
+      )
+    );
     return yield* boundedRead(
       deadlineMs,
-      Effect.tryPromise({
-        try: async (signal) => {
-          const child = Bun.spawn([process.execPath, ...LIST_ENTRY], {
-            cwd: dir,
-            env: { ...toolEnv(), PI_CODING_AGENT_DIR: dir },
-            stdout: "pipe",
-            stderr: "pipe",
-            signal,
-          });
-          const out = await new Response(child.stdout).text();
-          await child.exited;
-          return out;
-        },
-        catch: (error) => error,
+      fromPromise(async (signal) => {
+        const child = Bun.spawn([process.execPath, ...LIST_ENTRY], {
+          cwd: dir,
+          env: { ...toolEnv(), PI_CODING_AGENT_DIR: dir },
+          stdout: "pipe",
+          stderr: "pipe",
+          signal,
+        });
+        const out = await new Response(child.stdout).text();
+        await child.exited;
+        return out;
       })
     ).pipe(
       Effect.catchIf(
@@ -165,14 +162,11 @@ export const piMcpList = async (
     );
   });
   // The promise edge of pi's read: its scratch dir is removed however it ends.
-  const said = await Effect.runPromise(
+  const said = await runPromise(
     Effect.acquireUseRelease(
-      Effect.tryPromise({
-        try: () => mkdtemp(join(tmpdir(), "cawco-pi-mcp-")),
-        catch: (error) => error,
-      }),
+      fromPromise(() => mkdtemp(join(tmpdir(), "cawco-pi-mcp-"))),
       list,
-      (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true }))
+      (dir) => fromPromise(() => rm(dir, { recursive: true, force: true }))
     )
   );
   if (said === undefined) {

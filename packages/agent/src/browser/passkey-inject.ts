@@ -25,6 +25,7 @@ import {
 import { errnoCode } from "@cawco/core/absent";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { Effect, Fiber, Schedule } from "effect";
+import { runFork, runPromise } from "../daemon-runtime";
 
 const DEV_VHCI = "/dev/vhci";
 
@@ -360,7 +361,7 @@ class PasskeyInjector {
       return Promise.resolve();
     }
     // The promise edge of the setup, shared by every caller until it settles.
-    this.#starting ??= Effect.runPromise(this.#start()).finally(() => {
+    this.#starting ??= runPromise(this.#start()).finally(() => {
       this.#starting = undefined;
     });
     return this.#starting;
@@ -394,7 +395,7 @@ class PasskeyInjector {
   stop(): void {
     this.#up = false;
     if (this.#poll !== undefined) {
-      Effect.runFork(Fiber.interrupt(this.#poll));
+      runFork(Fiber.interrupt(this.#poll));
       this.#poll = undefined;
     }
     if (this.#fd >= 0) {
@@ -498,7 +499,7 @@ class PasskeyInjector {
       }
     });
     // Each read a poll's wait after the one before, the first one after the start.
-    this.#poll = Effect.runFork(
+    this.#poll = runFork(
       Effect.gen(function* () {
         yield* Effect.sleep(FD_POLL_MS);
         yield* Effect.repeat(once, Schedule.spaced(FD_POLL_MS));

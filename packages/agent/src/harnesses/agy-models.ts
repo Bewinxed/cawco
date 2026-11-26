@@ -10,6 +10,8 @@ import { boundedRead } from "@cawco/core/effect/bounded";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { modelsOf } from "./agy-frames";
 import {
   agyArgs,
@@ -31,7 +33,7 @@ const READ_MS = 30_000;
 export const agyAccountModels = async (
   accountId: string
 ): Promise<ModelInfo[]> => {
-  const { bin, signIn, home } = await Effect.runPromise(
+  const { bin, signIn, home } = await runPromise(
     Effect.gen(function* () {
       const agy = yield* agyToStart();
       const read = yield* readAgySignIn(accountId);
@@ -54,10 +56,10 @@ export const agyAccountModels = async (
   let made: string | undefined;
   try {
     // The promise edge of one bounded read of agy.
-    return await Effect.runPromise(
+    return await runPromise(
       boundedRead(
         READ_MS,
-        Effect.promise(async () => {
+        fromPromise(async () => {
           await signInAcp(connection, signIn.method, runtimeVersion, {
             end: () => endGroup(child),
             home,

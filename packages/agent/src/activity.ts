@@ -53,6 +53,7 @@ import { Effect } from "effect";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { z } from "zod";
+import { every, runPromise } from "./daemon-runtime";
 import { watchPower } from "./power";
 import { resolveBin, toolEnv } from "./tools";
 
@@ -217,7 +218,7 @@ const callOut = (
   env?: NodeJS.ProcessEnv
 ): Promise<string | undefined> =>
   // The promise edge of the call's end: its error, or its close.
-  Effect.runPromise(
+  runPromise(
     Effect.callback<string | undefined, unknown>((resume) => {
       const child = spawn(bin, args, {
         env,
@@ -281,7 +282,7 @@ const waylandIdle = async (): Promise<IdleSource | undefined> => {
   }
   const { connect } = await import("node:net");
   const socket = connect(path);
-  const opened = await Effect.runPromise(
+  const opened = await runPromise(
     Effect.callback<boolean, unknown>((resume) => {
       socket.once("connect", () => resume(Effect.succeed(true)));
       socket.once("error", () => resume(Effect.succeed(false)));
@@ -622,10 +623,11 @@ export const watchActivity = async (): Promise<Activity> => {
       }
     })
   );
-  const looking = setInterval(() => {
-    look().catch(() => undefined);
-  }, LOOK_MS);
-  looking.unref();
+  const stopLooking = every(
+    "activity",
+    LOOK_MS,
+    Effect.promise(() => look().catch(() => undefined))
+  );
   await look();
 
   return {
@@ -636,7 +638,7 @@ export const watchActivity = async (): Promise<Activity> => {
     },
     stop: () => {
       stopped = true;
-      clearInterval(looking);
+      stopLooking();
       listeners.clear();
       idle?.close?.();
       for (const release of held) {

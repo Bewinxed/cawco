@@ -42,7 +42,9 @@ import type { AgentPorts } from "./agent-ports";
 import { whileSandboxDown } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
 import { agentCommandStarted } from "./boundary/work";
+import { runPromise } from "./daemon-runtime";
 import { copyPathSync, inCopySync, viewRunning } from "./layer";
+import { fromPromise } from "./rejected";
 import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -525,7 +527,7 @@ const spawned = ({
   workspace,
 }: Spawned): Promise<CommandResult> =>
   // The promise edge of the command's run: its close, or why it could not run.
-  Effect.runPromise(
+  runPromise(
     Effect.callback<CommandResult, unknown>((resume) => {
       const child = spawn(file, args, {
         cwd,
@@ -893,7 +895,7 @@ const onHost = async (
   let words = "";
   // Looked at every BUSY_LOOK_MS after the last look ended, for the run's
   // `queueMaxMs` at most: the move's result, its cancel, or not yet.
-  const look = Effect.promise(async (): Promise<CommandResult | undefined> => {
+  const look = fromPromise(async (): Promise<CommandResult | undefined> => {
     const down = await whileSandboxDown(workspace, async () => {
       const now = await hostGitRefusal(workspace);
       if (now) {
@@ -940,7 +942,7 @@ const onHost = async (
     return undefined;
   });
   try {
-    const looked = await Effect.runPromise(
+    const looked = await runPromise(
       lookUntil({ every: BUSY_LOOK_MS, deadlineMs: run.queueMaxMs }, look)
     );
     if (looked.kind === "found") {

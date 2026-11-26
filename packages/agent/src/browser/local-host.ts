@@ -38,9 +38,10 @@ import {
 } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
-import { Effect } from "effect";
 import { z } from "zod";
 import { browserExecutable, chromiumSandboxed } from "../capabilities";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { resolveBin, toolEnv } from "../tools";
 import { doorProxyUrl, doorSpki, openDoor } from "./dashboard-door";
 import {
@@ -313,10 +314,10 @@ const activePort = async (
   pid: Parameters<typeof isAlive>[0],
   log: string
 ): Promise<number> => {
-  const looked = await Effect.runPromise(
+  const looked = await runPromise(
     lookUntil(
       { every: POLL_MS, deadlineMs: LIVE_MS },
-      Effect.promise(async () => {
+      fromPromise(async () => {
         const said = await readFile(
           join(profile, "DevToolsActivePort"),
           "utf8"
@@ -448,10 +449,10 @@ export class LocalHost implements BrowserHost {
       },
     };
     // Its DevTools answering, or Chromium gone first.
-    const looked = await Effect.runPromise(
+    const looked = await runPromise(
       lookUntil(
         { every: POLL_MS, deadlineMs: LIVE_MS },
-        Effect.promise(async () => {
+        fromPromise(async () => {
           if (await answers(devtools)) {
             return "answers" as const;
           }

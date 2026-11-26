@@ -9,6 +9,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { platform } from "node:os";
 import type { PasskeyRelayCapability } from "@cawco/core/browser";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 
 /** macOS `system_profiler` output when BLE hardware is present. */
 const BLE_SUPPORTED = /Bluetooth Low Energy Supported:\s*Yes/iu;
@@ -43,7 +44,7 @@ let bleRead: Promise<boolean> | undefined;
 const detectBle = (): Promise<boolean> => {
   bleRead ??=
     platform() === "darwin"
-      ? Effect.runPromise(darwinHasBle)
+      ? runPromise(darwinHasBle)
       : Promise.resolve(platform() === "linux" && linuxHasBle());
   return bleRead;
 };

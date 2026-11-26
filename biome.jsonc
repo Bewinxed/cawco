@@ -106,6 +106,9 @@
     // The dashboard's server reaches the hub through its /api relay alone,
     // which carries the browser pass that keeps an agent's browser its agent.
     "./scripts/lint/dashboard-hub-relay.grit",
+    // The agent wraps a promise in one form: fromPromise, or its module's
+    // own tagged error made in catch (packages/agent/src/rejected.ts).
+    "./scripts/lint/agent-promise-wraps.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

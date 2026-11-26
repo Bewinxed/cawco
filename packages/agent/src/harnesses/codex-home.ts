@@ -41,6 +41,7 @@ import type { ToolSpec } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import { Deferred, Effect, Exit } from "effect";
 import { type NativeBinary, nativeEnv } from "../codex-native";
+import { runPromise } from "../daemon-runtime";
 import { resolveBin, runnable, toolGate, toolPath } from "../tools";
 import type * as V2 from "./codex-protocol/v2.gen";
 import { type CodexPeer, withAppServer } from "./codex-rpc";
@@ -373,7 +374,7 @@ export const beginCodexLogin = async (
       }
       Deferred.doneUnsafe(challenge, Exit.succeed(started));
       // The promise edge of the wait for the sign-in's end, or its stop.
-      await Effect.runPromise(
+      await runPromise(
         Effect.raceFirst(Deferred.await(done), Deferred.await(stopped))
       );
     },
@@ -398,7 +399,7 @@ export const beginCodexLogin = async (
     }
   );
   // The promise edge of the wait for Codex's page and code.
-  const first = await Effect.runPromise(Deferred.await(challenge));
+  const first = await runPromise(Deferred.await(challenge));
   signIns.set(accountId, {
     done,
     end: () => Deferred.doneUnsafe(stopped, Exit.void),
@@ -423,7 +424,7 @@ export const completeCodexLogin = async (
     return { state: "expired" };
   }
   // The promise edge of the wait on the person: a minute, then "still waiting".
-  const outcome = await Effect.runPromise(
+  const outcome = await runPromise(
     boundedRead(COMPLETE_WAIT_MS, Deferred.await(signIn.done)).pipe(
       Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
     )

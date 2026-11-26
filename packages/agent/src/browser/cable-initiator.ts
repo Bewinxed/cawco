@@ -25,6 +25,7 @@ import {
 } from "node:crypto";
 import { decode, encode } from "cborg";
 import { Effect, Queue } from "effect";
+import { runPromise, runSync } from "../daemon-runtime";
 
 export interface CableInitiatorOptions {
   allowCredentials?: Array<{ type: string; id: Buffer }>;
@@ -487,7 +488,7 @@ const decodePaddedMap = (data: Buffer): CborMap => {
 class TunnelLink {
   readonly #socket: WebSocket;
   /** Each message as it came, until the tunnel ends: then why, after every message before it. */
-  readonly #messages = Effect.runSync(Queue.unbounded<Buffer, Error>());
+  readonly #messages = runSync(Queue.unbounded<Buffer, Error>());
 
   private constructor(socket: WebSocket) {
     this.#socket = socket;
@@ -552,12 +553,12 @@ class TunnelLink {
     url: string,
     signal: AbortSignal | undefined
   ): Promise<TunnelLink> {
-    return Effect.runPromise(TunnelLink.opened(url, signal));
+    return runPromise(TunnelLink.opened(url, signal));
   }
 
   /** The next message, or why the tunnel ended once none is left. */
   next(): Promise<Buffer> {
-    return Effect.runPromise(Queue.take(this.#messages));
+    return runPromise(Queue.take(this.#messages));
   }
 
   send(data: Buffer): void {
@@ -571,7 +572,7 @@ class TunnelLink {
 
   /** Ends the tunnel with `error`, its first end kept. */
   #end(error: Error): void {
-    Effect.runSync(Queue.fail(this.#messages, error));
+    runSync(Queue.fail(this.#messages, error));
   }
 }
 

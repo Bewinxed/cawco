@@ -106,6 +106,8 @@ import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
 import { Clock, Effect, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise, type Rejected } from "./rejected";
 import { removeTree } from "./remove-tree";
 
 /**
@@ -777,7 +779,7 @@ export const inView = (id: string, pid: number): boolean => {
 };
 
 /** Each workspace's view starting: whatever ensures it meanwhile shares the one start. */
-const viewing = makeJoin<string, number, ViewRefused>();
+const viewing = makeJoin<string, number, ViewRefused | Rejected>();
 
 /** How long a view's holder has to name its namespace. */
 const VIEW_START_MS = 10_000;
@@ -801,7 +803,7 @@ export const ensureView = (id: string, layer: Layer): Promise<number> => {
     return Promise.resolve(member.pid);
   }
   // The promise edge of the view's start, shared by every caller while it runs.
-  return Effect.runPromise(viewing.run(id, startView(id, layer)));
+  return runPromise(viewing.run(id, startView(id, layer)));
 };
 
 /** What the holder has done so far, as {@link startView} looks: named its namespace, or exited. */
@@ -814,7 +816,7 @@ const startView = Effect.fnUntraced(function* (id: string, layer: Layer) {
   const bwrap = systemProgram("bwrap");
   const perl = systemProgram("perl");
   systemProgram("nsenter");
-  const standIns = yield* Effect.promise(async () => {
+  const standIns = yield* fromPromise(async () => {
     for (const mount of layer.mounts ?? []) {
       await makeFolder(mount.upper, { mode: 0o700 });
       await makeFolder(mount.work, { mode: 0o700 });
@@ -847,7 +849,7 @@ const startView = Effect.fnUntraced(function* (id: string, layer: Layer) {
   );
   holder.unref();
   const refuse = (why: string) =>
-    Effect.promise(async () => {
+    fromPromise(async () => {
       // The holder reads the end of its stdin and leaves; bwrap, if it never
       // got as far, is killed.
       await holder.stdin.end();
@@ -896,7 +898,7 @@ const startView = Effect.fnUntraced(function* (id: string, layer: Layer) {
   if (said !== undefined) {
     return yield* refuse(`was not mounted: ${said}`);
   }
-  yield* Effect.promise(async () => {
+  yield* fromPromise(async () => {
     holder.stdin.write(`${VIEW_MOUNTED}\n`);
     await holder.stdin.end();
     await openWorkDirs(layer);
@@ -1269,14 +1271,14 @@ export const endView = (
   id: string
 ): Promise<{ ended: ViewProcess[]; left: number[] }> =>
   // The promise edge of the view's end (workspace.ts's archive).
-  Effect.runPromise(endViewNow(id));
+  runPromise(endViewNow(id));
 
 /** How long {@link endViewNow} gives what it killed before it reads the view's members again. */
 const VIEW_KILL_SETTLE_MS = 50;
 
 const endViewNow = Effect.fnUntraced(function* (
   id: string
-): Effect.fn.Return<{ ended: ViewProcess[]; left: number[] }> {
+): Effect.fn.Return<{ ended: ViewProcess[]; left: number[] }, Rejected> {
   const record = readViewRecord(id);
   if (!record) {
     return { ended: [], left: [] };
@@ -1286,7 +1288,7 @@ const endViewNow = Effect.fnUntraced(function* (
   // Read again each round, mark and all: once its last process is gone, the
   // namespace's number may be another's within the same round.
   const round = Effect.fnUntraced(function* (members: readonly number[]) {
-    const named = yield* Effect.promise(() =>
+    const named = yield* fromPromise(() =>
       Promise.all(
         members
           .filter((pid) => !ended.has(pid))
@@ -1317,7 +1319,7 @@ const endViewNow = Effect.fnUntraced(function* (
           })
         );
   if (left.length === 0) {
-    yield* Effect.promise(() => rm(viewFile(id), { force: true }));
+    yield* fromPromise(() => rm(viewFile(id), { force: true }));
   }
   return {
     ended: [...ended]

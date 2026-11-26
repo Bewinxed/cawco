@@ -39,6 +39,11 @@ export interface Join<K, A, E = never> {
    */
   readonly isRunning: (key: K) => boolean;
   /**
+   * Every key with a run in flight now, as {@link Join.isRunning} answers
+   * for each: for a line that says what is being worked on.
+   */
+  readonly keys: () => K[];
+  /**
    * The run in flight on `key`, waited for without starting one: its value,
    * or none at once when no run is in flight. It fails as that run fails.
    * The wait counts as one of the run's callers: the run is interrupted only
@@ -104,6 +109,8 @@ export const makeJoin = <K, A, E = never>(): Join<K, A, E> => {
     runPromise: (key, start) =>
       Effect.runPromise(run(key, Effect.promise(start))),
     isRunning: (key) => Effect.runSync(Cache.has(runs, lookOnly(key))),
+    keys: () =>
+      Array.from(Effect.runSync(Cache.keys(runs)), (joined) => joined.key),
     peek: (key) => Cache.getOption(runs, lookOnly(key)),
   };
 };

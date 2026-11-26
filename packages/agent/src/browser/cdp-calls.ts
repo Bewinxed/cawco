@@ -7,6 +7,7 @@
 import { Gone } from "@cawco/core/effect/bounded";
 import { Deferred, Effect, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
 
 type Json = Record<string, unknown>;
 
@@ -65,7 +66,7 @@ export class CdpCalls {
    * connection went.
    */
   call(method: string, params: Json, sessionId?: string): Promise<Json> {
-    return Effect.runPromise(
+    return runPromise(
       this.request(method, params, sessionId).pipe(
         Effect.mapError((failed) =>
           failed._tag === "Gone" ? new Error(failed.what) : failed

@@ -51,9 +51,11 @@ import { Effect } from "effect";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { codexNative, type NativeBinary, nativeEnv } from "./codex-native";
+import { runPromise } from "./daemon-runtime";
 import { expandHome } from "./fs";
 import { runGroupWithin } from "./group-run";
 import { probeStarted } from "./probe-count";
+import { fromPromise } from "./rejected";
 import { ToolInstallsSchema } from "./stored-shapes";
 
 /** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
@@ -2101,7 +2103,7 @@ const settleLooks = async (): Promise<void> => {
     }
     return [...thereBeforeMove].every((id) => look.get(id) !== "missing");
   };
-  const looked = await Effect.runPromise(
+  const looked = await runPromise(
     Effect.sleep(COPY_SETTLE_MS).pipe(
       Effect.andThen(
         lookUntil(
@@ -2110,7 +2112,7 @@ const settleLooks = async (): Promise<void> => {
             deadlineMs: COPY_SETTLE_MOST_MS - COPY_SETTLE_MS,
             until: (done: boolean) => done,
           },
-          Effect.tryPromise({ try: lookAgain, catch: (error) => error })
+          fromPromise(lookAgain)
         )
       )
     )

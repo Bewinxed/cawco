@@ -47,14 +47,16 @@ import type { AgentPorts } from "./agent-ports";
 import { type BrowserPorts, wakeBrowser } from "./browser/browsers";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
-import { letGo } from "./hub-loopback";
+import { letGo, runFork, runPromise, runSync } from "./daemon-runtime";
 import {
-  bridgeClosed,
   closeBridge,
+  previewEnded,
+  previewStarting,
   reachWorkspace,
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
+import { asThrown, fromPromise } from "./rejected";
 import {
   networkOf,
   sourceEnded,
@@ -253,11 +255,11 @@ const stopNow = async (instanceId: string): Promise<boolean> => {
   const preview = previews.get(instanceId);
   previews.delete(instanceId);
   if (!preview) {
-    await closeBridge(instanceId);
+    await runPromise(previewEnded(instanceId));
     return false;
   }
   // The promise edge of closing the preview's scope.
-  await Effect.runPromise(Scope.close(preview.scope, Exit.void));
+  await runPromise(Scope.close(preview.scope, Exit.void));
   return true;
 };
 
@@ -327,7 +329,10 @@ export function servingPreviews(): ServingPreview[] {
 /** Stops every preview and the browser listener: each bridge's whole group is killed before this returns, its end awaited by no one. */
 const stopPreviews = (): void => {
   for (const instanceId of [...previews.keys()]) {
-    letGo("preview stop", () => stopPreview({ instanceId }));
+    letGo(
+      "preview stop",
+      fromPromise(() => stopPreview({ instanceId }))
+    );
   }
   browserListener?.listener.stop(true);
   browserListener = undefined;
@@ -359,19 +364,17 @@ const cdpSocket: WebSocketHandler<CdpSocket> = {
   open(socket) {
     const { data } = socket;
     // Let go: the view attaches while the socket stands, or says why it did not.
-    Effect.runFork(
-      Effect.tryPromise({
-        try: () =>
-          cdpView(data.cdp, {
-            send: (frame) => {
-              if (!data.closed) {
-                socket.send(frame);
-              }
-            },
-            close: (code, why) => socket.close(code, why),
-          }),
-        catch: (error) => error,
-      }).pipe(
+    runFork(
+      fromPromise(() =>
+        cdpView(data.cdp, {
+          send: (frame) => {
+            if (!data.closed) {
+              socket.send(frame);
+            }
+          },
+          close: (code, why) => socket.close(code, why),
+        })
+      ).pipe(
         Effect.match({
           onSuccess: (view) => {
             if (!view) {
@@ -391,7 +394,7 @@ const cdpSocket: WebSocketHandler<CdpSocket> = {
             previewFailed(
               "agent browser listener",
               null,
-              `${data.cdp}'s take-over view did not attach: ${causeOf(error)}`
+              `${data.cdp}'s take-over view did not attach: ${causeOf(error.cause)}`
             );
             socket.close(1011, "The take-over view did not attach.");
           },
@@ -739,10 +742,13 @@ async function start(
     );
   await stopNow(instanceId);
   // What this start opens is held in one scope: the bridge a request opens
-  // goes with it, and the listener, which stops first.
-  const scope = Effect.runSync(Scope.make());
-  Effect.runSync(
-    Scope.addFinalizer(scope, bridgeClosed(instanceId).pipe(Effect.orDie))
+  // goes with it, and the listener, which stops first. Once it closes, no
+  // request the listener still holds opens the bridge again before the
+  // next start (preview-bridge.ts `previewEnded`).
+  previewStarting(instanceId);
+  const scope = runSync(Scope.make());
+  runSync(
+    Scope.addFinalizer(scope, previewEnded(instanceId).pipe(Effect.orDie))
   );
   // A workspace no boundary runs refuses the preview in so many words. A
   // sheet's stage or a served preview's server is woken by its first
@@ -753,7 +759,7 @@ async function start(
       await upstreamOf(instanceId, source);
     } catch (error) {
       // The promise edge of closing the scope of a start that failed.
-      await Effect.runPromise(Scope.close(scope, Exit.fail(error)));
+      await runPromise(Scope.close(scope, Exit.fail(error)));
       throw error;
     }
   }
@@ -849,31 +855,28 @@ async function start(
     }
     // Answering at all is serving: a server still compiling is no refusal,
     // so no answer within the ask's time is "ok" too.
-    const heard = await Effect.runPromise(
+    const heard = await runPromise(
       boundedRead(
         PING_ASK_MS,
-        Effect.tryPromise({
-          try: async (signal) => {
-            const answer = await fetch(
-              upstream === "host"
-                ? `http://127.0.0.1:${source.port}/`
-                : `http://localhost:${source.port}/`,
-              {
-                method: "HEAD",
-                headers: { host: `localhost:${source.port}` },
-                redirect: "manual",
-                signal,
-                ...(upstream === "host" ? {} : { unix: upstream.unix }),
-              }
-            );
-            await answer.body?.cancel();
-          },
-          catch: (error) => error,
+        fromPromise(async (signal) => {
+          const answer = await fetch(
+            upstream === "host"
+              ? `http://127.0.0.1:${source.port}/`
+              : `http://localhost:${source.port}/`,
+            {
+              method: "HEAD",
+              headers: { host: `localhost:${source.port}` },
+              redirect: "manual",
+              signal,
+              ...(upstream === "host" ? {} : { unix: upstream.unix }),
+            }
+          );
+          await answer.body?.cancel();
         })
       ).pipe(Effect.result)
     );
     return heard._tag === "Failure" && !(heard.failure instanceof Unanswered)
-      ? serverDown(unanswered(source, heard.failure))
+      ? serverDown(unanswered(source, asThrown(heard.failure)))
       : ok;
   };
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one path for a request's header rewriting, its stage's wake, its socket or fetch, and its answer's HTML injection.
@@ -946,7 +949,10 @@ async function start(
     // wake started and not waited on: held, it held every socket of
     // the tab to the same address (core `notUpYet`).
     if (asksUpgrade(request) && !sourceUp(source)) {
-      letGo("preview wake", () => staged(request));
+      letGo(
+        "preview wake",
+        fromPromise(() => staged(request))
+      );
       return notUpYet();
     }
     // A page's request waits on the stage's wake and the server's first answer.
@@ -1111,7 +1117,7 @@ async function start(
     });
   // The promise edge of the listener held in the start's scope: one that
   // did not open closes the scope, and the bridge goes with it.
-  const listener = await Effect.runPromise(
+  const listener = await runPromise(
     Effect.acquireRelease(
       Effect.try({ try: listen, catch: (error) => error }),
       (opened) => Effect.sync(() => opened.stop(true))

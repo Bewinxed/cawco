@@ -94,6 +94,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Deferred, Effect, Exit } from "effect";
 import { type Boundary, boundaryCommand } from "../boundary/state";
+import { runPromise } from "../daemon-runtime";
 import {
   callDelegationTool,
   delegationTools,
@@ -284,7 +285,7 @@ class PiShells {
         }
       );
       // The promise edge of the command's end, or its move.
-      return Effect.runPromise(Deferred.await(outcome));
+      return runPromise(Deferred.await(outcome));
     };
   }
 }
@@ -1908,7 +1909,7 @@ class PiSession implements HarnessSession {
     // none of that name ({@link #setEffort}).
     [CONTROL_SET_EFFORT]: (effort) =>
       // The promise edge of a setting made at once; a refusal rejects.
-      Effect.runPromise(
+      runPromise(
         Effect.try({
           try: () => this.#setEffort(effort),
           catch: (error) => error,
@@ -1923,7 +1924,7 @@ class PiSession implements HarnessSession {
     // session runs none ({@link cawcosExtensionsAlone}).
     [CONTROL_MCP_TOGGLE]: (name, enabled) =>
       // The promise edge of a switch made at once; a refusal rejects.
-      Effect.runPromise(
+      runPromise(
         Effect.try({
           try: () => {
             if (!this.#fleetMcp) {

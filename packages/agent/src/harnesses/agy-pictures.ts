@@ -32,6 +32,7 @@
 import type { TurnImage } from "@cawco/core/attachments";
 import { agyWords } from "@cawco/core/words/agy";
 import { Effect } from "effect";
+import { fromPromise } from "../rejected";
 
 const MB = 1024 * 1024;
 /** Each picture's base64, at most (Claude on Google Cloud). */
@@ -78,11 +79,11 @@ const whole = (bytes: Buffer, format: string): boolean => {
 
 /** A picture's header as `Bun.Image` reads it, before any pixel is held; none when it reads none. */
 const header = (image: Bun.Image) =>
-  Effect.tryPromise(() => image.metadata()).pipe(Effect.option);
+  fromPromise(() => image.metadata()).pipe(Effect.option);
 
 /** Whether every pixel of a picture decodes. */
 const decodes = (image: Bun.Image) =>
-  Effect.tryPromise(() => image.bytes()).pipe(
+  fromPromise(() => image.bytes()).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false)
   );

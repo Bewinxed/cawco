@@ -19,6 +19,7 @@ import { fieldOf } from "./json-field";
 import { GATE_PATH } from "./mcp-gate";
 import { HOSTED_PATH, mcpHost } from "./mcp-host";
 import { freshen as freshenAccount } from "./provider-accounts";
+import { fromPromise } from "./rejected";
 import {
   fenced,
   holdRestart,
@@ -585,7 +586,7 @@ export const McpGatewayLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const { hubNow, ports, supervising } = yield* DaemonLinks;
     yield* Effect.acquireRelease(
-      Effect.promise(() =>
+      fromPromise(() =>
         startMcpGateway(hubNow, {
           freshen: (accountId) => freshenAccount(accountId, ports),
           supervisorHolds: () => supervising.current?.restartHolds(),

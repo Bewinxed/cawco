@@ -119,6 +119,7 @@ import {
   ownFilesOnly,
 } from "./carry";
 import { poolSourceOf, prepareClone } from "./clone";
+import { runPromise } from "./daemon-runtime";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { dropPlaceSet } from "./fleet-place-set";
@@ -182,6 +183,7 @@ import {
   reclaimPools,
 } from "./object-pool";
 import { PACKAGE_TREES } from "./package-trees";
+import { fromPromise } from "./rejected";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
 import { keeperChildren } from "./sessiond-client";
@@ -2372,7 +2374,7 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
   // One pass: what is CawCo's and not killed yet, killed and given time to
   // leave; whether it found any. Up to LEFT_INSIDE_PASSES, while each finds some.
   const pass = Effect.gen(function* () {
-    const fresh = (yield* Effect.promise(read)).filter(
+    const fresh = (yield* fromPromise(read)).filter(
       (one) => !(one.owner || killed.has(one.pid))
     );
     if (fresh.length === 0) {
@@ -2385,7 +2387,7 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
     yield* Effect.sleep(LEFT_INSIDE_SETTLE_MS);
     return true;
   });
-  await Effect.runPromise(
+  await runPromise(
     pass.pipe(
       Effect.repeat({
         times: LEFT_INSIDE_PASSES - 1,

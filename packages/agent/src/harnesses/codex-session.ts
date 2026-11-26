@@ -47,7 +47,8 @@ import {
 import { withSkillMarkers } from "@cawco/core/skill-words";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
-import { Deferred, Effect, Exit } from "effect";
+import { Deferred, Exit } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import type {
   HarnessContext,
@@ -62,8 +63,8 @@ import { acknowledgeSessionCredential } from "../session-identity";
 import {
   KeeperRefused,
   procEpoch,
-  refusalReason,
   type SessiondClient,
+  writeRefused,
 } from "../sessiond-client";
 import {
   CODEX_NEEDS_ACCOUNT,
@@ -306,14 +307,7 @@ class CodexSession implements HarnessSession {
     try {
       await this.#client.write(this.#procId, line);
     } catch (error) {
-      const refusal = new KeeperRefused(
-        this.#procId,
-        refusalReason(error),
-        this.#pid
-      );
-      console.warn(
-        `[sessiond] ${this.#procId}: write refused: ${refusal.reason}`
-      );
+      const refusal = writeRefused(this.#procId, error, this.#pid);
       this.#ctx.keeperRefused(refusal);
       throw refusal;
     }
@@ -933,7 +927,7 @@ class CodexSession implements HarnessSession {
     if (preloads.length > 0 && this.#turn) {
       this.#ended ??= Deferred.makeUnsafe<void>();
       // The promise edge of the wait for the running turn's end.
-      await Effect.runPromise(Deferred.await(this.#ended));
+      await runPromise(Deferred.await(this.#ended));
     }
     const input: V2.UserInput[] = [
       ...(extras.images ?? []).map((image): V2.UserInput => ({

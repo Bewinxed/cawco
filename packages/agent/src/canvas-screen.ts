@@ -24,22 +24,29 @@ import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { Duration, Effect, Fiber, Layer } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
+import { runFork } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** Each held page's browser, and the guard that closes it once the hub goes quiet on it, by the hub's token. */
 const held = new Map<string, { browser: Browser; guard: Fiber.Fiber<void> }>();
 
 /** The guard on `token`: it closes the page twice `screenHoldMs` from now, unless the hub holds it on first ({@link unguard}). */
 const guardOf = (token: string): Fiber.Fiber<void> =>
-  Effect.runFork(
+  runFork(
     Effect.sleep(Duration.millis(2 * CANVAS_LIMITS.screenHoldMs)).pipe(
-      Effect.andThen(Effect.promise(() => closeCanvasScreen({ token }))),
-      Effect.asVoid
+      Effect.andThen(fromPromise(() => closeCanvasScreen({ token }))),
+      Effect.asVoid,
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[canvas] the page held for ${token} was not closed: ${error.message}`
+        )
+      )
     )
   );
 
 /** A guard let go: the page is held on, or closed. */
 const unguard = (guard: Fiber.Fiber<void>): void => {
-  Effect.runFork(Fiber.interrupt(guard));
+  runFork(Fiber.interrupt(guard));
 };
 
 /**

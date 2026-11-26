@@ -25,6 +25,8 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { GhRepoSchema } from "@cawco/core/stored-shapes";
 import { Effect, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** Where a workspace writes, so nothing run on the host is found there. */
 const writableInside = (): string[] => [
@@ -74,7 +76,7 @@ interface GhRun {
  * go before gh exits. None when gh is not here.
  */
 const ghRunning = Effect.fn("ghRunning")(function* (args: string[]) {
-  const gh = yield* Effect.promise(hostGh);
+  const gh = yield* fromPromise(hostGh);
   if (!gh) {
     return;
   }
@@ -110,7 +112,7 @@ const ghRunning = Effect.fn("ghRunning")(function* (args: string[]) {
 
 /** The promise edge of {@link ghRunning}. */
 const ghRun = (args: string[]): Promise<GhRun | undefined> =>
-  Effect.runPromise(ghRunning(args));
+  runPromise(ghRunning(args));
 
 /**
  * What the host's gh prints for `args`, when it exits 0; none when gh is not
@@ -431,7 +433,7 @@ const pageSays = async (url: string): Promise<PageSays> => {
   }
   page.username = "";
   page.password = "";
-  return await Effect.runPromise(
+  return await runPromise(
     timedEffect(
       boundedRead(
         PAGE_TIMEOUT_MS,
@@ -445,12 +447,9 @@ const pageSays = async (url: string): Promise<PageSays> => {
       Effect.catchTag("Unanswered", () => Effect.succeed(none)),
       // A page that fails says nothing: the row stands on what its URL holds.
       Effect.catchTag("PageUnread", ({ cause }) =>
-        Effect.sync(() => {
-          console.warn(
-            `[gh-repo] ${page.host}'s page didn't answer: ${String(cause)}`
-          );
-          return none;
-        })
+        Effect.logWarning(
+          `[gh-repo] ${page.host}'s page didn't answer: ${String(cause)}`
+        ).pipe(Effect.as(none))
       )
     )
   );

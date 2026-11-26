@@ -122,6 +122,7 @@ import { namedAndMore } from "@cawco/providers/names";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
+import { runFork, runPromise } from "../daemon-runtime";
 import { isGitDir } from "../git-dir";
 import { openGithubDoor } from "../github-door";
 import { openGitDoor } from "../hub-git";
@@ -1674,18 +1675,18 @@ export const armedWorkspaces = (): HandoverState["workspaces"] =>
 export const armingOf = (id: string): Promise<void> | undefined => {
   const arming = rearming.get(id);
   // The promise edge of the arming's fiber (control.ts, looks.ts).
-  return arming && Effect.runPromise(Fiber.join(arming));
+  return arming && runPromise(Fiber.join(arming));
 };
 
 /** Every workspace's arming under way or done, now. */
 export const allArming = (): Promise<void>[] =>
   // The promise edge of each arming's fiber (looks.ts).
-  [...rearming.values()].map((arming) => Effect.runPromise(Fiber.join(arming)));
+  [...rearming.values()].map((arming) => runPromise(Fiber.join(arming)));
 
 /** Settles the next time the start-up reading moves. */
 export const nextReading = (): Promise<void> =>
   // The promise edge of the reading's next move (control.ts).
-  Effect.runPromise(Deferred.await(readingMoved));
+  runPromise(Deferred.await(readingMoved));
 
 /** One step of the arming, its commands run in order. */
 export const armStep = (event: HandoverEvent): void => {
@@ -1722,7 +1723,7 @@ const obeyArming = (command: HandoverCommand): void => {
       // for whatever waits on the arming.
       rearming.set(
         command.id,
-        Effect.runFork(Effect.promise(() => armOne(command.id, command.how)))
+        runFork(Effect.promise(() => armOne(command.id, command.how)))
       );
       return;
     case "say":
@@ -1801,7 +1802,7 @@ const armOne = async (
  */
 export const hookArmed = (id: string): Promise<void> =>
   // The promise edge of the wait for a workspace's arming (session.ts).
-  Effect.runPromise(
+  runPromise(
     Effect.gen(function* () {
       for (;;) {
         const phase = armState.arming;

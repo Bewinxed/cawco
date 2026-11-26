@@ -33,6 +33,8 @@ import type { BrowserKey, PasskeyAdvertFrame } from "@cawco/core/browser";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Context, Effect, Layer } from "effect";
 import { DaemonLinks } from "../daemon-links";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { detectPasskeyRelay } from "./passkey-detect";
 import { passkeyInjector } from "./passkey-inject";
 
@@ -155,10 +157,10 @@ export class PasskeyScanner {
   /** Whether this machine can scan: a BLE adapter and the tool that reads it (BlueZ's `bluetoothctl`, or macOS's `swift`). */
   static available(): Promise<boolean> {
     // The promise edge of the scanner's tools asked whether they run.
-    return Effect.runPromise(
+    return runPromise(
       Effect.gen(function* () {
         if (platform() === "darwin") {
-          const { hasBle } = yield* Effect.promise(detectPasskeyRelay);
+          const { hasBle } = yield* fromPromise(detectPasskeyRelay);
           return hasBle && "out" in (yield* printed("swift", ["--version"]));
         }
         const listed = yield* printed("bluetoothctl", ["list"]);
@@ -195,9 +197,7 @@ export class PasskeyScanner {
     }
 
     // Try to power on the adapter: a failure is said and passed, as it may be on already.
-    const powered = await Effect.runPromise(
-      printed("bluetoothctl", ["power", "on"])
-    );
+    const powered = await runPromise(printed("bluetoothctl", ["power", "on"]));
     if ("failed" in powered) {
       console.error(
         `[passkey-capture] power on failed (adapter may already be on): ${powered.failed}`

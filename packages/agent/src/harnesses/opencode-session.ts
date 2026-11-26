@@ -123,6 +123,7 @@ import type {
 } from "@opencode/client";
 import { Effect } from "effect";
 import { z } from "zod";
+import { later, runPromise } from "../daemon-runtime";
 import { readFleetMemory } from "../fleet-memory";
 import type {
   HarnessContext,
@@ -131,6 +132,7 @@ import type {
 } from "../harness";
 import { cannot } from "../harness";
 import { placedMemoryIn } from "../placed-memory";
+import { fromPromise } from "../rejected";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { opencodeCompactsAt } from "./compaction-points";
@@ -151,7 +153,6 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
-import { fromPromise } from "./opencode-effect";
 import {
   codeModeCalls,
   compactBoundary,
@@ -1187,7 +1188,8 @@ export class OpencodeSession implements HarnessSession {
    */
   #limitRefusal: { kind: AccountRefusal; words: string } | undefined;
   /** Armed while a turn waits on the provider without any server event; see STALLED_TURN_MS. */
-  #stallTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Ends the stall notice's wait, while one is armed. */
+  #stallTimer: (() => void) | undefined;
   /** The open turn's asks parked with the person, until each is settled. */
   readonly #parkedAsks = new Set<string>();
   /** The open turn's tool calls running, from `session.tool.called` to their end. */
@@ -2432,7 +2434,7 @@ export class OpencodeSession implements HarnessSession {
     );
     // The promise edge of the snapshot's tries (GATE_SNAPSHOTS); the last
     // failure was said by the try that had it.
-    await Effect.runPromise(
+    await runPromise(
       read.pipe(
         Effect.retry({
           schedule: backoffSchedule(GATE_SNAPSHOTS),
@@ -3149,19 +3151,23 @@ export class OpencodeSession implements HarnessSession {
     if (!this.#waitsOnProvider) {
       return;
     }
-    this.#stallTimer = setTimeout(() => {
-      this.#stallTimer = undefined;
-      if (!this.#waitsOnProvider) {
-        return;
-      }
-      this.#ctx.frame({
-        type: "system",
-        subtype: "provider_stalled",
-        session_id: this.sessionId ?? undefined,
-        content:
-          "Still waiting on the provider with no output — the turn is open and may yet complete. If this persists, interrupt and retry.",
-      });
-    }, STALLED_TURN_MS);
+    this.#stallTimer = later(
+      "opencode stall notice",
+      STALLED_TURN_MS,
+      Effect.sync(() => {
+        this.#stallTimer = undefined;
+        if (!this.#waitsOnProvider) {
+          return;
+        }
+        this.#ctx.frame({
+          type: "system",
+          subtype: "provider_stalled",
+          session_id: this.sessionId ?? undefined,
+          content:
+            "Still waiting on the provider with no output — the turn is open and may yet complete. If this persists, interrupt and retry.",
+        });
+      })
+    );
   }
 
   /** The turn waits on `id` (a parked ask, a running tool call): the provider is not the one silent. */
@@ -3179,7 +3185,7 @@ export class OpencodeSession implements HarnessSession {
 
   #clearStallTimer(): void {
     if (this.#stallTimer !== undefined) {
-      clearTimeout(this.#stallTimer);
+      this.#stallTimer();
       this.#stallTimer = undefined;
     }
   }

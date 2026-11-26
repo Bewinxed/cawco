@@ -45,6 +45,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { BrowserRecordSchema } from "../stored-shapes";
 
 /**
@@ -386,7 +387,7 @@ const udpFree = Effect.fnUntraced(function* (port: number) {
  * 127.0.0.1 probe called free).
  */
 const portFree = (port: number): Promise<boolean> =>
-  Effect.runPromise(
+  runPromise(
     Effect.gen(function* () {
       return (yield* tcpFree(port)) && (yield* udpFree(port));
     })

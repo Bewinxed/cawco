@@ -32,8 +32,9 @@
 
 import { lookUntil } from "@cawco/core/effect/poll";
 import { recordLimitReading } from "@cawco/core/limit-readings";
-import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { CdpLink } from "./cdp-takeover";
 import { idbRead, idbWrite } from "./sign-ins-page";
 
@@ -171,14 +172,14 @@ const blankPage = async (
     // evaluated as the navigation commits can still run in the one before.
     open: async (origin) => {
       await link.call("Page.navigate", { url: `${origin}/` }, session);
-      const looked = await Effect.runPromise(
+      const looked = await runPromise(
         lookUntil(
           {
             every: OPEN_POLL_MS,
             deadlineMs: OPEN_MS,
             until: (at: unknown) => at === origin,
           },
-          Effect.promise(() =>
+          fromPromise(() =>
             evaluate(link, session, "location.origin", CALL_SHORT_MS)
           )
         )

@@ -1,0 +1,22 @@
+language js
+
+// The agent wraps a promise in one form (packages/agent/src/rejected.ts):
+// `fromPromise(run)`, whose rejection is a `Rejected` carrying the very
+// error, or `Effect.tryPromise` whose `catch` makes the module's own
+// `Schema.TaggedError`. A `catch` that hands the rejection on as it is gives
+// a failure of type `unknown` no `catchTag` can tell apart, and
+// `Effect.tryPromise(run)` alone gives Effect's `UnknownError`, which
+// hides it from every promise caller that reads its error.
+or {
+  `Effect.tryPromise($arg)` as $hit where {
+    $filename <: includes "packages/agent/src/",
+    $arg <: contains or { `catch: ($e) => $e`, `catch: $e => $e`, `catch: ($e: unknown) => $e` },
+    register_diagnostic(span=$hit, message="A promise's rejection handed on as it is has no type: wrap it with fromPromise (packages/agent/src/rejected.ts), or make the module's own Schema.TaggedError in catch (scripts/lint/agent-promise-wraps.grit).")
+  },
+  `Effect.tryPromise($arg)` as $hit where {
+    $filename <: includes "packages/agent/src/",
+    $arg <: or { `() => $_`, `async () => $_`, `($_) => $_`, `async ($_) => $_`, `$name` },
+    $arg <: not `{ $_ }`,
+    register_diagnostic(span=$hit, message="Effect.tryPromise(run) fails with Effect's UnknownError: wrap it with fromPromise (packages/agent/src/rejected.ts), or make the module's own Schema.TaggedError in catch (scripts/lint/agent-promise-wraps.grit).")
+  }
+}

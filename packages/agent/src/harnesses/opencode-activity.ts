@@ -20,6 +20,8 @@ import { detach } from "@cawco/core/detach";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
+import { later, runPromise, runSync } from "../daemon-runtime";
+import { fromPromise, type Rejected } from "../rejected";
 import {
   errorText,
   notAnswered,
@@ -88,9 +90,10 @@ export class OpencodeActivity {
   #unansweredSince: number | undefined;
   #pending: Promise<Reading> | undefined;
   /** Each recovery wave's shared read, kept as long as the wave is. */
-  readonly #waves = new WeakMap<object, Effect.Effect<Reading>>();
+  readonly #waves = new WeakMap<object, Effect.Effect<Reading, Rejected>>();
   #nextSampleAt = 0;
-  #timer: ReturnType<typeof setTimeout> | undefined;
+  /** Ends the next report, once one is due. */
+  #timer: (() => void) | undefined;
   #stopped = false;
 
   constructor(generation: string) {
@@ -250,20 +253,20 @@ export class OpencodeActivity {
     const shared = wave ? this.#waves.get(wave) : undefined;
     if (shared) {
       // The promise edge of the wave's read.
-      const read = await Effect.runPromise(shared);
+      const read = await runPromise(shared);
       if (read.read > afterRead) {
         return read;
       }
     }
     // One read, run once and kept: every caller of the wave from now on
     // shares it.
-    const reading = Effect.runSync(
-      Effect.cached(Effect.promise(() => this.#read(client)))
+    const reading = runSync(
+      Effect.cached(fromPromise(() => this.#read(client)))
     );
     if (wave) {
       this.#waves.set(wave, reading);
     }
-    return Effect.runPromise(reading);
+    return runPromise(reading);
   }
 
   /**
@@ -340,11 +343,14 @@ export class OpencodeActivity {
 
   report(client: OpencodeClient): ActivitySnapshot {
     if (!(this.#timer || this.#stopped)) {
-      this.#timer = setTimeout(() => {
-        this.#timer = undefined;
-        this.report(client);
-      }, ACTIVE_INTERVAL_MS);
-      this.#timer.unref();
+      this.#timer = later(
+        "opencode activity",
+        ACTIVE_INTERVAL_MS,
+        Effect.sync(() => {
+          this.#timer = undefined;
+          this.report(client);
+        })
+      );
     }
     detach(this.sample(client), "sample");
     return this.snapshot();
@@ -352,6 +358,6 @@ export class OpencodeActivity {
 
   stop(): void {
     this.#stopped = true;
-    clearTimeout(this.#timer);
+    this.#timer?.();
   }
 }

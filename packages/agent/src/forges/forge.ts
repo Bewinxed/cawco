@@ -27,6 +27,7 @@ import {
 } from "@cawco/providers/read-stop";
 import { repoAt } from "@cawco/providers/registry";
 import { Effect, Result } from "effect";
+import { runPromise } from "../daemon-runtime";
 import type { ForgeLogin, ForgeSignIn } from "./forge-adapter";
 import { giteaCaller, giteaLogin } from "./gitea-sign-in";
 import { githubLogin } from "./github-sign-in";
@@ -150,7 +151,7 @@ export const forgePost = async (ask: ForgeAsk): Promise<ForgeVerdict> => {
   }
   const { forge, signIn } = found;
   const what = `${externalItemWords.source[forge]} on ${signIn.host}`;
-  const outcome = await Effect.runPromise(
+  const outcome = await runPromise(
     Effect.result(
       written(forge, signIn, at.path, ask.op).pipe(
         Effect.timeoutOrElse({

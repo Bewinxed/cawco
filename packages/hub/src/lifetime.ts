@@ -1,9 +1,9 @@
+import { clockSleepingOn } from "@cawco/core/effect/clock";
 import { doing } from "@cawco/core/loop-watch";
 import {
   Cause,
   Clock,
   Context,
-  Duration,
   Effect,
   Exit,
   type Fiber,
@@ -272,16 +272,7 @@ export const makeLifetime = (): HubLifetimeShape => {
     });
   };
   /** The lifetime's clock: the system's time, and its waits on {@link sleepFor}. */
-  const system = Clock.Clock.defaultValue();
-  const clock: Clock.Clock = {
-    currentTimeMillisUnsafe: () => system.currentTimeMillisUnsafe(),
-    currentTimeMillis: system.currentTimeMillis,
-    currentTimeNanosUnsafe: () => system.currentTimeNanosUnsafe(),
-    currentTimeNanos: system.currentTimeNanos,
-    monotonicTimeNanosUnsafe: () => system.monotonicTimeNanosUnsafe(),
-    monotonicTimeNanos: system.monotonicTimeNanos,
-    sleep: (duration) => sleepFor(Duration.toMillis(duration)),
-  };
+  const clock = clockSleepingOn(sleepFor);
   /** What every fiber of the lifetime runs with: its clock. */
   const context = Context.make(Clock.Clock, clock);
   /**

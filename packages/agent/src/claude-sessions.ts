@@ -27,7 +27,9 @@ import {
   type SessionEntry,
   sessionConfigDir,
 } from "@cawco/core/paths/claude";
-import { Effect } from "effect";
+import type { Effect } from "effect";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** Claude Code names every session by a UUID; a name that starts with one is that session's. */
 const SESSION_ID =
@@ -282,15 +284,12 @@ export const carrySessions = (
 ): Promise<Map<string, Carried>> =>
   // Every session's turn, taken in one order, so two carries that name the
   // same sessions never each hold one the other waits for.
-  Effect.runPromise(
+  runPromise(
     [...new Set(requests.map((request) => request.sessionId))]
       .sort()
       .reduceRight<Effect.Effect<Map<string, Carried>, unknown>>(
         (inner, sessionId) => carrying.withLock(sessionId, inner),
-        Effect.tryPromise({
-          try: () => carryNow(requests),
-          catch: (error) => error,
-        })
+        fromPromise(() => carryNow(requests))
       )
   );
 

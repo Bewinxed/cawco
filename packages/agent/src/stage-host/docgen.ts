@@ -46,8 +46,10 @@ import {
   type TailwindTheme,
   TOKEN_NAMESPACES,
 } from "@cawco/design-tokens/tailwind-theme";
-import { Cache, Duration, Effect, Equal, Hash } from "effect";
+import { Cache, Duration, Equal, Hash } from "effect";
 import type TS from "typescript";
+import { runPromise, runSync } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 
 /** svelte2tsx's shims for the code it writes, read beside it at build time (build.ts). */
 declare const __SVELTE_SHIMS__: string;
@@ -1076,10 +1078,9 @@ class PropsAsk implements Equal.Equal {
  * read never fails (its failure is its `note`); one key's read of an older
  * content is let go once another is asked for ({@link keptHash}).
  */
-const kept = Effect.runSync(
+const kept = runSync(
   Cache.makeWith(
-    (ask: PropsAsk) =>
-      Effect.promise(() => docOf(ask.file, ask.name, ask.text)),
+    (ask: PropsAsk) => fromPromise(() => docOf(ask.file, ask.name, ask.text)),
     { capacity: Number.POSITIVE_INFINITY, timeToLive: () => Duration.infinity }
   )
 );
@@ -1120,13 +1121,13 @@ export function propsOf(
   const key = `${file}#${name}`;
   const was = keptHash.get(key);
   if (was !== undefined && was !== hash) {
-    Effect.runSync(
+    runSync(
       Cache.invalidate(kept, new PropsAsk(key, was, { file, name, text }))
     );
   }
   keptHash.set(key, hash);
   // The promise edge of the kept read.
-  return Effect.runPromise(
+  return runPromise(
     Cache.get(kept, new PropsAsk(key, hash, { file, name, text }))
   ).then(withTokenNames);
 }

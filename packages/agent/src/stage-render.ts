@@ -76,8 +76,10 @@ import type { Browser, BrowserContext, Page } from "playwright-core";
 import { z } from "zod";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
+import { runPromise } from "./daemon-runtime";
 import { findState, poseState, statePicture } from "./frame-picture";
 import { layoutNow, readAgainNow, sweepNow } from "./in-page/page";
+import { fromPromise } from "./rejected";
 import { measureMove } from "./stage-measure";
 
 /** How long a render may take, Chromium's launch to its answer: one limit, which every wait of the render shares (the hub waits this long on it). */
@@ -242,7 +244,7 @@ const sweepOf = (
 ): Effect.Effect<SweepRead | null | "stopped"> =>
   boundedRead(
     ms,
-    Effect.tryPromise(() => page.evaluate(sweepNow))
+    fromPromise(() => page.evaluate(sweepNow))
   ).pipe(Effect.orElseSucceed(() => "stopped" as const));
 
 /** Each states file's first story, by the plans the stage wrote into the page (core `CANVAS_PLAN_ID`); null when the plans could not be read. */
@@ -597,59 +599,52 @@ async function readKept(
   let said: SweepRead | null = null;
   let looks = 0;
   // One look: the report read again (after the first), done once it owes nothing or the limit came; else the page's sweep read, and each owed file it is not reading asked of it again.
-  const look = Effect.tryPromise({
-    try: async (): Promise<boolean> => {
-      if (looks > 0) {
-        report = await stageReport(pages.origin, files);
+  const look = fromPromise(async (): Promise<boolean> => {
+    if (looks > 0) {
+      report = await stageReport(pages.origin, files);
+    }
+    looks += 1;
+    const owed = readerOwed(report);
+    if (owed.length === 0 || Date.now() >= until) {
+      return true;
+    }
+    if (kept.closed) {
+      throw new Error(words.readerGone);
+    }
+    const now = await runPromise(
+      timedEffect(
+        sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, until - Date.now()))),
+        (ms) => recordLimitReading("agent.sweep-said-ms", ms)
+      )
+    );
+    if (now !== "stopped") {
+      said = now;
+    }
+    const reading = new Set(said?.swept ? said.drawing : files);
+    const idle = owed.filter((file) => {
+      if (reading.has(file)) {
+        idleSince.delete(file);
+        return false;
       }
-      looks += 1;
-      const owed = readerOwed(report);
-      if (owed.length === 0 || Date.now() >= until) {
-        return true;
+      const since = idleSince.get(file) ?? Date.now();
+      idleSince.set(file, since);
+      const hash = report.sections.find((one) => one.file === file)?.hash;
+      return Date.now() - since >= READ_AGAIN_MS && asked.get(file) !== hash;
+    });
+    if (idle.length > 0) {
+      for (const file of idle) {
+        asked.set(
+          file,
+          report.sections.find((one) => one.file === file)?.hash ?? ""
+        );
       }
-      if (kept.closed) {
-        throw new Error(words.readerGone);
-      }
-      const now = await Effect.runPromise(
-        timedEffect(
-          sweepOf(
-            page,
-            Math.max(1, Math.min(SAID_WAIT_MS, until - Date.now()))
-          ),
-          (ms) => recordLimitReading("agent.sweep-said-ms", ms)
-        )
-      );
-      if (now !== "stopped") {
-        said = now;
-      }
-      const reading = new Set(said?.swept ? said.drawing : files);
-      const idle = owed.filter((file) => {
-        if (reading.has(file)) {
-          idleSince.delete(file);
-          return false;
-        }
-        const since = idleSince.get(file) ?? Date.now();
-        idleSince.set(file, since);
-        const hash = report.sections.find((one) => one.file === file)?.hash;
-        return Date.now() - since >= READ_AGAIN_MS && asked.get(file) !== hash;
+      await page.evaluate(readAgainNow, idle).catch((error: unknown) => {
+        throw kept.closed ? new Error(words.readerGone) : error;
       });
-      if (idle.length > 0) {
-        for (const file of idle) {
-          asked.set(
-            file,
-            report.sections.find((one) => one.file === file)?.hash ?? ""
-          );
-        }
-        await page.evaluate(readAgainNow, idle).catch((error: unknown) => {
-          throw kept.closed ? new Error(words.readerGone) : error;
-        });
-      }
-      return false;
-    },
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    }
+    return false;
   });
-  await Effect.runPromise(
+  await runPromise(
     lookUntil(
       {
         every: Duration.millis(POLL_MS),
@@ -712,9 +707,7 @@ async function drawAsked(
       .catch((error: unknown) => {
         throw timedOut(error) ? new Error(words.notLoaded(seconds)) : error;
       });
-    const swept = await Effect.runPromise(
-      sweepUntil(page, deadline - ANSWER_MS)
-    );
+    const swept = await runPromise(sweepUntil(page, deadline - ANSWER_MS));
     const { state } = ask;
     const done = !!swept?.swept && swept.reports > 0;
     // A state's picture needs its section drawn: with none, the read says where it stood and what to do instead.

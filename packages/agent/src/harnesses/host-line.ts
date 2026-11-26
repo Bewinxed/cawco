@@ -12,12 +12,13 @@
 
 import { KindedError, type LastErrorKind } from "@cawco/core/relaunch";
 import { Deferred, Effect, Exit } from "effect";
+import { runPromise } from "../daemon-runtime";
 import type { KeeperPool } from "../keepers";
 import {
-  KeeperRefused,
+  type KeeperRefused,
   procEpoch,
-  refusalReason,
   type SessiondClient,
+  writeRefused,
 } from "../sessiond-client";
 
 /**
@@ -170,14 +171,7 @@ export class HostLine<E extends { type: string }> {
     try {
       await this.#client.write(this.#procId, `${JSON.stringify(command)}\n`);
     } catch (error) {
-      const refusal = new KeeperRefused(
-        this.#procId,
-        refusalReason(error),
-        this.#pid
-      );
-      console.warn(
-        `[sessiond] ${this.#procId}: write refused: ${refusal.reason}`
-      );
+      const refusal = writeRefused(this.#procId, error, this.#pid);
       this.#keeperRefused(refusal);
       throw refusal;
     }
@@ -195,7 +189,7 @@ export class HostLine<E extends { type: string }> {
       throw error;
     }
     // The promise edge of the host's reply.
-    return await Effect.runPromise(Deferred.await(reply));
+    return await runPromise(Deferred.await(reply));
   }
 
   /** The host's stdin ended: it stops once it has read what came before. */
@@ -224,7 +218,7 @@ export const hostSnapshot = async <S>(
   const { client } = held;
   const id = crypto.randomUUID();
   // The promise edge of one state read off the host.
-  return await Effect.runPromise(
+  return await runPromise(
     Effect.callback<S, unknown>((resume) => {
       // Its own subscription beside the session's: ending it leaves the
       // session's listener as it was.

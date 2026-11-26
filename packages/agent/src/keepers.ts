@@ -17,6 +17,7 @@ import {
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
 import { Cache, Duration, Effect, Exit, Option } from "effect";
+import { runFork, runPromise, runSync } from "./daemon-runtime";
 import {
   ensureSessiond,
   KEEPER_WELCOME_MS,
@@ -98,7 +99,7 @@ export class KeeperPool {
    * caller asking meanwhile; kept once it answers, until its keeper retires
    * it; a dial that failed is not kept, and the next caller dials again.
    */
-  readonly #clients = Effect.runSync(
+  readonly #clients = runSync(
     Cache.makeWith(
       (endpoint: string) =>
         // Waits on the keeper's welcome or its end, as every reading here does.
@@ -119,7 +120,7 @@ export class KeeperPool {
   async current(): Promise<SessiondClient> {
     const machine = machineEndpoint();
     const endpoint = await currentEndpoint(machine);
-    const known = await Effect.runPromise(
+    const known = await runPromise(
       Cache.getOption(this.#clients, endpoint).pipe(
         Effect.map(Option.getOrUndefined),
         Effect.orElseSucceed(() => undefined)
@@ -324,15 +325,15 @@ export class KeeperPool {
   close(): void {
     // Each connection held or still dialled is read before it is let go,
     // and closed once it answers.
-    for (const endpoint of [...Effect.runSync(Cache.keys(this.#clients))]) {
-      Effect.runFork(
+    for (const endpoint of [...runSync(Cache.keys(this.#clients))]) {
+      runFork(
         Cache.getOption(this.#clients, endpoint).pipe(
           Effect.map(Option.map((client) => client.close())),
           Effect.ignore
         )
       );
     }
-    Effect.runSync(Cache.invalidateAll(this.#clients));
+    runSync(Cache.invalidateAll(this.#clients));
   }
 
   /**
@@ -342,7 +343,7 @@ export class KeeperPool {
    */
   #client(endpoint: string): Promise<SessiondClient> {
     const clients = this.#clients;
-    return Effect.runPromise(
+    return runPromise(
       Cache.get(clients, endpoint).pipe(
         Effect.flatMap((client) =>
           client.retired

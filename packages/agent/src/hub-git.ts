@@ -79,6 +79,7 @@ import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Effect } from "effect";
+import { runPromise } from "./daemon-runtime";
 import { hubGitLogin, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, isHubRemote } from "./git/hub-remote";
 import {
@@ -106,6 +107,7 @@ import {
   overlaySync,
   viewRunning,
 } from "./layer";
+import { fromPromise } from "./rejected";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
 import { cloneHolding } from "./workspace-records";
@@ -502,7 +504,7 @@ const runOnHost = (
       })
   );
   // The promise edge of one run on the host (this door's fetches and pushes).
-  return Effect.runPromise(
+  return runPromise(
     ran.pipe(
       Effect.map((code): HostRun => {
         // @limit external: git's own command words: `git lfs <command>` is two, every other `git <command>` one
@@ -1758,14 +1760,14 @@ export const closeGitDoor = (id: string): Promise<void> => {
   const server = doors.get(id);
   doors.delete(id);
   // The promise edge of the door's close (boundary/stop.ts).
-  return Effect.runPromise(
+  return runPromise(
     Effect.gen(function* () {
       if (server) {
         yield* Effect.callback<void>((resume) => {
           server.close(() => resume(Effect.void));
         });
       }
-      yield* Effect.promise(() => rm(gitDoorOf(id), { force: true }));
+      yield* fromPromise(() => rm(gitDoorOf(id), { force: true }));
     })
   );
 };

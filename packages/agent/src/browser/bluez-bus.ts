@@ -40,6 +40,7 @@ import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import { runInC } from "@cawco/core/run-captured";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { browserOwner } from "./state";
 
 /** The machine's D-Bus system bus. */
@@ -83,7 +84,7 @@ const unitOf = async (key: BrowserKey): Promise<string> =>
 
 /** Whether `socket` is there within {@link READY_MS}: the proxy listens once it is. */
 const listens = (socket: string): Promise<boolean> =>
-  Effect.runPromise(
+  runPromise(
     lookUntil(
       {
         every: READY_POLL_MS,

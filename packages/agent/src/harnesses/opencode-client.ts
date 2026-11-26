@@ -29,8 +29,9 @@ import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client";
 import { Effect, Schedule } from "effect";
+import { asThrown, fromPromise } from "../rejected";
 import { toolBinary } from "../tools";
-import { fromPromise, runAbortable } from "./opencode-effect";
+import { runAbortable } from "./opencode-effect";
 
 export type OpencodeClient = OpenCodeClient;
 
@@ -206,7 +207,9 @@ const structuredText = (error: object): string => {
  * (`{type, message, status?}`, `Session.StructuredError`) reads as
  * `type status: message`; anything thrown reads as `name: message`.
  */
-export const errorText = (error: unknown): string => {
+export const errorText = (thrown: unknown): string => {
+  // A promise's rejection that Effect code carried reads as that rejection.
+  const error = asThrown(thrown);
   if (typeof error === "string") {
     return error;
   }

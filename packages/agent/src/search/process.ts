@@ -39,7 +39,8 @@ import {
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
-import { Deferred, Effect, Exit, Schema } from "effect";
+import { Deferred, Exit, Schema } from "effect";
+import { runPromise } from "../daemon-runtime";
 import type {
   RoleOp,
   SearchAnswer,
@@ -118,7 +119,7 @@ const refuse = (owed: Owed, error: unknown): void => {
 
 /** The promise edge of `owed`'s answer, as op `K`'s (the platform gap in {@link Owed}). */
 const answered = <A>(owed: Owed): Promise<A> =>
-  Effect.runPromise(Deferred.await(owed.answer)) as Promise<A>;
+  runPromise(Deferred.await(owed.answer)) as Promise<A>;
 
 interface Work extends Owed {
   ask: SearchAsk;
@@ -163,7 +164,7 @@ export class SearchProcess<R extends SearchRole> {
   /** Done once a process of this role has first opened the index, or failed to. */
   readonly #firstOpen = Deferred.makeUnsafe<void>();
   /** The promise edge of {@link #firstOpen}. */
-  readonly firstOpen = Effect.runPromise(Deferred.await(this.#firstOpen));
+  readonly firstOpen = runPromise(Deferred.await(this.#firstOpen));
   /** No process is started until `after` settles: what is asked meanwhile waits here. */
   #gated: boolean;
 

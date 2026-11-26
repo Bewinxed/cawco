@@ -15,6 +15,7 @@ import { errnoCode } from "@cawco/core/absent";
 import Docker from "dockerode";
 import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
 import { colimaHome, colimaProfileOf } from "./colima";
 
 /** A container runtime that answered. */
@@ -235,7 +236,7 @@ const rootlessNetworkOf = async (
   socketPath: string
 ): Promise<Runtime["rootlessNetwork"]> => {
   try {
-    const info = await Effect.runPromise(
+    const info = await runPromise(
       Effect.callback<unknown, unknown>((resume) => {
         docker.modem.dial(
           { path: LIBPOD_INFO, method: "GET", statusCodes: { 200: true } },

@@ -177,8 +177,13 @@ import { ensureBoundary } from "./boundary/ensure";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { agentServerStarted } from "./boundary/servers";
 import { excludeFromCheckout } from "./checkout-exclude";
+import { letGo, runFork, runPromise, runSync } from "./daemon-runtime";
 import { type MemoryNow, memoryNow } from "./machine-room";
-import { closeBridge, reachWorkspace } from "./preview-bridge";
+import {
+  bridgeClosed,
+  reachWorkspace,
+  workspaceReached,
+} from "./preview-bridge";
 import {
   bytesWords,
   expectedBytes,
@@ -187,6 +192,7 @@ import {
   marginOf,
   measure,
 } from "./preview-room";
+import { fromPromise } from "./rejected";
 import {
   copyBack,
   dropPin,
@@ -324,7 +330,7 @@ const RESTARTS: BackoffPolicy = {
   mostMs: 20_000,
   giveUp: { afterTries: STAGE_RESTARTS + 1 },
 };
-/** How often a start asks whether its port is free yet ({@link letGo}). Ours. */
+/** How often a start asks whether its port is free yet ({@link portLetGo}). Ours. */
 const LET_GO_POLL_MS = 500;
 /** How long a stopped stage's group has between TERM and KILL. */
 const KILL_GRACE_MS = 5000;
@@ -1015,15 +1021,6 @@ class StageUnanswered extends Schema.TaggedError<StageUnanswered>()(
   }
 }
 
-/** A rejection as the `Error` the stage's Effect code carries in its error channel: the error itself, or its words in one. */
-const asError = (error: unknown): Error =>
-  error instanceof Error ? error : new Error(String(error));
-
-/** A step of another module's promise code, its rejection in the error channel as the error it was. */
-const attempt = <A>(
-  run: (signal: AbortSignal) => Promise<A>
-): Effect.Effect<A, Error> => Effect.tryPromise({ try: run, catch: asError });
-
 /**
  * A request to the stage itself, next to it: through the bridge into its
  * boundary's network, or the host's loopback on macOS. `take` reads its
@@ -1040,14 +1037,16 @@ const askStage = Effect.fnUntraced(function* <T>(
   take: (response: Response, cut: (error: unknown) => never) => Promise<T>,
   body?: object
 ): Effect.fn.Return<T, Error | Unanswered> {
-  const reached = yield* attempt(() =>
-    reachWorkspace(bridgeName(stage), stage.boundary.id, stage.port)
+  const reached = yield* workspaceReached(
+    bridgeName(stage),
+    stage.boundary.id,
+    stage.port
   );
   const at =
     reached === "host"
       ? stageRenderWords.loopback(stage.port)
       : stageRenderWords.bridged(stage.port, shortId(stage.boundary.id));
-  const asked = attempt(async (signal) => {
+  const asked = fromPromise(async (signal) => {
     // An abort is the read's own deadline, which its bound answers.
     const cut = (error: unknown): never => {
       throw signal.aborted
@@ -1151,8 +1150,7 @@ const answered = <T>(
   what: string,
   shape: z.ZodType<T>,
   body?: object
-): Promise<T> =>
-  Effect.runPromise(answerOf(stage, path, bound, what, shape, body));
+): Promise<T> => runPromise(answerOf(stage, path, bound, what, shape, body));
 
 /** Writes the host into the toolchain root when it is not there as this build has it, git-excluded. */
 async function writeHost(stage: Stage): Promise<void> {
@@ -1178,7 +1176,7 @@ function kill(stage: Stage): void {
   stage.life = undefined;
   stage.child = undefined;
   if (life) {
-    Effect.runFork(Scope.close(life, Exit.void));
+    runFork(Scope.close(life, Exit.void));
   }
 }
 
@@ -1220,17 +1218,17 @@ function begin(
   work: (life: Scope.Scope) => Effect.Effect<void, Error>
 ): Promise<void> {
   kill(stage);
-  const life = Effect.runSync(Scope.make());
+  const life = runSync(Scope.make());
   stage.life = life;
-  Effect.runSync(
+  runSync(
     Scope.addFinalizer(
       life,
       Effect.sync(() => closeReaders(stage.key))
     )
   );
-  const run = Effect.runSync(Effect.forkIn(work(life), life));
+  const run = runSync(Effect.forkIn(work(life), life));
   // The promise edge of a stage's start: `ready`, which wake awaits.
-  const ready = Effect.runPromise(
+  const ready = runPromise(
     Fiber.await(run).pipe(
       Effect.flatMap((exit) =>
         Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
@@ -1246,9 +1244,9 @@ function begin(
 /** The stage ended, or stopped answering, on its own after it served: started again after its restart series's next wait, or in `error` once the series gives up. */
 function crashed(stage: Stage, why: string): void {
   kill(stage);
-  stage.restarts ??= Effect.runSync(Schedule.toStep(backoffSchedule(RESTARTS)));
+  stage.restarts ??= runSync(Schedule.toStep(backoffSchedule(RESTARTS)));
   const series = stage.restarts;
-  const next = Effect.runSync(
+  const next = runSync(
     series(Date.now(), undefined).pipe(
       Effect.map(([tries, wait]) => ({ tries, wait })),
       Pull.catchDone(() => Effect.succeed(undefined))
@@ -1322,7 +1320,7 @@ const healthy = (
   (stage.runs.kind === "serve"
     ? boundedRead(
         waitMs,
-        attempt(() => listens(stage))
+        fromPromise(() => listens(stage))
       )
     : askStage(
         stage,
@@ -1398,7 +1396,15 @@ const healthLook = Effect.fnUntraced(function* (stage: Stage) {
   }
   // A canvas no read has asked for in the stage's idle time is no longer in use: its kept reader closes.
   idleReaders(stage.key, IDLE_MS);
-  if (yield* Effect.promise(() => depsMoved(stage))) {
+  // A lockfile that could not be read is said, and the health look goes on.
+  const moved = yield* fromPromise(() => depsMoved(stage)).pipe(
+    Effect.catch((error) =>
+      Effect.logWarning(
+        `[stage] ${stage.key}: its lockfile was not looked at: ${error.message}`
+      ).pipe(Effect.as(false))
+    )
+  );
+  if (moved) {
     if (stage.status === "live") {
       startAgain(stage, REINSTALLING);
     }
@@ -1476,13 +1482,12 @@ export function moveStages(executors: readonly number[]): number {
 
 /** The bridge into a stopped stage's network closed, let go: a close that fails is said, and the next look at the stage opens its own. */
 function bridgeLetGo(stage: Stage): void {
-  Effect.runFork(
-    attempt(() => closeBridge(bridgeName(stage))).pipe(
+  letGo(
+    "stage bridge close",
+    bridgeClosed(bridgeName(stage)).pipe(
       Effect.catch((error) =>
-        Effect.sync(() =>
-          console.warn(
-            `[stage] ${stage.key}: its bridge was not closed: ${error.message}`
-          )
+        Effect.logWarning(
+          `[stage] ${stage.key}: its bridge was not closed: ${error.message}`
         )
       )
     )
@@ -1583,7 +1588,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
     : [serveScript(stage.runs.command), { PORT: String(stage.port) }];
 
 /** Whether the stage's port is free within `waitMs`, asked every {@link LET_GO_POLL_MS}: a server an earlier daemon left lets go of it at its next beat. Something that holds the port and does not answer holds it. */
-const letGo = (stage: Stage, waitMs: number): Effect.Effect<boolean> =>
+const portLetGo = (stage: Stage, waitMs: number): Effect.Effect<boolean> =>
   lookUntil(
     {
       every: Duration.millis(LET_GO_POLL_MS),
@@ -1655,7 +1660,7 @@ const measureLive = Effect.suspend(() => {
   if (live.length === 0) {
     return Effect.succeed(false);
   }
-  return attempt(() =>
+  return fromPromise(() =>
     measure(
       live.map((stage) => ({
         boundary: stage.boundary.id,
@@ -1665,10 +1670,8 @@ const measureLive = Effect.suspend(() => {
     )
   ).pipe(
     Effect.catch((error) =>
-      Effect.sync(() =>
-        console.warn(
-          `[stage] the live previews' memory was not measured: ${error.message}`
-        )
+      Effect.logWarning(
+        `[stage] the live previews' memory was not measured: ${error.message}`
       )
     ),
     Effect.as(true)
@@ -1681,7 +1684,7 @@ function keepMeasuring(): void {
     return;
   }
   measuring = true;
-  Effect.runFork(
+  runFork(
     Effect.sleep(Duration.millis(MEASURE_MS)).pipe(
       Effect.andThen(
         Effect.repeat(measureLive, {
@@ -1912,30 +1915,30 @@ const starting = Effect.fnUntraced(function* (
   // woken after its sleep has missed every edit since, and its clone may
   // have retired meanwhile (stage-clone.ts), which this cuts again. An
   // install that fails is the stage's error, in the installer's words.
-  yield* attempt(() => installFor(stage)).pipe(
+  yield* fromPromise(() => installFor(stage)).pipe(
     Effect.catch((error) => refusedStart(stage, error.message))
   );
   if (stage.runs.kind === "sheet") {
-    yield* attempt(() => writeHost(stage));
+    yield* fromPromise(() => writeHost(stage));
     // The host a failed health look ended (`crashed` → `kill`: its
     // executor's TERM has the boundary's runner TERM the host's group, then
     // KILL it 4 s on, boundary/runner.ts `runnerText` `cancel`) lets go of the port
     // first: one hung there holds it, and a replacement started beside it
     // only says "Port … is already in use" until its restarts are spent.
-    if (!(yield* letGo(stage, HOST_LET_GO_MS))) {
+    if (!(yield* portLetGo(stage, HOST_LET_GO_MS))) {
       return yield* refusedStart(
         stage,
         `port ${stage.port} in this workspace is still held ${HOST_LET_GO_MS / 1000}s after its stage was ended, so its host wasn't started again. Stop what holds it, then show the canvas again.`
       );
     }
-  } else if (!(yield* letGo(stage, SERVE_LET_GO_MS))) {
+  } else if (!(yield* portLetGo(stage, SERVE_LET_GO_MS))) {
     return yield* refusedStart(
       stage,
       `port ${stage.port} in this workspace is already in use, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
   roomFor(stage);
-  const boundary = yield* attempt(() => ensureBoundary(stage.boundary));
+  const boundary = yield* fromPromise(() => ensureBoundary(stage.boundary));
   const child = yield* Scope.provide(spawned(stage, boundary.exec), life);
   const said = yield* Scope.provide(hearing(stage, child), life);
   const ended = Deferred.await(said.ended);
@@ -2378,7 +2381,7 @@ export async function warmStage(
       return;
     }
     const stage = await storyStage(tree, first, warm.by);
-    await Effect.runPromise(
+    await runPromise(
       Effect.all(
         canvases.map((stories) =>
           walkedAsEmbed(
@@ -2721,7 +2724,7 @@ export async function sourceEnded(source: PreviewSource): Promise<boolean> {
     return false;
   }
   if (stage.status === "live") {
-    const look = await Effect.runPromise(healthy(stage, HEALTH_WAIT_MS));
+    const look = await runPromise(healthy(stage, HEALTH_WAIT_MS));
     // One that serves keeps its restarts' count: only a whole look's time
     // live starts it afresh.
     if (stage.status === "live" && !(look.kind === "answered" && look.value)) {

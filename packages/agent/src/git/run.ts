@@ -17,6 +17,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { Effect, Schema } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { cloneHolding } from "../workspace-records";
 import { withoutCredential } from "./hub-credential";
 
@@ -186,7 +187,7 @@ export const gitUntil =
       return stdout.trim();
     });
     // The promise edge of the run, inside the create's one deadline.
-    return await Effect.runPromise(
+    return await runPromise(
       boundedRead(remaining, ran).pipe(
         Effect.catchTag("Unanswered", () =>
           Effect.fail(new GitDidNotRun({ message: late }))

@@ -38,6 +38,8 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect, Fiber } from "effect";
 import { z } from "zod";
+import { runFork } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 import { toolEnv } from "./tools";
 
 /** What a row's npx command line asks for: one package, the bin it runs, and that bin's arguments. */
@@ -563,7 +565,7 @@ const sweep = async (live: () => readonly string[]): Promise<void> => {
     return;
   }
   if (again) {
-    Effect.runFork(Fiber.interrupt(again));
+    runFork(Fiber.interrupt(again));
     again = undefined;
   }
   const root = fleetMcpInstallsDir();
@@ -578,7 +580,7 @@ const sweep = async (live: () => readonly string[]): Promise<void> => {
     entries.map((entry) => retireOne(entry, inUse, sessions, fleet))
   );
   if (outcomes.includes("waiting")) {
-    again = Effect.runFork(
+    again = runFork(
       Effect.sleep(RETIRE_AGAIN_MS).pipe(
         // Begun: the pass it runs is no longer one to let go.
         Effect.andThen(
@@ -586,17 +588,10 @@ const sweep = async (live: () => readonly string[]): Promise<void> => {
             again = undefined;
           })
         ),
-        Effect.andThen(
-          Effect.tryPromise({
-            try: () => retireInstalls(live),
-            catch: (error) => error,
-          })
-        ),
+        Effect.andThen(fromPromise(() => retireInstalls(live))),
         Effect.catch((error) =>
-          Effect.sync(() =>
-            console.warn(
-              `[fleet-mcp] retiring old installs failed: ${String(error)}`
-            )
+          Effect.logWarning(
+            `[fleet-mcp] retiring old installs failed: ${String(error.cause)}`
           )
         )
       )

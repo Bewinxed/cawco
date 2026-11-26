@@ -103,7 +103,9 @@ import { Cache, Duration, Effect, Exit, Fiber, Option } from "effect";
 import { parseAllDocuments } from "yaml";
 import { z } from "zod";
 import { contextEndpoint } from "./browser/runtime";
+import { runFork, runPromise, runSync } from "./daemon-runtime";
 import { delegationHubUrl } from "./delegation";
+import { fromPromise } from "./rejected";
 import { socketPlace } from "./tool-door";
 
 /** The label naming the session whose work created a container: its instance id. */
@@ -762,13 +764,9 @@ type OpenDoors = ContainerDoors & { servers: Server[] };
  * until {@link closeContainerDoors}; a failed opening is not kept, and the
  * next caller opens again.
  */
-const doors = Effect.runSync(
+const doors = runSync(
   Cache.makeWith(
-    (instanceId: string) =>
-      Effect.tryPromise({
-        try: () => openDoors(instanceId),
-        catch: (error) => error,
-      }),
+    (instanceId: string) => fromPromise(() => openDoors(instanceId)),
     {
       capacity: Number.POSITIVE_INFINITY,
       timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),
@@ -822,7 +820,7 @@ const openDoors = async (instanceId: string): Promise<OpenDoors> => {
 export const openContainerDoors = (
   instanceId: string
 ): Promise<ContainerDoors> =>
-  Effect.runPromise(
+  runPromise(
     Cache.get(doors, instanceId).pipe(
       Effect.map(({ env, untracked }) => ({ env, untracked }))
     )
@@ -833,17 +831,17 @@ const closeContainerDoors = async (instanceId: string): Promise<void> => {
   // The doors held, or still opening, are read before they are let go, so
   // an opening after this starts afresh; what was held is waited for and
   // closed.
-  const held = Effect.runFork(
+  const held = runFork(
     Cache.getOption(doors, instanceId).pipe(
       Effect.map(Option.getOrUndefined),
       Effect.orElseSucceed(() => undefined)
     )
   );
-  Effect.runSync(Cache.invalidate(doors, instanceId));
-  const open = await Effect.runPromise(Fiber.join(held));
+  runSync(Cache.invalidate(doors, instanceId));
+  const open = await runPromise(Fiber.join(held));
   await Promise.all(
     (open?.servers ?? []).map((server) =>
-      Effect.runPromise(
+      runPromise(
         Effect.callback<void>((resume) => {
           server.close(() => resume(Effect.void));
         })

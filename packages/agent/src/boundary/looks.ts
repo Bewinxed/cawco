@@ -17,6 +17,7 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { Effect, type Fiber } from "effect";
 import { z } from "zod";
+import { runFork } from "../daemon-runtime";
 import { closeGithubDoor } from "../github-door";
 import { closeGitDoor } from "../hub-git";
 import type { HeldProc } from "../keepers";
@@ -346,7 +347,7 @@ const lookForNarrowing = (): void => {
     }
   });
   // Once per agent, for as long as it runs; each look's failure is said in it.
-  narrowLooks = Effect.runFork(
+  narrowLooks = runFork(
     look.pipe(Effect.delay(NARROW_LOOK_MS), Effect.forever)
   );
 };
@@ -650,7 +651,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   // Once per agent, for as long as it runs: a sweep each QUIET_SWEEP_MS
   // after the last one ended, the first a wait after it starts; each sweep's
   // failure is said in it.
-  quietSweeps = Effect.runFork(
+  quietSweeps = runFork(
     sweep.pipe(Effect.delay(QUIET_SWEEP_MS), Effect.forever)
   );
 };

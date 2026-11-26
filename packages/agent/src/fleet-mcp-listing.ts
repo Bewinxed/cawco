@@ -1,7 +1,9 @@
 import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import { Cache, Effect } from "effect";
 import { z } from "zod";
+import { runPromise, runSync } from "./daemon-runtime";
 import { harnessMcpUrl } from "./delegation";
+import { fromPromise } from "./rejected";
 
 /** Where every harness on this machine dials a fleet server the hub proxies. */
 export const proxiedFleetMcpUrl = (name: string): string =>
@@ -126,32 +128,27 @@ const count = async (
  * nothing is decided on a list nobody saw, and what was decided before stays.
  */
 export const proxiedToolCount = (name: string): Promise<number | undefined> =>
-  Effect.runPromise(Cache.get(readings, name));
+  runPromise(Cache.get(readings, name));
 
 /** One reading of `name`'s tools ({@link proxiedToolCount}): what could not be read is undefined. */
 const reading = Effect.fnUntraced(function* (name: string) {
   return yield* boundedRead(
     READING_MS,
-    Effect.tryPromise({
-      try: (signal) => count(name, signal),
-      catch: (error) => error,
-    })
+    fromPromise((signal) => count(name, signal))
   ).pipe(
     Effect.catch((error) =>
-      Effect.sync((): number | undefined => {
-        if (error instanceof Unanswered) {
-          console.warn(
+      (error instanceof Unanswered
+        ? Effect.logWarning(
             `[fleet-mcp] the hub's relay did not list ${name}'s tools within ${READING_MS / 1000} s; nothing is decided on it`
-          );
-        }
-        return undefined;
-      })
+          )
+        : Effect.void
+      ).pipe(Effect.as<number | undefined>(undefined))
     )
   );
 });
 
 /** Each server's last reading, shared by every session that asks while it runs and {@link SHARED_MS} after. */
-const readings = Effect.runSync(
+const readings = runSync(
   Cache.make({
     lookup: reading,
     capacity: Number.POSITIVE_INFINITY,

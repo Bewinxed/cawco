@@ -43,6 +43,7 @@ import type { WindowAsk } from "@cawco/core/transcript-types";
 import type { LocatedRecord, TranscriptRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { timeOf } from "./last-prompt.ts";
 import {
   idSpans,
@@ -1321,7 +1322,7 @@ interface SaidPlan {
 
 async function saidPlan(all: readonly ChainNode[]): Promise<SaidPlan> {
   // The promise edge of the walk, the loop given one more turn after it.
-  const nodes = await Effect.runPromise(
+  const nodes = await runPromise(
     walkChainYielding([...all], true).pipe(
       Effect.map((walked) => walked.filter((node) => node.shows !== undefined)),
       Effect.tap(() => Effect.yieldNow)
@@ -1451,7 +1452,7 @@ export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
     const index = await indexes.get(path);
     const nodes = await derivedOf(index).chain.of(() =>
       // The promise edge of the walk.
-      Effect.runPromise(
+      runPromise(
         walkChainYielding([...index.nodes], false).pipe(
           Effect.map((walked) =>
             walked.filter((node) => node.shows !== undefined)

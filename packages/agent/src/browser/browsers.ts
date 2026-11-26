@@ -53,6 +53,8 @@ import { makeLock } from "@cawco/core/keyed-lock";
 import { namedAndMore } from "@cawco/providers/names";
 import { Deferred, Effect } from "effect";
 import type { AgentPorts } from "../agent-ports";
+import { every, runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import {
   ContainerHost,
   keepAdapter,
@@ -61,7 +63,6 @@ import {
 } from "./container-host";
 import { closeDoor, openDoor } from "./dashboard-door";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
-import { runEvery } from "./every";
 import { frontOrigin, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -745,10 +746,10 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
   const fd = openLockFile(join(browserDir(key), "lock"), true);
   try {
     // The lock taken, or the record another process made while it held it.
-    const looked = await Effect.runPromise(
+    const looked = await runPromise(
       lookUntil(
         { every: RESERVE_POLL_MS, deadlineMs: RESERVE_MS },
-        Effect.promise(
+        fromPromise(
           async (): Promise<
             { locked: true } | { made: BrowserRecord } | undefined
           > => {
@@ -1289,7 +1290,12 @@ const followNetwork = (
     queue.run(() => once(always));
   const unread = (error: unknown): string =>
     `[browser] the machine's network was not read: ${why(error)}`;
-  const stop = runEvery(pollMs, () => look(false), unread);
+  const stop = every(
+    "browser network",
+    pollMs,
+    fromPromise(() => look(false)),
+    unread
+  );
   look(true).catch((error: unknown) => console.warn(unread(error)));
   return { sweep: () => look(true), stop };
 };
@@ -1404,9 +1410,10 @@ export const watchBrowsers = async (
   }
   // A tick waits on a browser's lock while a start holds it (an image build
   // takes minutes): the next one waits for it rather than stacking behind it.
-  ticks = runEvery(
+  ticks = every(
+    "browser tick",
     TICK_MS,
-    () => tick(ports),
+    fromPromise(() => tick(ports)),
     (error) => `[browser] tick failed: ${why(error)}`
   );
   return stop;

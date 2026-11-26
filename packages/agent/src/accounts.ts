@@ -49,12 +49,14 @@ import { z } from "zod";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
+import { runPromise } from "./daemon-runtime";
 import {
   keychainLockState,
   type LockUnread,
   loginKeychainPath,
 } from "./login-keychain";
 import { probeStarted } from "./probe-count";
+import { fromPromise, type Rejected } from "./rejected";
 
 /**
  * An account's Claude Code on this machine: its config dir, which holds its
@@ -236,12 +238,9 @@ export const authStatus = Effect.fn("authStatus")(function* (
   env: Record<string, string | undefined>,
   dir: string
 ) {
-  const executable = yield* Effect.tryPromise({
-    try: () => claudeToStart(),
-    catch: (error) => error,
-  }).pipe(
+  const executable = yield* fromPromise(() => claudeToStart()).pipe(
     Effect.catchIf(
-      (error): error is ClaudeRefused => error instanceof ClaudeRefused,
+      (error) => error.cause instanceof ClaudeRefused,
       (error) => Effect.succeed({ refused: error.message })
     )
   );
@@ -268,7 +267,7 @@ export const authStatus = Effect.fn("authStatus")(function* (
 export const authStatusIn = (
   env: Record<string, string | undefined>,
   dir: string
-): Promise<AuthStatus> => Effect.runPromise(authStatus(env, dir));
+): Promise<AuthStatus> => runPromise(authStatus(env, dir));
 
 /** `claude auth status --json` that did not start. */
 class AuthStatusFailed extends Schema.TaggedError<AuthStatusFailed>()(
@@ -746,11 +745,7 @@ const CHECK_PROMPT = "Reply with OK.";
  * which says nothing of the account.
  */
 export const checkAccount = (account: string): Promise<AccountCheck> =>
-  Effect.runPromise(accountCheck(account));
-
-/** Another module's promise step: its rejection kept as it is, for the promise edge to give on. */
-const asIs = <A>(run: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: run, catch: (error) => error });
+  runPromise(accountCheck(account));
 
 /** Claude Code that gave no answer within a read's time: its words say which read. */
 class ClaudeUnanswered extends Schema.TaggedError<ClaudeUnanswered>()(
@@ -758,7 +753,7 @@ class ClaudeUnanswered extends Schema.TaggedError<ClaudeUnanswered>()(
   { message: Schema.String }
 ) {}
 
-/** A read's "no answer in time" among failures of any shape (another module's rejection, {@link asIs}). */
+/** A read's "no answer in time" among its other failures (another module's rejection, a {@link Rejected}). */
 const isUnanswered = (error: unknown): error is Unanswered =>
   error instanceof Unanswered;
 
@@ -776,7 +771,7 @@ const initialized = (handle: ReturnType<typeof query>, late: string) =>
   timedEffect(
     boundedRead(
       PROBE_TIMEOUT_MS,
-      asIs(() => handle.initializationResult())
+      fromPromise(() => handle.initializationResult())
     ),
     (ms) => recordLimitReading("agent.account-probe-ms", ms)
   ).pipe(
@@ -788,7 +783,7 @@ const initialized = (handle: ReturnType<typeof query>, late: string) =>
 /** {@link checkAccount}'s run, its promise edge. */
 const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
   yield* startable(account, "checked");
-  const executable = yield* asIs(claudeToStart);
+  const executable = yield* fromPromise(claudeToStart);
   const handle = yield* heldQuery({
     prompt: CHECK_PROMPT,
     options: {
@@ -809,7 +804,7 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
   return yield* timedEffect(
     boundedRead(
       CHECK_TIMEOUT_MS,
-      asIs(async (): Promise<AccountCheck> => {
+      fromPromise(async (): Promise<AccountCheck> => {
         for await (const message of handle) {
           if (
             message.type === "assistant" &&
@@ -858,12 +853,12 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
  * carries the organization id the dir's `auth status` names.
  */
 export const probeAccount = (account: string): Promise<AccountProbe> =>
-  Effect.runPromise(accountProbe(account));
+  runPromise(accountProbe(account));
 
 /** {@link probeAccount}'s run, its promise edge. */
 const accountProbe = Effect.fn("accountProbe")(function* (account: string) {
   yield* startable(account, "probed");
-  const executable = yield* asIs(claudeToStart);
+  const executable = yield* fromPromise(claudeToStart);
   const handle = yield* heldQuery({
     prompt: idle,
     options: {
@@ -881,7 +876,7 @@ const accountProbe = Effect.fn("accountProbe")(function* (account: string) {
   );
   // Who it is, keyed on its organization's id, which only `auth status`
   // names: read now, so the id is this login's ({@link dirIdentity}).
-  yield* asIs(() => readAccount(account));
+  yield* fromPromise(() => readAccount(account));
   const identity = dirIdentity(
     accountConfigDir(account),
     identityOf(init.account)
@@ -923,7 +918,7 @@ export const folderCommands = (
   account: string | undefined,
   launch: FolderLaunch
 ): Promise<SlashCommand[]> =>
-  Effect.runPromise(commandsOfFolder(cwd, account, launch));
+  runPromise(commandsOfFolder(cwd, account, launch));
 
 /** {@link folderCommands}'s run, its promise edge. */
 const commandsOfFolder = Effect.fn("commandsOfFolder")(function* (
@@ -934,7 +929,7 @@ const commandsOfFolder = Effect.fn("commandsOfFolder")(function* (
   if (account) {
     yield* startable(account, "read for its commands");
   }
-  const executable = yield* asIs(claudeToStart);
+  const executable = yield* fromPromise(claudeToStart);
   const handle = yield* heldQuery({
     prompt: idle,
     options: {

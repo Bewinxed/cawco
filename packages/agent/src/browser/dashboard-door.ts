@@ -82,10 +82,12 @@ import {
   Validity,
   Version,
 } from "@peculiar/asn1-x509";
-import { Cause, Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Scope } from "effect";
+import { runPromise, thrownOf } from "../daemon-runtime";
 import { delegationHubUrl } from "../delegation";
 import { hubPorts } from "../hub-ports";
 import { provenFetch } from "../hub-proof";
+import { fromPromise } from "../rejected";
 import { CLOSED_HOSTS } from "./hub-pac";
 import { browsersDir } from "./state";
 
@@ -798,21 +800,17 @@ const listening = (server: Server, at: number | string) =>
     () => Effect.sync(() => server.close())
   );
 
-/** A promise step of opening a door, its rejection the open's failure. */
-const step = <A>(work: () => Promise<A>) =>
-  Effect.tryPromise({ try: work, catch: (error) => error });
-
 /** Browser `key`'s listeners on `port` and on its folder's socket, each closed with the scope. */
 const listeners = Effect.fnUntraced(function* (key: BrowserKey, port: number) {
-  yield* listening(yield* step(() => doorServer(key)), port);
+  yield* listening(yield* fromPromise(() => doorServer(key)), port);
   const dir = doorDir(key);
-  yield* step(() => makeFolder(dir, { mode: 0o755 }));
+  yield* fromPromise(() => makeFolder(dir, { mode: 0o755 }));
   // The container's user, another uid, reaches the socket through it.
-  yield* step(() => chmod(dir, 0o755));
+  yield* fromPromise(() => chmod(dir, 0o755));
   const path = join(dir, DOOR_SOCKET);
-  yield* step(() => rm(path, { force: true }));
-  yield* listening(yield* step(() => doorServer(key)), path);
-  yield* step(() => chmod(path, 0o666));
+  yield* fromPromise(() => rm(path, { force: true }));
+  yield* listening(yield* fromPromise(() => doorServer(key)), path);
+  yield* fromPromise(() => chmod(path, 0o666));
 });
 
 /** Browser `key`'s door closed: its listeners, its pass forgotten, its folder removed. */
@@ -825,9 +823,7 @@ const shut = Effect.fnUntraced(function* (key: BrowserKey) {
   if (held) {
     yield* Scope.close(held.scope, Exit.void);
   }
-  yield* Effect.promise(() =>
-    rm(doorDir(key), { recursive: true, force: true })
-  );
+  yield* fromPromise(() => rm(doorDir(key), { recursive: true, force: true }));
 });
 
 /**
@@ -838,7 +834,7 @@ const shut = Effect.fnUntraced(function* (key: BrowserKey) {
  */
 export const openDoor = (key: BrowserKey, port: number): Promise<void> =>
   // The promise edge of a door's open, in its turn.
-  Effect.runPromise(
+  runPromise(
     doorTurns.withLock(
       key,
       Effect.gen(function* () {
@@ -862,7 +858,7 @@ export const openDoor = (key: BrowserKey, port: number): Promise<void> =>
           return;
         }
         yield* Scope.close(scope, Exit.void);
-        const error = Cause.squash(opened.cause);
+        const error = thrownOf(opened.cause);
         yield* Effect.logWarning(
           `[browser] ${key}: its dashboard door did not open on 127.0.0.1:${port}: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -873,4 +869,4 @@ export const openDoor = (key: BrowserKey, port: number): Promise<void> =>
 /** Closes browser `key`'s door, its pass forgotten and its folder removed. */
 export const closeDoor = (key: BrowserKey): Promise<void> =>
   // The promise edge of a door's close, in its turn.
-  Effect.runPromise(doorTurns.withLock(key, shut(key)));
+  runPromise(doorTurns.withLock(key, shut(key)));

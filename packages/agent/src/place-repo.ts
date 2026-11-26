@@ -46,6 +46,8 @@ import {
 import { namedAndMore } from "@cawco/providers/names";
 import type { Subprocess } from "bun";
 import { Effect, Schema } from "effect";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 import { repoTop } from "./repo-top";
 import { credentialIn } from "./secret-text";
 
@@ -99,14 +101,14 @@ const within = <T>(
 ): Promise<T> => {
   const remaining = deadline - Date.now();
   // The promise edge of one git run (this file's place steps).
-  return Effect.runPromise(
+  return runPromise(
     remaining <= 0
       ? Effect.fail(
           new GitLate({
             message: `git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`,
           })
         )
-      : boundedRead(remaining, Effect.promise(work)).pipe(
+      : boundedRead(remaining, fromPromise(work)).pipe(
           Effect.catchTag("Unanswered", () =>
             Effect.fail(
               new GitLate({

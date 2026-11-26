@@ -38,6 +38,7 @@ import {
 } from "@cawco/core/signal";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { Effect, Schema } from "effect";
+import { fromPromise, type Rejected } from "./rejected";
 
 /** The database an OpenCode 2.0 data home holds: what makes a home a store. */
 const DATABASE = join("opencode", "opencode.db");
@@ -114,10 +115,10 @@ const ended = (
   pid: number,
   start: string,
   ms: number
-): Effect.Effect<boolean> =>
+): Effect.Effect<boolean, Rejected> =>
   lookUntil(
     { every: GONE_LOOK_MS, deadlineMs: ms, until: (alive: boolean) => !alive },
-    Effect.promise(() => runs(pid, start))
+    fromPromise(() => runs(pid, start))
   ).pipe(Effect.map((looked) => looked.kind === "found"));
 
 /**
@@ -135,15 +136,15 @@ const endServersOn = Effect.fnUntraced(function* (
   home: string,
   account: string
 ) {
-  for (const { pid, start } of yield* Effect.promise(() => serversOn(home))) {
-    console.info(
+  for (const { pid, start } of yield* fromPromise(() => serversOn(home))) {
+    yield* Effect.logInfo(
       `[opencode] account ${account}'s server ${pid} runs on its data home in the runtime dir; ending it so the home moves still`
     );
-    yield* Effect.promise(() => send(pid, start, "SIGTERM"));
+    yield* fromPromise(() => send(pid, start, "SIGTERM"));
     if (yield* ended(pid, start, TERM_GRACE_MS)) {
       continue;
     }
-    yield* Effect.promise(() => send(pid, start, "SIGKILL"));
+    yield* fromPromise(() => send(pid, start, "SIGKILL"));
     if (!(yield* ended(pid, start, KILL_GRACE_MS))) {
       return yield* new HomeHeld({
         message: `Account ${account}'s OpenCode server ${pid} on ${home} did not end after SIGKILL, so its data home cannot move.`,
@@ -216,28 +217,26 @@ const moveHome = async (
  * account's sessions are elsewhere.
  */
 export const moveOpencodeAccountHomes = Effect.gen(function* () {
-  yield* Effect.promise(() =>
-    rm(stagingRoot(), { recursive: true, force: true })
-  );
+  yield* fromPromise(() => rm(stagingRoot(), { recursive: true, force: true }));
   const old = join(sessionIdentityDir(), "opencode-accounts");
   const accounts = yield* Effect.promise(() =>
     readdir(old).catch(unlessGone([]))
   );
   for (const account of accounts) {
     const from = join(old, account);
-    if (!(yield* Effect.promise(() => there(join(from, DATABASE))))) {
+    if (!(yield* fromPromise(() => there(join(from, DATABASE))))) {
       continue;
     }
     const to = opencodeAccountHome(account);
-    if (yield* Effect.promise(() => there(join(to, DATABASE)))) {
-      console.warn(
+    if (yield* fromPromise(() => there(join(to, DATABASE)))) {
+      yield* Effect.logWarning(
         `[opencode] account ${account}'s data home is at ${to} already; the copy left at ${from} is not read`
       );
       continue;
     }
     yield* endServersOn(from, account);
-    yield* Effect.promise(() => moveHome(account, from, to));
-    console.info(
+    yield* fromPromise(() => moveHome(account, from, to));
+    yield* Effect.logInfo(
       `[opencode] moved account ${account}'s data home from ${from} to ${to}`
     );
   }

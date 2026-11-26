@@ -1,6 +1,5 @@
 import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
-import { failureOf } from "@cawco/core/detach";
 import { HUB_PORT_HEADER } from "@cawco/core/ports";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { TailnetServing } from "@cawco/core/tailnet-https";
@@ -17,6 +16,8 @@ import {
 import type { Server } from "bun";
 import { Effect, Exit, Layer, Scope } from "effect";
 import { type AgentState, type HubHere, recordAgentState } from "./agent-state";
+import { letGo, runPromise, runSync } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** How the loopback serves the hub, as the agent records it. */
 type HubServing = NonNullable<AgentState["hubLoopback"]>;
@@ -88,23 +89,13 @@ interface HubLoopback {
   stop: () => Promise<void>;
 }
 
-/**
- * `work` let go: started now, awaited by no one, its failure logged. The
- * agent's previews let work go with it too (preview.ts).
- */
-export const letGo = (what: string, work: () => Promise<unknown>): void => {
-  Effect.runFork(
-    Effect.tryPromise({ try: work, catch: (error) => error }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning(`[${what}] failed: ${failureOf(error)}`)
-      )
-    )
+/** Records how the loopback serves the hub (agent-state.ts `hubLoopback`), let go. */
+const recordHub = (serving: HubServing): void => {
+  letGo(
+    "hub loopback record",
+    fromPromise(() => recordAgentState("hubLoopback", serving))
   );
 };
-
-/** Records how the loopback serves the hub (agent-state.ts `hubLoopback`). */
-const recordHub = (serving: HubServing): void =>
-  letGo("hub loopback record", () => recordAgentState("hubLoopback", serving));
 
 /**
  * How the loopback reaches the hub now: plain http or https verified
@@ -437,9 +428,9 @@ async function carryElsewhere(
     }
   }
   // Its listeners stop together, as its scope closes.
-  const scope = Effect.runSync(Scope.make("parallel"));
+  const scope = runSync(Scope.make("parallel"));
   // The promise edge of `listenAll`, in the loopback's own scope.
-  const { servers, held, absent } = await Effect.runPromise(
+  const { servers, held, absent } = await runPromise(
     listenAll(hubHost, LOOPBACK, all, () => route).pipe(
       Scope.provide(scope),
       Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
@@ -480,7 +471,7 @@ async function carryElsewhere(
       listeners: servers.length,
       serverName: route.kind === "tailnet" ? route.serverName : null,
     }),
-    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+    stop: () => runPromise(Scope.close(scope, Exit.void)),
   };
 }
 
@@ -530,22 +521,31 @@ export function carryHub(
 export function followHub(tailnet: TailnetServing | undefined): void {
   const now = carried;
   if (now) {
-    letGo("hub loopback follow", () =>
-      now.loopback.then((loopback) => {
-        if (loopback?.follow(tailnet)) {
-          recordHub(loopback.serving());
-        }
-      })
+    letGo(
+      "hub loopback follow",
+      fromPromise(() => now.loopback).pipe(
+        Effect.tap((loopback) =>
+          Effect.sync(() => {
+            if (loopback?.follow(tailnet)) {
+              recordHub(loopback.serving());
+            }
+          })
+        )
+      )
     );
   }
 }
 
 /** The agent is stopping: its loopback stops serving the hub. */
-const stopCarrying = Effect.promise(async () => {
+const stopCarrying = fromPromise(async () => {
   const was = carried;
   carried = undefined;
   await (await was?.loopback)?.stop();
-});
+}).pipe(
+  Effect.catch((error) =>
+    Effect.logWarning(`[${HOP}] did not stop: ${error.message}`)
+  )
+);
 
 /**
  * The hub on this computer's loopback, which each register starts

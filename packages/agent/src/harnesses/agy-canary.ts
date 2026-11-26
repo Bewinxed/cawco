@@ -45,6 +45,7 @@ import { resolveRates } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
 import { Effect, Exit, Option, Scope } from "effect";
 import { z } from "zod";
+import { fromPromise, type Rejected } from "../rejected";
 import { carriesHookNotice, levelsOffered, modelsOf } from "./agy-frames";
 import { agyJudgeEnv, serveAgyJudge } from "./agy-hook";
 import {
@@ -238,9 +239,13 @@ const failedWhy = (
   error:
     | { readonly _tag: "Unanswered"; readonly reason: "timeout" | "dead" }
     | { readonly _tag: "AgyJudgeError"; readonly why: string }
+    | Rejected
 ): string => {
   if (error._tag === "AgyJudgeError") {
     return error.why;
+  }
+  if (error._tag === "Rejected") {
+    return error.message;
   }
   return error.reason === "timeout"
     ? "timed out"
@@ -268,15 +273,15 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
   const scope = yield* Scope.make();
   const made: { sessionId?: string } = {};
   const run = Effect.gen(function* () {
-    yield* Effect.promise(() => makeFolder(scratch.dir, { mode: 0o700 }));
-    yield* Effect.promise(() => makeFolder(dirname(socket)));
+    yield* fromPromise(() => makeFolder(scratch.dir, { mode: 0o700 }));
+    yield* fromPromise(() => makeFolder(dirname(socket)));
     const judge = yield* agyJudgeEnv(socket);
     yield* serveAgyJudge(socket, checkAnswer(scratch, token, seen)).pipe(
       Scope.provide(scope)
     );
     // The keyring guard's reading (agy-launch.ts `refuseKeyring`), as agy
     // is about to start.
-    const signedIn = yield* Effect.promise(() => signedInAt(home));
+    const signedIn = yield* fromPromise(() => signedInAt(home));
     const since = Date.now();
     const { child, connection } = startAcp(
       {
@@ -304,7 +309,7 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
     // The promise edge of one bounded turn of agy's.
     yield* boundedRead(
       CHECK_MS,
-      Effect.promise(async () => {
+      fromPromise(async () => {
         await signInAcp(connection, signIn.method, runtimeVersion, {
           end: () => endGroup(child),
           home,
@@ -355,7 +360,7 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
     Effect.ensuring(
       Effect.gen(function* () {
         yield* Scope.close(scope, Exit.void);
-        yield* Effect.promise(async () => {
+        yield* fromPromise(async () => {
           if (made.sessionId) {
             // Made only for the check, never the person's: its id is not kept.
             await deleteAgyConversation(
@@ -367,7 +372,13 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
           await rm(scratch.dir, { recursive: true, force: true });
           // The checks' folder goes once no check is in it.
           await rmdir(dirname(scratch.dir)).catch(() => undefined);
-        });
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(
+              `[agy] the hook check's scratch ${scratch.dir} was not removed: ${error.message}`
+            )
+          )
+        );
       })
     )
   );
@@ -408,7 +419,7 @@ export const agyHookHeld = (accountId: string) =>
         });
       }
       if (agy.version) {
-        yield* Effect.promise(() =>
+        yield* fromPromise(() =>
           writeStateFile(
             file,
             `${JSON.stringify({

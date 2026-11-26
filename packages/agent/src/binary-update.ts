@@ -107,6 +107,7 @@ import { Context, Effect, Fiber, Layer, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary/control";
 import { DaemonLinks } from "./daemon-links";
+import { letGo, runFork, runPromise } from "./daemon-runtime";
 import { provenFetch } from "./hub-proof";
 import {
   type KeeperConnection,
@@ -116,6 +117,7 @@ import {
 } from "./keepers";
 import { pinsBackFor, runBinaryPins } from "./pin-record";
 import { type Power, type PowerEvent, watchPower } from "./power";
+import { fromPromise } from "./rejected";
 import {
   lowerFence,
   raiseFence,
@@ -429,13 +431,15 @@ const logFailure = (error: unknown): void => {
 };
 
 /**
- * `work`, let go: begun once the caller has returned, as a timer of 0 began
- * it, its failure said in the log ({@link logFailure}).
+ * `work`, let go (daemon-runtime.ts `letGo`): begun once the caller has
+ * returned, as a timer of 0 began it, its failure said in the log
+ * ({@link logFailure}).
  */
-const letGo = (work: () => Promise<unknown>): void => {
-  Effect.runFork(
+const tickLetGo = (work: () => Promise<unknown>): void => {
+  letGo(
+    "update",
     Effect.yieldNow.pipe(
-      Effect.andThen(Effect.tryPromise({ try: work, catch: (error) => error })),
+      Effect.andThen(fromPromise(work)),
       Effect.catch((error) => Effect.sync(() => logFailure(error)))
     )
   );
@@ -450,11 +454,11 @@ const everyFixed = (
   ms: number,
   work: () => Promise<unknown>
 ): Fiber.Fiber<unknown> =>
-  Effect.runFork(
+  runFork(
     Effect.sleep(ms).pipe(
       Effect.andThen(
         Effect.repeat(
-          Effect.tryPromise({ try: work, catch: (error) => error }).pipe(
+          fromPromise(work).pipe(
             Effect.catch((error) => Effect.sync(() => logFailure(error)))
           ),
           Schedule.fixed(ms)
@@ -851,13 +855,13 @@ export class BinaryUpdater {
 
   stop(): void {
     for (const ticks of this.#ticks.splice(0)) {
-      Effect.runFork(Fiber.interrupt(ticks));
+      runFork(Fiber.interrupt(ticks));
     }
   }
 
   /** The hub's push: act on the changed policy without holding the hub's call. */
   configure(): BinaryUpdateState {
-    letGo(() => this.tick());
+    tickLetGo(() => this.tick());
     return this.#state;
   }
 
@@ -869,7 +873,7 @@ export class BinaryUpdater {
    */
   hubRegistered(): void {
     if (this.#state.phase === "waiting-for-hub") {
-      letGo(() => this.tick());
+      tickLetGo(() => this.tick());
     }
   }
 
@@ -2218,7 +2222,7 @@ export class BinaryUpdater {
     try {
       return await work();
     } finally {
-      Effect.runFork(Fiber.interrupt(renew));
+      runFork(Fiber.interrupt(renew));
     }
   }
 
@@ -2335,17 +2339,14 @@ export class BinaryUpdater {
       await this.#tellHubUnwritten({ phase: "installing" });
       // The work in flight looked at now, and every DRAIN_POLL_MS after
       // until it is gone or DRAIN_MS has passed: the last look's holds.
-      const looked = await Effect.runPromise(
+      const looked = await runPromise(
         lookUntil(
           {
             every: DRAIN_POLL_MS,
             deadlineMs: DRAIN_MS,
             until: (now: RestartReadiness) => now.ready,
           },
-          Effect.tryPromise({
-            try: () => readReadiness(hub, this.#supervisorHolds),
-            catch: (error) => error,
-          })
+          fromPromise(() => readReadiness(hub, this.#supervisorHolds))
         )
       );
       const reading = looked.kind === "found" ? looked.value : looked.last;
@@ -2573,7 +2574,7 @@ export const BinaryUpdatesLayer = Layer.effect(BinaryUpdates)(
       ),
       (made) => Effect.sync(() => made.stop())
     );
-    yield* Effect.forkScoped(Effect.promise(() => updater.start()));
+    yield* Effect.forkScoped(fromPromise(() => updater.start()));
     return updater;
   })
 );

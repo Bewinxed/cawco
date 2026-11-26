@@ -19,6 +19,7 @@ import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import type {
   StoreAnswer,
   StoreArg,
@@ -158,7 +159,7 @@ export const storeRead = <K extends StoreOp>(
   // The promise edge of the join: a caller there is never interrupted, so
   // the read goes to its end for whoever asks the same after this caller's
   // deadline.
-  const shared = Effect.runPromise(reading[op].run(key, ask(op, arg)));
+  const shared = runPromise(reading[op].run(key, ask(op, arg)));
   return readWithin(ms, () => shared);
 };
 
@@ -169,4 +170,4 @@ export const storeWork = <K extends StoreOp>(
   tell?: (value: unknown) => void
 ): Promise<StoreAnswer<K>> =>
   // The promise edge of ask.
-  Effect.runPromise(ask(op, arg, tell));
+  runPromise(ask(op, arg, tell));

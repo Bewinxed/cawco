@@ -45,6 +45,8 @@ import type { Subprocess } from "bun";
 import { Effect, Exit, Schema } from "effect";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { bridgeRelay } from "./bridge-relay";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** The workspace a preview names has no boundary running on this machine. */
 export class WorkspaceDown extends PreviewStartDown {
@@ -127,6 +129,13 @@ const sharing = makeJoin<string, string, Error>();
 const stops = new Map<string, number>();
 /** The previews (macOS) whose workspace's network is the host's, each with that workspace. */
 const onHost = new Map<string, string>();
+/**
+ * The previews whose scope has closed (preview.ts: a stop, or the start
+ * before a new one), each until its next start ({@link previewStarting}):
+ * a request its listener held when the stop came asks for its bridge no
+ * sooner than now, and is refused rather than open one no stop would name.
+ */
+const ended = new Set<string>();
 
 /** The agent's own dir for bridge sockets, beside its other sockets; no workspace reads it. */
 const bridgeDir = (): string => {
@@ -186,7 +195,23 @@ export const bridgeClosed = (instanceId: string): Effect.Effect<void, Error> =>
 
 /** The promise edge of {@link bridgeClosed}. */
 export const closeBridge = (instanceId: string): Promise<void> =>
-  Effect.runPromise(bridgeClosed(instanceId));
+  runPromise(bridgeClosed(instanceId));
+
+/**
+ * Preview `instanceId`'s scope closed: its bridge is closed as
+ * {@link bridgeClosed} closes it, and every open for it is refused with
+ * {@link BridgeStopped} until its next start ({@link previewStarting}).
+ */
+export const previewEnded = (instanceId: string): Effect.Effect<void, Error> =>
+  Effect.suspend(() => {
+    ended.add(instanceId);
+    return bridgeClosed(instanceId);
+  });
+
+/** Preview `instanceId` starts: its requests may open its bridge again. */
+export const previewStarting = (instanceId: string): void => {
+  ended.delete(instanceId);
+};
 
 /** Kills `instanceId`'s registered bridge, its whole group, and removes its socket. */
 const teardown = (instanceId: string): Effect.Effect<void, Error> =>
@@ -216,10 +241,7 @@ const killGroup = (
     if (leader !== undefined) {
       signalGroup(leader, "SIGKILL");
     }
-    yield* Effect.tryPromise({
-      try: () => rm(socket, { force: true }),
-      catch: thrown,
-    });
+    yield* fromPromise(() => rm(socket, { force: true }));
     yield* Effect.promise(() => proc.exited);
     const left = yield* lookUntil(
       {
@@ -230,13 +252,13 @@ const killGroup = (
       Effect.sync(() => inGroup(proc.pid))
     );
     if (left.kind === "deadline") {
-      console.warn(
+      yield* Effect.logWarning(
         `[preview] the bridge for ${instanceId} left ${left.last.join(", ")} running ${BRIDGE_STOP_MS / 1000}s after it was stopped`
       );
     }
   });
 
-/** The preview was stopped while its bridge opened; nothing of the bridge stands. */
+/** The preview was stopped before or while its bridge opened; nothing of the bridge stands. */
 class BridgeStopped extends Schema.TaggedError<BridgeStopped>()(
   "BridgeStopped",
   {}
@@ -255,30 +277,33 @@ const alive = (bridge: Bridge): boolean =>
  * Where `port` of workspace `workspace` is served now: the network of the
  * newest generation whose sandbox runs and listens on it, else the current
  * one's (`workspaceNetworks` lists them newest first); `host` on macOS.
- * Throws {@link WorkspaceDown} when no sandbox of the workspace runs.
+ * Fails with {@link WorkspaceDown} when no sandbox of the workspace runs.
  */
-const target = async (
+const target = (
   workspace: string,
   port: number
-): Promise<number | "host"> => {
-  const networks = await workspaceNetworks(workspace);
-  const [first] = networks;
-  if (!first) {
-    throw new WorkspaceDown();
-  }
-  if (first === "host") {
-    return "host";
-  }
-  const inners = networks.flatMap((network) =>
-    network === "host" ? [] : [network.inner]
-  );
-  const listens = await Promise.all(
-    inners.map(async (inner) =>
-      (await listeners(inner)).some((one) => one.port === port)
-    )
-  );
-  return inners[listens.indexOf(true)] ?? first.inner;
-};
+): Effect.Effect<number | "host", Error> =>
+  Effect.gen(function* () {
+    const networks = yield* fromPromise(() => workspaceNetworks(workspace));
+    const [first] = networks;
+    if (!first) {
+      return yield* Effect.fail(new WorkspaceDown());
+    }
+    if (first === "host") {
+      return "host";
+    }
+    const inners = networks.flatMap((network) =>
+      network === "host" ? [] : [network.inner]
+    );
+    const listens = yield* fromPromise(() =>
+      Promise.all(
+        inners.map(async (inner) =>
+          (await listeners(inner)).some((one) => one.port === port)
+        )
+      )
+    );
+    return inners[listens.indexOf(true)] ?? first.inner;
+  });
 
 /** The bridge process to `inner`'s network for `relay`, leading a process group of its own. */
 const spawnBridge = (
@@ -323,7 +348,8 @@ const open = (
 ): Effect.Effect<string, Error> =>
   Effect.gen(function* () {
     const { inner, port, workspace } = reach;
-    const stopped = () => stops.get(instanceId) !== stop;
+    const stopped = () =>
+      stops.get(instanceId) !== stop || ended.has(instanceId);
     yield* teardown(instanceId);
     if (stopped()) {
       return yield* new BridgeStopped();
@@ -338,12 +364,9 @@ const open = (
     if (problem) {
       return yield* Effect.fail(new Error(problem));
     }
-    yield* Effect.tryPromise({
-      try: async () => {
-        await makeFolder(dir, { mode: 0o700 });
-        await rm(socket, { force: true });
-      },
-      catch: thrown,
+    yield* fromPromise(async () => {
+      await makeFolder(dir, { mode: 0o700 });
+      await rm(socket, { force: true });
     });
     const proc = yield* Effect.acquireRelease(
       Effect.try({
@@ -431,45 +454,58 @@ export const workspaceGone = async (workspace: string): Promise<boolean> =>
  * to what it first opened for: once the preview names another workspace or
  * port, or a newer generation listens on the port (its server started again
  * there), the next request goes there. One bridge per preview at a time: an
- * open under way for another reach finishes before this one's starts. Throws
- * {@link WorkspaceDown} when no sandbox of the workspace runs here; a request
- * that then finds nothing answering asks {@link workspaceGone}.
+ * open under way for another reach finishes before this one's starts. Fails
+ * with {@link WorkspaceDown} when no sandbox of the workspace runs here; a
+ * request that then finds nothing answering asks {@link workspaceGone}. A
+ * preview whose scope has closed is refused ({@link previewEnded}).
  */
-export const reachWorkspace = async (
+export const workspaceReached = (
   instanceId: string,
   workspace: string,
   port: number
-): Promise<string | "host"> => {
-  // A stage runs in a boundary of any kind (core workspace-id.ts): a clone's, a place's stage clone's, a design folder's.
-  if (!isWorkspaceId(workspace)) {
-    throw new Error(`${workspace} is not a workspace id.`);
-  }
-  if (onHost.get(instanceId) === workspace) {
-    return "host";
-  }
-  const inner = await target(workspace, port);
-  if (inner === "host") {
-    onHost.set(instanceId, workspace);
-    return "host";
-  }
-  onHost.delete(instanceId);
-  const reach: Reach = { inner, port, workspace };
-  if (!turns.isBusy(instanceId)) {
-    // Nothing opens or stops it: the bridge it has serves when it reaches this.
-    const bridge = bridges.get(instanceId);
-    if (bridge && sameReach(bridge, reach) && alive(bridge)) {
-      return bridge.socket;
+): Effect.Effect<string | "host", Error> =>
+  Effect.gen(function* () {
+    // A stage runs in a boundary of any kind (core workspace-id.ts): a clone's, a place's stage clone's, a design folder's.
+    if (!isWorkspaceId(workspace)) {
+      return yield* Effect.fail(
+        new Error(`${workspace} is not a workspace id.`)
+      );
     }
-  }
-  // The promise edge of `bridgeTo` in the preview's turn, shared by every
-  // request for the same reach while it is under way.
-  return Effect.runPromise(
-    sharing.run(
+    if (ended.has(instanceId)) {
+      return yield* new BridgeStopped();
+    }
+    if (onHost.get(instanceId) === workspace) {
+      return "host";
+    }
+    const inner = yield* target(workspace, port);
+    if (inner === "host") {
+      onHost.set(instanceId, workspace);
+      return "host";
+    }
+    onHost.delete(instanceId);
+    const reach: Reach = { inner, port, workspace };
+    if (!turns.isBusy(instanceId)) {
+      // Nothing opens or stops it: the bridge it has serves when it reaches this.
+      const bridge = bridges.get(instanceId);
+      if (bridge && sameReach(bridge, reach) && alive(bridge)) {
+        return bridge.socket;
+      }
+    }
+    // `bridgeTo` in the preview's turn, shared by every request for the
+    // same reach while it is under way.
+    return yield* sharing.run(
       JSON.stringify([instanceId, workspace, port, inner]),
       turns.withLock(
         instanceId,
         bridgeTo(instanceId, reach, stops.get(instanceId))
       )
-    )
-  );
-};
+    );
+  });
+
+/** The promise edge of {@link workspaceReached}. */
+export const reachWorkspace = (
+  instanceId: string,
+  workspace: string,
+  port: number
+): Promise<string | "host"> =>
+  runPromise(workspaceReached(instanceId, workspace, port));

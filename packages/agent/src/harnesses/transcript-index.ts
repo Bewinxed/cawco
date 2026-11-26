@@ -32,8 +32,10 @@ import {
   type LocatedRecord,
   scanFile,
 } from "@cawco/jsonl-parser";
-import { Effect, Semaphore } from "effect";
+import { Semaphore } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { gauge } from "../memory.ts";
+import { fromPromise } from "../rejected";
 
 /** One file's index. */
 export interface LineIndex<N, M = unknown> {
@@ -173,12 +175,9 @@ export class LineIndexes<N, M = unknown> {
   /** A whole file scanned into a new index, {@link SCANS_AT_ONCE} at a time. */
   private scanWhole(path: string): Promise<LineIndex<N, M>> {
     // The promise edge of a scan that waits its turn.
-    return Effect.runPromise(
+    return runPromise(
       this.scans.withPermit(
-        Effect.tryPromise({
-          try: () => inFlight("transcript index scans", this.scan(path)),
-          catch: (error) => error,
-        })
+        fromPromise(() => inFlight("transcript index scans", this.scan(path)))
       )
     );
   }

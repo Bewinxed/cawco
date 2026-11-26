@@ -34,7 +34,7 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { cutShort, lastLines as lastLinesOf } from "@cawco/core/words/helpers";
 import type { Subprocess } from "bun";
-import { Cause, Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Exit, Schema, Scope } from "effect";
 import type { z } from "zod";
 import {
   accountEnv,
@@ -46,6 +46,14 @@ import {
   removeAccountDir,
 } from "./accounts";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
+import {
+  runFork,
+  runPromise,
+  runSync,
+  runSyncExit,
+  thrownOf,
+} from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /**
  * Signing an account in on a machine from the dashboard, over the tunnel, in
@@ -117,7 +125,7 @@ export interface LoginChallenge {
 
 /** Ends the sign-in: its scope closed, the CLI killed and its terminal closed. */
 const end = (signIn: SignIn) => {
-  Effect.runFork(Scope.close(signIn.scope, Exit.void));
+  runFork(Scope.close(signIn.scope, Exit.void));
 };
 
 /**
@@ -180,7 +188,7 @@ const unmarkLogin = (account: string, pid: number): void => {
  * (its marker names a live process with the same start time), and drops
  * every marker.
  */
-export const endOrphanedSignIns = async (): Promise<void> => {
+export const endOrphanedSignIns = Effect.fn("endOrphanedSignIns")(function* () {
   for (const account of accountIds()) {
     let marker: LoginMarker | undefined;
     try {
@@ -190,7 +198,7 @@ export const endOrphanedSignIns = async (): Promise<void> => {
         throw error;
       }
       // It names no process to end: said, and dropped as every marker is.
-      console.warn(
+      yield* Effect.logWarning(
         `[login] ${error.message}: the sign-in it marked is not ended, and the marker is removed`
       );
       rmSync(markerFile(account), { force: true });
@@ -199,24 +207,29 @@ export const endOrphanedSignIns = async (): Promise<void> => {
     if (!marker) {
       continue;
     }
-    const live = await identifiedPid(marker).catch((error: unknown) => {
-      if (!isSignalRefused(error)) {
-        throw error;
-      }
-      // It names no process CawCo may signal: said, and dropped as every marker is.
-      console.warn(
-        `[login] ${markerFile(account)}: ${error.message}; the sign-in it marked is not ended, and the marker is removed`
-      );
-    });
+    const named = marker;
+    const live = yield* fromPromise(() =>
+      identifiedPid(named).catch((error: unknown) => {
+        if (!isSignalRefused(error)) {
+          throw error;
+        }
+        // It names no process CawCo may signal: said, and dropped as every marker is.
+        console.warn(
+          `[login] ${markerFile(account)}: ${error.message}; the sign-in it marked is not ended, and the marker is removed`
+        );
+      })
+    );
     // Gone between the check and the signal, it has nothing left to end.
     if (live !== undefined && signalPid(live, "SIGTERM") === "denied") {
-      throw new Error(
-        `[login] the sign-in ${markerFile(account)} marks, pid ${live}, is not this user's to end`
+      return yield* Effect.fail(
+        new Error(
+          `[login] the sign-in ${markerFile(account)} marks, pid ${live}, is not this user's to end`
+        )
       );
     }
     rmSync(markerFile(account), { force: true });
   }
-};
+});
 
 /** What the CLI printed since `from`, as the text a terminal would show. */
 const said = (signIn: SignIn, from = 0) =>
@@ -296,7 +309,7 @@ export const heardUntil = (
   boundedWhileHeard(quietMs, (heard) =>
     Effect.callback<boolean>((resume) => {
       run.heard = () => {
-        Effect.runSync(heard);
+        runSync(heard);
         if (done()) {
           resume(Effect.succeed(true));
         }
@@ -320,8 +333,7 @@ const until = (
   signIn: SignIn,
   done: () => boolean,
   quietMs: number
-): Promise<boolean | "quiet"> =>
-  Effect.runPromise(heardUntil(signIn, done, quietMs));
+): Promise<boolean | "quiet"> => runPromise(heardUntil(signIn, done, quietMs));
 
 /**
  * A CLI's terminal and the CLI itself, opened in `scope`, which ends both
@@ -334,7 +346,7 @@ export const openInTerminal = (
   spawn: (terminal: Bun.Terminal) => Subprocess,
   output: (bytes: Uint8Array) => void
 ): { child: Subprocess; terminal: Bun.Terminal } => {
-  const opened = Effect.runSyncExit(
+  const opened = runSyncExit(
     Effect.gen(function* () {
       const terminal = yield* Effect.acquireRelease(
         Effect.sync(
@@ -357,8 +369,8 @@ export const openInTerminal = (
     }).pipe(Scope.provide(scope))
   );
   if (Exit.isFailure(opened)) {
-    Effect.runFork(Scope.close(scope, opened));
-    throw Cause.squash(opened.cause);
+    runFork(Scope.close(scope, opened));
+    throw thrownOf(opened.cause);
   }
   return opened.value;
 };
@@ -411,14 +423,12 @@ const beginSignIn = async (
   const { pid } = current.child;
   await markLogin(account, pid);
   // Let go: the marker goes once the CLI ends, however that comes.
-  Effect.runFork(
+  runFork(
     Effect.promise(() => current.child.exited).pipe(
       Effect.andThen(Effect.sync(() => unmarkLogin(account, pid))),
       Effect.catchCause((cause) =>
-        Effect.sync(() =>
-          console.warn(
-            `[login] ${account}'s sign-in marker: ${failureOf(Cause.squash(cause))}`
-          )
+        Effect.logWarning(
+          `[login] ${account}'s sign-in marker: ${failureOf(thrownOf(cause))}`
         )
       )
     )
@@ -548,7 +558,7 @@ const logout = async (account: string): Promise<void> => {
     throw error;
   }
   // The promise edge of {@link signOut}.
-  await Effect.runPromise(signOut(executable, account));
+  await runPromise(signOut(executable, account));
 };
 
 /** `claude auth logout` that did not sign out: its own words, or none. */

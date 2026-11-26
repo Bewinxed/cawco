@@ -18,6 +18,8 @@ import type { Ran } from "@cawco/core/run-captured";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { spawnTethered, untether } from "@cawco/core/tether";
 import { Effect, Fiber } from "effect";
+import { runFork, runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /**
  * How long a group asked to end (SIGTERM) is given before it is killed:
@@ -53,7 +55,7 @@ const awaitGone = (
   graceMs: number
 ): Promise<void> =>
   // The promise edge of the wait (runGroupWithin, endEveryGroup).
-  Effect.runPromise(
+  runPromise(
     boundedRead(graceMs * 2, Fiber.await(gone)).pipe(
       Effect.asVoid,
       Effect.catchTag("Unanswered", () => Effect.void)
@@ -85,7 +87,7 @@ export const runGroupWithin = async (
 ): Promise<Bounded<Ran>> => {
   const graceMs = options.graceMs ?? GROUP_GRACE_MS;
   // Ends once the group's run has settled, however it ended; none ran yet.
-  let gone: Fiber.Fiber<unknown> = Effect.runFork(Effect.void);
+  let gone: Fiber.Fiber<unknown> = runFork(Effect.void);
   const read = (signal: AbortSignal, heard?: () => void): Promise<Ran> => {
     const child = spawnTethered(argv, {
       env: options.env,
@@ -112,7 +114,7 @@ export const runGroupWithin = async (
       }
     });
     // The run's settling, waited on and never failing: its outcome is the caller's.
-    const settled = Effect.runFork(Effect.exit(Effect.promise(() => work)));
+    const settled = runFork(Effect.exit(fromPromise(() => work)));
     gone = settled;
     if (leader) {
       liveGroups.set(leader, { end, gone: settled });

@@ -110,10 +110,12 @@ import { stopWorkspaceBoundary } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
 import { closeBoundary } from "./boundary/stop";
 import { poolSourceOf } from "./clone";
+import { runFork, runPromise, runSync } from "./daemon-runtime";
 import { expandHome } from "./fs";
 import { gitUntil } from "./git/run";
 import { REMADE_IN_COPY } from "./layer";
 import { formatFlag, poolGitEnv, standingPool } from "./object-pool";
+import { asThrown, fromPromise } from "./rejected";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
 import { forgetInstalls, installProject } from "./stage-install";
@@ -192,28 +194,24 @@ const copied = new Map<string, Map<string, string>>();
  */
 const gitRaw = (dir: string, args: readonly string[]): Promise<string> =>
   // The promise edge of git's bounded run.
-  Effect.runPromise(
+  runPromise(
     boundedRead(
       STAGE_CLONE_GIT_MS,
-      Effect.tryPromise({
-        try: async (signal) => {
-          const { code, stdout, stderr } = await runCaptured(
-            safeGitArgv(["--no-optional-locks", "-C", dir, ...args]),
-            {
-              env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-              signal,
-              killSignal: "SIGKILL",
-            }
-          );
-          if (code !== 0) {
-            throw new Error(
-              `git ${args[0]} failed in ${dir}: ${stderr.trim() || `exit ${code}`}`
-            );
+      fromPromise(async (signal) => {
+        const { code, stdout, stderr } = await runCaptured(
+          safeGitArgv(["--no-optional-locks", "-C", dir, ...args]),
+          {
+            env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+            signal,
+            killSignal: "SIGKILL",
           }
-          return stdout;
-        },
-        catch: (error) =>
-          error instanceof Error ? error : new Error(String(error)),
+        );
+        if (code !== 0) {
+          throw new Error(
+            `git ${args[0]} failed in ${dir}: ${stderr.trim() || `exit ${code}`}`
+          );
+        }
+        return stdout;
       })
     ).pipe(
       Effect.catchTag("Unanswered", () =>
@@ -1178,20 +1176,13 @@ const heard = (
   if (follow.settle || !watching) {
     return;
   }
-  follow.settle = Effect.runSync(
+  follow.settle = runSync(
     Effect.forkIn(
       Effect.sleep(SETTLE_MS).pipe(
-        Effect.andThen(
-          Effect.tryPromise({
-            try: () => settled(id, follow),
-            catch: (error) => error,
-          })
-        ),
+        Effect.andThen(fromPromise(() => settled(id, follow))),
         Effect.catch((error) =>
-          Effect.sync(() =>
-            console.warn(
-              `[stage ${shortId(id)} follow] failed: ${failureOf(error)}`
-            )
+          Effect.logWarning(
+            `[stage ${shortId(id)} follow] failed: ${failureOf(asThrown(error))}`
           )
         )
       ),
@@ -1206,24 +1197,22 @@ const unwatch = (follow: Following): void => {
   follow.watching = undefined;
   follow.settle = undefined;
   if (watching) {
-    Effect.runFork(Scope.close(watching, Exit.void));
+    runFork(Scope.close(watching, Exit.void));
   }
 };
 
 /** Stage clone `id`'s watch closed and started again after `after` ms ({@link watchSource}). */
 const rewatch = (id: string, follow: Following, after: number): void => {
   unwatch(follow);
-  const watching = Effect.runSync(Scope.make());
+  const watching = runSync(Scope.make());
   follow.watching = watching;
-  Effect.runSync(
+  runSync(
     Effect.forkIn(
       (after > 0 ? Effect.sleep(after) : Effect.void).pipe(
         Effect.andThen(watchSource(id, follow, watching)),
         Effect.catch((error) =>
-          Effect.sync(() =>
-            console.warn(
-              `[stage ${shortId(id)} watch] failed: ${failureOf(error)}`
-            )
+          Effect.logWarning(
+            `[stage ${shortId(id)} watch] failed: ${failureOf(asThrown(error))}`
           )
         )
       ),
@@ -1250,10 +1239,7 @@ const watchSource = Effect.fnUntraced(function* (
   follow: Following,
   watching: Scope.Scope
 ) {
-  const kept = yield* Effect.tryPromise({
-    try: () => keptOf(id),
-    catch: (error) => error,
-  });
+  const kept = yield* fromPromise(() => keptOf(id));
   if (!kept || following.get(id) !== follow) {
     return;
   }
@@ -1307,15 +1293,10 @@ const watchSource = Effect.fnUntraced(function* (
       }),
       (watcher: FSWatcher) =>
         Effect.sync(() => watcher.removeAllListeners()).pipe(
-          Effect.andThen(
-            Effect.tryPromise({
-              try: () => watcher.close(),
-              catch: (error) => error,
-            })
-          ),
+          Effect.andThen(fromPromise(() => watcher.close())),
           Effect.catch((error) =>
-            Effect.sync(() =>
-              console.warn(`[stage watch close] failed: ${failureOf(error)}`)
+            Effect.logWarning(
+              `[stage watch close] failed: ${failureOf(asThrown(error))}`
             )
           )
         )

@@ -33,6 +33,7 @@ import { Gone } from "@cawco/core/effect/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { Effect, Schema, type Scope } from "effect";
 import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
+import { runPromise } from "./daemon-runtime";
 
 /** This machine's login keychain, under HOME: the one `unlockKeychain` unlocks. */
 export const loginKeychainPath = (): string =>
@@ -141,4 +142,4 @@ export const keychainLocked = (
   path: string,
   signal?: AbortSignal
 ): Promise<boolean> =>
-  Effect.runPromise(keychainLockState(path), signal ? { signal } : undefined);
+  runPromise(keychainLockState(path), signal ? { signal } : undefined);

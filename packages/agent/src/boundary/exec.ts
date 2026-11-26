@@ -30,6 +30,7 @@ import {
   workspaceRuntimeDir,
   workspaceXdgEnv,
 } from "../boundary-env";
+import { runPromise } from "../daemon-runtime";
 import { gitDoorEnv, gitHelperDirOf } from "../hub-git";
 import type { SessiondClient } from "../sessiond-client";
 import { toolDoorOf } from "../tool-door";
@@ -92,12 +93,12 @@ const stderrReason = (stderr: string | undefined): string | undefined =>
  * ({@link stderrReason}), so an exception thrown past the host's own lines
  * is named too.
  */
-export const ready = (
+export const readied = (
   client: SessiondClient,
   procId: string,
   line: string,
   what: string
-): Promise<number> => {
+): Effect.Effect<number, Unstarted> => {
   const said: string[] = [];
   const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
   const heard = Effect.gen(function* () {
@@ -137,24 +138,30 @@ export const ready = (
     );
     return yield* Deferred.await(outcome);
   }).pipe(Effect.scoped);
-  // The promise edge of a boundary's or a judge's start (ensure.ts, judge-process.ts).
-  return Effect.runPromise(
-    timedEffect(boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard), (ms) =>
-      recordLimitReading("agent.boundary-start-ms", ms)
-    ).pipe(
-      Effect.catchTag("Unanswered", () =>
-        Effect.fail(
-          new Unstarted({
-            message: `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`,
-          })
-        )
+  return timedEffect(
+    boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard),
+    (ms) => recordLimitReading("agent.boundary-start-ms", ms)
+  ).pipe(
+    Effect.catchTag("Unanswered", () =>
+      Effect.fail(
+        new Unstarted({
+          message: `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`,
+        })
       )
     )
   );
 };
 
+/** The promise edge of {@link readied}: a boundary's start (ensure.ts). */
+export const ready = (
+  client: SessiondClient,
+  procId: string,
+  line: string,
+  what: string
+): Promise<number> => runPromise(readied(client, procId, line, what));
+
 /** A process that did not say it was ready: it exited first, or said nothing in time. Its words name it and what it said. */
-class Unstarted extends Schema.TaggedError<Unstarted>()("Unstarted", {
+export class Unstarted extends Schema.TaggedError<Unstarted>()("Unstarted", {
   message: Schema.String,
 }) {}
 

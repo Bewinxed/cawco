@@ -15,6 +15,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Schedule, Schema } from "effect";
+import { fromPromise } from "../rejected";
 
 /** What agy's `PostToolUse` payload names of where the call's result is written. */
 const PostToolUse = Schema.Struct({
@@ -86,7 +87,7 @@ const STEP_LOOKS = Schedule.spaced("20 millis").pipe(
 export const writtenResult = (
   at: WrittenAt
 ): Effect.Effect<Option.Option<string>> =>
-  Effect.tryPromise(() => readFile(at.transcriptPath, "utf8")).pipe(
+  fromPromise(() => readFile(at.transcriptPath, "utf8")).pipe(
     Effect.map((text) => stepIn(text, at.stepIdx)),
     Effect.flatMap(Effect.fromOption),
     Effect.retry(STEP_LOOKS),

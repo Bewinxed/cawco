@@ -57,6 +57,7 @@ import { runtimeVersion } from "@cawco/core/runtime";
 import { agyWords } from "@cawco/core/words/agy";
 import { lastLines } from "@cawco/core/words/helpers";
 import { Effect, Fiber, Schedule } from "effect";
+import { runFork, runPromise } from "../daemon-runtime";
 import {
   identityOf,
   providerAccountReports,
@@ -385,7 +386,7 @@ const beginBusiness = async (
   let expiry: Fiber.Fiber<void> | undefined;
   const end = (): void => {
     if (expiry) {
-      Effect.runFork(Fiber.interrupt(expiry));
+      runFork(Fiber.interrupt(expiry));
     }
     connection.close();
     endGroup(child);
@@ -406,16 +407,15 @@ const beginBusiness = async (
   );
   // What came first: the link, or agy's `authenticate` ending (none, when
   // neither came in time).
-  const first: { url: URL } | { ended: AuthEnd } | undefined =
-    await Effect.runPromise(
-      boundedRead(
-        LINK_MS,
-        Effect.raceFirst(
-          look.pipe(Effect.map((url) => (url ? { url } : undefined))),
-          Effect.promise(() => authed).pipe(Effect.map((ended) => ({ ended })))
-        )
-      ).pipe(Effect.orElseSucceed(() => undefined))
-    );
+  const first: { url: URL } | { ended: AuthEnd } | undefined = await runPromise(
+    boundedRead(
+      LINK_MS,
+      Effect.raceFirst(
+        look.pipe(Effect.map((url) => (url ? { url } : undefined))),
+        Effect.promise(() => authed).pipe(Effect.map((ended) => ({ ended })))
+      )
+    ).pipe(Effect.orElseSucceed(() => undefined))
+  );
   if (!(first && "url" in first)) {
     const ended = first?.ended;
     // Signed in with no link shown: the keyring's sign-in, unless the home
@@ -442,7 +442,7 @@ const beginBusiness = async (
     throw refused(agyWords.noLink(""));
   }
   businesses.set(accountId, { authed, callback, end, guard, state });
-  expiry = Effect.runFork(
+  expiry = runFork(
     Effect.sleep(KEEP_MS).pipe(
       Effect.andThen(
         Effect.sync(() => {
@@ -490,7 +490,7 @@ const completeBusiness = async (
     }
     const target = new URL(one.callback.href);
     target.search = given.search;
-    await Effect.runPromise(
+    await runPromise(
       boundedRead(
         EXCHANGE_MS,
         Effect.promise(() =>
@@ -502,7 +502,7 @@ const completeBusiness = async (
       ).pipe(Effect.orElseSucceed(() => undefined))
     );
   }
-  const ended = await Effect.runPromise(
+  const ended = await runPromise(
     boundedRead(
       EXCHANGE_MS,
       Effect.promise(() => one.authed)
@@ -537,14 +537,14 @@ export const beginAgyLogin = async (
     record.method === "oauth-business" && place
       ? { method: "oauth-business", gcp: place }
       : { method: "oauth-personal" };
-  const { bin } = await Effect.runPromise(
+  const { bin } = await runPromise(
     agyToStart().pipe(Effect.mapError((error) => refused(error.message)))
   );
   await writeAgyRecord(accountId, {
     method: signIn.method,
     ...(place && signIn.method === "oauth-business" ? { gcp: place } : {}),
   });
-  const home = await Effect.runPromise(
+  const home = await runPromise(
     prepareAgyHome(accountId, signIn).pipe(
       Effect.mapError((error) => refused(error.message))
     )

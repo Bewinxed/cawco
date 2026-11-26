@@ -10,6 +10,7 @@ import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { findProgram } from "@cawco/core/workspace-needs";
 import { quote } from "@cawco/providers/quote";
 import { Effect } from "effect";
+import { runPromise } from "./daemon-runtime";
 import { resolveBin, toolEnv } from "./tools";
 
 /** The argv that holds idle sleep off while `why` runs, for as long as `pid` lives, or why this machine has none. */
@@ -80,7 +81,7 @@ export const holdAwake = async (
     stdio: "ignore",
   });
   // Whether it started: its error, or its spawn.
-  const refused = Effect.runPromise(
+  const refused = runPromise(
     Effect.callback<string | undefined, unknown>((resume) => {
       child.once("error", (failure) => resume(Effect.succeed(failure.message)));
       child.once("spawn", () => resume(Effect.succeed(undefined)));

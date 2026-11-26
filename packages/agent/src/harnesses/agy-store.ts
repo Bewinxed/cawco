@@ -31,6 +31,7 @@ import type {
 import { withoutSkillMarkers } from "@cawco/core/skill-words";
 import { typeFilter } from "@cawco/jsonl-parser";
 import { Effect, Option, Schema } from "effect";
+import { runSync } from "../daemon-runtime";
 import {
   agyEntries,
   agyRequestOf,
@@ -86,7 +87,7 @@ const summariesOf = (store: AgyStore): Map<string, Summary> => {
   if (!existsSync(file)) {
     return read;
   }
-  Effect.runSync(
+  runSync(
     Effect.acquireUseRelease(
       Effect.try(() =>
         store.accountId

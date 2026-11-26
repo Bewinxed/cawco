@@ -37,6 +37,8 @@ import { lookUntil } from "@cawco/core/effect/poll";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { CdpLink } from "./cdp-takeover";
 
 const TargetsSchema = z.object({
@@ -126,14 +128,14 @@ const atWidth = async (link: CdpLink, targetId: string): Promise<boolean> => {
 
 /** Waits up to {@link SETTLE_MS} for page `targetId` to stand at its window's width; answers whether it did. */
 const settled = (link: CdpLink, targetId: string): Promise<boolean> =>
-  Effect.runPromise(
+  runPromise(
     lookUntil(
       {
         every: SETTLE_STEP_MS,
         deadlineMs: SETTLE_MS,
         until: (at: boolean) => at,
       },
-      Effect.promise(() => atWidth(link, targetId))
+      fromPromise(() => atWidth(link, targetId))
     ).pipe(Effect.map((looked) => looked.kind === "found"))
   );
 

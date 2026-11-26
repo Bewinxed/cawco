@@ -4,7 +4,6 @@ bare-run	Effect.runPromise	packages/hub/src/links.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
-error-class	KeeperRefused	packages/agent/src/sessiond-client.ts	1
 error-class	NotTaken	packages/hub/src/db/forget.ts	1
 error-class	StageRefusal	packages/agent/src/stage-refusal.ts	1
 error-class	StoredShapeError	packages/hub/src/stored-json.ts	1

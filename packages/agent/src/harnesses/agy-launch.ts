@@ -34,6 +34,7 @@ import { agyWords } from "@cawco/core/words/agy";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Effect, Option, Schema } from "effect";
 import { readHeld } from "../provider-accounts";
+import { fromPromise, type Rejected } from "../rejected";
 import { toolGate, toolPath } from "../tools";
 import { linkAgyFleet } from "./agy-fleet";
 import { agyJudgeEnv, writeAgyHook } from "./agy-hook";
@@ -54,9 +55,12 @@ export class AgyStartRefused extends Schema.TaggedError<AgyStartRefused>()(
 
 const refuse = (message: string) => new AgyStartRefused({ message });
 
+/** A start's own step that failed: the start refused in that step's words. */
+const refusedBy = Effect.mapError((error: Rejected) => refuse(error.message));
+
 /** The installed agy a start runs, and its version; refused in the gate's words when it is missing or older than CawCo runs. */
 export const agyToStart = Effect.fn("agyToStart")(function* () {
-  const gate = yield* Effect.promise(() => toolGate(AGY_SPEC));
+  const gate = yield* fromPromise(() => toolGate(AGY_SPEC)).pipe(refusedBy);
   if (gate.refused || !gate.path) {
     return yield* refuse(gate.words ?? `${AGY_SPEC.name} isn't installed.`);
   }
@@ -131,9 +135,9 @@ export const readAgySignIn = Effect.fn("readAgySignIn")(function* (
   const place = placeOf(record.gcp);
   // A Google sign-in must be in the home before agy runs: agy asked to sign
   // in with none opens a browser on this machine.
-  const signedIn = yield* Effect.promise(() =>
+  const signedIn = yield* fromPromise(() =>
     Bun.file(agySignInFile(accountId)).exists()
-  );
+  ).pipe(refusedBy);
   switch (record.method) {
     case "oauth-personal":
       if (!signedIn) {
@@ -387,15 +391,17 @@ export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
   const home = agyAccountHome(accountId);
   // A conversation deleted from the home stays out of agy's shared files
   // before any agy there reads them (agy-store-files.ts).
-  yield* Effect.promise(() => applyAgyDeletes(accountStore(accountId)));
-  yield* Effect.promise(() =>
+  yield* fromPromise(() => applyAgyDeletes(accountStore(accountId))).pipe(
+    refusedBy
+  );
+  yield* fromPromise(() =>
     writeStateFile(
       join(home, AGY_APP_DATA, "settings.json"),
       `${JSON.stringify(settingsOf(signIn), null, 2)}\n`,
       { mode: 0o600 }
     )
-  );
-  yield* Effect.promise(() => writeOpeners(home));
+  ).pipe(refusedBy);
+  yield* fromPromise(() => writeOpeners(home)).pipe(refusedBy);
   yield* writeAgyHook(home, hookScript(home)).pipe(
     Effect.mapError((error) =>
       refuse(`CawCo couldn't write its hook into ${error.path}.`)
@@ -445,11 +451,13 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   const home = yield* prepareAgyHome(accountId, signIn);
   const judgeSocket = agyJudgeSocket(instanceId);
   const judge = yield* agyJudgeEnv(judgeSocket).pipe(
-    Effect.mapError((error) => refuse(error.why))
+    Effect.mapError((error) =>
+      refuse(error._tag === "Rejected" ? error.message : error.why)
+    )
   );
   const tmp = bounded ? ownTmp(home, instanceId) : undefined;
   if (tmp) {
-    yield* Effect.promise(() => makeFolder(tmp, { mode: 0o700 }));
+    yield* fromPromise(() => makeFolder(tmp, { mode: 0o700 })).pipe(refusedBy);
   }
   const launch: AgyLaunch = {
     bin: agy.bin,

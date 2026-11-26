@@ -92,7 +92,7 @@ import {
   inStartingSet,
   PERSON_AND_READ_TOOLS,
 } from "@cawco/core/delegate-types";
-import { detach, failureOf } from "@cawco/core/detach";
+import { detach } from "@cawco/core/detach";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import { timedEffect } from "@cawco/core/effect/timed";
@@ -216,7 +216,7 @@ import {
   newStats,
   parseRecords,
 } from "@cawco/jsonl-parser";
-import { Cause, Deferred, Duration, Effect, Exit, Schedule } from "effect";
+import { Deferred, Duration, Effect, Exit, Schedule } from "effect";
 import {
   accountEnv,
   accountReports,
@@ -250,6 +250,7 @@ import {
   INITIALIZE_SAYS_VERSION_FROM,
   versionRefusal,
 } from "../claude-version";
+import { letGo, runPromise } from "../daemon-runtime";
 import { reportDamaged } from "../damaged-records";
 import { delegationMcp, MCP_SERVER_NAME, openItemsText } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
@@ -317,6 +318,7 @@ import { probeStarted } from "../probe-count";
 import { parseProcId, procIdFor } from "../proc-id";
 import { withAccountReads } from "../provider-usage";
 import { redactText } from "../redaction";
+import { fromPromise, type Rejected } from "../rejected";
 import {
   acknowledgeSessionCredential,
   CredentialUnknown,
@@ -1270,7 +1272,7 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
         const waiting = Deferred.makeUnsafe<IteratorResult<SDKUserMessage>>();
         this.#waiting = waiting;
         // The promise edge of the SDK's pull: the next turn, or the end.
-        return Effect.runPromise(Deferred.await(waiting));
+        return runPromise(Deferred.await(waiting));
       },
     };
   }
@@ -3135,7 +3137,7 @@ class ClaudeSession implements HarnessSession {
         ) =>
           // The promise edge of the ask: answered here, by the person, or
           // withdrawn (its answer then never comes, as the CLI let it go).
-          Effect.runPromise(
+          runPromise(
             Effect.callback<PermissionResult>((resolve) => {
               // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
               const answered = this.#mode.answersHostSide(toolName);
@@ -4762,7 +4764,7 @@ class ClaudeSession implements HarnessSession {
     const delivery = this.#delivery.get(uuid);
     if (delivery) {
       // The promise edge of the wait for the CLI's receipt.
-      await Effect.runPromise(Deferred.await(delivery));
+      await runPromise(Deferred.await(delivery));
     }
     // https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md
     // 0.2.76: cancel_async_message drops a queued user message by UUID.
@@ -4802,30 +4804,23 @@ class ClaudeSession implements HarnessSession {
    * stops the session and says why ({@link #credentialRefused}); one that
    * reads anything else (`disabled`) is not dialled again.
    */
-  #dialCawco(credential: string): Effect.Effect<void, unknown> {
+  #dialCawco(credential: string): Effect.Effect<void, Rejected | "again"> {
     let over = false;
     // Its end, however it ends: the pump reports its own failure.
-    const pumpEnded = Effect.exit(
-      Effect.tryPromise({ try: () => this.#pump, catch: (error) => error })
-    ).pipe(
+    const pumpEnded = Effect.exit(fromPromise(() => this.#pump)).pipe(
       Effect.andThen(
         Effect.sync(() => {
           over = true;
         })
       )
     );
-    const dial = Effect.tryPromise({
-      try: () => this.#dialOnce(credential),
-      catch: (error) => error,
-    }).pipe(
+    const dial = fromPromise(() => this.#dialOnce(credential)).pipe(
       Effect.tapError((error) =>
-        Effect.sync(() => {
-          if (!over) {
-            console.warn(
-              `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error instanceof Error ? error.message : String(error)}`
-            );
-          }
-        })
+        over
+          ? Effect.void
+          : Effect.logWarning(
+              `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error.message}`
+            )
       ),
       Effect.flatMap((dialled) =>
         dialled === "done" ? Effect.void : Effect.fail("again" as const)
@@ -4933,10 +4928,7 @@ class ClaudeSession implements HarnessSession {
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
     let said = "connecting";
     // One reading: connected ends the wait; refused or off fails the launch.
-    const look = Effect.tryPromise({
-      try: () => this.#readCawcoSlot(),
-      catch: (error) => error,
-    }).pipe(
+    const look = fromPromise(() => this.#readCawcoSlot()).pipe(
       Effect.flatMap((read) => {
         if (read.slot === "refused") {
           return Effect.fail(
@@ -4954,9 +4946,9 @@ class ClaudeSession implements HarnessSession {
         }
         if (read.slot === "again" && read.why !== said) {
           said = read.why;
-          console.info(
+          return Effect.logInfo(
             `[claude] ${this.instanceId}: its CawCo MCP reads ${read.why} at launch; dialled again on its launch credential`
-          );
+          ).pipe(Effect.as(read));
         }
         return Effect.succeed(read);
       })
@@ -4981,7 +4973,7 @@ class ClaudeSession implements HarnessSession {
       )
     );
     // The promise edge of the launch's wait for its CawCo slot.
-    const last = await Effect.runPromise(Effect.repeat(look, spacing));
+    const last = await runPromise(Effect.repeat(look, spacing));
     if (last.slot === "connected") {
       if (said !== "connecting") {
         console.info(
@@ -5095,17 +5087,7 @@ class ClaudeSession implements HarnessSession {
       console.info(
         `[claude] ${this.instanceId}: attached while its CawCo MCP is ${cawco.status === "pending" ? "connecting" : "reconnecting"}; it is dialled until it connects`
       );
-      Effect.runFork(
-        this.#dialCawco(credential).pipe(
-          Effect.catchCause((cause) =>
-            Effect.sync(() =>
-              console.warn(
-                `[dialCawco] failed: ${failureOf(Cause.squash(cause))}`
-              )
-            )
-          )
-        )
-      );
+      letGo("dialCawco", this.#dialCawco(credential));
     } else if (cawco?.status === "needs-auth") {
       // The refusal stops it and says why; what asked hears it was refused.
       this.#credentialRefused();
@@ -5188,15 +5170,13 @@ class ClaudeSession implements HarnessSession {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
     // The promise edge of the wait for the interrupted turn's end.
-    await Effect.runPromise(
+    await runPromise(
       timedEffect(this.#turn.settle(SETTLE_TIMEOUT_MS), (ms) =>
         recordLimitReading("agent.claude-settle-ms", ms)
       ).pipe(
         Effect.catchTag("Unanswered", (unanswered) =>
-          Effect.sync(() =>
-            console.warn(
-              `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
-            )
+          Effect.logWarning(
+            `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
           )
         )
       )

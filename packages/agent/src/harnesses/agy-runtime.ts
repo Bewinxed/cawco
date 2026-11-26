@@ -96,7 +96,9 @@ import {
   Scope,
   Semaphore,
 } from "effect";
+import { runPromise, runSync } from "../daemon-runtime";
 import type { SessionControls, TurnExtras } from "../harness";
+import { fromPromise } from "../rejected";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
 import { AgyFleetHooks } from "./agy-fleet-hooks";
@@ -276,14 +278,14 @@ class AgySession {
   /** The carried record, said first in the next prompt of a new conversation (agy-carry.ts). */
   #carry: string | undefined;
   /** The judge's socket and the reader of agy's updates, served for as long as this scope is open. */
-  readonly #judge = Effect.runSync(Scope.make());
+  readonly #judge = runSync(Scope.make());
   /**
    * agy's `session/update`s, and the marks a turn's end waits on, read one
    * at a time in the order they came ({@link #read}): a call's end waits
    * there for the result agy writes behind it, and what agy says after it
    * waits behind that.
    */
-  readonly #updates = Effect.runSync(Queue.unbounded<Update>());
+  readonly #updates = runSync(Queue.unbounded<Update>());
   /** The fiber that reads {@link #updates}, once the session opened. */
   #reader: Fiber.Fiber<never> | undefined;
   /** The fleet's hooks, run on its events (agy-fleet-hooks.ts). */
@@ -461,7 +463,7 @@ class AgySession {
     if (!this.#own) {
       await makeFolder(dirname(launch.judgeSocket));
       const judged = this.#judged();
-      await Effect.runPromise(
+      await runPromise(
         serveAgyJudge(launch.judgeSocket, (line) => {
           const turn = agyTurnEventOf(line);
           if (turn) {
@@ -478,7 +480,7 @@ class AgySession {
         }).pipe(Scope.provide(this.#judge))
       );
     }
-    this.#reader = Effect.runSync(
+    this.#reader = runSync(
       Effect.forkIn(
         Effect.forever(
           Queue.take(this.#updates).pipe(
@@ -773,7 +775,7 @@ class AgySession {
     }
     const drained = Deferred.makeUnsafe<void>();
     Queue.offerUnsafe(this.#updates, { drained });
-    await Effect.runPromise(
+    await runPromise(
       Effect.raceFirst(
         Deferred.await(drained),
         Effect.asVoid(Fiber.await(reader))
@@ -1019,7 +1021,7 @@ class AgySession {
     this.#asks.set(requestId, { allow, reject, answer, asked });
     this.#ctx.permission(asked);
     // The promise edge of the person's answer.
-    return await Effect.runPromise(Deferred.await(answer));
+    return await runPromise(Deferred.await(answer));
   }
 
   #settle(requestId: string, response: RequestPermissionResponse): boolean {
@@ -1083,7 +1085,7 @@ class AgySession {
         Effect.flatMap((refused) =>
           refused
             ? Effect.fail(new Error(refused))
-            : Effect.promise(() => this.#promptHooks(text))
+            : fromPromise(() => this.#promptHooks(text))
         ),
         Effect.flatMap((hooked) =>
           "refused" in hooked
@@ -1110,7 +1112,7 @@ class AgySession {
         )
       )
     );
-    Effect.runPromise(handed)
+    runPromise(handed)
       .then(({ answered }) => answered)
       .catch((error: unknown) => {
         this.#unread.delete(message.uuid);
@@ -1271,8 +1273,8 @@ class AgySession {
     const pictures = this.#turn?.pictures ?? 0;
     const retry = !again && pictures === 0;
     try {
-      await Effect.runPromise(
-        this.#sending.withPermit(Effect.promise(() => this.#setAside(retry)))
+      await runPromise(
+        this.#sending.withPermit(fromPromise(() => this.#setAside(retry)))
       );
     } catch (error) {
       this.#endTurn(stopReason, { words: saidBy(error) });
@@ -1440,9 +1442,9 @@ class AgySession {
     this.#fleet.end();
     const agy = this.#agy;
     this.#endAgy();
-    await Effect.runPromise(Scope.close(this.#judge, Exit.void));
+    await runPromise(Scope.close(this.#judge, Exit.void));
     if (agy) {
-      await Effect.runPromise(
+      await runPromise(
         Effect.promise(() => agy.child.exited).pipe(
           Effect.timeout(AGY_EXIT_WAIT),
           Effect.ignore

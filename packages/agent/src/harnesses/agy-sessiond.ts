@@ -35,6 +35,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { agyWords } from "@cawco/core/words/agy";
 import { readPolicy } from "@cawco/core/workspace-judge";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
@@ -507,7 +508,7 @@ export const spawnAgy = async (
     throw new Error(agyWords.needsAccount);
   }
   await atCloneRoot(ctx);
-  const launch = await Effect.runPromise(
+  const launch = await runPromise(
     (own || !accountId
       ? agyOwnLaunch(ctx.instanceId, commandEnv(ctx))
       : agyHookHeld(accountId).pipe(
@@ -621,7 +622,7 @@ export const adoptAgy = async (
     throw new Error(`Antigravity's host for ${instanceId} is gone`);
   }
   // The promise edge of the machine's agy, read as a start reads it.
-  const installed = await Effect.runPromise(
+  const installed = await runPromise(
     agyToStart().pipe(
       Effect.map((agy) => agy.version),
       Effect.orElseSucceed(() => undefined)

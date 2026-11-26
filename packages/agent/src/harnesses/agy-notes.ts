@@ -23,7 +23,9 @@ import { join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { agySessionNotes } from "@cawco/core/paths/harnesses";
 import { writeStateFile } from "@cawco/core/state-file";
-import { Effect, Option, Schema, Semaphore } from "effect";
+import { Option, Schema, Semaphore } from "effect";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 
 const HostNoteSchema = Schema.Struct({
   accountId: Schema.optional(Schema.String),
@@ -104,9 +106,9 @@ const written = <A>(
   change: (note: A) => A,
   none: A
 ): Promise<void> =>
-  Effect.runPromise(
+  runPromise(
     writing.withPermit(
-      Effect.promise(async () => {
+      fromPromise(async () => {
         const changed = change(
           Option.getOrElse(decode(await textOf(file)), () => none)
         );

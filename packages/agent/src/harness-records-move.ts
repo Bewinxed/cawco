@@ -17,7 +17,7 @@
  */
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { isGone } from "@cawco/core/absent";
+import { isGone, unlessGone } from "@cawco/core/absent";
 import {
   claudeFleetSidecarFile,
   earlierClaudeFleetSidecarFile,
@@ -28,7 +28,9 @@ import {
   piFleetSidecarFile,
 } from "@cawco/core/paths/harnesses";
 import { writeStateFile } from "@cawco/core/state-file";
+import { Effect } from "effect";
 import { OPENCODE_DIR } from "./harnesses/opencode-plugin";
+import { fromPromise } from "./rejected";
 
 /** What earlier versions named each of their files in OpenCode's global config dir: `cawco-<name>`. */
 const OPENCODE_RECORD_PREFIX = "cawco-";
@@ -73,36 +75,34 @@ const opencodeMoves = async (): Promise<RecordMove[]> => {
 };
 
 /** One record moved: written at its new path when none is there yet, and the old one removed; said when it was there. */
-const moveRecord = async ({ from, to }: RecordMove): Promise<void> => {
-  let bytes: Buffer;
-  try {
-    bytes = await readFile(from);
-  } catch (error) {
-    if (isGone(error)) {
-      return;
-    }
-    throw error;
+const moveRecord = Effect.fnUntraced(function* ({ from, to }: RecordMove) {
+  const bytes = yield* fromPromise(() =>
+    readFile(from).catch(unlessGone(undefined))
+  );
+  if (bytes === undefined) {
+    return;
   }
-  const kept = await isThere(to);
+  const kept = yield* fromPromise(() => isThere(to));
   if (!kept) {
-    await writeStateFile(to, bytes);
+    yield* fromPromise(() => writeStateFile(to, bytes));
   }
-  await rm(from, { force: true });
-  console.info(
+  yield* fromPromise(() => rm(from, { force: true }));
+  yield* Effect.logInfo(
     kept
       ? `[records] ${from} removed: ${to} was already there`
       : `[records] ${from} moved to ${to}`
   );
-};
+});
 
 /** Every harness record earlier versions kept in the person's agent config dirs, moved into CawCo's data dir. */
-export const moveHarnessRecords = async (): Promise<void> => {
+export const moveHarnessRecords = Effect.fn("moveHarnessRecords")(function* () {
   const moves: RecordMove[] = [
     { from: earlierClaudeFleetSidecarFile(), to: claudeFleetSidecarFile() },
-    { from: join(piAgentDir(), "cawco-fleet.json"), to: piFleetSidecarFile() },
-    ...(await opencodeMoves()),
+    {
+      from: join(piAgentDir(), "cawco-fleet.json"),
+      to: piFleetSidecarFile(),
+    },
+    ...(yield* fromPromise(opencodeMoves)),
   ];
-  for (const move of moves) {
-    await moveRecord(move);
-  }
-};
+  yield* Effect.forEach(moves, moveRecord, { discard: true });
+});

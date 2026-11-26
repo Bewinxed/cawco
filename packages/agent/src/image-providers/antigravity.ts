@@ -18,6 +18,7 @@ import { runtimeVersion } from "@cawco/core/runtime";
 import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { Clock, Effect, type Scope } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { promptAnswer } from "../harnesses/agy-frames";
 import { serveAgyJudge } from "../harnesses/agy-hook";
 import { agyImageRunAnswerTo } from "../harnesses/agy-judge";
@@ -36,6 +37,7 @@ import {
   agyAccountIds,
   deleteAgyConversation,
 } from "../harnesses/agy-store-files";
+import { fromPromise } from "../rejected";
 import { toolGate } from "../tools";
 import { ratioOf } from "./aspect";
 import {
@@ -269,7 +271,13 @@ const runAgy = Effect.fn("runAgy")(function* (
       catch: imageRunFailed,
     }),
     (folder) =>
-      Effect.promise(() => rm(folder, { recursive: true, force: true }))
+      fromPromise(() => rm(folder, { recursive: true, force: true })).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(
+            `[image] the run's folder ${folder} was not removed: ${error.message}`
+          )
+        )
+      )
   );
   const since = (yield* Clock.currentTimeMillis) - 1000;
   const paths = yield* Effect.tryPromise({
@@ -310,17 +318,26 @@ const runAgy = Effect.fn("runAgy")(function* (
   // Each is kept out of the home's shared files from now on, as a session's
   // agy running on the same home may write it back (agy-store-files.ts).
   yield* Effect.addFinalizer(() =>
-    Effect.promise(() =>
+    fromPromise(() =>
       Promise.all(
         [...conversationsOf(heard)].map((id) =>
           deleteAgyConversation(accountStore(accountId), id)
+        )
+      )
+    ).pipe(
+      Effect.asVoid,
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[image] the run's conversations were not removed: ${error.message}`
         )
       )
     )
   );
   // The keyring guard's reading (agy-launch.ts `refuseKeyring`), as agy is
   // about to start.
-  const signedIn = yield* Effect.promise(() => signedInAt(launch.home));
+  const signedIn = yield* fromPromise(() => signedInAt(launch.home)).pipe(
+    Effect.mapError(({ cause }) => imageRunFailed(cause))
+  );
   const startedAt = Date.now();
   const { child, connection } = yield* Effect.acquireRelease(
     Effect.try({
@@ -381,16 +398,16 @@ const runAgy = Effect.fn("runAgy")(function* (
     catch: imageRunFailed,
   });
   heard.sessionId = opened.sessionId;
-  const answered = yield* Effect.tryPromise({
-    try: () =>
-      connection.agent.request(methods.agent.session.prompt, {
-        sessionId: opened.sessionId,
-        prompt: [{ type: "text", text: promptOf(job, paths) }],
-      }),
-    catch: errorWords,
-  }).pipe(
+  const answered = yield* fromPromise(() =>
+    connection.agent.request(methods.agent.session.prompt, {
+      sessionId: opened.sessionId,
+      prompt: [{ type: "text", text: promptOf(job, paths) }],
+    })
+  ).pipe(
     Effect.map((answer) => ({ answer, error: "" })),
-    Effect.catch((said) => Effect.succeed({ answer: undefined, error: said }))
+    Effect.catch(({ cause }) =>
+      Effect.succeed({ answer: undefined, error: errorWords(cause) })
+    )
   );
   const bytes = yield* Effect.tryPromise({
     try: () =>
@@ -451,7 +468,7 @@ const accountToRun = async (): Promise<
   }
   const refused: string[] = [];
   for (const accountId of accounts) {
-    const read = await Effect.runPromise(
+    const read = await runPromise(
       readAgySignIn(accountId).pipe(
         Effect.as(undefined),
         Effect.catch((why) => Effect.succeed(why.message))

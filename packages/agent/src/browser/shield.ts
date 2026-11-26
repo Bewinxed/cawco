@@ -57,6 +57,8 @@ import { browserAskWords, browserFaultWords } from "@cawco/core/words/browser";
 import { Duration, Effect, Fiber, Schedule } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
+import { every, runFork } from "../daemon-runtime";
+import { fromPromise, type Rejected } from "../rejected";
 import {
   browserRows,
   browsersChanged,
@@ -71,7 +73,6 @@ import {
 } from "./cdp-takeover";
 import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
-import { runEvery } from "./every";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import { restoreWindows } from "./own-size";
@@ -106,14 +107,14 @@ const HAND_BACK: BackoffPolicy = {
 };
 
 /** Each take-over the daemon is handing back itself: its tries on {@link HAND_BACK} ({@link handBackUnwatched}). */
-const handBacks = new Map<BrowserKey, Fiber.Fiber<void>>();
+const handBacks = new Map<BrowserKey, Fiber.Fiber<void, Rejected>>();
 
 /** `key`'s own hand-back let go: a view came back, or the take-over ended. */
 const dropHandBack = (key: BrowserKey): void => {
   const handing = handBacks.get(key);
   handBacks.delete(key);
   if (handing) {
-    Effect.runFork(Fiber.interrupt(handing));
+    runFork(Fiber.interrupt(handing));
   }
 };
 
@@ -839,9 +840,10 @@ let watching: (() => void) | undefined;
 
 /** Counts every take-over's views; one unwatched for two minutes, or whose browser stopped, is handed back. */
 const watch = (ports: ShieldPorts): void => {
-  watching ??= runEvery(
+  watching ??= every(
+    "take-over watch",
     WATCH_MS,
-    () => watchOnce(ports),
+    fromPromise(() => watchOnce(ports)),
     (error) => `[browser] take-overs not counted: ${why(error)}`
   );
 };
@@ -889,7 +891,7 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
     console.info(
       `[browser] ${key}: no view of its take-over for ${TAKEOVER_UNWATCHED_MS / 60_000} minutes: handed back`
     );
-    handBacks.set(key, Effect.runFork(handBackUnwatched(ports, key)));
+    handBacks.set(key, runFork(handBackUnwatched(ports, key)));
   }
 };
 
@@ -900,10 +902,7 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
  */
 const handBackUnwatched = (ports: ShieldPorts, key: BrowserKey) =>
   Effect.retryOrElse(
-    Effect.tryPromise({
-      try: () => handBackBrowser(ports, key, "unwatched"),
-      catch: (error) => error,
-    }),
+    fromPromise(() => handBackBrowser(ports, key, "unwatched")),
     backoffSchedule(HAND_BACK).pipe(
       Schedule.tap(({ duration }) =>
         Effect.logInfo(
@@ -912,8 +911,8 @@ const handBackUnwatched = (ports: ShieldPorts, key: BrowserKey) =>
       )
     ),
     (error, tries) =>
-      Effect.promise(() =>
-        giveUpHandBack(ports, key, tries.tries, tries.failingMs, error)
+      fromPromise(() =>
+        giveUpHandBack(ports, key, tries.tries, tries.failingMs, error.cause)
       )
   ).pipe(
     Effect.asVoid,

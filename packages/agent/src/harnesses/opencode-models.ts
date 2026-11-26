@@ -42,8 +42,9 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
+import { every, runPromise } from "../daemon-runtime";
 import { delegationHubUrl } from "../delegation";
-import { fromPromise } from "./opencode-effect";
+import { fromPromise } from "../rejected";
 
 /** Where OpenCode 2.0.28 reads its catalog from (`models.url`, else its own `https://models.opencode.ai`). */
 const OPENCODE_MODELS_SOURCE =
@@ -104,7 +105,8 @@ class OpencodeModels {
   #confirmedAt = 0;
   #loaded: Promise<void> | null = null;
   #reading: Promise<void> | null = null;
-  #timer: ReturnType<typeof setInterval> | null = null;
+  /** Ends the refreshes, once {@link #start} began them. */
+  #timer: (() => void) | null = null;
 
   /** The file as the last agent left it. */
   #load(): Promise<void> {
@@ -171,7 +173,7 @@ class OpencodeModels {
   /** The source read again (one read at a time), on {@link CATALOG_READS}; throws the last failure. */
   refresh(): Promise<void> {
     // The promise edge of the refresh's reads.
-    this.#reading ??= Effect.runPromise(
+    this.#reading ??= runPromise(
       Effect.gen({ self: this }, function* () {
         yield* fromPromise(() => this.#load());
         yield* fromPromise(() => this.#readOnce()).pipe(
@@ -278,12 +280,15 @@ class OpencodeModels {
     if (this.#timer) {
       return;
     }
-    this.#timer = setInterval(() => {
-      this.refresh().catch((error: unknown) =>
-        console.warn(`[opencode] ${said(error)}; the held copy stays`)
-      );
-    }, REFRESH_MS);
-    this.#timer.unref();
+    this.#timer = every(
+      "opencode models",
+      REFRESH_MS,
+      Effect.promise(() =>
+        this.refresh().catch((error: unknown) =>
+          console.warn(`[opencode] ${said(error)}; the held copy stays`)
+        )
+      )
+    );
   }
 }
 

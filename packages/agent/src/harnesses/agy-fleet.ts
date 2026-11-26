@@ -42,6 +42,7 @@ import {
   harnessRecordsDir,
 } from "@cawco/core/paths/harnesses";
 import { Effect, Schema } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { heldSkills, memoryState, syncMemory, syncSkillFiles } from "../fleet";
 import { hookStatesInSet, readFleetHarnessSet } from "../fleet-harness-set";
 import type { FleetPart } from "../fleet-parts";
@@ -75,21 +76,28 @@ const linkTo = (link: string, target: string) =>
     catch: (cause) => new AgyFleetLinkError({ link, cause }),
   });
 
+/** Folder `dir` made for a link inside it, or why not. */
+const folderFor = (dir: string) =>
+  Effect.tryPromise({
+    try: () => makeFolder(dir),
+    catch: (cause) => new AgyFleetLinkError({ link: dir, cause }),
+  });
+
 /**
  * Agy home `home` linked to the fleet's skills and memory: what every
  * launch readies (agy-launch.ts `prepareAgyHome`), so a home made after
  * the last sync takes the fleet as it stands.
  */
 export const linkAgyFleet = Effect.fn("linkAgyFleet")(function* (home: string) {
-  yield* Effect.promise(() => makeFolder(AGY_SKILLS));
-  yield* Effect.promise(() => makeFolder(home));
+  yield* folderFor(AGY_SKILLS);
+  yield* folderFor(home);
   yield* linkTo(join(home, "skills"), AGY_SKILLS);
   yield* linkTo(join(home, "GEMINI.md"), AGY_MEMORY);
 });
 
 /** Every account home `accountIds` names, linked ({@link linkAgyFleet}); one that fails is said on the log. */
 const linkHomes = (accountIds: readonly string[]): Promise<void> =>
-  Effect.runPromise(
+  runPromise(
     Effect.forEach(
       accountIds,
       (accountId) =>

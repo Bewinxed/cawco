@@ -17,6 +17,7 @@ import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
 import { Effect, type Fiber, Schedule } from "effect";
 import { MEMBERSHIP_PREFIX, membershipName } from "../boundary-policy";
+import { runFork } from "../daemon-runtime";
 import { workspaceRecords } from "../workspace-records";
 import { commandsOf } from "./exec";
 import { type Seen, snapshot } from "./place-guard";
@@ -222,7 +223,7 @@ export const lookAtPreTag = (): void => {
   });
   // Now, then each QUIET_SWEEP_MS after the last look ended, until one
   // finds none left.
-  preTagLooks = Effect.runFork(
+  preTagLooks = runFork(
     look.pipe(
       Effect.repeat({
         schedule: Schedule.spaced(QUIET_SWEEP_MS),

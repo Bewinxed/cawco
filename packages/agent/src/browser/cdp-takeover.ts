@@ -48,6 +48,8 @@ import { makeLock } from "@cawco/core/keyed-lock";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { Effect, Fiber } from "effect";
 import { z } from "zod";
+import { runFork, runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
 /** The page size a screencast frame names (`Page.screencastFrame` metadata). */
@@ -162,15 +164,13 @@ export class CdpLink {
   /** The browser-level connection of the Chromium whose DevTools answer at `devtools` (`http://127.0.0.1:<port>`). */
   static opened(devtools: string): Effect.Effect<CdpLink, Error> {
     return Effect.gen(function* () {
-      const read = yield* Effect.tryPromise({
-        try: () =>
-          readWithin(CALL_MS, (signal) =>
-            fetch(`${devtools}/json/version`, { signal }).then(
-              async (response) => DevtoolsVersion.parse(await response.json())
-            )
-          ),
-        catch: thrown,
-      });
+      const read = yield* fromPromise(() =>
+        readWithin(CALL_MS, (signal) =>
+          fetch(`${devtools}/json/version`, { signal }).then(async (response) =>
+            DevtoolsVersion.parse(await response.json())
+          )
+        )
+      );
       if (read.kind === "unanswered") {
         return yield* Effect.fail(
           new Error(
@@ -199,7 +199,7 @@ export class CdpLink {
 
   /** The promise edge of {@link CdpLink.opened}. */
   static open(devtools: string): Promise<CdpLink> {
-    return Effect.runPromise(CdpLink.opened(devtools));
+    return runPromise(CdpLink.opened(devtools));
   }
 
   /**
@@ -237,7 +237,7 @@ export class CdpLink {
     sessionId?: string,
     ms = CALL_MS
   ): Promise<Json> {
-    return Effect.runPromise(this.request(method, params, sessionId, ms));
+    return runPromise(this.request(method, params, sessionId, ms));
   }
 
   /**
@@ -1154,7 +1154,7 @@ export class CdpTakeover {
     if (scale > 1) {
       const page = message.sessionId;
       // Work let go: a frame meanwhile interrupts the wait, not a capture under way.
-      this.#settle = Effect.runFork(
+      this.#settle = runFork(
         Effect.sleep(SETTLE_MS).pipe(
           Effect.andThen(
             Effect.promise(() => this.#sharpen(page).catch(() => undefined))
@@ -1167,7 +1167,7 @@ export class CdpTakeover {
   /** The wait for a still page's sharp picture cut: the page moved, or is laid out again or let go. */
   #unsettle(): void {
     if (this.#settle) {
-      Effect.runFork(Fiber.interrupt(this.#settle));
+      runFork(Fiber.interrupt(this.#settle));
       this.#settle = undefined;
     }
   }

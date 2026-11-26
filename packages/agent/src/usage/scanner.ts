@@ -11,6 +11,7 @@ import { ratesFingerprint, refreshPricing } from "@cawco/core/usage/pricing";
 import { BUCKET_MS, bucketStart, totalTokens } from "@cawco/core/usage/tokens";
 import type { UsageBucket, UsageTokens } from "@cawco/core/usage/types";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
@@ -251,7 +252,7 @@ const INGEST_PART = 500;
  * `Effect.yieldNow`, which Effect's default scheduler hands on with
  * `setImmediate`, after the I/O that came due.
  */
-const loopTurn = (): Promise<void> => Effect.runPromise(Effect.yieldNow);
+const loopTurn = (): Promise<void> => runPromise(Effect.yieldNow);
 
 /** The id an `INSERT … RETURNING id` gave: such an insert always returns its row. */
 const inserted = (row: { id: number } | null): number => {

@@ -56,6 +56,8 @@ import { until } from "@cawco/core/until";
 import { cutShort } from "@cawco/core/words/helpers";
 import { Effect, Layer } from "effect";
 import { BinaryUpdates } from "./binary-update";
+import { every, runPromise, runSync } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 import {
   type KeeperJob,
   KeeperKept,
@@ -296,8 +298,8 @@ class KeeperWatchdog {
   readonly #leftAsIs = new Map<string, { current: boolean; version: string }>();
   /** Each keeper's run of silent dials, by its endpoint. */
   readonly #streaks = new Map<string, Streak>();
-  #timer: ReturnType<typeof setInterval> | undefined;
-  #probing: Promise<void> | undefined;
+  /** Ends the dials on {@link KEEPER_PROBE_MS}, once {@link start} began them. */
+  #stopDials: (() => void) | undefined;
 
   constructor(options: KeeperWatchdogOptions) {
     this.#diagnosticsRoot =
@@ -316,23 +318,23 @@ class KeeperWatchdog {
     }
   }
 
+  /** A dial of every keeper each `intervalMs` after the last ended, the first `intervalMs` from now. */
   start(intervalMs = KEEPER_PROBE_MS): void {
-    this.#timer = setInterval(() => {
-      this.#probing ??= this.probe()
-        .catch((error: unknown) =>
-          this.#log(
-            `session keeper watchdog: ${error instanceof Error ? error.message : String(error)}`
+    this.#stopDials = every(
+      "keeper watchdog",
+      intervalMs,
+      fromPromise(() => this.probe()).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            this.#log(`session keeper watchdog: ${error.message}`)
           )
         )
-        .finally(() => {
-          this.#probing = undefined;
-        });
-    }, intervalMs);
-    this.#timer.unref();
+      )
+    );
   }
 
   stop(): void {
-    clearInterval(this.#timer);
+    this.#stopDials?.();
   }
 
   /** One dial of every keeper, and the recovery of each whose dial is the {@link KEEPER_WEDGED_DIALS}th silent one in a row. */
@@ -361,7 +363,7 @@ class KeeperWatchdog {
       return;
     }
     // The promise edge of dialKeeper.
-    const { dial, accepted } = await Effect.runPromise(
+    const { dial, accepted } = await runPromise(
       dialKeeper(found.endpoint, welcomeMs)
     );
     let detail: string;
@@ -467,7 +469,7 @@ class KeeperWatchdog {
     }
     // Dialled every half second after the last dial ended, until a dial is
     // welcomed or KEEPER_BACK_MS has passed.
-    const back = await Effect.runPromise(
+    const back = await runPromise(
       lookUntil(
         {
           every: 500,
@@ -516,7 +518,7 @@ export const KeeperWatchLayer = Layer.effectDiscard(
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const watchdog = new KeeperWatchdog({
-          log: (line) => Effect.runFork(Effect.logWarning(line)),
+          log: (line) => runSync(Effect.logWarning(line)),
           // The notice rides the update state, which a binary install keeps.
           record: async (restart) => {
             if (await readInstallation()) {

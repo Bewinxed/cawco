@@ -2,6 +2,7 @@
 
 import { Effect } from "effect";
 import { z } from "zod";
+import { runPromise } from "./daemon-runtime";
 import type { SessiondClient } from "./sessiond-client";
 
 /** A ring line read back: its fields as they are, `message` a line of its own. */
@@ -110,7 +111,7 @@ export const readRing = (
   let oldest = afterSeq + 1;
   // The promise edge of the read: its last line, the child's end, or that
   // its keeper holds it no more settles it.
-  return Effect.runPromise(
+  return runPromise(
     Effect.callback<RingRead, unknown>((resume) => {
       // This read's own subscription, ended with the read: every other one to
       // the child on this connection goes on.

@@ -64,7 +64,9 @@ import { unhandled } from "@cawco/core/unhandled";
 import { notAliveReason } from "@cawco/core/words/sessiond";
 import { Deferred, Effect, Exit, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "./daemon-runtime";
 import { parseProcId } from "./proc-id";
+import { fromPromise } from "./rejected";
 import { holdRestart } from "./restart";
 
 /**
@@ -74,23 +76,22 @@ import { holdRestart } from "./restart";
  * more will: the session fails with this, in its start failure's words, and
  * keeps what it was sent for its next start.
  */
-export class KeeperRefused extends Error {
-  /**
-   * The pid of the process the input was for, as its keeper listed it when
-   * the session took it, when known: the process the session lets go of,
-   * and ends (session.ts `#refusedInput`). The id alone may name its next
-   * process by then.
-   */
-  readonly pid: number | undefined;
-  readonly procId: string;
-  readonly reason: string;
-  constructor(procId: string, reason: string, pid?: number) {
-    super(
-      `This session's process could not be reached: the process that keeps this machine's sessions running refused its input (${reason}).`
-    );
-    this.procId = procId;
-    this.reason = reason;
-    this.pid = pid;
+export class KeeperRefused extends Schema.TaggedError<KeeperRefused>()(
+  "KeeperRefused",
+  {
+    /**
+     * The pid of the process the input was for, as its keeper listed it when
+     * the session took it, when known: the process the session lets go of,
+     * and ends (session.ts `#refusedInput`). The id alone may name its next
+     * process by then.
+     */
+    pid: Schema.optional(Schema.Number),
+    procId: Schema.String,
+    reason: Schema.String,
+  }
+) {
+  override get message(): string {
+    return `This session's process could not be reached: the process that keeps this machine's sessions running refused its input (${this.reason}).`;
   }
 }
 
@@ -353,14 +354,14 @@ export const ensureSessiond = async (
   // Asked at once and again 50 ms after each answer, until it is bound or
   // ADHOC_START_TIMEOUT_MS has passed.
   const began = Date.now();
-  const bound = await Effect.runPromise(
+  const bound = await runPromise(
     lookUntil(
       {
         every: 50,
         deadlineMs: ADHOC_START_TIMEOUT_MS,
         until: (listening: boolean) => listening,
       },
-      Effect.promise(async () => {
+      fromPromise(async () => {
         const asked = await answers(endpoint, 250);
         switch (asked.kind) {
           case "answered":
@@ -615,7 +616,7 @@ export class SessiondClient {
   ): Promise<Bounded<SessiondClient>> {
     // The promise edge of a dial within its deadline: the keeper's end is
     // "dead", a refusal rejects.
-    return Effect.runPromise(
+    return runPromise(
       timedEffect(
         boundedRead(
           timeoutMs,
@@ -922,7 +923,7 @@ export class SessiondClient {
       return Promise.reject(error);
     }
     // The promise edge of the wait for its ack.
-    return Effect.runPromise(Deferred.await(acked));
+    return runPromise(Deferred.await(acked));
   }
 
   // -------------------------------------------------------------------- verbs
@@ -1129,7 +1130,7 @@ export class SessiondClient {
 
   /** The promise edge of {@link listed}. */
   list(): Promise<SessiondWelcomeInfo> {
-    return Effect.runPromise(this.listed());
+    return runPromise(this.listed());
   }
 
   close(): void {
@@ -1149,11 +1150,30 @@ class SessiondRefusal extends Schema.TaggedError<SessiondRefusal>()(
 }
 
 /** The keeper's own words for why a command did not go, however it failed. */
-export const refusalReason = (error: unknown): string => {
+const refusalReason = (error: unknown): string => {
   if (error instanceof SessiondRefusal) {
     return error.reason;
   }
   return error instanceof Error ? error.message : String(error);
+};
+
+/**
+ * The keeper refused a write to `procId`, whose process is `pid` when
+ * known: its {@link KeeperRefused}, said in the log. Its caller tells the
+ * session and throws it.
+ */
+export const writeRefused = (
+  procId: string,
+  error: unknown,
+  pid: number | undefined
+): KeeperRefused => {
+  const refusal = new KeeperRefused({
+    procId,
+    reason: refusalReason(error),
+    pid,
+  });
+  console.warn(`[sessiond] ${procId}: write refused: ${refusal.reason}`);
+  return refusal;
 };
 
 const assertApplied = (ack: SessiondAck, verb: string): void => {
@@ -1433,7 +1453,7 @@ export const sessiondBridge = (
     if (refusal) {
       return;
     }
-    refusal = new KeeperRefused(procId, reason, childPid);
+    refusal = new KeeperRefused({ procId, reason, pid: childPid });
     refused(refusal);
     events.emit("error", refusal);
   };

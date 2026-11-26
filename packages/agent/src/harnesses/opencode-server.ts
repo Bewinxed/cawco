@@ -3,6 +3,7 @@ import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
 import {
@@ -33,12 +34,13 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
+import { runFork, runPromise } from "../daemon-runtime";
 import { launchGateForm } from "../gate-form";
 import { readJson } from "../json-file";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
+import { fromPromise, type Rejected } from "../rejected";
 import type { SessiondClient } from "../sessiond-client";
 import { OpencodeServerRecordSchema } from "../stored-shapes";
-import { fromPromise, makeFlights } from "./opencode-effect";
 
 // @limit recording: agent.opencode-cutover-ms until 2026-12-26
 const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
@@ -518,7 +520,7 @@ export class OpencodeServerOwner {
   #candidateProcId: string | null = null;
   readonly #writes = makeLock();
   /** Each retired generation being ended, by procId: one end at a time each, an end asked meanwhile sharing it. */
-  readonly #retiring = makeFlights<string, void>();
+  readonly #retiring = makeJoin<string, void, Rejected>();
   readonly #retryAt = new Map<string, number>();
   /**
    * The last start of this server that failed, and what it was started
@@ -1094,23 +1096,26 @@ export class OpencodeServerOwner {
     for (const identity of this.#record?.retired ?? []) {
       if (
         identity.procId === this.#candidateProcId ||
-        this.#retiring.has(identity.procId) ||
+        this.#retiring.isRunning(identity.procId) ||
         Date.now() < (this.#retryAt.get(identity.procId) ?? 0)
       ) {
         continue;
       }
       // Let go: the next maintain after its retry time ends it again.
-      Effect.runFork(
+      runFork(
         this.#retiring.run(
           identity.procId,
           fromPromise(() => this.#retire(identity)).pipe(
             Effect.catch((error) =>
               Effect.sync(() => {
                 this.#retryAt.set(identity.procId, Date.now() + 5000);
-                console.warn(
-                  `[opencode] retired generation ${identity.procId}: ${error}; retry in 5s`
-                );
-              })
+              }).pipe(
+                Effect.andThen(
+                  Effect.logWarning(
+                    `[opencode] retired generation ${identity.procId}: ${error.cause}; retry in 5s`
+                  )
+                )
+              )
             )
           )
         )
@@ -1196,7 +1201,7 @@ export class OpencodeServerOwner {
       `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}, ${why}: SIGTERM`
     );
     // The promise edge of processEnd.
-    await Effect.runPromise(
+    await runPromise(
       processEnd({
         present: fromPromise(present),
         send: (sig) => fromPromise(() => send(sig)),

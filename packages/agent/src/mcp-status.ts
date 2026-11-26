@@ -15,6 +15,8 @@ import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Effect } from "effect";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
+import { runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 import { claudeHomeEnv } from "./tools";
 
 /**
@@ -164,11 +166,7 @@ export const readMcpRuntime = async (
     !read.some((row) => names.includes(row.name) && row.status === "pending");
   /** One status read of the CLI's, kept as the latest. */
   const statusOf = (handle: Query): Effect.Effect<McpServerStatus[], Error> =>
-    Effect.tryPromise({
-      try: () => handle.mcpServerStatus(),
-      catch: (error) =>
-        error instanceof Error ? error : new Error(String(error)),
-    }).pipe(
+    fromPromise(() => handle.mcpServerStatus()).pipe(
       Effect.tap((read) =>
         Effect.sync(() => {
           statuses = read;
@@ -213,7 +211,7 @@ export const readMcpRuntime = async (
   });
   // The promise edge of the CLI's MCP reads: its process is closed however
   // they end, and a read that failed says why on every server.
-  return await Effect.runPromise(
+  return await runPromise(
     Effect.acquireUseRelease(
       Effect.sync(() =>
         query({

@@ -13,6 +13,8 @@ import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import { lastOutput } from "@cawco/core/output-tail";
 import { shortId } from "@cawco/core/short-id";
 import { Deferred, Effect, Exit, Schema } from "effect";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise } from "../rejected";
 import type {
   ClientRequest,
   InitializeResponse,
@@ -166,7 +168,7 @@ export class CodexPeer {
       throw error;
     }
     // The promise edge of the request's answer.
-    const result = await Effect.runPromise(Deferred.await(answer));
+    const result = await runPromise(Deferred.await(answer));
     if (!isResultOf(result, method)) {
       throw new Error(`Codex answered ${method} with no result`);
     }
@@ -288,7 +290,7 @@ const openAppServer = (
   const peer: CodexPeer = new CodexPeer(
     (line) =>
       // The promise edge of one line written to the child's stdin.
-      Effect.runPromise(
+      runPromise(
         Effect.callback<void, Error>((resume) => {
           child.stdin.write(line, (error) =>
             resume(error ? Effect.fail(error) : Effect.void)
@@ -346,7 +348,7 @@ export const withAppServer = <T>(
   } = {}
 ): Promise<T> =>
   // The promise edge of a one-off app-server's read.
-  Effect.runPromise(
+  runPromise(
     Effect.acquireRelease(
       Effect.sync(() => openAppServer(bin, env, options)),
       (server) => Effect.sync(() => closeAppServer(server))
@@ -355,12 +357,9 @@ export const withAppServer = <T>(
         boundedRead(
           options.timeoutMs ?? ONE_OFF_MS,
           Effect.raceFirst(
-            Effect.tryPromise({
-              try: async () => {
-                await peer.handshake();
-                return await work(peer);
-              },
-              catch: (error) => error,
+            fromPromise(async () => {
+              await peer.handshake();
+              return await work(peer);
             }),
             Deferred.await(exited)
           )

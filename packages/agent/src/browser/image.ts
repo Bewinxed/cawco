@@ -12,6 +12,7 @@ import { Readable } from "node:stream";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import type Docker from "dockerode";
 import { Effect } from "effect";
+import { runPromise } from "../daemon-runtime";
 
 /** The image's inputs, by their name in the build context. */
 const BROWSER_IMAGE_FILES = [
@@ -54,7 +55,7 @@ const follow = (
   stream: NodeJS.ReadableStream,
   onEvent: (event: ProgressEvent) => void
 ): Promise<void> =>
-  Effect.runPromise(
+  runPromise(
     Effect.callback<void, Error>((resume) => {
       docker.modem.followProgress(
         stream,

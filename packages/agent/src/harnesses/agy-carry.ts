@@ -18,6 +18,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeFolderSync } from "@cawco/core/folders";
 import { Effect, Option, Schema } from "effect";
+import { runSync } from "../daemon-runtime";
 
 /** One message as kept. */
 const Carried = Schema.Struct({
@@ -43,7 +44,7 @@ export const keepCarried = (
     return;
   }
   const file = agyCarryFile(home, sessionId);
-  Effect.runSync(
+  runSync(
     Effect.try(() => {
       makeFolderSync(join(home, "cawco-carry"));
       appendFileSync(
@@ -52,8 +53,8 @@ export const keepCarried = (
       );
     }).pipe(
       Effect.catch((error) =>
-        Effect.sync(() =>
-          console.warn(`[agy] keeping ${file} failed: ${String(error.cause)}`)
+        Effect.logWarning(
+          `[agy] keeping ${file} failed: ${String(error.cause)}`
         )
       )
     )
@@ -62,7 +63,7 @@ export const keepCarried = (
 
 /** What conversation `sessionId` keeps, oldest first; none when it keeps nothing. */
 export const carriedOf = (home: string, sessionId: string): Carried[] =>
-  Effect.runSync(
+  runSync(
     Effect.try(() => readFileSync(agyCarryFile(home, sessionId), "utf8")).pipe(
       Effect.map((text) =>
         text.split("\n").flatMap((line) => Option.toArray(decodeLine(line)))

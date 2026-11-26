@@ -46,7 +46,7 @@ import {
   perlQuote,
 } from "../boundary/hook-judge";
 import { JUDGE_ANSWER_END, JUDGE_ANSWER_END_PERL } from "../boundary/protocol";
-
+import { fromPromise } from "../rejected";
 import type { AgyAfterAnswer, AgyAnswer } from "./agy-judge";
 
 /**
@@ -219,7 +219,7 @@ class AgyJudgeError extends Schema.TaggedError<AgyJudgeError>()(
 
  */
 export const agyJudgeEnv = Effect.fn("agyJudgeEnv")(function* (socket: string) {
-  const packed = yield* Effect.promise(() => packedSocketAddress(socket));
+  const packed = yield* fromPromise(() => packedSocketAddress(socket));
   if (!packed.ok) {
     return yield* new AgyJudgeError({
       socket,

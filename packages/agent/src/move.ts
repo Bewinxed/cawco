@@ -53,6 +53,7 @@ import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
 import { Effect, Fiber, Schema } from "effect";
 import type { AgentPorts } from "./agent-ports";
+import { runFork, runPromise } from "./daemon-runtime";
 import { holdingRemote, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
 import { LFS_FILTERS } from "./git/lfs";
@@ -296,7 +297,7 @@ const exec = async (
   }
   // The process is the run's while it lives (a Cancel kills it), and is
   // killed if reading it fails before it exits.
-  const { code, stdout, stderr } = await Effect.runPromise(
+  const { code, stdout, stderr } = await runPromise(
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const child = Bun.spawn(argv, {
@@ -1566,7 +1567,7 @@ const lfsStep = (
     };
     // The progress read each 250 ms after the last read ended, while the
     // pull runs; a read that fails is let go, the next one reads again.
-    const ticker = Effect.runFork(
+    const ticker = runFork(
       Effect.promise(() => tail().catch(() => undefined)).pipe(
         Effect.delay(250),
         Effect.forever
@@ -1588,7 +1589,7 @@ const lfsStep = (
         cwd: path,
         env,
       });
-      await Effect.runPromise(Fiber.interrupt(ticker));
+      await runPromise(Fiber.interrupt(ticker));
       await tail();
       feed.end();
       if (pulled.code !== 0) {
@@ -1606,7 +1607,7 @@ const lfsStep = (
       });
       return stage;
     } finally {
-      await Effect.runPromise(Fiber.interrupt(ticker));
+      await runPromise(Fiber.interrupt(ticker));
       await uncommit(undefined, path, snapshot).catch(() => undefined);
       await rm(scratch, { recursive: true, force: true });
     }

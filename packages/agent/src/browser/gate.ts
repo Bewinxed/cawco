@@ -87,6 +87,7 @@ import {
 import type { Server, ServerWebSocket } from "bun";
 import { Deferred, Effect } from "effect";
 import { z } from "zod";
+import { runFork, runPromise } from "../daemon-runtime";
 import { withFeedbackLine } from "../feedback-line";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 import { isDashboardOrigin } from "./dashboard-door";
@@ -414,7 +415,7 @@ const socketOf = async (base: string, what: string): Promise<string> => {
 
 /** A connection to Chromium at `url`, once it is open. */
 const dial = (url: string): Promise<WebSocket> =>
-  Effect.runPromise(
+  runPromise(
     Effect.callback<WebSocket, Error>((resume) => {
       const socket = new WebSocket(url);
       socket.onopen = () => resume(Effect.succeed(socket));
@@ -1003,7 +1004,7 @@ export class Gate {
       )
     );
     // Work let go: whatever waits for the mark waits on `landed`.
-    Effect.runFork(this.#markTurns.withLock(page, marking));
+    runFork(this.#markTurns.withLock(page, marking));
   }
 
   /** What waited for page `page`'s next mark goes on. */
@@ -1021,7 +1022,7 @@ export class Gate {
    */
   marked(page: string, ms = MARK_WAIT_MS): Promise<boolean> {
     // The promise edge of the wait for a page's mark.
-    return Effect.runPromise(
+    return runPromise(
       boundedRead(ms, this.#markOf(page)).pipe(
         Effect.as(true),
         Effect.catchTag("Unanswered", () => Effect.succeed(false))
@@ -1600,7 +1601,7 @@ class Link {
     if (twin) {
       // Behind the twin standing up: a twin that never stands leaves its
       // sessions here.
-      await Effect.runPromise(Deferred.await(twin.ready));
+      await runPromise(Deferred.await(twin.ready));
       twin = sessionId ? this.#routed.get(sessionId) : undefined;
     }
     if (twin) {

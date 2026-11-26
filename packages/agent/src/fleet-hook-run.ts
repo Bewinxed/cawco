@@ -25,6 +25,7 @@ import { lastOutput } from "@cawco/core/output-tail";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { Effect } from "effect";
+import { runPromise } from "./daemon-runtime";
 import { commandLineOf } from "./fleet-hook-guard";
 import type { SetHook } from "./fleet-set-rows";
 
@@ -58,7 +59,7 @@ const runCommand = (
   handler: HookCommandHandler,
   input: string,
   place: HookPlace
-): Promise<Ran> => Effect.runPromise(commandRun(handler, input, place));
+): Promise<Ran> => runPromise(commandRun(handler, input, place));
 
 /** {@link runCommand}'s run: interrupted, it ends the hook's group as its timeout does. */
 const commandRun = Effect.fnUntraced(function* (

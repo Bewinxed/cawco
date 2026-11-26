@@ -56,6 +56,7 @@ import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
+import { runFork } from "./daemon-runtime";
 import { isGitDir } from "./git-dir";
 import { mountedAnywhere } from "./mount-table";
 
@@ -272,12 +273,12 @@ export const keepStandInsListed = async (
   let settle: Fiber.Fiber<void> | undefined;
   const settleUndone = (): void => {
     if (settle) {
-      Effect.runFork(Fiber.interrupt(settle));
+      runFork(Fiber.interrupt(settle));
     }
   };
   const relist = (): void => {
     settleUndone();
-    settle = Effect.runFork(
+    settle = runFork(
       Effect.promise(() =>
         listStandIns(ref, false).catch((error: unknown) => {
           console.warn(

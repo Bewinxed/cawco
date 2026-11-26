@@ -26,7 +26,9 @@ import { workspaceNeeds } from "@cawco/core/workspace-needs";
 import { workspaceSpills } from "@cawco/core/workspace-policy";
 import { Effect, RcMap, Scope } from "effect";
 import { z } from "zod";
+import { runPromise, runSync } from "../daemon-runtime";
 import { ensureView, layerOf, viewArgv } from "../layer";
+import { fromPromise } from "../rejected";
 import { gateOf } from "./exec";
 import { type Held, reported, stateDir, writeWhole } from "./state";
 
@@ -445,18 +447,24 @@ const gateWrites = makeKeyedLock<string>();
  * holder, removed once its last lets go, and taken again from the start by
  * a step after that ({@link behindGate}).
  */
-const gates = Effect.runSync(
+const gates = runSync(
   RcMap.make({
     lookup: (id: string) =>
       Effect.acquireRelease(
         gateWrites.withLock(
           id,
-          Effect.promise(() => writeStateFile(gateOf(id), String(process.pid)))
+          fromPromise(() => writeStateFile(gateOf(id), String(process.pid)))
         ),
         () =>
           gateWrites.withLock(
             id,
-            Effect.promise(() => rm(gateOf(id), { force: true }))
+            fromPromise(() => rm(gateOf(id), { force: true })).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `[workspace] ${id}: its replacing gate was not taken down: ${error.message}`
+                )
+              )
+            )
           )
       ),
   }).pipe(Scope.provide(Scope.makeUnsafe()))
@@ -472,9 +480,9 @@ const gates = Effect.runSync(
  */
 export const behindGate = <T>(id: string, step: () => Promise<T>): Promise<T> =>
   // The promise edge of a step behind the gate (ensure.ts, looks.ts, stop.ts).
-  Effect.runPromise(
+  runPromise(
     RcMap.get(gates, id).pipe(
-      Effect.andThen(Effect.promise(() => step())),
+      Effect.andThen(fromPromise(() => step())),
       Effect.scoped
     )
   );

@@ -18,7 +18,9 @@ import {
   claudeFleetSidecarFile,
   legacyClaudeFleetSidecarFile,
 } from "@cawco/core/paths/fleet";
+import { Effect } from "effect";
 import { readJson, readOwnJson, UnreadJson, writeJson } from "./json-file";
+import { fromPromise } from "./rejected";
 import {
   ClaudeFleetSidecarSchema,
   LegacyFleetSidecarSchema,
@@ -53,24 +55,30 @@ const readLegacy = async (
 };
 
 /** The old sidecar's servers folded into the current sidecar's `mcp`, and the old sidecar removed; said when it was there. */
-export const moveLegacyFleetSidecar = async (): Promise<void> => {
-  const legacyPath = legacyClaudeFleetSidecarFile();
-  const legacy = await readLegacy(legacyPath);
-  if (legacy === undefined) {
-    return;
+export const moveLegacyFleetSidecar = Effect.fn("moveLegacyFleetSidecar")(
+  function* () {
+    const legacyPath = legacyClaudeFleetSidecarFile();
+    const legacy = yield* fromPromise(() => readLegacy(legacyPath));
+    if (legacy === undefined) {
+      return;
+    }
+    const path = claudeFleetSidecarFile();
+    const current =
+      (yield* fromPromise(() =>
+        readOwnJson(
+          path,
+          (value) => ClaudeFleetSidecarSchema.partial().safeParse(value).data
+        )
+      )) ?? {};
+    yield* fromPromise(() =>
+      writeJson(path, {
+        ...current,
+        mcp: [...new Set([...(current.mcp ?? []), ...(legacy.mcp ?? [])])],
+      })
+    );
+    yield* fromPromise(() => rm(legacyPath, { force: true }));
+    yield* Effect.logInfo(
+      `[fleet] ${legacyPath}: the servers it named folded into ${path}, and it removed`
+    );
   }
-  const path = claudeFleetSidecarFile();
-  const current =
-    (await readOwnJson(
-      path,
-      (value) => ClaudeFleetSidecarSchema.partial().safeParse(value).data
-    )) ?? {};
-  await writeJson(path, {
-    ...current,
-    mcp: [...new Set([...(current.mcp ?? []), ...(legacy.mcp ?? [])])],
-  });
-  await rm(legacyPath, { force: true });
-  console.info(
-    `[fleet] ${legacyPath}: the servers it named folded into ${path}, and it removed`
-  );
-};
+);

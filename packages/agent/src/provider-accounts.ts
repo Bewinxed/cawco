@@ -78,6 +78,8 @@ import {
 import { z } from "zod";
 import { removeAccountDir } from "./accounts";
 import type { AgentPorts, OpencodeOwnCredential } from "./agent-ports";
+import { runFork, runPromise, runSync } from "./daemon-runtime";
+import { fromPromise, type Rejected } from "./rejected";
 import { storeRead } from "./stores/client";
 import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
@@ -261,10 +263,7 @@ class AccountStore implements CredentialStore {
       // pi-ai's refresh, when it is one (auth/resolve.js
       // `refreshStoredOAuthCredential`): inside the account's turn, so two
       // asks never both spend one refresh token.
-      const next = yield* Effect.tryPromise({
-        try: () => fn(was),
-        catch: (error) => error,
-      });
+      const next = yield* fromPromise(() => fn(was));
       // pi-ai's refresh answers its own fields only: who the sign-in is
       // stays on it while it is the same grant (the same refresh token; a
       // Copilot refresh keeps its GitHub token). A new sign-in written over
@@ -279,11 +278,9 @@ class AccountStore implements CredentialStore {
           ? { ...next, [IDENTITY]: kept }
           : next;
       if (written !== undefined) {
-        yield* Effect.tryPromise({
-          try: () =>
-            writeHeld(account, { provider: providerId, credential: written }),
-          catch: (error) => error,
-        });
+        yield* fromPromise(() =>
+          writeHeld(account, { provider: providerId, credential: written })
+        );
       }
       return written ?? current?.credential;
     });
@@ -291,7 +288,7 @@ class AccountStore implements CredentialStore {
     // its lock, whose wait `options.signal` may let go of (pi-ai's "signal
     // cancels only the wait for the lock"); from the read to the write
     // nothing cuts it, since a refresh may already have rotated the token.
-    return Effect.runPromise(
+    return runPromise(
       writing.withLock(account, Effect.uninterruptible(change)),
       options?.signal ? { signal: options.signal } : undefined
     );
@@ -311,18 +308,16 @@ class AccountStore implements CredentialStore {
  * provider, kept once made; one that failed to be made is not kept, and
  * the next ask makes it again.
  */
-const runtimes = Effect.runSync(
+const runtimes = runSync(
   Cache.makeWith(
     (key: string) => {
       const [accountId = "", provider = ""] = key.split("\u0000");
-      return Effect.tryPromise({
-        try: () =>
-          ModelRuntime.create({
-            refreshOnCreate: false,
-            credentials: new AccountStore(accountId, provider),
-          }),
-        catch: (error) => error,
-      });
+      return fromPromise(() =>
+        ModelRuntime.create({
+          refreshOnCreate: false,
+          credentials: new AccountStore(accountId, provider),
+        })
+      );
     },
     {
       capacity: Number.POSITIVE_INFINITY,
@@ -336,14 +331,14 @@ const runtimes = Effect.runSync(
 const runtimeFor = (
   accountId: string,
   provider: string
-): Effect.Effect<ModelRuntime, unknown> =>
+): Effect.Effect<ModelRuntime, Rejected> =>
   Cache.get(runtimes, `${accountId}\u0000${provider}`);
 
 /** The promise edge of {@link runtimeFor}. */
 const runtimeOf = (
   accountId: string,
   provider: string
-): Promise<ModelRuntime> => Effect.runPromise(runtimeFor(accountId, provider));
+): Promise<ModelRuntime> => runPromise(runtimeFor(accountId, provider));
 
 /**
  * Whether pi-ai keeps an account of `provider`: signs it in, refreshes it
@@ -455,7 +450,7 @@ export const freshened = Effect.fn("freshened")(function* (
     );
   }
   const runtime = yield* runtimeFor(accountId, held.provider).pipe(
-    Effect.mapError(refreshFailed(accountId))
+    Effect.mapError(({ cause }) => refreshFailed(accountId)(cause))
   );
   yield* Effect.tryPromise({
     try: () =>
@@ -469,7 +464,7 @@ export const freshen = (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">,
   periodic = false
-): Promise<void> => Effect.runPromise(freshened(accountId, ports, periodic));
+): Promise<void> => runPromise(freshened(accountId, ports, periodic));
 
 /** How a refresh that did not happen is said in the log. */
 const REFRESH_FAILED_SAID: Record<RefreshFailed["_tag"], string> = {
@@ -480,7 +475,7 @@ const REFRESH_FAILED_SAID: Record<RefreshFailed["_tag"], string> = {
 };
 
 /** Keeps every OAuth credential on the machine fresh, one after another; a failure is said and tried again next time. */
-const freshenEvery = Effect.fn("freshenEvery")(function* (
+export const freshenEvery = Effect.fn("freshenEvery")(function* (
   ports: Pick<AgentPorts, "borrowAsk">
 ) {
   yield* Effect.forEach(
@@ -488,21 +483,14 @@ const freshenEvery = Effect.fn("freshenEvery")(function* (
     (account) =>
       freshened(account, ports, true).pipe(
         Effect.catch((error) =>
-          Effect.sync(() =>
-            console.warn(
-              `[accounts] ${account}: ${REFRESH_FAILED_SAID[error._tag]}: ${error.message}`
-            )
+          Effect.logWarning(
+            `[accounts] ${account}: ${REFRESH_FAILED_SAID[error._tag]}: ${error.message}`
           )
         )
       ),
     { discard: true }
   );
 });
-
-/** The promise edge of {@link freshenEvery}. */
-export const freshenAll = (
-  ports: Pick<AgentPorts, "borrowAsk">
-): Promise<void> => Effect.runPromise(freshenEvery(ports));
 
 // ── Who a credential is ──────────────────────────────────────────────────
 
@@ -639,7 +627,7 @@ const withIdentity = async (
   !keptIdentity(credential)
     ? {
         ...credential,
-        [IDENTITY]: await Effect.runPromise(githubIdentity(credential)),
+        [IDENTITY]: await runPromise(githubIdentity(credential)),
       }
     : credential;
 
@@ -965,7 +953,7 @@ const endSignIn = (accountId: string): void => {
   const signIn = signIns.get(accountId);
   signIns.delete(accountId);
   if (signIn) {
-    Effect.runFork(Fiber.interrupt(signIn.login));
+    runFork(Fiber.interrupt(signIn.login));
   }
 };
 
@@ -981,52 +969,50 @@ const runLogin = (
   shown: Deferred.Deferred<ProviderSigninChallenge>,
   code: Deferred.Deferred<string>
 ): Fiber.Fiber<SignInEnd> =>
-  Effect.runFork(
-    Effect.tryPromise({
-      try: (signal) =>
-        runtime.login(provider, "oauth", {
-          signal,
-          prompt: (prompt) => {
-            if (prompt.type === "select") {
-              const device = prompt.options.find(
-                (option) =>
-                  DEVICE_OPTION.test(option.id) ||
-                  DEVICE_LABEL.test(option.label)
-              );
-              return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
-            }
-            if (prompt.type === "manual_code") {
-              // The promise edge of the wait for the pasted code.
-              return Effect.runPromise(Deferred.await(code));
-            }
-            // A question the sign-in asks with a default (Copilot's enterprise
-            // domain): the default.
-            return Promise.resolve("");
-          },
-          notify: (event) => {
-            if (event.type === "device_code") {
-              Deferred.doneUnsafe(
-                shown,
-                Effect.succeed({
-                  verificationUrl: event.verificationUri,
-                  userCode: event.userCode,
-                  expiresAt:
-                    Date.now() + (event.expiresInSeconds ?? 900) * 1000,
-                })
-              );
-            } else if (event.type === "auth_url") {
-              Deferred.doneUnsafe(shown, Effect.succeed({ url: event.url }));
-            }
-          },
-        }),
-      catch: (error): SignInEnd => {
-        const failed =
-          error instanceof Error ? error : new Error(String(error));
-        return DEVICE_FLOW_TIMED_OUT.test(failed.message) ? "expired" : failed;
-      },
-    }).pipe(
+  runFork(
+    fromPromise((signal) =>
+      runtime.login(provider, "oauth", {
+        signal,
+        prompt: (prompt) => {
+          if (prompt.type === "select") {
+            const device = prompt.options.find(
+              (option) =>
+                DEVICE_OPTION.test(option.id) || DEVICE_LABEL.test(option.label)
+            );
+            return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
+          }
+          if (prompt.type === "manual_code") {
+            // The promise edge of the wait for the pasted code.
+            return runPromise(Deferred.await(code));
+          }
+          // A question the sign-in asks with a default (Copilot's enterprise
+          // domain): the default.
+          return Promise.resolve("");
+        },
+        notify: (event) => {
+          if (event.type === "device_code") {
+            Deferred.doneUnsafe(
+              shown,
+              Effect.succeed({
+                verificationUrl: event.verificationUri,
+                userCode: event.userCode,
+                expiresAt: Date.now() + (event.expiresInSeconds ?? 900) * 1000,
+              })
+            );
+          } else if (event.type === "auth_url") {
+            Deferred.doneUnsafe(shown, Effect.succeed({ url: event.url }));
+          }
+        },
+      })
+    ).pipe(
       Effect.as<SignInEnd>("done"),
-      Effect.catch((ended) => Effect.succeed(ended))
+      Effect.catch(({ cause }) => {
+        const failed =
+          cause instanceof Error ? cause : new Error(String(cause));
+        return Effect.succeed<SignInEnd>(
+          DEVICE_FLOW_TIMED_OUT.test(failed.message) ? "expired" : failed
+        );
+      })
     )
   );
 
@@ -1087,7 +1073,7 @@ export const beginProviderLogin = (
   accountId: string,
   provider: string
 ): Promise<ProviderSigninChallenge> =>
-  Effect.runPromise(beginSignIn(accountId, provider));
+  runPromise(beginSignIn(accountId, provider));
 
 /** A sign-in finished: who it is, kept or signed straight out as someone else's. */
 const settled = async (
@@ -1139,7 +1125,7 @@ export const completeProviderLogin = async (
   }
   // Not finished yet within the wait: the sign-in still waits for the
   // person, and runs on.
-  const outcome = await Effect.runPromise(
+  const outcome = await runPromise(
     boundedRead(
       COMPLETE_WAIT_MS,
       Fiber.await(signIn.login).pipe(
@@ -1839,9 +1825,9 @@ const dropStore = async (
   if (held && !lenderOf(held.credential) && piAiKeeps(held.provider)) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
   }
-  Effect.runSync(
+  runSync(
     Effect.forEach(
-      [...Effect.runSync(Cache.keys(runtimes))].filter((key) =>
+      [...runSync(Cache.keys(runtimes))].filter((key) =>
         key.startsWith(`${accountId}\u0000`)
       ),
       (key) => Cache.invalidate(runtimes, key),
@@ -2032,28 +2018,36 @@ export const opencodeAccountEnv = (
  * The file that plugin read each session's account from
  * (`opencode-accounts-<hub>.json` beside the session credentials) goes too.
  */
-export const dropOpencodeMarkers = async (): Promise<void> => {
-  const stale = (await readdir(sessionIdentityDir()).catch(() => [])).filter(
-    (file) => file.startsWith("opencode-accounts-") && file.endsWith(".json")
-  );
-  await Promise.all(
-    stale.map((file) => rm(join(sessionIdentityDir(), file), { force: true }))
-  );
-  const path = join(opencodeDataDir(), "auth.json");
-  const store = await readJson(path);
-  const kept = Object.fromEntries(
-    Object.entries(store).filter(
-      ([, entry]) =>
-        entry.key !== OPENCODE_MARKER && entry.access !== OPENCODE_MARKER
-    )
-  );
-  if (Object.keys(kept).length !== Object.keys(store).length) {
-    await writeJson(path, kept);
-    console.info(
-      "[accounts] OpenCode's own store no longer holds CawCo's account markers"
+export const dropOpencodeMarkers = Effect.fn("dropOpencodeMarkers")(
+  function* () {
+    const stale = (yield* Effect.promise(() =>
+      readdir(sessionIdentityDir()).catch((): string[] => [])
+    )).filter(
+      (file) => file.startsWith("opencode-accounts-") && file.endsWith(".json")
     );
+    yield* fromPromise(() =>
+      Promise.all(
+        stale.map((file) =>
+          rm(join(sessionIdentityDir(), file), { force: true })
+        )
+      )
+    );
+    const path = join(opencodeDataDir(), "auth.json");
+    const store = yield* fromPromise(() => readJson(path));
+    const kept = Object.fromEntries(
+      Object.entries(store).filter(
+        ([, entry]) =>
+          entry.key !== OPENCODE_MARKER && entry.access !== OPENCODE_MARKER
+      )
+    );
+    if (Object.keys(kept).length !== Object.keys(store).length) {
+      yield* fromPromise(() => writeJson(path, kept));
+      yield* Effect.logInfo(
+        "[accounts] OpenCode's own store no longer holds CawCo's account markers"
+      );
+    }
   }
-};
+);
 
 // ── The providers an account can be for ─────────────────────────────────
 

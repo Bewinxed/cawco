@@ -9,8 +9,10 @@
 import { MACHINE_PROOF_HEADER } from "@cawco/core/hub-auth";
 import { machineId } from "@cawco/core/machine-id";
 import { machineProofHeaders } from "@cawco/core/machine-key";
+import { Effect } from "effect";
 import { readConfig, writeConfig } from "./config";
 import { toHttpBase } from "./discovery";
+import { fromPromise } from "./rejected";
 
 let connected: string | undefined;
 let ownId: string | undefined;
@@ -28,16 +30,16 @@ export const setConnectedHub = (hubId: string): void => {
  * this machine, and what says this is the machine's agent
  * (machine-agent.ts).
  */
-export const recordJoinedHub = async (
+export const recordJoinedHub = Effect.fn("recordJoinedHub")(function* (
   url: string,
   hubId: string
-): Promise<void> => {
-  const config = await readConfig();
+) {
+  const config = yield* fromPromise(() => readConfig());
   const hubUrl = toHttpBase(url);
   if (hubUrl && (config?.hubUrl !== hubUrl || config.hubId !== hubId)) {
-    await writeConfig({ hubUrl, hubId });
+    yield* fromPromise(() => writeConfig({ hubUrl, hubId }));
   }
-};
+});
 
 /** The id of the hub this machine proves itself to. */
 const provenHubId = async (): Promise<string | undefined> =>

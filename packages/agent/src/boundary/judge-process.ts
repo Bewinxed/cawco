@@ -11,9 +11,11 @@ import { workspaceDoorDir } from "@cawco/core/paths/workspace";
 import { trustedPath } from "@cawco/core/workspace-needs";
 import { Effect, Fiber, FiberMap, Option, Scope } from "effect";
 import { BUN_SCRIPT_ENV } from "../bun-runtime";
+import { runPromise, runSync } from "../daemon-runtime";
 import { isJudgeOf, JUDGE_FORM_LENGTH, judgeProcId } from "../proc-id";
+import { fromPromise } from "../rejected";
 import { socketPlace } from "../tool-door";
-import { ready } from "./exec";
+import { readied } from "./exec";
 import {
   bunRuntime,
   JUDGE_SCRIPT,
@@ -36,7 +38,7 @@ import {
 } from "./state";
 
 /** The judges starting now, by their sessiond id: one start each, however many ask, its fiber gone from here once it ends. */
-const judging = Effect.runSync(
+const judging = runSync(
   FiberMap.make<string, void>().pipe(Scope.provide(Scope.makeUnsafe()))
 );
 
@@ -140,39 +142,41 @@ export const judgeFor = async (
     writeWhole(join(stateDir(id), JUDGE_PROTOCOL_FILE), protocolText, 0o644),
     writeWhole(server, serverText, 0o644),
   ]);
-  const start = Effect.promise(async () => {
-    const client = await sessiond();
-    if (await holding(procId)) {
+  const start = Effect.gen(function* () {
+    const client = yield* fromPromise(sessiond);
+    if (yield* fromPromise(() => holding(procId))) {
       return;
     }
-    await client.spawnProc(procId, {
-      command: runtime,
-      // Its build last: what it answers when asked which it runs.
-      args: [
-        server,
-        ...judgeArgv({ socket, ...handed, build: judgeBuildOf(scripts) }),
-      ],
-      // Bun reads bunfig.toml and .env from where it starts: the state dir,
-      // which nothing inside the boundary writes.
-      cwd: stateDir(id),
-      env: {
-        ...BUN_SCRIPT_ENV,
-        PATH: trustedPath(),
-      },
-      workspace: true,
-    });
-    await ready(client, procId, JUDGE_READY, "its judge").catch(
-      (error: Error) => {
-        throw refusal(id, error.message);
-      }
+    yield* fromPromise(() =>
+      client.spawnProc(procId, {
+        command: runtime,
+        // Its build last: what it answers when asked which it runs.
+        args: [
+          server,
+          ...judgeArgv({ socket, ...handed, build: judgeBuildOf(scripts) }),
+        ],
+        // Bun reads bunfig.toml and .env from where it starts: the state dir,
+        // which nothing inside the boundary writes.
+        cwd: stateDir(id),
+        env: {
+          ...BUN_SCRIPT_ENV,
+          PATH: trustedPath(),
+        },
+        workspace: true,
+      })
     );
-    console.info(`[workspace] ${id}: its judge (form ${form}) is running`);
+    yield* readied(client, procId, JUDGE_READY, "its judge").pipe(
+      Effect.mapError((error) => refusal(id, error.message))
+    );
+    yield* Effect.logInfo(
+      `[workspace] ${id}: its judge (form ${form}) is running`
+    );
   });
   const running = FiberMap.getUnsafe(judging, procId);
   const started = Option.isSome(running)
     ? running.value
-    : Effect.runSync(FiberMap.run(judging, procId, start));
+    : runSync(FiberMap.run(judging, procId, start));
   // The promise edge of the judge's start, shared by every caller while it runs.
-  await Effect.runPromise(Fiber.join(started));
+  await runPromise(Fiber.join(started));
   return { procId, socket };
 };

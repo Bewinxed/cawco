@@ -22,7 +22,9 @@ import {
 } from "@cawco/core/paths/workspace";
 import { ownSocketRoot } from "@cawco/core/socket-root";
 import { Effect, Exit, Scope } from "effect";
+import { runPromise, runSync } from "./daemon-runtime";
 import { harnessMcpUrl } from "./delegation";
+import { fromPromise } from "./rejected";
 
 /** A workspace's door socket. */
 export const toolDoorOf = (id: string): string =>
@@ -127,10 +129,16 @@ const serveDoor = (path: string) =>
       catch: (error) => error,
     }),
     (server) =>
-      Effect.promise(async () => {
+      fromPromise(async () => {
         await server.stop(true);
         await rm(path, { force: true });
-      })
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(
+            `[tool-door] ${path} was not taken down: ${error.message}`
+          )
+        )
+      )
   );
 
 /**
@@ -144,9 +152,9 @@ export const openToolDoor = (id: string): Promise<string> => {
       return path;
     }
     await prepareDoor(path);
-    const scope = Effect.runSync(Scope.make());
+    const scope = runSync(Scope.make());
     // The promise edge of `serveDoor`, in the door's own scope.
-    await Effect.runPromise(
+    await runPromise(
       serveDoor(path).pipe(
         Scope.provide(scope),
         Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
@@ -164,7 +172,7 @@ export const closeToolDoor = (id: string): Promise<void> =>
     doors.delete(id);
     if (scope) {
       // The promise edge of closing the door's scope, its socket removed with it.
-      await Effect.runPromise(Scope.close(scope, Exit.void));
+      await runPromise(Scope.close(scope, Exit.void));
       return;
     }
     await rm(toolDoorOf(id), { force: true });

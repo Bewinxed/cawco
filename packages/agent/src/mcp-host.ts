@@ -110,6 +110,7 @@ import {
 import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
+import { runPromise } from "./daemon-runtime";
 import { harnessMcpUrl } from "./delegation";
 import { fleetMcpAt } from "./fleet-mcp-set";
 import { gatePath, type McpGate } from "./mcp-gate";
@@ -446,7 +447,7 @@ class Child {
       Deferred.doneUnsafe(answer, Exit.fail(error));
     }
     // The promise edge of the server's answer; `signal` is let go with it.
-    return Effect.runPromise(
+    return runPromise(
       Deferred.await(answer).pipe(
         Effect.ensuring(
           Effect.sync(() => signal?.removeEventListener("abort", cancel))

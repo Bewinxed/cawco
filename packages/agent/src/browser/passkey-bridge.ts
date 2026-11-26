@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { Deferred, Effect } from "effect";
 import { z } from "zod";
+import { every, runPromise } from "../daemon-runtime";
 import {
   type CableAssertionResponse,
   type CableInitiatorOptions,
@@ -32,7 +33,6 @@ import {
   isOwnAdvert,
 } from "./cable-initiator";
 import { CdpLink } from "./cdp-takeover";
-import { runEvery } from "./every";
 
 /** The extension's id, which its manifest's key gives it (chromium.conf). */
 const EXTENSION_ID = "ggmghgopcefkanlpdhbbjogokighkbgc";
@@ -332,7 +332,7 @@ export class PasskeyBridge {
       filter: [{ type: "service_worker" }],
     });
     const load = this.#target ? undefined : await this.#load();
-    const found = await Effect.runPromise(
+    const found = await runPromise(
       boundedRead(WORKER_MS, Deferred.await(this.#found)).pipe(
         Effect.as(true),
         Effect.catchTag("Unanswered", () => Effect.succeed(false))
@@ -350,15 +350,16 @@ export class PasskeyBridge {
     // The browser's DevTools connection closed meanwhile: nothing to read.
     if (!this.closed) {
       // Each read a poll's wait after the one before ended.
-      this.#reads = runEvery(
+      this.#reads = every(
+        "passkey extension reads",
         POLL_MS,
-        () =>
+        Effect.promise(() =>
           this.#read().catch((error: unknown) => {
             // The worker stopped or went: attached again once it runs.
             this.#session = undefined;
             this.#onFail(error);
-          }),
-        String
+          })
+        )
       );
     }
   }

@@ -32,6 +32,8 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { spawnTethered, untether } from "@cawco/core/tether";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { Effect } from "effect";
+import { every } from "./daemon-runtime";
 import { resolveBin, toolEnv } from "./tools";
 
 /** What was heard: a sleep announced, a wake announced, or a sleep found after it ended (the clocks). */
@@ -108,19 +110,24 @@ const startWatch = (): Power => {
   }
   let wall = Date.now();
   let awake = performance.now();
-  setInterval(() => {
-    const wallNow = Date.now();
-    const awakeNow = performance.now();
-    const gained = wallNow - wall - (awakeNow - awake);
-    wall = wallNow;
-    awake = awakeNow;
-    if (gained > SLEPT_MS) {
-      console.info(
-        `[power] this machine slept about ${Math.round(gained / 1000)} s (its wall clock gained that on its awake clock)`
-      );
-      hear("slept");
-    }
-  }, GAP_LOOK_MS).unref();
+  every(
+    "power",
+    GAP_LOOK_MS,
+    Effect.suspend(() => {
+      const wallNow = Date.now();
+      const awakeNow = performance.now();
+      const gained = wallNow - wall - (awakeNow - awake);
+      wall = wallNow;
+      awake = awakeNow;
+      if (gained > SLEPT_MS) {
+        hear("slept");
+        return Effect.logInfo(
+          `[power] this machine slept about ${Math.round(gained / 1000)} s (its wall clock gained that on its awake clock)`
+        );
+      }
+      return Effect.void;
+    })
+  );
   return {
     asleep: () => asleep,
     awakeMs: () => performance.now() - wokeAt,

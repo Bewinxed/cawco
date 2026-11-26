@@ -1,6 +1,7 @@
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
 import { Duration, Effect, Exit, Scope } from "effect";
+import { runFork, runPromise } from "./daemon-runtime";
 import { heardUntil, openInTerminal, type TerminalRun } from "./login";
 
 /**
@@ -65,7 +66,7 @@ const waiting = new Map<string, Waiting>();
  * closed at once, then its expiry's wait let go.
  */
 const end = (one: Waiting): void => {
-  Effect.runFork(Scope.close(one.scope, Exit.void));
+  runFork(Scope.close(one.scope, Exit.void));
 };
 
 /** Whether a sign-in waits under `key` for its code. */
@@ -135,7 +136,7 @@ const until = (
   done: () => boolean,
   quietMs: number
 ): Promise<boolean> =>
-  Effect.runPromise(
+  runPromise(
     heardUntil(one, done, quietMs).pipe(
       Effect.map((answer) => (answer === "quiet" ? done() : answer))
     )
@@ -161,7 +162,7 @@ export const beginPtySignin = async (
   const scope = Scope.makeUnsafe();
   // Forked first, so the scope lets it go last: closing ends the program and
   // its terminal before anything else.
-  Effect.runFork(
+  runFork(
     Effect.sleep(Duration.millis(KEEP_MS)).pipe(
       Effect.andThen(
         Effect.sync(() => {

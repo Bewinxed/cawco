@@ -141,7 +141,9 @@ import type {
   InferCustomEventPayload,
   ViteDevServer,
 } from "vite";
+import { runPromise, runSync } from "../daemon-runtime";
 import { PACKAGE_TREES } from "../package-trees";
+import { fromPromise, type Rejected } from "../rejected";
 import { propsOf } from "./docgen";
 import {
   codeWordOf,
@@ -751,7 +753,7 @@ interface Imported {
 }
 
 /** Each served module's imports, by the transform that wrote them, read once (`Effect.cached`) and kept while the transform lives: read again once Vite transforms the module again. */
-const importsKept = new WeakMap<object, Effect.Effect<Imported[]>>();
+const importsKept = new WeakMap<object, Effect.Effect<Imported[], Rejected>>();
 
 /**
  * What module `url` (an address of Vite's graph, no base) imports, as Vite
@@ -774,12 +776,10 @@ async function importsOf(url: string): Promise<Imported[]> {
   let kept = importsKept.get(result);
   if (!kept) {
     const { code } = result;
-    kept = Effect.runSync(
-      Effect.cached(Effect.promise(() => importedBy(code)))
-    );
+    kept = runSync(Effect.cached(fromPromise(() => importedBy(code))));
     importsKept.set(result, kept);
   }
-  return Effect.runPromise(kept);
+  return runPromise(kept);
 }
 
 /** The modules `code` (as Vite serves it) imports, each found in Vite's graph, which its import analysis filled as it wrote them. */
@@ -942,15 +942,11 @@ function releasePage(page: object): void {
       continue;
     }
     heldSections.delete(file);
-    Effect.runSync(Cache.invalidate(drawnKept, file));
+    runSync(Cache.invalidate(drawnKept, file));
     reports.delete(file);
   }
   pageSections.delete(page);
 }
-
-/** A rejection as the `Error` the host's Effect code carries: the error itself, or its words in one. */
-const asError = (error: unknown): Error =>
-  error instanceof Error ? error : new Error(String(error));
 
 /** A kept read's time to live in its {@link Cache}: a read that answered is kept until it is let go; a failed one is read again on the next ask. */
 const keptOnceRead = (exit: Exit.Exit<unknown, unknown>): Duration.Duration =>
@@ -966,19 +962,16 @@ const keptOnceRead = (exit: Exit.Exit<unknown, unknown>): Duration.Duration =>
  * with the dashboard's 52 states files loaded spent 2 to 9 s in Vite's
  * resolver. Sorted, as {@link drawnFrom} answers them.
  */
-const drawnKept = Effect.runSync(
+const drawnKept = runSync(
   Cache.makeWith(
     (sheet: string) =>
-      Effect.tryPromise({
-        try: async () => {
-          const abs = resolve(root, sheet);
-          const { files, reloads } = await drawnFrom(
-            abs,
-            readFileSync(abs, "utf8")
-          );
-          return { files: new Set(files), reloads };
-        },
-        catch: asError,
+      fromPromise(async () => {
+        const abs = resolve(root, sheet);
+        const { files, reloads } = await drawnFrom(
+          abs,
+          readFileSync(abs, "utf8")
+        );
+        return { files: new Set(files), reloads };
       }),
     { capacity: Number.POSITIVE_INFINITY, timeToLive: keptOnceRead }
   )
@@ -992,7 +985,7 @@ interface DrawnSet {
 
 /** The promise edge of {@link drawnKept}: what held section `sheet` is drawn from, kept. */
 function drawnSet(sheet: string): Promise<DrawnSet> {
-  return Effect.runPromise(Cache.get(drawnKept, sheet));
+  return runPromise(Cache.get(drawnKept, sheet));
 }
 
 /**
@@ -1053,7 +1046,7 @@ async function heldReached(
       if (!files.has(file)) {
         return;
       }
-      Effect.runSync(Cache.invalidate(drawnKept, sheet));
+      runSync(Cache.invalidate(drawnKept, sheet));
       if (reloads.has(file) || !inGraph) {
         reloaded.push(mod);
       } else {
@@ -4219,10 +4212,10 @@ function cawcoStage() {
         return;
       }
       if (type !== "update" || isManifest(file)) {
-        Effect.runSync(Cache.invalidateAll(drawnKept));
+        runSync(Cache.invalidateAll(drawnKept));
       }
       // An edit may add or drop an import a story's private modules run through.
-      Effect.runSync(Cache.invalidateAll(ownKept));
+      runSync(Cache.invalidateAll(ownKept));
       if (isManifest(file)) {
         if (type !== "create") {
           return;
@@ -4485,17 +4478,16 @@ interface OwnSet {
 }
 
 /** Each states file's own set, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
-const ownKept = Effect.runSync(
-  Cache.makeWith(
-    (file: string) =>
-      Effect.tryPromise({ try: () => ownSet(file), catch: asError }),
-    { capacity: Number.POSITIVE_INFINITY, timeToLive: keptOnceRead }
-  )
+const ownKept = runSync(
+  Cache.makeWith((file: string) => fromPromise(() => ownSet(file)), {
+    capacity: Number.POSITIVE_INFINITY,
+    timeToLive: keptOnceRead,
+  })
 );
 
 /** The promise edge of {@link ownKept}: states file `file`'s (from the root) own set, kept. A walk that failed (a file gone mid-read) is walked again on the next ask. */
 function ownSetOf(file: string): Promise<OwnSet> {
-  return Effect.runPromise(Cache.get(ownKept, file));
+  return runPromise(Cache.get(ownKept, file));
 }
 
 /**
@@ -4624,12 +4616,10 @@ async function runnerCode(dev: DevServer, url: string): Promise<OwnCode> {
           }
         : { error: `Vite gave no runner code for ${url}.` };
     };
-    kept = Effect.runSync(
-      Effect.cached(Effect.tryPromise({ try: converted, catch: asError }))
-    );
+    kept = runSync(Effect.cached(fromPromise(converted)));
     runnerKept.set(served, kept);
   }
-  return Effect.runPromise(kept);
+  return runPromise(kept);
 }
 
 /** States file `file`'s own set with every private module's code ({@link runnerCode}): one answer for every runner of its section. */

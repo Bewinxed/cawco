@@ -17,6 +17,7 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
 import { imageSize } from "image-size";
 import type { AgentPorts } from "./agent-ports";
+import { runPromise } from "./daemon-runtime";
 import {
   type ImageProvider,
   type ImageRunFailed,
@@ -259,7 +260,7 @@ function made(
   provider: ImageProvider,
   run: Effect.Effect<MadeImage, ImageRunFailed>
 ): Promise<MadeImage> {
-  return Effect.runPromise(
+  return runPromise(
     boundedRead(IMAGE_GENERATION_TIMEOUT_MS, run).pipe(
       Effect.catchTag("Unanswered", () =>
         Effect.fail(

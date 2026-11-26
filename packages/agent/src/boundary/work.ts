@@ -18,6 +18,8 @@ import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { Effect } from "effect";
 import { membershipName } from "../boundary-policy";
+import { runPromise } from "../daemon-runtime";
+import { fromPromise, type Rejected } from "../rejected";
 import { commandsOf } from "./exec";
 import type { Seen } from "./place-guard";
 import {
@@ -348,7 +350,7 @@ const endWorkspaceWork = Effect.fnUntraced(function* (
     for (const pid of round.left) {
       left.add(pid);
     }
-    const { agents, later } = yield* Effect.promise(() =>
+    const { agents, later } = yield* fromPromise(() =>
       workspaceWork(instanceId, workspace)
     );
     if (later.length === 0) {
@@ -399,19 +401,19 @@ export const endSessionWork = (
 ): Promise<{ ended: number[]; left: number[] }> => {
   // The promise edge of the session's work ended (session.ts).
   if (process.platform !== "darwin") {
-    return Effect.runPromise(endWork(() => sessionWork(instanceId)));
+    return runPromise(endWork(() => sessionWork(instanceId)));
   }
   if (!workspace || workspaceIdKindOf(workspace) === "place") {
     return Promise.resolve({ ended: [], left: [] });
   }
-  return Effect.runPromise(endWorkspaceWork(instanceId, workspace));
+  return runPromise(endWorkspaceWork(instanceId, workspace));
 };
 
 /** {@link endSessionWork}'s ending of the work `read` reads, read again for its kill. */
 const endWork = Effect.fnUntraced(function* (
   read: () => Promise<Worker[]>
-): Effect.fn.Return<{ ended: number[]; left: number[] }> {
-  const first = yield* Effect.promise(read);
+): Effect.fn.Return<{ ended: number[]; left: number[] }, Rejected> {
+  const first = yield* fromPromise(read);
   if (first.length === 0) {
     return { ended: [], left: [] };
   }
@@ -427,14 +429,14 @@ const endWork = Effect.fnUntraced(function* (
         deadlineMs: ms,
         until: (still: readonly Worker[]) => still.length === 0,
       },
-      Effect.promise(async () => {
+      fromPromise(async () => {
         running = await stillRunning(running);
         return running;
       })
     ).pipe(Effect.map(() => running));
   };
   yield* goneWithin(first, WORK_GRACE_MS);
-  const last = yield* Effect.promise(read);
+  const last = yield* fromPromise(read);
   for (const one of last) {
     signalPid(listedPid(one.pid), "SIGKILL");
   }

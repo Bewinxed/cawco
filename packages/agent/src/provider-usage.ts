@@ -20,6 +20,7 @@ import type { SpawnPayload } from "@cawco/core/protocol";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { Cause, Clock, Duration, Effect, Fiber } from "effect";
 import type { AgentPorts } from "./agent-ports";
+import { runFork, runPromise, thrownOf } from "./daemon-runtime";
 import type { HarnessContext } from "./harness";
 import { freshened, readHeld } from "./provider-accounts";
 import { anthropicUsage } from "./usage/anthropic";
@@ -177,23 +178,26 @@ export const readAccountUsage = (
   accountId: string,
   ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<ProviderAccountReading | undefined> =>
-  Effect.runPromise(accountUsage(accountId, ports));
+  runPromise(accountUsage(accountId, ports));
 
 /** Every metered account whose last read is 5 minutes old or more, read now. */
-export const readDueProviderAccounts = async (
+export const dueProviderAccounts = Effect.fn("dueProviderAccounts")(function* (
   ports: Pick<AgentPorts, "borrowAsk">
-): Promise<ProviderAccountReading[]> => {
+) {
+  const now = yield* Clock.currentTimeMillis;
   const due = [...accountIds(), ...credentialAccountIds()].filter(
     (accountId) =>
-      Date.now() - (attempted.get(accountId) ?? 0) >= PROVIDER_READ_INTERVAL_MS
+      now - (attempted.get(accountId) ?? 0) >= PROVIDER_READ_INTERVAL_MS
   );
-  const readings = await Promise.all(
-    due.map((accountId) => readAccountUsage(accountId, ports))
+  const readings = yield* Effect.forEach(
+    due,
+    (accountId) => accountUsage(accountId, ports),
+    { concurrency: "unbounded" }
   );
   return readings.filter(
     (one): one is ProviderAccountReading => one !== undefined
   );
-};
+});
 
 /**
  * A turn on the account just ended: its windows are read shortly, once for a
@@ -208,7 +212,7 @@ const readAccountSoon = (
 ): void => {
   const waiting = soon.get(accountId);
   if (waiting) {
-    Effect.runFork(Fiber.interrupt(waiting));
+    runFork(Fiber.interrupt(waiting));
   }
   const spaced =
     (attempted.get(accountId) ?? 0) + TURN_READ_SPACING_MS - Date.now();
@@ -244,15 +248,13 @@ const readAccountSoon = (
     Effect.catchCause((cause) =>
       Cause.hasInterruptsOnly(cause)
         ? Effect.void
-        : Effect.sync(() =>
-            console.warn(
-              `[provider-usage] ${accountId}: ${failureOf(Cause.squash(cause))}`
-            )
+        : Effect.logWarning(
+            `[provider-usage] ${accountId}: ${failureOf(thrownOf(cause))}`
           )
     ),
     Effect.asVoid
   );
-  soon.set(accountId, Effect.runFork(read));
+  soon.set(accountId, runFork(read));
 };
 
 /** The machine's OpenCode Go key, for the usage screens' per-machine Go reading: its first Go account's. */

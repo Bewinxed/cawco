@@ -34,9 +34,10 @@
  *   backoff's state by hand. `backoffWait` and `backoffStep` on a count kept
  *   in a row outlive the process and are not counted. Counted by the policy.
  * - **bare-run**: `Effect.runPromise`, `runFork`, `runSync`, their `…With`
- *   and `…Exit` forms, in packages/hub/src outside lifetime.ts: the hub's
- *   edge is its lifetime. The agent's edge is `Effect.runPromise`
- *   (CLAUDE.md, "Backend internals"), so the agent is not counted.
+ *   and `…Exit` forms, in packages/hub/src outside lifetime.ts and in
+ *   packages/agent/src outside daemon-runtime.ts: the hub's edge is its
+ *   lifetime, the agent's its runtime, whose fibers sleep on an unref'd
+ *   clock and log the house line.
  * - **hand-promise**: `new Promise(…)` or `Promise.withResolvers()`: a wait
  *   for something to happen, settled by hand.
  * - **error-class**: a class that extends `Error` itself: an expected
@@ -82,7 +83,7 @@ const KINDS = {
   "backoff-loop":
     "a retry is Effect.retry with backoffSchedule(policy) (@cawco/core/effect/backoff-schedule)",
   "bare-run":
-    "the hub's edge is its lifetime: lifetime.run and lifetime.fork (packages/hub/src/lifetime.ts)",
+    "the hub's edge is its lifetime: lifetime.run and lifetime.fork (packages/hub/src/lifetime.ts); the agent's is its runtime: runPromise, runFork, runSync, letGo and every (packages/agent/src/daemon-runtime.ts)",
   "hand-promise":
     "a wait for something to happen is a Deferred, a Latch or Effect.callback; a poll is lookUntil (@cawco/core/effect/poll); a read with a deadline is @cawco/core/effect/bounded",
   "error-class":
@@ -91,9 +92,13 @@ const KINDS = {
 type Kind = keyof typeof KINDS;
 
 const SCOPE = /^packages\/(?:hub|agent)\/src\/.*\.[cm]?tsx?$/u;
-/** Where `bare-run` counts: the hub, whose lifetime is its one edge. */
-const HUB = /^packages\/hub\/src\//u;
-const LIFETIME_FILE = "packages/hub/src/lifetime.ts";
+/** Where `bare-run` counts: the hub and the agent, each with its one edge. */
+const BARE_RUN = /^packages\/(?:hub|agent)\/src\//u;
+/** The one edge of each: the hub's lifetime, the agent's runtime. */
+const EDGES = new Set([
+  "packages/hub/src/lifetime.ts",
+  "packages/agent/src/daemon-runtime.ts",
+]);
 /** Effect's ways to run an effect outside one: `run{Promise,Fork,Sync}`, with `Exit` and `With` (`runPromiseExitWith`). */
 const RUN = /^run(?:Promise|Fork|Sync)(?:Exit)?(?:With)?$/u;
 /** Planted mistakes and generated modules. */
@@ -603,8 +608,8 @@ const backoffLoop = (node: ts.Node): string | undefined =>
 
 /** `Effect.runPromise` and its kin, called or handed on: its text. */
 const bareRun = (node: ts.Node, file: string): string | undefined =>
-  HUB.test(file) &&
-  file !== LIFETIME_FILE &&
+  BARE_RUN.test(file) &&
+  !EDGES.has(file) &&
   ts.isPropertyAccessExpression(node) &&
   ts.isIdentifier(node.expression) &&
   node.expression.text === "Effect" &&

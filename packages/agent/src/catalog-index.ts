@@ -25,6 +25,8 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
 import { Effect, type Fiber } from "effect";
 import { z } from "zod";
+import { runFork, runPromise } from "./daemon-runtime";
+import { fromPromise } from "./rejected";
 
 /** One file as the index holds it: what it was when read, and what was read of it (null: nothing to list). */
 interface Indexed {
@@ -115,21 +117,19 @@ const saveIndex = (index: Map<string, Indexed>): void => {
   if (saving) {
     return;
   }
-  saving = Effect.runFork(
+  saving = runFork(
     Effect.sleep(SAVE_AFTER_MS).pipe(
       Effect.andThen(
-        Effect.tryPromise({
-          try: () =>
-            writeStateFile(
-              catalogIndexPath(),
-              JSON.stringify(Object.fromEntries(index))
-            ),
-          catch: (error) => error,
-        })
+        fromPromise(() =>
+          writeStateFile(
+            catalogIndexPath(),
+            JSON.stringify(Object.fromEntries(index))
+          )
+        )
       ),
       Effect.catch((error) =>
-        Effect.sync(() =>
-          console.warn(`[catalog] the index could not be kept: ${error}`)
+        Effect.logWarning(
+          `[catalog] the index could not be kept: ${error.cause}`
         )
       ),
       Effect.ensuring(
@@ -419,7 +419,7 @@ const watchFolders = async (
       watchFolder(dir, folder, reader, folders);
     }
     // A turn of the event loop (the scheduler's setImmediate) between batches.
-    await Effect.runPromise(Effect.yieldNow);
+    await runPromise(Effect.yieldNow);
   }
 };
 

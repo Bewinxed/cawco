@@ -32,6 +32,7 @@ import {
   linkUserLayer,
   removeAccountDir,
 } from "./accounts";
+import { runPromise } from "./daemon-runtime";
 import { inFleetQueue } from "./fleet";
 import { forgetAccount } from "./login";
 
@@ -192,7 +193,7 @@ const security = (
   args: string[],
   input?: string
 ): Promise<{ code: number; stdout: string }> =>
-  Effect.runPromise(securityRun(args, input));
+  runPromise(securityRun(args, input));
 
 const findItem = async (service: string): Promise<string | undefined> => {
   const read = await security([

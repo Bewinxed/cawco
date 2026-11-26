@@ -48,6 +48,7 @@ import { recordAgentState } from "./agent-state";
 import { rearmMoved, recheckNarrowed } from "./boundary/looks";
 import { userLayerHeld } from "./boundary/plan";
 import { buildKey } from "./build";
+import { runFork, runPromise } from "./daemon-runtime";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { feedbackHeard } from "./feedback-line";
@@ -76,6 +77,7 @@ import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
 import { placeInstalls, syncInstalls } from "./mcp-install";
 import { resolveMcpLauncher } from "./mcp-launcher";
 import { onFleetMcpMoved } from "./mcp-status";
+import { fromPromise, type Rejected } from "./rejected";
 import { errorText, warn } from "./session-log";
 
 /** What the converger reads of the live sessions, and where its frames go. */
@@ -163,7 +165,7 @@ export class FleetConverger {
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
   #lastReport: FleetSyncReport | undefined;
   /** The machine's probe ticks ({@link #healthSoon}), once its agent has taken a delta: they run for the agent's life. */
-  #healthTicks: Fiber.Fiber<unknown> | undefined;
+  #healthTicks: Fiber.Fiber<unknown, Rejected> | undefined;
   /** The items deltas moved or took away since the last converge began. */
   readonly #convergeIds = new Set<string>();
   /** A person's Sync: the next converge takes every item, changed or not. */
@@ -634,9 +636,9 @@ export class FleetConverger {
     if (this.#healthTicks) {
       return;
     }
-    this.#healthTicks = Effect.runFork(
+    this.#healthTicks = runFork(
       Effect.repeat(
-        Effect.promise(() => this.#healthTick()),
+        fromPromise(() => this.#healthTick()),
         Schedule.spaced(HEALTH_MS)
       )
     );
@@ -1202,12 +1204,7 @@ export class FleetConverger {
     // by the delta's answer, which says its failure.
     this.#fleetDenials.set(
       requestId,
-      Effect.runFork(
-        Effect.tryPromise({
-          try: () => this.#holdDelta(delta),
-          catch: (error) => error,
-        })
-      )
+      runFork(fromPromise(() => this.#holdDelta(delta)))
     );
   }
 
@@ -1222,7 +1219,7 @@ export class FleetConverger {
     }
     const held = this.#fleetDenials.get(requestId);
     this.#fleetDenials.delete(requestId);
-    return held && Effect.runPromise(Fiber.join(held));
+    return held && runPromise(Fiber.join(held));
   }
 
   /**

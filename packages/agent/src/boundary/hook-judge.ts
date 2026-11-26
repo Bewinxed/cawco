@@ -18,6 +18,7 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Deferred, Effect, Result } from "effect";
 import { bunScriptRuntime } from "../bun-runtime";
+import { runPromise } from "../daemon-runtime";
 import { JUDGE_FORM_LENGTH } from "../proc-id";
 import {
   JUDGE_ALLOWS,
@@ -379,7 +380,7 @@ export interface JudgeAnswer {
 /** Asks the judge workspace `id`'s hook names which build it runs ({@link JUDGE_BUILD_QUESTION}). */
 export const judgeAnswer = (id: string, build: string): Promise<JudgeAnswer> =>
   // The promise edge of the judge's answer (looks.ts).
-  Effect.runPromise(
+  runPromise(
     Effect.gen(function* () {
       const hook = yield* Effect.promise(() =>
         readFile(join(stateDir(id), "hook"), "utf8").catch(() => "")

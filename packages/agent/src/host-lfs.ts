@@ -36,6 +36,7 @@ import {
 } from "@cawco/hub/client";
 import { Effect, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "./daemon-runtime";
 import { toHttpBase } from "./discovery";
 import { holdDeclaredSecret } from "./git/hub-credential";
 import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
@@ -137,7 +138,7 @@ const askHub = <A extends HubAnswer>(
   hub: string,
   request: (client: HubClient) => Promise<A>,
   what: string
-): Promise<HubData<A>> => Effect.runPromise(hubSays(hub, request, what));
+): Promise<HubData<A>> => runPromise(hubSays(hub, request, what));
 
 /** The project workspace `id` belongs to, as the hub named it at its cut (boundary/looks.ts `setProject`); none for none. */
 export const workspaceProjectOf = async (
@@ -225,7 +226,7 @@ export const hostSigns = async (endpoint: string): Promise<boolean> => {
   // git waits on is git's child, and stopping git alone left it running (on
   // macOS, an osxkeychain waiting on another's lock, one per door
   // connection, hub-git.ts `HOST_RUN_SILENCE_MS`).
-  return await Effect.runPromise(
+  return await runPromise(
     boundedRead(HELPER_MS, credentialFill(url)).pipe(
       Effect.catchTag("Unanswered", () => Effect.succeed(false))
     )

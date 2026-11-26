@@ -4,6 +4,7 @@ import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { quote } from "@cawco/providers/quote";
 import { Clock, Duration, Effect, Schedule, Schema } from "effect";
+import { runPromise } from "./daemon-runtime";
 
 /**
  * THE HUB AWAY IS NO ANSWER. What this machine asks of the hub over HTTP is
@@ -134,7 +135,7 @@ export const throughHubAway = (
       })
     )
   );
-  return Effect.runPromise(
+  return runPromise(
     attempt.pipe(
       Effect.retry(waits),
       Effect.catchTag("HubAway", ({ away }) => Effect.succeed({ away }))

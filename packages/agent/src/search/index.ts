@@ -31,6 +31,7 @@ import {
   Layer,
   Schedule,
 } from "effect";
+import { runFork, runPromise } from "../daemon-runtime";
 import { SearchProcess } from "./process";
 
 /**
@@ -90,7 +91,7 @@ export class TranscriptSearchService {
   #failing: string | null = null;
   readonly #firstSync = Deferred.makeUnsafe<void>();
   /** The promise edge of the first sync's end: settles once it has ended, however it ended. */
-  readonly synced = Effect.runPromise(Deferred.await(this.#firstSync));
+  readonly synced = runPromise(Deferred.await(this.#firstSync));
   /** Each process that opens the index says how far it is whole. */
   readonly #heardOpen = (through: number): void => {
     this.#indexedThrough = Math.max(this.#indexedThrough, through);
@@ -191,7 +192,7 @@ export class TranscriptSearchService {
       .finally(() => Deferred.doneUnsafe(this.#firstSync, Exit.void));
     // The next SYNC_INTERVAL_MS on, then at that rate: a sync that runs
     // longer is followed at once, and syncs never pile up.
-    this.#ticks = Effect.runFork(
+    this.#ticks = runFork(
       Effect.sleep(SYNC_INTERVAL_MS).pipe(
         Effect.andThen(
           Effect.repeat(
@@ -385,7 +386,7 @@ export class TranscriptSearchService {
 
   close(): void {
     if (this.#ticks) {
-      Effect.runFork(Fiber.interrupt(this.#ticks));
+      runFork(Fiber.interrupt(this.#ticks));
       this.#ticks = null;
     }
     this.#reader.close();

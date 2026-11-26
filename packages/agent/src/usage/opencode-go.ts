@@ -6,6 +6,7 @@ import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
 import { Clock, Effect, Result, Schema } from "effect";
 import { z } from "zod";
+import { runPromise } from "../daemon-runtime";
 
 /**
  * The OpenCode Go plan's live windows. OpenCode Go meters every key by dollar
@@ -192,7 +193,7 @@ export const openCodeGoLimits = Effect.fn("openCodeGoLimits")(function* (
   } else if (read.failure._tag === "Unanswered") {
     // No reading: the last good windows stand, marked stale below.
     error = `no answer within ${secondsOf(read.failure.after)}s`;
-    console.warn(
+    yield* Effect.logWarning(
       `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
     );
   } else {
@@ -217,4 +218,4 @@ export const openCodeGoLimits = Effect.fn("openCodeGoLimits")(function* (
  */
 export const fetchOpenCodeGoLimits = (
   key: string | null
-): Promise<OpenCodeGoLimits | null> => Effect.runPromise(openCodeGoLimits(key));
+): Promise<OpenCodeGoLimits | null> => runPromise(openCodeGoLimits(key));

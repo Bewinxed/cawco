@@ -19,6 +19,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceDoorDir } from "@cawco/core/paths/workspace";
 import { Effect, Exit, Scope } from "effect";
+import { runPromise, runSync } from "./daemon-runtime";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 
@@ -117,7 +118,7 @@ export const openGithubDoor = async (id: string): Promise<void> => {
   await rm(path, { force: true });
   const scope = Scope.makeUnsafe();
   // The listener is held by the door's scope: closing it stops serving.
-  Effect.runSync(
+  runSync(
     Effect.acquireRelease(
       Effect.sync(() =>
         Bun.serve({
@@ -145,7 +146,7 @@ export const closeGithubDoor = async (id: string): Promise<void> => {
   doors.delete(id);
   if (scope) {
     // The promise edge of the door's close.
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await runPromise(Scope.close(scope, Exit.void));
   }
   await rm(githubDoorOf(id), { force: true });
 };
