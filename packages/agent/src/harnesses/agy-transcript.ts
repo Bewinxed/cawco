@@ -8,9 +8,10 @@
  * carries the call's `toolCall.id`, its `stepIdx` and the transcript's
  * `transcriptPath` (`assets/8c459ba3/q2-payloads.txt`), and the step there
  * holds the result as its `content`
- * (`assets/123883c1/agy-brain-transcript_full.jsonl`). agy waits on the
- * hook's answer before it says the call ended, so the result is read
- * while it waits.
+ * (`assets/123883c1/agy-brain-transcript_full.jsonl`). agy writes that step
+ * only after its hook is answered and the call's end is sent, some
+ * milliseconds behind it, so the step is looked for again until it is
+ * there.
  */
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Schedule, Schema } from "effect";
@@ -27,6 +28,24 @@ const decodePostToolUse = Schema.decodeUnknownOption(
   Schema.fromJsonString(PostToolUse)
 );
 
+/** Where agy writes the result of one call: its transcript and the step. */
+export interface WrittenAt {
+  readonly stepIdx: number;
+  readonly transcriptPath: string;
+}
+
+/** The call one line of CawCo's hook ended and where agy writes its result; none for a line that is no `PostToolUse`. */
+export const writtenAt = (
+  line: string
+): Option.Option<{ readonly id: string; readonly at: WrittenAt }> =>
+  Option.map(
+    decodePostToolUse(line),
+    ({ stepIdx, toolCall, transcriptPath }) => ({
+      id: toolCall.id,
+      at: { stepIdx, transcriptPath },
+    })
+  );
+
 /** One step of agy's transcript, as far as a result is read from it. */
 const Step = Schema.Struct({
   step_index: Schema.Number,
@@ -35,46 +54,45 @@ const Step = Schema.Struct({
 
 const decodeStep = Schema.decodeUnknownOption(Schema.fromJsonString(Step));
 
+/**
+ * Step `index` of a transcript's text, read from its end, where a new
+ * step is: agy appends steps in order, so one before `index` means it is
+ * not written yet.
+ */
+const stepIn = (
+  text: string,
+  index: number
+): Option.Option<typeof Step.Type> => {
+  const lines = text.split("\n");
+  for (let at = lines.length - 1; at >= 0; at -= 1) {
+    const step = decodeStep(lines[at] ?? "");
+    if (Option.isNone(step)) {
+      continue;
+    }
+    if (step.value.step_index <= index) {
+      return step.value.step_index === index ? step : Option.none();
+    }
+  }
+  return Option.none();
+};
+
 /** How long a result agy has not written yet is looked for again. */
-const STEP_LOOKS = Schedule.spaced("50 millis").pipe(
-  Schedule.upTo({ times: 20 })
+const STEP_LOOKS = Schedule.spaced("20 millis").pipe(
+  Schedule.upTo({ times: 50 })
 );
 
-/** Step `index` of the transcript at `path`, once agy has written it. */
-const stepAt = (path: string, index: number) =>
-  Effect.tryPromise(() => readFile(path, "utf8")).pipe(
-    Effect.map((text) =>
-      text
-        .split("\n")
-        .map((line) => decodeStep(line))
-        .flatMap((step) => (Option.isSome(step) ? [step.value] : []))
-        .findLast((step) => step.step_index === index)
-    ),
-    Effect.flatMap(Effect.fromNullishOr),
-    Effect.retry(STEP_LOOKS),
-    Effect.option
-  );
-
-/**
- * The result of the call one line of CawCo's hook ended, as agy wrote it
- * in its transcript: none for a line that is no `PostToolUse`, or a step
- * agy holds no text for.
- */
+/** The result agy wrote at `at`, once it has; none for a step it holds no text for, or one not written within a second. */
 export const writtenResult = (
-  line: string
-): Effect.Effect<Option.Option<{ id: string; text: string }>> => {
-  const ended = decodePostToolUse(line);
-  if (Option.isNone(ended)) {
-    return Effect.succeedNone;
-  }
-  const { stepIdx, toolCall, transcriptPath } = ended.value;
-  return stepAt(transcriptPath, stepIdx).pipe(
+  at: WrittenAt
+): Effect.Effect<Option.Option<string>> =>
+  Effect.tryPromise(() => readFile(at.transcriptPath, "utf8")).pipe(
+    Effect.map((text) => stepIn(text, at.stepIdx)),
+    Effect.flatMap(Effect.fromOption),
+    Effect.retry(STEP_LOOKS),
+    Effect.option,
     Effect.map(
       Option.flatMap(({ content }) =>
-        content
-          ? Option.some({ id: toolCall.id, text: content })
-          : Option.none()
+        Option.fromNullishOr(content || undefined)
       )
     )
   );
-};

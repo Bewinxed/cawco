@@ -85,7 +85,16 @@ import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
 import { readPolicy } from "@cawco/core/workspace-judge";
-import { Deferred, Effect, Exit, Option, Scope, Semaphore } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Queue,
+  Scope,
+  Semaphore,
+} from "effect";
 import type { SessionControls, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
@@ -109,7 +118,7 @@ import type { AgyAnswer, AgySession as Judged } from "./agy-judge";
 import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
 import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
-import { writtenResult } from "./agy-transcript";
+import { type WrittenAt, writtenAt, writtenResult } from "./agy-transcript";
 import { credentialControls } from "./credential-controls";
 
 /** A start's command, as the host was handed it. */
@@ -154,6 +163,11 @@ interface AgyProcess {
   /** Set once CawCo ended it itself, so its exit is no failure. */
   ended: boolean;
 }
+
+/** One of agy's updates, or a mark a turn's end waits on ({@link AgySession.#drained}). */
+type Update =
+  | { readonly update: SessionNotification }
+  | { readonly drained: Deferred.Deferred<void> };
 
 /** What the running turn has said so far. */
 interface Turn {
@@ -237,8 +251,17 @@ class AgySession {
   readonly #sending = Semaphore.makeUnsafe(1);
   /** The carried record, said first in the next prompt of a new conversation (agy-carry.ts). */
   #carry: string | undefined;
-  /** The judge's socket, served for as long as this scope is open. */
+  /** The judge's socket and the reader of agy's updates, served for as long as this scope is open. */
   readonly #judge = Effect.runSync(Scope.make());
+  /**
+   * agy's `session/update`s, and the marks a turn's end waits on, read one
+   * at a time in the order they came ({@link #read}): a call's end waits
+   * there for the result agy writes behind it, and what agy says after it
+   * waits behind that.
+   */
+  readonly #updates = Effect.runSync(Queue.unbounded<Update>());
+  /** The fiber that reads {@link #updates}, once the session opened. */
+  #reader: Fiber.Fiber<never> | undefined;
   /** The fleet's hooks, run on its events (agy-fleet-hooks.ts). */
   readonly #fleet: AgyFleetHooks;
   readonly #asks = new Map<string, ParkedAsk>();
@@ -259,8 +282,8 @@ class AgySession {
   readonly #ran = new Map<string, boolean>();
   /** Why the host stopped agy as no longer to be trusted, once it has. */
   #refused: string | undefined;
-  /** What agy wrote of each ended call in its transcript, by agy's id, until its end is said (agy-transcript.ts). */
-  readonly #written = new Map<string, string>();
+  /** Where agy writes each ended call's result, by agy's id, until its end is said (agy-transcript.ts). */
+  readonly #writtenAt = new Map<string, WrittenAt>();
   #models: ModelInfo[] = [];
   #commands: SlashCommand[] = [];
   /** The last answer that named the session's config options: what thinking levels its model takes. */
@@ -386,14 +409,23 @@ class AgySession {
     await makeFolder(dirname(launch.judgeSocket));
     const judged = this.#judged();
     await Effect.runPromise(
-      serveAgyJudge(launch.judgeSocket, async (line) => {
-        const answer = await this.#fleet.answer(line, judged);
-        const written = await Effect.runPromise(writtenResult(line));
-        if (Option.isSome(written)) {
-          this.#written.set(written.value.id, written.value.text);
+      serveAgyJudge(launch.judgeSocket, (line) => {
+        const ended = writtenAt(line);
+        if (Option.isSome(ended)) {
+          this.#writtenAt.set(ended.value.id, ended.value.at);
         }
-        return answer;
+        return this.#fleet.answer(line, judged);
       }).pipe(Scope.provide(this.#judge))
+    );
+    this.#reader = Effect.runSync(
+      Effect.forkIn(
+        Effect.forever(
+          Queue.take(this.#updates).pipe(
+            Effect.flatMap((one) => this.#read(one))
+          )
+        ),
+        this.#judge
+      )
     );
     await this.#startAgy();
     const resumed = this.#start.spec.resume?.sessionKey;
@@ -417,9 +449,11 @@ class AgySession {
         .onRequest(methods.client.session.requestPermission, ({ params }) =>
           this.#asked(params)
         )
-        .onNotification(methods.client.session.update, ({ params }) =>
-          this.#updated(params)
-        ),
+        .onNotification(methods.client.session.update, ({ params }) => {
+          if (params.sessionId === this.sessionId) {
+            Queue.offerUnsafe(this.#updates, { update: params });
+          }
+        }),
       {
         said: (text) => {
           process.stderr.write(text);
@@ -551,11 +585,53 @@ class AgySession {
     this.#ctx.frame(message);
   }
 
-  /** One of agy's `session/update`s, as the session's frames. */
-  #updated(notification: SessionNotification): void {
-    if (notification.sessionId !== this.sessionId) {
+  /**
+   * One update read off {@link #updates}: a mark, met; a call's end that
+   * carries no result, said once the result agy writes of it is read; any
+   * other, said at once.
+   */
+  #read(one: Update): Effect.Effect<void> {
+    if ("drained" in one) {
+      return Deferred.succeed(one.drained, undefined);
+    }
+    const { update } = one.update;
+    const at =
+      update.sessionUpdate === "tool_call_update" &&
+      (update.status === "completed" || update.status === "failed") &&
+      callResult(update, undefined) === ""
+        ? this.#writtenAt.get(update.toolCallId)
+        : undefined;
+    if (!at) {
+      return Effect.sync(() => this.#updated(one.update, undefined));
+    }
+    return writtenResult(at).pipe(
+      Effect.map((written) =>
+        this.#updated(one.update, Option.getOrUndefined(written))
+      )
+    );
+  }
+
+  /** Every update agy sent so far said: what a turn's end waits on before it is said. */
+  async #drained(): Promise<void> {
+    const reader = this.#reader;
+    if (!reader) {
       return;
     }
+    const drained = Deferred.makeUnsafe<void>();
+    Queue.offerUnsafe(this.#updates, { drained });
+    await Effect.runPromise(
+      Effect.raceFirst(
+        Deferred.await(drained),
+        Effect.asVoid(Fiber.await(reader))
+      )
+    );
+  }
+
+  /** One of agy's `session/update`s, as the session's frames; `written`, what agy wrote of a call it ends with no result. */
+  #updated(
+    notification: SessionNotification,
+    written: string | undefined
+  ): void {
     const { update } = notification;
     switch (update.sessionUpdate) {
       case "agent_message_chunk":
@@ -583,7 +659,12 @@ class AgySession {
           );
         }
         if (update.status === "completed" || update.status === "failed") {
-          this.#answered(update.toolCallId, update.status === "failed", update);
+          this.#answered(
+            update.toolCallId,
+            update.status === "failed",
+            update,
+            written
+          );
           if (update.status === "completed") {
             this.#proven(update.toolCallId, update);
           } else {
@@ -714,11 +795,11 @@ class AgySession {
   #answered(
     id: string,
     failed: boolean,
-    update: { content?: readonly unknown[] | null; rawOutput?: unknown }
+    update: { content?: readonly unknown[] | null; rawOutput?: unknown },
+    written: string | undefined
   ): void {
     this.#calls.set(id, "ended");
-    const written = this.#written.get(id);
-    this.#written.delete(id);
+    this.#writtenAt.delete(id);
     this.#emit({
       type: "user",
       parent_tool_use_id: null,
@@ -935,7 +1016,9 @@ class AgySession {
         sessionId,
         prompt: carry ? [{ type: "text", text: carry }, ...blocks] : blocks,
       });
+      await this.#drained();
     } catch (error) {
+      await this.#drained();
       this.#prompts = Math.max(0, this.#prompts - 1);
       if (this.#prompts === 0) {
         // A session the host refused ends its turn in the refusal's words,
@@ -1094,7 +1177,7 @@ class AgySession {
     });
     this.#turn = undefined;
     this.#calls.clear();
-    this.#written.clear();
+    this.#writtenAt.clear();
     this.#ctx.busy(false);
     if (stopReason === "end_turn" && !fault) {
       this.#stopHooks().catch((error: unknown) => this.#ctx.failed(error));
