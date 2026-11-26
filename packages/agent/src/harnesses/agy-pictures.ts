@@ -8,6 +8,12 @@
  *
  * - **Decode**: `Bun.Image` (libspng, libjpeg-turbo, libwebp) decodes every
  *   pixel; its format must be the one the send names.
+ * - **Whole**: the file ends as its format ends, since the decoders read a
+ *   cut one: libspng decodes a PNG with no `IEND`, which Google refuses
+ *   ("Unable to process input image", the fix's host probe), and
+ *   libjpeg-turbo one missing its end marker. A PNG ends with its `IEND`
+ *   chunk, a JPEG holds its `EOI` marker, a WebP is as long as its RIFF
+ *   header says.
  * - **Each picture**: at most 10 MB as base64, and 8000 pixels a side, the
  *   limits for Claude on Google Cloud, which agy runs ("The maximum
  *   dimensions for each image are 8000x8000 px"; "10 MB (base64-encoded)
@@ -51,6 +57,25 @@ const TYPE_NAME: Readonly<Record<string, string>> = {
   "image/webp": "WebP",
 };
 
+/** A PNG's last chunk: `IEND`, empty, and its CRC. */
+const PNG_END = Buffer.from("0000000049454e44ae426082", "hex");
+/** A JPEG's end of image marker. */
+const JPEG_END = Buffer.from([0xff, 0xd9]);
+
+/** Whether `bytes` end as their `format` ends (a file cut short does not). */
+const whole = (bytes: Buffer, format: string): boolean => {
+  switch (format) {
+    case "png":
+      return bytes.subarray(-PNG_END.length).equals(PNG_END);
+    case "jpeg":
+      return bytes.includes(JPEG_END, 2);
+    case "webp":
+      return bytes.length >= 12 && bytes.readUInt32LE(4) + 8 === bytes.length;
+    default:
+      return false;
+  }
+};
+
 /** A picture's header as `Bun.Image` reads it, before any pixel is held; none when it reads none. */
 const header = (image: Bun.Image) =>
   Effect.tryPromise(() => image.metadata()).pipe(Effect.option);
@@ -76,11 +101,14 @@ const pictureRefusal = Effect.fnUntraced(function* (
   if (!BASE64.test(picture.data)) {
     return agyWords.pictureUnreadable(named, type);
   }
-  const image = new Bun.Image(Buffer.from(picture.data, "base64"));
+  const bytes = Buffer.from(picture.data, "base64");
+  const format = FORMAT_OF[picture.mediaType] ?? "";
+  const image = new Bun.Image(bytes);
   const read = yield* header(image);
   if (
     read._tag === "None" ||
-    read.value.format !== FORMAT_OF[picture.mediaType]
+    read.value.format !== format ||
+    !whole(bytes, format)
   ) {
     return agyWords.pictureUnreadable(named, type);
   }
