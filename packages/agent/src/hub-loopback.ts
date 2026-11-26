@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
-import { detach } from "@cawco/core/detach";
+import { failureOf } from "@cawco/core/detach";
 import { HUB_PORT_HEADER } from "@cawco/core/ports";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { TailnetServing } from "@cawco/core/tailnet-https";
@@ -15,6 +15,7 @@ import {
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
+import { Effect, Exit, Scope } from "effect";
 import { type AgentState, type HubHere, recordAgentState } from "./agent-state";
 
 /** How the loopback serves the hub, as the agent records it. */
@@ -87,9 +88,23 @@ interface HubLoopback {
   stop: () => Promise<void>;
 }
 
+/**
+ * `work` let go: started now, awaited by no one, its failure logged. The
+ * agent's previews let work go with it too (preview.ts).
+ */
+export const letGo = (what: string, work: () => Promise<unknown>): void => {
+  Effect.runFork(
+    Effect.tryPromise({ try: work, catch: (error) => error }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(`[${what}] failed: ${failureOf(error)}`)
+      )
+    )
+  );
+};
+
 /** Records how the loopback serves the hub (agent-state.ts `hubLoopback`). */
 const recordHub = (serving: HubServing): void =>
-  detach(recordAgentState("hubLoopback", serving), "hub loopback record");
+  letGo("hub loopback record", () => recordAgentState("hubLoopback", serving));
 
 /**
  * How the loopback reaches the hub now: plain http or https verified
@@ -226,49 +241,56 @@ const codeOf = (error: unknown): unknown =>
 
 /**
  * Every pair of `all` (a loopback port, the hub's port it is carried to) on
- * each of `hosts`: what opened, the ports another listener holds, and the
- * loopback addresses this computer does not have (a container with no IPv6
- * has no `::1`). Anything else that fails a bind stops what opened and throws.
+ * each of `hosts`, each listener held in the scope it runs in: what opened,
+ * the ports another listener holds, and the loopback addresses this computer
+ * does not have (a container with no IPv6 has no `::1`). Anything else that
+ * fails a bind fails it, and what opened goes as its scope closes.
  */
-async function listenAll(
+const listenAll = (
   hubHost: string,
   hosts: string[],
   all: [local: number, hub: number][],
   route: () => Route
-): Promise<{
-  absent: string[];
-  held: Map<string, number[]>;
-  servers: Server<PreviewSocket>[];
-}> {
-  const servers: Server<PreviewSocket>[] = [];
-  const held = new Map<string, number[]>();
-  const absent: string[] = [];
-  try {
+): Effect.Effect<
+  {
+    absent: string[];
+    held: Map<string, number[]>;
+    servers: Server<PreviewSocket>[];
+  },
+  unknown,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const servers: Server<PreviewSocket>[] = [];
+    const held = new Map<string, number[]>();
+    const absent: string[] = [];
     for (const hostname of hosts) {
       for (const [local, port] of all) {
-        try {
-          servers.push(listen(hubHost, hostname, local, port, route));
-        } catch (error) {
-          const code = codeOf(error);
-          if (code === "EADDRINUSE") {
-            held.set(hostname, [...(held.get(hostname) ?? []), local]);
-            continue;
-          }
-          if (code === "EADDRNOTAVAIL" || code === "EAFNOSUPPORT") {
-            absent.push(hostname);
-            break;
-          }
-          throw error;
+        const opened = yield* Effect.acquireRelease(
+          Effect.try({
+            try: () => listen(hubHost, hostname, local, port, route),
+            catch: (error) => error,
+          }),
+          (server) => Effect.promise(() => server.stop(true))
+        ).pipe(Effect.result);
+        if (opened._tag === "Success") {
+          servers.push(opened.success);
+          continue;
         }
+        const code = codeOf(opened.failure);
+        if (code === "EADDRINUSE") {
+          held.set(hostname, [...(held.get(hostname) ?? []), local]);
+          continue;
+        }
+        if (code === "EADDRNOTAVAIL" || code === "EAFNOSUPPORT") {
+          absent.push(hostname);
+          break;
+        }
+        return yield* Effect.fail(opened.failure);
       }
     }
-  } catch (error) {
-    // What did open goes with the start that failed.
-    await Promise.all(servers.map((server) => server.stop(true)));
-    throw error;
-  }
-  return { servers, held, absent };
-}
+    return { servers, held, absent };
+  });
 
 /** What the hub's register answer says of where this machine reaches it. */
 export interface HubSays {
@@ -414,11 +436,14 @@ async function carryElsewhere(
       all.push([port, port]);
     }
   }
-  const { servers, held, absent } = await listenAll(
-    hubHost,
-    LOOPBACK,
-    all,
-    () => route
+  // Its listeners stop together, as its scope closes.
+  const scope = Effect.runSync(Scope.make("parallel"));
+  // The promise edge of `listenAll`, in the loopback's own scope.
+  const { servers, held, absent } = await Effect.runPromise(
+    listenAll(hubHost, LOOPBACK, all, () => route).pipe(
+      Scope.provide(scope),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
+    )
   );
   for (const hostname of absent) {
     console.info(
@@ -455,9 +480,7 @@ async function carryElsewhere(
       listeners: servers.length,
       serverName: route.kind === "tailnet" ? route.serverName : null,
     }),
-    stop: async () => {
-      await Promise.all(servers.map((server) => server.stop(true)));
-    },
+    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
   };
 }
 
@@ -507,13 +530,12 @@ export function carryHub(
 export function followHub(tailnet: TailnetServing | undefined): void {
   const now = carried;
   if (now) {
-    detach(
+    letGo("hub loopback follow", () =>
       now.loopback.then((loopback) => {
         if (loopback?.follow(tailnet)) {
           recordHub(loopback.serving());
         }
-      }),
-      "hub loopback follow"
+      })
     );
   }
 }

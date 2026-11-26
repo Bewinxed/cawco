@@ -14,12 +14,14 @@
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { darwinSocketRoot } from "@cawco/core/paths/roots";
 import {
   socketPathProblem,
   workspaceDoorDir,
 } from "@cawco/core/paths/workspace";
 import { ownSocketRoot } from "@cawco/core/socket-root";
+import { Effect, Exit, Scope } from "effect";
 import { harnessMcpUrl } from "./delegation";
 
 /** A workspace's door socket. */
@@ -94,46 +96,76 @@ const forward = async (request: Request): Promise<Response> => {
   });
 };
 
-const open = new Map<string, ReturnType<typeof Bun.serve>>();
+/** Each workspace's door, held in a scope of its own: closing it stops the server and removes its socket. */
+const doors = new Map<string, Scope.Closeable>();
+/** Each workspace's door opens and closes one after another: two opens side by side would each serve the socket, the later removing the earlier's. */
+const turns = makeKeyedLock<string>();
+
+/** Workspace `id`'s door served at `path`, in the scope it is opened in. */
+const serveDoor = (path: string) =>
+  Effect.acquireRelease(
+    Effect.try({
+      try: () =>
+        Bun.serve({
+          unix: path,
+          // No idle limit: a call answers when its tool does, and an admin write
+          // waits for the person to approve it. Bun cuts a unix socket's request
+          // at its 10 s default too ("Bun.serve() timed out a request after 10
+          // seconds", measured on Bun 1.4.2; `server.timeout(request, 0)` does not
+          // lift it), while bun-types 1.4.2 declares `idleTimeout` for host:port
+          // servers alone, so it goes in untyped.
+          ...NO_IDLE_LIMIT,
+          fetch: (request) =>
+            forward(request).catch(
+              (error: unknown) =>
+                new Response(
+                  `cawco: the hub's tools could not be reached: ${error instanceof Error ? error.message : String(error)}\n`,
+                  { status: 502 }
+                )
+            ),
+        }),
+      catch: (error) => error,
+    }),
+    (server) =>
+      Effect.promise(async () => {
+        await server.stop(true);
+        await rm(path, { force: true });
+      })
+  );
 
 /**
  * Serves workspace `id`'s door, once per agent ({@link prepareDoor}: a socket
  * an earlier agent left is replaced, and the dir it lies in is made).
  */
-export const openToolDoor = async (id: string): Promise<string> => {
+export const openToolDoor = (id: string): Promise<string> => {
   const path = toolDoorOf(id);
-  if (open.has(id)) {
+  return turns.run(id, async () => {
+    if (doors.has(id)) {
+      return path;
+    }
+    await prepareDoor(path);
+    const scope = Effect.runSync(Scope.make());
+    // The promise edge of `serveDoor`, in the door's own scope.
+    await Effect.runPromise(
+      serveDoor(path).pipe(
+        Scope.provide(scope),
+        Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
+      )
+    );
+    doors.set(id, scope);
     return path;
-  }
-  await prepareDoor(path);
-  open.set(
-    id,
-    Bun.serve({
-      unix: path,
-      // No idle limit: a call answers when its tool does, and an admin write
-      // waits for the person to approve it. Bun cuts a unix socket's request
-      // at its 10 s default too ("Bun.serve() timed out a request after 10
-      // seconds", measured on Bun 1.4.2; `server.timeout(request, 0)` does not
-      // lift it), while bun-types 1.4.2 declares `idleTimeout` for host:port
-      // servers alone, so it goes in untyped.
-      ...NO_IDLE_LIMIT,
-      fetch: (request) =>
-        forward(request).catch(
-          (error: unknown) =>
-            new Response(
-              `cawco: the hub's tools could not be reached: ${error instanceof Error ? error.message : String(error)}\n`,
-              { status: 502 }
-            )
-        ),
-    })
-  );
-  return path;
+  });
 };
 
 /** Stops serving workspace `id`'s door. */
-export const closeToolDoor = async (id: string): Promise<void> => {
-  const server = open.get(id);
-  open.delete(id);
-  await server?.stop(true);
-  await rm(toolDoorOf(id), { force: true });
-};
+export const closeToolDoor = (id: string): Promise<void> =>
+  turns.run(id, async () => {
+    const scope = doors.get(id);
+    doors.delete(id);
+    if (scope) {
+      // The promise edge of closing the door's scope, its socket removed with it.
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+      return;
+    }
+    await rm(toolDoorOf(id), { force: true });
+  });

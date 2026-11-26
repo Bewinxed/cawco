@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
-import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserKey,
   type BrowserListenArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import { opensAsFile } from "@cawco/core/file-viewer";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
@@ -41,11 +41,13 @@ import {
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { type BrowserPorts, wakeBrowser } from "./browser/browsers";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
+import { letGo } from "./hub-loopback";
 import {
   closeBridge,
   reachWorkspace,
@@ -76,6 +78,8 @@ const previews = new Map<
   {
     for: SourceKey;
     listener: Server<PreviewSocket>;
+    /** What the start opened, its listener and its bridge: closing it stops both. */
+    scope: Scope.Closeable;
     /** The workspace network its port is in (stage.ts `networkOf`); none for the host's. */
     network: string | undefined;
     token: string;
@@ -239,11 +243,21 @@ const turns = makeKeyedLock<string>();
 const inTurn = <T>(instanceId: string, work: () => Promise<T>): Promise<T> =>
   turns.run(instanceId, work);
 
+/**
+ * Stops what preview `instanceId`'s start opened, its listener and then its
+ * bridge, by closing its scope; a bridge with no start's scope standing (its
+ * start failed before it held one) is closed all the same.
+ */
 const stopNow = async (instanceId: string): Promise<boolean> => {
-  previews.get(instanceId)?.listener.stop(true);
-  const had = previews.delete(instanceId);
-  await closeBridge(instanceId);
-  return had;
+  const preview = previews.get(instanceId);
+  previews.delete(instanceId);
+  if (!preview) {
+    await closeBridge(instanceId);
+    return false;
+  }
+  // The promise edge of closing the preview's scope.
+  await Effect.runPromise(Scope.close(preview.scope, Exit.void));
+  return true;
 };
 
 /**
@@ -312,7 +326,7 @@ export function servingPreviews(): ServingPreview[] {
 /** Stops every preview and the browser listener: each bridge's whole group is killed before this returns, its end awaited by no one. */
 export function stopPreviews(): void {
   for (const instanceId of [...previews.keys()]) {
-    stopPreview({ instanceId }).catch(console.error);
+    letGo("preview stop", () => stopPreview({ instanceId }));
   }
   browserListener?.listener.stop(true);
   browserListener = undefined;
@@ -338,36 +352,46 @@ const NO_VIEW =
 const cdpSocket: WebSocketHandler<CdpSocket> = {
   open(socket) {
     const { data } = socket;
-    cdpView(data.cdp, {
-      send: (frame) => {
-        if (!data.closed) {
-          socket.send(frame);
-        }
-      },
-      close: (code, why) => socket.close(code, why),
-    })
-      .then((view) => {
-        if (!view) {
-          socket.close(4404, NO_VIEW);
-          return;
-        }
-        if (data.closed) {
-          view.leave();
-          return;
-        }
-        data.view = view;
-        for (const text of data.early.splice(0)) {
-          view.input(text);
-        }
-      })
-      .catch((error: unknown) => {
-        previewFailed(
-          "agent browser listener",
-          null,
-          `${data.cdp}'s take-over view did not attach: ${causeOf(error)}`
-        );
-        socket.close(1011, "The take-over view did not attach.");
-      });
+    // Let go: the view attaches while the socket stands, or says why it did not.
+    Effect.runFork(
+      Effect.tryPromise({
+        try: () =>
+          cdpView(data.cdp, {
+            send: (frame) => {
+              if (!data.closed) {
+                socket.send(frame);
+              }
+            },
+            close: (code, why) => socket.close(code, why),
+          }),
+        catch: (error) => error,
+      }).pipe(
+        Effect.match({
+          onSuccess: (view) => {
+            if (!view) {
+              socket.close(4404, NO_VIEW);
+              return;
+            }
+            if (data.closed) {
+              view.leave();
+              return;
+            }
+            data.view = view;
+            for (const text of data.early.splice(0)) {
+              view.input(text);
+            }
+          },
+          onFailure: (error) => {
+            previewFailed(
+              "agent browser listener",
+              null,
+              `${data.cdp}'s take-over view did not attach: ${causeOf(error)}`
+            );
+            socket.close(1011, "The take-over view did not attach.");
+          },
+        })
+      )
+    );
   },
   message(socket, message) {
     const text = String(message);
@@ -708,12 +732,27 @@ async function start(
       restarts ? SERVER_RESTARTS_WORDS : DOWN_WORDS.server
     );
   await stopNow(instanceId);
+  // What this start opens is held in one scope: the bridge a request opens
+  // goes with it, and the listener, which stops first.
+  const scope = Effect.runSync(Scope.make());
+  Effect.runSync(
+    Scope.addFinalizer(
+      scope,
+      Effect.promise(() => closeBridge(instanceId))
+    )
+  );
   // A workspace no boundary runs refuses the preview in so many words. A
   // sheet's stage or a served preview's server is woken by its first
   // request (`staged`), which starts the boundary it runs in: a boundary
   // closed while it slept is no refusal.
   if (!(source.workspace && (source.stage || source.serve))) {
-    await upstreamOf(instanceId, source);
+    try {
+      await upstreamOf(instanceId, source);
+    } catch (error) {
+      // The promise edge of closing the scope of a start that failed.
+      await Effect.runPromise(Scope.close(scope, Exit.fail(error)));
+      throw error;
+    }
   }
   /**
    * A sheet's stage or a workspace preview's server, woken when it sleeps;
@@ -805,27 +844,34 @@ async function start(
         ? downResponse("workspace", 503)
         : downResponse("reach", 502, causeOf(error));
     }
-    try {
-      // Answering at all is serving: a server still compiling is no refusal.
-      await readWithin(PING_ASK_MS, async (signal) => {
-        const answer = await fetch(
-          upstream === "host"
-            ? `http://127.0.0.1:${source.port}/`
-            : `http://localhost:${source.port}/`,
-          {
-            method: "HEAD",
-            headers: { host: `localhost:${source.port}` },
-            redirect: "manual",
-            signal,
-            ...(upstream === "host" ? {} : { unix: upstream.unix }),
-          }
-        );
-        await answer.body?.cancel();
-      });
-      return ok;
-    } catch (error) {
-      return serverDown(unanswered(source, error));
-    }
+    // Answering at all is serving: a server still compiling is no refusal,
+    // so no answer within the ask's time is "ok" too.
+    const heard = await Effect.runPromise(
+      boundedRead(
+        PING_ASK_MS,
+        Effect.tryPromise({
+          try: async (signal) => {
+            const answer = await fetch(
+              upstream === "host"
+                ? `http://127.0.0.1:${source.port}/`
+                : `http://localhost:${source.port}/`,
+              {
+                method: "HEAD",
+                headers: { host: `localhost:${source.port}` },
+                redirect: "manual",
+                signal,
+                ...(upstream === "host" ? {} : { unix: upstream.unix }),
+              }
+            );
+            await answer.body?.cancel();
+          },
+          catch: (error) => error,
+        })
+      ).pipe(Effect.result)
+    );
+    return heard._tag === "Failure" && !(heard.failure instanceof Unanswered)
+      ? serverDown(unanswered(source, heard.failure))
+      : ok;
   };
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one path for a request's header rewriting, its stage's wake, its socket or fetch, and its answer's HTML injection.
   async function relayed(
@@ -897,7 +943,7 @@ async function start(
     // wake started and not waited on: held, it held every socket of
     // the tab to the same address (core `notUpYet`).
     if (asksUpgrade(request) && !sourceUp(source)) {
-      staged(request).catch(() => undefined);
+      letGo("preview wake", () => staged(request));
       return notUpYet();
     }
     // A page's request waits on the stage's wake and the server's first answer.
@@ -1042,25 +1088,38 @@ async function start(
       headers,
     });
   }
-  const listener = Bun.serve<PreviewSocket>({
-    hostname: "0.0.0.0",
-    port: 0,
-    websocket: listenerSocket,
-    // Each request but the ping is held from here until its answer's head:
-    // the ping says how long the oldest has waited ({@link pinged}).
-    fetch: (request, server) =>
-      new URL(request.url).pathname === PREVIEW_PING_PATH
-        ? relayed(request, server)
-        : holding.during(() => relayed(request, server)),
-    // Anything else that threw while serving the preview.
-    error(error) {
-      const why = `the agent's listener failed serving it: ${causeOf(error)}`;
-      previewFailed("agent listener", instanceId, why);
-      return serverDown(why);
-    },
-  });
+  const listen = (): Server<PreviewSocket> =>
+    Bun.serve<PreviewSocket>({
+      hostname: "0.0.0.0",
+      port: 0,
+      websocket: listenerSocket,
+      // Each request but the ping is held from here until its answer's head:
+      // the ping says how long the oldest has waited ({@link pinged}).
+      fetch: (request, server) =>
+        new URL(request.url).pathname === PREVIEW_PING_PATH
+          ? relayed(request, server)
+          : holding.during(() => relayed(request, server)),
+      // Anything else that threw while serving the preview.
+      error(error) {
+        const why = `the agent's listener failed serving it: ${causeOf(error)}`;
+        previewFailed("agent listener", instanceId, why);
+        return serverDown(why);
+      },
+    });
+  // The promise edge of the listener held in the start's scope: one that
+  // did not open closes the scope, and the bridge goes with it.
+  const listener = await Effect.runPromise(
+    Effect.acquireRelease(
+      Effect.try({ try: listen, catch: (error) => error }),
+      (opened) => Effect.sync(() => opened.stop(true))
+    ).pipe(
+      Scope.provide(scope),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
+    )
+  );
   previews.set(instanceId, {
     listener,
+    scope,
     token,
     for: options.for,
     network: networkOf(source),

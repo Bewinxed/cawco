@@ -111,16 +111,20 @@ export const measure = async (live: readonly LivePreview[]): Promise<void> => {
     return;
   }
   const seen = await processLineage();
-  const byBoundary = new Map<string, Promise<number[]>>();
-  for (const one of live) {
-    if (!byBoundary.has(one.boundary)) {
-      byBoundary.set(one.boundary, boundaryPids(one.boundary, seen));
-    }
-  }
+  // Each boundary's processes read once, however many previews run in it.
+  const boundaries = [...new Set(live.map((one) => one.boundary))];
+  const byBoundary = new Map(
+    await Promise.all(
+      boundaries.map(
+        async (boundary) =>
+          [boundary, await boundaryPids(boundary, seen)] as const
+      )
+    )
+  );
   await Promise.all(
     live.map(async (one) => {
       const mark = `${CAWCO_ENV.stageServer}=${one.key}`;
-      const pids = (await byBoundary.get(one.boundary)) ?? [];
+      const pids = byBoundary.get(one.boundary) ?? [];
       const each = await Promise.all(
         pids.map(async (pid) =>
           ((await processArgs(pid))?.env ?? []).includes(mark)
