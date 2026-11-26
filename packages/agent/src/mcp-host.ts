@@ -101,6 +101,7 @@ import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { cutShortTail } from "@cawco/core/words/helpers";
+import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
 import { harnessMcpUrl } from "./delegation";
@@ -299,12 +300,10 @@ const recordStarted = (): void => {
 /** One running server process, spoken to over its stdio, one JSON-RPC message per line. */
 class Child {
   readonly #proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
+  /** Each request still waiting, by id: the answer it waits on. */
   readonly #pending = new Map<
     number,
-    {
-      resolve: (message: JsonRpcMessage) => void;
-      reject: (error: Error) => void;
-    }
+    Deferred.Deferred<JsonRpcMessage, unknown>
   >();
   readonly #stderr: string[] = [];
   /** How many of its stderr lines were dropped from the front of {@link #stderr}. */
@@ -356,8 +355,8 @@ class Child {
       ).trim();
       this.#ended = `The ${name} MCP server exited (code ${code})${said ? `: ${cutShortTail(said, 400)}` : ""}. Its next call starts it again.`;
       console.warn(`[mcp-host] ${this.#ended}`);
-      for (const { reject } of this.#pending.values()) {
-        reject(new Error(this.#ended));
+      for (const answer of this.#pending.values()) {
+        Deferred.doneUnsafe(answer, Exit.fail(new Error(this.#ended)));
       }
       this.#pending.clear();
     });
@@ -382,7 +381,7 @@ class Child {
           : undefined;
       if (pending && typeof message.id === "number") {
         this.#pending.delete(message.id);
-        pending.resolve(message);
+        Deferred.doneUnsafe(pending, Exit.succeed(message));
       }
       return;
     }
@@ -427,34 +426,37 @@ class Child {
     }
     const id = this.#next;
     this.#next += 1;
-    return new Promise<JsonRpcMessage>((resolve, reject) => {
-      const cancel = () => {
-        if (this.#pending.delete(id)) {
-          this.notify("notifications/cancelled", {
-            requestId: id,
-            reason: "The session that asked went away.",
-          });
-          reject(new Error("Cancelled."));
-        }
-      };
-      signal?.addEventListener("abort", cancel, { once: true });
-      this.#pending.set(id, {
-        resolve: (message) => {
-          signal?.removeEventListener("abort", cancel);
-          resolve(message);
-        },
-        reject: (error) => {
-          signal?.removeEventListener("abort", cancel);
-          reject(error);
-        },
-      });
+    const answer = Deferred.makeUnsafe<JsonRpcMessage, unknown>();
+    const cancel = () => {
+      if (this.#pending.delete(id)) {
+        this.notify("notifications/cancelled", {
+          requestId: id,
+          reason: "The session that asked went away.",
+        });
+        Deferred.doneUnsafe(answer, Exit.fail(new Error("Cancelled.")));
+      }
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+    this.#pending.set(id, answer);
+    try {
       this.#send({
         jsonrpc: "2.0",
         id,
         method,
         ...(params ? { params } : {}),
       });
-    });
+    } catch (error) {
+      this.#pending.delete(id);
+      Deferred.doneUnsafe(answer, Exit.fail(error));
+    }
+    // The promise edge of the server's answer; `signal` is let go with it.
+    return Effect.runPromise(
+      Deferred.await(answer).pipe(
+        Effect.ensuring(
+          Effect.sync(() => signal?.removeEventListener("abort", cancel))
+        )
+      )
+    );
   }
 
   /** Ends the process; `exited` follows. */

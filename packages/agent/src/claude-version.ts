@@ -11,6 +11,7 @@ import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import type { Subprocess } from "bun";
+import { Schema } from "effect";
 import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 
 /**
@@ -263,12 +264,15 @@ export const versionRefusal = (
  * What {@link claudeToStart} refuses with: its message is the one sentence,
  * `reason` which of the two it is.
  */
-export class ClaudeRefused extends Error {
-  readonly reason: "not-installed" | "version";
+export class ClaudeRefused extends Schema.TaggedError<ClaudeRefused>()(
+  "ClaudeRefused",
+  {
+    message: Schema.String,
+    reason: Schema.Literals(["not-installed", "version"]),
+  }
+) {
   constructor(reason: ClaudeRefused["reason"], message: string) {
-    super(message);
-    this.name = "ClaudeRefused";
-    this.reason = reason;
+    super({ reason, message });
   }
 
   /** A fleet item that needed this Claude Code, failed for this refusal. */

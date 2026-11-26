@@ -90,6 +90,7 @@ import {
   stripFrontmatter,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { Deferred, Effect, Exit } from "effect";
 import { type Boundary, boundaryCommand } from "../boundary/state";
 import {
   callDelegationTool,
@@ -231,52 +232,57 @@ class PiShells {
           }
         },
       });
-      return new Promise((resolve, reject) => {
-        this.#foreground.set(taskId, () => {
-          moved = true;
-          this.#foreground.delete(taskId);
-          this.#background.set(taskId, own);
-          parent?.removeEventListener("abort", abort);
-          options.onData(
-            Buffer.from(
-              `\n\nCommand moved to the background (ID: ${taskId}) so that a message that arrived while it was running can reach you; it was not interrupted. Its result is delivered to you automatically when it finishes; carry on without waiting for it.\n`
-            )
-          );
-          this.report.moved(taskId, command);
-          resolve({ exitCode: 0 });
-        });
-        const settled = () => {
-          this.#foreground.delete(taskId);
-          this.#background.delete(taskId);
-          parent?.removeEventListener("abort", abort);
-        };
-        running.then(
-          ({ exitCode }) => {
-            settled();
-            if (moved) {
-              this.report.ended(
-                shellEnd(taskId, command, { exitCode }),
-                saidTail(tail),
-                this.#stopped.delete(taskId)
-              );
-            } else {
-              resolve({ exitCode });
-            }
-          },
-          (error: unknown) => {
-            settled();
-            if (moved) {
-              this.report.ended(
-                shellEnd(taskId, command, { error }),
-                saidTail(tail),
-                this.#stopped.delete(taskId)
-              );
-            } else {
-              reject(error);
-            }
-          }
+      // The command's end, or its move to the background, whichever is first.
+      const outcome = Deferred.makeUnsafe<
+        Awaited<ReturnType<BashExec>>,
+        unknown
+      >();
+      this.#foreground.set(taskId, () => {
+        moved = true;
+        this.#foreground.delete(taskId);
+        this.#background.set(taskId, own);
+        parent?.removeEventListener("abort", abort);
+        options.onData(
+          Buffer.from(
+            `\n\nCommand moved to the background (ID: ${taskId}) so that a message that arrived while it was running can reach you; it was not interrupted. Its result is delivered to you automatically when it finishes; carry on without waiting for it.\n`
+          )
         );
+        this.report.moved(taskId, command);
+        Deferred.doneUnsafe(outcome, Exit.succeed({ exitCode: 0 }));
       });
+      const settled = () => {
+        this.#foreground.delete(taskId);
+        this.#background.delete(taskId);
+        parent?.removeEventListener("abort", abort);
+      };
+      running.then(
+        ({ exitCode }) => {
+          settled();
+          if (moved) {
+            this.report.ended(
+              shellEnd(taskId, command, { exitCode }),
+              saidTail(tail),
+              this.#stopped.delete(taskId)
+            );
+          } else {
+            Deferred.doneUnsafe(outcome, Exit.succeed({ exitCode }));
+          }
+        },
+        (error: unknown) => {
+          settled();
+          if (moved) {
+            this.report.ended(
+              shellEnd(taskId, command, { error }),
+              saidTail(tail),
+              this.#stopped.delete(taskId)
+            );
+          } else {
+            Deferred.doneUnsafe(outcome, Exit.fail(error));
+          }
+        }
+      );
+      // The promise edge of the command's end, or its move.
+      return Effect.runPromise(Deferred.await(outcome));
     };
   }
 }
@@ -1879,10 +1885,13 @@ class PiSession implements HarnessSession {
     // Refused, never another level put in its place, when the model has
     // none of that name ({@link #setEffort}).
     [CONTROL_SET_EFFORT]: (effort) =>
-      new Promise<void>((resolve) => {
-        this.#setEffort(effort);
-        resolve();
-      }),
+      // The promise edge of a setting made at once; a refusal rejects.
+      Effect.runPromise(
+        Effect.try({
+          try: () => this.#setEffort(effort),
+          catch: (error) => error,
+        })
+      ),
     [CONTROL_SUPPORTED_MODELS]: () => modelCatalog(this.#runtime),
     // pi has no slash commands.
     [CONTROL_SUPPORTED_COMMANDS]: () => Promise.resolve([]),
@@ -1891,18 +1900,23 @@ class PiSession implements HarnessSession {
     // The fleet's servers, which CawCo registered for the session; a fenced
     // session runs none ({@link cawcosExtensionsAlone}).
     [CONTROL_MCP_TOGGLE]: (name, enabled) =>
-      new Promise<void>((resolve) => {
-        if (!this.#fleetMcp) {
-          throw new Error(
-            harnessRefusedWords.noMcp(
-              "pi",
-              `${name} wasn't switched ${enabled ? "on" : "off"}`
-            )
-          );
-        }
-        this.#fleetMcp.toggle(name, enabled);
-        resolve();
-      }),
+      // The promise edge of a switch made at once; a refusal rejects.
+      Effect.runPromise(
+        Effect.try({
+          try: () => {
+            if (!this.#fleetMcp) {
+              throw new Error(
+                harnessRefusedWords.noMcp(
+                  "pi",
+                  `${name} wasn't switched ${enabled ? "on" : "off"}`
+                )
+              );
+            }
+            this.#fleetMcp.toggle(name, enabled);
+          },
+          catch: (error) => error,
+        })
+      ),
     [CONTROL_CONTEXT_USAGE]: () => {
       // The last message that carries a usage: an answer's, or a tool
       // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).

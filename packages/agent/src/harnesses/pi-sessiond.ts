@@ -45,6 +45,7 @@ import {
 import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
 import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
 import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
+import { Deferred, Effect, Exit } from "effect";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
@@ -162,13 +163,10 @@ class PiRemoteSession implements HarnessSession {
 
   readonly harness = "pi" as const;
   sessionId: string | null = null;
+  /** Each request still waiting on the host's reply, by id: the reply it waits on, and whether it reads the state. */
   readonly #pending = new Map<
     string,
-    {
-      resolve: (value: unknown) => void;
-      reject: (error: Error) => void;
-      snapshot: boolean;
-    }
+    { reply: Deferred.Deferred<unknown, Error>; snapshot: boolean }
   >();
   readonly #client: SessiondClient;
   readonly #ctx: HarnessContext;
@@ -260,14 +258,20 @@ class PiRemoteSession implements HarnessSession {
             case "reply": {
               const pending = this.#pending.get(event.id);
               this.#pending.delete(event.id);
+              if (!pending) {
+                break;
+              }
               if (event.error) {
-                pending?.reject(saidFailure({ ...event, error: event.error }));
+                Deferred.doneUnsafe(
+                  pending.reply,
+                  Exit.fail(saidFailure({ ...event, error: event.error }))
+                );
               } else {
                 // Apply in socket order, before a later busy delta can arrive.
-                if (pending?.snapshot) {
+                if (pending.snapshot) {
                   this.applyState(piHostState(event.value));
                 }
-                pending?.resolve(event.value);
+                Deferred.doneUnsafe(pending.reply, Exit.succeed(event.value));
               }
               break;
             }
@@ -287,7 +291,10 @@ class PiRemoteSession implements HarnessSession {
             );
           }
           for (const pending of this.#pending.values()) {
-            pending.reject(new Error(`pi host exited: ${code ?? signal}`));
+            Deferred.doneUnsafe(
+              pending.reply,
+              Exit.fail(new Error(`pi host exited: ${code ?? signal}`))
+            );
           }
           this.#pending.clear();
           this.#exited = true;
@@ -425,20 +432,16 @@ class PiRemoteSession implements HarnessSession {
       { type: "snapshot" } | ({ type: "control" } & Control) | { type: "stop" }
   ): Promise<unknown> {
     const id = crypto.randomUUID();
-    const response = new Promise<unknown>((resolve, reject) =>
-      this.#pending.set(id, {
-        resolve,
-        reject,
-        snapshot: command.type === "snapshot",
-      })
-    );
+    const reply = Deferred.makeUnsafe<unknown, Error>();
+    this.#pending.set(id, { reply, snapshot: command.type === "snapshot" });
     try {
       await this.write({ ...command, id });
     } catch (error) {
       this.#pending.delete(id);
       throw error;
     }
-    return response;
+    // The promise edge of the host's reply.
+    return await Effect.runPromise(Deferred.await(reply));
   }
 
   send(message: SentMessage, extras: TurnExtras): void {
@@ -639,35 +642,43 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
   }
   const { client } = held;
   const id = crypto.randomUUID();
-  return new Promise((resolve, reject) => {
-    // Its own subscription beside the session's: ending it leaves the
-    // session's listener as it was.
-    let stop = (): void => undefined;
-    stop = client.subscribe(procIdFor("pi", instanceId), {
-      line: (line) => {
-        const event = piHostEvent(JSON.parse(line.data));
-        if (event.type !== "reply" || event.id !== id) {
-          return;
-        }
-        stop();
-        if (event.error) {
-          reject(saidFailure({ ...event, error: event.error }));
-        } else {
-          resolve(piHostState(event.value));
-        }
-      },
-      exit: () => {
-        stop();
-        reject(new Error("pi host exited while reading state"));
-      },
-    });
-    client
-      .write(
-        procIdFor("pi", instanceId),
-        `${JSON.stringify({ type: "snapshot", id })}\n`
-      )
-      .catch(reject);
-  });
+  // The promise edge of one state read off the host.
+  return await Effect.runPromise(
+    Effect.callback<PiHostState, unknown>((resume) => {
+      // Its own subscription beside the session's: ending it leaves the
+      // session's listener as it was.
+      let stop = (): void => undefined;
+      stop = client.subscribe(procIdFor("pi", instanceId), {
+        line: (line) => {
+          const event = piHostEvent(JSON.parse(line.data));
+          if (event.type !== "reply" || event.id !== id) {
+            return;
+          }
+          stop();
+          resume(
+            event.error
+              ? Effect.fail(saidFailure({ ...event, error: event.error }))
+              : Effect.succeed(piHostState(event.value))
+          );
+        },
+        exit: () => {
+          stop();
+          resume(Effect.fail(new Error("pi host exited while reading state")));
+        },
+      });
+      client
+        .write(
+          procIdFor("pi", instanceId),
+          `${JSON.stringify({ type: "snapshot", id })}\n`
+        )
+        .catch((error: unknown) => {
+          stop();
+          resume(Effect.fail(error));
+        });
+      // Interrupted, the read ends its subscription.
+      return Effect.sync(() => stop());
+    })
+  );
 }
 
 export async function adoptPi(

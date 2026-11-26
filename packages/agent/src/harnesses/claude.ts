@@ -69,7 +69,7 @@ import {
   isClaudeImageMediaType,
   type TurnImage,
 } from "@cawco/core/attachments";
-import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
+import type { BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -92,7 +92,9 @@ import {
   inStartingSet,
   PERSON_AND_READ_TOOLS,
 } from "@cawco/core/delegate-types";
-import { detach } from "@cawco/core/detach";
+import { detach, failureOf } from "@cawco/core/detach";
+import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
+import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   INSPECT_CONFIG,
@@ -211,6 +213,7 @@ import {
   newStats,
   parseRecords,
 } from "@cawco/jsonl-parser";
+import { Cause, Deferred, Duration, Effect, Exit, Schedule } from "effect";
 import {
   accountEnv,
   accountReports,
@@ -1195,7 +1198,8 @@ function withExtras(
  */
 class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: SDKUserMessage[] = [];
-  #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
+  /** The SDK's pull waiting for the next turn, when none was queued. */
+  #waiting: Deferred.Deferred<IteratorResult<SDKUserMessage>> | null = null;
   #endedValue = false;
   get #ended(): boolean {
     return this.#endedValue;
@@ -1213,7 +1217,10 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
     const waiting = this.#waiting;
     if (waiting) {
       this.#waiting = null;
-      waiting({ done: false, value: message });
+      Deferred.doneUnsafe(
+        waiting,
+        Exit.succeed({ done: false, value: message })
+      );
       return;
     }
     this.#queue.push(message);
@@ -1232,7 +1239,12 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
   end(): void {
     this.#closedValue = true;
     this.#endedValue = true;
-    this.#waiting?.({ done: true, value: undefined });
+    if (this.#waiting) {
+      Deferred.doneUnsafe(
+        this.#waiting,
+        Exit.succeed({ done: true, value: undefined })
+      );
+    }
     this.#waiting = null;
   }
 
@@ -1255,9 +1267,10 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
         if (this.#ended) {
           return Promise.resolve({ done: true, value: undefined });
         }
-        return new Promise((resolve) => {
-          this.#waiting = resolve;
-        });
+        const waiting = Deferred.makeUnsafe<IteratorResult<SDKUserMessage>>();
+        this.#waiting = waiting;
+        // The promise edge of the SDK's pull: the next turn, or the end.
+        return Effect.runPromise(Deferred.await(waiting));
       },
     };
   }
@@ -1380,7 +1393,8 @@ class Turn {
   get running(): boolean {
     return this.#running;
   }
-  #ended = Promise.withResolvers<void>();
+  /** Done when the turn in flight ends; a fresh one for each turn. */
+  #ended = Deferred.makeUnsafe<void>();
 
   start(): void {
     this.#busy = true;
@@ -1394,21 +1408,35 @@ class Turn {
   end(): void {
     this.#busy = false;
     this.#running = false;
-    this.#ended.resolve();
-    this.#ended = Promise.withResolvers<void>();
+    Deferred.doneUnsafe(this.#ended, Exit.void);
+    this.#ended = Deferred.makeUnsafe<void>();
   }
 
   /** The end of the turn in flight, given `ms`: `unanswered` while it still runs after them. */
-  settle(ms: number): Promise<Bounded<void>> {
-    if (!this.busy) {
-      return Promise.resolve({ kind: "answered", value: undefined });
-    }
-    const ended = this.#ended.promise;
-    return readWithin(ms, () => ended);
+  settle(ms: number): Effect.Effect<void, Unanswered> {
+    return this.busy
+      ? boundedRead(ms, Deferred.await(this.#ended))
+      : Effect.void;
   }
 }
 
 const SETTLE_TIMEOUT_MS = 5000;
+
+/** How soon a launch reads its CawCo slot again while it is still connecting. */
+const CONNECTING_LOOK_MS = 250;
+/** How soon a launch reads its CawCo slot again once it was dialled again. */
+const DIALLED_LOOK_MS = 1000;
+
+/**
+ * One reading of a session's CawCo slot ({@link ClaudeSession}'s
+ * `#readCawcoSlot`): connected, refused, again (still connecting, or dialled
+ * again), or off.
+ */
+type CawcoSlot =
+  | { slot: "connected"; servers: McpServerStatus[] }
+  | { slot: "refused" }
+  | { slot: "again"; why: string }
+  | { slot: "off"; status: string };
 
 /**
  * Why a held child the hub no longer knows was stopped, in the error formula
@@ -2676,10 +2704,8 @@ class ClaudeSession implements HarnessSession {
   /** The supplied header is ACKable only when this handle launched the child. */
   readonly #launchCredential: string | undefined;
   readonly #input: InputStream;
-  readonly #delivery = new Map<
-    string,
-    ReturnType<typeof Promise.withResolvers<void>>
-  >();
+  /** Each send not yet taken in by the CLI, by uuid: done once it is (or withdrawn, or the process ends). */
+  readonly #delivery = new Map<string, Deferred.Deferred<void>>();
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
   readonly #ctx: HarnessContext;
@@ -3096,47 +3122,53 @@ class ClaudeSession implements HarnessSession {
             matchedAskRule,
           }
         ) =>
-          new Promise<PermissionResult>((resolve) => {
-            // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
-            const answered = this.#mode.answersHostSide(toolName);
-            console.log(
-              askLine(
+          // The promise edge of the ask: answered here, by the person, or
+          // withdrawn (its answer then never comes, as the CLI let it go).
+          Effect.runPromise(
+            Effect.callback<PermissionResult>((resolve) => {
+              // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
+              const answered = this.#mode.answersHostSide(toolName);
+              console.log(
+                askLine(
+                  toolName,
+                  { decisionReason, blockedPath, matchedAskRule },
+                  answered
+                )
+              );
+              if (answered) {
+                resolve(
+                  Effect.succeed({
+                    behavior: "allow",
+                    updatedInput: toolInput,
+                  })
+                );
+                return;
+              }
+              this.#permissions.set(requestId, {
+                resolve: (result) => resolve(Effect.succeed(result)),
                 toolName,
-                { decisionReason, blockedPath, matchedAskRule },
-                answered
-              )
-            );
-            if (answered) {
-              resolve({
-                behavior: "allow",
-                updatedInput: toolInput,
+                input: toolInput,
               });
-              return;
-            }
-            this.#permissions.set(requestId, {
-              resolve,
-              toolName,
-              input: toolInput,
-            });
-            // The CLI withdrew the ask (an interrupt mid-ask): nobody can
-            // answer it any more, and the hub hears it was withdrawn.
-            signal.addEventListener(
-              "abort",
-              () => {
-                if (this.#permissions.delete(requestId)) {
-                  ctx.permissionResolved?.(requestId, "cancelled");
-                }
-              },
-              { once: true }
-            );
-            ctx.permission({
-              requestId,
-              toolName,
-              input: toolInput,
-              suggestions,
-              toolUseId: toolUseID,
-            });
-          }),
+              // The CLI withdrew the ask (an interrupt mid-ask): nobody can
+              // answer it any more, and the hub hears it was withdrawn.
+              signal.addEventListener(
+                "abort",
+                () => {
+                  if (this.#permissions.delete(requestId)) {
+                    ctx.permissionResolved?.(requestId, "cancelled");
+                  }
+                },
+                { once: true }
+              );
+              ctx.permission({
+                requestId,
+                toolName,
+                input: toolInput,
+                suggestions,
+                toolUseId: toolUseID,
+              });
+            })
+          ),
       },
     });
 
@@ -3321,8 +3353,7 @@ class ClaudeSession implements HarnessSession {
           if (lifecycle.state === "cancelled") {
             this.#notes.delete(lifecycle.command_uuid);
           }
-          this.#delivery.get(lifecycle.command_uuid)?.resolve();
-          this.#delivery.delete(lifecycle.command_uuid);
+          this.#delivered(lifecycle.command_uuid);
           const said = toNeutral(message);
           if (said) {
             ctx.frame(said);
@@ -3351,8 +3382,7 @@ class ClaudeSession implements HarnessSession {
             turn.ran();
             started = true;
           }
-          this.#delivery.get(uuid)?.resolve();
-          this.#delivery.delete(uuid);
+          this.#delivered(uuid);
         }
         // A turn the CLI starts on its own — a background task's notification,
         // a message it held from the last turn — is a turn all the same: the
@@ -3523,10 +3553,9 @@ class ClaudeSession implements HarnessSession {
       );
     } finally {
       this.#transcriptWatch?.();
-      for (const delivery of this.#delivery.values()) {
-        delivery.resolve();
+      for (const uuid of [...this.#delivery.keys()]) {
+        this.#delivered(uuid);
       }
-      this.#delivery.clear();
       // Gone with the process: the supervisor hands back what it never read.
       this.#unread.clear();
       ctx.closed?.();
@@ -4168,7 +4197,7 @@ class ClaudeSession implements HarnessSession {
       extras.attachments,
       images
     );
-    this.#delivery.set(message.uuid, Promise.withResolvers<void>());
+    this.#delivery.set(message.uuid, Deferred.makeUnsafe<void>());
     if (note) {
       this.#notes.add(message.uuid);
       this.#input.push(outgoing);
@@ -4697,10 +4726,18 @@ class ClaudeSession implements HarnessSession {
     };
   }
 
+  /** Send `uuid` is the CLI's now (or withdrawn, or gone with the process): a wait for its receipt ends. */
+  #delivered(uuid: string): void {
+    const delivery = this.#delivery.get(uuid);
+    if (delivery) {
+      Deferred.doneUnsafe(delivery, Exit.void);
+      this.#delivery.delete(uuid);
+    }
+  }
+
   async #withdraw(uuid: string): Promise<"withdrawn" | "started"> {
     if (this.#input.withdraw(uuid)) {
-      this.#delivery.get(uuid)?.resolve();
-      this.#delivery.delete(uuid);
+      this.#delivered(uuid);
       this.#unread.delete(uuid);
       if (!this.#turn.running && this.#delivery.size === 0) {
         this.#turn.end();
@@ -4711,7 +4748,11 @@ class ClaudeSession implements HarnessSession {
     // A control write can overtake the SDK's async input iterator. Wait for
     // the CLI's receipt of this send before asking it to cancel; no send is
     // delayed or held here. The CLI's cancellation still decides the race.
-    await this.#delivery.get(uuid)?.promise;
+    const delivery = this.#delivery.get(uuid);
+    if (delivery) {
+      // The promise edge of the wait for the CLI's receipt.
+      await Effect.runPromise(Deferred.await(delivery));
+    }
     // https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md
     // 0.2.76: cancel_async_message drops a queued user message by UUID.
     // Query has no public typed method (0.3.296); use its own correlated
@@ -4750,30 +4791,40 @@ class ClaudeSession implements HarnessSession {
    * stops the session and says why ({@link #credentialRefused}); one that
    * reads anything else (`disabled`) is not dialled again.
    */
-  async #dialCawco(credential: string): Promise<void> {
+  #dialCawco(credential: string): Effect.Effect<void, unknown> {
     let over = false;
     // Its end, however it ends: the pump reports its own failure.
-    const ended = () => {
-      over = true;
-    };
-    this.#pump.then(ended, ended);
-    const tries = new Backoff(CAWCO_DIALS);
-    while (!over) {
-      try {
-        if ((await this.#dialOnce(credential)) === "done") {
-          return;
-        }
-      } catch (error) {
-        if (over) {
-          return;
-        }
-        console.warn(
-          `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-      const step = tries.failed();
-      await Bun.sleep(step.kind === "wait" ? step.ms : CAWCO_DIALS.mostMs);
-    }
+    const pumpEnded = Effect.exit(
+      Effect.tryPromise({ try: () => this.#pump, catch: (error) => error })
+    ).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          over = true;
+        })
+      )
+    );
+    const dial = Effect.tryPromise({
+      try: () => this.#dialOnce(credential),
+      catch: (error) => error,
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          if (!over) {
+            console.warn(
+              `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        })
+      ),
+      Effect.flatMap((dialled) =>
+        dialled === "done" ? Effect.void : Effect.fail("again" as const)
+      )
+    );
+    // Its policy never gives up: it dials at its cap until the child ends.
+    return Effect.raceFirst(
+      Effect.retry(dial, backoffSchedule(CAWCO_DIALS)),
+      pumpEnded
+    );
   }
 
   /** One reading of the cawco slot for {@link #dialCawco}: whether the dial is done. */
@@ -4810,12 +4861,7 @@ class ClaudeSession implements HarnessSession {
    * Claude Code does not dial a server again whose first connect failed.
    * `off`: a status nothing dials (`disabled`, or no slot at all).
    */
-  async #readCawcoSlot(): Promise<
-    | { slot: "connected"; servers: McpServerStatus[] }
-    | { slot: "refused" }
-    | { slot: "again"; why: string }
-    | { slot: "off"; status: string }
-  > {
+  async #readCawcoSlot(): Promise<CawcoSlot> {
     const servers = await this.#handle.mcpServerStatus();
     const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
     switch (cawco?.status) {
@@ -4874,41 +4920,68 @@ class ClaudeSession implements HarnessSession {
    * refusal of the credential (`needs-auth`) fails it at once.
    */
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
-    const deadline = Date.now() + HUB_AWAY_BOUND_MS;
     let said = "connecting";
-    for (;;) {
-      const read = await this.#readCawcoSlot();
-      if (read.slot === "connected") {
-        if (said !== "connecting") {
-          console.info(
-            `[claude] ${this.instanceId}: its CawCo MCP connected on its launch credential after it was dialled again`
+    // One reading: connected ends the wait; refused or off fails the launch.
+    const look = Effect.tryPromise({
+      try: () => this.#readCawcoSlot(),
+      catch: (error) => error,
+    }).pipe(
+      Effect.flatMap((read) => {
+        if (read.slot === "refused") {
+          return Effect.fail(
+            new Error(
+              "This session didn't start: the hub refused its sign-in to CawCo's tools (needs-auth). Start it again; a fresh start signs in afresh."
+            )
           );
         }
-        return read.servers;
-      }
-      if (read.slot === "again" && read.why !== said) {
-        said = read.why;
+        if (read.slot === "off") {
+          return Effect.fail(
+            new Error(
+              `This session didn't start: its connection to CawCo's tools is off (${read.status}). Start it again.`
+            )
+          );
+        }
+        if (read.slot === "again" && read.why !== said) {
+          said = read.why;
+          console.info(
+            `[claude] ${this.instanceId}: its CawCo MCP reads ${read.why} at launch; dialled again on its launch credential`
+          );
+        }
+        return Effect.succeed(read);
+      })
+    );
+    // Read again until it connects or {@link HUB_AWAY_BOUND_MS} passes: soon
+    // while it is still connecting, a second apart once it was dialled again.
+    const spacing = Schedule.spaced(CONNECTING_LOOK_MS).pipe(
+      Schedule.setInputType<CawcoSlot>(),
+      Schedule.passthrough,
+      Schedule.while(
+        ({ input, elapsed }) =>
+          input.slot !== "connected" && elapsed < HUB_AWAY_BOUND_MS
+      ),
+      Schedule.modifyDelay(({ input }) =>
+        Effect.succeed(
+          Duration.millis(
+            input.slot === "again" && input.why !== "connecting"
+              ? DIALLED_LOOK_MS
+              : CONNECTING_LOOK_MS
+          )
+        )
+      )
+    );
+    // The promise edge of the launch's wait for its CawCo slot.
+    const last = await Effect.runPromise(Effect.repeat(look, spacing));
+    if (last.slot === "connected") {
+      if (said !== "connecting") {
         console.info(
-          `[claude] ${this.instanceId}: its CawCo MCP reads ${read.why} at launch; dialled again on its launch credential`
+          `[claude] ${this.instanceId}: its CawCo MCP connected on its launch credential after it was dialled again`
         );
       }
-      if (read.slot === "refused") {
-        throw new Error(
-          "This session didn't start: the hub refused its sign-in to CawCo's tools (needs-auth). Start it again; a fresh start signs in afresh."
-        );
-      }
-      if (read.slot === "off") {
-        throw new Error(
-          `This session didn't start: its connection to CawCo's tools is off (${read.status}). Start it again.`
-        );
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `This session didn't start: its connection to CawCo's tools didn't come up within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}). Start it again.`
-        );
-      }
-      await Bun.sleep(read.why === "connecting" ? 250 : 1000);
+      return last.servers;
     }
+    throw new Error(
+      `This session didn't start: its connection to CawCo's tools didn't come up within ${HUB_AWAY_BOUND_MS / 1000} seconds (${last.slot === "again" ? last.why : last.slot}). Start it again.`
+    );
   }
 
   async #installSessionCredential(
@@ -5011,7 +5084,17 @@ class ClaudeSession implements HarnessSession {
       console.info(
         `[claude] ${this.instanceId}: attached while its CawCo MCP is ${cawco.status === "pending" ? "connecting" : "reconnecting"}; it is dialled until it connects`
       );
-      detach(this.#dialCawco(credential), "dialCawco");
+      Effect.runFork(
+        this.#dialCawco(credential).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              console.warn(
+                `[dialCawco] failed: ${failureOf(Cause.squash(cause))}`
+              )
+            )
+          )
+        )
+      );
     } else if (cawco?.status === "needs-auth") {
       // The refusal stops it and says why; what asked hears it was refused.
       this.#credentialRefused();
@@ -5093,18 +5176,20 @@ class ClaudeSession implements HarnessSession {
     this.#permissions.clear();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
-    const settled = await this.#turn.settle(SETTLE_TIMEOUT_MS);
-    switch (settled.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        console.warn(
-          `[claude] ${this.instanceId}: its turn still ran ${settled.after} ms after the interrupt; the stop closes it`
-        );
-        break;
-      default:
-        unhandled("read", settled);
-    }
+    // The promise edge of the wait for the interrupted turn's end.
+    await Effect.runPromise(
+      this.#turn
+        .settle(SETTLE_TIMEOUT_MS)
+        .pipe(
+          Effect.catchTag("Unanswered", (unanswered) =>
+            Effect.sync(() =>
+              console.warn(
+                `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
+              )
+            )
+          )
+        )
+    );
     // The interrupted turn's end read the effort: it lands while the query
     // is open. A CLI that answers nothing within the turn's own wait gets
     // the close, and the read says it failed.

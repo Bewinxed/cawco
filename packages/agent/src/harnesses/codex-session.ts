@@ -47,6 +47,7 @@ import {
 import { withSkillMarkers } from "@cawco/core/skill-words";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
+import { Deferred, Effect, Exit } from "effect";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionGitEnv } from "../git-credential";
 import type {
@@ -215,7 +216,7 @@ class CodexSession implements HarnessSession {
   /** The turn running, by Codex's id. */
   #turn: string | undefined;
   /** Settled when the running turn ends, for a send that waits for it ({@link #hand}). */
-  #ended: PromiseWithResolvers<void> | undefined;
+  #ended: Deferred.Deferred<void> | undefined;
   #turnStartTokens: V2.TokenUsageBreakdown | undefined;
   #tokens: V2.ThreadTokenUsage | undefined;
   #turnError: V2.TurnError | undefined;
@@ -715,7 +716,9 @@ class CodexSession implements HarnessSession {
 
   #turnEnded(turn: V2.Turn): void {
     this.#turn = undefined;
-    this.#ended?.resolve();
+    if (this.#ended) {
+      Deferred.doneUnsafe(this.#ended, Exit.void);
+    }
     this.#ended = undefined;
     const error = turn.error ?? this.#turnError;
     const failed = turn.status === "failed";
@@ -928,8 +931,9 @@ class CodexSession implements HarnessSession {
     // steered into a running one it is dropped (measured, Codex 0.169.0
     // against a mock API): a launch's wait for the running turn's end.
     if (preloads.length > 0 && this.#turn) {
-      this.#ended ??= Promise.withResolvers<void>();
-      await this.#ended.promise;
+      this.#ended ??= Deferred.makeUnsafe<void>();
+      // The promise edge of the wait for the running turn's end.
+      await Effect.runPromise(Deferred.await(this.#ended));
     }
     const input: V2.UserInput[] = [
       ...(extras.images ?? []).map((image): V2.UserInput => ({

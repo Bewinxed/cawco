@@ -42,6 +42,7 @@ import {
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import type { LocatedRecord, TranscriptRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
+import { Effect } from "effect";
 import { timeOf } from "./last-prompt.ts";
 import {
   idSpans,
@@ -621,28 +622,25 @@ function walkChainWindowed(
   }
 }
 
-/** The loop's turn between two steps of a long walk. */
-const loopTurn = (): Promise<void> =>
-  new Promise((resolve) => setImmediate(resolve));
-
 /**
  * {@link walkChainWindowed} over a whole file's index, giving the loop a turn
- * between its steps: each is a pass over every node (tens of milliseconds
- * on a transcript of 100,000 lines), the walk whole more than 100.
+ * between its steps (`Effect.yieldNow`, a turn of the event loop): each is a
+ * pass over every node (tens of milliseconds on a transcript of 100,000
+ * lines), the walk whole more than 100.
  */
-async function walkChainYielding(
+const walkChainYielding = Effect.fnUntraced(function* (
   records: ChainNode[],
   said: boolean
-): Promise<LinkedNode[]> {
+): Effect.fn.Return<LinkedNode[]> {
   const steps = walkSteps(records, false, said);
   for (;;) {
     const step = steps.next();
     if (step.done) {
       return step.value;
     }
-    await loopTurn();
+    yield* Effect.yieldNow;
   }
-}
+});
 
 /** The walk, a step at a time: it yields between its passes over the records. */
 function* walkSteps(
@@ -1322,10 +1320,13 @@ interface SaidPlan {
 }
 
 async function saidPlan(all: readonly ChainNode[]): Promise<SaidPlan> {
-  const nodes = (await walkChainYielding([...all], true)).filter(
-    (node) => node.shows !== undefined
+  // The promise edge of the walk, the loop given one more turn after it.
+  const nodes = await Effect.runPromise(
+    walkChainYielding([...all], true).pipe(
+      Effect.map((walked) => walked.filter((node) => node.shows !== undefined)),
+      Effect.tap(() => Effect.yieldNow)
+    )
   );
-  await loopTurn();
   return {
     at: new Map(nodes.map((node, i) => [node.uuid, i])),
     cuts: windowCuts(
@@ -1448,9 +1449,14 @@ async function messagesAt(
 export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
   return transcriptOrGone(async () => {
     const index = await indexes.get(path);
-    const nodes = await derivedOf(index).chain.of(async () =>
-      (await walkChainYielding([...index.nodes], false)).filter(
-        (node) => node.shows !== undefined
+    const nodes = await derivedOf(index).chain.of(() =>
+      // The promise edge of the walk.
+      Effect.runPromise(
+        walkChainYielding([...index.nodes], false).pipe(
+          Effect.map((walked) =>
+            walked.filter((node) => node.shows !== undefined)
+          )
+        )
       )
     );
     const joined = await derivedOf(index).joined.of(() =>

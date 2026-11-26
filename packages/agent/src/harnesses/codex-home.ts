@@ -25,7 +25,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { lstat, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderSigninResult } from "@cawco/core/accounts";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead } from "@cawco/core/effect/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { accountsRoot } from "@cawco/core/paths/claude";
@@ -39,6 +39,7 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { ToolSpec } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
+import { Deferred, Effect, Exit } from "effect";
 import { type NativeBinary, nativeEnv } from "../codex-native";
 import { resolveBin, runnable, toolGate, toolPath } from "../tools";
 import type * as V2 from "./codex-protocol/v2.gen";
@@ -326,7 +327,7 @@ const codexSignedIn = (
 
 /** A device-code sign-in waiting for the person, held until it ends. */
 interface CodexSignIn {
-  readonly done: Promise<"done" | "expired" | Error>;
+  readonly done: Deferred.Deferred<"done" | "expired" | Error>;
   readonly end: () => void;
   readonly expiresAt: number;
 }
@@ -352,25 +353,17 @@ export const beginCodexLogin = async (
   signIns.delete(accountId);
   const codex = await codexToStart();
   await prepareHome(accountId);
-  let shown: (value: {
-    userCode: string;
-    verificationUrl: string;
-  }) => void = () => undefined;
-  let failed: (error: Error) => void = () => undefined;
-  const challenge = new Promise<{ userCode: string; verificationUrl: string }>(
-    (resolve, reject) => {
-      shown = resolve;
-      failed = reject;
-    }
-  );
-  let ended: (outcome: "done" | "expired" | Error) => void = () => undefined;
-  const done = new Promise<"done" | "expired" | Error>((resolve) => {
-    ended = resolve;
-  });
-  let stop: () => void = () => undefined;
-  const stopped = new Promise<void>((resolve) => {
-    stop = resolve;
-  });
+  // The page and code Codex shows; how the sign-in ended; and its stop,
+  // which a later begin, a completion or a sign-out says.
+  const challenge = Deferred.makeUnsafe<
+    { userCode: string; verificationUrl: string },
+    Error
+  >();
+  const done = Deferred.makeUnsafe<"done" | "expired" | Error>();
+  const stopped = Deferred.makeUnsafe<void>();
+  const ended = (outcome: "done" | "expired" | Error): void => {
+    Deferred.doneUnsafe(done, Exit.succeed(outcome));
+  };
   const expiresAt = Date.now() + DEVICE_CODE_MS;
   withAppServer(
     codex.bin,
@@ -384,8 +377,11 @@ export const beginCodexLogin = async (
           `Codex started a ${started.type} sign-in, not a device code.`
         );
       }
-      shown(started);
-      await Promise.race([done, stopped]);
+      Deferred.doneUnsafe(challenge, Exit.succeed(started));
+      // The promise edge of the wait for the sign-in's end, or its stop.
+      await Effect.runPromise(
+        Effect.raceFirst(Deferred.await(done), Deferred.await(stopped))
+      );
     },
     {
       timeoutMs: DEVICE_CODE_MS,
@@ -403,12 +399,17 @@ export const beginCodexLogin = async (
     () => ended("expired"),
     (error: unknown) => {
       const why = error instanceof Error ? error : new Error(String(error));
-      failed(why);
+      Deferred.doneUnsafe(challenge, Exit.fail(why));
       ended(why);
     }
   );
-  const first = await challenge;
-  signIns.set(accountId, { done, end: stop, expiresAt });
+  // The promise edge of the wait for Codex's page and code.
+  const first = await Effect.runPromise(Deferred.await(challenge));
+  signIns.set(accountId, {
+    done,
+    end: () => Deferred.doneUnsafe(stopped, Exit.void),
+    expiresAt,
+  });
   return { ...first, expiresAt };
 };
 
@@ -427,13 +428,17 @@ export const completeCodexLogin = async (
   if (!signIn) {
     return { state: "expired" };
   }
-  const read = await readWithin(COMPLETE_WAIT_MS, () => signIn.done);
-  if (read.kind === "unanswered") {
+  // The promise edge of the wait on the person: a minute, then "still waiting".
+  const outcome = await Effect.runPromise(
+    boundedRead(COMPLETE_WAIT_MS, Deferred.await(signIn.done)).pipe(
+      Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
+    )
+  );
+  if (outcome === undefined) {
     return Date.now() < signIn.expiresAt
       ? { state: "pending" }
       : { state: "expired" };
   }
-  const outcome = read.value;
   signIns.delete(accountId);
   signIn.end();
   if (outcome === "expired") {

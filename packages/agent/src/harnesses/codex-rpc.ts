@@ -6,9 +6,11 @@
  * (codex-session.ts), or one this agent starts for a single read
  * ({@link withAppServer}).
  */
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import { readWithin } from "@cawco/core/bounded";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { createInterface, type Interface } from "node:readline";
+import type { Readable, Writable } from "node:stream";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
+import { Deferred, Effect, Exit, Schema } from "effect";
 import type {
   ClientRequest,
   InitializeResponse,
@@ -68,11 +70,12 @@ export type CodexNotification = ServerNotification;
 export type CodexServerRequest = ServerRequest;
 
 /** A JSON-RPC error Codex answered a request with. */
-class CodexRpcError extends Error {
-  readonly code: number;
+class CodexRpcError extends Schema.TaggedError<CodexRpcError>()(
+  "CodexRpcError",
+  { code: Schema.Number, message: Schema.String }
+) {
   constructor(method: string, code: number, message: string) {
-    super(`Codex refused ${method}: ${message}`);
-    this.code = code;
+    super({ code, message: `Codex refused ${method}: ${message}` });
   }
 }
 
@@ -125,13 +128,10 @@ export class CodexPeer {
   readonly #handlers: CodexHandlers;
   readonly #prefix = `cawco-${crypto.randomUUID().slice(0, 8)}-`;
   #sent = 0;
+  /** Each request still waiting, by id: its method, and the answer it waits on. */
   readonly #pending = new Map<
     string,
-    {
-      method: string;
-      resolve: (value: unknown) => void;
-      reject: (error: Error) => void;
-    }
+    { method: string; answer: Deferred.Deferred<unknown, Error> }
   >();
   #closed: Error | undefined;
 
@@ -155,16 +155,16 @@ export class CodexPeer {
     }
     this.#sent += 1;
     const id = `${this.#prefix}${this.#sent}`;
-    const answer = new Promise<unknown>((resolve, reject) =>
-      this.#pending.set(id, { method, resolve, reject })
-    );
+    const answer = Deferred.makeUnsafe<unknown, Error>();
+    this.#pending.set(id, { method, answer });
     try {
       await this.#write(`${JSON.stringify({ id, method, params })}\n`);
     } catch (error) {
       this.#pending.delete(id);
       throw error;
     }
-    const result = await answer;
+    // The promise edge of the request's answer.
+    const result = await Effect.runPromise(Deferred.await(answer));
     if (!isResultOf(result, method)) {
       throw new Error(`Codex answered ${method} with no result`);
     }
@@ -217,24 +217,25 @@ export class CodexPeer {
     }
     this.#pending.delete(id);
     const { error } = message;
-    if (isRecord(error)) {
-      pending.reject(
-        new CodexRpcError(
-          pending.method,
-          typeof error.code === "number" ? error.code : 0,
-          typeof error.message === "string" ? error.message : String(error)
-        )
-      );
-    } else {
-      pending.resolve(message.result);
-    }
+    Deferred.doneUnsafe(
+      pending.answer,
+      isRecord(error)
+        ? Exit.fail(
+            new CodexRpcError(
+              pending.method,
+              typeof error.code === "number" ? error.code : 0,
+              typeof error.message === "string" ? error.message : String(error)
+            )
+          )
+        : Exit.succeed(message.result)
+    );
   }
 
   /** The connection ended: every request still waiting fails with `why`. */
   close(why: Error): void {
     this.#closed = why;
     for (const pending of this.#pending.values()) {
-      pending.reject(why);
+      Deferred.doneUnsafe(pending.answer, Exit.fail(why));
     }
     this.#pending.clear();
   }
@@ -255,21 +256,24 @@ export class CodexPeer {
 /** How long a one-off app-server may take for its whole read. */
 const ONE_OFF_MS = 30_000;
 
-/**
- * `work` run against an app-server this agent starts for it alone, with
- * `env` (its `CODEX_HOME`), in `cwd`: initialized, then stopped as `work`
- * ends. Its asks are refused: a read raises none.
- */
-export const withAppServer = async <T>(
+/** A one-off app-server: its child, the peer on its stdio, and its exit. */
+interface AppServer {
+  readonly child: ChildProcessByStdio<Writable, Readable, Readable>;
+  /** Fails, with its stderr's end, once the child exits. */
+  readonly exited: Deferred.Deferred<never, Error>;
+  readonly lines: Interface;
+  readonly peer: CodexPeer;
+}
+
+/** Starts `bin app-server` with `env` in `cwd`, its peer on its stdio; nothing is asked of it yet. */
+const openAppServer = (
   bin: string,
   env: Record<string, string>,
-  work: (peer: CodexPeer) => Promise<T>,
   options: {
     cwd?: string;
     notification?: (message: CodexNotification) => void;
-    timeoutMs?: number;
-  } = {}
-): Promise<T> => {
+  }
+): AppServer => {
   const child = spawn(bin, ["app-server"], {
     cwd: options.cwd,
     env,
@@ -281,8 +285,13 @@ export const withAppServer = async <T>(
   });
   const peer: CodexPeer = new CodexPeer(
     (line) =>
-      new Promise<void>((resolve, reject) =>
-        child.stdin.write(line, (error) => (error ? reject(error) : resolve()))
+      // The promise edge of one line written to the child's stdin.
+      Effect.runPromise(
+        Effect.callback<void, Error>((resume) => {
+          child.stdin.write(line, (error) =>
+            resume(error ? Effect.fail(error) : Effect.void)
+          );
+        })
       ),
     {
       notification: (message) => options.notification?.(message),
@@ -295,37 +304,73 @@ export const withAppServer = async <T>(
   );
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => peer.receive(line));
-  const exited = new Promise<never>((_, reject) =>
-    child.once("exit", (code, signal) =>
-      reject(
+  const exited = Deferred.makeUnsafe<never, Error>();
+  child.once("exit", (code, signal) =>
+    Deferred.doneUnsafe(
+      exited,
+      Exit.fail(
         new Error(
           `codex app-server exited (${code ?? signal}) before the read ended: ${stderr.trim() || "no output"}`
         )
       )
     )
   );
-  exited.catch(() => undefined);
   child.once("error", (error) => peer.close(error));
-  try {
-    const read = await readWithin(options.timeoutMs ?? ONE_OFF_MS, () =>
-      Promise.race([
-        (async () => {
-          await peer.handshake();
-          return await work(peer);
-        })(),
-        exited,
-      ])
-    );
-    if (read.kind === "unanswered") {
-      throw new Error(
-        `codex app-server did not answer within ${read.after} ms (${read.reason})`
-      );
-    }
-    return read.value;
-  } finally {
-    peer.close(new Error("the read ended"));
-    lines.close();
-    child.stdin.end();
-    child.kill("SIGTERM");
-  }
+  return { child, exited, lines, peer };
 };
+
+/** Ends a one-off app-server: its requests still waiting fail, and the child is stopped. */
+const closeAppServer = ({ child, lines, peer }: AppServer): void => {
+  peer.close(new Error("the read ended"));
+  lines.close();
+  child.stdin.end();
+  child.kill("SIGTERM");
+};
+
+/**
+ * `work` run against an app-server this agent starts for it alone, with
+ * `env` (its `CODEX_HOME`), in `cwd`: initialized, then stopped as `work`
+ * ends. Its asks are refused: a read raises none. The child's exit ends the
+ * read with its stderr's end; past `timeoutMs` it is let go.
+ */
+export const withAppServer = <T>(
+  bin: string,
+  env: Record<string, string>,
+  work: (peer: CodexPeer) => Promise<T>,
+  options: {
+    cwd?: string;
+    notification?: (message: CodexNotification) => void;
+    timeoutMs?: number;
+  } = {}
+): Promise<T> =>
+  // The promise edge of a one-off app-server's read.
+  Effect.runPromise(
+    Effect.acquireRelease(
+      Effect.sync(() => openAppServer(bin, env, options)),
+      (server) => Effect.sync(() => closeAppServer(server))
+    ).pipe(
+      Effect.flatMap(({ exited, peer }) =>
+        boundedRead(
+          options.timeoutMs ?? ONE_OFF_MS,
+          Effect.raceFirst(
+            Effect.tryPromise({
+              try: async () => {
+                await peer.handshake();
+                return await work(peer);
+              },
+              catch: (error) => error,
+            }),
+            Deferred.await(exited)
+          )
+        )
+      ),
+      Effect.mapError((error) =>
+        error instanceof Unanswered
+          ? new Error(
+              `codex app-server did not answer within ${error.after} ms (${error.reason})`
+            )
+          : error
+      ),
+      Effect.scoped
+    )
+  );

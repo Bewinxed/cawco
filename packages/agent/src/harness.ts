@@ -57,6 +57,7 @@ import type {
   StoredRun,
 } from "@cawco/core/session-messages";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import { Schema } from "effect";
 import type { FleetPart } from "./fleet-parts";
 import type { TreeTop } from "./folder-tree";
 import type { HarnessCli } from "./harness-cli";
@@ -73,8 +74,30 @@ export interface TurnExtras {
   images?: SendPayload["images"];
 }
 
+/** What each refusal below holds: its words, and what caused it when something did. */
+const REFUSAL = {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+};
+
+/** A refusal's fields from the arguments an `Error` takes: its words, and `{ cause }` when given. */
+const refusal = (
+  message: string,
+  options?: ErrorOptions
+): { message: string; cause?: unknown } =>
+  options && "cause" in options
+    ? { message, cause: options.cause }
+    : { message };
+
 /** Known surviving custody requires an operator decision, not another probe or a replacement. */
-export class HarnessRecoveryRefused extends Error {}
+export class HarnessRecoveryRefused extends Schema.TaggedError<HarnessRecoveryRefused>()(
+  "HarnessRecoveryRefused",
+  REFUSAL
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(refusal(message, options));
+  }
+}
 /**
  * A reattach that cannot succeed for its own session: its server answered
  * for that session or its directory with an error, or stayed out of reach
@@ -83,9 +106,23 @@ export class HarnessRecoveryRefused extends Error {}
  * unavailable, so the hub owes its sends and its next start is a start of its
  * own; a start that ends on it fails once, with these words.
  */
-export class ReattachFailed extends Error {}
+export class ReattachFailed extends Schema.TaggedError<ReattachFailed>()(
+  "ReattachFailed",
+  REFUSAL
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(refusal(message, options));
+  }
+}
 /** A refusal is final for its launch attempt, including recovery attempts. */
-export class SessionAddressRefused extends Error {}
+export class SessionAddressRefused extends Schema.TaggedError<SessionAddressRefused>()(
+  "SessionAddressRefused",
+  REFUSAL
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(refusal(message, options));
+  }
+}
 /**
  * A session process that cannot be trusted to run: its CawCo MCP credential
  * did not install (a process this agent launched) or verify (one it attached
@@ -93,7 +130,14 @@ export class SessionAddressRefused extends Error {}
  * can stop holding. The process has been stopped; this is its spawn's
  * failure, with the reason — an end, not a recovery the hub retries.
  */
-export class HeldProcessRefused extends Error {}
+export class HeldProcessRefused extends Schema.TaggedError<HeldProcessRefused>()(
+  "HeldProcessRefused",
+  REFUSAL
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(refusal(message, options));
+  }
+}
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
@@ -349,7 +393,14 @@ export const runControl = <K extends ControlName>(
  * {@link Harness} and {@link HarnessSession} is required, so a harness that
  * lacks one says so here rather than leaving it out.
  */
-class HarnessCannot extends Error {}
+class HarnessCannot extends Schema.TaggedError<HarnessCannot>()(
+  "HarnessCannot",
+  REFUSAL
+) {
+  constructor(message: string, options?: ErrorOptions) {
+    super(refusal(message, options));
+  }
+}
 
 /** A member that refuses, every time, with `why`. */
 export const cannot = (why: string) => (): Promise<never> =>

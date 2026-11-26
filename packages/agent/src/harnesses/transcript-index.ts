@@ -22,6 +22,7 @@
  */
 
 import { isGone, unlessGone } from "@cawco/core/absent";
+import { makeJoin } from "@cawco/core/effect/join";
 import { inFlight } from "@cawco/core/loop-watch";
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import {
@@ -31,6 +32,7 @@ import {
   type LocatedRecord,
   scanFile,
 } from "@cawco/jsonl-parser";
+import { Effect, Semaphore } from "effect";
 import { gauge } from "../memory.ts";
 
 /** One file's index. */
@@ -92,11 +94,11 @@ export class LineIndexes<N, M = unknown> {
   /** LRU map — iteration order = insertion/touch order. */
   private readonly entries = new Map<string, LineIndex<N, M>>();
   /** Single-flight: a read joins the scan of its file already running. */
-  private readonly inflight = new Map<string, Promise<LineIndex<N, M>>>();
+  private readonly inflight = makeJoin<string, LineIndex<N, M>>();
   private totalBytes = 0;
   private budgetBytes = DEFAULT_BUDGET_BYTES;
-  private scanning = 0;
-  private readonly scanTurns: (() => void)[] = [];
+  /** Whole-file scans, {@link SCANS_AT_ONCE} at a time, first come first served. */
+  private readonly scans = Semaphore.makeUnsafe(SCANS_AT_ONCE);
   private readonly prefilter: BytePrefilter;
   private readonly pick: (located: LocatedRecord) => N;
 
@@ -112,20 +114,15 @@ export class LineIndexes<N, M = unknown> {
 
   /** The file's index, brought up to date with it; a file no longer there drops its index. */
   get(path: string): Promise<LineIndex<N, M>> {
-    const pending = this.inflight.get(path);
-    if (pending) {
-      return pending;
-    }
-    const read = this.refresh(path)
-      .catch((error: unknown) => {
+    // The promise edge of the file's one read in flight.
+    return this.inflight.runPromise(path, () =>
+      this.refresh(path).catch((error: unknown) => {
         if (isGone(error)) {
           this.evict(path);
         }
         throw error;
       })
-      .finally(() => this.inflight.delete(path));
-    this.inflight.set(path, read);
-    return read;
+    );
   }
 
   /** Re-size the budget and evict down to it: the daemon's `transcriptCacheMb`. */
@@ -174,22 +171,16 @@ export class LineIndexes<N, M = unknown> {
   }
 
   /** A whole file scanned into a new index, {@link SCANS_AT_ONCE} at a time. */
-  private async scanWhole(path: string): Promise<LineIndex<N, M>> {
-    if (this.scanning >= SCANS_AT_ONCE) {
-      await new Promise<void>((resolve) => this.scanTurns.push(resolve));
-    } else {
-      this.scanning += 1;
-    }
-    try {
-      return await inFlight("transcript index scans", this.scan(path));
-    } finally {
-      const next = this.scanTurns.shift();
-      if (next) {
-        next();
-      } else {
-        this.scanning -= 1;
-      }
-    }
+  private scanWhole(path: string): Promise<LineIndex<N, M>> {
+    // The promise edge of a scan that waits its turn.
+    return Effect.runPromise(
+      this.scans.withPermit(
+        Effect.tryPromise({
+          try: () => inFlight("transcript index scans", this.scan(path)),
+          catch: (error) => error,
+        })
+      )
+    );
   }
 
   private async scan(path: string): Promise<LineIndex<N, M>> {

@@ -1,12 +1,16 @@
-import { setTimeout as delay } from "node:timers/promises";
-import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
-import { readWithin } from "@cawco/core/bounded";
+import {
+  type McpServerStatus,
+  type Query,
+  query,
+} from "@anthropic-ai/claude-agent-sdk";
+import { boundedRead } from "@cawco/core/effect/bounded";
+import { lookUntil } from "@cawco/core/effect/poll";
 import {
   type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
 } from "@cawco/core/fleet";
-import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
@@ -100,6 +104,8 @@ export const fleetMcpMoved = (): void => {
 
 /** CawCo's own bound on the CLI starting and answering its first status read. */
 const START_TIMEOUT_MS = 30_000;
+/** How often a connecting server's status is read again, once the CLI is up. */
+const SETTLE_READ_MS = 250;
 /** CawCo's own margin past Claude Code's connect timeout for its verdict to land. */
 const VERDICT_MARGIN_MS = 5000;
 
@@ -135,17 +141,6 @@ export const readMcpRuntime = async (
     const refused = error.itemState;
     return Object.fromEntries(names.map((name) => [name, refused]));
   }
-  const handle = query({
-    prompt: idle,
-    options: {
-      persistSession: false,
-      env,
-      pathToClaudeCodeExecutable: executable,
-      mcpServers: servers,
-      mcpServersDelivery: "initialize",
-      strictMcpConfig: true,
-    },
-  });
   let statuses: McpServerStatus[] | undefined;
   /** Why a server's status was not read in time, once a phase went unanswered. */
   let unanswered: string | undefined;
@@ -163,60 +158,84 @@ export const readMcpRuntime = async (
     );
   const settledFor = (read: McpServerStatus[]): boolean =>
     !read.some((row) => names.includes(row.name) && row.status === "pending");
-  try {
-    // The CLI's start: its first status.
-    const first = await readWithin(START_TIMEOUT_MS, () =>
-      handle.mcpServerStatus()
+  /** One status read of the CLI's, kept as the latest. */
+  const statusOf = (handle: Query): Effect.Effect<McpServerStatus[], Error> =>
+    Effect.tryPromise({
+      try: () => handle.mcpServerStatus(),
+      catch: (error) =>
+        error instanceof Error ? error : new Error(String(error)),
+    }).pipe(
+      Effect.tap((read) =>
+        Effect.sync(() => {
+          statuses = read;
+        })
+      )
     );
-    switch (first.kind) {
-      case "answered":
-        statuses = first.value;
-        break;
-      case "unanswered":
-        unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
-        return report();
-      default:
-        unhandled("read", first);
-    }
-    if (settledFor(first.value)) {
+  const reads = Effect.fnUntraced(function* (
+    handle: Query
+  ): Effect.fn.Return<FleetSyncReport["mcp"], Error> {
+    // The CLI's start: its first status.
+    const first = yield* boundedRead(START_TIMEOUT_MS, statusOf(handle)).pipe(
+      Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
+    );
+    if (first === undefined) {
+      unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
       return report();
     }
-    // The CLI is up and connecting: from here its own timeout runs.
-    const settledRead = await readWithin(
-      connectMs + VERDICT_MARGIN_MS,
-      async (signal) => {
-        while (!signal.aborted) {
-          await delay(250);
-          const read = await handle.mcpServerStatus();
-          statuses = read;
-          if (settledFor(read)) {
-            return;
-          }
-        }
-      }
-    );
-    switch (settledRead.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        unanswered = `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
-        break;
-      default:
-        unhandled("read", settledRead);
+    if (settledFor(first)) {
+      return report();
     }
-    return report();
-  } catch (error) {
-    return Object.fromEntries(
-      names.map((name) => [
-        name,
-        {
-          state: "failed",
-          cause: "unknown",
-          detail: error instanceof Error ? error.message : String(error),
-        },
-      ])
+    // The CLI is up and connecting: from here its own timeout runs. Read
+    // again every 250 ms, the first a wait after the start's read.
+    yield* boundedRead(
+      connectMs + VERDICT_MARGIN_MS,
+      Effect.sleep(SETTLE_READ_MS).pipe(
+        Effect.andThen(
+          lookUntil(
+            { every: SETTLE_READ_MS, until: settledFor },
+            statusOf(handle)
+          )
+        )
+      )
+    ).pipe(
+      Effect.catchTag("Unanswered", () =>
+        Effect.sync(() => {
+          unanswered = `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
+        })
+      )
     );
-  } finally {
-    handle.close();
-  }
+    return report();
+  });
+  // The promise edge of the CLI's MCP reads: its process is closed however
+  // they end, and a read that failed says why on every server.
+  return await Effect.runPromise(
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        query({
+          prompt: idle,
+          options: {
+            persistSession: false,
+            env,
+            pathToClaudeCodeExecutable: executable,
+            mcpServers: servers,
+            mcpServersDelivery: "initialize",
+            strictMcpConfig: true,
+          },
+        })
+      ),
+      reads,
+      (handle) => Effect.sync(() => handle.close())
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(
+          Object.fromEntries(
+            names.map((name) => [
+              name,
+              { state: "failed", cause: "unknown", detail: error.message },
+            ])
+          ) satisfies FleetSyncReport["mcp"]
+        )
+      )
+    )
+  );
 };

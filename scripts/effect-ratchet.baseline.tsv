@@ -1,5 +1,6 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 backoff-loop	new Backoff(CAWCO_DIALS)	packages/agent/src/harnesses/claude.ts	1
+backoff-loop	new Backoff(ASK_AGAIN)	packages/hub/src/views/catalogs.ts	1
 backoff-loop	new Backoff(DIRECTORY_RELEASES)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(EVENT_FEED)	packages/agent/src/harnesses/opencode.ts	1
 backoff-loop	new Backoff(FAILED_READS)	packages/agent/src/usage/opencode-go.ts	1
@@ -23,14 +24,13 @@ error-class	AttemptFailed	packages/agent/src/binary-update.ts	1
 error-class	ChromiumMissing	packages/agent/src/chromium.ts	1
 error-class	ClaudeRefused	packages/agent/src/claude-version.ts	1
 error-class	CodexRpcError	packages/agent/src/harnesses/codex-rpc.ts	1
+error-class	CommandStopped	packages/hub/src/machine-pause.ts	1
+error-class	ConnectionProblem	packages/hub/src/connections.ts	1
 error-class	CredentialUnknown	packages/agent/src/session-identity.ts	1
 error-class	DbUnread	packages/agent/src/stores/opencode-reads.ts	1
 error-class	FleetDenialsRefused	packages/agent/src/denied-tools.ts	1
 error-class	FramePictureRefusal	packages/agent/src/frame-picture.ts	1
 error-class	GitExited	packages/agent/src/git/run.ts	1
-error-class	HarnessCannot	packages/agent/src/harness.ts	1
-error-class	HarnessRecoveryRefused	packages/agent/src/harness.ts	1
-error-class	HeldProcessRefused	packages/agent/src/harness.ts	1
 error-class	HubNotAnswering	packages/hub/src/client.ts	1
 error-class	HubUnreachable	packages/agent/src/binary-update.ts	1
 error-class	KeeperKept	packages/agent/src/service-manager/keeper-job.ts	1
@@ -38,13 +38,11 @@ error-class	KeeperRefused	packages/agent/src/sessiond-client.ts	1
 error-class	MoveCancelled	packages/agent/src/move.ts	1
 error-class	NotRunning	packages/agent/src/session.ts	1
 error-class	NotTaken	packages/hub/src/db/forget.ts	1
-error-class	ReattachFailed	packages/agent/src/harness.ts	1
 error-class	ReattachUnanswered	packages/agent/src/harnesses/opencode.ts	1
 error-class	Refused	packages/agent/src/stage-measure.ts	1
 error-class	RelayFailed	packages/agent/src/browser/relay.ts	1
 error-class	SearchStopped	packages/agent/src/search/process.ts	1
 error-class	ServiceError	packages/agent/src/service-manager/install.ts	1
-error-class	SessionAddressRefused	packages/agent/src/harness.ts	1
 error-class	SessiondRefusal	packages/agent/src/sessiond-client.ts	1
 error-class	SessiondUnavailableError	packages/agent/src/sessiond-client.ts	1
 error-class	StageRefusal	packages/agent/src/stage-refusal.ts	1
@@ -81,21 +79,13 @@ hand-promise	new Promise	packages/agent/src/catalog-index.ts	1
 hand-promise	new Promise	packages/agent/src/daemon.ts	2
 hand-promise	new Promise	packages/agent/src/discovery.ts	1
 hand-promise	new Promise	packages/agent/src/fleet-hook-run.ts	1
-hand-promise	new Promise	packages/agent/src/harnesses/claude-transcript.ts	1
-hand-promise	new Promise	packages/agent/src/harnesses/claude.ts	2
-hand-promise	new Promise	packages/agent/src/harnesses/codex-home.ts	3
-hand-promise	new Promise	packages/agent/src/harnesses/codex-rpc.ts	3
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-docs.ts	1
 hand-promise	new Promise	packages/agent/src/harnesses/opencode-plugin-module.ts	2
 hand-promise	new Promise	packages/agent/src/harnesses/opencode.ts	4
-hand-promise	new Promise	packages/agent/src/harnesses/pi-runtime.ts	3
-hand-promise	new Promise	packages/agent/src/harnesses/pi-sessiond.ts	2
-hand-promise	new Promise	packages/agent/src/harnesses/transcript-index.ts	1
 hand-promise	new Promise	packages/agent/src/host-lfs.ts	1
 hand-promise	new Promise	packages/agent/src/hub-command.ts	1
 hand-promise	new Promise	packages/agent/src/hub-git.ts	2
 hand-promise	new Promise	packages/agent/src/login.ts	1
-hand-promise	new Promise	packages/agent/src/mcp-host.ts	1
 hand-promise	new Promise	packages/agent/src/provider-accounts.ts	3
 hand-promise	new Promise	packages/agent/src/search/process.ts	2
 hand-promise	new Promise	packages/agent/src/session-containers.ts	1
@@ -126,8 +116,6 @@ hand-promise	new Promise	packages/hub/src/server.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/boundary-host.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/boundary/ensure.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/browser/passkey-bridge.ts	2
-hand-promise	Promise.withResolvers	packages/agent/src/harnesses/claude.ts	3
-hand-promise	Promise.withResolvers	packages/agent/src/harnesses/codex-session.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/harnesses/opencode.ts	2
 hand-promise	Promise.withResolvers	packages/agent/src/machine-agent.ts	1
 hand-promise	Promise.withResolvers	packages/agent/src/search/index.ts	1
@@ -169,7 +157,6 @@ promise-map	flights	packages/agent/src/move.ts	1
 promise-map	gateReads	packages/agent/src/tools.ts	1
 promise-map	gates	packages/agent/src/boundary/decisions.ts	1
 promise-map	importsKept	packages/agent/src/stage-host/host.ts	1
-promise-map	inflight	packages/agent/src/harnesses/transcript-index.ts	1
 promise-map	inFlight	packages/agent/src/mcp-install.ts	1
 promise-map	inFlight	packages/agent/src/provider-usage.ts	1
 promise-map	inFlight	packages/hub/src/place-repo.ts	1
@@ -219,7 +206,6 @@ timed-loop	Bun.sleep	packages/agent/src/browser/own-size.ts	1
 timed-loop	Bun.sleep	packages/agent/src/browser/relay.ts	1
 timed-loop	Bun.sleep	packages/agent/src/browser/sign-ins.ts	1
 timed-loop	Bun.sleep	packages/agent/src/daemon.ts	1
-timed-loop	Bun.sleep	packages/agent/src/harnesses/claude.ts	2
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-client.ts	3
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-models.ts	1
 timed-loop	Bun.sleep	packages/agent/src/harnesses/opencode-server.ts	2
@@ -243,6 +229,8 @@ timed-loop	ctx.lifetime.after → syncAccounts	packages/hub/src/account-probes.t
 timed-loop	ctx.lifetime.sleep	packages/hub/src/continuations.ts	3
 timed-loop	ctx.lifetime.sleep	packages/hub/src/cut-turns.ts	1
 timed-loop	delay	packages/agent/src/mcp-status.ts	1
+timed-loop	lifetime.sleep	packages/hub/src/dispatch.ts	1
+timed-loop	lifetime.sleep	packages/hub/src/routines.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/browser/passkey-inject.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/session.ts	1
 timed-loop	new Promise(setTimeout)	packages/agent/src/sessiond-client.ts	1

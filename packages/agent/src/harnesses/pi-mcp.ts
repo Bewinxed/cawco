@@ -9,7 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readWithin } from "@cawco/core/bounded";
+import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
 import {
   type FleetItemState,
   type FleetMcpConfig,
@@ -18,6 +18,7 @@ import {
 import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
+import { Effect } from "effect";
 import { z } from "zod";
 import { type McpGate, throughMcpGate } from "../mcp-gate";
 import { MCP_CONNECT_MS } from "../mcp-status";
@@ -127,43 +128,69 @@ export const piMcpList = async (
   if (names.length === 0) {
     return {};
   }
-  const dir = await mkdtemp(join(tmpdir(), "cawco-pi-mcp-"));
-  try {
-    await writeStateFile(
-      join(dir, "mcp.json"),
-      JSON.stringify({ mcpServers: servers })
-    );
-    const read = await readWithin(MCP_CONNECT_MS + 15_000, async (signal) => {
-      const child = Bun.spawn([process.execPath, ...LIST_ENTRY], {
-        cwd: dir,
-        env: { ...toolEnv(), PI_CODING_AGENT_DIR: dir },
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-      });
-      const out = await new Response(child.stdout).text();
-      await child.exited;
-      return out;
+  const deadlineMs = MCP_CONNECT_MS + 15_000;
+  // pi's list, run on its scratch agent dir: its output, or nothing when it
+  // did not answer within its connect window (its process is stopped then).
+  const list = Effect.fnUntraced(function* (dir: string) {
+    yield* Effect.tryPromise({
+      try: () =>
+        writeStateFile(
+          join(dir, "mcp.json"),
+          JSON.stringify({ mcpServers: servers })
+        ),
+      catch: (error) => error,
     });
-    if (read.kind === "unanswered") {
-      const detail = `pi did not read its MCP servers within ${(MCP_CONNECT_MS + 15_000) / 1000} seconds.`;
-      return Object.fromEntries(
-        names.map((name) => [
-          name,
-          { state: "failed", cause: "timed-out", detail },
-        ])
-      );
-    }
-    const listed = z
-      .object({ servers: z.array(ListedSchema).optional() })
-      .parse(JSON.parse(read.value.slice(read.value.indexOf("{")))).servers;
+    return yield* boundedRead(
+      deadlineMs,
+      Effect.tryPromise({
+        try: async (signal) => {
+          const child = Bun.spawn([process.execPath, ...LIST_ENTRY], {
+            cwd: dir,
+            env: { ...toolEnv(), PI_CODING_AGENT_DIR: dir },
+            stdout: "pipe",
+            stderr: "pipe",
+            signal,
+          });
+          const out = await new Response(child.stdout).text();
+          await child.exited;
+          return out;
+        },
+        catch: (error) => error,
+      })
+    ).pipe(
+      Effect.catchIf(
+        (error) => error instanceof Unanswered,
+        () => Effect.succeed(undefined)
+      )
+    );
+  });
+  // The promise edge of pi's read: its scratch dir is removed however it ends.
+  const said = await Effect.runPromise(
+    Effect.acquireUseRelease(
+      Effect.tryPromise({
+        try: () => mkdtemp(join(tmpdir(), "cawco-pi-mcp-")),
+        catch: (error) => error,
+      }),
+      list,
+      (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true }))
+    )
+  );
+  if (said === undefined) {
+    const detail = `pi did not read its MCP servers within ${deadlineMs / 1000} seconds.`;
     return Object.fromEntries(
       names.map((name) => [
         name,
-        stateOf(listed?.find((one) => one.name === name)),
+        { state: "failed", cause: "timed-out", detail },
       ])
     );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
   }
+  const listed = z
+    .object({ servers: z.array(ListedSchema).optional() })
+    .parse(JSON.parse(said.slice(said.indexOf("{")))).servers;
+  return Object.fromEntries(
+    names.map((name) => [
+      name,
+      stateOf(listed?.find((one) => one.name === name)),
+    ])
+  );
 };
