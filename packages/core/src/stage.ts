@@ -1169,7 +1169,6 @@ export const CANVAS_SPEC_LIMITS = {
   /** A direction's line, characters: one line. */
   directionLine: 200,
   edges: 100,
-  files: 24,
   label: 80,
 } as const;
 

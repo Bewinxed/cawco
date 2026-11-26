@@ -178,7 +178,6 @@ const designDirections = z
       line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
     })
   )
-  .max(CANVAS_SPEC_LIMITS.files)
   .optional();
 
 /** What a design folder holds, as its agent marks it (core `DESIGN_MARKS`). */
@@ -235,10 +234,7 @@ export const artifactCreate = {
     file: z
       .union([
         z.string().min(1).max(1000).regex(STATES_ENTRY),
-        z
-          .array(z.string().min(1).max(1000).regex(STATES_ENTRY))
-          .min(1)
-          .max(CANVAS_SPEC_LIMITS.files),
+        z.array(z.string().min(1).max(1000).regex(STATES_ENTRY)).min(1),
       ])
       .optional()
       .describe("Each story they judge, `path:Story`; whole with reading."),

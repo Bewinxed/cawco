@@ -181,9 +181,6 @@ function directionsProblem(
   if (directions.length === 1) {
     return `A design graph's directions are two or more of one design: one alone is the design, given as file. Example: ${DIRECTIONS_EXAMPLE}.`;
   }
-  if (directions.length > CANVAS_SPEC_LIMITS.files) {
-    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.files} directions.`;
-  }
   const names = new Set(directions.map((one) => one.name.trim()));
   const named = new Set(directions.map((one) => one.file));
   if (names.size < directions.length || named.size < directions.length) {
@@ -323,9 +320,6 @@ export function designPartsOf(input: {
   }
   if (directions.length === 1) {
     return `A design's directions are two or more of one design: one alone is the design, given as html or dir. Example: ${DESIGN_DIRECTIONS_EXAMPLE}.`;
-  }
-  if (directions.length > CANVAS_SPEC_LIMITS.files) {
-    return `A design graph takes at most ${CANVAS_SPEC_LIMITS.files} directions.`;
   }
   const names = new Set(directions.map((one) => one.name.trim()));
   const unpaged = directions.filter(

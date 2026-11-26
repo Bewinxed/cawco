@@ -120,8 +120,7 @@ const designDirections = t.Optional(
       html: t.Optional(htmlField),
       dir: t.Optional(folderField),
       ...directionWords,
-    }),
-    { maxItems: CANVAS_SPEC_LIMITS.files }
+    })
   )
 );
 
@@ -131,9 +130,7 @@ const designMark = t.Optional(t.UnionEnum(DESIGN_MARKS));
 /** A design graph's edges, groups, dials and directions (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
   directions: t.Optional(
-    t.Array(t.Object({ file: statesFile, ...directionWords }), {
-      maxItems: CANVAS_SPEC_LIMITS.files,
-    })
+    t.Array(t.Object({ file: statesFile, ...directionWords }))
   ),
   edges: t.Optional(
     t.Array(
@@ -231,15 +228,7 @@ export const createBody = t.Object({
   name: t.String({ pattern: ARTIFACT_NAME.source }),
   html: t.Optional(htmlField),
   program: t.Optional(t.String({ minLength: 1, maxLength: PROGRAM_MAX })),
-  file: t.Optional(
-    t.Union([
-      statesFile,
-      t.Array(statesFile, {
-        minItems: 1,
-        maxItems: CANVAS_SPEC_LIMITS.files,
-      }),
-    ])
-  ),
+  file: t.Optional(t.Union([statesFile, t.Array(statesFile, { minItems: 1 })])),
   dir: t.Optional(folderField),
   content: designMark,
   port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),

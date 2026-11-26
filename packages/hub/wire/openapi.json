@@ -13440,7 +13440,6 @@
                     "type": "string"
                   },
                   "directions": {
-                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -13553,7 +13552,6 @@
                     "anyOf": [
                       {
                         "minItems": 1,
-                        "maxItems": 24,
                         "type": "array",
                         "items": {
                           "minLength": 1,
