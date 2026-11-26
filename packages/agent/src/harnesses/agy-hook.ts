@@ -1,19 +1,19 @@
 /**
- * The one `PreToolUse` hook CawCo writes into an agy home
- * (`<gemini-dir>/config/hooks.json`), and the server that answers it for one
- * session. agy runs the hook before every tool call of every session the
- * home holds, its subagents' included (the project's
+ * The one `PreToolUse` hook CawCo writes into an agy dir
+ * (`<gemini-dir>/config/hooks.json`): each session's own, and its account's
+ * home, where the account's own runs go; and the server that answers it for
+ * one session. agy runs the hook before every tool call of the session the
+ * dir holds, its subagents' included (the project's
  * `assets/b3380ec3/agy-harness-parity.md` §P-j); the hook hands the call to
  * its session's judge and prints the judge's answer (agy-judge.ts).
  *
- * The hook knows its session by construction. An agy home is an account's,
- * shared by that account's sessions, and each session is an `agy acp`
+ * The hook knows its session by construction. Each session is an `agy acp`
  * process of its own, started with its judge's socket in its environment
  * ({@link agyJudgeEnv}). agy hands a hook its own environment
  * (`assets/338276e4/p0a.calls.jsonl`: the hook read the variable the probe
  * started agy with), so a session's hook reaches that session's judge and
- * no other, and one hooks.json serves every session of the home. A call
- * whose agy names no judge is denied.
+ * no other, and every dir's hooks.json runs the account's one script. A
+ * call whose agy names no judge is denied.
  *
  * It fails closed. Every way it cannot hand back the judge's answer prints
  * `deny` with the reason the model reads: no judge named, none answering,
@@ -188,15 +188,15 @@ class AgyHookWriteError extends Schema.TaggedError<AgyHookWriteError>()(
 
 /**
  * Writes the hook's script to `script` and the hooks.json that runs it into
- * agy home `home`, each whole (core state-file.ts). The script is read-only:
- * the hook is what every call passes, so nothing rewrites it but this.
-
+ * agy dir `dir` (`--gemini-dir`), each whole (core state-file.ts). The
+ * script is read-only: the hook is what every call passes, so nothing
+ * rewrites it but this.
  */
 export const writeAgyHook = Effect.fn("writeAgyHook")(function* (
-  home: string,
+  dir: string,
   script: string
 ) {
-  const hooks = join(home, "config", "hooks.json");
+  const hooks = join(dir, "config", "hooks.json");
   yield* Effect.tryPromise({
     try: () => writeStateFile(script, agyHookScript(), { mode: 0o444 }),
     catch: (cause) => new AgyHookWriteError({ path: script, cause }),

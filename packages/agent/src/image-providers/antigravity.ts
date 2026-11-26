@@ -306,7 +306,8 @@ const runAgy = Effect.fn("runAgy")(function* (
     accountId,
     `image-${crypto.randomUUID()}`,
     {},
-    false
+    false,
+    undefined
   ).pipe(Effect.mapError(imageRunFailed));
   /**
    * What the run heard: its session once opened, every conversation its

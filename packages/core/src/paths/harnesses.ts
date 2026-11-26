@@ -195,28 +195,52 @@ export const codexStoreDir = (): string => join(cawcoDataDir(), "codex-store");
 /** What the fleet sync writes for Codex (skills, rules), linked into every account's home. */
 export const codexFleetRoot = (): string => join(cawcoDataDir(), "fleet-codex");
 
-/** What the fleet sync writes for Antigravity, linked into every account's agy home (tsk-340 item 9). */
+/** What the fleet sync writes for Antigravity, which each session's own agy dir takes (tsk-340 item 9). */
 export const agyFleetRoot = (): string => join(cawcoDataDir(), "fleet-agy");
 
 /**
- * One Antigravity account's agy home (`agy acp --gemini-dir`): its
- * `config/hooks.json` (CawCo's one hook), and its app-data dir
- * ({@link AGY_APP_DATA}) with its settings, its sign-in when agy keeps one
- * in a file, and its conversations. Beside the account's other stores, which
- * no workspace reads. The owner's own home ({@link agyOwnHome}) is never
- * written: CawCo only reads its conversations.
+ * One Antigravity account's agy home: its app-data dir ({@link
+ * AGY_APP_DATA}), which every session of the account shares, with its
+ * settings, its sign-in when agy keeps one in a file, and its
+ * conversations; and the `--gemini-dir` of the account's own runs (its
+ * sign-in, its models' read, its hook check, its image runs), with CawCo's
+ * hook and agy's one-time setup in its `config/`. A session runs in a dir
+ * of its own ({@link agySessionDir}). Beside the account's other stores,
+ * which no workspace reads. The owner's own home ({@link agyOwnHome}) is
+ * never written: CawCo only reads its conversations.
  */
 export const agyAccountHome = (accountId: string): string =>
   join(homedir(), ".cawco", "accounts", accountId, "agy");
 
 /**
- * The app-data dir every session of an account's agy home shares, by its
- * name in the home (`agy acp --app-data-dir`, which takes a relative name
- * alone). One per account, as T3 Code keeps one per profile: agy keeps a
- * file sign-in in it ({@link agySignInFile}), which a session in a dir of
- * its own would not find.
+ * The app-data dir every agy run on an account shares, by its name in the
+ * account's home (`agy acp --app-data-dir`). One per account, as T3 Code
+ * keeps one per profile: agy keeps the file sign-in in it ({@link
+ * agySignInFile}) and every conversation, so each session's dir reaches it
+ * by a path relative to that dir (agy 1.5.18 refuses an absolute one:
+ * "must not be absolute", the project's `assets/cbec55e2/REPORT.md`).
  */
 export const AGY_APP_DATA = "cawco";
+
+/** Where an account's sessions' own agy dirs are, one per session ({@link agySessionDir}). */
+export const agySessionDirs = (accountId: string): string =>
+  join(homedir(), ".cawco", "accounts", accountId, "agy-sessions");
+
+/**
+ * Session dir `name`'s `--gemini-dir` on account `accountId`: the skills,
+ * `GEMINI.md` and `config/hooks.json` that session alone reads, beside the
+ * account's home and, like it, in no workspace's reach. Removed with the
+ * conversation it holds.
+ */
+export const agySessionDir = (accountId: string, name: string): string => {
+  if (!AGY_SESSION_DIR_NAME.test(name)) {
+    throw new Error(`${name} names no Antigravity session dir`);
+  }
+  return join(agySessionDirs(accountId), name);
+};
+
+/** What a session dir's name may be: one path segment, as a session's id is ({@link agySessionDir}). */
+export const AGY_SESSION_DIR_NAME = /^[0-9A-Za-z][0-9A-Za-z_-]{0,127}$/u;
 
 /**
  * Where agy keeps an account's Google sign-in: a file in its home's app-data

@@ -317,7 +317,7 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
     const { child, connection } = startAcp(
       {
         bin,
-        args: agyArgs(home),
+        args: agyArgs(home, home),
         env: agyEnvironment(signIn, home, { ...judge, TMPDIR: scratch.dir }),
         cwd: scratch.dir,
       },

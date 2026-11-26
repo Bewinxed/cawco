@@ -46,7 +46,7 @@ export const agyAccountModels = async (
   const { child, connection } = startAcp(
     {
       bin,
-      args: agyArgs(home),
+      args: agyArgs(home, home),
       env: agyEnvironment(signIn, home, {}),
       cwd: home,
     },

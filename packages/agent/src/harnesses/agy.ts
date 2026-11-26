@@ -98,7 +98,7 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
   reloadSkills: false,
   // Its background commands are agy's own; CawCo's task list is not wired to them.
   tasks: false,
-  // The fleet's skills and memory reach every account's home and its hooks
+  // The fleet's skills and memory reach each session's own dir and its hooks
   // run through CawCo's own (agy-fleet.ts); a fleet plugin is Claude
   // Code's, which agy does not load.
   plugins: false,
@@ -337,7 +337,7 @@ class AgyHarness implements Harness<"agy"> {
     return agyFleetRoot();
   }
 
-  /** The fleet's skills and memory, linked into every Antigravity account's home here (agy-fleet.ts). */
+  /** The fleet's skills and memory, which each Antigravity session's dir here takes (agy-fleet.ts). */
   syncFleet(
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>

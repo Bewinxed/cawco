@@ -42,7 +42,7 @@
  *   goes to the new conversation.
  */
 import { rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   type ClientConnection,
   type ContentBlock,
@@ -576,11 +576,7 @@ class AgySession {
         ? {
             _meta: {
               antigravity: {
-                systemPrompt: {
-                  append: [APPEND, this.#start.memory]
-                    .filter(Boolean)
-                    .join("\n\n"),
-                },
+                systemPrompt: { append: APPEND },
               },
             },
           }
@@ -614,11 +610,12 @@ class AgySession {
   #adopted(sessionId: string): void {
     this.sessionId = sessionId;
     this.#ctx.session(sessionId);
-    const { accountId } = this.#start.launch;
+    const { accountId, dir } = this.#start.launch;
     const { cwd } = this.#start.spec;
     this.#note(sessionId, (note) => ({
       ...note,
       ...(accountId ? { accountId } : {}),
+      ...(dir ? { dir: basename(dir) } : {}),
       cwd: note.cwd ?? cwd,
       createdAt: note.createdAt ?? Date.now(),
     }));
@@ -1452,9 +1449,14 @@ class AgySession {
       );
     }
     await this.#applyDeletes();
-    const { tmp } = this.#start.launch;
+    const { tmp, dir } = this.#start.launch;
     if (tmp) {
       await rm(tmp, { recursive: true, force: true });
+    }
+    // A session dir that never held a conversation names none to delete it
+    // with: it goes with its host.
+    if (dir && !this.sessionId) {
+      await rm(dir, { recursive: true, force: true });
     }
   }
 

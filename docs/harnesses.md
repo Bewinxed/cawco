@@ -80,7 +80,7 @@ carries it.
 through the workspace's executor, inside the boundary: Claude Code through
 its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`), OpenCode through CawCo's
 plugin's `shell`, pi through `sessionBash`, Antigravity through the one `PreToolUse` hook
-CawCo writes into its home (agent `harnesses/agy-hook.ts` `writeAgyHook`),
+CawCo writes into each session's agy dir (agent `harnesses/agy-hook.ts` `writeAgyHook`),
 whose session judge rewrites each `run_command` to the executor
 (`agy-judge.ts` `agyAnswer`). A harness that runs its tools itself proves
 the rewrite on every call: Antigravity's host stops the session when a
@@ -144,8 +144,8 @@ workspace it starts no fleet server with a command itself: each comes
 through the workspace's MCP gate (`HarnessContext.mcpGate`), which runs it on
 the host, and chrome-devtools through the browser door
 (`HarnessContext.browserDoor`). Antigravity takes them all in `session/new`
-(agent `agy-sessiond.ts` `mcpServersOf`), never in its home's
-`mcp_config.json`, which every session of the home would start; a server
+(agent `agy-sessiond.ts` `mcpServersOf`), through its gate, never in
+its agy dir's `mcp_config.json`, which agy would start outside it; a server
 whose transport agy's ACP lacks (remote SSE) is left out. How its calls
 name a server is descriptor `callNaming` (Antigravity's:
 `mcp_<server>_<tool>`).
@@ -218,9 +218,10 @@ MCP servers, plugins, subagents) lands in files of CawCo's own under its data
 dir (`Harness.syncFleet`, `Harness.fleetHome`), and each session takes it
 through its own launch. Nothing is written into the person's own agent
 config. Who runs the fleet's hooks, on which events and with which tool
-names, is descriptor `hooks`. Antigravity's skills and memory are linked
-into every account's home (agent `agy-fleet.ts` `syncAgyFleet`,
-`linkAgyFleet`), and its fleet hooks run through CawCo's one hook and ACP
+names, is descriptor `hooks`. Antigravity's skills, held to the session's
+starting set, and its memory with the session's own documents are placed
+in each session's own agy dir (agent `agy-fleet.ts` `placeAgyFleet`,
+`syncAgyFleet`), and its fleet hooks run through CawCo's one hook and ACP
 client, handed Claude Code's payload (`agy-fleet-hooks.ts`
 `AgyFleetHooks`), never as entries of agy's own `hooks.json`.
 
@@ -232,8 +233,10 @@ back and resume as they ran (`listSessions`, `readTranscriptWindow`,
 `listsAllConversations` and `catalogProvesGone`.
 
 Antigravity's home is one per account, under the account's dir (core
-`paths/harnesses.ts` `agyAccountHome`; its launch, agent `agy-launch.ts`
-`agyLaunch`), shared by that account's sessions. Its conversations are
+`paths/harnesses.ts` `agyAccountHome`), its app-data dir shared by that
+account's sessions, each of which runs in a dir of its own (`agySessionDir`;
+its launch, agent `agy-launch.ts` `agyLaunch`), removed with its
+conversation. Its conversations are
 read from agy's own files, every account's home and agy's own `~/.gemini`
 alike, the latter read-only (`agy-store.ts` `listAgyConversations`;
 `agy-history.ts`; search, `packages/jsonl-parser/src/agy.ts`). A name or a

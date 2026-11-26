@@ -6,9 +6,9 @@
  * Two files a conversation, each with one writer process, so neither
  * writer undoes the other's change:
  * - what its host saw (`<id>.json`, agy-runtime.ts): the account whose home
- *   holds it, absent for one in agy's own default home; the folder it ran
- *   in; when it began; the title agy gave it (`session_info_update`), its
- *   default name;
+ *   holds it, absent for one in agy's own default home; the session dir it
+ *   runs in on that account; the folder it ran in; when it began; the
+ *   title agy gave it (`session_info_update`), its default name;
  * - what the person and the agent did (`<id>.person.json`): the person's
  *   title, which outranks agy's; its tag; the folder it moved to with its
  *   project; and each stop CawCo made of it for failing the same way again
@@ -29,6 +29,7 @@ import { fromPromise } from "../rejected";
 
 const HostNoteSchema = Schema.Struct({
   accountId: Schema.optional(Schema.String),
+  dir: Schema.optional(Schema.String),
   cwd: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
   title: Schema.optional(Schema.String),
@@ -55,6 +56,8 @@ export interface AgyNote {
   readonly createdAt?: number;
   readonly customTitle?: string;
   readonly cwd?: string;
+  /** The name of the session dir it runs in on its account (core paths/harnesses.ts `agySessionDir`). */
+  readonly dir?: string;
   readonly stops?: readonly { at: number; words: string }[];
   readonly tag?: string;
   readonly title?: string;

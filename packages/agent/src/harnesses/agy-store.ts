@@ -5,7 +5,8 @@
  *
  * - every Antigravity account's home (core paths/harnesses.ts
  *   `agyAccountHome`), its store the app-data dir CawCo names
- *   (`AGY_APP_DATA`): the conversations CawCo ran;
+ *   (`AGY_APP_DATA`), which every session of the account shares from a
+ *   dir of its own: the conversations CawCo ran;
  * - agy's own default home (`agyOwnHome`), its store `antigravity-cli`:
  *   the conversations the person started in agy's terminal (tsk-340
  *   story 14), read and never written. Its SQLite files are opened

@@ -110,8 +110,9 @@ export type AgyMcpServer = InferOutput<typeof MCP_SERVER>;
 
 /**
  * What the host runs agy as: its binary, its argv, the environment it gets
- * whole and nothing else, its home, the judge's socket its hook dials, and
- * the account's sign-in method `authenticate` names.
+ * whole and nothing else, its home (the account's, holding the app-data
+ * dir every session of the account shares), the judge's socket its hook
+ * dials, and the account's sign-in method `authenticate` names.
  */
 const LAUNCH = object({
   bin: string(),
@@ -133,6 +134,14 @@ const LAUNCH = object({
   version: optional(string()),
   /** agy's own temp dir (`TMPDIR`), made for this session alone and removed as its host ends. */
   tmp: optional(string()),
+  /**
+   * The session's own agy dir (`--gemini-dir`, core paths/harnesses.ts
+   * `agySessionDir`), under its account beside `home`: its skills, its
+   * `GEMINI.md` with its own memory and its hook. Kept with the
+   * conversation it holds; removed as its host ends when it never held one.
+   * Absent for a run in `home` itself.
+   */
+  dir: optional(string()),
 });
 
 /** What the host runs agy as ({@link LAUNCH}). */
@@ -162,13 +171,6 @@ const AGY_HOST_COMMAND = variant("type", [
     denied: array(string()),
     /** The CawCo build the host names itself as in `initialize`. */
     clientVersion: string(),
-    /**
-     * The session's own memory documents, each headed by its path: its
-     * folder's placed memory and the hub's documents for it, appended to
-     * agy's system prompt. The fleet's memory is the home's `GEMINI.md`
-     * (agent harnesses/agy-fleet.ts), which agy reads again each turn.
-     */
-    memory: optional(string()),
     /** Its workspace, when it is a work item's session in one. */
     workspace: optional(WORKSPACE),
     /** The gate form the agent expects its judge on, said back in its state. */

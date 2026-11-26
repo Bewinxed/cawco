@@ -19,14 +19,16 @@ import { accountsRoot } from "@cawco/core/paths/claude";
 import {
   AGY_APP_DATA,
   AGY_OWN_APP_DATA,
+  AGY_SESSION_DIR_NAME,
   agyAccountHome,
   agyAccountRecord,
   agyOwnHome,
+  agySessionDir,
 } from "@cawco/core/paths/harnesses";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Option, Schema } from "effect";
 import { agyCarryFile } from "./agy-carry";
-import { removeAgyNote } from "./agy-notes";
+import { allAgyNotes, removeAgyNote } from "./agy-notes";
 
 /** One agy home's store of conversations. */
 export interface AgyStore {
@@ -242,8 +244,8 @@ const keepAgyDeleted = async (store: AgyStore, id: string): Promise<void> => {
 /**
  * Conversation `id` of account store `store` deleted: every file agy keeps
  * of it (its `brain/` dir, its conversation database, its title, CawCo's
- * carried record of it), its rows in the store's shared files, and CawCo's
- * note of it. A conversation the person had (`remember`) has its id kept in
+ * carried record of it), its rows in the store's shared files, the session
+ * dir it ran in ({@link sessionDirOf}), and CawCo's note of it. A conversation the person had (`remember`) has its id kept in
  * the home's deleted list too, so no agy running there brings it back; one
  * CawCo made only to read the account's models, with no agy left running
  * on it, needs none.
@@ -269,7 +271,34 @@ export const deleteAgyConversation = async (
     await rm(path, { recursive: true, force: true });
   }
   await dropFromShared(store.dir, [id]);
+  const dir = await sessionDirOf(store, id);
+  if (dir) {
+    await rm(dir, { recursive: true, force: true });
+  }
   await removeAgyNote(id);
+};
+
+/**
+ * The session dir conversation `id` of account store `store` ran in, as
+ * CawCo's note of it names (agy-notes.ts); none when it names none, or
+ * when another conversation of the account runs in it too (one a session
+ * went on in after Google refused its first).
+ */
+const sessionDirOf = async (
+  store: AgyStore,
+  id: string
+): Promise<string | undefined> => {
+  const { accountId } = store;
+  const notes = await allAgyNotes();
+  const dir = notes.get(id)?.dir;
+  if (!(accountId && dir && AGY_SESSION_DIR_NAME.test(dir))) {
+    return undefined;
+  }
+  const shared = [...notes].some(
+    ([other, note]) =>
+      other !== id && note.accountId === accountId && note.dir === dir
+  );
+  return shared ? undefined : agySessionDir(accountId, dir);
 };
 
 // ------------------------------------------------------------ implicit

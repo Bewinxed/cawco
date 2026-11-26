@@ -23,6 +23,7 @@ import {
   agyHostState,
 } from "@cawco/core/harness/agy-host-state";
 import { fleetMemoryFile } from "@cawco/core/paths/fleet";
+import { AGY_SESSION_DIR_NAME } from "@cawco/core/paths/harnesses";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
@@ -53,8 +54,13 @@ import { procIdFor } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { agyHookHeld } from "./agy-canary";
 import { agyDeniedTools } from "./agy-judge";
-import { agyLaunch, agyOwnLaunch, agyToStart } from "./agy-launch";
-import { changeAgyPersonNote } from "./agy-notes";
+import {
+  type AgySessionPlace,
+  agyLaunch,
+  agyOwnLaunch,
+  agyToStart,
+} from "./agy-launch";
+import { changeAgyPersonNote, readAgyNote } from "./agy-notes";
 import { findAgyConversation } from "./agy-store";
 import { commandEnv } from "./command-env";
 import { hostSnapshot } from "./host-line";
@@ -439,16 +445,38 @@ const mcpServersOf = async (
 };
 
 /**
- * The session's own memory documents, each under its path, for agy's
- * system prompt: its folder's placed memory and the hub's documents for
- * it. The fleet's memory is left out: it is the home's `GEMINI.md`
- * (agy-fleet.ts), which agy reads again before each turn.
+ * The session's own memory documents, each under its path, for its dir's
+ * `GEMINI.md`: its folder's placed memory and the hub's documents for it.
+ * The fleet's memory is left out: the dir's `GEMINI.md` opens with it as
+ * it is at each sync (agy-fleet.ts).
  */
 const memoryOf = async (spec: SpawnPayload, cwd: string): Promise<string> =>
   (await sessionMemory(spec, cwd))
     .filter(({ path }) => path !== fleetMemoryFile())
     .map(({ path, content }) => `# ${path}\n\n${content.trim()}`)
     .join("\n\n");
+
+/**
+ * The dir session `spec` runs in on its account, and the fleet that dir
+ * takes: its starting set's skills (every skill with none) and its own
+ * memory. A conversation runs in the dir it ran in before, as CawCo's note
+ * of it names (agy-notes.ts), so one conversation keeps one dir and its
+ * delete removes it; a new one in a dir named by the session's id.
+ */
+const placeOf = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): Promise<AgySessionPlace> => {
+  const key = spec.resume?.sessionKey;
+  const noted = key ? (await readAgyNote(key)).dir : undefined;
+  return {
+    name: noted && AGY_SESSION_DIR_NAME.test(noted) ? noted : ctx.instanceId,
+    fleet: {
+      skills: spec.startingSet?.skills,
+      memory: await memoryOf(spec, ctx.cwd),
+    },
+  };
+};
 
 /**
  * Refuses a workspace session that does not start at its clone's root: agy
@@ -508,6 +536,7 @@ export const spawnAgy = async (
     throw new Error(agyWords.needsAccount);
   }
   await atCloneRoot(ctx);
+  const place = own ? undefined : await placeOf(spec, ctx);
   const launch = await runPromise(
     (own || !accountId
       ? agyOwnLaunch(ctx.instanceId, commandEnv(ctx))
@@ -517,7 +546,8 @@ export const spawnAgy = async (
               accountId,
               ctx.instanceId,
               commandEnv(ctx),
-              ctx.boundary !== undefined
+              ctx.boundary !== undefined,
+              place
             )
           )
         )
@@ -525,7 +555,6 @@ export const spawnAgy = async (
   );
   // agy's own home runs under its own setup: none of the fleet's.
   const mcpServers = await mcpServersOf(spec, ctx, !own);
-  const memory = own ? "" : await memoryOf(spec, ctx.cwd);
   const client = await agyKeepers.current();
   const procId = procIdFor("agy", ctx.instanceId);
   await agyKeepers.replaceElsewhere(procId, client);
@@ -573,7 +602,6 @@ export const spawnAgy = async (
       mcpServers,
       denied: [...denied],
       clientVersion: runtimeVersion,
-      ...(memory ? { memory } : {}),
       // A work item's session: every command through its executor, every
       // file tool by its policy (agy-judge.ts), every fleet hook through its
       // shell prefix (agy-fleet-hooks.ts), on this build's gate.

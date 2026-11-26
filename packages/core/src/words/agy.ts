@@ -88,8 +88,10 @@ export const agyWords = {
   noFork: "Antigravity can't fork a session. Start a new one.",
   /** A fleet hook's `UserPromptSubmit` block, its reason in the hook's words. This line and the next as Gemini 4 Neon decided them (the project's `assets/5f081fab/neon-answer.md`). */
   promptRefused: (said: string) => `A fleet hook refused this prompt: ${said}`,
-  /** A home whose fleet links CawCo couldn't make, at `link`. */
+  /** A session dir whose fleet CawCo couldn't place, at `link`. */
   noFleetLink: (link: string) => `Couldn't link the fleet into ${link}.`,
+  /** A session dir CawCo couldn't copy the account's agy setup into. */
+  noSessionDir: (dir: string) => `Couldn't set up ${dir}.`,
   /** agy's own sign-in refused the account's method, in agy's words. */
   signInRefused: (said: string) => `Antigravity sign-in failed: ${said}`,
   /**

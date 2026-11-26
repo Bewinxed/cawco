@@ -354,7 +354,7 @@ const beginBusiness = async (
   const { child, connection } = startAcp(
     {
       bin: run.bin,
-      args: agyArgs(run.home),
+      args: agyArgs(run.home, run.home),
       cwd: run.home,
       // agy refuses a browser sign-in with no display to open one on; the
       // only opener it finds is CawCo's.

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { readdir, rm } from "node:fs/promises";
-import { delimiter, dirname, join } from "node:path";
+import { cp, readdir, rm } from "node:fs/promises";
+import { delimiter, dirname, join, relative } from "node:path";
 import {
   type ClientApp,
   type ClientConnection,
@@ -8,6 +8,7 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk";
+import { unlessGone } from "@cawco/core/absent";
 import { makeFolder } from "@cawco/core/folders";
 import {
   AGY_METHODS,
@@ -23,6 +24,7 @@ import {
   agyAccountHome,
   agyAccountRecord,
   agyOwnHome,
+  agySessionDir,
   agySignInFile,
 } from "@cawco/core/paths/harnesses";
 import { agyJudgeSocket } from "@cawco/core/paths/hub";
@@ -36,7 +38,7 @@ import { Effect, Option, Schema } from "effect";
 import { readHeld } from "../provider-accounts";
 import { fromPromise, type Rejected } from "../rejected";
 import { toolGate, toolPath } from "../tools";
-import { linkAgyFleet } from "./agy-fleet";
+import { type AgySessionFleet, placeAgyFleet } from "./agy-fleet";
 import { agyJudgeEnv, writeAgyHook } from "./agy-hook";
 import { accountStore, applyAgyDeletes } from "./agy-store-files";
 
@@ -376,13 +378,22 @@ const settingsOf = (signIn: AgySignIn) => ({
   ...("gcp" in signIn ? { gcp: signIn.gcp } : {}),
 });
 
-/** The hook's script in an account's home: beside its hooks.json, where nothing a session runs writes. */
+/** The hook's script in an account's home: beside its hooks.json, where nothing a session runs writes; every session dir's hooks.json runs it. */
 const hookScript = (home: string): string => join(home, "cawco-hook.pl");
 
 /**
+ * Where agy 1.5.18 looks for conversations in a `--gemini-dir` (an older
+ * layout's), logging an error at each start when it is missing (the
+ * project's `assets/cbec55e2/REPORT.md` Q3); made empty, as it keeps every
+ * conversation in the app-data dir.
+ */
+const OLD_CONVERSATIONS = join("antigravity", "conversations");
+
+/**
  * Account `accountId`'s agy home, readied for a launch on `signIn`: its
- * settings and CawCo's hook written, the fleet's skills and memory linked
- * (agy-fleet.ts). Returns the home.
+ * settings and CawCo's hook written; the fleet is placed in each session's
+ * dir instead ({@link prepareAgySession}).
+ * Returns the home.
  */
 export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
   accountId: string,
@@ -407,20 +418,77 @@ export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
       refuse(`CawCo couldn't write its hook into ${error.path}.`)
     )
   );
-  yield* linkAgyFleet(home).pipe(
-    Effect.mapError((error) => refuse(agyWords.noFleetLink(error.link)))
+  yield* fromPromise(() => makeFolder(join(home, OLD_CONVERSATIONS))).pipe(
+    refusedBy
   );
   return home;
 });
 
-/** agy's argv for a session in `home`: ACP, telemetry off, the home and its app-data dir. */
-export const agyArgs = (home: string): string[] => [
+/** Where a session runs: its dir's name on its account ({@link agySessionDir}) and the fleet its dir takes. */
+export interface AgySessionPlace {
+  readonly fleet: AgySessionFleet;
+  readonly name: string;
+}
+
+/**
+ * Session dir `place` on account home `home`, readied for a launch: agy's
+ * one-time setup as the account's home holds it, CawCo's hook, and the
+ * session's fleet. agy records each one-time step (`PLUGIN_ENABLEMENT` and
+ * its other migrations) in the account's shared `jetski_state.pbtxt` but
+ * writes some into the dir it runs in (`config/config.json`), so only the
+ * first dir to start after a step lands gets it (the project's
+ * `assets/cbec55e2/REPORT.md` caveat 2). The account's home is that first
+ * dir: its hook check runs there on each agy version before any session
+ * of the account starts (agy-canary.ts), and its sign-in, models' read and
+ * image runs run there too. So each launch copies the home's `config/`
+ * over the session's, but for the hook, which is written as the session's
+ * own. Returns the dir.
+ */
+const prepareAgySession = Effect.fn("prepareAgySession")(function* (
+  accountId: string,
+  home: string,
+  place: AgySessionPlace
+): Effect.fn.Return<string, AgyStartRefused> {
+  const dir = agySessionDir(accountId, place.name);
+  const hooks = join(home, "config", "hooks.json");
+  yield* fromPromise(() => makeFolder(dir, { mode: 0o700 })).pipe(refusedBy);
+  yield* Effect.tryPromise({
+    try: () =>
+      cp(join(home, "config"), join(dir, "config"), {
+        recursive: true,
+        force: true,
+        filter: (source) => source !== hooks,
+      }).catch(unlessGone(undefined)),
+    catch: () => refuse(agyWords.noSessionDir(dir)),
+  });
+  yield* writeAgyHook(dir, hookScript(home)).pipe(
+    Effect.mapError((error) =>
+      refuse(`CawCo couldn't write its hook into ${error.path}.`)
+    )
+  );
+  yield* fromPromise(() => makeFolder(join(dir, OLD_CONVERSATIONS))).pipe(
+    refusedBy
+  );
+  yield* placeAgyFleet(dir, place.fleet).pipe(
+    Effect.mapError((error) => refuse(agyWords.noFleetLink(error.link)))
+  );
+  return dir;
+});
+
+/**
+ * agy's argv for a run in agy dir `dir` on account home `home`: ACP,
+ * telemetry off, the dir, and the account's shared app-data dir by its path
+ * from the dir, which agy resolves against it (agy 1.5.18 refuses an
+ * absolute one, the project's `assets/cbec55e2/REPORT.md` Q1, Q4). A run
+ * of the account's own has the home as its dir.
+ */
+export const agyArgs = (dir: string, home: string): string[] => [
   "acp",
   "--disable-telemetry",
   "--gemini-dir",
-  home,
+  dir,
   "--app-data-dir",
-  AGY_APP_DATA,
+  relative(dir, join(home, AGY_APP_DATA)),
 ];
 
 /**
@@ -436,7 +504,9 @@ const ownTmp = (home: string, instanceId: string): string =>
 /**
  * What session `instanceId` on account `accountId` runs as: the installed
  * agy, its argv, its environment whole, its home, its judge's socket and
- * the method `authenticate` names. A workspace session (`bounded`) runs
+ * the method `authenticate` names. A session (`place`) runs in a dir of
+ * its own ({@link prepareAgySession}); a run of the account's own (an
+ * image run) in the account's home. A workspace session (`bounded`) runs
  * agy on a temp dir of its own ({@link ownTmp}). Refused before anything
  * starts when agy or the account's method cannot run it.
  */
@@ -444,11 +514,13 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   accountId: string,
   instanceId: string,
   extras: Readonly<Record<string, string>>,
-  bounded: boolean
+  bounded: boolean,
+  place: AgySessionPlace | undefined
 ): Effect.fn.Return<AgyLaunch, AgyStartRefused> {
   const agy = yield* agyToStart();
   const signIn = yield* readAgySignIn(accountId);
   const home = yield* prepareAgyHome(accountId, signIn);
+  const dir = place ? yield* prepareAgySession(accountId, home, place) : home;
   const judgeSocket = agyJudgeSocket(instanceId);
   const judge = yield* agyJudgeEnv(judgeSocket).pipe(
     Effect.mapError((error) =>
@@ -461,7 +533,7 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   }
   const launch: AgyLaunch = {
     bin: agy.bin,
-    args: agyArgs(home),
+    args: agyArgs(dir, home),
     env: agyEnvironment(signIn, home, {
       ...extras,
       ...judge,
@@ -473,6 +545,7 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
     accountId,
     ...(agy.version ? { version: agy.version } : {}),
     ...(tmp ? { tmp } : {}),
+    ...(place ? { dir } : {}),
   };
   return launch;
 });
