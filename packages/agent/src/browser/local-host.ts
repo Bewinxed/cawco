@@ -9,6 +9,7 @@
  * preferences say so before it first starts.
  */
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -20,6 +21,7 @@ import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   BROWSER_SCREEN,
+  type BrowserKey,
   type BrowserRelay,
   isBrowserKey,
 } from "@cawco/core/browser";
@@ -34,7 +36,7 @@ import {
   signalGroup,
   spawnedPid,
 } from "@cawco/core/signal";
-import { writeStateFile } from "@cawco/core/state-file";
+import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { until } from "@cawco/core/until";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -50,6 +52,7 @@ import {
   type Progress,
   portsOf,
   readBrowser,
+  type TraceBrowser,
   withBrowser,
 } from "./state";
 
@@ -178,9 +181,9 @@ const logFile = (record: BrowserRecord): string =>
 /** What an agent before 2026-10-20 kept of a local Chromium in its browser's records dir. */
 const KEPT_IN_RECORDS = [PROFILE_NAME, LOG_NAME];
 
-/** The first line of its output that says what went wrong, else its last. */
-const lastWords = async (record: BrowserRecord): Promise<string> => {
-  const lines = (await readFile(logFile(record), "utf8").catch(() => ""))
+/** The first line of the output at `log` that says what went wrong, else its last. */
+const lastWords = async (log: string): Promise<string> => {
+  const lines = (await readFile(log, "utf8").catch(() => ""))
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
@@ -200,6 +203,177 @@ const POLL_MS = 100;
 
 const answers = (port: number): Promise<boolean> =>
   httpAnswers(`http://127.0.0.1:${port}/json/version`, 1000);
+
+/**
+ * The local Chromium's command line, the project's and a trace's alike
+ * ({@link LocalHost.traceBrowser}): DevTools on `devtools` (0, a free port
+ * it names in its profile's `DevToolsActivePort`), its profile at
+ * `profile`, and every request through its dashboard door at `proxy`.
+ */
+const chromiumArgs = (at: {
+  devtools: number;
+  profile: string;
+  proxy: string;
+  spki: string;
+}): string[] => [
+  "--headless=new",
+  `--remote-debugging-port=${at.devtools}`,
+  "--remote-debugging-address=127.0.0.1",
+  `--user-data-dir=${at.profile}`,
+  "--no-first-run",
+  "--no-default-browser-check",
+  // Its own secrets kept in its profile, never the system's store:
+  // Linux's keyring (`--password-store=basic`) and the person's macOS
+  // login Keychain, whose access can wait on a prompt no one sees
+  // (`--use-mock-keychain`), the pair Playwright and Puppeteer launch
+  // Chromium with (playwright-core 1.64.1 `chromiumSwitches`).
+  "--password-store=basic",
+  "--use-mock-keychain",
+  "--disable-sync",
+  // Every request through its dashboard door, loopback too: Chromium's
+  // implicit bypass rules send it direct unless `<-loopback>` removes
+  // them (net/docs/proxy.md), and the door signs the dashboard's in as
+  // this browser and refuses the hub's ports elsewhere. Its key is the
+  // one certificate the door ends the dashboard's TLS with.
+  `--proxy-server=${at.proxy}`,
+  "--proxy-bypass-list=<-loopback>",
+  `--ignore-certificate-errors-spki-list=${at.spki}`,
+  "--disable-background-networking",
+  // The container host's screen (core `BROWSER_SCREEN`): Chromium's
+  // headless screen is a virtual 800x600 one unless `--screen-info`
+  // names it (components/headless/screen_info/README.md), and a window
+  // is kept within it. A window's page is smaller by the browser's own
+  // UI, as on neko's desktop; the take-over lays the page it shows out
+  // at the whole screen (cdp-takeover.ts).
+  `--screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}}`,
+  `--window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height}`,
+  // A desktop with a mouse, as the container host's X server is
+  // (browser/xorg.conf): headless Chromium has no input device, so
+  // every page reads (pointer: none) and (hover: none). Blink's pointer
+  // and hover settings say a mouse instead (ui::PointerType FINE = 4,
+  // ui::HoverType HOVER = 2), the switch Playwright launches every
+  // headless Chromium with (playwright-core 1.64.1). A page that
+  // emulates touch (`Emulation.setTouchEmulationEnabled`) still reads
+  // coarse while it does.
+  "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+  // Chromium's own sandbox: the daemon's rule (capabilities.ts), as the
+  // canvas screen and stage renderer launch it.
+  ...(chromiumSandboxed() ? [] : ["--no-sandbox"]),
+  "about:blank",
+];
+
+/** Where a local browser's traces run ({@link LocalHost.traceBrowser}): a dir each, named by its id. */
+const tracesDir = (key: BrowserKey): string => join(chromiumDir(key), "traces");
+
+/**
+ * The traces this process launched and has not closed, by id: any other
+ * dir under a {@link tracesDir} is one an earlier agent's end left.
+ */
+const liveTraces = new Set<string>();
+
+/** A trace's Chromium by its identity, kept in its dir, so a later process signals only it. */
+const TraceProcess = z.object({
+  bootId: z.string().optional(),
+  pid: z.number(),
+  procStart: z.string(),
+});
+
+/** The file in a trace's dir that names its Chromium. */
+const TRACE_PROCESS = "process.json";
+
+/**
+ * A trace's Chromium ended, its whole process group, and its dir removed.
+ * Killed outright: its profile is thrown away, so nothing of it needs to be
+ * written first.
+ */
+const removeTrace = async (dir: string): Promise<void> => {
+  const marker = await readRecord(join(dir, TRACE_PROCESS), TraceProcess).catch(
+    () => undefined
+  );
+  const pid = marker ? await identifiedPid(marker) : undefined;
+  if (pid) {
+    signalGroup(pid, "SIGKILL");
+    await until(() => !isAlive(pid), {
+      deadline: Date.now() + STOP_MS,
+      every: POLL_MS,
+    });
+  }
+  await rm(dir, { recursive: true, force: true });
+};
+
+/**
+ * The port a Chromium started with `--remote-debugging-port=0` took, once its
+ * DevTools answers there: Chromium names it on the first line of its
+ * profile's `DevToolsActivePort` (content/browser/devtools/
+ * devtools_http_handler.cc). Throws when Chromium ends or doesn't answer
+ * within {@link LIVE_MS}, with the last words of its `log`.
+ */
+const activePort = async (
+  profile: string,
+  pid: Parameters<typeof isAlive>[0],
+  log: string
+): Promise<number> => {
+  const looked = await Effect.runPromise(
+    lookUntil(
+      { every: POLL_MS, deadlineMs: LIVE_MS },
+      Effect.promise(async () => {
+        const said = await readFile(
+          join(profile, "DevToolsActivePort"),
+          "utf8"
+        ).catch(() => "");
+        const port = Number(said.split("\n")[0]);
+        if (port > 0 && (await answers(port))) {
+          return { port };
+        }
+        return isAlive(pid) ? undefined : ("ended" as const);
+      })
+    )
+  );
+  if (looked.kind === "deadline") {
+    throw new Error(
+      `Chromium's DevTools did not answer within ${LIVE_MS / 1000} s: ${await lastWords(log)}`
+    );
+  }
+  if (looked.value === "ended") {
+    throw new Error(
+      `Chromium ended before its DevTools answered: ${await lastWords(log)}`
+    );
+  }
+  return looked.value.port;
+};
+
+/**
+ * Chromium started with `args` in a process group of its own, so it
+ * outlives the process that started it, its output written to `log`:
+ * answered by its identity, so a later process signals only it.
+ */
+const launchChromium = async (
+  executable: string,
+  args: string[],
+  log: string
+): Promise<{
+  boot: string | undefined;
+  pid: Parameters<typeof isAlive>[0];
+  procStart: string;
+}> => {
+  const out = openSync(log, "w", 0o600);
+  const child = spawn(executable, args, {
+    detached: true,
+    env: hostEnvironment(),
+    stdio: ["ignore", out, out],
+  });
+  closeSync(out);
+  child.unref();
+  const pid = spawnedPid(child);
+  if (!pid) {
+    throw new Error(`Chromium did not start (${executable}).`);
+  }
+  const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);
+  if (!procStart) {
+    throw new Error(`Chromium ended as it started (${executable}).`);
+  }
+  return { boot, pid, procStart };
+};
 
 export class LocalHost implements BrowserHost {
   readonly kind = "local";
@@ -257,67 +431,11 @@ export class LocalHost implements BrowserHost {
       )
     );
     // Its own output, kept beside its profile: the one word on why it ended.
-    const log = openSync(logFile(record), "w", 0o600);
-    const child = spawn(
+    const { pid, procStart, boot } = await launchChromium(
       chromium.executable,
-      [
-        "--headless=new",
-        `--remote-debugging-port=${devtools}`,
-        "--remote-debugging-address=127.0.0.1",
-        `--user-data-dir=${profile}`,
-        "--no-first-run",
-        "--no-default-browser-check",
-        // Its own secrets kept in its profile, never the system's store:
-        // Linux's keyring (`--password-store=basic`) and the person's macOS
-        // login Keychain, whose access can wait on a prompt no one sees
-        // (`--use-mock-keychain`), the pair Playwright and Puppeteer launch
-        // Chromium with (playwright-core 1.64.1 `chromiumSwitches`).
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-sync",
-        // Every request through its dashboard door, loopback too: Chromium's
-        // implicit bypass rules send it direct unless `<-loopback>` removes
-        // them (net/docs/proxy.md), and the door signs the dashboard's in as
-        // this browser and refuses the hub's ports elsewhere. Its key is the
-        // one certificate the door ends the dashboard's TLS with.
-        `--proxy-server=${proxy}`,
-        "--proxy-bypass-list=<-loopback>",
-        `--ignore-certificate-errors-spki-list=${spki}`,
-        "--disable-background-networking",
-        // The container host's screen (core `BROWSER_SCREEN`): Chromium's
-        // headless screen is a virtual 800x600 one unless `--screen-info`
-        // names it (components/headless/screen_info/README.md), and a window
-        // is kept within it. A window's page is smaller by the browser's own
-        // UI, as on neko's desktop; the take-over lays the page it shows out
-        // at the whole screen (cdp-takeover.ts).
-        `--screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}}`,
-        `--window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height}`,
-        // A desktop with a mouse, as the container host's X server is
-        // (browser/xorg.conf): headless Chromium has no input device, so
-        // every page reads (pointer: none) and (hover: none). Blink's pointer
-        // and hover settings say a mouse instead (ui::PointerType FINE = 4,
-        // ui::HoverType HOVER = 2), the switch Playwright launches every
-        // headless Chromium with (playwright-core 1.64.1). A page that
-        // emulates touch (`Emulation.setTouchEmulationEnabled`) still reads
-        // coarse while it does.
-        "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-        // Chromium's own sandbox: the daemon's rule (capabilities.ts), as the
-        // canvas screen and stage renderer launch it.
-        ...(chromiumSandboxed() ? [] : ["--no-sandbox"]),
-        "about:blank",
-      ],
-      { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }
+      chromiumArgs({ devtools, profile, proxy, spki }),
+      logFile(record)
     );
-    closeSync(log);
-    child.unref();
-    const pid = spawnedPid(child);
-    if (!pid) {
-      throw new Error(`Chromium did not start (${chromium.executable}).`);
-    }
-    const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);
-    if (!procStart) {
-      throw new Error(`Chromium ended as it started (${chromium.executable}).`);
-    }
     const next: BrowserRecord = {
       ...record,
       host: "local",
@@ -349,7 +467,7 @@ export class LocalHost implements BrowserHost {
     }
     if (looked.value === "ended") {
       throw new Error(
-        `Chromium ended before its DevTools answered: ${await lastWords(record)}`
+        `Chromium ended before its DevTools answered: ${await lastWords(logFile(record))}`
       );
     }
     return { ...next, state: "live" };
@@ -373,6 +491,60 @@ export class LocalHost implements BrowserHost {
   async remove(record: BrowserRecord): Promise<void> {
     await this.stop(record);
     await rm(chromiumDir(record.key), { recursive: true, force: true });
+  }
+
+  /**
+   * A second local Chromium for one trace of `record`'s, launched with the
+   * same command line and dashboard door on a profile of its own under
+   * {@link tracesDir} and a DevTools port Chromium picks. Its close kills it
+   * and removes its dir; a dir an earlier agent's end left goes as the next
+   * trace launches.
+   */
+  async traceBrowser(record: BrowserRecord): Promise<TraceBrowser> {
+    const chromium = await chromiumExecutable();
+    if (!("executable" in chromium)) {
+      throw new Error(
+        "unavailable" in chromium ? chromium.unavailable : chromium.failure
+      );
+    }
+    const traces = tracesDir(record.key);
+    const left = await readdir(traces).catch((): string[] => []);
+    await Promise.all(
+      left
+        .filter((name) => !liveTraces.has(name))
+        .map((name) => removeTrace(join(traces, name)))
+    );
+    const { door } = portsOf(record);
+    const proxy = doorProxyUrl(door);
+    const spki = await doorSpki();
+    const id = randomBytes(8).toString("hex");
+    const dir = join(traces, id);
+    const profile = join(dir, PROFILE_NAME);
+    const log = join(dir, LOG_NAME);
+    liveTraces.add(id);
+    const close = async (): Promise<void> => {
+      await removeTrace(dir);
+      liveTraces.delete(id);
+    };
+    try {
+      await makeFolder(profile, { mode: 0o700 });
+      await writePreferences(profile);
+      const { pid, procStart, boot } = await launchChromium(
+        chromium.executable,
+        chromiumArgs({ devtools: 0, profile, proxy, spki }),
+        log
+      );
+      await writeStateFile(
+        join(dir, TRACE_PROCESS),
+        `${JSON.stringify({ pid, procStart, ...(boot ? { bootId: boot } : {}) })}\n`,
+        { mode: 0o600 }
+      );
+      const port = await activePort(profile, pid, log);
+      return { devtools: `http://127.0.0.1:${port}`, close };
+    } catch (error) {
+      await close();
+      throw error;
+    }
   }
 
   /**

@@ -35,6 +35,8 @@
  * would relay.
  */
 import { randomBytes } from "node:crypto";
+import { createServer, type Socket } from "node:net";
+import { Writable } from "node:stream";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
 import {
@@ -98,6 +100,7 @@ import {
   type MachineNetwork,
   type Progress,
   portsOf,
+  type TraceBrowser,
 } from "./state";
 
 /**
@@ -423,28 +426,176 @@ const RESTART_CHROMIUM = [
 ];
 
 /**
+ * Runs `cmd` in `container` (as `user`, else the container's own), its
+ * output on a TTY: answers its exit code and what it printed.
+ */
+const execIn = async (
+  container: Docker.Container,
+  cmd: string[],
+  user?: string
+): Promise<{ code: number | null; said: string }> => {
+  const exec = await container.exec({
+    Cmd: cmd,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: true,
+    ...(user ? { User: user } : {}),
+  });
+  const chunks: Buffer[] = [];
+  for await (const chunk of await exec.start({ Tty: true })) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const { ExitCode } = await exec.inspect();
+  return { code: ExitCode, said: Buffer.concat(chunks).toString().trim() };
+};
+
+/**
  * Runs {@link RESTART_CHROMIUM} in `container`: answers what it printed, or
  * throws it with its exit code.
  */
 const restartChromium = async (
   container: Docker.Container
 ): Promise<string> => {
+  const { code, said } = await execIn(container, RESTART_CHROMIUM);
+  if (code !== 0) {
+    throw new Error(`exit ${code}: ${said}`);
+  }
+  return said;
+};
+
+/** The user chromium.conf runs the project's Chromium as: the image's (neko's `USER`). */
+const CHROMIUM_USER = "neko";
+
+/**
+ * Where one trace's Chromium keeps its profile, its output and its process
+ * group's id, by the trace's id: in the container's own /tmp, thrown away
+ * whole as the trace ends.
+ */
+const TRACE_DIR = "/tmp/cawco-trace-";
+
+/**
+ * The traces this process launched and has not closed, by id: any other
+ * trace dir in a container is one an earlier agent's end left.
+ */
+const liveTraces = new Set<string>();
+
+/**
+ * A trace's Chromium, launched in the project's container as chromium.conf
+ * launches the project's own: the same binary (Debian's `chromium`, on the
+ * image's PATH), user, PAC, door key and
+ * preview-name rules, read from the container's environment as
+ * chromium.conf reads them. Headless, so nothing of it reaches neko's screen
+ * the person may be watching, at that screen's size (core
+ * `BROWSER_SCREEN`), saying the project's Chromium's user agent (`$2`)
+ * where its own would name it headless; its profile is a new one in its dir (`$1`), its
+ * DevTools on a port Chromium picks and names in the profile's
+ * `DevToolsActivePort`. `setsid` makes it a process group of its own, whose
+ * id it keeps in `$1/pid`, so its close ends every process of it.
+ */
+const TRACE_LAUNCH = `echo $$ >"$1/pid"; exec chromium --headless=new --no-sandbox --disable-file-system --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check --screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}} --window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height} --user-agent="$2" --user-data-dir="$1/profile" --remote-debugging-port=0 --remote-allow-origins=* --proxy-pac-url="$CAWCO_PAC_URL" --ignore-certificate-errors-spki-list="$CAWCO_DOOR_SPKI" \${CAWCO_HOST_RULES:+"--host-resolver-rules=$CAWCO_HOST_RULES"} about:blank >"$1/chromium.log" 2>&1`;
+
+/** Ends trace dir `$1`'s process group and removes the dir. Killed outright: its profile is thrown away, so nothing of it needs writing first. */
+const TRACE_REMOVE = `[ -s "$1/pid" ] && kill -KILL "-$(cat "$1/pid")" 2>/dev/null; rm -rf "$1"`;
+
+/** Every trace dir but those whose ids are the arguments removed, each as {@link TRACE_REMOVE} removes one. */
+const TRACE_SWEEP = `gone() { ${TRACE_REMOVE}; }; for d in ${TRACE_DIR}*; do [ -d "$d" ] || continue; case " $* " in *" \${d#${TRACE_DIR}} "*) continue;; esac; gone "$d"; done`;
+
+/**
+ * What trace dir `$1` stands at: `port <n>` once Chromium named its DevTools
+ * port, `wait` while it runs without, else `ended` and the last of its
+ * output.
+ */
+const TRACE_PORT = `p=$(head -n 1 "$1/profile/DevToolsActivePort" 2>/dev/null); if [ -n "$p" ]; then echo "port $p"; elif kill -0 "-$(cat "$1/pid" 2>/dev/null)" 2>/dev/null; then echo wait; else echo ended; tail -n 5 "$1/chromium.log"; fi`;
+
+const PORT_LINE = /^port (\d+)/u;
+
+/** What a Chromium's DevTools answers at `/json/version`, as far as its user agent. */
+const VersionAgent = z.object({ "User-Agent": z.string() });
+
+/** The user agent the Chromium whose DevTools answer at `devtools` says. */
+const userAgentOf = async (devtools: string): Promise<string> => {
+  const read = await readWithin(CHROMIUM_MS, (signal) =>
+    fetch(`${devtools}/json/version`, { signal }).then(async (response) =>
+      VersionAgent.parse(await response.json())
+    )
+  );
+  if (read.kind === "unanswered") {
+    throw new Error(
+      `The project's Chromium did not say its user agent within ${CHROMIUM_MS / 1000} s.`
+    );
+  }
+  return read.value["User-Agent"];
+};
+
+/** A writable that keeps nothing: the stderr of a carried connection. */
+const nowhere = (): Writable =>
+  new Writable({
+    write: (_chunk, _encoding, done) => done(),
+  });
+
+/**
+ * Carries `socket` to `port` on `container`'s own loopback: a \`socat\`
+ * the runtime runs in the container, its stdin attached (an exec hijacked,
+ * as \`docker exec -i\` is), its stdout demultiplexed back into the socket.
+ */
+const carry = async (
+  docker: Docker,
+  container: Docker.Container,
+  port: number,
+  socket: Socket
+): Promise<void> => {
+  socket.pause();
   const exec = await container.exec({
-    Cmd: RESTART_CHROMIUM,
+    Cmd: ["socat", "STDIO", `TCP:127.0.0.1:${port}`],
+    AttachStdin: true,
     AttachStdout: true,
     AttachStderr: true,
-    Tty: true,
+    Tty: false,
+    User: CHROMIUM_USER,
   });
-  const chunks: Buffer[] = [];
-  for await (const chunk of await exec.start({ Tty: true })) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const said = Buffer.concat(chunks).toString();
-  const { ExitCode } = await exec.inspect();
-  if (ExitCode !== 0) {
-    throw new Error(`exit ${ExitCode}: ${said.trim()}`);
-  }
-  return said.trim();
+  const stream = await exec.start({ hijack: true, stdin: true });
+  docker.modem.demuxStream(stream, socket, nowhere());
+  stream.on("end", () => socket.end());
+  stream.on("error", () => socket.destroy());
+  socket.on("error", () => stream.destroy());
+  socket.on("close", () => stream.destroy());
+  socket.pipe(stream);
+  socket.resume();
+};
+
+/**
+ * A port on this machine's loopback that reaches `port` on `container`'s
+ * own loopback, each connection {@link carry}'d: a container publishes its
+ * project's DevTools port alone. Chromium names its sockets by the Host each
+ * request came with (content/browser/devtools/devtools_http_handler.cc), so
+ * its \`/json/version\` answers through this port too.
+ */
+const forwardInto = (
+  docker: Docker,
+  container: Docker.Container,
+  port: number
+): Promise<{ close: () => void; port: number }> => {
+  const server = createServer((socket) => {
+    carry(docker, container, port, socket).catch((error: unknown) => {
+      console.warn(
+        `[browser] a connection to a trace's Chromium was not carried into its container: ${error instanceof Error ? error.message : String(error)}`
+      );
+      socket.destroy();
+    });
+  });
+  return Effect.runPromise(
+    Effect.callback<{ close: () => void; port: number }, Error>((resume) => {
+      server.once("error", (error) => resume(Effect.fail(error)));
+      server.listen(0, "127.0.0.1", () => {
+        const at = server.address();
+        resume(
+          typeof at === "object" && at
+            ? Effect.succeed({ port: at.port, close: () => server.close() })
+            : Effect.fail(new Error("The trace's forward took no port."))
+        );
+      });
+    })
+  );
 };
 
 /** The runtime's not-found answer. */
@@ -1053,6 +1204,85 @@ export class ContainerHost implements BrowserHost {
    */
   async removeLabelled(key: BrowserKey): Promise<void> {
     await removeOwned(this.#docker, await browserOwner(), key);
+  }
+
+  /**
+   * A second Chromium for one trace of `record`'s, in its running container
+   * ({@link TRACE_LAUNCH}), reached through a port of this machine's own
+   * ({@link forwardInto}). Its close ends it and removes its dir; a dir an
+   * earlier agent's end left goes as the next trace launches here.
+   */
+  async traceBrowser(record: BrowserRecord): Promise<TraceBrowser> {
+    if (!record.container) {
+      throw new Error(`${record.key} runs on no container.`);
+    }
+    const container = this.#docker.getContainer(record.container.id);
+    await execIn(
+      container,
+      ["sh", "-c", TRACE_SWEEP, "sh", ...liveTraces],
+      CHROMIUM_USER
+    );
+    const id = randomBytes(8).toString("hex");
+    const dir = `${TRACE_DIR}${id}`;
+    liveTraces.add(id);
+    let forward: { close: () => void; port: number } | undefined;
+    const close = async (): Promise<void> => {
+      forward?.close();
+      await execIn(
+        container,
+        ["sh", "-c", TRACE_REMOVE, "sh", dir],
+        CHROMIUM_USER
+      );
+      liveTraces.delete(id);
+    };
+    try {
+      const launched = await container.exec({
+        Cmd: [
+          "sh",
+          "-c",
+          `mkdir -m 700 "$1" && exec setsid sh -c '${TRACE_LAUNCH}' sh "$1" "$2"`,
+          "sh",
+          dir,
+          await userAgentOf(this.devtoolsUrl(record)),
+        ],
+        User: CHROMIUM_USER,
+        Env: [`HOME=/home/${CHROMIUM_USER}`],
+      });
+      await launched.start({ Detach: true });
+      const looked = await Effect.runPromise(
+        lookUntil(
+          {
+            every: LIVE_POLL_MS,
+            deadlineMs: CHROMIUM_MS,
+            until: (at: { said: string }) => !at.said.startsWith("wait"),
+          },
+          Effect.promise(() =>
+            execIn(
+              container,
+              ["sh", "-c", TRACE_PORT, "sh", dir],
+              CHROMIUM_USER
+            )
+          )
+        )
+      );
+      const said =
+        looked.kind === "found" ? looked.value.said : looked.last.said;
+      const port = Number(PORT_LINE.exec(said)?.[1]);
+      if (!port) {
+        throw new Error(
+          looked.kind === "found"
+            ? `Chromium ended before its DevTools answered: ${said}`
+            : `Chromium's DevTools did not answer within ${CHROMIUM_MS / 1000} s.`
+        );
+      }
+      forward = await forwardInto(this.#docker, container, port);
+      const devtools = `http://127.0.0.1:${forward.port}`;
+      await answers(`${devtools}/json/version`, "The trace's Chromium");
+      return { devtools, close };
+    } catch (error) {
+      await close();
+      throw error;
+    }
   }
 
   async remove(record: BrowserRecord): Promise<void> {

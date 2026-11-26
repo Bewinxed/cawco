@@ -193,7 +193,26 @@ export interface BrowserHost {
   ) => Promise<BrowserRecord>;
   /** Stops it, keeping its profile. */
   stop: (record: BrowserRecord) => Promise<void>;
+  /**
+   * A second Chromium for one trace of the record's running browser (gate.ts
+   * `Link`), launched as this host launches the record's, on a profile of
+   * its own that holds nothing yet: answered once its DevTools answers.
+   */
+  traceBrowser: (record: BrowserRecord) => Promise<TraceBrowser>;
   readonly viewer: "neko" | "cdp";
+}
+
+/**
+ * The Chromium one trace runs in, apart from its project's browser: a trace
+ * records every page of the browser it runs in (gate.ts). Nothing of it
+ * outlives {@link TraceBrowser.close}; one an agent's end left behind is
+ * removed by the next one its host launches.
+ */
+export interface TraceBrowser {
+  /** Ends its Chromium and removes its profile. */
+  close: () => Promise<void>;
+  /** Its DevTools address on this machine, `http://127.0.0.1:<port>`. */
+  devtools: string;
 }
 
 /** A start's word while it pulls or builds the image. */

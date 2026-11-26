@@ -89,6 +89,7 @@ import {
   readBrowser,
   recordFor,
   slotted,
+  type TraceBrowser,
   withBrowser,
   writeBrowser,
 } from "./state";
@@ -378,6 +379,45 @@ export const viewerSession = async (
   return { session: id, token };
 };
 
+/**
+ * A browser of its own for one trace of `key`'s (gate.ts `Link`): launched
+ * by the host that runs `key`'s, as that host launches it, and given a copy
+ * of its sign-ins, read from it and written into the new one by the carry a
+ * move into a container makes (sign-ins.ts): its cookies, and the
+ * localStorage and IndexedDB of every origin they name. Its close removes it
+ * and the copy with it.
+ */
+const traceBrowserOf = async (key: BrowserKey): Promise<TraceBrowser> => {
+  const record = await readBrowser(key);
+  const host = record?.state === "live" ? await hostOf(record) : undefined;
+  if (!(record && host && (await host.running(record)))) {
+    throw new Error(`${key} does not run.`);
+  }
+  const [read, launched] = await Promise.allSettled([
+    readSignIns(host.devtoolsUrl(record)),
+    host.traceBrowser(record),
+  ]);
+  if (launched.status === "rejected") {
+    throw launched.reason;
+  }
+  const trace = launched.value;
+  let signIns: SignIns;
+  try {
+    if (read.status === "rejected") {
+      throw read.reason;
+    }
+    signIns = read.value;
+    await writeSignIns(trace.devtools, signIns);
+  } catch (error) {
+    await trace.close();
+    throw error;
+  }
+  console.info(
+    `[browser] ${key}: a trace's browser of its own launched on the ${host.kind} host, ${signIns.cookies.length} cookie(s), ${signIns.storage.length} origin(s)' localStorage and ${signIns.databases.length} origin(s)' IndexedDB copied into it`
+  );
+  return trace;
+};
+
 /** Serves `record`'s gate behind the machine's one gate port, when this process serves gates. */
 const gateFor = (record: BrowserRecord, ports: BrowserPorts): void => {
   if (!servingGates) {
@@ -391,6 +431,7 @@ const gateFor = (record: BrowserRecord, ports: BrowserPorts): void => {
     // browser, the remake waits for its release.
     devtools: (wake, alone) =>
       devtoolsOf(ports, key, wake, alone ? "match" : "defer"),
+    traceBrowser: () => traceBrowserOf(key),
     used: (held) => {
       used(key, ports);
       if (!held) {

@@ -32,8 +32,14 @@
  * and the methods that speak for every page at once (a browser-level
  * session, tracing or interception at the browser's level). Chromium's
  * tracing records the whole browser whichever page asks, so a page's trace
- * starts only while no other workspace has a connection or a page here, and
- * one running is cut, its data dropped, as another arrives. Every page a
+ * runs in place only while no other workspace has a connection or a page
+ * here. Otherwise, and as soon as another workspace arrives while one runs
+ * in place, the page is traced in a browser of its own, one per trace
+ * (browsers.ts `traceBrowserOf`): a second Chromium its host launches as it
+ * launches this one, holding a copy of this one's sign-ins, removed with
+ * the copy as the trace ends or its connection does. The agent's calls on
+ * the page reach its twin there unchanged ({@link Link}), and the page goes
+ * on here where the twin left off. Every page a
  * session owns carries its owner in every document it loads (core
  * `GATED_PAGE_MARK`, defined on the page by the gate's watch as the page
  * becomes the session's, before it first loads anything), and the
@@ -84,7 +90,7 @@ import { z } from "zod";
 import { withFeedbackLine } from "../feedback-line";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 import { isDashboardOrigin } from "./dashboard-door";
-import { browserDir } from "./state";
+import { browserDir, type TraceBrowser } from "./state";
 
 /** What a refusal says, one sentence each. */
 const GATE_WORDS = {
@@ -104,10 +110,16 @@ const GATE_WORDS = {
   none: "No browser is kept for this workspace's project on this machine.",
   ended: "This workspace's boundary ended, and its pages with it.",
   stopped: "The browser stopped.",
-  traceShared:
-    "Tracing did not start: a trace records every page of the browser, and another session of the project has pages or a connection in it. Trace on a new page once the project's other sessions have closed theirs.",
-  traceCut:
-    "The trace was stopped and its data dropped: another session of the project came to the browser while it ran, and a trace records every page. Trace on a new page once the project's other sessions have closed theirs.",
+} as const;
+
+/** What a trace's refusal says, with why its own browser failed it. */
+const TRACE_WORDS = {
+  notStarted: (why: string) =>
+    `Tracing did not start: another session of the project is in its browser, so the trace needs a browser of its own, and that browser did not start: ${why}`,
+  lost: (why: string) =>
+    `The trace stopped: another session of the project came to its browser, so the trace moved to a browser of its own, and that browser did not start: ${why}`,
+  stopped: "The trace's own browser stopped.",
+  noPage: "the page the trace was asked on is not known",
 } as const;
 
 /** The close code of a connection the shield cuts. */
@@ -385,6 +397,21 @@ const answered = (calls: CdpCalls, message: Cdp): boolean => {
   return true;
 };
 
+/** The browser-wide socket the Chromium whose DevTools answer at `base` (`http://127.0.0.1:<port>`) names. */
+const socketOf = async (base: string, what: string): Promise<string> => {
+  const read = await readWithin(10_000, (signal) =>
+    fetch(`${base}/json/version`, { signal }).then(async (response) =>
+      DevtoolsVersion.parse(await response.json())
+    )
+  );
+  const url =
+    read.kind === "answered" ? read.value.webSocketDebuggerUrl : undefined;
+  if (!url) {
+    throw new Error(`${what}'s DevTools did not answer at ${base}.`);
+  }
+  return url;
+};
+
 /** A connection to Chromium at `url`, once it is open. */
 const dial = (url: string): Promise<WebSocket> =>
   Effect.runPromise(
@@ -427,6 +454,12 @@ export interface GateDeps {
    */
   devtools: (wake: boolean, alone: boolean) => Promise<string | undefined>;
   key: BrowserKey;
+  /**
+   * A browser of its own for one trace (browsers.ts `traceBrowserOf`),
+   * launched as this one is and holding a copy of its sign-ins: a trace
+   * records every page of the browser it runs in.
+   */
+  traceBrowser: () => Promise<TraceBrowser>;
   /** Called as the first connection opens (`true`) and the last closes (`false`). */
   used: (held: boolean) => void;
 }
@@ -795,17 +828,12 @@ export class Gate {
     if (!base) {
       throw new Error(`${this.key} does not run.`);
     }
-    const read = await readWithin(10_000, (signal) =>
-      fetch(`${base}/json/version`, { signal }).then(async (response) =>
-        DevtoolsVersion.parse(await response.json())
-      )
-    );
-    const url =
-      read.kind === "answered" ? read.value.webSocketDebuggerUrl : undefined;
-    if (!url) {
-      throw new Error(`${this.key}'s DevTools did not answer at ${base}.`);
-    }
-    return url;
+    return socketOf(base, this.key);
+  }
+
+  /** A browser of its own for one trace of a page here ({@link GateDeps.traceBrowser}). */
+  traceBrowser(): Promise<TraceBrowser> {
+    return this.#deps.traceBrowser();
   }
 
   /** A connection opened: the browser woken, the watch up, and Chromium's connection for it. */
@@ -1051,7 +1079,8 @@ export class Gate {
   /**
    * Whether a workspace other than `id` holds a connection or a live page
    * here. Chromium's tracing is the whole browser's, whichever page asks:
-   * a trace then would record that workspace's pages.
+   * a trace here would record that workspace's pages, so it runs in a
+   * browser of its own.
    */
   shared(id: string): boolean {
     for (const link of this.#links) {
@@ -1064,11 +1093,11 @@ export class Gate {
     );
   }
 
-  /** Workspace `id` came to the browser (a connection, a page): every other workspace's trace running is cut. */
+  /** Workspace `id` came to the browser (a connection, a page): every other workspace's trace running here moves to a browser of its own. */
   #arrived(id: string): void {
     for (const link of this.#links) {
       if (link.workspace !== id) {
-        link.cutTraces();
+        link.moveTraces();
       }
     }
   }
@@ -1298,6 +1327,124 @@ export class Gate {
 }
 
 // ---------------------------------------------------------------------------
+// A page traced in a browser of its own
+
+/**
+ * A call that sets how a session behaves, kept so a twin's session is set
+ * up alike ({@link Link}): a domain turned on or off, or a setting, a script,
+ * a binding or a breakpoint made or taken away, in the domains that keep
+ * them for the session rather than for one document.
+ */
+const STATE =
+  /^(?:\w+\.(?:enable|disable)|(?:Page|Network|Fetch|Emulation|Runtime|Target|Security|Debugger|DOMDebugger|Log|Audits|Performance|Animation)\.(?:set|add|remove|emulate|clear|override)\w*)$/u;
+/** Of those, the calls that change one document or script, gone with the page that held it. */
+const NOT_STATE = new Set([
+  "Page.setDocumentContent",
+  "Debugger.setBreakpoint",
+  "Debugger.setBreakpointOnFunctionCall",
+  "Debugger.setReturnValue",
+  "Debugger.setScriptSource",
+  "Debugger.setVariableValue",
+]);
+/** A state call that adds one thing of many, kept by what it adds; any other keeps one setting, its last call. */
+const ADDS = /\.(?:add\w*|set\w*Breakpoint\w*)$/u;
+/** A state call that takes away what an add made, named by the handle the add was answered with. */
+const REMOVES = /\.remove\w*$/u;
+
+/** A domain's turning on or off, and a setting's verb (`setCacheDisabled`, `clearGeolocationOverride`): what a call's key leaves out. */
+const TOGGLES = /^(?:enable|disable)$/u;
+const SETTING_VERB = /^(?:set|clear|emulate|override)|Override$/gu;
+
+/**
+ * What a state call is kept under: a domain's on or off one key, a setting
+ * one key whatever sets or clears it, an add or a remove one of its own.
+ */
+const stateKey = (method: string, params: Json): string => {
+  const [domain = "", name = ""] = method.split(".");
+  if (TOGGLES.test(name)) {
+    return `${domain}.on`;
+  }
+  if (ADDS.test(method) || REMOVES.test(method)) {
+    return `${method} ${JSON.stringify(params)}`;
+  }
+  return `${domain}.${name.replace(SETTING_VERB, "")}`;
+};
+
+/** One state call kept, and the handle its answer named when it adds. */
+interface StateCall {
+  handle?: string;
+  method: string;
+  params: Json;
+}
+
+/** The handle an add's answer names: a script's identifier, a breakpoint's id. */
+const handleOf = (result: Json): string | undefined =>
+  text(result.identifier) ?? text(result.breakpointId);
+
+/** A remove's params with each handle it names as `handles` has it in the other browser. */
+const handlesIn = (params: Json, handles: ReadonlyMap<string, string>): Json =>
+  Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [
+      key,
+      typeof value === "string" ? (handles.get(value) ?? value) : value,
+    ])
+  );
+
+/** `data` with each id of `pairs` written as its pair: Chromium's ids are 32 hex digits, each its own. */
+const swapped = (data: string, pairs: Iterable<readonly [string, string]>) => {
+  let out = data;
+  for (const [from, to] of pairs) {
+    out = out.replaceAll(from, to);
+  }
+  return out;
+};
+
+/**
+ * One of the agent's pages traced in a browser of its own: its twin there,
+ * a page of that browser opened on the address the page is on, and a
+ * session there for each of the agent's sessions on the page, set up with
+ * the state calls the agent made on it ({@link STATE}). While the twin
+ * stands for the page, every call the agent makes on those sessions goes to
+ * the twin, its target, session and frame ids written as the twin's, and
+ * what the twin says comes back written as the page's; a state call goes to
+ * the page here too, so the page is set as the agent set it when it goes
+ * on. Its frames' and workers' sessions are the twin's own, passed as they
+ * are.
+ */
+interface Twin {
+  /** Each twin session's agent session. */
+  readonly agents: Map<string, string>;
+  browser?: TraceBrowser;
+  /** Each session of the twin's own frames and workers, and the session it was attached under. */
+  readonly children: Map<string, string>;
+  /** The agent's IO.close of the trace's stream: once answered, the trace is done. */
+  closing?: number;
+  ended: boolean;
+  /** Each handle the agent's adds were answered with here, as the trace's browser has it. */
+  readonly handles: Map<string, string>;
+  /** Whether the twin stands for the page: what this browser says of the page's sessions is dropped. */
+  live: boolean;
+  /** The agent's page, in this browser. */
+  readonly page: string;
+  /** The agent's calls sent to the twin and not answered yet, and the session each was on. */
+  readonly pending: Map<number, string | undefined>;
+  /** The agent's IO.read calls to the twin: their data passes as it came. */
+  readonly reads: Set<number>;
+  /** Done once the twin stands for the page, with why when it never will. */
+  readonly ready: Deferred.Deferred<string | undefined>;
+  /** Each of the agent's sessions of the page, and its twin's session. */
+  readonly sessions: Map<string, string>;
+  socket?: WebSocket;
+  /** The agent's call that starts the trace in the twin: its refusal ends the twin. */
+  start?: number;
+  /** The trace's data stream, as `Tracing.tracingComplete` named it. */
+  stream?: string;
+  /** The page's twin, in the trace's browser. */
+  twin?: string;
+  wire?: CdpCalls;
+}
+
+// ---------------------------------------------------------------------------
 // One agent's connection
 
 /**
@@ -1332,10 +1479,22 @@ class Link {
   readonly #goes = new Map<number, string>();
   /** The agent's calls whose answers the gate reads or narrows. */
   readonly #asked = new Map<number, Cdp>();
-  /** Sessions the agent traces on now. */
-  readonly #tracing = new Set<string>();
-  /** Sessions whose trace the gate cut: their trace's events are dropped, their `Tracing.end` refused. */
-  readonly #traceCut = new Set<string>();
+  /** The session each of the agent's sessions was attached under: a page's under its tab, a frame's under its page. */
+  readonly #parents = new Map<string, string>();
+  /** Each of the agent's sessions' state calls ({@link STATE}), in the order last made: what a twin's session is set up with. */
+  readonly #states = new Map<string, Map<string, StateCall>>();
+  /** The agent's adds sent here, by call id: the handle each answer names is kept with it. */
+  readonly #stateAsked = new Map<number, StateCall>();
+  /** The sessions the agent traces on in place, and the params it started each with. */
+  readonly #tracing = new Map<string, Json>();
+  /** Sessions whose trace in place the gate ended as another workspace came: what this browser recorded is dropped unread. */
+  readonly #dropTrace = new Set<string>();
+  /** Sessions whose trace was moving to a browser of its own as that browser failed, and why: their `Tracing.end` is refused with it. */
+  readonly #lost = new Map<string, string>();
+  /** Each of the agent's pages traced in a browser of its own, by its target id. */
+  readonly #twins = new Map<string, Twin>();
+  /** The twin each of the agent's sessions goes through while its page is traced there. */
+  readonly #routed = new Map<string, Twin>();
   /** Loopback origins the agent entered by an `artifact_browse` address: the hub's previews there, which it loads again by any path. */
   readonly #entered = new Set<string>();
 
@@ -1386,6 +1545,7 @@ class Link {
     this.#socket = undefined;
     this.#up?.close();
     this.#gate.detachLink(this);
+    this.#twinsDown();
   }
 
   close(code: number, why: string): void {
@@ -1394,6 +1554,7 @@ class Link {
     socket?.close(code, reason(why));
     this.#up?.close();
     this.#gate.detachLink(this);
+    this.#twinsDown();
   }
 
   #send(message: Cdp | string): void {
@@ -1427,13 +1588,29 @@ class Link {
     if (!(message && typeof message.id === "number" && message.method)) {
       return;
     }
-    const why = (await this.#refusal(message)) ?? this.#traced(message);
+    const why = await this.#refusal(message);
     if (why) {
       // A refusal of what the agent asked, so it can say CawCo was wrong.
       this.#refuse(message, withFeedbackLine(why));
       return;
     }
-    if (!message.sessionId && (await this.#answeredHere(message))) {
+    const kept = this.#record(message);
+    const { sessionId } = message;
+    let twin = sessionId ? this.#routed.get(sessionId) : undefined;
+    if (twin) {
+      // Behind the twin standing up: a twin that never stands leaves its
+      // sessions here.
+      await Effect.runPromise(Deferred.await(twin.ready));
+      twin = sessionId ? this.#routed.get(sessionId) : undefined;
+    }
+    if (twin) {
+      await this.#throughTwin(twin, message, kept);
+      return;
+    }
+    if (sessionId && (await this.#traced(message))) {
+      return;
+    }
+    if (!sessionId && (await this.#answeredHere(message))) {
       return;
     }
     // A load of one of its pages goes once the page carries its owner's
@@ -1467,38 +1644,566 @@ class Link {
   }
 
   /**
-   * Keeps which of the agent's sessions trace: a trace starts only while no
-   * other workspace is in the browser ({@link Gate.shared}), and the end of
-   * one the gate cut is refused, its data already dropped.
+   * Keeps each of the agent's sessions' state calls ({@link STATE}): the last
+   * of each setting and every add not taken away, each where its key was
+   * first made, so a setting a domain needs stays after the domain's turning
+   * on as the agent made them. Answers the call kept, whose answer's handle
+   * is kept with it.
    */
-  #traced(message: Cdp): string | undefined {
-    const session = message.sessionId ?? "";
-    if (message.method === "Tracing.start") {
-      if (this.#gate.shared(this.workspace)) {
-        return GATE_WORDS.traceShared;
+  #record(message: Cdp): StateCall | undefined {
+    const { method = "", params = {}, sessionId } = message;
+    if (!(sessionId && STATE.test(method)) || NOT_STATE.has(method)) {
+      return;
+    }
+    let calls = this.#states.get(sessionId);
+    if (!calls) {
+      calls = new Map();
+      this.#states.set(sessionId, calls);
+    }
+    if (REMOVES.test(method)) {
+      const named = new Set(Object.values(params));
+      for (const [key, call] of calls) {
+        if (call.handle && named.has(call.handle)) {
+          calls.delete(key);
+          return;
+        }
       }
-      this.#traceCut.delete(session);
-      this.#tracing.add(session);
-    } else if (message.method === "Tracing.end") {
-      if (this.#traceCut.has(session)) {
-        return GATE_WORDS.traceCut;
+    }
+    const call: StateCall = { method, params };
+    calls.set(stateKey(method, params), call);
+    if (ADDS.test(method)) {
+      this.#stateAsked.set(message.id ?? 0, call);
+    }
+    return call;
+  }
+
+  /** The agent's page session `session` is, or is under. */
+  #pageOf(session: string): string | undefined {
+    let at: string | undefined = session;
+    while (at) {
+      const target = this.#sessionTargets.get(at);
+      if (target && this.#gate.info(target)?.type === "page") {
+        return target;
       }
-      this.#tracing.delete(session);
+      at = this.#parents.get(at);
     }
   }
 
-  /** Another workspace came to the browser: every trace of this agent's is ended, and what it recorded never reaches it. */
-  cutTraces(): void {
-    for (const session of this.#tracing) {
-      this.#traceCut.add(session);
-      this.#wire?.call("Tracing.end", {}, session).catch(() => undefined);
+  /** The twin standing for the page session `session` is of, or is under, when one does. */
+  #twinAbove(session: string): Twin | undefined {
+    let at: string | undefined = session;
+    while (at) {
+      const twin = this.#routed.get(at);
+      if (twin) {
+        return twin;
+      }
+      at = this.#parents.get(at);
     }
-    if (this.#tracing.size > 0) {
+  }
+
+  /**
+   * A trace the agent starts or ends on one of its sessions: in place while
+   * no other workspace is in the browser ({@link Gate.shared}), else in a
+   * browser of its own ({@link #twinUp}); the end of one whose move failed
+   * is refused with why. True when it was answered here.
+   */
+  async #traced(message: Cdp): Promise<boolean> {
+    const session = message.sessionId ?? "";
+    if (message.method === "Tracing.start") {
+      this.#lost.delete(session);
+      if (!this.#gate.shared(this.workspace)) {
+        this.#tracing.set(session, message.params ?? {});
+        return false;
+      }
+      const page = this.#pageOf(session);
+      const why = page ? await this.#twinUp(page) : TRACE_WORDS.noPage;
+      const twin = page ? this.#twins.get(page) : undefined;
+      if (why || !twin) {
+        this.#refuse(
+          message,
+          withFeedbackLine(TRACE_WORDS.notStarted(why ?? TRACE_WORDS.stopped))
+        );
+        return true;
+      }
+      await this.#throughTwin(twin, message, undefined);
+      return true;
+    }
+    if (message.method === "Tracing.end") {
+      const lost = this.#lost.get(session);
+      if (lost) {
+        this.#lost.delete(session);
+        this.#refuse(message, withFeedbackLine(TRACE_WORDS.lost(lost)));
+        return true;
+      }
+      this.#tracing.delete(session);
+    }
+    return false;
+  }
+
+  /**
+   * Another workspace came to the browser: each trace of this agent's
+   * running in place ends here, what it recorded dropped unread, and goes
+   * on in a browser of its own, started again there with the params the
+   * agent gave it once the page's twin has loaded the page.
+   */
+  moveTraces(): void {
+    for (const [session, params] of this.#tracing) {
+      this.#tracing.delete(session);
+      this.#dropTrace.add(session);
+      this.#wire?.post("Tracing.end", {}, session);
+      const page = this.#pageOf(session);
+      if (!page) {
+        this.#lost.set(session, TRACE_WORDS.noPage);
+        continue;
+      }
       console.info(
-        `[browser] ${this.#gate.key}: workspace ${this.workspace}'s trace was cut: another session of the project came to the browser`
+        `[browser] ${this.#gate.key}: workspace ${this.workspace}'s trace moves to a browser of its own: another session of the project came to the browser`
+      );
+      // Work let go: the agent's calls on the page wait on the twin's `ready`.
+      this.#twinUp(page, { params, session }).catch((error: unknown) =>
+        console.warn(
+          `[browser] ${this.#gate.key}: workspace ${this.workspace}'s trace did not move: ${String(error)}`
+        )
       );
     }
-    this.#tracing.clear();
+  }
+
+  /**
+   * Page `page` traced in a browser of its own ({@link Twin}): every
+   * session of the agent's on it goes through the twin from now, and its
+   * calls wait until the twin stands. With `restart`, the trace that ran
+   * here on that session starts again there with its params. Answers why
+   * it did not stand, its sessions left here and the browser removed.
+   */
+  async #twinUp(
+    page: string,
+    restart?: { params: Json; session: string }
+  ): Promise<string | undefined> {
+    const twin: Twin = {
+      agents: new Map(),
+      children: new Map(),
+      ended: false,
+      handles: new Map(),
+      live: false,
+      page,
+      pending: new Map(),
+      reads: new Set(),
+      ready: Deferred.makeUnsafe<string | undefined>(),
+      sessions: new Map(),
+    };
+    this.#twins.set(page, twin);
+    const sessions = [...this.#sessionTargets]
+      .filter(([, target]) => target === page)
+      .map(([session]) => session);
+    for (const session of sessions) {
+      this.#routed.set(session, twin);
+    }
+    try {
+      await this.#twinStand(twin, sessions, restart);
+      Deferred.doneUnsafe(twin.ready, Effect.succeed(undefined));
+      console.info(
+        `[browser] ${this.#gate.key}: workspace ${this.workspace}'s page ${page} is traced in a browser of its own, as ${twin.twin}`
+      );
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      if (restart) {
+        this.#lost.set(restart.session, why);
+      }
+      await this.#twinDown(twin);
+      Deferred.doneUnsafe(twin.ready, Effect.succeed(why));
+      console.warn(
+        `[browser] ${this.#gate.key}: workspace ${this.workspace}'s page ${page} got no browser of its own to trace in: ${why}`
+      );
+      return why;
+    }
+  }
+
+  /** The twin of `twin`'s page made and set up: the browser, its page on the page's address, and a session there for each of `sessions`. */
+  async #twinStand(
+    twin: Twin,
+    sessions: readonly string[],
+    restart: { params: Json; session: string } | undefined
+  ): Promise<void> {
+    const browser = await this.#gate.traceBrowser();
+    twin.browser = browser;
+    if (twin.ended) {
+      await browser.close();
+      throw new Error(GATE_WORDS.stopped);
+    }
+    const socket = await dial(
+      await socketOf(browser.devtools, "The trace's browser")
+    );
+    twin.socket = socket;
+    const wire = gateCalls(socket);
+    twin.wire = wire;
+    socket.onmessage = (event) => this.#fromTwin(twin, said(event.data));
+    socket.onclose = () => {
+      wire.fail(TRACE_WORDS.stopped);
+      this.#letTwinGo(twin);
+    };
+    if (twin.ended) {
+      socket.close();
+      throw new Error(GATE_WORDS.stopped);
+    }
+    const made = await wire.call("Target.createTarget", { url: BLANK });
+    twin.twin = text(made.targetId);
+    const own = text(
+      (
+        await wire.call("Target.attachToTarget", {
+          targetId: twin.twin,
+          flatten: true,
+        })
+      ).sessionId
+    );
+    if (!(twin.twin && own)) {
+      throw new Error("The trace's browser opened no page.");
+    }
+    // Marked as the agent's from its first document, as its pages here are
+    // (Gate `#mark`): the dashboard it loads names its owner.
+    await wire.call("Page.enable", {}, own);
+    await wire.call(
+      "Page.addScriptToEvaluateOnNewDocument",
+      { source: gatedPageScript(this.workspace), runImmediately: true },
+      own
+    );
+    for (const session of sessions) {
+      await this.#twinSession(twin, session);
+    }
+    // The twin stands for the page from here: the agent is told the
+    // page's contexts are gone, as a navigation tells it, and its sessions
+    // are set up there as it set them up here.
+    twin.live = true;
+    for (const session of sessions) {
+      this.#send({
+        method: "Runtime.executionContextsCleared",
+        params: {},
+        sessionId: session,
+      });
+      await this.#replay(twin, session);
+    }
+    const url = this.#gate.info(twin.page)?.url;
+    if (url && url !== BLANK) {
+      await wire.call("Page.navigate", { url }, own);
+    }
+    const tracing = restart && twin.sessions.get(restart.session);
+    if (restart && tracing) {
+      await wire.call("Tracing.start", restart.params, tracing);
+    }
+  }
+
+  /** A session of the twin's for the agent's session `session` of its page. */
+  async #twinSession(twin: Twin, session: string): Promise<void> {
+    const attached = await twin.wire?.call("Target.attachToTarget", {
+      targetId: twin.twin,
+      flatten: true,
+    });
+    const id = text(attached?.sessionId);
+    if (!id) {
+      throw new Error("The trace's browser gave its page no session.");
+    }
+    twin.sessions.set(session, id);
+    twin.agents.set(id, session);
+    this.#routed.set(session, twin);
+  }
+
+  /** The state calls the agent made on `session`, made again on its twin's session, each add's handle kept as the twin has it. */
+  async #replay(twin: Twin, session: string): Promise<void> {
+    const there = twin.sessions.get(session);
+    for (const call of this.#states.get(session)?.values() ?? []) {
+      const params = REMOVES.test(call.method)
+        ? handlesIn(call.params, twin.handles)
+        : call.params;
+      const answer = await twin.wire
+        ?.call(call.method, params, there)
+        .catch((error: unknown) => {
+          console.info(
+            `[browser] ${this.#gate.key}: ${call.method} was not made again on a trace's page: ${String(error)}`
+          );
+        });
+      const handle = answer ? handleOf(answer) : undefined;
+      if (call.handle && handle) {
+        twin.handles.set(call.handle, handle);
+      }
+    }
+  }
+
+  /**
+   * One of the agent's calls on a session the twin stands for: to the twin,
+   * written as its ids are, a state call to the page here too ({@link
+   * #addBoth} for an add, whose handle the agent knows as this browser's).
+   */
+  async #throughTwin(
+    twin: Twin,
+    message: Cdp,
+    kept: StateCall | undefined
+  ): Promise<void> {
+    const session = message.sessionId ?? "";
+    const method = message.method ?? "";
+    const id = message.id ?? 0;
+    const own = twin.sessions.get(session);
+    let params = message.params ?? {};
+    if (own && STATE.test(method) && !NOT_STATE.has(method)) {
+      if (ADDS.test(method)) {
+        await this.#addBoth(twin, message, own, kept);
+        return;
+      }
+      this.#wire?.post(method, params, session);
+      if (REMOVES.test(method)) {
+        params = handlesIn(params, twin.handles);
+      }
+    }
+    if (method === "IO.read") {
+      twin.reads.add(id);
+    } else if (
+      method === "IO.close" &&
+      twin.stream &&
+      text(params.handle) === twin.stream
+    ) {
+      twin.closing = id;
+    } else if (method === "Tracing.start") {
+      twin.start = id;
+    }
+    twin.pending.set(id, session);
+    const out = { ...message, params, ...(own ? { sessionId: own } : {}) };
+    twin.socket?.send(
+      swapped(JSON.stringify(out), [[twin.page, twin.twin ?? twin.page]])
+    );
+    if (own && DRIVES.test(method)) {
+      this.#gate.drove(this.workspace, twin.page);
+    }
+  }
+
+  /** An add made on the page here and on its twin: answered as this browser answered it, the twin's handle kept beside it. */
+  async #addBoth(
+    twin: Twin,
+    message: Cdp,
+    own: string,
+    kept: StateCall | undefined
+  ): Promise<void> {
+    const method = message.method ?? "";
+    const params = message.params ?? {};
+    this.#stateAsked.delete(message.id ?? 0);
+    const [here, there] = await Promise.allSettled([
+      this.#wire?.call(method, params, message.sessionId) ?? {},
+      twin.wire?.call(method, params, own) ?? {},
+    ]);
+    if (here.status === "rejected" || there.status === "rejected") {
+      const failed = here.status === "rejected" ? here : there;
+      this.#refuse(
+        message,
+        failed.status === "rejected" && failed.reason instanceof Error
+          ? failed.reason.message
+          : String(failed)
+      );
+      return;
+    }
+    const handle = handleOf(here.value);
+    const theirs = handleOf(there.value);
+    if (kept) {
+      kept.handle = handle;
+    }
+    if (handle && theirs) {
+      twin.handles.set(handle, theirs);
+    }
+    this.#send({
+      id: message.id,
+      result: here.value,
+      ...(message.sessionId ? { sessionId: message.sessionId } : {}),
+    });
+  }
+
+  /**
+   * What the twin's browser says: an answer to one of the agent's calls,
+   * or an event of one of the twin's sessions, written as the page's ids;
+   * a trace's data as it came. The twin goes once the trace it ran is
+   * read, refused, or its page gone.
+   */
+  #fromTwin(twin: Twin, data: string): void {
+    const message = parse(data);
+    if (!message || (twin.wire && answered(twin.wire, message))) {
+      return;
+    }
+    const back = new Map(twin.agents);
+    if (twin.twin) {
+      back.set(twin.twin, twin.page);
+    }
+    const agent = message.sessionId
+      ? (twin.agents.get(message.sessionId) ??
+        (twin.children.has(message.sessionId) ? message.sessionId : undefined))
+      : undefined;
+    if (typeof message.id === "number") {
+      this.#twinAnswered(twin, message, agent, swapped(data, back));
+      return;
+    }
+    if (!message.sessionId) {
+      this.#twinBrowserEvent(twin, message);
+      return;
+    }
+    if (!agent) {
+      return;
+    }
+    this.#twinChildren(twin, message, agent);
+    if (message.method?.startsWith("Tracing.")) {
+      const stream = text(message.params?.stream);
+      if (message.method === "Tracing.tracingComplete") {
+        twin.stream = stream;
+      }
+      this.#send({ ...message, sessionId: agent });
+      if (message.method === "Tracing.tracingComplete" && !stream) {
+        this.#letTwinGo(twin);
+      }
+      return;
+    }
+    this.#send(swapped(data, back));
+  }
+
+  /** The twin's answer to one of the agent's calls: a read's data as it came; the twin goes once the trace's stream is closed or its start refused. */
+  #twinAnswered(
+    twin: Twin,
+    message: Cdp,
+    agent: string | undefined,
+    written: string
+  ): void {
+    const id = message.id ?? 0;
+    twin.pending.delete(id);
+    if (twin.reads.delete(id)) {
+      this.#send({ ...message, ...(agent ? { sessionId: agent } : {}) });
+    } else {
+      this.#send(written);
+    }
+    if (id === twin.closing || (id === twin.start && message.error)) {
+      this.#letTwinGo(twin);
+    }
+  }
+
+  /** An event at the twin's browser's level: the twin goes with its page. */
+  #twinBrowserEvent(twin: Twin, message: Cdp): void {
+    const params = message.params ?? {};
+    const detached =
+      message.method === "Target.detachedFromTarget" &&
+      twin.agents.has(text(params.sessionId) ?? "");
+    const crashed =
+      message.method === "Target.targetCrashed" &&
+      text(params.targetId) === twin.twin;
+    if (detached || crashed) {
+      this.#letTwinGo(twin);
+    }
+  }
+
+  /** The twin's frames and workers, as its sessions are attached and let go: the agent's, under `agent`. */
+  #twinChildren(twin: Twin, message: Cdp, agent: string): void {
+    const params = message.params ?? {};
+    const child = text(params.sessionId);
+    if (!(child && message.sessionId)) {
+      return;
+    }
+    if (message.method === "Target.attachedToTarget") {
+      twin.children.set(child, message.sessionId);
+      this.#routed.set(child, twin);
+      this.#sessions.add(child);
+      this.#parents.set(child, agent);
+      if (isInfo(params.targetInfo)) {
+        this.#sessionTargets.set(child, params.targetInfo.targetId);
+      }
+    } else if (message.method === "Target.detachedFromTarget") {
+      twin.children.delete(child);
+      this.#forgetSession(child);
+    }
+  }
+
+  /** {@link #twinDown}, let go: said in the log when it fails. */
+  #letTwinGo(twin: Twin): void {
+    this.#twinDown(twin).catch((error: unknown) =>
+      console.warn(
+        `[browser] ${this.#gate.key}: a trace's browser of workspace ${this.workspace} was not removed: ${String(error)}`
+      )
+    );
+  }
+
+  /**
+   * The twin gone: its browser and its copy of the sign-ins removed, the
+   * agent told its frames and workers there are gone and its calls there
+   * unanswered failed, and the page's sessions here again, the page loaded
+   * on the address the twin was on, so it goes on where the twin left off.
+   */
+  async #twinDown(twin: Twin): Promise<void> {
+    if (twin.ended) {
+      return;
+    }
+    twin.ended = true;
+    if (this.#twins.get(twin.page) === twin) {
+      this.#twins.delete(twin.page);
+    }
+    const info =
+      twin.live && twin.twin
+        ? await twin.wire
+            ?.call("Target.getTargetInfo", { targetId: twin.twin })
+            .catch((): Json => ({}))
+        : undefined;
+    const url = isInfo(info?.targetInfo) ? info.targetInfo.url : undefined;
+    for (const [child, parent] of twin.children) {
+      this.#send({
+        method: "Target.detachedFromTarget",
+        params: { sessionId: child },
+        sessionId: twin.agents.get(parent) ?? parent,
+      });
+      this.#forgetSession(child);
+    }
+    for (const [id, session] of twin.pending) {
+      this.#send({
+        id,
+        error: { code: REFUSED, message: TRACE_WORDS.stopped },
+        ...(session ? { sessionId: session } : {}),
+      });
+    }
+    for (const session of twin.sessions.keys()) {
+      this.#routed.delete(session);
+      if (twin.live) {
+        this.#send({
+          method: "Runtime.executionContextsCleared",
+          params: {},
+          sessionId: session,
+        });
+      }
+    }
+    for (const [session, routed] of this.#routed) {
+      if (routed === twin) {
+        this.#routed.delete(session);
+      }
+    }
+    twin.socket?.close();
+    await twin.browser?.close();
+    const back = [...twin.sessions.keys()].find((session) =>
+      this.#sessions.has(session)
+    );
+    if (twin.live && url && back && this.#socket) {
+      await this.#wire
+        ?.call("Page.navigate", { url }, back)
+        .catch((error: unknown) =>
+          console.info(
+            `[browser] ${this.#gate.key}: a traced page of workspace ${this.workspace} did not open again on ${url}: ${String(error)}`
+          )
+        );
+    }
+    console.info(
+      `[browser] ${this.#gate.key}: workspace ${this.workspace}'s trace of page ${twin.page} is done, its browser removed`
+    );
+  }
+
+  /** Every twin of this connection gone: the connection is. */
+  #twinsDown(): void {
+    for (const twin of this.#twins.values()) {
+      this.#letTwinGo(twin);
+    }
+  }
+
+  /** Session `session` is gone: nothing of it is kept. */
+  #forgetSession(session: string): void {
+    this.#sessions.delete(session);
+    this.#sessionTargets.delete(session);
+    this.#parents.delete(session);
+    this.#states.delete(session);
+    this.#routed.delete(session);
   }
 
   /** Why the gate refuses `message`, or nothing when it goes on. */
@@ -1658,6 +2363,7 @@ class Link {
         this.#asked.set(message.id ?? 0, message);
         return false;
       }
+      case "Target.attachToTarget":
       case "Target.createBrowserContext":
       case "Target.getTargets":
       case "Target.getBrowserContexts":
@@ -1697,10 +2403,18 @@ class Link {
       return;
     }
     if (typeof message.id === "number") {
+      const kept = this.#stateAsked.get(message.id);
+      this.#stateAsked.delete(message.id);
+      if (kept && message.result) {
+        kept.handle = handleOf(message.result);
+      }
       const asked = this.#asked.get(message.id);
       this.#asked.delete(message.id);
       if (asked && message.result) {
         this.#read(asked, message.result);
+        if (this.#twinAttached(asked, message)) {
+          return;
+        }
         this.#send(message);
         return;
       }
@@ -1715,26 +2429,87 @@ class Link {
     this.#browserEvent(message, params, data);
   }
 
-  /** An event of one of the agent's sessions: its children are the agent's too. */
+  /**
+   * An event of one of the agent's sessions: its children are the agent's
+   * too. What a trace the gate ended here recorded is dropped, its stream
+   * closed unread; what a page says while its twin stands for it is the
+   * twin's to say.
+   */
   #sessionEvent(message: Cdp, params: Json, data: string): void {
     const session = message.sessionId ?? "";
-    if (
-      !this.#sessions.has(session) ||
-      (this.#traceCut.has(session) && message.method?.startsWith("Tracing."))
-    ) {
+    if (!this.#sessions.has(session)) {
       return;
     }
     const child = text(params.sessionId);
     if (child && message.method === "Target.attachedToTarget") {
       this.#sessions.add(child);
+      this.#parents.set(child, session);
       if (isInfo(params.targetInfo)) {
         this.#sessionTargets.set(child, params.targetInfo.targetId);
       }
     } else if (child && message.method === "Target.detachedFromTarget") {
-      this.#sessions.delete(child);
-      this.#sessionTargets.delete(child);
+      this.#gone(child);
+    }
+    if (
+      this.#dropTrace.has(session) &&
+      message.method?.startsWith("Tracing.")
+    ) {
+      const stream = text(params.stream);
+      if (message.method === "Tracing.tracingComplete") {
+        this.#dropTrace.delete(session);
+        if (stream) {
+          this.#wire?.post("IO.close", { handle: stream }, session);
+        }
+      }
+      return;
+    }
+    if (this.#twinAbove(session)?.live) {
+      return;
     }
     this.#send(data);
+  }
+
+  /**
+   * Session `session` here is gone: forgotten, and the twin of its page
+   * lets its session for it go, the twin itself once it stands for none.
+   */
+  #gone(session: string): void {
+    const twin = this.#routed.get(session);
+    this.#forgetSession(session);
+    const there = twin?.sessions.get(session);
+    if (!(twin && there)) {
+      return;
+    }
+    twin.sessions.delete(session);
+    twin.agents.delete(there);
+    twin.wire?.post("Target.detachFromTarget", { sessionId: there });
+    if (twin.sessions.size === 0) {
+      this.#letTwinGo(twin);
+    }
+  }
+
+  /**
+   * The answer to the agent's attach to a page a twin stands for: held
+   * until the twin has a session for the new one, then given. True when it
+   * is held.
+   */
+  #twinAttached(asked: Cdp, answer: Cdp): boolean {
+    const twin =
+      asked.method === "Target.attachToTarget"
+        ? this.#twins.get(text(asked.params?.targetId) ?? "")
+        : undefined;
+    const session = text(answer.result?.sessionId);
+    if (!(twin?.live && session) || twin.ended) {
+      return false;
+    }
+    this.#twinSession(twin, session)
+      .catch((error: unknown) =>
+        console.info(
+          `[browser] ${this.#gate.key}: a session of workspace ${this.workspace} stays on its page here, not its twin: ${String(error)}`
+        )
+      )
+      .finally(() => this.#send(answer));
+    return true;
   }
 
   /** An event at the browser's level: the Target domain's, as far as the agent may see; nothing else speaks for one page. */
@@ -1781,10 +2556,10 @@ class Link {
     target: string | undefined,
     data: string
   ): void {
-    if (!(session && this.#sessions.delete(session))) {
+    if (!(session && this.#sessions.has(session))) {
       return;
     }
-    this.#sessionTargets.delete(session);
+    this.#gone(session);
     if (target) {
       this.#attached.delete(target);
     }
