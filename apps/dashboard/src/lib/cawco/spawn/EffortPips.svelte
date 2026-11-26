@@ -316,5 +316,25 @@
         value={effortIdx}
       />
     </div>
+    <!-- Each step's level, named under it, as the ruler names its marks:
+         centred where the chip's centre stands on that step. The range
+         input says the level to a reader, so these are drawing alone. -->
+    {#if n > 1}
+      <div
+        aria-hidden="true"
+        class="relative mt-space-1 h-lh type-meta whitespace-nowrap"
+        data-slot="step-labels"
+        style:--kw={`${kw}px`}
+      >
+        {#each efforts as level, i (level)}
+          <span
+            class="absolute top-0 -translate-x-1/2 text-ink-muted transition-[color] duration-(--duration-control) ease-out data-on:text-ink-strong rtl:translate-x-1/2"
+            data-on={i === effortIdx || undefined}
+            style:left={`calc(var(--kw) / 2 + ${frac(i)} * (100% - var(--kw)))`}
+            >{capital(level)}</span
+          >
+        {/each}
+      </div>
+    {/if}
   </div>
 </div>

@@ -277,18 +277,6 @@
   /** Start's word while the machine reads the folder it starts in. */
   const CHECKING = spawnWords.form.checkingFolder;
   const NOT_UPLOADED = spawnWords.form.notUploaded;
-  // Either holds Start only while its file does: settled, it is gone.
-  $effect(() => {
-    const { uploading, unready } = firstMessage;
-    untrack(() => {
-      if (
-        (error === STILL_UPLOADING && !uploading) ||
-        (error === NOT_UPLOADED && !unready)
-      ) {
-        error = "";
-      }
-    });
-  });
   let editor = $state<HTMLDivElement>();
   /**
    * A location set with Enter or "Use this folder": its popover closes and
@@ -359,8 +347,14 @@
   let spinOff = $state(false);
   /** Start it clean: no instruction context (core `SpawnPayload.clean`). Off by default. */
   let clean = $state(false);
-  /** Why Start held back before anything was sent (a file uploading, a form that doesn't hold); "" otherwise. */
+  /** What the hub refused the form (an estimate, a cancel); "" otherwise. */
   let error = $state("");
+  /**
+   * Start was pressed: from then on the form says, live, what still holds
+   * Start (`pressHold`). A hold is read from the form as it stands now, so
+   * it goes the moment the person fixes it.
+   */
+  let pressed = $state(false);
   let unreadable = $state(false);
   /**
    * The estimate and the folder checks whose machine went away: said in
@@ -413,9 +407,11 @@
   const showing = $derived(open ? parkedStart(spawning.shown) : undefined);
   /** A start runs: the form takes no input, and Start says its stage. */
   const busy = $derived(showing?.state === "running");
+  /** What holds a pressed Start now, as the form stands; "" before a press. */
+  const pressHold = $derived(pressed ? holdWords() : "");
   /** What the form says went wrong: its own hold, or the start's failure. */
   const failure = $derived(
-    error || (showing?.state === "failed" ? showing.error : "")
+    error || pressHold || (showing?.state === "failed" ? showing.error : "")
   );
   const machineId = $derived(machineIds[0] ?? "");
   const locationKey = $derived(JSON.stringify([machineIds, cwd.trim()]));
@@ -1414,6 +1410,7 @@
       spinOff = Boolean(prefill?.spinOff);
       clean = false;
       error = "";
+      pressed = false;
       popover = null;
       verifiedLocation = "";
       moveRead = null;
@@ -1664,6 +1661,20 @@
       return locationReading;
     }
     return "";
+  }
+  /**
+   * What holds Start before anything is sent, saying why: a file still on
+   * its way or one the hub never got (as a session's Send is held, in the
+   * same words), or a form that doesn't hold (`validate`).
+   */
+  function holdWords() {
+    if (firstMessage.uploading) {
+      return STILL_UPLOADING;
+    }
+    if (firstMessage.unready) {
+      return NOT_UPLOADED;
+    }
+    return validate();
   }
   // The press held for the folder check, played once the check has landed:
   // `start` then goes, or says the check's refusal. A press for a location
@@ -2002,22 +2013,16 @@
     return answeredOr(target, forked, spawnWords.form.forkUnknown);
   }
   /**
-   * What holds Start before anything is sent, saying why: a file still on
-   * its way or one the hub never got (as a session's Send is held, in the
-   * same words), or a form that doesn't hold. Move & start goes no further
-   * either: it morphs the form to step 2, and Move it starts the move.
+   * Whether Start is held before anything is sent; the reading line says
+   * why (`pressHold`). Move & start goes no further either: it morphs the
+   * form to step 2, and Move it starts the move.
    */
   function heldBack(force: boolean): boolean {
-    if (firstMessage.uploading) {
-      error = STILL_UPLOADING;
+    pressed = true;
+    if (firstMessage.uploading || firstMessage.unready) {
       return true;
     }
-    if (firstMessage.unready) {
-      error = NOT_UPLOADED;
-      return true;
-    }
-    error = validate();
-    if (error) {
+    if (validate()) {
       document.getElementById("session-dir")?.focus();
       return true;
     }
@@ -2207,6 +2212,7 @@
   function back() {
     moveStep = false;
     error = "";
+    pressed = false;
     // Back, pressed, goes with the step it led out of: the keys go to the
     // prompt, the form's first field, rather than to the page.
     tick().then(() => {
