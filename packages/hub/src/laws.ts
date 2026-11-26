@@ -16,6 +16,7 @@ import {
   type LawAbout,
 } from "@cawco/core/invariant";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
+import { Context, Effect, Layer } from "effect";
 import { HTTPError, problem } from "elysia";
 
 /**
@@ -38,7 +39,7 @@ class LawProblem extends HTTPError {
   }
 }
 
-export function createLaws() {
+function make() {
   /** Who takes each break once the hub's tasks exist ({@link fileWith}). */
   let filer: ((error: InvariantBroken) => void) | undefined;
   /** Breaks caught before there was a filer: the board's first read at boot runs before the tasks are made. */
@@ -116,3 +117,13 @@ export function createLaws() {
     },
   };
 }
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class Laws extends Context.Service<Laws, ReturnType<typeof make>>()(
+  "Laws"
+) {}
+
+export const LawsLayer = Layer.effect(Laws)(Effect.sync(make));

@@ -9,11 +9,12 @@
  * dashboard on the board frame.
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { Context, Effect, Layer } from "effect";
 
 const sha256 = (value: string): Buffer =>
   createHash("sha256").update(value).digest();
 
-export const createMachineCredentials = () => {
+const make = () => {
   const hashes = new Map<string, Buffer>();
   return {
     /** A new credential for `machineId`'s connection; the one before it stops working. */
@@ -34,7 +35,7 @@ export const createMachineCredentials = () => {
   };
 };
 
-export type MachineCredentials = ReturnType<typeof createMachineCredentials>;
+export type MachineCredentialsShape = ReturnType<typeof make>;
 
 /**
  * Who an `Authorization: Basic <user:password>` header proves: a machine by
@@ -43,7 +44,7 @@ export type MachineCredentials = ReturnType<typeof createMachineCredentials>;
  */
 export const basicCaller = (
   authorization: string | null,
-  machines: MachineCredentials,
+  machines: MachineCredentialsShape,
   session: (credential: string) => string | undefined
 ): string | undefined => {
   if (!authorization?.startsWith("Basic ")) {
@@ -71,3 +72,16 @@ export const basicCaller = (
   }
   return session(password) === user ? user : undefined;
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class MachineCredentials extends Context.Service<
+  MachineCredentials,
+  MachineCredentialsShape
+>()("MachineCredentials") {}
+
+export const MachineCredentialsLayer = Layer.effect(MachineCredentials)(
+  Effect.sync(make)
+);

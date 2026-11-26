@@ -20,8 +20,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import { writeStateFile } from "@cawco/core/state-file";
-import { Effect, Semaphore } from "effect";
+import { Context, Effect, Layer, Semaphore } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
+import { HubLifetime } from "./lifetime";
 
 /** The file beside the hub's database that holds {@link HubEvent}s. */
 const HUB_RECORD_FILE = "hub-record.json";
@@ -75,7 +76,7 @@ export type RecordHubEvent = (event: HubEvent) => void;
  * writes go one at a time in the order their timers ran, so the newest
  * text is the last to land.
  */
-export const createHubRecord = (
+const make = (
   lifetime: Pick<HubLifetimeShape, "after" | "fork">
 ): RecordHubEvent => {
   let events: (HubEvent & { readonly at: number })[] | undefined;
@@ -118,3 +119,17 @@ export const createHubRecord = (
     });
   };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class HubRecord extends Context.Service<HubRecord, RecordHubEvent>()(
+  "HubRecord"
+) {}
+
+export const HubRecordLayer = Layer.effect(HubRecord)(
+  Effect.gen(function* () {
+    return make(yield* HubLifetime);
+  })
+);

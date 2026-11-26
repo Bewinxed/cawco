@@ -30,12 +30,14 @@ import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Deferred, Effect } from "effect";
+import { Context, Deferred, Effect, Layer } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
+import { Db } from "./db";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import type { HubLifetimeShape } from "./lifetime";
+import { HubLifetime } from "./lifetime";
 
 /**
  * How long an answered key is kept. Ours: a gateway sends a call again only
@@ -133,7 +135,7 @@ const joined = (chunks: Uint8Array[]): Uint8Array => {
   return whole;
 };
 
-export const createToolCallKeys = ({
+const make = ({
   db,
   lifetime,
 }: {
@@ -306,3 +308,19 @@ export const createToolCallKeys = ({
 
   return { once, onceResult };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class ToolCallKeys extends Context.Service<
+  ToolCallKeys,
+  ReturnType<typeof make>
+>()("ToolCallKeys") {}
+
+export const ToolCallKeysLayer = Layer.effect(ToolCallKeys)(
+  Effect.gen(function* () {
+    const db = yield* Db;
+    return make({ db: db.toolCallKeys, lifetime: yield* HubLifetime });
+  })
+);

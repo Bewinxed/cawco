@@ -76,6 +76,7 @@ import { recordLimitReading } from "@cawco/core/limit-readings";
 import { httpProof, sameMac, socketProof } from "@cawco/core/machine-key";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
+import { Context } from "effect";
 import { Elysia, problem, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import type { RecordHubEvent } from "./hub-record";
@@ -1366,3 +1367,15 @@ export const createHubAuth = ({
     },
   };
 };
+
+/** What {@link createHubAuth} makes: the hub's word on who asks. */
+export type HubAuthShape = ReturnType<typeof createHubAuth>;
+
+/**
+ * The hub's word on who asks, as one of its services. Its layer is in
+ * hub-layer.ts: what it is built from (a browser's pass, the dashboard's
+ * address) imports this file.
+ */
+export class HubAuth extends Context.Service<HubAuth, HubAuthShape>()(
+  "HubAuth"
+) {}

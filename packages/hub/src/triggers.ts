@@ -64,7 +64,7 @@ import {
   PROJECT_ORIGIN,
   type TriggerEvent,
 } from "./trigger-event";
-import type { TriggerSettings } from "./trigger-settings";
+import type { TriggerSettingsShape } from "./trigger-settings";
 import type { Parent } from "./work-item-state";
 import { isLive } from "./work-item-state";
 import type { WorkItems } from "./work-items";
@@ -153,7 +153,7 @@ export interface TriggersDeps {
   ) => { reason: string | null; state: string };
   /** The person's words to a session, theirs alone with CawCo's note beside them (server.ts `sendYours`). */
   readonly sendYours: (row: InstanceRow, said: PersonsSend) => void;
-  readonly settings: Pick<TriggerSettings, "forEvent">;
+  readonly settings: Pick<TriggerSettingsShape, "forEvent">;
   readonly tasks: Pick<Tasks, "get">;
   readonly workItems: Pick<WorkItems, "endForHub" | "startForHub">;
 }

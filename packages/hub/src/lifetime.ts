@@ -5,8 +5,10 @@ import {
   Context,
   Duration,
   Effect,
+  Exit,
   type Fiber,
   Layer,
+  Scope,
 } from "effect";
 import { makeScheduler, type SchedulerShape } from "./scheduler";
 
@@ -71,6 +73,17 @@ export interface HubLifetimeShape {
    * closes first; `name` is what its run is known by when it holds the loop.
    */
   readonly after: (name: string, ms: number, run: () => void) => HubTimer;
+  /**
+   * `layer`'s services, made at once from `given` with the lifetime's clock:
+   * how the hub builds the services that are layers (hub-layer.ts), once.
+   * The build is synchronous, so a layer whose making waits fails it. What
+   * the layer acquired is released at {@link close}, with the other
+   * releases, in the order they were given.
+   */
+  readonly build: <ROut, RIn>(
+    layer: Layer.Layer<ROut, never, RIn>,
+    given: Context.Context<RIn>
+  ) => Context.Context<ROut>;
   /** Stops one of this lifetime's timers; none, or one that already ran, is nothing. */
   readonly cancel: (timer: HubTimer | undefined) => void;
   /** Stops every timer, interrupts every fiber, runs every release, and says so; once. */
@@ -299,6 +312,18 @@ export const makeLifetime = (): HubLifetimeShape => {
   };
   return {
     after,
+    build: (layer, given) => {
+      const scope = Scope.makeUnsafe();
+      releases.push(() => {
+        const released = Scope.closeUnsafe(scope, Exit.void);
+        if (released) {
+          Effect.runForkWith(context)(released);
+        }
+      });
+      return Effect.runSyncWith(Context.merge(given, context))(
+        Layer.buildWithScope(layer, scope)
+      );
+    },
     every,
     jobs: makeScheduler({ after, every }),
     cancel,

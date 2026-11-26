@@ -22,7 +22,7 @@ import {
   windowWords,
 } from "@cawco/core/usage/windows";
 import { tokenWords } from "@cawco/core/words/account-lines";
-import { type Admission, usdWords } from "./admission";
+import { type AdmissionShape, usdWords } from "./admission";
 import type { DbShape } from "./db";
 import { waitsLine } from "./db/at-limit";
 import type {
@@ -282,7 +282,7 @@ export interface AtLimitPorts {
    */
   accountRows: (row: LimitRow, leaving: string) => AccountsRead;
   /** The one ledger every move onto an account is charged against (admission.ts), shared with the wake path. */
-  admission: Admission;
+  admission: AdmissionShape;
   /** `row`'s prompt cache now (keep-alive.ts `cacheState`): warm until a moment, cold, or unknown; inside a turn is warm. */
   cacheState: (row: LimitRow) => CacheState;
   /**

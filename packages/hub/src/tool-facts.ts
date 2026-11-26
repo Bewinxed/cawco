@@ -13,8 +13,9 @@
  * nor refused, and answered 500 "couldn't be read" for the two seconds
  * before the report (host run 84ca5c0e, 20:05:27.547).
  */
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
+import { HubLifetime } from "./lifetime";
 
 /** One machine's connection now, and whether its tools have been said on it. */
 interface Connection {
@@ -40,9 +41,7 @@ export interface ToolFactsShape {
   readonly until: (machineId: string, ms: number) => Promise<boolean>;
 }
 
-export const createToolFacts = (
-  lifetime: Pick<HubLifetimeShape, "run">
-): ToolFactsShape => {
+const make = (lifetime: Pick<HubLifetimeShape, "run">): ToolFactsShape => {
   const connections = new Map<string, Connection>();
 
   const wakeAll = (connection: Connection): void => {
@@ -103,3 +102,17 @@ export const createToolFacts = (
     },
   };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class ToolFacts extends Context.Service<ToolFacts, ToolFactsShape>()(
+  "ToolFacts"
+) {}
+
+export const ToolFactsLayer = Layer.effect(ToolFacts)(
+  Effect.gen(function* () {
+    return make(yield* HubLifetime);
+  })
+);

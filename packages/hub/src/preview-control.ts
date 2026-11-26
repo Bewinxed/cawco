@@ -17,7 +17,7 @@ import {
 import type { Upstream } from "@cawco/core/preview/upstream";
 import { unhandled } from "@cawco/core/unhandled";
 import { causeOf, previewFailed } from "@cawco/preview/proxy";
-import { Deferred, Effect } from "effect";
+import { Context, Deferred, Effect, Layer } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import type { ArtifactDocuments } from "./artifact-documents";
@@ -39,8 +39,10 @@ import type { PreviewsDb } from "./db/previews";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 import { takeBrowserReadings } from "./limit-readings";
+import { HubLifetime } from "./lifetime";
 import { PICK_WORDS } from "./person-acts";
 import type { PreviewListeners, PreviewServerHand } from "./preview";
+import { previewParents } from "./preview";
 import { enter, lockedResponse, type PassLock } from "./preview-access";
 import { labelOf, originFor, parsePattern } from "./preview-hosts";
 import { HOP } from "./preview-origin";
@@ -69,6 +71,7 @@ import {
 } from "./preview-server/wire";
 import { staleEntry } from "./preview-stale";
 import type { TailnetLive } from "./tailnet-doors";
+import { TailnetHttps } from "./tailnet-https";
 
 /** How long `stood` waits for the server's answer to a stand. Our call: a bind is milliseconds. */
 const STOOD_MS = 5000;
@@ -180,7 +183,7 @@ const notServerResponse = () =>
   });
 
 /** The hub's end of the link: what it says to the server, and what the server's stands answered. */
-export const createPreviewLink = (deps: {
+const make = (deps: {
   /** The hub's lifetime: a wait on a stand's answer runs on it. */
   lifetime: HubLifetimeShape;
   parents: () => string[];
@@ -241,7 +244,7 @@ export const createPreviewLink = (deps: {
   };
 };
 
-export type PreviewLink = ReturnType<typeof createPreviewLink>;
+export type PreviewLinkShape = ReturnType<typeof make>;
 
 /** A relayed request as the browser sent it: its address restored, and the lock it met. */
 const asSent = (
@@ -271,7 +274,7 @@ const asSent = (
 };
 
 export const previewControlRoutes = (
-  link: PreviewLink,
+  link: PreviewLinkShape,
   deps: PreviewControlDeps
 ) => {
   /** Each origin's doc sockets the server relays, by the hub's socket id. */
@@ -670,3 +673,23 @@ export const previewControlRoutes = (
       }
     );
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class PreviewLink extends Context.Service<
+  PreviewLink,
+  PreviewLinkShape
+>()("PreviewLink") {}
+
+export const PreviewLinkLayer = Layer.effect(PreviewLink)(
+  Effect.gen(function* () {
+    const tailnet = yield* TailnetHttps;
+    return make({
+      lifetime: yield* HubLifetime,
+      parents: previewParents,
+      tailnet: () => tailnet.live(),
+    });
+  })
+);

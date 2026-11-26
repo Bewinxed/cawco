@@ -1,12 +1,13 @@
 /**
  * What the hub holds in memory about each session, not in any column: one place
  * for the stores and for forgetting them when a session's row goes
- * ({@link createSessionRuntime}).
+ * ({@link make}).
  */
 import type { SessionPulse } from "@cawco/core/protocol";
+import { Context, Effect, Layer } from "effect";
 import { WatchedMap } from "./watched-map";
 
-export const createSessionRuntime = () => {
+const make = () => {
   /**
    * What each session is doing right now, as its own daemon last said: memory
    * only, and never a column.
@@ -74,3 +75,16 @@ export const createSessionRuntime = () => {
     awaitingFirstTurn,
   };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class SessionRuntime extends Context.Service<
+  SessionRuntime,
+  ReturnType<typeof make>
+>()("SessionRuntime") {}
+
+export const SessionRuntimeLayer = Layer.effect(SessionRuntime)(
+  Effect.sync(make)
+);

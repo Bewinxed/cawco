@@ -1,6 +1,6 @@
 import { problem } from "elysia";
 
-import type { createSessionIdentities } from "../session-identity";
+import type { SessionIdentities } from "../session-identity";
 
 /** A request's session credential (`Authorization: Bearer …`), or null: never the person's `Owner` token. */
 const bearerOf = (request: Request): string | null => {
@@ -15,7 +15,7 @@ const bearerOf = (request: Request): string | null => {
  * `instanceId` (`stranger` says which); undefined when it may go on.
  */
 export const sessionCallerRefusal = (
-  identities: Pick<ReturnType<typeof createSessionIdentities>, "resolve">,
+  identities: Pick<SessionIdentities["Service"], "resolve">,
   request: Request,
   instanceId: string,
   stranger: string

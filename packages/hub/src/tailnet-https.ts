@@ -39,9 +39,9 @@
 import { hostname, userInfo } from "node:os";
 import { failureOf } from "@cawco/core/detach";
 import type {
-  TailnetHttps,
   TailnetHttpsTodo,
   TailnetOrigin,
+  TailnetHttps as TailnetState,
 } from "@cawco/core/tailnet-https";
 import { secondsOf } from "@cawco/core/time";
 import {
@@ -53,7 +53,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/preview/proxy";
-import { Effect, Schedule } from "effect";
+import { Context, Effect, Schedule } from "effect";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
@@ -147,12 +147,12 @@ export const createTailnetHttps = ({
   lifetime,
 }: TailnetHttpsDeps) => {
   const run = (args: string[]) => runTailscale(bin, args, CALL_MS);
-  let state: TailnetHttps = { state: "absent", host };
+  let state: TailnetState = { state: "absent", host };
   /** The dashboard's port's HTTPS (tailnet-doors.ts); the preview ports' are the preview server's, handed {@link TailnetLive} on each change. */
   const doors = createTailnetDoors((what, work) => {
     lifetime.fork(what, work);
   });
-  const listeners: ((state: TailnetHttps) => void)[] = [];
+  const listeners: ((state: TailnetState) => void)[] = [];
 
   /** `tailscale status --json`, read. */
   const readStatus = async (): Promise<
@@ -314,7 +314,7 @@ export const createTailnetHttps = ({
   };
 
   /** The wire state a reading stands for, `unread` keeping what stood. */
-  const stateOf = (reading: Reading): TailnetHttps => {
+  const stateOf = (reading: Reading): TailnetState => {
     switch (reading.state) {
       case "absent":
       case "signed-out":
@@ -411,10 +411,10 @@ export const createTailnetHttps = ({
     },
 
     /** Where it stands now, as `GET /api/tailnet-https` answers. */
-    state: (): TailnetHttps => state,
+    state: (): TailnetState => state,
 
     /** Hears every change of state. */
-    onChange(listener: (state: TailnetHttps) => void): void {
+    onChange(listener: (state: TailnetState) => void): void {
       listeners.push(listener);
     },
 
@@ -586,3 +586,13 @@ export const dashboardRelay =
         }
       },
     });
+
+/**
+ * {@link createTailnetHttps}'s door as one of the hub's services. Its layer
+ * is in hub-layer.ts: the preview server loads this file, and loads nothing
+ * of the hub's lifetime.
+ */
+export class TailnetHttps extends Context.Service<
+  TailnetHttps,
+  TailnetHttpsService
+>()("TailnetHttps") {}

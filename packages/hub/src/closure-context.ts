@@ -109,7 +109,7 @@ import type {
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { problem } from "elysia";
-import type { createAdmission } from "./admission";
+import type { Admission } from "./admission";
 import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
 import type { Artifacts } from "./artifacts/service";
@@ -150,7 +150,7 @@ import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
 import type { createFolderMoves } from "./folder-moves";
 import type { HarnessConfigBody } from "./harness-config-body";
-import type { Caller, createHubAuth } from "./hub-auth";
+import type { Caller, HubAuth } from "./hub-auth";
 import type { hubRestarts } from "./hub-restart";
 import type {
   AccountUse,
@@ -170,7 +170,7 @@ import type {
 } from "./hub-shapes";
 import type { createKeepAliveScheduler, KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
-import type { createLaws } from "./laws";
+import type { Laws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
 import type {
@@ -188,7 +188,7 @@ import type {
   Unanswered,
 } from "./machine-answers";
 import type { createMachineContact } from "./machine-contact";
-import type { createMachineCredentials } from "./machine-credentials";
+import type { MachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
 import type { createMemory } from "./memory";
 import type { MemoryRun } from "./memory-run";
@@ -226,7 +226,7 @@ import type { createRoutines, Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
 import type { SessionCallsDeps } from "./session-calls";
-import type { createSessionIdentities } from "./session-identity";
+import type { SessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SettingPick } from "./setting-pick-shapes";
 import type { SkillFolderReader } from "./skills";
@@ -236,9 +236,9 @@ import type { OwnDefault } from "./start-models";
 import type { createStoredRecent } from "./stored-recent";
 import type { createStreamRelay } from "./stream-relay";
 import type { StreamHubShape } from "./stream-shape";
-import type { createTailnetHttps } from "./tailnet-https";
+import type { TailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
-import type { createToolCallKeys } from "./tool-call-keys";
+import type { ToolCallKeys } from "./tool-call-keys";
 import type { ToolFactsShape } from "./tool-facts";
 import type { ToolReleases } from "./tool-releases";
 import type {
@@ -329,7 +329,7 @@ export interface ClosureContext {
   ) =>
     { accountId?: string; moved?: true; placed?: string } | { refusal: string };
   accountWords: (accountId: string | null | undefined) => string;
-  admission: ReturnType<typeof createAdmission>;
+  admission: Admission["Service"];
   advanceCompaction: (instanceId: string) => void;
   advanceMove: (move: LoginMove) => Promise<void>;
   afterPausingCall: (instanceId: string, neutral: NeutralMessage) => void;
@@ -631,7 +631,7 @@ export interface ClosureContext {
     }
   ) => HookDraft | string;
   hubAsks: ReturnType<typeof createAsks>;
-  hubAuth: ReturnType<typeof createHubAuth>;
+  hubAuth: HubAuth["Service"];
   hubBuild: BuildInfo;
   hubGitOrigins: () => string[];
   hubPreviewOrigins: () => HubPreviewOrigins;
@@ -642,7 +642,7 @@ export interface ClosureContext {
     instanceId: string,
     origin: NeutralOrigin
   ) => TurnChoice | undefined;
-  identities: ReturnType<typeof createSessionIdentities>;
+  identities: SessionIdentities["Service"];
   inCustody: Map<string, { machineId: string; since: number; told: boolean }>;
   inFlightFor: SessionCallsDeps["inFlightFor"];
   inFlightRefusal: (instanceId: string) => string | undefined;
@@ -783,7 +783,7 @@ export interface ClosureContext {
   ) => { model: string } | { refusal: string };
   launchRefusal: (instanceId: string) => string | undefined;
   launchStarted: (instanceId: string, why: string) => void;
-  laws: ReturnType<typeof createLaws>;
+  laws: Laws["Service"];
   lead: Caw | undefined;
   leadRuns: Routines | undefined;
   leftoverWords: (workspaceId: string, from: string) => string;
@@ -803,7 +803,7 @@ export interface ClosureContext {
   locations: Map<string, SessionLocation | null>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
-  machineCredentials: ReturnType<typeof createMachineCredentials>;
+  machineCredentials: MachineCredentials["Service"];
   machineCustody: Map<string, SessionCustody>;
   machineFault: (
     machineId: string,
@@ -1416,7 +1416,7 @@ export interface ClosureContext {
   TOOL_SIGNIN_BEGIN_MS: 90000;
   TOOL_SIGNIN_COMPLETE_MS: 180000;
   tabNamed: (asked: string, machine: string | null) => Promise<TabNamed>;
-  tailnetHttps: ReturnType<typeof createTailnetHttps>;
+  tailnetHttps: TailnetHttps["Service"];
   takenUpBy: (
     row: { parentInstanceId?: string | null | undefined } | undefined,
     origin: NeutralOrigin
@@ -1445,7 +1445,7 @@ export interface ClosureContext {
   ) => void;
   tickLeaves: () => void;
   tickMoves: () => void;
-  toolCallKeys: ReturnType<typeof createToolCallKeys>;
+  toolCallKeys: ToolCallKeys["Service"];
   /** Whether each machine's tool cells are its connection's now (tool-facts.ts). */
   toolFacts: ToolFactsShape;
   /** Something a tool listing reads beside its session moved (a connection, a delegate type, an area, the fleet): every listing made again, every open list looked at (delegation-mcp.ts). */

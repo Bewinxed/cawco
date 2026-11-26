@@ -13,7 +13,7 @@
  *   `triggerModeDefault`), never Caw's chat mode. A model follows its
  *   harness (core `triggerSettingInEffect`).
  * - **A routine's or an event route's own mode** wins over all of it, per
- *   event, as the router reads it ({@link TriggerSettings.forEvent}).
+ *   event, as the router reads it ({@link TriggerSettingsShape.forEvent}).
  * - Read and written through `/api/fleet/trigger-settings` and
  *   `/api/projects/:id/trigger-settings`; a write names the fields it
  *   changes, null clearing one.
@@ -32,8 +32,10 @@ import {
   triggerModeDefault,
   triggerSettingInEffect,
 } from "@cawco/core/triggers";
+import { Context, Effect, Layer } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
+import { Db } from "./db";
 import type { ProjectRow } from "./db/projects";
 import { oneAccountAsked } from "./project-edit";
 import { MODE } from "./tasks";
@@ -72,10 +74,7 @@ const settingBody = t.Object({
 
 const KIND = t.UnionEnum(TRIGGER_KINDS);
 
-export const createTriggerSettings = ({
-  accounts,
-  db,
-}: TriggerSettingsDeps) => {
+const make = ({ accounts, db }: TriggerSettingsDeps) => {
   /** The project's Caw settings, what a kind's harness, model and account fall back to. */
   const cawOf = (project: ProjectRow) => ({
     harness: project.cawHarness,
@@ -217,10 +216,10 @@ export const createTriggerSettings = ({
   };
 };
 
-export type TriggerSettings = ReturnType<typeof createTriggerSettings>;
+export type TriggerSettingsShape = ReturnType<typeof make>;
 
 /** The routes the fleet's settings and a project's Caw settings read and write each kind's setting through. */
-export const triggerSettingsRoutes = (settings: TriggerSettings) =>
+export const triggerSettingsRoutes = (settings: TriggerSettingsShape) =>
   new Elysia()
     .get("/api/fleet/trigger-settings", () => settings.fleet())
     .patch(
@@ -239,3 +238,19 @@ export const triggerSettingsRoutes = (settings: TriggerSettings) =>
       },
       ({ params, body }) => settings.setProject(params.id, params.kind, body)
     );
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class TriggerSettings extends Context.Service<
+  TriggerSettings,
+  TriggerSettingsShape
+>()("TriggerSettings") {}
+
+export const TriggerSettingsLayer = Layer.effect(TriggerSettings)(
+  Effect.gen(function* () {
+    const db = yield* Db;
+    return make({ accounts: () => db.accounts.list(), db });
+  })
+);

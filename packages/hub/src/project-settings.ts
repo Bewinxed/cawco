@@ -157,7 +157,7 @@ import { projectStartingSet } from "./project-starting-set";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
-import type { TriggerSettings } from "./trigger-settings";
+import type { TriggerSettingsShape } from "./trigger-settings";
 import { budgetOf } from "./work-limits";
 
 const GITHUB_REPO =
@@ -596,7 +596,7 @@ export interface ProjectSettingsDeps {
    * Each kind of trigger's settings in the project, read and written as
    * Caw's settings panel does (trigger-settings.ts).
    */
-  readonly triggers: Pick<TriggerSettings, "project" | "setProject">;
+  readonly triggers: Pick<TriggerSettingsShape, "project" | "setProject">;
   /**
    * Writes the project's `starting-set.md` with `set`, by `author`, or
    * deletes it for null (project-starting-set.ts).

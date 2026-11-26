@@ -302,6 +302,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { quote } from "@cawco/providers/quote";
+import { Context } from "effect";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
@@ -318,7 +319,7 @@ import {
 import { actionRoutes, createActions } from "./actions";
 import { adminCalls } from "./admin-calls";
 import { adminTools } from "./admin-tools";
-import { createAdmission } from "./admission";
+import { Admission } from "./admission";
 import { runFrameStages } from "./agent-socket/frame-run";
 import { frameStagesOf } from "./agent-socket/frame-stages";
 import { runMachineReturn } from "./agent-socket/machine-return";
@@ -344,7 +345,7 @@ import { createDesignFiles } from "./artifacts/design-files";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
 import { artifactPictures, artifactSend } from "./artifacts/page-posts";
-import { createPageStores } from "./artifacts/page-stores";
+import { PageStores } from "./artifacts/page-stores";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   type Artifacts,
@@ -369,7 +370,7 @@ import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
 import { answered as browserAnswered } from "./browser-answered";
-import { browserPassRoutes, openBrowserPass } from "./browser-passes";
+import { browserPassRoutes } from "./browser-passes";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
@@ -406,9 +407,8 @@ import {
   dashboardUrl,
   delegateDashboard,
   noteTailnetDashboard,
-  secureDashboardUrl,
 } from "./dashboard-url";
-import type { DbShape } from "./db";
+import { Db, type DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import { accountReportOf } from "./db/machines";
 import {
@@ -484,10 +484,11 @@ import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
 import type { HarnessConfigBody } from "./harness-config-body";
 import { createHistory, custodyLine, userTurnText } from "./history";
-import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
+import { addressOf, browserName, type Caller, HubAuth } from "./hub-auth";
 import { type HubContext, hubContextOf } from "./hub-context";
 import { hubId } from "./hub-id";
-import { createHubRecord } from "./hub-record";
+import { HubLayer } from "./hub-layer";
+import { HubRecord } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { type AuthSocket, type Forwarded, MachineAway } from "./hub-shapes";
@@ -522,8 +523,13 @@ import { landingBranch } from "./landing-run";
 import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
 import { createLawTasks } from "./law-tasks";
-import { createLaws } from "./laws";
-import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { Laws } from "./laws";
+import {
+  HubLifetime,
+  type HubLifetimeShape,
+  type HubTimer,
+  soon,
+} from "./lifetime";
 import {
   contextSize,
   liveWorkOf,
@@ -551,7 +557,7 @@ import {
 import { createMachineCalls } from "./machine-calls";
 import { createMachineCommands } from "./machine-commands";
 import { createMachineContact } from "./machine-contact";
-import { basicCaller, createMachineCredentials } from "./machine-credentials";
+import { basicCaller, MachineCredentials } from "./machine-credentials";
 import {
   createMachinePause,
   PAUSE_ORIGIN,
@@ -584,6 +590,7 @@ import {
   type AnswerFrom,
   onPermissionAnswer,
   outlivesSession,
+  Pending,
   type PendingShape,
 } from "./pending";
 import { notPersonsOwn, PERSON_SOCKET_WORDS } from "./person-acts";
@@ -601,15 +608,14 @@ import {
   noteParent,
   onParents,
   type PreviewTarget,
-  previewParents,
   previewTargets,
   shownArtifact,
 } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import { createPreviewBrowse, WORKSPACE_TIMEOUT_MS } from "./preview-browse";
 import {
-  createPreviewLink,
   fromPreviewServer,
+  PreviewLink,
   type PreviewOriginDeps,
   previewControlRoutes,
 } from "./preview-control";
@@ -667,7 +673,7 @@ import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import { recordsProjectOf } from "./records-project";
 import type { AnyProblem } from "./refusal";
-import { type RegistryShape, refusalFrame } from "./registry";
+import { Registry, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl } from "./relay-control";
 import {
@@ -742,12 +748,12 @@ import {
   attachmentsOfPages,
 } from "./session-attachments";
 import { sessionCalls } from "./session-calls";
-import { createSessionIdentities } from "./session-identity";
+import { SessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
-import { createSessionRuntime } from "./session-runtime";
+import { SessionRuntime } from "./session-runtime";
 import { sessionWord } from "./session-word";
 import type { SettingPick } from "./setting-pick-shapes";
 import { createSettingPicks } from "./setting-picks";
@@ -783,7 +789,7 @@ import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { createTrackers, trackerRoutes } from "./sync";
-import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
+import { dashboardRelay, TailnetHttps } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { normaliseTaskRef } from "./task-file";
 import { createTaskInput } from "./task-input";
@@ -797,17 +803,14 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import { createToolCallKeys } from "./tool-call-keys";
-import { createToolFacts } from "./tool-facts";
+import { ToolCallKeys } from "./tool-call-keys";
+import { ToolFacts } from "./tool-facts";
 import { createToolInstalls } from "./tool-installs";
 import { ToolReleases } from "./tool-releases";
 import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
 import { PROJECT_ORIGIN } from "./trigger-event";
-import {
-  createTriggerSettings,
-  triggerSettingsRoutes,
-} from "./trigger-settings";
+import { TriggerSettings, triggerSettingsRoutes } from "./trigger-settings";
 import { createTriggers, type Triggers } from "./triggers";
 import { turnState } from "./turn-state";
 import { turnOrigin, turnUsageOf } from "./turn-usage";
@@ -1317,6 +1320,16 @@ export const createServer = (
     dir: dirname(DB_PATH),
     sleep: lifetime.sleep,
   });
+  // The hub's services that are layers (hub-layer.ts), made once on its
+  // lifetime from the four it was handed.
+  const services = lifetime.build(
+    HubLayer,
+    Context.make(Db, db).pipe(
+      Context.add(Registry, registry),
+      Context.add(Pending, pending),
+      Context.add(HubLifetime, lifetime)
+    )
+  );
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
     readSessionProcess: () => readSessionProcess,
@@ -2300,7 +2313,7 @@ export const createServer = (
     pulses,
     touched,
     forget: forgetSessionRuntime,
-  } = createSessionRuntime();
+  } = Context.get(services, SessionRuntime);
   const {
     agentProtocols,
     binaryUpdateStates,
@@ -2401,7 +2414,7 @@ export const createServer = (
    * request, is logged by name, and opens a defect task for agents once the
    * tasks exist (law-tasks.ts, filled below).
    */
-  const laws = createLaws();
+  const laws = Context.get(services, Laws);
   // A statement on the hub's connection that reads a large table whole is a
   // broken law, logged and filed (db/statement-plans.ts); it still runs.
   db.statementPlans.hear((scan) => {
@@ -3786,7 +3799,7 @@ export const createServer = (
   /** What a machine last reported of each harness, kept until its next report. */
   const capabilityReports = new Map<string, HarnessReport[]>();
   /** Whether each machine's tool cells are its connection's now: set at its register, heard at its tools report. */
-  const toolFacts = createToolFacts(lifetime);
+  const toolFacts = Context.get(services, ToolFacts);
   registry.onAgentLeft((machineId, socketId) =>
     toolFacts.left(machineId, socketId)
   );
@@ -4082,28 +4095,11 @@ export const createServer = (
    * relay — carries the workspace, so the machine runs its shell commands
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
-  const identities = createSessionIdentities(db);
+  const identities = Context.get(services, SessionIdentities);
   // Who may call the hub: the mode, the person's devices, machines' keys
   // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
-  const recordHubEvent = createHubRecord(lifetime);
-  const hubAuth = createHubAuth({
-    // A browser's pass names a machine the hub still knows: one removed
-    // takes its browsers' passes with it.
-    browserPass: (pass) => {
-      const held = openBrowserPass(pass);
-      return held && db.machineFactsOf(held.machineId) ? held : undefined;
-    },
-    // Where a pairing's code and QR send the person: https once a dashboard reached the hub over it.
-    dashboard: () => secureDashboardUrl(registry) ?? dashboardUrl(registry),
-    db: db.hubAuth,
-    hubId,
-    recordHubEvent,
-    session: (authorization) => identities.resolve(authorization),
-    sshKeys: {
-      pending: () => db.sshMachines.pendingKeys(),
-      adopted: (id) => db.sshMachines.update(id, { pendingKey: null }),
-    },
-  });
+  const recordHubEvent = Context.get(services, HubRecord);
+  const hubAuth = Context.get(services, HubAuth);
   /**
    * Whether each machine's welcome has converged (welcome-converge.ts): what
    * an add's sync step waits on.
@@ -4153,7 +4149,7 @@ export const createServer = (
    * cold wake. A recorded turn
    * and a sleep tell it ({@link recordTurnUsage}, {@link sessionAsleep}).
    */
-  const admission = createAdmission(db);
+  const admission = Context.get(services, Admission);
   // The usage summary every account decision reads, filled once from the
   // readings and turns kept before it existed (db usage-periods.ts `fill`).
   const periodsFilled = db.usagePeriods.fill();
@@ -4751,7 +4747,7 @@ export const createServer = (
     });
   }
   // Pages' own stores (artifacts/page-stores.ts), joined on their origins.
-  const pageStores = createPageStores({ db: db.pageStores, lifetime });
+  const pageStores = Context.get(services, PageStores);
 
   /**
    * What `discard_workspace` answers past its carry: the artifacts the
@@ -5771,10 +5767,7 @@ export const createServer = (
    * row), and sends each shown preview's address again, its tailnet origin
    * come or gone.
    */
-  const tailnetHttps = createTailnetHttps({
-    dashboardPort: DASHBOARD_PORT,
-    lifetime,
-  });
+  const tailnetHttps = Context.get(services, TailnetHttps);
   tailnetHttps.beside(DASHBOARD_PORT, dashboardRelay(DASHBOARD_PORT));
   tailnetHttps.onChange((tailnet) => {
     noteTailnetDashboard(tailnetHttps.dashboard());
@@ -5794,11 +5787,7 @@ export const createServer = (
    * is told (the dashboards that may frame a preview, the tailnet's
    * certificate, that the port rows moved), and what its stands answered.
    */
-  const previewLink = createPreviewLink({
-    lifetime,
-    parents: previewParents,
-    tailnet: () => tailnetHttps.live(),
-  });
+  const previewLink = Context.get(services, PreviewLink);
   onParents((parents) => previewLink.say({ type: "parents", parents }));
   /**
    * Every preview origin's port and the fleet's mode (preview.ts), which the
@@ -7014,7 +7003,7 @@ export const createServer = (
   });
 
   /** What each fleet machine proves itself with to the git remote (machine-credentials.ts). */
-  const machineCredentials = createMachineCredentials();
+  const machineCredentials = Context.get(services, MachineCredentials);
 
   // ── Who may connect (hub-auth.ts) ──────────────────────────────────────
   /** Each machine socket's nonce, sent on open, answered by its register. */
@@ -9642,10 +9631,7 @@ export const createServer = (
   });
   leadPort.fill(caw);
   // Each kind of trigger's harness, model, mode and account (trigger-settings.ts).
-  const triggerSettings = createTriggerSettings({
-    accounts: () => db.accounts.list(),
-    db,
-  });
+  const triggerSettings = Context.get(services, TriggerSettings);
   // The trigger router (triggers.ts): every trigger on a project's thing
   // goes to the session on it, else a fresh one; never to Caw's conversation.
   const triggers = createTriggers({
@@ -11646,7 +11632,7 @@ export const createServer = (
     placement: placementPreview(ctx),
   });
   // A relayed tool call sent again under its key is answered, not run again.
-  const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
+  const toolCallKeys = Context.get(services, ToolCallKeys);
   // A session's sends and starts through its tools (delegation-sends.ts).
   const delegationSends = createDelegationSends({
     cutTurn,

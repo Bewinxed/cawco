@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
+import { Context, Effect, Layer } from "effect";
 import type { DbShape } from "./db";
+import { Db } from "./db";
 
 const CREDENTIAL = /^[A-Za-z0-9_-]{43}$/u;
 
 /** The hub keeps hashes only. The raw value travels directly to one retained harness. */
-export const createSessionIdentities = (db: DbShape) => {
+const make = (db: DbShape) => {
   const hash = (credential: string) =>
     createHash("sha256").update(credential).digest("hex");
   const resolve = (authorization: string | null) => {
@@ -46,3 +48,18 @@ export const createSessionIdentities = (db: DbShape) => {
     },
   };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class SessionIdentities extends Context.Service<
+  SessionIdentities,
+  ReturnType<typeof make>
+>()("SessionIdentities") {}
+
+export const SessionIdentitiesLayer = Layer.effect(SessionIdentities)(
+  Effect.gen(function* () {
+    return make(yield* Db);
+  })
+);

@@ -28,7 +28,7 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { Deferred, Effect, Schema } from "effect";
 import type { KeptOff } from "./account-marks";
-import { type Admission, usdWords } from "./admission";
+import { type AdmissionShape, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { HeldMove, LimitHold } from "./db/at-limit";
@@ -226,7 +226,7 @@ const outOf = (
  */
 export const accountsRead = (
   db: DbShape,
-  admission: Pick<Admission, "arrivals" | "ledger">,
+  admission: Pick<AdmissionShape, "arrivals" | "ledger">,
   row: LimitRow,
   leaving: string,
   how: {

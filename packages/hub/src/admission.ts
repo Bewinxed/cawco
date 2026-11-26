@@ -10,7 +10,9 @@ import {
   windowOpen,
   windowUsed,
 } from "@cawco/core/usage/windows";
+import { Context, Effect, Layer } from "effect";
 import type { DbShape } from "./db";
+import { Db } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import { readPeriods, usdPerPercent } from "./forecast";
 import type { Arrival } from "./placement";
@@ -26,7 +28,7 @@ import type { Arrival } from "./placement";
  * (core `bearing`), each measured in dollars per percent from that
  * account's own periods of it (forecast.ts `usdPerPercent`, over the usage
  * summary). A charge also carries the session's burn, so the run-out test
- * counts it arriving on its target ({@link Admission} `arrivals`) until its
+ * counts it arriving on its target ({@link AdmissionShape} `arrivals`) until its
  * cost shows there. The ledger of
  * each window is what the one decision reads of an account here (decide.ts,
  * its floor test): nothing here refuses a move.
@@ -110,7 +112,7 @@ const bearingWindows = (
   return { reading, reported, windows };
 };
 
-export const createAdmission = (db: DbShape) => {
+const make = (db: DbShape) => {
   /** Each session's standing charge, by session. */
   const charges = new Map<string, Charge>();
 
@@ -379,4 +381,18 @@ export const createAdmission = (db: DbShape) => {
   };
 };
 
-export type Admission = ReturnType<typeof createAdmission>;
+export type AdmissionShape = ReturnType<typeof make>;
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class Admission extends Context.Service<Admission, AdmissionShape>()(
+  "Admission"
+) {}
+
+export const AdmissionLayer = Layer.effect(Admission)(
+  Effect.gen(function* () {
+    return make(yield* Db);
+  })
+);

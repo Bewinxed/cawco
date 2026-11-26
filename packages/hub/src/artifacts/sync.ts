@@ -56,7 +56,7 @@ import { applyUpdate, type Doc, Map as YMap } from "yjs";
 import type { StoreKey } from "../db/page-stores";
 import type { ArtifactClient, ArtifactDocs } from "./docs";
 import { picturePath } from "./page-store";
-import type { PageStores, StoreClient } from "./page-stores";
+import type { PageStoresShape, StoreClient } from "./page-stores";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -527,7 +527,7 @@ export interface StoreSocketEnd {
 }
 
 /** The listener's handlers for pages' store sockets: y-websocket's protocol, sync only, as an artifact's. */
-export const storeSocket = (stores: PageStores) => ({
+export const storeSocket = (stores: PageStoresShape) => ({
   open(socket: StoreSocketEnd) {
     const client: StoreClient = {
       beat: () => socket.send(BEAT),

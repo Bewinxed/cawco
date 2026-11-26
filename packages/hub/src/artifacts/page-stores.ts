@@ -14,12 +14,15 @@
  *
  * A store holds at most {@link STORE_LIMITS}`.bytes`, its whole state as
  * one update (`Y.encodeStateAsUpdate`), checked as each update is taken
- * ({@link PageStores.take}).
+ * ({@link PageStoresShape.take}).
  */
 import { RESYNC_MS } from "@cawco/core/doc-link";
+import { Context, Effect, Layer } from "effect";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { Db } from "../db";
 import { type PageStoresDb, type StoreKey, storeName } from "../db/page-stores";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
+import { HubLifetime } from "../lifetime";
 import { COMPACT_AT, COMPACT_QUIET_MS, IDLE_MS } from "./docs";
 
 /**
@@ -35,7 +38,7 @@ const STORE_LIMITS = { bytes: 8 * 1024 * 1024 } as const;
 export interface StoreClient {
   /** Sends it the hub's beat (sync.ts `BEAT`), every {@link RESYNC_MS}. */
   beat: () => void;
-  /** Ends its socket: what the store was kept for is gone ({@link PageStores.drop}). */
+  /** Ends its socket: what the store was kept for is gone ({@link PageStoresShape.drop}). */
   close: () => void;
   send: (update: Uint8Array) => void;
 }
@@ -57,7 +60,7 @@ interface Loaded {
   size: number;
 }
 
-export interface PageStores {
+export interface PageStoresShape {
   /** The store's doc, loaded from its log when it is not in memory. */
   doc: (key: StoreKey) => Doc;
   /** What `key` was kept for is gone, or came back: every joined page's socket ended and its doc let go, read again from its log at the next join. */
@@ -85,17 +88,17 @@ const clientOf = (origin: unknown): StoreClient | undefined =>
     ? origin.client
     : undefined;
 
-/** Whether `value` is a joined client: what {@link PageStores.take}'s origin carries. */
+/** Whether `value` is a joined client: what {@link PageStoresShape.take}'s origin carries. */
 const isClient = (value: unknown): value is StoreClient =>
   typeof value === "object" &&
   value !== null &&
   "send" in value &&
   typeof value.send === "function";
 
-export const createPageStores = (deps: {
+const make = (deps: {
   db: PageStoresDb;
   lifetime: HubLifetimeShape;
-}): PageStores => {
+}): PageStoresShape => {
   const loaded = new Map<string, Loaded>();
 
   deps.lifetime.every("store resync", RESYNC_MS, () => {
@@ -263,3 +266,18 @@ export const createPageStores = (deps: {
     },
   };
 };
+
+/**
+ * What `make` makes, as one of the hub's services: built once, from its
+ * layer, by `createServer` (hub-layer.ts).
+ */
+export class PageStores extends Context.Service<PageStores, PageStoresShape>()(
+  "PageStores"
+) {}
+
+export const PageStoresLayer = Layer.effect(PageStores)(
+  Effect.gen(function* () {
+    const db = yield* Db;
+    return make({ db: db.pageStores, lifetime: yield* HubLifetime });
+  })
+);
