@@ -161,7 +161,6 @@ promise-map	judging	packages/agent/src/boundary/judge-process.ts	1
 promise-map	kept	packages/agent/src/stage-host/docgen.ts	1
 promise-map	liveGroups	packages/agent/src/group-run.ts	1
 promise-map	local	packages/agent/src/stage-host/host.ts	1
-promise-map	looksQueued	packages/hub/src/at-limit.ts	1
 promise-map	making	packages/hub/src/git-remote.ts	1
 promise-map	needAsking	packages/agent/src/tools.ts	1
 promise-map	open	packages/agent/src/browser/dashboard-door.ts	1

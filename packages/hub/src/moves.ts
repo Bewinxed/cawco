@@ -22,7 +22,6 @@ import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { detach } from "@cawco/core/detach";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -66,6 +65,7 @@ import type { PermissionResult } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { Effect } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { MoveHold, MoveRow, SettledMove } from "./db/moves";
@@ -1446,7 +1446,12 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   /** A job goes on by itself: its record is what anyone follows. */
-  const goOn = (id: string): void => detach(advance(id), `move ${id}`);
+  const goOn = (id: string): void => {
+    deps.lifetime.fork(
+      `move ${id}`,
+      Effect.tryPromise(() => advance(id))
+    );
+  };
 
   // ── The person ──────────────────────────────────────────────────────────
 
@@ -1523,9 +1528,11 @@ export const createMoves = (deps: MovesDeps) => {
       deps.settle(askId, "cancelled");
     }
     if (deps.online(machine)) {
-      detach(
-        deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS),
-        `move ${id} cancel`
+      deps.lifetime.fork(
+        `move ${id} cancel`,
+        Effect.tryPromise(() =>
+          deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS)
+        )
       );
     }
     console.log(`[moves] ${id}: cancelled at ${row.stage}: ${words}`);
@@ -1616,14 +1623,16 @@ export const createMoves = (deps: MovesDeps) => {
   const machineBack = (machineId: string): void => {
     for (const row of db.moveRowsOn(machineId)) {
       if (row.stage === "cancelled" && row.state.stopOn === machineId) {
-        detach(
-          deps.call(
-            machineId,
-            CONTROL_MOVE_CANCEL,
-            [row.id],
-            INSPECT_TIMEOUT_MS
-          ),
-          `move ${row.id} cancel`
+        deps.lifetime.fork(
+          `move ${row.id} cancel`,
+          Effect.tryPromise(() =>
+            deps.call(
+              machineId,
+              CONTROL_MOVE_CANCEL,
+              [row.id],
+              INSPECT_TIMEOUT_MS
+            )
+          )
         );
         db.updateMove(row.id, {
           state: { ...row.state, stopOn: undefined },

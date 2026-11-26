@@ -11,7 +11,6 @@ import {
   type WaitReason,
 } from "@cawco/core/accounts";
 import { WORK_IN_FLIGHT } from "@cawco/core/binary-updates";
-import { detach } from "@cawco/core/detach";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -26,6 +25,7 @@ import {
 import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import { Deferred, Effect } from "effect";
 import type { KeptOff } from "./account-marks";
 import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
@@ -771,13 +771,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(row.id);
         return;
       }
-      detach(
+      lifetime.fork(
+        "at-limit settle",
         serially(current.provider, "a settling session's look", () =>
           act(fresh, current, cause).catch((error: unknown) => {
             console.error(failedWords(fresh, current, error));
           })
-        ),
-        "at-limit settle"
+        )
       );
     });
     settling.set(row.id, { timer: next, until });
@@ -1047,13 +1047,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         if (!fresh || over(fresh)) {
           return;
         }
-        detach(
+        lifetime.fork(
+          "at-limit notice",
           serially(current.provider, "an announced move", () =>
             act(fresh, current, cause).catch((error: unknown) => {
               console.error(failedWords(fresh, current, error));
             })
-          ),
-          "at-limit notice"
+          )
         );
       })
     );
@@ -1822,15 +1822,25 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * Runs `work` once every decision of `provider` before it has ended, so
    * decisions of one provider are taken one at a time, in the order their
    * events came. A failure is logged as `what`'s and ends only that work.
+   * On a free provider `work` starts as this runs, before its first wait.
    */
   const serially = (
     provider: string,
     what: string,
     work: () => Promise<void>
-  ): Promise<void> =>
-    chains.run(provider, work).catch((error: unknown) => {
-      console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
-    });
+  ): Effect.Effect<void> =>
+    chains
+      .withLock(
+        provider,
+        Effect.tryPromise({ try: work, catch: (error: unknown) => error })
+      )
+      .pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
+          })
+        )
+      );
 
   /**
    * One look at every hold of `provider`, one decision each in admission
@@ -1863,12 +1873,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * The look queued for each provider's holds ({@link lookAgain}), and
-   * whether only a change of the accounts asked for it.
+   * The look queued for each provider's holds ({@link lookAgain}), whether
+   * only a change of the accounts asked for it, and its end, which every
+   * caller it took waits on.
    */
   const looksQueued = new Map<
     string,
-    { accountsMoved: boolean; look: Promise<void> }
+    { accountsMoved: boolean; looked: Deferred.Deferred<void> }
   >();
 
   /**
@@ -1881,27 +1892,32 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     provider: string,
     why: string,
     accountsMoved: boolean
-  ): Promise<void> => {
-    const queued = looksQueued.get(provider);
-    if (queued !== undefined) {
-      queued.accountsMoved &&= accountsMoved;
-      return queued.look;
-    }
-    const entry = { accountsMoved, look: Promise.resolve() };
-    // Queued before its turn is asked for: a turn nothing holds begins at
-    // once, and takes it off the queue as it begins.
-    looksQueued.set(provider, entry);
-    entry.look = serially(
-      provider,
-      `the look at the holds (${why})`,
-      async () => {
+  ): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const queued = looksQueued.get(provider);
+      if (queued !== undefined) {
+        queued.accountsMoved &&= accountsMoved;
+        return Deferred.await(queued.looked);
+      }
+      const entry = { accountsMoved, looked: Deferred.makeUnsafe<void>() };
+      // Queued before its turn is asked for: a turn nothing holds begins at
+      // once, and takes it off the queue as it begins.
+      looksQueued.set(provider, entry);
+      return serially(provider, `the look at the holds (${why})`, async () => {
         looksQueued.delete(provider);
         await lookAtHolds(provider, entry.accountsMoved);
         plan();
-      }
-    );
-    return entry.look;
-  };
+      }).pipe(
+        Effect.onExit((exit) => {
+          // Cut before its turn began (the hub closed): a later ask queues
+          // a look of its own rather than waiting on this one.
+          if (looksQueued.get(provider) === entry) {
+            looksQueued.delete(provider);
+          }
+          return Deferred.done(entry.looked, exit);
+        })
+      );
+    });
 
   /** Whether any hold is carried on by the hub now: one not stale. */
   const anyHeld = (): boolean =>
@@ -1940,13 +1956,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         came: one,
         held: rebalancer.heldOn(one.provider, one.machineId),
       }));
-      detach(
-        lookAgain(provider, "its accounts changed", true).then(() => {
-          for (const one of before) {
-            rebalancer.notify(one.came, one.held);
-          }
-        }),
-        "at-limit look"
+      lifetime.fork(
+        "at-limit look",
+        lookAgain(provider, "its accounts changed", true).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              for (const one of before) {
+                rebalancer.notify(one.came, one.held);
+              }
+            })
+          )
+        )
       );
     }
   };
@@ -1995,9 +2015,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const { provider } = soonest;
     timer = lifetime.after("at-limit hold's moment", soonest.at - now, () => {
       timer = undefined;
-      detach(
-        lookAgain(provider, "a hold's moment came", false),
-        "at-limit look"
+      lifetime.fork(
+        "at-limit look",
+        lookAgain(provider, "a hold's moment came", false)
       );
     });
   };
@@ -2143,14 +2163,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * Past the cutoff it is carried on only when `asked`: the message is a
    * person's or its parent's, or a Continue's ({@link goneStale}).
    */
-  const lookNow = (
+  const lookAtNow = (
     instanceId: string,
     why: string,
     asked?: TakenUpBy
-  ): Promise<void> => {
+  ): Effect.Effect<void> => {
     const held = db.atLimit.hold(instanceId);
     if (!held) {
-      return Promise.resolve();
+      return Effect.void;
     }
     return serially(
       providerOf(held.accountId),
@@ -2235,17 +2255,22 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         db.atLimit.hold(instanceId) !== undefined
       );
     },
-    lookNow,
+    /** The promise edge of {@link lookAtNow}. */
+    lookNow: (
+      instanceId: string,
+      why: string,
+      asked?: TakenUpBy
+    ): Promise<void> => lifetime.run(lookAtNow(instanceId, why, asked)),
     /**
      * `instanceId`'s process said its background work changed (cut-turns.ts
      * `keepTasks`): a hold whose move waits for that work is decided again
-     * now ({@link lookNow}); anything else is left as it is.
+     * now ({@link lookAtNow}); anything else is left as it is.
      */
     workChanged(instanceId: string): void {
       if (db.atLimit.heldMove(instanceId)) {
-        detach(
-          lookNow(instanceId, "the work its move waits for changed"),
-          "at-limit look"
+        lifetime.fork(
+          "at-limit look",
+          lookAtNow(instanceId, "the work its move waits for changed")
         );
       }
     },
@@ -2372,10 +2397,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     /** A turn of `instanceId` was refused at its account's limit, and has ended. */
     turnRefused(instanceId: string): Promise<void> {
       const row = rowOf(instanceId);
-      return serially(
-        providerOf(row?.accountId),
-        `the answer to ${instanceId.slice(0, 8)}'s refused turn`,
-        () => answerRefused(instanceId)
+      // The promise edge of the answer, in its provider's turn.
+      return lifetime.run(
+        serially(
+          providerOf(row?.accountId),
+          `the answer to ${instanceId.slice(0, 8)}'s refused turn`,
+          () => answerRefused(instanceId)
+        )
       );
     },
     /**
@@ -2386,21 +2414,24 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      */
     signedOut(instanceId: string): Promise<void> {
       const row = rowOf(instanceId);
-      return serially(
-        providerOf(row?.accountId),
-        `the answer to ${instanceId.slice(0, 8)}'s refused sign-in`,
-        async () => {
-          const fresh = rowOf(instanceId);
-          const current = fresh ? currentOf(fresh) : undefined;
-          if (!(fresh && current)) {
-            return;
+      // The promise edge of the answer, in its provider's turn.
+      return lifetime.run(
+        serially(
+          providerOf(row?.accountId),
+          `the answer to ${instanceId.slice(0, 8)}'s refused sign-in`,
+          async () => {
+            const fresh = rowOf(instanceId);
+            const current = fresh ? currentOf(fresh) : undefined;
+            if (!(fresh && current)) {
+              return;
+            }
+            const named = accountNameAmong(current, db.accounts.list());
+            console.info(
+              `[at-limit] ${ports.named(fresh)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in ${configurePage("accounts")}.`
+            );
+            await act(fresh, current, "refused-credential");
           }
-          const named = accountNameAmong(current, db.accounts.list());
-          console.info(
-            `[at-limit] ${ports.named(fresh)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in ${configurePage("accounts")}.`
-          );
-          await act(fresh, current, "refused-credential");
-        }
+        )
       );
     },
     /**
@@ -2412,7 +2443,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      */
     turnEnded(instanceId: string): void {
       const row = rowOf(instanceId);
-      detach(
+      lifetime.fork(
+        "at-limit turn's end",
         serially(
           providerOf(row?.accountId),
           `the decision at ${instanceId.slice(0, 8)}'s turn's end`,
@@ -2420,8 +2452,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
             await extraUsageTurn(instanceId);
             await rebalancer.turnEnded(instanceId);
           }
-        ),
-        "at-limit turn's end"
+        )
       );
     },
     accountsChanged,

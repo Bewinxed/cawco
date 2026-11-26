@@ -8,7 +8,6 @@ import {
   LIMITED_PROVIDERS,
   namedAccount,
 } from "@cawco/core/accounts";
-import { detach } from "@cawco/core/detach";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { COMPACTION_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -27,6 +26,7 @@ import { chatgptPlanWords } from "@cawco/core/words/chatgpt-plan";
 import { configurePage } from "@cawco/core/words/configure";
 import { owedMoveWords } from "@cawco/core/words/owed-moves";
 import { relaunchWords } from "@cawco/core/words/relaunch";
+import { Effect } from "effect";
 import { ElysiaStatus } from "elysia";
 import { type KeptOff, keptOffIn, markOn } from "./account-marks";
 import { machineAccount } from "./accounts";
@@ -109,6 +109,7 @@ export type LimitMovesContext = Pick<
   | "launchClaims"
   | "launchInFlight"
   | "lastRequestContext"
+  | "lifetime"
   | "machineName"
   | "modelRefusal"
   | "moveRowsToAccount"
@@ -764,7 +765,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const going = takeUpOwedMove(instanceId, carry);
     if (going !== undefined) {
       // The carry runs on its own; the relaunch follows it.
-      detach(going, "account move");
+      ctx.lifetime.fork(
+        "account move",
+        Effect.tryPromise(() => going)
+      );
       return;
     }
     const [stored] = ctx.db.getInstancesByIds([instanceId]);
@@ -1283,12 +1287,14 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
           machineId
       );
     for (const held of heldHere) {
-      detach(
-        ctx.atLimit.lookNow(
-          held.instanceId,
-          `${ctx.machineName(machineId)} is connected again`
-        ),
-        "at-limit look"
+      ctx.lifetime.fork(
+        "at-limit look",
+        Effect.tryPromise(() =>
+          ctx.atLimit.lookNow(
+            held.instanceId,
+            `${ctx.machineName(machineId)} is connected again`
+          )
+        )
       );
     }
     const heldIds = new Set(heldHere.map((one) => one.instanceId));
@@ -1311,7 +1317,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       takenUp.push({ id, waited: true });
     }
     if (takenUp.length > 0) {
-      detach(takeUpInTurn(takenUp), "owed moves on register");
+      ctx.lifetime.fork(
+        "owed moves on register",
+        Effect.tryPromise(() => takeUpInTurn(takenUp))
+      );
     }
   };
 
@@ -1690,7 +1699,10 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       `${woke.head} The message waits at the hub until its conversation is copied there.`
     );
     movingAtMessage.add(row.id);
-    detach(carryAtMessage(row, from, woke), "move at a message");
+    ctx.lifetime.fork(
+      "move at a message",
+      Effect.tryPromise(() => carryAtMessage(row, from, woke))
+    );
     return true;
   };
 
@@ -2450,13 +2462,16 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    */
   const carryBetweenTurns = (live: readonly PublicInstanceRow[]): void => {
     for (const row of live) {
-      detach(
-        (async () => {
-          if (ctx.owedMoves.has(row.id) && (await ctx.sessionIdle(row))) {
+      ctx.lifetime.fork(
+        "account move between turns",
+        Effect.gen(function* () {
+          if (
+            ctx.owedMoves.has(row.id) &&
+            (yield* Effect.tryPromise(() => ctx.sessionIdle(row)))
+          ) {
             relaunchOnAccount(row.id);
           }
-        })(),
-        "account move between turns"
+        })
       );
     }
   };
