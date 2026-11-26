@@ -121,3 +121,23 @@ scripts/lint/fixtures/design/planted-typed-read.ts:24:19 house/typed-property-re
 scripts/lint/fixtures/design/planted.svelte:20:23 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:14:29 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:25:10 house/typed-property-read
+# house/limit-has-a-reason: a bound of every kind with no reason (limit/reported.*); limit/passing.* holds each tag form, and reports nothing.
+scripts/lint/fixtures/limit/reported.svelte:4:9 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.svelte:5:41 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:17:25 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:18:33 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:22:52 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:25:3 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:26:3 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:29:37 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:30:36 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:31:33 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:32:39 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:33:34 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:34:14 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:35:14 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:36:37 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:36:48 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:40:14 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:43:30 house/limit-has-a-reason
+scripts/lint/fixtures/limit/reported.ts:43:42 house/limit-has-a-reason

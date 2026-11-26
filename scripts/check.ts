@@ -401,8 +401,10 @@ if (TSC) {
 /** Golar's lint run: the script and what it reads (its config, rules, patches and stylesheets declare theirs). */
 const GOLAR_LINT = "scripts/lint/golar-lint.ts";
 // The files golar.config.ts lints: its globs, as one pattern.
+// The limit rule reads every TypeScript and Svelte file under packages/ and
+// apps/ (but apps/apple), so those stand for the narrower globs there.
 const LINTED =
-  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|apps\/dashboard\/scripts\/.*\.ts|apps\/cawrier\/src\/.*\.ts|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte)|packages\/[^/]+\/scripts\/.*\.ts|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
+  /^(?:(?:packages\/|apps\/(?!apple\/)).*\.(?:ts|tsx|svelte)|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
 /** The files the design rules read (golar.config.ts `designed`). */
 const DESIGNED = /^apps\/dashboard\/src\/.*\.(?:ts|svelte)$/u;
 /** The dashboard's stylesheets, whose classes and tokens the design rules judge by. */
