@@ -17,7 +17,7 @@ import type {
   IngressView,
 } from "../ingress-views";
 import { PAYLOAD_MAX } from "../ingress-views";
-import type { FolderFile, FolderListing } from "../project-folder";
+import type { FolderFile, FolderListing, FolderPage } from "../project-folder";
 import type { RelayCreated } from "../relay-created";
 import {
   ago,
@@ -33,8 +33,12 @@ import {
 /** A list line's mark, which a single answer says as its kind. */
 const LIST_MARK = /^- /u;
 
-/** `folder_read`: a file's words, or a folder's entries. */
-export const folderReadWords = (read: FolderFile | FolderListing): string => {
+/**
+ * `folder_read`: a file's words, or a folder's entries. A file read in pages
+ * names, before its words, the bytes this page holds and where the next one
+ * starts, so a cut answer never loses the way on.
+ */
+export const folderReadWords = (read: FolderListing | FolderPage): string => {
   if ("entries" in read) {
     return lines(
       read.entries.length === 0
@@ -48,7 +52,14 @@ export const folderReadWords = (read: FolderFile | FolderListing): string => {
         "The listing stopped at its cap: list a folder under it."
     );
   }
-  return lines(`${read.path} (${read.size} bytes):`, read.content);
+  if (read.offset === 0 && read.next === null) {
+    return lines(`${read.path} (${read.size} bytes):`, read.content);
+  }
+  const end = read.next ?? read.size;
+  return lines(
+    `${read.path}, bytes ${read.offset} to ${end} of ${read.size}; ${read.next === null ? "the file's last page" : `the next page is offset ${read.next}`}:`,
+    read.content
+  );
 };
 
 /** `folder_write`: committed, or proposed for the person. */
@@ -129,7 +140,7 @@ export const memoryReadWords = (
         : "The project keeps no memory file yet."
     );
   }
-  return folderReadWords(read);
+  return folderReadWords({ ...read, offset: 0, next: null });
 };
 
 /** `event_route_delete`, `connector_poll_delete`. */

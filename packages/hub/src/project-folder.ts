@@ -47,6 +47,7 @@ import { freeBytes } from "@cawco/core/free-bytes";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { recordLimitReading } from "@cawco/core/limit-readings";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
+import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -904,9 +905,13 @@ const walk = async (
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
+/** Where git looks for a NUL to judge a file binary. */
+// @limit external: git judges a file binary by a NUL in its first 8000 bytes, FIRST_FEW_BYTES in git's xdiff-interface.c
+const BINARY_HEAD = 8000;
+
 /** The bytes as UTF-8 text, or undefined when they are binary (a NUL early on, as git judges, or not UTF-8). */
 const asText = (bytes: Uint8Array): string | undefined => {
-  if (bytes.subarray(0, 8000).includes(0)) {
+  if (bytes.subarray(0, BINARY_HEAD).includes(0)) {
     return undefined;
   }
   try {
@@ -937,8 +942,8 @@ const statToRead = async (
 const sha256Of = (bytes: Uint8Array): string =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
-/** One text file, whole: up to {@link FOLDER_FILE_LIMIT}; a binary file is refused. */
-export const readFolderFile = async (projectId: string, rawPath: string) => {
+/** The file at `rawPath` to read as text; refused when it names none, or names a folder. */
+const fileToRead = async (projectId: string, rawPath: string) => {
   const found = await statToRead(
     projectId,
     rawPath,
@@ -947,13 +952,27 @@ export const readFolderFile = async (projectId: string, rawPath: string) => {
   if (found instanceof ElysiaStatus) {
     return found;
   }
-  const { rel, real, info } = found;
-  if (info.isDirectory()) {
+  if (found.info.isDirectory()) {
     return problem(409, {
       code: "folder-read-folder",
-      detail: `${rel} is a folder; list it instead of reading it.`,
+      detail: `${found.rel} is a folder; list it instead of reading it.`,
     });
   }
+  return found;
+};
+
+/**
+ * One text file, whole: up to {@link FOLDER_FILE_LIMIT}; a binary file is
+ * refused. For the hub's own readers of a file they parse or write back
+ * whole, and the dashboard's file view; `folder_read` reads any size by page
+ * ({@link readFolderPage}).
+ */
+export const readFolderFile = async (projectId: string, rawPath: string) => {
+  const found = await fileToRead(projectId, rawPath);
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { rel, real, info } = found;
   recordLimitReading("hub.folder-file-bytes", info.size);
   if (info.size > FOLDER_FILE_LIMIT) {
     return problem(413, {
@@ -976,6 +995,167 @@ export const readFolderFile = async (projectId: string, rawPath: string) => {
     size: bytes.byteLength,
   };
   return file;
+};
+
+/**
+ * One page of a text file, as `folder_read` answers it: the file's words
+ * from byte `offset`, and `next`, the byte offset its following page starts
+ * at, null on its last page. Pages split between characters, never inside
+ * one, so every page's words read whole and its pages in order are the file.
+ */
+export interface FolderPage {
+  content: string;
+  /** Null on the file's last page. */
+  next: number | null;
+  /** The byte this page starts at. */
+  offset: number;
+  path: string;
+  /** The whole file's bytes. */
+  size: number;
+}
+
+/**
+ * The most UTF-16 units one page carries: one tool answer's room, less the
+ * room its first line takes (the file's path, up to {@link PATH_LIMIT}, and
+ * its bytes), so the line naming the next page always reaches the model.
+ */
+// @limit measured: one tool answer's room, TOOL_ANSWER_CHARS, measured in core prompt-budget.ts from Claude Code's MAX_MCP_OUTPUT_TOKENS and 22,145 fleet tool results; a page past it is cut by the harness before its model reads it
+const PAGE_CHARS = TOOL_ANSWER_CHARS - PATH_LIMIT - 200;
+/** The most bytes a UTF-8 character takes: what one page's {@link PAGE_CHARS} read from disk may weigh. */
+const UTF8_WIDEST = 4;
+const lenient = new TextDecoder("utf-8");
+
+/** How many bytes a UTF-8 character starting with `lead` takes; 1 for a byte that starts none. */
+const leadWidth = (lead: number): number => {
+  if (lead >= 0xf0 && lead <= 0xf4) {
+    return 4;
+  }
+  if (lead >= 0xe0 && lead <= 0xef) {
+    return 3;
+  }
+  return lead >= 0xc2 && lead <= 0xdf ? 2 : 1;
+};
+
+/** Whether `byte` continues a UTF-8 character rather than starting one. */
+const continues = (byte: number | undefined): boolean =>
+  byte !== undefined && byte >= 0x80 && byte <= 0xbf;
+
+/**
+ * The bytes the character at `bytes[at]` takes: its lead's width when every
+ * byte of it `bytes` holds continues it (so past `bytes`' end when `bytes`
+ * holds only its start), else 1, a stray byte read as U+FFFD.
+ */
+const charWidth = (bytes: Uint8Array, at: number): number => {
+  const width = leadWidth(bytes[at] ?? 0);
+  for (let next = at + 1; next < at + width && next < bytes.length; next += 1) {
+    if (!continues(bytes[next])) {
+      return 1;
+    }
+  }
+  return width;
+};
+
+/**
+ * Where the characters `bytes` holds whole end, after at most
+ * {@link PAGE_CHARS} UTF-16 units: never inside a character, nor inside one
+ * `bytes` holds only the start of when the file goes on past them (`more`).
+ */
+const wholeCharsEnd = (bytes: Uint8Array, more: boolean): number => {
+  let at = 0;
+  let units = 0;
+  while (at < bytes.length) {
+    const width = charWidth(bytes, at);
+    const takes = width === UTF8_WIDEST ? 2 : 1;
+    if (units + takes > PAGE_CHARS || (more && at + width > bytes.length)) {
+      break;
+    }
+    at = Math.min(at + width, bytes.length);
+    units += takes;
+  }
+  return at;
+};
+
+/**
+ * Where a page of `bytes` ends ({@link wholeCharsEnd}); a page the file goes
+ * on past ends after its last line break, when one stands in its second half.
+ */
+const pageEnd = (bytes: Uint8Array, more: boolean): number => {
+  const at = wholeCharsEnd(bytes, more);
+  if (at === bytes.length && !more) {
+    return at;
+  }
+  const lineEnd = bytes.subarray(0, at).lastIndexOf(0x0a) + 1;
+  return lineEnd > at / 2 ? lineEnd : at;
+};
+
+/** Whether byte `back` of `bytes` falls inside a character that starts before it. */
+const insideCharacter = (bytes: Uint8Array, back: number): boolean => {
+  for (let at = 0; at < back; at += 1) {
+    if (at + charWidth(bytes, at) > back && charWidth(bytes, at) > 1) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * One page of a text file of any size, from byte `offset` (0, or a page's
+ * `next`): what `folder_read` answers. A file is binary, and refused, as
+ * git judges it (a NUL in its first {@link BINARY_HEAD} bytes) or when its
+ * start is not UTF-8; a stray byte further in reads as U+FFFD, so a long
+ * log with one bad byte still reads to its end. An offset past the file's
+ * end, or inside a character, is refused.
+ */
+export const readFolderPage = async (
+  projectId: string,
+  rawPath: string,
+  offset = 0
+) => {
+  const found = await fileToRead(projectId, rawPath);
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { rel, real, info } = found;
+  const total = info.size;
+  if (offset > total) {
+    return problem(422, {
+      code: "folder-page-past-end",
+      detail: `${rel} is ${total} bytes, so no page starts at ${offset}.`,
+    });
+  }
+  const file = Bun.file(real);
+  const start = await file.slice(0, BINARY_HEAD).bytes();
+  if (
+    asText(start.subarray(0, wholeCharsEnd(start, start.length < total))) ===
+    undefined
+  ) {
+    return problem(415, {
+      code: "folder-file-binary",
+      detail: `${rel} is a binary file, so it cannot be read as text.`,
+    });
+  }
+  // From up to a character's width before `offset`: what tells whether it
+  // falls inside one.
+  const from = Math.max(0, offset - (UTF8_WIDEST - 1));
+  const near = await file
+    .slice(from, offset + PAGE_CHARS * UTF8_WIDEST)
+    .bytes();
+  if (insideCharacter(near, offset - from)) {
+    return problem(422, {
+      code: "folder-page-mid-character",
+      detail: `Byte ${offset} of ${rel} falls inside a character; start at 0 or at the offset a page names as next.`,
+    });
+  }
+  const read = near.subarray(offset - from);
+  const end = pageEnd(read, offset + read.length < total);
+  const page: FolderPage = {
+    path: rel,
+    content: lenient.decode(read.subarray(0, end)),
+    offset,
+    next: offset + end < total ? offset + end : null,
+    size: total,
+  };
+  return page;
 };
 
 /** The pictures the hub serves a folder file as, by extension. */

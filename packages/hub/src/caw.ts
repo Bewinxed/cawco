@@ -114,7 +114,7 @@ import {
   folderContent,
   folderPath,
   listFolder,
-  readFolderFile,
+  readFolderPage,
   writeFolderFile,
 } from "./project-folder";
 import type { ProjectStops } from "./project-stops";
@@ -1904,13 +1904,13 @@ export const createCaw = ({
             });
       };
       return [
-        FOLDER_READ_DEFINITION.run(async ({ path }) => {
+        FOLDER_READ_DEFINITION.run(async ({ path, offset }) => {
           const calling = ours();
           if (calling instanceof ElysiaStatus) {
             return calling;
           }
           const projectId = calling.project.id;
-          const file = await readFolderFile(projectId, path ?? "");
+          const file = await readFolderPage(projectId, path ?? "", offset);
           // No path, or a folder: its listing.
           return file instanceof ElysiaStatus &&
             (file.status === 400 || file.status === 409)
@@ -2094,8 +2094,11 @@ export const cawRoutes = (caw: Caw) =>
 
 const FOLDER_READ_DEFINITION = defineTool(
   "folder_read",
-  "Files and folders of your project's folder on the hub. Use it to read a file there or list a folder.",
-  { path: z.string().optional().describe("No path: the root.") },
+  "Files and folders of your project's folder on the hub. Use it to read a file there or list a folder. A long file comes in pages: pass the offset a page names to read the next.",
+  {
+    path: z.string().optional().describe("No path: the root."),
+    offset: z.number().int().min(0).optional().describe("Bytes; default 0."),
+  },
   folderReadWords
 );
 
