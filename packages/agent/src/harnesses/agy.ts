@@ -6,9 +6,9 @@
  * says (agy-launch.ts), once the account's hook check passed
  * (agy-canary.ts), the fleet reaching them (agy-fleet.ts). A work item's
  * session runs in its workspace's boundary through CawCo's hook and judge
- * (agy-judge.ts, agy-runtime.ts). Stored conversations and adoption's proof
- * are the later items of tsk-340, and each refuses until then in its own
- * words.
+ * (agy-judge.ts, agy-runtime.ts). Its stored conversations are read from
+ * agy's own files (agy-store.ts), those of every account's home and of
+ * agy's own default home. Adoption's proof is a later item of tsk-340.
  */
 import { CONTROL_PROBE_ACCOUNT } from "@cawco/core/accounts/controls";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -19,14 +19,17 @@ import type {
   SignInFault,
 } from "@cawco/core/harness";
 import { AGY } from "@cawco/core/harness/agy";
+import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { agyFleetRoot } from "@cawco/core/paths/harnesses";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type {
   AuthState,
   NeutralSessionInfo,
+  SessionMessage,
+  StoredRun,
 } from "@cawco/core/session-messages";
 import { resumeCursor } from "@cawco/core/stream";
-import type { TranscriptWindow } from "@cawco/core/transcript-types";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { agyWords } from "@cawco/core/words/agy";
 import { toolVersion } from "../capabilities";
 import { sessionFleetDenials } from "../denied-tools";
@@ -39,6 +42,7 @@ import {
   type KeeperCustody,
   noCarry,
   type SomeControls,
+  type TranscriptSpan,
 } from "../harness";
 import { probeStarted } from "../probe-count";
 import { procEpoch } from "../sessiond-client";
@@ -49,8 +53,9 @@ import {
   agyFleetStatus,
   syncAgyFleet,
 } from "./agy-fleet";
+import { agySpan, agyWindow } from "./agy-history";
 import { AGY_SPEC } from "./agy-launch";
-import { agyAccountIds } from "./agy-models";
+import { changeAgyPersonNote } from "./agy-notes";
 import {
   adoptAgy,
   agyDenials,
@@ -59,6 +64,14 @@ import {
   spawnAgy,
 } from "./agy-sessiond";
 import { probeAgyAccount } from "./agy-signin";
+import {
+  agyConversationEntries,
+  agyConversationInfo,
+  agyLastModel,
+  findAgyConversation,
+  listAgyConversations,
+} from "./agy-store";
+import { agyAccountIds, deleteAgyConversation } from "./agy-store-files";
 import { FULL_CAPABILITIES } from "./capabilities";
 import { keeperCustody, liveChild } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
@@ -83,13 +96,6 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
   mcpControl: false,
   // agy reads its skills again before each turn by itself.
   reloadSkills: false,
-  // Stored conversations are read, listed, renamed, tagged and deleted
-  // once agy's store is read (tsk-340 item 8).
-  listSessions: false,
-  getSessionMessages: false,
-  renameSession: false,
-  tagSession: false,
-  deleteSession: false,
   // Its background commands are agy's own; CawCo's task list is not wired to them.
   tasks: false,
   // The fleet's skills and memory reach every account's home and its hooks
@@ -97,9 +103,6 @@ const AGY_CAPABILITIES: HarnessCapabilities = {
   // Code's, which agy does not load.
   plugins: false,
 };
-
-/** Why each stored-conversation member refuses until agy's store is read. */
-const NO_STORE = "CawCo doesn't read Antigravity's stored conversations yet.";
 
 class AgyHarness implements Harness<"agy"> {
   readonly kind = "agy" as const;
@@ -150,11 +153,21 @@ class AgyHarness implements Harness<"agy"> {
     return Promise.resolve();
   }
 
+  /**
+   * A conversation follows its project's folder on this machine: its note
+   * names the new folder, which a resume opens it in. agy's store lives in
+   * its home, which no other machine's agy reads, so it never moves there.
+   */
   readonly folderCarry = {
-    drop: cannot(NO_STORE),
-    here: cannot(NO_STORE),
-    take: cannot(NO_STORE),
-    tops: cannot(NO_STORE),
+    here: async (one: { sessionId: string; to: string }) => {
+      await changeAgyPersonNote(one.sessionId, (note) => ({
+        ...note,
+        movedTo: one.to,
+      }));
+    },
+    drop: cannot(agyWords.staysOnMachine),
+    take: cannot(agyWords.staysOnMachine),
+    tops: cannot(agyWords.staysOnMachine),
   };
 
   /** A conversation lives in its account's own home (descriptor `accountDir`). */
@@ -231,24 +244,93 @@ class AgyHarness implements Harness<"agy"> {
       : undefined;
   }
 
-  /** None yet: agy's store is not read (capability `listSessions`). */
-  listSessions(): Promise<NeutralSessionInfo[]> {
-    return Promise.resolve([]);
+  /** Every stored conversation, of every account's home and of agy's own, those run in `dir` alone when it names one. */
+  listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
+    return listAgyConversations(dir);
   }
 
-  getSessionInfo(): Promise<NeutralSessionInfo | null> {
-    return Promise.resolve(null);
+  /** A conversation id is agy's own, the same in every folder. */
+  getSessionInfo(sessionKey: string): Promise<NeutralSessionInfo | null> {
+    return agyConversationInfo(sessionKey);
   }
 
-  getSessionMessages = cannot(NO_STORE);
-  readTranscriptWindow: () => Promise<TranscriptWindow> = cannot(NO_STORE);
-  renameSession = cannot(NO_STORE);
-  deleteSession = cannot(NO_STORE);
-  tagSession = cannot(NO_STORE);
+  async getSessionMessages(
+    sessionKey: string,
+    _dir?: string,
+    tail?: number,
+    span: TranscriptSpan = "chain"
+  ): Promise<SessionMessage[]> {
+    const entries = agySpan(await agyConversationEntries(sessionKey), span);
+    return tail ? entries.slice(-tail) : entries;
+  }
 
-  /** Nothing read back of a stored conversation yet. */
-  storedRun() {
-    return Promise.resolve({});
+  async readTranscriptWindow(
+    sessionKey: string,
+    _dir: string | undefined,
+    ask: WindowAsk
+  ): Promise<TranscriptWindow> {
+    return agyWindow(await agyConversationEntries(sessionKey), ask);
+  }
+
+  /** Named in CawCo's note: agy's own title stays its default (agy-notes.ts). */
+  async renameSession(sessionKey: string, title: string): Promise<void> {
+    await this.#stored(sessionKey);
+    await changeAgyPersonNote(sessionKey, (note) => ({
+      ...note,
+      customTitle: title,
+    }));
+  }
+
+  async tagSession(sessionKey: string, tag: string | null): Promise<void> {
+    await this.#stored(sessionKey);
+    await changeAgyPersonNote(sessionKey, ({ tag: _tag, ...note }) =>
+      tag === null ? note : { ...note, tag }
+    );
+  }
+
+  /**
+   * Every file of the conversation removed from its account's home
+   * (agy-store-files.ts). One in agy's own home is the person's, which CawCo
+   * never writes; one no store holds is gone already.
+   */
+  async deleteSession(sessionKey: string): Promise<void> {
+    const store = await findAgyConversation(sessionKey);
+    if (!store) {
+      return;
+    }
+    if (!store.accountId) {
+      throw new Error(agyWords.ownDeleteRefused);
+    }
+    await deleteAgyConversation(store, sessionKey);
+  }
+
+  /**
+   * What the conversation ran on: its account's home, and the model and
+   * thinking level its transcript last names. One of agy's own home names
+   * no account, and runs on agy's own sign-in. CawCo's mode is recorded
+   * nowhere: it resumes in the default.
+   */
+  async storedRun(sessionKey: string): Promise<StoredRun> {
+    const store = await findAgyConversation(sessionKey);
+    if (!store) {
+      return {};
+    }
+    const ran = await agyLastModel(sessionKey);
+    return {
+      ...(store.accountId ? { account: store.accountId } : {}),
+      ...(ran ? { model: { from: "transcript", value: ran.model } } : {}),
+      ...(ran?.effort && isEffortLevel(ran.effort)
+        ? { effort: { from: "transcript", value: ran.effort } }
+        : {}),
+      permissionMode: { from: "default", value: "default" },
+    };
+  }
+
+  /** The store that holds `sessionKey`, or why there is none. */
+  async #stored(sessionKey: string): Promise<void> {
+    if (!(await findAgyConversation(sessionKey))) {
+      throw new Error(agyWords.noConversation);
+    }
   }
 
   fleetHome(): string {

@@ -26,13 +26,16 @@ import {
   agyLaunch,
   endGroup,
   readAgySignIn,
-  removeAgyConversation,
   signedInAt,
   signInAcp,
   startAcp,
 } from "../harnesses/agy-launch";
-import { agyAccountIds } from "../harnesses/agy-models";
 import { turnFault } from "../harnesses/agy-outcome";
+import {
+  accountStore,
+  agyAccountIds,
+  deleteAgyConversation,
+} from "../harnesses/agy-store-files";
 import { toolGate } from "../tools";
 import { ratioOf } from "./aspect";
 import {
@@ -304,11 +307,13 @@ const runAgy = Effect.fn("runAgy")(function* (
   // The conversations the run made, gone once agy has ended (the finalizer
   // below this one runs first): none is a session of the person's. Set
   // before the session opens, so a run interrupted mid-turn removes them too.
+  // Each is kept out of the home's shared files from now on, as a session's
+  // agy running on the same home may write it back (agy-store-files.ts).
   yield* Effect.addFinalizer(() =>
     Effect.promise(() =>
       Promise.all(
         [...conversationsOf(heard)].map((id) =>
-          removeAgyConversation(launch.home, id)
+          deleteAgyConversation(accountStore(accountId), id)
         )
       )
     )
@@ -403,7 +408,7 @@ const runAgy = Effect.fn("runAgy")(function* (
   });
   const { stopReason } = promptAnswer(answered.answer);
   const fault = turnFault(
-    launch.home,
+    { home: launch.home, own: false },
     opened.sessionId,
     -1,
     stopReason,

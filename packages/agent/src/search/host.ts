@@ -57,6 +57,7 @@ import {
   TranscriptIndex,
   type TurnsOptions,
 } from "@cawco/jsonl-parser/fts5";
+import { listAgyTranscripts } from "../harnesses/agy-store-files";
 import { readOpenCodeDocs } from "../harnesses/opencode-docs";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
@@ -78,7 +79,7 @@ type Tell = (value: unknown) => void;
 const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
   /**
    * One sync: every OpenCode database's messages since its watermark and
-   * every Claude and pi transcript's new lines, committed as fts5.ts `sync`
+   * every Claude, pi and Antigravity transcript's new lines, committed as fts5.ts `sync`
    * commits them, the watermarks written only when they moved. `tell` hears
    * how far a long catch-up has come.
    */
@@ -104,6 +105,10 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
       })),
       ...(await listPiFiles()).map((path) => ({
         harness: "pi" as const,
+        path,
+      })),
+      ...(await listAgyTranscripts()).map((path) => ({
+        harness: "agy" as const,
         path,
       })),
     ];

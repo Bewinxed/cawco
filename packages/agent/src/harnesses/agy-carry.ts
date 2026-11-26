@@ -30,7 +30,7 @@ export type Carried = typeof Carried.Type;
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(Carried));
 
 /** Where conversation `sessionId` of agy home `home` is kept. */
-const fileOf = (home: string, sessionId: string): string =>
+export const agyCarryFile = (home: string, sessionId: string): string =>
   join(home, "cawco-carry", `${sessionId}.jsonl`);
 
 /** `lines` added to what conversation `sessionId` keeps; a write that fails is said and dropped, as the record is the session's aid, not its truth. */
@@ -42,7 +42,7 @@ export const keepCarried = (
   if (lines.length === 0) {
     return;
   }
-  const file = fileOf(home, sessionId);
+  const file = agyCarryFile(home, sessionId);
   Effect.runSync(
     Effect.try(() => {
       makeFolderSync(join(home, "cawco-carry"));
@@ -63,7 +63,7 @@ export const keepCarried = (
 /** What conversation `sessionId` keeps, oldest first; none when it keeps nothing. */
 export const carriedOf = (home: string, sessionId: string): Carried[] =>
   Effect.runSync(
-    Effect.try(() => readFileSync(fileOf(home, sessionId), "utf8")).pipe(
+    Effect.try(() => readFileSync(agyCarryFile(home, sessionId), "utf8")).pipe(
       Effect.map((text) =>
         text.split("\n").flatMap((line) => Option.toArray(decodeLine(line)))
       ),

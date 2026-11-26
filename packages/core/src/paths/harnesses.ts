@@ -203,7 +203,8 @@ export const agyFleetRoot = (): string => join(cawcoDataDir(), "fleet-agy");
  * `config/hooks.json` (CawCo's one hook), and its app-data dir
  * ({@link AGY_APP_DATA}) with its settings, its sign-in when agy keeps one
  * in a file, and its conversations. Beside the account's other stores, which
- * no workspace reads. The owner's own `~/.gemini` is never read or written.
+ * no workspace reads. The owner's own home ({@link agyOwnHome}) is never
+ * written: CawCo only reads its conversations.
  */
 export const agyAccountHome = (accountId: string): string =>
   join(homedir(), ".cawco", "accounts", accountId, "agy");
@@ -239,3 +240,31 @@ export const AGY_SIGN_IN_FILE = "antigravity-oauth-token";
  */
 export const agyAccountRecord = (accountId: string): string =>
   join(homedir(), ".cawco", "accounts", accountId, "antigravity.json");
+
+/**
+ * agy's own default home, where the conversations the person starts in
+ * agy's terminal live (tsk-340 story 14). CawCo reads its store and never
+ * writes it: a conversation from it is continued by agy itself, launched
+ * on this home with no `--gemini-dir` of CawCo's.
+ */
+export const agyOwnHome = (): string => join(homedir(), ".gemini");
+
+/** The app-data dir agy keeps in its own default home, where no `--app-data-dir` names one. */
+export const AGY_OWN_APP_DATA = "antigravity-cli";
+
+/**
+ * CawCo's note per Antigravity conversation, by its id: the account it
+ * runs on, its folder, the title agy gave it and the one the person gave
+ * it, its tag, and CawCo's stops. agy's store holds none of these where
+ * CawCo can read them, and its own default home is never written, so a
+ * conversation from it is renamed and tagged here too.
+ */
+export const agySessionNotes = (): string =>
+  join(cawcoDataDir(), "agy-sessions");
+
+/**
+ * Where CawCo keeps what a conversation of agy's own default home said
+ * (agent harnesses/agy-carry.ts), which an account's conversation keeps in
+ * its account's home: agy's own home is never written.
+ */
+export const agyOwnCarryHome = (): string => join(cawcoDataDir(), "agy-own");

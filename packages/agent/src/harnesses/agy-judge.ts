@@ -541,3 +541,55 @@ export const agyImageRunAnswerTo = (
       return imageRunAnswer(call, folder);
     },
   });
+
+/**
+ * What agy hands the hook at a model call's start (`PreInvocation`) and at
+ * a turn's end (`Stop`): the conversation, which call of the turn it is,
+ * and whether agy is fully idle after it or still holds a command in the
+ * background or a wake-up (the project's `assets/b5b3ca96/REPORT.md` §1).
+ */
+const TurnEventInput = Schema.Struct({
+  hookEventName: Schema.Literals(["PreInvocation", "Stop"]),
+  conversationId: Schema.String,
+  invocationNum: Schema.optional(Schema.Number),
+  fullyIdle: Schema.optional(Schema.Boolean),
+});
+
+const decodeTurnEvent = Schema.decodeUnknownOption(
+  Schema.fromJsonString(TurnEventInput)
+);
+
+/** A turn's start or end as agy's hook told it. */
+export type AgyTurnEvent =
+  | {
+      readonly kind: "invocation";
+      readonly conversationId: string;
+      /** Which model call of its turn, from 0. */
+      readonly invocationNum: number;
+    }
+  | {
+      readonly kind: "stop";
+      readonly conversationId: string;
+      /** Whether nothing of the conversation runs on: no background command, no wake-up. */
+      readonly fullyIdle: boolean;
+    };
+
+/** The line the hook sent as a turn's start or end; none for a tool call or a line of no such shape. */
+export const agyTurnEventOf = (line: string): AgyTurnEvent | undefined =>
+  Option.getOrUndefined(
+    Option.map(decodeTurnEvent(line), (event): AgyTurnEvent =>
+      event.hookEventName === "Stop"
+        ? {
+            kind: "stop",
+            conversationId: event.conversationId,
+            // A Stop that says nothing of it is taken as fully idle: the
+            // prompt's own answer then ends the turn.
+            fullyIdle: event.fullyIdle ?? true,
+          }
+        : {
+            kind: "invocation",
+            conversationId: event.conversationId,
+            invocationNum: event.invocationNum ?? 0,
+          }
+    )
+  );

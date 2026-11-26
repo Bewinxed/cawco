@@ -83,7 +83,8 @@ import {
   startAcp,
   writeAgyRecord,
 } from "./agy-launch";
-import { agyAccountIds, agyAccountModels } from "./agy-models";
+import { agyAccountModels } from "./agy-models";
+import { agyAccountIds } from "./agy-store-files";
 
 /** Thrown with the words the person reads. */
 const refused = (words: string): Error => new Error(words);

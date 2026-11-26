@@ -49,6 +49,7 @@ export const writtenAt = (
 /** One step of agy's transcript, as far as a result is read from it. */
 const Step = Schema.Struct({
   step_index: Schema.Number,
+  status: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
 });
 
@@ -91,8 +92,13 @@ export const writtenResult = (
     Effect.retry(STEP_LOOKS),
     Effect.option,
     Effect.map(
-      Option.flatMap(({ content }) =>
-        Option.fromNullishOr(content || undefined)
+      // A call agy moved to the background (a command, a timer) holds its
+      // start at that step, `RUNNING`, never its end, which agy writes as a
+      // later message (agy-history.ts): no result is read from it.
+      Option.flatMap(({ content, status }) =>
+        Option.fromNullishOr(
+          status === "RUNNING" ? undefined : content || undefined
+        )
       )
     )
   );

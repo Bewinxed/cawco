@@ -13,6 +13,7 @@ import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONTROL_REPLIES } from "@cawco/core/control-replies";
 import { inStartingSet } from "@cawco/core/delegate-types";
 import { BOUNDARY_RELAUNCH, SESSION_STOPPED } from "@cawco/core/harness";
+import { AGY_TOOLS } from "@cawco/core/harness/agy";
 import {
   type AgyHostCommand,
   type AgyHostEvent,
@@ -51,7 +52,9 @@ import { procIdFor } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { agyHookHeld } from "./agy-canary";
 import { agyDeniedTools } from "./agy-judge";
-import { agyLaunch, agyToStart } from "./agy-launch";
+import { agyLaunch, agyOwnLaunch, agyToStart } from "./agy-launch";
+import { changeAgyPersonNote } from "./agy-notes";
+import { findAgyConversation } from "./agy-store";
 import { commandEnv } from "./command-env";
 import { hostSnapshot } from "./host-line";
 import { HostedSession } from "./hosted-session";
@@ -77,6 +80,8 @@ class AgyRemoteSession
   #hostForm: string | undefined;
   /** Why this session was refused, once it has been: said once. */
   #refusal: string | undefined;
+  /** The tool calls agy began that have not ended, by id ({@link beforeFrame}). */
+  readonly #pending = new Map<string, { name: string; since: number }>();
 
   constructor(
     client: SessiondClient,
@@ -109,6 +114,9 @@ class AgyRemoteSession
     // before its cursor: the host's state says it.
     this.#running = state.version ?? this.#running;
     this.#hostForm = state.gateForm;
+    for (const call of state.pending ?? []) {
+      this.#pending.set(call.id, { name: call.name, since: call.since });
+    }
     this.applyShared(state);
     if (state.refused !== undefined) {
       this.#refuse(state.refused);
@@ -170,6 +178,72 @@ class AgyRemoteSession
     }
   }
 
+  /**
+   * Each tool call agy began, from its tool use until its result: once a
+   * turn is over, a running one is a command agy moved to the background
+   * or a wake-up it set, which wakes the session when it ends and ends with
+   * agy's process ({@link holding}).
+   */
+  protected override beforeFrame(message: NeutralMessage): void {
+    if (message.type === "assistant") {
+      for (const block of message.message.content) {
+        if (block.type === "tool_use") {
+          this.#pending.set(block.id, { name: block.name, since: Date.now() });
+        }
+      }
+    } else if (
+      message.type === "user" &&
+      Array.isArray(message.message.content)
+    ) {
+      for (const block of message.message.content) {
+        if (block.type === "tool_result") {
+          this.#pending.delete(block.tool_use_id);
+        }
+      }
+    } else if (
+      message.type === "result" &&
+      message.wakes &&
+      message.wakes.background + message.wakes.scheduled === 0
+    ) {
+      // A turn that ends with nothing pending leaves no call running.
+      this.#pending.clear();
+    }
+  }
+
+  /** The calls still running once no turn runs, as commands and wake-ups. */
+  #held(): { commands: string[]; wakeUps: string[] } {
+    const commands: string[] = [];
+    const wakeUps: string[] = [];
+    for (const [id, call] of this.#pending) {
+      (AGY_TOOLS[call.name] === "schedule" ? wakeUps : commands).push(id);
+    }
+    return { commands, wakeUps };
+  }
+
+  /**
+   * What stopping agy now would lose beyond its turn: the sends it holds
+   * unread, then the commands it moved to the background and the wake-ups
+   * it set, which agy's process ends with it (`assets/b5b3ca96/REPORT.md`
+   * §2: a restart stops every one). A move never comes: an Antigravity
+   * session stays on its account.
+   */
+  override holding(): string | undefined {
+    const unread = super.holding();
+    if (unread) {
+      return unread;
+    }
+    if (this.busyNow) {
+      return undefined;
+    }
+    const { commands, wakeUps } = this.#held();
+    if (commands.length > 0) {
+      return `${commands.length} background command(s) it started are still running`;
+    }
+    return wakeUps.length > 0
+      ? `it has scheduled itself ${wakeUps.length} wake-up(s)`
+      : undefined;
+  }
+
   protected override ownEvent(_seq: number, event: AgyHostEvent): void {
     switch (event.type) {
       case "version":
@@ -202,6 +276,7 @@ class AgyRemoteSession
 
   protected override hostEnded(): void {
     this.#asks.clear();
+    this.#pending.clear();
   }
 
   /** Each ask the host still holds, parked again with this agent: what an agent taking the host back owes the person. */
@@ -244,21 +319,55 @@ class AgyRemoteSession
   };
 
   /** agy's background commands come back with a resume on the same account, the only one it runs on. */
+  /** Its background commands and wake-ups, which end with agy's process. */
   heldForLater(): RestartHold[] {
-    return [];
+    if (this.busyNow) {
+      return [];
+    }
+    const { commands, wakeUps } = this.#held();
+    return [
+      ...(commands.length > 0
+        ? [{ reason: "command" as const, ids: commands }]
+        : []),
+      ...(wakeUps.length > 0
+        ? [{ reason: "wake-up" as const, ids: wakeUps }]
+        : []),
+    ];
   }
 
+  /** When its oldest background command began, as the host saw it. */
   heldSince(): number | undefined {
-    return undefined;
+    if (this.busyNow) {
+      return undefined;
+    }
+    const { commands } = this.#held();
+    const starts = commands.flatMap((id) => {
+      const call = this.#pending.get(id);
+      return call ? [call.since] : [];
+    });
+    return starts.length > 0 ? Math.min(...starts) : undefined;
   }
 
   readonly endedForMove = cannot(
     "An Antigravity session never moves between accounts."
   );
 
-  /** agy keeps no note of CawCo's in its history. */
-  noteStopped(): Promise<void> {
-    return Promise.resolve();
+  /**
+   * agy starts turns of its own (a background command ended, a wake-up), so
+   * it can fail the same way again and again; its history is agy's, which
+   * CawCo never writes, so the stop is kept in CawCo's note of the
+   * conversation, which a transcript read back draws where it was made
+   * (agy-history.ts).
+   */
+  async noteStopped(words: string): Promise<void> {
+    const { sessionId } = this;
+    if (!sessionId) {
+      return;
+    }
+    await changeAgyPersonNote(sessionId, (note) => ({
+      ...note,
+      stops: [...(note.stops ?? []), { at: Date.now(), words }],
+    }));
   }
 
   /** The running agy against the machine's, once both are read. */
@@ -301,14 +410,19 @@ const agyServer = (
  * (chrome-devtools with its browser door), each remote HTTP one as it is,
  * as Claude Code's sessions take them (claude.ts `fleetMcpFor`). A server
  * agy's ACP takes no form of (a remote SSE one) is left out. A session with
- * no gate (a fenced one) takes the remote servers alone.
+ * no gate (a fenced one) takes the remote servers alone; one in agy's own
+ * home (`withFleet` false), whose setup is agy's, CawCo's alone.
  */
 const mcpServersOf = async (
   spec: SpawnPayload,
-  ctx: HarnessContext
+  ctx: HarnessContext,
+  withFleet: boolean
 ): Promise<AgyMcpServer[]> => {
   const cawco = delegationMcp(ctx.instanceId, ctx.sessionCredential);
   const own = agyServer(MCP_SERVER_NAME, cawco);
+  if (!withFleet) {
+    return [own];
+  }
   const all = inStartingSet(await fleetMcpAt(ctx.cwd), spec.startingSet);
   const reached = ctx.mcpGate
     ? throughMcpGate(all, ctx.mcpGate)
@@ -357,6 +471,26 @@ const atCloneRoot = async (ctx: HarnessContext): Promise<void> => {
 };
 
 /**
+ * Whether `spec` continues a conversation of agy's own default home: one
+ * the person started in agy's terminal, which runs there, under agy's own
+ * settings (tsk-340 story 14), whatever account the hub placed it on;
+ * never a work item's.
+ */
+const continuesOwn = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): Promise<boolean> => {
+  const key = spec.resume?.sessionKey;
+  // A work item's session runs in its account's home, under its judge:
+  // never in the person's own, where no hook of CawCo's runs.
+  if (!key || ctx.boundary) {
+    return false;
+  }
+  const store = await findAgyConversation(key);
+  return store !== undefined && store.accountId === undefined;
+};
+
+/**
  * A new Antigravity session: its launch read from its account, its host
  * started under the keeper, and agy started there, signed in and its
  * session opened. A launch the account cannot run is refused before any
@@ -367,26 +501,30 @@ export const spawnAgy = async (
   ctx: HarnessContext,
   denied: readonly string[]
 ): Promise<HarnessSession> => {
+  const own = await continuesOwn(spec, ctx);
   const accountId = spec.accountDir?.accountId;
-  if (!accountId) {
+  if (!(own || accountId)) {
     throw new Error(agyWords.needsAccount);
   }
   await atCloneRoot(ctx);
   const launch = await Effect.runPromise(
-    agyHookHeld(accountId).pipe(
-      Effect.andThen(
-        agyLaunch(
-          accountId,
-          ctx.instanceId,
-          commandEnv(ctx),
-          ctx.boundary !== undefined
+    (own || !accountId
+      ? agyOwnLaunch(ctx.instanceId, commandEnv(ctx))
+      : agyHookHeld(accountId).pipe(
+          Effect.andThen(
+            agyLaunch(
+              accountId,
+              ctx.instanceId,
+              commandEnv(ctx),
+              ctx.boundary !== undefined
+            )
+          )
         )
-      ),
-      Effect.mapError((refused) => new Error(refused.message))
-    )
+    ).pipe(Effect.mapError((refused) => new Error(refused.message)))
   );
-  const mcpServers = await mcpServersOf(spec, ctx);
-  const memory = await memoryOf(spec, ctx.cwd);
+  // agy's own home runs under its own setup: none of the fleet's.
+  const mcpServers = await mcpServersOf(spec, ctx, !own);
+  const memory = own ? "" : await memoryOf(spec, ctx.cwd);
   const client = await agyKeepers.current();
   const procId = procIdFor("agy", ctx.instanceId);
   await agyKeepers.replaceElsewhere(procId, client);

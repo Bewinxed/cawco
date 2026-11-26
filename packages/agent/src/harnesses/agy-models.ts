@@ -5,12 +5,9 @@
  * Gemini alone). The read opens one session and asks nothing of it; the
  * conversation it made is removed from the home after.
  */
-import { existsSync, readdirSync } from "node:fs";
 import { client, methods } from "@agentclientprotocol/sdk";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
-import { accountsRoot } from "@cawco/core/paths/claude";
-import { agyAccountRecord } from "@cawco/core/paths/harnesses";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { Effect } from "effect";
 import { modelsOf } from "./agy-frames";
@@ -21,26 +18,11 @@ import {
   endGroup,
   prepareAgyHome,
   readAgySignIn,
-  removeAgyConversation,
   signedInAt,
   signInAcp,
   startAcp,
 } from "./agy-launch";
-
-/** The accounts with an Antigravity record on this machine. */
-export const agyAccountIds = (): string[] => {
-  try {
-    return readdirSync(accountsRoot(), { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isDirectory() && existsSync(agyAccountRecord(entry.name))
-      )
-      .map((entry) => entry.name)
-      .toSorted();
-  } catch {
-    return [];
-  }
-};
+import { accountStore, deleteAgyConversation } from "./agy-store-files";
 
 /** How long one account's read may take: agy starts in about a second and a half (§P, "Cost of a process"). */
 const READ_MS = 30_000;
@@ -98,7 +80,8 @@ export const agyAccountModels = async (
     connection.close();
     endGroup(child);
     if (made) {
-      await removeAgyConversation(home, made);
+      // Made only to read the models, never the person's: its id is not kept.
+      await deleteAgyConversation(accountStore(accountId), made, false);
     }
   }
 };

@@ -20,6 +20,7 @@ import {
   type InferOutput,
   literal,
   nullable,
+  number,
   object,
   optional,
   picklist,
@@ -61,6 +62,15 @@ const AGY_HOST_STATE = object({
   /** The sends the host handed agy that agy has not read yet, by uuid. */
   held: array(string()),
   sessionId: nullable(string()),
+  /**
+   * The tool calls agy began that have not ended: once its turn is over,
+   * the commands it moved to the background and its one-time wake-ups, which
+   * end with its process (the project's `assets/b5b3ca96/REPORT.md` §2, §3).
+   * `since` is when the host saw each begin, epoch ms.
+   */
+  pending: optional(
+    array(object({ id: string(), name: string(), since: number() }))
+  ),
   /** The running agy's version as its `initialize` said it: what an agent that takes the host back reads it as outdated against. */
   version: optional(string()),
 });
@@ -109,7 +119,13 @@ const LAUNCH = object({
   env: record(string(), string()),
   home: string(),
   judgeSocket: string(),
-  methodId: picklist(AGY_METHODS),
+  /**
+   * The account's sign-in method, which `authenticate` names; absent for
+   * agy's own default home, where agy signs in as it does in its terminal.
+   */
+  methodId: optional(picklist(AGY_METHODS)),
+  /** The account whose home it runs in; absent for agy's own default home. */
+  accountId: optional(string()),
   /**
    * The installed agy's version (`agy --version`), against which the
    * running agy's `initialize` answer reads as outdated.

@@ -790,6 +790,15 @@ export const PROVIDER_RETRY = "provider_retry";
 export const MCP_NOT_CONNECTED = "mcp_not_connected";
 
 /**
+ * The `system` subtype saying the session runs under its harness's own
+ * settings, which CawCo's permission modes and fleet setup don't reach: a
+ * conversation the person started in the harness's own terminal, continued
+ * there (Antigravity's, agent harnesses/agy-runtime.ts). Its line is in
+ * `content`.
+ */
+export const OWN_SETTINGS = "own_settings";
+
+/**
  * The `system` subtype saying the agent stopped a session that failed the same
  * way {@link REPEATED_FAILURE_LIMIT} times in a row with no send in between —
  * a harness looping on its own (opencode's overflow compaction retried a

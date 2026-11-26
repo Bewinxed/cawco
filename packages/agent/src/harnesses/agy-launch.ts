@@ -1,34 +1,4 @@
-/**
- * What an Antigravity session runs as: Google's own `agy acp`, in its
- * account's agy home, with an environment built from nothing but what the
- * account's one sign-in method needs (tsk-340, "Compliance posture"; T3
- * Code's `antigravityAuthSupport.ts`, whose launch this follows).
- *
- * - The account's method is read whole before anything starts
- *   ({@link readAgySignIn}): a key or a project the method needs and the
- *   machine does not hold refuses the start in one sentence, so agy never
- *   runs on a method with no credential, where it would fall back to a saved
- *   Google login (agy changelog 1.5.9).
- * - Every Google, Gemini, gcloud and agy variable of the host is dropped
- *   ({@link agyEnvironment}), then only the method's credential is set:
- *   `GEMINI_API_KEY` for a Gemini key. Agent Platform runs on gcloud's own
- *   default credentials, and its Google Cloud project and location, like
- *   Gemini Enterprise's, go in the home's settings, never the environment.
- * - Every launch of every method keeps agy's own sign-in in a file in the
- *   account's home, never the OS keyring ({@link HOME_SIGN_IN}), so each
- *   Google account's sign-in is its own and a key account's home holds no
- *   Google login to fall back to.
- * - Every launch carries `--disable-telemetry`, and agy's self-update and
- *   crash reports are off.
- * - CawCo's hook is written into the home before every launch (agy-hook.ts),
- *   and the session's judge is named in agy's environment (agy-judge.ts).
- *
- * CawCo reads no Google token: a Google sign-in is agy's, in the account's
- * home; a key is the account's credential, which CawCo already keeps
- * (core accounts.ts) and hands agy in its environment.
- */
-import { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import {
@@ -52,6 +22,7 @@ import {
   AGY_SIGN_IN_FILE,
   agyAccountHome,
   agyAccountRecord,
+  agyOwnHome,
   agySignInFile,
 } from "@cawco/core/paths/harnesses";
 import { agyJudgeSocket } from "@cawco/core/paths/hub";
@@ -66,6 +37,7 @@ import { readHeld } from "../provider-accounts";
 import { toolGate, toolPath } from "../tools";
 import { linkAgyFleet } from "./agy-fleet";
 import { agyJudgeEnv, writeAgyHook } from "./agy-hook";
+import { accountStore, applyAgyDeletes } from "./agy-store-files";
 
 const AGY_TOOL = toolSpec("antigravity");
 if (!AGY_TOOL) {
@@ -351,19 +323,41 @@ export const agyEnvironment = (
 ): Record<string, string> =>
   withOpeners(
     {
-      ...Object.fromEntries(
-        Object.entries(sessionEnvironment(host)).filter(
-          ([name]) => !droppedForAgy(name)
-        )
-      ),
-      PATH: toolPath(),
-      ...extras,
+      ...hostEnvironment(extras, host),
       ...credentialOf(signIn),
       ...HOME_SIGN_IN(home),
       ...AGY_SPEC.runEnv,
     },
     home
   );
+
+/** The host's environment, every variable {@link droppedForAgy} names gone, on the tools' PATH, with `extras`. */
+const hostEnvironment = (
+  extras: Readonly<Record<string, string>>,
+  host: Readonly<Record<string, string | undefined>>
+): Record<string, string> => ({
+  ...Object.fromEntries(
+    Object.entries(sessionEnvironment(host)).filter(
+      ([name]) => !droppedForAgy(name)
+    )
+  ),
+  PATH: toolPath(),
+  ...extras,
+});
+
+/**
+ * agy's environment in its own default home (tsk-340 story 14): as the
+ * person's terminal runs it, on its own sign-in and its own browser and
+ * keyring, with none of a CawCo home's switches and nothing written into
+ * that home; what every run of agy carries still on it.
+ */
+const agyOwnEnvironment = (
+  extras: Readonly<Record<string, string>>,
+  host: Readonly<Record<string, string | undefined>> = process.env
+): Record<string, string> => ({
+  ...hostEnvironment(extras, host),
+  ...AGY_SPEC.runEnv,
+});
 
 /**
  * The home's settings for `signIn` (its app-data dir's `settings.json`): the
@@ -391,6 +385,9 @@ export const prepareAgyHome = Effect.fn("prepareAgyHome")(function* (
   signIn: AgySignIn
 ): Effect.fn.Return<string, AgyStartRefused> {
   const home = agyAccountHome(accountId);
+  // A conversation deleted from the home stays out of agy's shared files
+  // before any agy there reads them (agy-store-files.ts).
+  yield* Effect.promise(() => applyAgyDeletes(accountStore(accountId)));
   yield* Effect.promise(() =>
     writeStateFile(
       join(home, AGY_APP_DATA, "settings.json"),
@@ -465,8 +462,33 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
     home,
     judgeSocket,
     methodId: signIn.method,
+    accountId,
     ...(agy.version ? { version: agy.version } : {}),
     ...(tmp ? { tmp } : {}),
+  };
+  return launch;
+});
+
+/**
+ * What session `instanceId` runs as to continue a conversation of agy's own
+ * default home (tsk-340 story 14): agy as the person runs it in a terminal,
+ * on that home, its own settings and its own sign-in, with telemetry off.
+ * CawCo writes nothing into that home, so no hook of CawCo's runs there and
+ * no judge is asked: agy asks its own permissions, which reach the person
+ * as CawCo's asks.
+ */
+export const agyOwnLaunch = Effect.fn("agyOwnLaunch")(function* (
+  instanceId: string,
+  extras: Readonly<Record<string, string>>
+): Effect.fn.Return<AgyLaunch, AgyStartRefused> {
+  const agy = yield* agyToStart();
+  const launch: AgyLaunch = {
+    bin: agy.bin,
+    args: ["acp", "--disable-telemetry"],
+    env: agyOwnEnvironment(extras),
+    home: agyOwnHome(),
+    judgeSocket: agyJudgeSocket(instanceId),
+    ...(agy.version ? { version: agy.version } : {}),
   };
   return launch;
 });
@@ -538,12 +560,12 @@ const readStderr = (
  * agy `initialize`d as CawCo, by its own name and build, advertising no
  * file system, terminal or elicitation of the client's, then signed in by
  * the account's one method (`authenticate`, which agy needs named even
- * when its environment holds the method's key: issue #1701). Its
- * `initialize` answer.
+ * when its environment holds the method's key: issue #1701), or by none in
+ * agy's own default home. Its `initialize` answer.
  */
 export const signInAcp = async (
   connection: ClientConnection,
-  methodId: AgySignIn["method"],
+  methodId: AgySignIn["method"] | undefined,
   version: string,
   guard: KeyringGuard
 ) => {
@@ -551,6 +573,11 @@ export const signInAcp = async (
     protocolVersion: PROTOCOL_VERSION,
     clientInfo: { name: "cawco", title: "CawCo", version },
   });
+  // agy's own default home signs in as its terminal does, unnamed (the
+  // project's `assets/b5b3ca96/REPORT.md` §8).
+  if (!methodId) {
+    return initialized;
+  }
   await connection.agent
     .request(methods.agent.authenticate, { methodId })
     .catch((error: unknown) => {
@@ -626,55 +653,4 @@ export const endGroup = (child: AgyChild): void => {
   if (pid !== undefined) {
     signalGroup(pid, "SIGTERM");
   }
-};
-
-/**
- * The conversation `sessionId` agy made in `home`, removed: its store, its
- * working files, its title (`annotations/<id>.pbtxt`) and its row in agy's
- * conversation summaries (`conversation_summaries.db`, keyed by `conversation_id`; what an image run
- * left there, the project's `assets/bbb39c69/after-runs-cawco-whole.txt`).
- * For a run that is no session of the person's (a models read, an image),
- * so it never shows as a conversation.
- */
-export const removeAgyConversation = async (
-  home: string,
-  sessionId: string
-): Promise<void> => {
-  const data = join(home, AGY_APP_DATA);
-  const store = join(data, "conversations", `${sessionId}.db`);
-  // The store, and the write-ahead log and index SQLite keeps beside it.
-  await Promise.all(
-    ["", "-wal", "-shm"].map((end) => rm(`${store}${end}`, { force: true }))
-  );
-  await rm(join(data, "brain", sessionId), { recursive: true, force: true });
-  await rm(join(data, "annotations", `${sessionId}.pbtxt`), { force: true });
-  forgetSummary(join(data, "conversation_summaries.db"), sessionId);
-};
-
-/** Conversation `sessionId`'s row gone from agy's summaries at `file`; nothing when it has none or no such store. */
-const forgetSummary = (file: string, sessionId: string): void => {
-  if (!existsSync(file)) {
-    return;
-  }
-  Effect.runSync(
-    Effect.acquireUseRelease(
-      Effect.try(() => new Database(file)),
-      (database) =>
-        Effect.try(() =>
-          database
-            .query(
-              "DELETE FROM conversation_summaries WHERE conversation_id = ?"
-            )
-            .run(sessionId)
-        ),
-      (database) => Effect.sync(() => database.close())
-    ).pipe(
-      // Its store agy's to change: a row left is said, never a failed run.
-      Effect.catch((error) =>
-        Effect.logWarning(
-          `[agy] conversation ${sessionId}'s summary stayed in ${file}: ${String(error)}`
-        )
-      )
-    )
-  );
 };

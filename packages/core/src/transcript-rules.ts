@@ -72,6 +72,7 @@ import {
   CONVERSATION_RESET,
   isHarnessBlock,
   MCP_NOT_CONNECTED,
+  OWN_SETTINGS,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./session-messages";
@@ -1242,6 +1243,15 @@ export function mapFrame(
               subtype: MCP_NOT_CONNECTED,
               noteKind: "MCP server",
               noteTitle: `${sdk.mcp_server} didn't connect`,
+            })
+          );
+          break;
+        // A session under its harness's own settings: its one line
+        // (core `OWN_SETTINGS`).
+        case OWN_SETTINGS:
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", sdk.content ?? "", {
+              subtype: OWN_SETTINGS,
             })
           );
           break;

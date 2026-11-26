@@ -150,7 +150,8 @@ interface AgyHookEntry {
 
 /**
  * An agy home's `config/hooks.json`, holding the hook at `script` alone,
- * before and after every tool, with agy's limit on it: before, the judge's
+ * before and after every tool, at each model call's start and at each
+ * turn's end, with agy's limit on it: before, the judge's
  * answer and then the fleet's `PreToolUse` hooks; after, the fleet's
  * `PostToolUse` hooks (agy-fleet-hooks.ts). The fleet's hooks are never
  * entries of their own here: agy would hand them its own payload and read
@@ -158,20 +159,23 @@ interface AgyHookEntry {
  * but this writes the file, whole, so no sync changes its shape.
  */
 const agyHooksFile = (script: string): string => {
+  const handler: AgyHookHandler = {
+    type: "command",
+    command: hookCommand(script),
+    timeout: HOOK_TIMEOUT_S,
+  };
   const every: readonly AgyToolHookGroup[] = [
-    {
-      matcher: ".*",
-      hooks: [
-        {
-          type: "command",
-          command: hookCommand(script),
-          timeout: HOOK_TIMEOUT_S,
-        },
-      ],
-    },
+    { matcher: ".*", hooks: [handler] },
   ];
   const entries: Readonly<Record<string, AgyHookEntry>> = {
-    cawco: { PreToolUse: every, PostToolUse: every },
+    cawco: {
+      PreToolUse: every,
+      PostToolUse: every,
+      // A turn's first model call and its end, which tell a turn agy
+      // starts by itself (agy-runtime.ts).
+      PreInvocation: [handler],
+      Stop: [handler],
+    },
   };
   return `${JSON.stringify(entries, null, 2)}\n`;
 };

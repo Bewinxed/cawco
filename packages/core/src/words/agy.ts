@@ -1,14 +1,16 @@
 /**
  * What CawCo says of an Antigravity session it refuses or ends (agent
  * harnesses/agy-launch.ts, agy-runtime.ts, agy-sessiond.ts, agy-canary.ts,
- * agy-judge.ts): an account that cannot start one, a workspace session
- * stopped or a write it refused, and a turn that ends without a reply or at
- * the account's quota. Read by the agent alone; the app draws none of it.
+ * agy-judge.ts, agy.ts): an account that cannot start one, a workspace
+ * session stopped or a write it refused, a turn that ends without a reply
+ * or at the account's quota, and what it says of its stored conversations.
+ * Said by the agent; the app draws `ownSettings` as a transcript's line.
  * Decided by Gemini 4 Neon on 2026-11-26 (the project's
  * `assets/eb689d78/neon-answer.md`; the picture strings,
  * `assets/046b2a6e/neon-answer.md`; the workspace words,
  * `assets/9eb4dcba/neon-answer.md`; an account's methods and sign-in,
- * `assets/b6a2f599/neon-answer.md`).
+ * `assets/b6a2f599/neon-answer.md`; the stored-conversation strings,
+ * `assets/9c99dae2/neon-answer.md`).
  */
 
 export const agyWords = {
@@ -153,4 +155,13 @@ export const agyWords = {
     said
       ? `Google refused the picture. ${said}`
       : "Google refused the picture.",
+  /** A delete of a conversation in agy's own default home, which CawCo never writes. */
+  ownDeleteRefused: "Can't delete it here. Delete it in Antigravity.",
+  /** A folder move to another machine, which agy's store can't follow. */
+  staysOnMachine: "Antigravity conversations can't move to another machine.",
+  /** A rename or tag of a conversation no Antigravity store on the machine holds. */
+  noConversation: "Conversation isn't on this machine.",
+  /** The line a session continued from agy's own history starts with. */
+  ownSettings:
+    "Uses Antigravity's own settings. Permission modes and fleet setup don't apply.",
 } as const;

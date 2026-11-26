@@ -60,11 +60,11 @@ import {
   endGroup,
   prepareAgyHome,
   readAgySignIn,
-  removeAgyConversation,
   signedInAt,
   signInAcp,
   startAcp,
 } from "./agy-launch";
+import { accountStore, deleteAgyConversation } from "./agy-store-files";
 
 /** What a check proved, kept per account ({@link checkFile}). */
 const Kept = z.object({
@@ -357,7 +357,12 @@ const runCheck = Effect.fn("agyHookCheck")(function* (
         yield* Scope.close(scope, Exit.void);
         yield* Effect.promise(async () => {
           if (made.sessionId) {
-            await removeAgyConversation(home, made.sessionId);
+            // Made only for the check, never the person's: its id is not kept.
+            await deleteAgyConversation(
+              accountStore(accountId),
+              made.sessionId,
+              false
+            );
           }
           await rm(scratch.dir, { recursive: true, force: true });
           // The checks' folder goes once no check is in it.

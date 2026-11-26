@@ -63,7 +63,7 @@ import type {
 } from "@cawco/core/harness/agy-host-state";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { type SharedMode, sharedModeNamed } from "@cawco/core/harness/modes";
-import { AGY_APP_DATA } from "@cawco/core/paths/harnesses";
+import { AGY_APP_DATA, agyOwnCarryHome } from "@cawco/core/paths/harnesses";
 import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
@@ -76,6 +76,7 @@ import {
 import {
   MESSAGES_READ,
   type NeutralMessage,
+  OWN_SETTINGS,
   type PermissionResult,
   type SentMessage,
   type SlashCommand,
@@ -114,7 +115,12 @@ import {
   takesAppend,
 } from "./agy-frames";
 import { serveAgyJudge } from "./agy-hook";
-import type { AgyAnswer, AgySession as Judged } from "./agy-judge";
+import {
+  type AgyAnswer,
+  type AgyTurnEvent,
+  agyTurnEventOf,
+  type AgySession as Judged,
+} from "./agy-judge";
 import {
   type AgyChild,
   endGroup,
@@ -122,8 +128,15 @@ import {
   signInAcp,
   startAcp,
 } from "./agy-launch";
-import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
+import { type AgyHostNote, changeAgyHostNote } from "./agy-notes";
+import {
+  type AgySteps,
+  lastStep,
+  type TurnFault,
+  turnFault,
+} from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
+import { accountStore, applyAgyDeletes } from "./agy-store-files";
 import { type WrittenAt, writtenAt, writtenResult } from "./agy-transcript";
 import { credentialControls } from "./credential-controls";
 
@@ -173,7 +186,12 @@ interface AgyProcess {
 /** One of agy's updates, or a mark a turn's end waits on ({@link AgySession.#drained}). */
 type Update =
   | { readonly update: SessionNotification }
-  | { readonly drained: Deferred.Deferred<void> };
+  | { readonly drained: Deferred.Deferred<void> }
+  /** A turn's start or end as agy's hook told it, read in its place among the updates ({@link AgySession.turnEvent}). */
+  | { readonly turn: AgyTurnEvent };
+
+/** How long a stop waits for agy to end before it keeps its home's deleted conversations out (agy ends at once on SIGTERM; our own bound). */
+const AGY_EXIT_WAIT = "5 seconds";
 
 /** What the running turn has said so far. */
 interface Turn {
@@ -273,11 +291,26 @@ class AgySession {
   readonly #asks = new Map<string, ParkedAsk>();
   /** The sends handed to agy it has not taken yet, by uuid. */
   readonly #unread = new Set<string>();
-  /** The prompts sent whose answers have not come. */
+  /**
+   * The prompts sent whose answers have not come. agy answers a prompt only
+   * once nothing of the conversation runs on, so one stays open while a
+   * command it moved to the background or a wake-up it set is pending, and
+   * the turns those start run inside it (the project's
+   * `assets/b5b3ca96/REPORT.md` §2, §3).
+   */
   #prompts = 0;
+  /** CawCo's running turn: the person's, or one agy started itself inside an open prompt. */
   #turn: Turn | undefined;
-  /** The running turn's tool calls said as tool uses, by agy's id, and whether each result is said too. */
-  readonly #calls = new Map<string, "running" | "ended">();
+  /**
+   * The tool calls said as tool uses, by agy's id: each running one, by its
+   * name and when it began, until its result is said; each ended one until
+   * its turn ends. A running one that outlives its turn is a command agy
+   * moved to the background or a wake-up it set ({@link pending}).
+   */
+  readonly #calls = new Map<
+    string,
+    { ended: boolean; name: string; since: number }
+  >();
   /** The tool each call agy began names, by agy's id, until it ends: a command's result is proven by it. */
   readonly #callTools = new Map<string, string>();
   /**
@@ -327,9 +360,10 @@ class AgySession {
       get mode() {
         return session.#mode;
       },
-      // A call raised outside a prompt CawCo sent (agy's own wake-up)
-      // cannot be asked about: agy holds its ask until the client's next
-      // request (issue #1461).
+      // A call raised outside an open prompt cannot be asked about: agy
+      // would hold its ask until the client's next request (issue #1461).
+      // Over ACP agy runs no tool with no prompt open (the project's
+      // `assets/b5b3ca96/REPORT.md` §2, §3), so this denial is a fail-safe.
       get personTurn() {
         return session.#prompts > 0;
       },
@@ -406,23 +440,44 @@ class AgySession {
     this.#ctx.refused(words);
     this.#prompts = 0;
     this.#turn = undefined;
+    this.#calls.clear();
     this.#ctx.busy(false);
   }
 
-  /** The judge served, agy started and signed in, and the session opened. */
+  /** Whether it runs in agy's own default home, under agy's own settings (agy-launch.ts `agyOwnLaunch`). */
+  get #own(): boolean {
+    return this.#start.launch.accountId === undefined;
+  }
+
+  /**
+   * The judge served, agy started and signed in, and the session opened. In
+   * agy's own default home no hook of CawCo's runs, so no judge is served,
+   * no fleet hook runs, and the session says once that agy's own settings
+   * hold. A turn's start or end the hook tells is read in its place among
+   * agy's updates.
+   */
   async open(): Promise<void> {
     const { launch } = this.#start;
-    await makeFolder(dirname(launch.judgeSocket));
-    const judged = this.#judged();
-    await Effect.runPromise(
-      serveAgyJudge(launch.judgeSocket, (line) => {
-        const ended = writtenAt(line);
-        if (Option.isSome(ended)) {
-          this.#writtenAt.set(ended.value.id, ended.value.at);
-        }
-        return this.#fleet.answer(line, judged);
-      }).pipe(Scope.provide(this.#judge))
-    );
+    if (!this.#own) {
+      await makeFolder(dirname(launch.judgeSocket));
+      const judged = this.#judged();
+      await Effect.runPromise(
+        serveAgyJudge(launch.judgeSocket, (line) => {
+          const turn = agyTurnEventOf(line);
+          if (turn) {
+            if (turn.conversationId === this.sessionId) {
+              Queue.offerUnsafe(this.#updates, { turn });
+            }
+            return Promise.resolve({});
+          }
+          const ended = writtenAt(line);
+          if (Option.isSome(ended)) {
+            this.#writtenAt.set(ended.value.id, ended.value.at);
+          }
+          return this.#fleet.answer(line, judged);
+        }).pipe(Scope.provide(this.#judge))
+      );
+    }
     this.#reader = Effect.runSync(
       Effect.forkIn(
         Effect.forever(
@@ -436,7 +491,16 @@ class AgySession {
     await this.#startAgy();
     const resumed = this.#start.spec.resume?.sessionKey;
     await this.#openSession(resumed, this.#append);
-    await this.#fleet.started(resumed ? "resume" : "startup");
+    if (this.#own) {
+      this.#emit({
+        type: "system",
+        subtype: OWN_SETTINGS,
+        content: agyWords.ownSettings,
+        ...(this.sessionId ? { session_id: this.sessionId } : {}),
+      });
+    } else {
+      await this.#fleet.started(resumed ? "resume" : "startup");
+    }
   }
 
   /** agy started, `initialize`d and signed in by the account's method, and whether it takes appended words noted. */
@@ -471,6 +535,7 @@ class AgySession {
         },
         ended: (why) => {
           holder.why = why;
+          this.#applyDeletes();
           if (holder.agy) {
             this.#agyEnded(holder.agy, why);
           }
@@ -543,9 +608,84 @@ class AgySession {
     await this.#setEffort(this.#effort);
   }
 
+  /** The conversation the session runs in, said, and CawCo's note of where it runs kept (agy-notes.ts). */
   #adopted(sessionId: string): void {
     this.sessionId = sessionId;
     this.#ctx.session(sessionId);
+    const { accountId } = this.#start.launch;
+    const { cwd } = this.#start.spec;
+    this.#note(sessionId, (note) => ({
+      ...note,
+      ...(accountId ? { accountId } : {}),
+      cwd: note.cwd ?? cwd,
+      createdAt: note.createdAt ?? Date.now(),
+    }));
+  }
+
+  /** CawCo's note of conversation `sessionId` changed; a write that fails is said, as the note is the listing's aid, not the session's. */
+  #note(sessionId: string, change: (note: AgyHostNote) => AgyHostNote): void {
+    changeAgyHostNote(sessionId, change).catch((error: unknown) =>
+      console.warn(
+        `[agy] ${this.#start.spec.instanceId}: noting conversation ${sessionId} failed: ${saidBy(error)}`
+      )
+    );
+  }
+
+  /**
+   * A turn's start or end as agy's hook told it, read in its place among
+   * agy's updates:
+   * - a model call with none of CawCo's turns running is a turn agy began
+   *   itself inside an open prompt (a background command ended, a wake-up
+   *   came): it runs as a turn of its own, and says what it does as it
+   *   does it;
+   * - a turn's first model call while one runs (a wake-up that came while
+   *   the person's turn ran) closes what was said so far, so its words are
+   *   their own;
+   * - agy's turn ending with a command in the background or a wake-up still
+   *   set ends CawCo's turn there, though agy holds its prompt open, and
+   *   the result counts what is pending. A turn that ends fully idle ends
+   *   with the prompt's own answer, which follows at once and carries its
+   *   tokens.
+   */
+  #turnEvent(event: AgyTurnEvent): void {
+    if (event.conversationId !== this.sessionId) {
+      return;
+    }
+    if (event.kind === "invocation") {
+      if (!this.#turn) {
+        this.#beginTurn();
+      } else if (event.invocationNum === 0 && this.#turn.said) {
+        this.#flush();
+      }
+      return;
+    }
+    if (!event.fullyIdle && this.#turn) {
+      this.#endTurn(
+        "end_turn",
+        this.#faultOf(this.#turn, this.sessionId, "end_turn")
+      );
+    }
+  }
+
+  /** A turn of CawCo's begun: the session busy. */
+  #beginTurn(): void {
+    const { sessionId } = this;
+    this.#turn = {
+      after: sessionId ? lastStep(this.#steps(), sessionId) : -1,
+      said: false,
+      text: "",
+      thinking: "",
+      pictures: 0,
+      tokens: [],
+    };
+    this.#ctx.busy(true);
+  }
+
+  /** The calls still running: once no turn runs, what agy holds for later. */
+  #pending(): { id: string; name: string; since: number }[] {
+    return [...this.#calls]
+      .filter(([, call]) => !call.ended)
+      .map(([id, call]) => ({ id, name: call.name, since: call.since }));
   }
 
   #connection(): ClientConnection {
@@ -574,6 +714,8 @@ class AgySession {
     this.#ctx.failed(new Error(tail ? `${why}: ${tail}` : why));
     this.#prompts = 0;
     this.#turn = undefined;
+    // Its background commands and wake-ups ended with it.
+    this.#calls.clear();
     this.#ctx.busy(false);
   }
 
@@ -602,6 +744,9 @@ class AgySession {
   #read(one: Update): Effect.Effect<void> {
     if ("drained" in one) {
       return Deferred.succeed(one.drained, undefined);
+    }
+    if ("turn" in one) {
+      return Effect.sync(() => this.#turnEvent(one.turn));
     }
     const { update } = one.update;
     const at =
@@ -657,7 +802,7 @@ class AgySession {
         this.#called(update.toolCallId, update.name ?? update.title, update);
         return;
       case "tool_call_update":
-        if (this.#calls.get(update.toolCallId) === "ended") {
+        if (this.#calls.get(update.toolCallId)?.ended) {
           return;
         }
         if (!this.#calls.has(update.toolCallId)) {
@@ -696,10 +841,16 @@ class AgySession {
       case "config_option_update":
         this.#options = { configOptions: update.configOptions };
         return;
+      case "session_info_update":
+        if (update.title && this.sessionId) {
+          const { title } = update;
+          this.#note(this.sessionId, (note) => ({ ...note, title }));
+        }
+        this.#emit({ type: "raw", harness: "agy", message: update });
+        return;
       case "plan":
       case "plan_update":
       case "plan_removed":
-      case "session_info_update":
       case "notice":
         // No frame of CawCo's draws them yet: forwarded whole.
         this.#emit({ type: "raw", harness: "agy", message: update });
@@ -759,7 +910,7 @@ class AgySession {
     }
     if (turn.text) {
       if (this.sessionId) {
-        keepCarried(this.#start.launch.home, this.sessionId, [
+        keepCarried(this.#carryHome(), this.sessionId, [
           { who: "agent", text: turn.text },
         ]);
       }
@@ -782,7 +933,7 @@ class AgySession {
     if (this.#calls.has(id)) {
       return;
     }
-    this.#calls.set(id, "running");
+    this.#calls.set(id, { ended: false, name, since: Date.now() });
     this.#callTools.set(id, name);
     if (this.#turn) {
       this.#turn.said = true;
@@ -807,7 +958,12 @@ class AgySession {
     update: { content?: readonly unknown[] | null; rawOutput?: unknown },
     written: string | undefined
   ): void {
-    this.#calls.set(id, "ended");
+    const call = this.#calls.get(id);
+    this.#calls.set(id, {
+      ended: true,
+      name: call?.name ?? "tool",
+      since: call?.since ?? Date.now(),
+    });
     this.#writtenAt.delete(id);
     this.#emit({
       type: "user",
@@ -839,7 +995,9 @@ class AgySession {
       (option) =>
         option.kind === "reject_once" || option.kind === "reject_always"
     )?.optionId;
-    if (UNASKED.has(this.#mode) && allow) {
+    // In agy's own home its own settings decide what it asks, and every ask
+    // reaches the person.
+    if (!this.#own && UNASKED.has(this.#mode) && allow) {
       return { outcome: { outcome: "selected", optionId: allow } };
     }
     const { toolCall } = params;
@@ -925,7 +1083,7 @@ class AgySession {
         Effect.flatMap((refused) =>
           refused
             ? Effect.fail(new Error(refused))
-            : Effect.promise(() => this.#fleet.prompted(text))
+            : Effect.promise(() => this.#promptHooks(text))
         ),
         Effect.flatMap((hooked) =>
           "refused" in hooked
@@ -960,6 +1118,15 @@ class AgySession {
       });
   }
 
+  /** The fleet's `UserPromptSubmit` hooks on a send; none in agy's own home, which runs under its own settings. */
+  #promptHooks(
+    text: string
+  ): Promise<{ readonly refused: string } | { readonly context: string[] }> {
+    return this.#own
+      ? Promise.resolve({ context: [] })
+      : this.#fleet.prompted(text);
+  }
+
   /** The fleet's `Stop` hooks on a turn that ended: a block's reason is sent as a prompt that starts another turn. */
   async #stopHooks(): Promise<void> {
     const reason = await this.#fleet.stopped();
@@ -985,21 +1152,18 @@ class AgySession {
     if (!sessionId) {
       throw new Error(agyWords.ended);
     }
-    if (this.#prompts === 0) {
-      this.#turn = {
-        after: lastStep(this.#start.launch.home, sessionId),
-        said: false,
-        text: "",
-        thinking: "",
-        pictures: 0,
-        tokens: [],
-      };
+    // A prompt sent while agy holds an earlier one open (its turn over, a
+    // command in the background or a wake-up pending) goes to agy as a
+    // prompt of its own: agy answers the earlier one at once and runs this
+    // one, its pending work running on (`assets/b5b3ca96/REPORT.md` §2).
+    // Nothing is cancelled.
+    if (!this.#turn) {
+      this.#beginTurn();
     }
     this.#prompts += 1;
     if (this.#turn) {
       this.#turn.pictures += pictures;
     }
-    this.#ctx.busy(true);
     if (!again) {
       this.#unread.delete(uuid);
       this.#emit({
@@ -1008,7 +1172,7 @@ class AgySession {
         read: [uuid],
         session_id: sessionId,
       });
-      keepCarried(this.#start.launch.home, sessionId, [
+      keepCarried(this.#carryHome(), sessionId, [
         {
           who: "person",
           text: wordsOf(blocks),
@@ -1029,7 +1193,8 @@ class AgySession {
     } catch (error) {
       await this.#drained();
       this.#prompts = Math.max(0, this.#prompts - 1);
-      if (this.#prompts === 0) {
+      // A turn agy's Stop ended already has said its end.
+      if (this.#prompts === 0 && this.#turn) {
         // A session the host refused ends its turn in the refusal's words,
         // not in the connection's close they caused.
         this.#endTurn("end_turn", { words: this.#refused ?? saidBy(error) });
@@ -1037,6 +1202,25 @@ class AgySession {
       return;
     }
     this.#prompts = Math.max(0, this.#prompts - 1);
+    await this.#promptAnswered(
+      sessionId,
+      { uuid, blocks, again, pictures },
+      answer
+    );
+  }
+
+  /** A prompt's answer: the turn's end once it is the last prompt's, or the prompt sent again where agy answered it empty or refused it as invalid. */
+  async #promptAnswered(
+    sessionId: string,
+    sent: {
+      again: boolean;
+      blocks: ContentBlock[];
+      pictures: number;
+      uuid: string;
+    },
+    answer: unknown
+  ): Promise<void> {
+    const { uuid, blocks, again, pictures } = sent;
     const { stopReason, tokens } = promptAnswer(answer);
     if (tokens) {
       this.#turn?.tokens.push(tokens);
@@ -1045,7 +1229,15 @@ class AgySession {
     if (this.#prompts > 0) {
       return;
     }
-    const empty = stopReason === "end_turn" && !this.#turn?.said;
+    // agy answers its last prompt once nothing of the conversation runs
+    // on, or as a cancel ended it all: no call of it is pending now.
+    this.#dropPending();
+    const turn = this.#turn;
+    // Its turn already ended at agy's Stop ({@link #turnEvent}).
+    if (!turn) {
+      return;
+    }
+    const empty = stopReason === "end_turn" && !turn.said;
     if (empty && this.#start.launch.methodId === "agent-platform") {
       if (again) {
         this.#endTurn(stopReason, { words: agyWords.emptyTurn });
@@ -1055,7 +1247,7 @@ class AgySession {
       await this.#prompt(uuid, blocks, true, pictures);
       return;
     }
-    const fault = this.#faultOf(this.#turn, sessionId, stopReason);
+    const fault = this.#faultOf(turn, sessionId, stopReason);
     if (fault?.atLimit === undefined && fault?.invalid) {
       await this.#invalidEnd(uuid, blocks, again, stopReason, fault);
       return;
@@ -1102,7 +1294,7 @@ class AgySession {
    * (but the prompt about to go again, which goes as itself).
    */
   async #setAside(retrying: boolean): Promise<void> {
-    const { home } = this.#start.launch;
+    const home = this.#carryHome();
     const old = this.sessionId;
     const kept = old ? carriedOf(home, old) : [];
     const carried =
@@ -1146,16 +1338,24 @@ class AgySession {
     return [pricedRequest(this.#model ?? "agy", spent, Date.now())];
   }
 
+  /**
+   * Where CawCo keeps what the conversation said (agy-carry.ts): its
+   * account's home, or for agy's own home, which CawCo never writes, a dir
+   * of CawCo's.
+   */
+  #carryHome(): string {
+    return this.#own ? agyOwnCarryHome() : this.#start.launch.home;
+  }
+
+  /** Where the conversation's steps are read (agy-outcome.ts). */
+  #steps(): AgySteps {
+    return { home: this.#start.launch.home, own: this.#own };
+  }
+
   /** How the turn ended badly, as agy's store says, if it did. */
   #faultOf(turn: Turn | undefined, sessionId: string, stopReason: string) {
     return turn
-      ? turnFault(
-          this.#start.launch.home,
-          sessionId,
-          turn.after,
-          stopReason,
-          Date.now()
-        )
+      ? turnFault(this.#steps(), sessionId, turn.after, stopReason, Date.now())
       : undefined;
   }
 
@@ -1181,22 +1381,50 @@ class AgySession {
       ...(fault?.atLimit ? { atLimit: true } : {}),
       ...(this.#context ? { contextTokens: this.#context.used } : {}),
       ...(stopReason === "cancelled" ? { stop_reason: "interrupted" } : {}),
-      wakes: { background: 0, scheduled: 0 },
+      wakes: this.#wakes(),
       session_id: sessionId,
     });
     this.#turn = undefined;
-    this.#calls.clear();
+    for (const [id, call] of this.#calls) {
+      if (call.ended) {
+        this.#calls.delete(id);
+      }
+    }
     this.#writtenAt.clear();
     this.#ctx.busy(false);
-    if (stopReason === "end_turn" && !fault) {
+    if (stopReason === "end_turn" && !fault && !this.#own) {
       this.#stopHooks().catch((error: unknown) => this.#ctx.failed(error));
     }
   }
 
+  /** What will wake the session as its turn ends: its commands in the background and its wake-ups, each a call still running. */
+  #wakes(): { background: number; scheduled: number } {
+    const pending = this.#pending();
+    const scheduled = pending.filter(
+      (call) => AGY_TOOLS[call.name] === "schedule"
+    ).length;
+    return { background: pending.length - scheduled, scheduled };
+  }
+
+  /** Every call still running forgotten: agy ended them all. */
+  #dropPending(): void {
+    for (const [id, call] of this.#calls) {
+      if (!call.ended) {
+        this.#calls.delete(id);
+      }
+    }
+  }
+
+  /**
+   * The running turn cancelled. agy's cancel ends every command it moved to
+   * the background and every wake-up it set (`assets/b5b3ca96/REPORT.md`
+   * §3), so none is sent while no turn of CawCo's runs: an interrupt then
+   * has nothing to stop, and agy's pending work runs on.
+   */
   async interrupt(): Promise<void> {
     const { sessionId } = this;
     this.#cancelAsks();
-    if (sessionId && this.#prompts > 0) {
+    if (sessionId && this.#turn && this.#prompts > 0) {
       await this.#connection().agent.notify(methods.agent.session.cancel, {
         sessionId,
       });
@@ -1210,11 +1438,38 @@ class AgySession {
     await this.interrupt().catch(() => undefined);
     this.#stopped = true;
     this.#fleet.end();
+    const agy = this.#agy;
     this.#endAgy();
     await Effect.runPromise(Scope.close(this.#judge, Exit.void));
+    if (agy) {
+      await Effect.runPromise(
+        Effect.promise(() => agy.child.exited).pipe(
+          Effect.timeout(AGY_EXIT_WAIT),
+          Effect.ignore
+        )
+      );
+    }
+    await this.#applyDeletes();
     const { tmp } = this.#start.launch;
     if (tmp) {
       await rm(tmp, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * The conversations deleted from the account's home kept out of agy's
+   * shared files once this agy has ended, as one running may have written
+   * them back (agy-store-files.ts). None in agy's own home, which CawCo
+   * never writes.
+   */
+  async #applyDeletes(): Promise<void> {
+    const { accountId } = this.#start.launch;
+    if (accountId) {
+      await applyAgyDeletes(accountStore(accountId)).catch((error: unknown) =>
+        console.warn(
+          `[agy] ${this.#start.spec.instanceId}: keeping deleted conversations out failed: ${saidBy(error)}`
+        )
+      );
     }
   }
 
@@ -1222,8 +1477,9 @@ class AgySession {
   state(): AgyHostState {
     return {
       sessionId: this.sessionId,
-      busy: this.#prompts > 0,
+      busy: this.#turn !== undefined,
       held: [...this.#unread],
+      pending: this.#pending(),
       asks: [...this.#asks.values()].map((ask) => ask.asked),
       ...(this.#version ? { version: this.#version } : {}),
       ...(this.#start.gateForm ? { gateForm: this.#start.gateForm } : {}),

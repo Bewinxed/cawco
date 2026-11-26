@@ -7,13 +7,22 @@
  * CawCo's limit stop with its reset time, and any other error in its own
  * words. This follows T3 Code's `AntigravityTurnOutcome.ts` (its step types
  * and the patterns of agy's error text are read from it).
+ *
+ * In agy's own default home, which CawCo reads only as plain files and
+ * never writes (a SQLite read of a store agy has open writes its shared
+ * index beside it), the steps are read from the end of the conversation's
+ * transcript instead, whose `ERROR_MESSAGE` step holds the same error
+ * (agy-history.ts).
  */
 import { Database } from "bun:sqlite";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
-import { AGY_APP_DATA } from "@cawco/core/paths/harnesses";
+import { AGY_APP_DATA, AGY_OWN_APP_DATA } from "@cawco/core/paths/harnesses";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { agyWords } from "@cawco/core/words/agy";
 import { Effect } from "effect";
+import { agySteps } from "./agy-history";
+import { agyTranscriptPath } from "./agy-store-files";
 
 /** `CORTEX_STEP_TYPE_ERROR_MESSAGE` in agy's store. */
 const ERROR_STEP = 17;
@@ -41,9 +50,54 @@ const API_ERROR =
 /** agy 1.5 with a Google account: `STATUS (code NNN): message`. */
 const STATUS_ERROR = /(?<![A-Z_])([A-Z_]+) \(code (\d{3})\): (\P{Cc}+)/u;
 
-/** The conversation store of session `sessionId` in agy home `home`. */
+/**
+ * Where a conversation's steps are read: an account's home, whose store
+ * CawCo reads; or agy's own default home, whose transcript it reads.
+ */
+export interface AgySteps {
+  readonly home: string;
+  readonly own: boolean;
+}
+
+/** The conversation store of session `sessionId` in account home `home`. */
 const storeOf = (home: string, sessionId: string): string =>
   join(home, AGY_APP_DATA, "conversations", `${sessionId}.db`);
+
+/** How much of a transcript's end is read for its last steps: the few the turn's end needs. */
+const TAIL_BYTES = 256 * 1024;
+
+/** The whole steps of the end of session `sessionId`'s transcript in agy's own home `home`, oldest first. */
+const tailSteps = (
+  home: string,
+  sessionId: string
+): { error?: string; index: number; type: string }[] =>
+  Effect.runSync(
+    Effect.acquireUseRelease(
+      Effect.try(() =>
+        openSync(
+          agyTranscriptPath(join(home, AGY_OWN_APP_DATA), sessionId),
+          "r"
+        )
+      ),
+      (fd) =>
+        Effect.try(() => {
+          const { size } = fstatSync(fd);
+          const length = Math.min(size, TAIL_BYTES);
+          const bytes = Buffer.alloc(length);
+          readSync(fd, bytes, 0, length, size - length);
+          const lines = bytes.toString("utf8").split("\n");
+          // A read that starts mid-line drops that line.
+          return agySteps(
+            (length < size ? lines.slice(1) : lines).join("\n")
+          ).map((step) => ({
+            index: step.step_index,
+            type: step.type,
+            ...(step.error ? { error: step.error } : {}),
+          }));
+        }),
+      (fd) => Effect.sync(() => closeSync(fd))
+    ).pipe(Effect.orElseSucceed(() => []))
+  );
 
 /** `work` on the store read-only, or nothing when it is not there or not readable. */
 const reading = <A>(
@@ -58,8 +112,13 @@ const reading = <A>(
     ).pipe(Effect.orElseSucceed(() => undefined))
   );
 
-/** The last step's index in session `sessionId`'s store: where a prompt's steps begin after; -1 for none. */
-export const lastStep = (home: string, sessionId: string): number =>
+/** The last step's index of session `sessionId`: where a prompt's steps begin after; -1 for none. */
+export const lastStep = (at: AgySteps, sessionId: string): number =>
+  at.own
+    ? (tailSteps(at.home, sessionId).at(-1)?.index ?? -1)
+    : storeLastStep(at.home, sessionId);
+
+const storeLastStep = (home: string, sessionId: string): number =>
   reading(storeOf(home, sessionId), (database) => {
     const row = database
       .query<{ idx: number | null }, []>("SELECT max(idx) AS idx FROM steps")
@@ -69,6 +128,20 @@ export const lastStep = (home: string, sessionId: string): number =>
 
 /** The error's words of the last step after `after`, when that step is an error. */
 const errorAfter = (
+  at: AgySteps,
+  sessionId: string,
+  after: number
+): string | undefined => {
+  if (at.own) {
+    const last = tailSteps(at.home, sessionId).at(-1);
+    return last && last.index > after && last.type === "ERROR_MESSAGE"
+      ? (last.error ?? "")
+      : undefined;
+  }
+  return storeErrorAfter(at.home, sessionId, after);
+};
+
+const storeErrorAfter = (
   home: string,
   sessionId: string,
   after: number
@@ -125,13 +198,13 @@ export type TurnFault =
  * marked so.
  */
 export const turnFault = (
-  home: string,
+  at: AgySteps,
   sessionId: string,
   after: number,
   stopReason: string,
   now: number
 ): TurnFault | undefined => {
-  const text = errorAfter(home, sessionId, after);
+  const text = errorAfter(at, sessionId, after);
   if (text === undefined && stopReason !== "refusal") {
     return;
   }

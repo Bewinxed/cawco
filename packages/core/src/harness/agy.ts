@@ -355,8 +355,10 @@ export const AGY = {
 
   custody: "keeper",
   procIdPrefix: "agy:",
-  // Stored conversations are not listed yet.
-  listsAllConversations: false,
+  // Its listing reads every account's home and agy's own (agent
+  // harnesses/agy-store.ts); agy's own home's index is read as it stands on
+  // disk, which may lag agy, so a conversation left out is not proved gone.
+  listsAllConversations: true,
   catalogProvesGone: false,
   readsStoredContext: false,
   readsThroughCli: false,

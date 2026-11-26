@@ -1,18 +1,19 @@
 /**
  * A transcript file's documents, by whose transcript it is: the one read a
  * sync's tails and its workers' full parses both take (fts5.ts `sync`,
- * worker.ts `runTask`). Both harnesses here write one append-only JSONL file
+ * worker.ts `runTask`). Every harness here writes one append-only JSONL file
  * per session, so a file's checkpoint, its batches and its commit are one
  * path; only how a record becomes a document differs.
  */
 
+import { AGY_DOC_TYPES, agyConversationOf, agyDoc } from "./agy.ts";
 import { type Checkpoint, firstRecord, type ScanResult, scanFile } from "./file.ts";
 import { PI_DOC_TYPES, piDoc, piSessionOf } from "./pi.ts";
 import { typeFilter } from "./scan.ts";
 import { DOC_TYPES, type ExtractOptions, extractDoc, type TranscriptDoc } from "./text.ts";
 
 /** The harnesses whose transcripts are files. */
-export const FILE_HARNESSES = ["claude-code", "pi"] as const;
+export const FILE_HARNESSES = ["claude-code", "pi", "agy"] as const;
 export type FileHarness = (typeof FILE_HARNESSES)[number];
 
 /** A transcript file and whose it is. */
@@ -48,6 +49,18 @@ const READERS: Record<
       from,
       prefilter: typeFilter(...PI_DOC_TYPES),
       pick: (located) => piDoc(located.record, session, extract) ?? undefined,
+    });
+  },
+  // Only the path names the conversation.
+  agy: async (path, { extract, from }) => {
+    const sessionId = agyConversationOf(path);
+    if (!sessionId) {
+      throw new Error("no agy conversation in the path");
+    }
+    return await scanFile(path, {
+      from,
+      prefilter: typeFilter(...AGY_DOC_TYPES),
+      pick: (located) => agyDoc(located.record, sessionId, extract) ?? undefined,
     });
   },
 };
