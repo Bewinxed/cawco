@@ -521,7 +521,6 @@ empty-catch		packages/agent/src/forges/gitea-sign-in.ts	1
 empty-catch		packages/agent/src/git/lfs.ts	1
 empty-catch		packages/agent/src/harnesses/opencode.ts	2
 empty-catch		packages/agent/src/host-lfs.ts	1
-empty-catch		packages/agent/src/image-providers/antigravity.ts	1
 empty-catch		packages/agent/src/image-providers/chatgpt.ts	1
 empty-catch		packages/agent/src/layer.ts	3
 empty-catch		packages/agent/src/mcp-host.ts	3
@@ -532,7 +531,6 @@ empty-catch		packages/agent/src/stage-host/canvas/replays.ts	1
 empty-catch		packages/agent/src/stage-host/canvas/rig.ts	1
 empty-catch		packages/agent/src/stage-host/canvas/runtime.ts	1
 empty-catch		packages/agent/src/stage-host/canvas/stage.ts	1
-empty-catch		packages/agent/src/tools.ts	1
 empty-catch		packages/core/src/heavy-slots.ts	6
 empty-catch		packages/core/src/paths/workspace.ts	1
 empty-catch		packages/core/src/state-file.ts	1
@@ -557,7 +555,6 @@ empty-catch		packages/sessiond/src/server.ts	1
 empty-catch		packages/sessiond/src/tasks.ts	1
 empty-catch		scripts/hooks/delegate-nudge.ts	2
 suppression	@ts-expect-error	scripts/lib/tool-call.fixtures.ts	4
-suppression	biome-ignore lint/a11y/noHeaderScope	apps/dashboard/src/lib/cawco/ToolMatrix.svelte	1
 suppression	biome-ignore lint/a11y/noHeaderScope	apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte	1
 suppression	biome-ignore lint/a11y/noLabelWithoutControl	apps/dashboard/src/lib/cawco/connect/ReachStep.svelte	1
 suppression	biome-ignore lint/a11y/noNoninteractiveElementInteractions	apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte	1

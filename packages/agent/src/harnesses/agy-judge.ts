@@ -26,6 +26,7 @@
  * `force_ask` raised one `session/request_permission` whose `toolCallId`
  * is the hook's `toolCall.id` (`pb-default`).
  */
+import { isAbsolute, relative, resolve } from "node:path";
 import { deniedToolsBy } from "@cawco/core/delegate-types";
 import {
   AGY,
@@ -39,12 +40,14 @@ import type { SharedMode } from "@cawco/core/harness/modes";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { unhandled } from "@cawco/core/unhandled";
 import { judgeCall, type Policy } from "@cawco/core/workspace-judge";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 /** What agy hands its `PreToolUse` hook on stdin (its hooks doc, "Input/Output Contract"). */
 const HookInput = Schema.Struct({
   hookEventName: Schema.String,
   cwd: Schema.String,
+  /** The conversation making the call: a session's own, or its subagent's (agy 1.5.18, `assets/338276e4/p0a.calls.jsonl`). */
+  conversationId: Schema.optional(Schema.String),
   toolCall: Schema.Struct({
     id: Schema.String,
     name: Schema.String,
@@ -122,6 +125,10 @@ export const agyDeniedTools = (names: readonly string[]): ReadonlySet<string> =>
   new Set(deniedToolsBy(AGY_DENIED_TOOLS, names).tools);
 
 const deny = (reason: string): AgyAnswer => ({ decision: "deny", reason });
+
+/** Why a line the hook sent that is no call is denied. */
+const UNREAD_CALL =
+  "cawco: this call did not run, because the judge could not read what agy handed its hook.";
 
 const ALLOW: AgyAnswer = { decision: "allow" };
 
@@ -380,3 +387,98 @@ export const agyAnswer = (
       return unhandled("action", action);
   }
 };
+
+/**
+ * The subagent an image run's main agent hands its image to, by the
+ * `TypeName` of its `invoke_subagent` call, and the tool that subagent
+ * makes it with, by the argument naming the references it reads. agy
+ * 1.5.18 declares `generate_image` to no main agent of an ACP session, only
+ * to its built-in `image-generator` subagent (a session's declared tools
+ * listed by the model, the project's `assets/bbb39c69/declared-tools.out`).
+ */
+const IMAGE_SUBAGENT = "image-generator";
+const IMAGE_TOOL = "generate_image";
+const IMAGE_REFERENCES = "ImagePaths";
+/** The path `read_file` reads (core workspace-judge.ts `BUILT_INS.agy`). */
+const READ_PATH = "Path";
+
+/** Whether `path`, read from `cwd`, is `folder` or inside it. */
+const inside = (folder: string, cwd: string, path: unknown): boolean => {
+  if (typeof path !== "string" || !path) {
+    return false;
+  }
+  const from = relative(folder, resolve(cwd, path));
+  return !(from.startsWith("..") || isAbsolute(from));
+};
+
+/**
+ * The image run's answer to one call: its image handed to agy's
+ * `image-generator` subagent, that subagent's `generate_image` on
+ * references in the run's own `folder` alone, a read of a file in it, and
+ * the end of a turn run; everything else is denied, so the run makes one
+ * image and reads nothing of the machine's.
+ */
+const imageRunAnswer = (
+  call: AgyHookInput,
+  folder: string
+): AgyAnswer | AgyAfterAnswer => {
+  if (call.hookEventName === "PostToolUse") {
+    return {};
+  }
+  if (call.hookEventName !== "PreToolUse") {
+    return deny(
+      `cawco: the judge answers PreToolUse alone, and was handed ${call.hookEventName}.`
+    );
+  }
+  const { name, args = {} } = call.toolCall;
+  const kind = AGY_TOOLS[name];
+  if (name === IMAGE_TOOL) {
+    const references = args[IMAGE_REFERENCES] ?? [];
+    return Array.isArray(references) &&
+      references.every((path) => inside(folder, call.cwd, path))
+      ? ALLOW
+      : deny(
+          `cawco: ${IMAGE_TOOL} takes only the reference images named in the prompt, by the paths given there.`
+        );
+  }
+  if (kind === "subagent") {
+    return name === "invoke_subagent" && args.TypeName === IMAGE_SUBAGENT
+      ? ALLOW
+      : deny(
+          `cawco: ${name} did not run. This run hands its image to the ${IMAGE_SUBAGENT} subagent alone.`
+        );
+  }
+  if (kind === "read") {
+    return inside(folder, call.cwd, args[READ_PATH])
+      ? ALLOW
+      : deny("cawco: this run reads only the files in its own folder.");
+  }
+  if (kind === "turn") {
+    return ALLOW;
+  }
+  return deny(
+    `cawco: ${name} did not run. This run makes one image with ${IMAGE_TOOL} and nothing else.`
+  );
+};
+
+/**
+ * An image run's answer to one line its hook sent (agy-fleet-hooks.ts
+ * `answer`'s reading, the run's own policy; after a call, `{}`): a line that is no call is denied. Each
+ * conversation a call comes from is handed to `seen`: the run's own and its
+ * subagent's, whose folders hold the image and whose stores the run
+ * removes as it ends.
+ */
+export const agyImageRunAnswerTo = (
+  line: string,
+  folder: string,
+  seen: (conversationId: string) => void
+): AgyAnswer | AgyAfterAnswer =>
+  Option.match(decodeAgyHookInput(line), {
+    onNone: () => deny(UNREAD_CALL),
+    onSome: (call) => {
+      if (call.conversationId) {
+        seen(call.conversationId);
+      }
+      return imageRunAnswer(call, folder);
+    },
+  });

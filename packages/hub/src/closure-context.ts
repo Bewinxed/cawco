@@ -96,7 +96,6 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import type { StageFrame } from "@cawco/core/stage";
-import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type {
   TranscriptPage,
   TranscriptWhere,
@@ -976,7 +975,6 @@ export interface ClosureContext {
   >;
   pendingKey: (accountId: string, machineId: string, codex?: boolean) => string;
   pendingSignins: Map<string, PendingAccountSignin>;
-  pendingToolSignins: Map<string, ToolSigninChallenge>;
   /** A model picked while a session owes a move, judged against the account it lands on and carried with it (limit-moves.ts). */
   /** A setting's pick sent to a session's process and not yet answered, by its request (server.ts). */
   pickAsks: Map<string, { instanceId: string; pick: SettingPick }>;
@@ -1370,8 +1368,6 @@ export interface ClosureContext {
     model: string;
   };
   summaryMoveFailed: (row: ContinuationRow, reason: string) => void;
-  TOOL_SIGNIN_BEGIN_MS: 90000;
-  TOOL_SIGNIN_COMPLETE_MS: 180000;
   tabNamed: (asked: string, machine: string | null) => Promise<TabNamed>;
   tailnetHttps: TailnetHttps["Service"];
   takenUpBy: (

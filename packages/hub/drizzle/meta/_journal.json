@@ -3403,6 +3403,13 @@
       "when": 1795706124606,
       "tag": "0493_limit_readings",
       "breakpoints": true
+    },
+    {
+      "idx": 494,
+      "version": "6",
+      "when": 1795719187937,
+      "tag": "0494_drop_tool_signin",
+      "breakpoints": true
     }
   ]
 }

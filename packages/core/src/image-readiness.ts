@@ -1,4 +1,5 @@
 import type { Account, AccountReading, AccountSignin } from "./accounts";
+import { AGY_PROVIDER } from "./harness/agy-account";
 import type { ImageProviderId } from "./image-generation";
 import { machineLabel } from "./machine-names";
 import type { ToolStatus } from "./tools";
@@ -11,14 +12,14 @@ import type { ToolStatus } from "./tools";
  * - chatgpt: a ChatGPT login (an `openai-codex` OAuth account) signed in
  *   there, on any plan but Free, the one plan known to make no images
  *   (chatgpt.ts `NO_IMAGES_PLAN`); the plan is the account's last reading.
- * - antigravity: the Antigravity CLI installed there, runnable, and not
- *   signed out (antigravity.ts `readiness`), as the machine's tool status
- *   last said.
+ * - antigravity: the Antigravity CLI installed there and runnable, as the
+ *   machine's tool status last said, and an Antigravity account signed in
+ *   there, on any of its sign-in methods (antigravity.ts `readiness`).
  * - gemini-api: a Gemini API key (a `google` key account) signed in there
  *   (gemini-api.ts `heldKeys`).
  *
  * What only the request can tell (a ChatGPT token that won't renew, the
- * Google AI plan behind Antigravity, billing on a Gemini key's project) is
+ * Google AI plan behind an Antigravity account, billing on a Gemini key's project) is
  * not read here: the call says it.
  */
 
@@ -30,7 +31,7 @@ export type ImageLack =
   | { kind: "agy-missing" }
   | { kind: "agy-installing" }
   | { kind: "agy-broken"; detail: string }
-  | { kind: "agy-signed-out" }
+  | { kind: "agy-no-account" }
   | { kind: "no-key" };
 
 /** The fields of a machine the reading takes (core protocol `AgentRow`). */
@@ -70,18 +71,22 @@ const who = (account: Pick<Account, "email" | "id" | "label">): string =>
   account.label ?? account.email ?? account.id;
 
 /**
- * An account provider's lack on one machine: none when an account of it is
- * signed in there (and, for ChatGPT, on a plan that makes images); else the
- * nearest fix: a login on the Free plan, a login signed out there, none.
+ * An account provider's lack on one machine: none when an account of it
+ * (of `kind`, when one is named) is signed in there (and, for ChatGPT, on a
+ * plan that makes images); else the nearest fix: a login on the Free plan,
+ * a login signed out there, else `none`.
  */
 const accountLack = (
   machineId: string,
   fleet: ImageAccounts,
   provider: string,
-  kind: Account["kind"]
+  kind: Account["kind"] | undefined,
+  none: ImageLack
 ): ImageLack | null => {
   const own = fleet.accounts.filter(
-    (account) => account.provider === provider && account.kind === kind
+    (account) =>
+      account.provider === provider &&
+      (kind === undefined || account.kind === kind)
   );
   const signin = (accountId: string) =>
     fleet.signins.find(
@@ -108,18 +113,25 @@ const accountLack = (
   if (out) {
     return { kind: "signed-out", accountId: out.id, who: who(out) };
   }
-  return provider === CHATGPT_ACCOUNT
-    ? { kind: "no-login" }
-    : { kind: "no-key" };
+  return none;
 };
 
-/** The Antigravity CLI's lack on one machine, from its last tool status there. */
-const agyLack = (tool: ToolStatus | undefined): ImageLack | null => {
+/**
+ * Antigravity's lack on one machine: its CLI's, from its last tool status
+ * there, then an Antigravity account's, of any sign-in method.
+ */
+const agyLack = (
+  machineId: string,
+  tool: ToolStatus | undefined,
+  fleet: ImageAccounts | null
+): ImageLack | null => {
   switch (tool?.state) {
     case "installed":
-      return tool.signin?.state === "signed-out"
-        ? { kind: "agy-signed-out" }
-        : null;
+      return fleet
+        ? accountLack(machineId, fleet, AGY_PROVIDER, undefined, {
+            kind: "agy-no-account",
+          })
+        : { kind: "agy-no-account" };
     case "installing":
       return { kind: "agy-installing" };
     case "failed":
@@ -141,13 +153,17 @@ const lackOf = (
   switch (provider) {
     case "chatgpt":
       return fleet
-        ? accountLack(machine.machineId, fleet, CHATGPT_ACCOUNT, "oauth")
+        ? accountLack(machine.machineId, fleet, CHATGPT_ACCOUNT, "oauth", {
+            kind: "no-login",
+          })
         : { kind: "no-login" };
     case "antigravity":
-      return agyLack(machine.tools?.antigravity);
+      return agyLack(machine.machineId, machine.tools?.antigravity, fleet);
     case "gemini-api":
       return fleet
-        ? accountLack(machine.machineId, fleet, GEMINI_ACCOUNT, "api_key")
+        ? accountLack(machine.machineId, fleet, GEMINI_ACCOUNT, "api_key", {
+            kind: "no-key",
+          })
         : { kind: "no-key" };
     default:
       return null;

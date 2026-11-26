@@ -1,57 +1,32 @@
 /**
  * Configure › Command-line tools' ledgers (Component Story Format 3, live):
  * the whole catalog over a fleet, ToolMatrix drawn from the machines'
- * statuses as the hub publishes them. The Antigravity CLI has its own
- * Google sign-in (core `ToolSpec.signin`), so its ledger carries a Sign-in
- * column. A sign-in under way, refused or lapsed lives in the tab, not in
- * a status: the bench at `/motion/tool-signin` draws those, and runs one.
+ * statuses as the hub publishes them.
  */
 import { TOOL_CATALOG, TOOL_UPDATES_DEFAULT } from "@cawco/core/tools";
 import ToolMatrix from "./ToolMatrix.svelte";
 import {
-  AGY_UNREAD,
+  agyInstalled,
   agyMissing,
-  agyStatus,
   fleetMachine,
-  signinFleet,
-} from "./tool-signin-fixtures";
+  toolFleet,
+} from "./tool-fixtures";
 
 export default {
   component: ToolMatrix,
   args: {
     catalog: TOOL_CATALOG,
     policies: [],
-    machines: signinFleet(),
+    machines: toolFleet(),
     releases: {},
     updates: TOOL_UPDATES_DEFAULT,
   },
 };
 
-/** Eight machines, each a different sign-in state: missing, out, in, unknown, offline. */
-export const EveryState = { args: {} };
+/** Eight machines: the CLI missing on two, one offline. */
+export const Fleet = { args: {} };
 
-/** Signed in everywhere it is installed: the quiet column, its count on the head. */
-export const AllSignedIn = {
-  args: {
-    machines: [
-      fleetMachine(
-        "m-obelisk",
-        "obelisk-of-light",
-        "linux",
-        agyStatus("signed-in")
-      ),
-      fleetMachine(
-        "m-omar",
-        "Omars-MacBook-Pro",
-        "darwin",
-        agyStatus("signed-in")
-      ),
-      fleetMachine("m-uwu", "uwucloud", "linux", agyStatus("signed-in")),
-    ],
-  },
-};
-
-/** Installed nowhere: the column stands empty and the head counts no sign-in. */
+/** Installed nowhere. */
 export const NotInstalled = {
   args: {
     machines: [
@@ -61,51 +36,19 @@ export const NotInstalled = {
   },
 };
 
-/** agy couldn't say: the Unknown badge, whose popover holds its words. */
-export const Unknown = {
-  args: {
-    machines: [
-      fleetMachine(
-        "m-uwu",
-        "uwucloud",
-        "linux",
-        agyStatus("unknown", AGY_UNREAD)
-      ),
-      fleetMachine(
-        "m-obelisk",
-        "obelisk-of-light",
-        "linux",
-        agyStatus("unknown")
-      ),
-    ],
-  },
-};
-
 /** Every machine offline: states stand without their act. */
 export const Offline = {
   args: {
     machines: [
-      fleetMachine(
-        "m-hangar",
-        "hangar",
-        "linux",
-        agyStatus("signed-out"),
-        false
-      ),
+      fleetMachine("m-hangar", "hangar", "linux", agyInstalled, false),
       fleetMachine(
         "m-omar",
         "Omars-MacBook-Pro",
         "darwin",
-        agyStatus("signed-in"),
+        agyInstalled,
         false
       ),
-      fleetMachine(
-        "m-uwu",
-        "uwucloud",
-        "linux",
-        agyStatus("unknown", AGY_UNREAD),
-        false
-      ),
+      fleetMachine("m-uwu", "uwucloud", "linux", agyInstalled, false),
     ],
   },
 };
@@ -118,7 +61,7 @@ export const OneMachine = {
         "m-ledger",
         "ledger-build-runner-eu-west-3.internal",
         "linux",
-        agyStatus("signed-out")
+        agyInstalled
       ),
     ],
   },
@@ -128,13 +71,8 @@ export const OneMachine = {
 export const NoUnknownHarness = {
   args: {
     machines: [
-      fleetMachine(
-        "m-obelisk",
-        "obelisk-of-light",
-        "linux",
-        agyStatus("signed-in")
-      ),
-      fleetMachine("m-uwu", "uwucloud", "linux", agyStatus("signed-out")),
+      fleetMachine("m-obelisk", "obelisk-of-light", "linux", agyInstalled),
+      fleetMachine("m-uwu", "uwucloud", "linux", agyInstalled),
     ],
   },
 };
@@ -144,15 +82,10 @@ export const OneUnknownHarness = {
   args: {
     machines: [
       {
-        ...fleetMachine(
-          "m-obelisk",
-          "obelisk-of-light",
-          "linux",
-          agyStatus("signed-in")
-        ),
+        ...fleetMachine("m-obelisk", "obelisk-of-light", "linux", agyInstalled),
         unknownHarnesses: ["goose"],
       },
-      fleetMachine("m-uwu", "uwucloud", "linux", agyStatus("signed-out")),
+      fleetMachine("m-uwu", "uwucloud", "linux", agyInstalled),
     ],
   },
 };
@@ -166,7 +99,7 @@ export const ManyUnknownHarnesses = {
           "m-ledger",
           "ledger-build-runner-eu-west-3.internal",
           "linux",
-          agyStatus("signed-in")
+          agyInstalled
         ),
         unknownHarnesses: [
           "cursor-agent-headless-preview",
@@ -175,12 +108,7 @@ export const ManyUnknownHarnesses = {
         ],
       },
       {
-        ...fleetMachine(
-          "m-omar",
-          "Omars-MacBook-Pro",
-          "darwin",
-          agyStatus("signed-out")
-        ),
+        ...fleetMachine("m-omar", "Omars-MacBook-Pro", "darwin", agyInstalled),
         unknownHarnesses: ["goose"],
       },
     ],

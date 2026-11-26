@@ -3973,26 +3973,6 @@ const NamedMoveRequestShape = declared(
 export const NamedMoveRequestSchema = NamedMoveRequestShape;
 export type NamedMoveRequestOutput = z.output<typeof NamedMoveRequestShape>;
 
-const ToolSigninShape = declared(
-  z.object({
-    at: z.number(),
-    detail: z.string().optional(),
-    state: z.enum(["signed-in", "signed-out", "unknown"]),
-  }),
-  "ToolSignin",
-  "packages/core/src/tools.ts"
-);
-export const ToolSigninSchema = ToolSigninShape;
-export type ToolSigninOutput = z.output<typeof ToolSigninShape>;
-
-const NamedToolSigninShape = declared(
-  ToolSigninShape.omit({ state: true }).extend({ state: z.string() }),
-  "NamedToolSignin",
-  "packages/core/src/tools.ts"
-);
-export const NamedToolSigninSchema = NamedToolSigninShape;
-export type NamedToolSigninOutput = z.output<typeof NamedToolSigninShape>;
-
 const NeutralSessionInfoShape = declared(
   z.object({
     createdAt: z.number().optional(),
@@ -6023,16 +6003,6 @@ const ToolCopyShape = declared(
 );
 export const ToolCopySchema = ToolCopyShape;
 export type ToolCopyOutput = z.output<typeof ToolCopyShape>;
-
-const ToolSigninChallengeShape = declared(
-  z.object({ expiresAt: z.number(), url: z.string() }),
-  "ToolSigninChallenge",
-  "packages/core/src/tools.ts"
-);
-export const ToolSigninChallengeSchema = ToolSigninChallengeShape;
-export type ToolSigninChallengeOutput = z.output<
-  typeof ToolSigninChallengeShape
->;
 
 const ToolWantsShape = declared(
   z.object({ orNewer: z.boolean(), version: z.string() }),

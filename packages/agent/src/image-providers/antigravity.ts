@@ -6,22 +6,33 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { homedir, hostname, platform, tmpdir } from "node:os";
-import { extname, join, resolve } from "node:path";
-import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { toolSpec } from "@cawco/core/tools";
+import { hostname, tmpdir } from "node:os";
+import { extname, join } from "node:path";
+import {
+  client,
+  methods,
+  type SessionNotification,
+} from "@agentclientprotocol/sdk";
+import { AGY_APP_DATA } from "@cawco/core/paths/harnesses";
+import { runtimeVersion } from "@cawco/core/runtime";
 import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
-import { systemProgram } from "@cawco/core/workspace-needs";
-import type { Subprocess } from "bun";
 import { Clock, Effect, type Scope } from "effect";
-import { z } from "zod";
+import { promptAnswer } from "../harnesses/agy-frames";
+import { serveAgyJudge } from "../harnesses/agy-hook";
+import { agyImageRunAnswerTo } from "../harnesses/agy-judge";
 import {
-  heardUntilSignedOut,
-  probeToolStatus,
-  toolBinary,
-  toolEnv,
-} from "../tools";
+  AGY_SPEC,
+  agyLaunch,
+  endGroup,
+  readAgySignIn,
+  removeAgyConversation,
+  signInAcp,
+  startAcp,
+} from "../harnesses/agy-launch";
+import { agyAccountIds } from "../harnesses/agy-models";
+import { turnFault } from "../harnesses/agy-outcome";
+import { toolGate } from "../tools";
 import { ratioOf } from "./aspect";
 import {
   type ImageJob,
@@ -32,48 +43,36 @@ import {
 } from "./provider";
 
 /**
- * Gemini through the Antigravity CLI on this machine (`agy`), on the
- * person's own Google AI subscription there. CawCo only runs the `agy`
- * binary in print mode and reads what it prints and the files it writes: it
- * makes no request to Google of its own, which Antigravity's terms §6 would
- * make a breach ("Using third party software, tools, or services to access
- * the Service … is a breach", https://antigravity.google/terms), and it
- * never reads or holds the CLI's login. Print mode is documented for this
- * ("Run Antigravity CLI non-interactively to script agent tasks",
- * https://antigravity.google/docs/cli/headless/).
+ * Gemini through Google's own Antigravity CLI (`agy`), on an Antigravity
+ * account of this machine, by that account's own sign-in method. CawCo runs
+ * the `agy` binary over its published ACP interface (`agy acp`), launched
+ * as every Antigravity session of the account is (agent
+ * harnesses/agy-launch.ts `agyLaunch`: the account's agy home and
+ * environment, telemetry off), and reads what it says and the files it
+ * writes: it makes no request to Google of its own and never reads or holds
+ * the account's Google login.
+ *
+ * One run is one ACP session in the account's home, with a folder of its
+ * own as the session's folder. The home's one hook asks the run's own
+ * judge, which lets the main agent hand the image to agy's
+ * `image-generator` subagent, that subagent's `generate_image` run on the
+ * run's references, and reads of the run's folder, and denies the rest
+ * (agy-judge.ts `agyImageRunAnswerTo`). The image is found by its bytes
+ * ({@link madeImage}), and the run's conversations, its own and its
+ * subagent's, are removed from the home as the run ends, so an image run
+ * never shows as a conversation.
  */
 
-/** Where agy keeps each conversation's files (`--gemini-dir` `.gemini`, `--app-data-dir` `antigravity-cli`, their defaults). */
-const brainDir = (): string =>
-  join(homedir(), ".gemini", "antigravity-cli", "brain");
-
-/** The answer the run is held to: the saved image's path (`--json-schema`). */
-const ANSWER_SCHEMA = JSON.stringify({
-  type: "object",
-  properties: { path: { type: "string" } },
-  required: ["path"],
-});
-
 /**
- * agy's own limit on the run, under the orchestration's ten minutes, so the
- * CLI ends itself and says so before CawCo stops waiting.
- */
-const PRINT_TIMEOUT = "9m";
-
-/**
- * What agy is asked: one image through its own `generate_image` tool, with
- * the references (`paths`, numbered as the job's prompt names them) as that
- * call's `ImagePaths`, and the saved path as the answer. agy 1.5.1's main
- * agent hands images to its built-in `image-generator` subagent ("it now
- * hands image requests to a built-in `image-generator` subagent", agy
- * changelog 1.2.16) and, asked to call `generate_image` itself, answered
- * that it has none ("image generation is only exposed through the
- * `image-generator` subagent via `invoke_subagent`", stream-json run on
- * obelisk, 2026-11-05); that subagent "Pass[es] source or reference images
- * via ImagePaths" and makes "at most 3 attempts per image" (its system
- * prompt, in the agy 1.5.1 binary). So the image's brief is written once,
- * to go word for word to whichever of them calls the tool, and holds it to
- * one call.
+ * What agy is asked: one image, handed to its built-in `image-generator`
+ * subagent, the one holder of `generate_image` on agy 1.5.18 (its main
+ * agent of an ACP session has none: the project's
+ * `assets/bbb39c69/declared-tools.out`), with the references (`paths`,
+ * numbered as the job's prompt names them) as that call's `ImagePaths`.
+ * That subagent "Pass[es] source or reference images via ImagePaths" and
+ * makes "at most 3 attempts per image" (its system prompt, in the agy 1.5.1
+ * binary), so the image's brief is written once, to go word for word to
+ * it, and holds it to one call.
  */
 const promptOf = (job: ImageJob, paths: string[]): string => {
   const ratio = ratioOf(job.size);
@@ -92,7 +91,7 @@ const promptOf = (job: ImageJob, paths: string[]): string => {
     "Call generate_image once and do not retry, then give the absolute path of the saved image.",
   ];
   return [
-    "Make exactly one image with generate_image, then stop. If you have no generate_image tool of your own, hand the image to your image-generator subagent with one invoke_subagent call whose brief is the text between the two --- lines, word for word.",
+    "Make exactly one image, then stop. Hand it to your image-generator subagent with one invoke_subagent call whose brief is the text between the two --- lines, word for word.",
     "---",
     ...brief,
     "---",
@@ -110,9 +109,10 @@ const REFERENCE_EXTENSIONS: Readonly<Record<string, string>> = {
 
 /**
  * Each reference written into the run's own folder, as
- * `reference-<n>.<ext>` in the job's order, and its absolute path: agy's
- * workspace is that folder, so it reads them where it works, and the bytes
- * it reads are the ones the orchestration admitted and checked.
+ * `reference-<n>.<ext>` in the job's order, and its absolute path: the
+ * run's session works in that folder, its judge lets it read nothing else,
+ * and the bytes it reads are the ones the orchestration admitted and
+ * checked.
  */
 const writeReferences = async (
   cwd: string,
@@ -128,32 +128,6 @@ const writeReferences = async (
       return path;
     })
   );
-
-/** The JSON envelope print mode ends on (headless doc "JSON"): the fields read here. */
-const envelopeSchema = z.looseObject({
-  conversation_id: z.string().optional(),
-  status: z.string().optional(),
-  error: z.string().optional(),
-  /** The agent's own answer in words: why, when it made no image. */
-  response: z.string().optional(),
-  structured_output: z.looseObject({ path: z.string().optional() }).optional(),
-});
-type Envelope = z.infer<typeof envelopeSchema>;
-
-/** The last line of `out` that is the envelope, if any. */
-const envelopeOf = (out: string): Envelope | undefined => {
-  for (const line of out.trim().split("\n").reverse()) {
-    try {
-      const read = envelopeSchema.safeParse(JSON.parse(line));
-      if (read.success) {
-        return read.data;
-      }
-    } catch {
-      // Not the envelope: agy printed something else on this line.
-    }
-  }
-  return undefined;
-};
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg"]);
 
@@ -175,40 +149,26 @@ const imagesUnder = async (dir: string, since: number): Promise<string[]> => {
 };
 
 /**
- * The image the run made, its bytes: an image file written since the run
- * started in its conversation's folder or the run's own folder, the path
- * it answered first, then the newest; never one whose bytes are a
- * reference's. agy writes its image in its conversation's folder, not
- * where it is asked
- * (`~/.gemini/antigravity-cli/brain/<conversation_id>/<name>_<time>.jpg`,
- * measured on agy 1.5.0, 2026-11-04), and CawCo writes the references in
- * the run's own folder ({@link writeReferences}) after the run's start: a
+ * The image the run made, its bytes: the newest image file written since
+ * the run started in its conversation's folder or the run's own folder,
+ * never one whose bytes are a reference's. agy writes its image in its
+ * conversation's folder (`<app-data>/brain/<session>/<name>_<time>.jpg`,
+ * measured on agy 1.5.0, 2026-11-04), not where it is asked, and CawCo
+ * writes the references in the run's own folder after the run's start: a
  * run that made nothing would otherwise answer one of them back as its
  * image (a reference's pixels returned when agy's tool call failed,
  * measured on agy 1.5.1, 2026-11-05). So what counts as agy's is decided
  * by its bytes, which no name, folder or copy of agy's changes.
  */
 const madeImage = async (
-  envelope: Envelope | undefined,
-  cwd: string,
+  places: readonly string[],
   since: number,
   references: ImageJob["references"]
 ): Promise<Buffer | undefined> => {
-  const id = envelope?.conversation_id;
-  const conversation = id ? join(brainDir(), id) : undefined;
-  const places = [conversation, cwd].filter(
-    (place): place is string => place !== undefined
-  );
   const found = (
     await Promise.all(places.map((place) => imagesUnder(place, since)))
   ).flat();
-  const answered = envelope?.structured_output?.path;
-  const named = answered ? resolve(answered) : undefined;
-  const ordered =
-    named && found.includes(named)
-      ? [named, ...found.filter((path) => path !== named)]
-      : found;
-  for (const path of ordered) {
+  for (const path of found) {
     const bytes = await readFile(path).catch(() => undefined);
     if (
       bytes &&
@@ -220,53 +180,83 @@ const madeImage = async (
   return undefined;
 };
 
+/** An id agy gives a conversation: a UUID. */
+const CONVERSATION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/** Every conversation a run made: its session's, and each its hook was called from. */
+const conversationsOf = (heard: {
+  conversations: ReadonlySet<string>;
+  sessionId?: string;
+}): Set<string> =>
+  new Set([
+    ...(heard.sessionId === undefined ? [] : [heard.sessionId]),
+    ...heard.conversations,
+  ]);
+
+/** How long agy is given to end once signalled, before the run lets it go. */
+const AGY_END_MS = 10_000;
+
 /** What agy says when it is out of quota, and failed inside Google's service (measured on Plus). */
 const QUOTA = /RESOURCE_EXHAUSTED|code 429/u;
 const INTERNAL = /INTERNAL \(code 500\)|\b500 INTERNAL\b/u;
 
-/** The last lines of what agy said on its errors, for a sentence. */
+/** The last lines of what agy said, for a sentence. */
 const tailOf = (text: string): string =>
   cutShort(lastLines(Bun.stripANSI(text).trim().split("\n"), 4, " / "), 600);
 
+/** How a run that made no image ended: its stop reason, its error, and what agy said. */
+interface RunEnd {
+  /** The turn's error in agy's or Google's words, when it ended on one. */
+  readonly error: string;
+  /** Whether the account's quota is spent, as agy's store says (agy-outcome.ts `turnFault`). */
+  readonly limit: boolean;
+  /** What the agent answered, and the tail of agy's stderr. */
+  readonly said: string;
+  readonly stopReason: string;
+}
+
 /**
- * A run that ended with no image, as a refusal in words, by what agy said:
- * its error, its answer and the tail of its stderr, so a limit of agy's
- * own (a tool call it refused) reaches the person in its words. One that
- * said it is signed out never gets here: it ends where it says so
- * ({@link runAgy}).
+ * A run that ended with no image, as a refusal in words, by what agy said,
+ * so a limit of agy's own (a tool call it refused) reaches the person in
+ * its words.
  */
-const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
-  const error = envelope?.error ?? "";
-  const said = [tailOf(envelope?.response ?? ""), tailOf(stderr)]
-    .filter(Boolean)
-    .join(" / ");
-  const all = `${error}\n${said}`;
-  if (QUOTA.test(all)) {
-    return new Error(imageGenerationWords.agyQuota(error || said));
+const noImage = (end: RunEnd): Error => {
+  const all = `${end.error}\n${end.said}`;
+  if (end.limit || QUOTA.test(all)) {
+    return new Error(imageGenerationWords.agyQuota(end.error || end.said));
   }
   if (INTERNAL.test(all)) {
-    return new Error(imageGenerationWords.agyInternal(error || said));
+    return new Error(imageGenerationWords.agyInternal(end.error || end.said));
   }
   return new Error(
-    imageGenerationWords.agyNoImage(
-      envelope?.status ?? "no answer",
-      error,
-      said
-    )
+    imageGenerationWords.agyNoImage(end.stopReason, end.error, end.said)
   );
 };
 
+/** An error an ACP request ended on, in its words and the data it carries. */
+const errorWords = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const data = "data" in error ? error.data : undefined;
+  return data === undefined
+    ? error.message
+    : `${error.message} ${typeof data === "string" ? data : JSON.stringify(data)}`;
+};
+
 /**
- * One print-mode run of `bin` in a folder of its own, the job's references
- * written in it ({@link writeReferences}): its prompt asks for one image and
- * its path; the image is found where agy wrote it
- * ({@link madeImage}), whatever the run's exit, and a run that ended in an
- * error after writing it is said in a note (agy 1.5.0 on Pro ended
- * `NOT_FOUND (code 404)` after its image, measured).
+ * One run on account `accountId`: a folder of its own with the job's
+ * references in it ({@link writeReferences}), the account's agy started
+ * over ACP as its sessions are, the run's judge answering its hook, one
+ * session asked for one image. The image is found where agy wrote it
+ * ({@link madeImage}), whatever the turn's end; a turn that ended in an
+ * error after writing it is said in a note. agy, its judge, the run's
+ * folder and the conversation it made are all gone as the run ends, done
+ * or interrupted.
  */
 const runAgy = Effect.fn("runAgy")(function* (
-  bin: string,
-  signedOut: readonly string[],
+  accountId: string,
   job: ImageJob
 ): Effect.fn.Return<MadeImage, ImageRunFailed, Scope.Scope> {
   const cwd = yield* Effect.acquireRelease(
@@ -274,142 +264,220 @@ const runAgy = Effect.fn("runAgy")(function* (
       try: () => mkdtemp(join(tmpdir(), "cawco-agy-image-")),
       catch: imageRunFailed,
     }),
-    (made) => Effect.promise(() => rm(made, { recursive: true, force: true }))
+    (folder) =>
+      Effect.promise(() => rm(folder, { recursive: true, force: true }))
   );
   const since = (yield* Clock.currentTimeMillis) - 1000;
   const paths = yield* Effect.tryPromise({
     try: () => writeReferences(cwd, job.references),
     catch: imageRunFailed,
   });
-  // Its whole process tree is ended when the orchestration stops
-  // waiting: agy starts a language server of its own beside it. On Linux
-  // and macOS it leads a process group of its own, signalled whole; on
-  // Windows, which has no process groups, `taskkill /T` ends the process
-  // and every process it started.
-  const grouped = platform() !== "win32";
-  const child = yield* Effect.acquireRelease(
+  const launch = yield* agyLaunch(
+    accountId,
+    `image-${crypto.randomUUID()}`,
+    {}
+  ).pipe(Effect.mapError(imageRunFailed));
+  /**
+   * What the run heard: its session once opened, every conversation its
+   * hook was called from (its own and its subagent's), the agent's words,
+   * agy's last stderr line.
+   */
+  const heard: {
+    conversations: Set<string>;
+    sessionId?: string;
+    stderr: string;
+    text: string;
+  } = { conversations: new Set(), text: "", stderr: "" };
+  yield* serveAgyJudge(launch.judgeSocket, (line) =>
+    // An answer of the run's own, at once (the server takes a promise).
+    Promise.resolve(
+      agyImageRunAnswerTo(line, cwd, (conversationId) => {
+        // Only an id agy makes names a folder the run removes.
+        if (CONVERSATION_ID.test(conversationId)) {
+          heard.conversations.add(conversationId);
+        }
+      })
+    )
+  ).pipe(Effect.mapError(imageRunFailed));
+  // The conversations the run made, gone once agy has ended (the finalizer
+  // below this one runs first): none is a session of the person's. Set
+  // before the session opens, so a run interrupted mid-turn removes them too.
+  yield* Effect.addFinalizer(() =>
+    Effect.promise(() =>
+      Promise.all(
+        [...conversationsOf(heard)].map((id) =>
+          removeAgyConversation(launch.home, id)
+        )
+      )
+    )
+  );
+  const { connection } = yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
-        Bun.spawn(
-          [
-            bin,
-            "-p",
-            promptOf(job, paths),
-            "--output-format",
-            "json",
-            "--json-schema",
-            ANSWER_SCHEMA,
-            "--print-timeout",
-            PRINT_TIMEOUT,
-          ],
+        startAcp(
+          { bin: launch.bin, args: launch.args, env: launch.env, cwd },
+          client({ name: "cawco" }).onNotification(
+            methods.client.session.update,
+            ({ params }: { params: SessionNotification }) => {
+              const { update } = params;
+              if (
+                params.sessionId === heard.sessionId &&
+                update.sessionUpdate === "agent_message_chunk" &&
+                update.content.type === "text"
+              ) {
+                heard.text += update.content.text;
+              }
+            }
+          ),
           {
-            cwd,
-            env: toolEnv(),
-            stdin: "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-            ...(grouped ? { detached: true } : {}),
+            said: (text) => {
+              // A failure quotes agy's last line: its last words before it ended.
+              const lines = text.split("\n").filter((line) => line.trim());
+              heard.stderr = lines.at(-1) ?? heard.stderr;
+            },
+            ended: () => undefined,
           }
         ),
       catch: imageRunFailed,
     }),
-    (started) => Effect.sync(() => stopTree(started, grouped))
+    (started) =>
+      Effect.sync(() => {
+        started.connection.close();
+        endGroup(started.child);
+      }).pipe(
+        // Its end waited on, so nothing it still writes outlives the
+        // conversation's removal.
+        Effect.andThen(Effect.promise(() => started.child.exited)),
+        Effect.timeoutOption(AGY_END_MS)
+      )
   );
-  // Read as every run of agy is (tools.ts `heardUntilSignedOut`): signed
-  // out, it says so and then waits a minute for a login, so the run ends
-  // where it says it (its tree ended as it is let go), and that line is
-  // the refusal's reason.
-  const ended = yield* heardUntilSignedOut(child, signedOut);
-  if ("line" in ended) {
-    return yield* Effect.fail(
-      imageRunFailed(new Error(imageGenerationWords.agySignedOut(ended.line)))
-    );
-  }
-  const { code, out, err } = ended;
-  const envelope = envelopeOf(out);
-  const bytes = yield* Effect.tryPromise({
-    try: () => madeImage(envelope, cwd, since, job.references),
+  yield* Effect.tryPromise({
+    try: () => signInAcp(connection, launch.methodId, runtimeVersion),
     catch: imageRunFailed,
   });
-  if (!bytes) {
-    return yield* Effect.fail(imageRunFailed(noImage(envelope, err)));
-  }
-  const notes =
-    code === 0 && envelope?.status === "SUCCESS"
-      ? []
-      : [
-          imageGenerationWords.agyEndedAfterImage(
-            envelope?.error ?? `exit ${code}`
+  const opened = yield* Effect.tryPromise({
+    try: () =>
+      connection.agent.request(methods.agent.session.new, {
+        cwd,
+        mcpServers: [],
+      }),
+    catch: imageRunFailed,
+  });
+  heard.sessionId = opened.sessionId;
+  const answered = yield* Effect.tryPromise({
+    try: () =>
+      connection.agent.request(methods.agent.session.prompt, {
+        sessionId: opened.sessionId,
+        prompt: [{ type: "text", text: promptOf(job, paths) }],
+      }),
+    catch: errorWords,
+  }).pipe(
+    Effect.map((answer) => ({ answer, error: "" })),
+    Effect.catch((said) => Effect.succeed({ answer: undefined, error: said }))
+  );
+  const bytes = yield* Effect.tryPromise({
+    try: () =>
+      madeImage(
+        [
+          ...[...conversationsOf(heard)].map((id) =>
+            join(launch.home, AGY_APP_DATA, "brain", id)
           ),
-        ];
-  return { bytes, notes };
+          cwd,
+        ],
+        since,
+        job.references
+      ),
+    catch: imageRunFailed,
+  });
+  const { stopReason } = promptAnswer(answered.answer);
+  const fault = turnFault(
+    launch.home,
+    opened.sessionId,
+    -1,
+    stopReason,
+    yield* Clock.currentTimeMillis
+  );
+  const failure = answered.error || fault?.words || "";
+  if (!bytes) {
+    return yield* Effect.fail(
+      imageRunFailed(
+        noImage({
+          stopReason,
+          error: failure,
+          limit: fault?.atLimit === true,
+          said: [tailOf(heard.text), tailOf(heard.stderr)]
+            .filter(Boolean)
+            .join(" / "),
+        })
+      )
+    );
+  }
+  return {
+    bytes,
+    notes: failure ? [imageGenerationWords.agyEndedAfterImage(failure)] : [],
+  };
 }, Effect.scoped);
 
 /**
- * agy's whole process tree ended, while agy still runs: its group on Linux
- * and macOS, `taskkill /T` on Windows.
+ * The account a run goes on, the first of this machine's Antigravity
+ * accounts whose sign-in method is whole here (agy-launch.ts
+ * `readAgySignIn`), of any method; none, and why each is not, in words.
+ * Never another account once a run has begun on one: CawCo does not rotate
+ * accounts (tsk-340, "Compliance posture").
  */
-const stopTree = (child: Subprocess, grouped: boolean): void => {
-  const leader = spawnedPid(child);
-  if (leader === undefined || child.exitCode !== null) {
-    return;
+const accountToRun = async (): Promise<
+  { accountId: string } | { reason: string }
+> => {
+  const accounts = agyAccountIds();
+  if (!accounts.length) {
+    return { reason: imageGenerationWords.agyNoAccount(hostname()) };
   }
-  if (grouped) {
-    signalGroup(leader, "SIGTERM");
-    return;
+  const refused: string[] = [];
+  for (const accountId of accounts) {
+    const read = await Effect.runPromise(
+      readAgySignIn(accountId).pipe(
+        Effect.as(undefined),
+        Effect.catch((why) => Effect.succeed(why.message))
+      )
+    );
+    if (read === undefined) {
+      return { accountId };
+    }
+    refused.push(read);
   }
-  Bun.spawn([systemProgram("taskkill"), "/PID", String(leader), "/T", "/F"], {
-    env: process.env,
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-  });
+  return { reason: imageGenerationWords.agyNoUsableAccount(refused) };
 };
 
 /**
- * The pre-flight, spending nothing: the CLI is here and runs (the tool
- * probe), and its own read says it is signed in. A read that says neither
- * lets the run go on and says so. agy names no plan anywhere it prints
- * (`/usage`, `/credits`, `agy models` on agy 1.5.0, read on obelisk
- * 2026-11-04), so no plan is refused here: a plan that makes no images
+ * The pre-flight, spending nothing: agy is installed here at a version
+ * CawCo runs, and an Antigravity account of this machine has its sign-in
+ * method whole ({@link accountToRun}). Whether agy's sign-in still holds is
+ * agy's own answer as the run signs in, and a plan that makes no images
  * (Plus, Free) is refused by the run itself, in words ({@link noImage}).
  */
 async function readiness(): ReturnType<ImageProvider["readiness"]> {
-  const spec = toolSpec("antigravity");
-  const bin = spec ? await toolBinary(spec) : undefined;
-  if (!(spec && bin)) {
+  const gate = await toolGate(AGY_SPEC);
+  if (gate.refused === "not-installed") {
     return {
       ready: false,
       reason: imageGenerationWords.agyMissing(hostname()),
     };
   }
-  const status = await probeToolStatus(spec, { fresh: true });
-  if (status.state !== "installed") {
+  if (gate.refused) {
     return {
       ready: false,
-      reason:
-        status.state === "missing"
-          ? imageGenerationWords.agyMissing(hostname())
-          : imageGenerationWords.agyNotRunnable(status.detail ?? status.state),
+      reason: imageGenerationWords.agyNotRunnable(gate.words ?? gate.refused),
     };
   }
-  if (status.signin?.state === "signed-out") {
-    return {
-      ready: false,
-      reason: imageGenerationWords.agySignedOut(status.signin.detail ?? ""),
-    };
+  const account = await accountToRun();
+  if ("reason" in account) {
+    return { ready: false, reason: account.reason };
   }
-  const notes = [
-    ...(status.signin?.state === "unknown"
-      ? [imageGenerationWords.agySigninUnread(status.signin.detail ?? "")]
-      : []),
-    imageGenerationWords.agyPlanUnread,
-  ];
   return {
     ready: true,
-    notes,
+    notes: [imageGenerationWords.agyPlanUnread],
     generate: (job) =>
-      runAgy(bin, spec.signin?.signedOut ?? [], job).pipe(
+      runAgy(account.accountId, job).pipe(
         Effect.map((made) => ({
           bytes: made.bytes,
           notes: [
@@ -446,9 +514,9 @@ const AGY_MAX_REFERENCES = 3;
 const AGY_REFERENCE_BYTES = 20 * 1000 * 1000;
 
 /**
- * Gemini through this machine's Antigravity CLI: one model, Nano Banana 2
- * (core `IMAGE_PROVIDER_MODELS`), at most {@link AGY_MAX_REFERENCES}
- * references; JPEG as it makes it.
+ * Gemini through an Antigravity account of this machine: one model, Nano
+ * Banana 2 (core `IMAGE_PROVIDER_MODELS`), at most
+ * {@link AGY_MAX_REFERENCES} references; JPEG as it makes it.
  */
 export const antigravity: ImageProvider = {
   id: "antigravity",

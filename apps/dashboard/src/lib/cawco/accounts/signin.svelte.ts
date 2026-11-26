@@ -18,8 +18,7 @@ export type SigninPhase =
 
 /**
  * What SigninPanel draws: a sign-in by a link and the code its page shows,
- * pasted back. An account's (`SigninFlow`) and a tool's own
- * (`tool-signin.svelte.ts`).
+ * pasted back: an account's (`SigninFlow`).
  */
 export interface PasteSignin {
   code: string;
@@ -38,7 +37,7 @@ export interface PasteSignin {
  * is a popup the browser blocks); refused, the tab closes and the refusal
  * is thrown. Call it before any `await` of the press.
  */
-export async function openSigninTab<T extends { url: string }>(
+async function openSigninTab<T extends { url: string }>(
   ask: () => Promise<T>
 ): Promise<T> {
   const tab = window.open("about:blank", "_blank");

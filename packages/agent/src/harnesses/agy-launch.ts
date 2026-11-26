@@ -24,6 +24,9 @@
  * home; a key is the account's credential, which CawCo already keeps
  * (core accounts.ts) and hands agy in its environment.
  */
+import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ClientApp,
@@ -228,7 +231,8 @@ const credentialOf = (signIn: AgySignIn): Record<string, string> => {
  * agy's environment for `signIn`: the host's, every variable
  * {@link droppedForAgy} names gone, on the tools' PATH, with the method's
  * credential, the session's own extras (its judge, its git and container
- * doors), and agy's self-update and crash reports off.
+ * doors), and what every run of agy carries (core tools.ts `runEnv`: its
+ * self-update and crash reports off).
  */
 export const agyEnvironment = (
   signIn: AgySignIn,
@@ -243,8 +247,7 @@ export const agyEnvironment = (
   PATH: toolPath(),
   ...extras,
   ...credentialOf(signIn),
-  AGY_CLI_DISABLE_AUTO_UPDATE: "true",
-  ANTIGRAVITY_SENTRY_SAMPLE_RATE: "0",
+  ...AGY_SPEC.runEnv,
 });
 
 /**
@@ -428,4 +431,55 @@ export const endGroup = (child: AgyChild): void => {
   if (pid !== undefined) {
     signalGroup(pid, "SIGTERM");
   }
+};
+
+/**
+ * The conversation `sessionId` agy made in `home`, removed: its store, its
+ * working files, its title (`annotations/<id>.pbtxt`) and its row in agy's
+ * conversation summaries (`conversation_summaries.db`, keyed by `conversation_id`; what an image run
+ * left there, the project's `assets/bbb39c69/after-runs-cawco-whole.txt`).
+ * For a run that is no session of the person's (a models read, an image),
+ * so it never shows as a conversation.
+ */
+export const removeAgyConversation = async (
+  home: string,
+  sessionId: string
+): Promise<void> => {
+  const data = join(home, AGY_APP_DATA);
+  const store = join(data, "conversations", `${sessionId}.db`);
+  // The store, and the write-ahead log and index SQLite keeps beside it.
+  await Promise.all(
+    ["", "-wal", "-shm"].map((end) => rm(`${store}${end}`, { force: true }))
+  );
+  await rm(join(data, "brain", sessionId), { recursive: true, force: true });
+  await rm(join(data, "annotations", `${sessionId}.pbtxt`), { force: true });
+  forgetSummary(join(data, "conversation_summaries.db"), sessionId);
+};
+
+/** Conversation `sessionId`'s row gone from agy's summaries at `file`; nothing when it has none or no such store. */
+const forgetSummary = (file: string, sessionId: string): void => {
+  if (!existsSync(file)) {
+    return;
+  }
+  Effect.runSync(
+    Effect.acquireUseRelease(
+      Effect.try(() => new Database(file)),
+      (database) =>
+        Effect.try(() =>
+          database
+            .query(
+              "DELETE FROM conversation_summaries WHERE conversation_id = ?"
+            )
+            .run(sessionId)
+        ),
+      (database) => Effect.sync(() => database.close())
+    ).pipe(
+      // Its store agy's to change: a row left is said, never a failed run.
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[agy] conversation ${sessionId}'s summary stayed in ${file}: ${String(error)}`
+        )
+      )
+    )
+  );
 };

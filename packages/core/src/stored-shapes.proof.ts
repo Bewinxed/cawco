@@ -765,7 +765,6 @@ import type {
   NamedHarnessReportOutput,
   NamedMachineCapabilitiesOutput,
   NamedMoveRequestOutput,
-  NamedToolSigninOutput,
   NearMissOutput,
   NeutralContentBlockOutput,
   NeutralHarnessBlockOutput,
@@ -911,8 +910,6 @@ import type {
   TextAttachmentOutput,
   TokenKindOutput,
   ToolCopyOutput,
-  ToolSigninChallengeOutput,
-  ToolSigninOutput,
   ToolWantsOutput,
   TrackerSyncStateOutput,
   TranscriptAnswerOutput,
@@ -967,10 +964,7 @@ import type {
 } from "./stream-relay";
 import type { TailnetServing as TailnetServingType } from "./tailnet-https";
 import type {
-  NamedToolSignin as NamedToolSigninType,
   ToolCopy as ToolCopyType,
-  ToolSigninChallenge as ToolSigninChallengeType,
-  ToolSignin as ToolSigninType,
   ToolWants as ToolWantsType,
 } from "./tools";
 import type {
@@ -1331,8 +1325,6 @@ prove<
     Same<NamedHarnessReportOutput, NamedHarnessReportType>,
     Same<MoveRequestOutput, MoveRequestType>,
     Same<NamedMoveRequestOutput, NamedMoveRequestType>,
-    Same<ToolSigninOutput, ToolSigninType>,
-    Same<NamedToolSigninOutput, NamedToolSigninType>,
     Same<NeutralSessionInfoOutput, NeutralSessionInfoType>,
     Same<OnCapOutput, OnCapType>,
     Same<LimitWindowOutput, LimitWindowType>,
@@ -1475,7 +1467,6 @@ prove<
     Same<SupportedCommandsOutput, SupportedCommandsType>,
     Same<TaskOutputOutput, TaskOutputType>,
     Same<ToolCopyOutput, ToolCopyType>,
-    Same<ToolSigninChallengeOutput, ToolSigninChallengeType>,
     Same<ToolWantsOutput, ToolWantsType>,
     Same<TrackerSyncStateOutput, TrackerSyncStateType>,
     Same<DocAuthorOutput, DocAuthorType>,

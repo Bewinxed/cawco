@@ -19,7 +19,7 @@ const PROVIDERS: Readonly<
   },
   antigravity: {
     name: "Gemini through Antigravity",
-    runsOn: "On a Google AI Pro or Ultra login",
+    runsOn: "On an Antigravity account",
   },
   "gemini-api": {
     name: "Gemini API",
@@ -119,8 +119,8 @@ export const imageSettingsWords = {
         return "Antigravity CLI is installing…";
       case "agy-broken":
         return `Antigravity CLI can't run (${lack.detail})`;
-      case "agy-signed-out":
-        return "Antigravity CLI isn't signed in to Google";
+      case "agy-no-account":
+        return "No Antigravity account";
       case "no-key":
         return "No Gemini API key";
       default:
@@ -141,9 +141,10 @@ export const imageSettingsWords = {
           accountId: lack.accountId,
           label: "Open account",
         };
+      case "agy-no-account":
+        return { kind: "page", slug: "accounts", label: "Add account" };
       case "agy-missing":
       case "agy-broken":
-      case "agy-signed-out":
         return { kind: "page", slug: "cli-tools", label: "Open CLI tools" };
       case "agy-installing":
         return null;

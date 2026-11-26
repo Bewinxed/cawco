@@ -422,8 +422,6 @@ const ARGS: {
     maybe(boolean()),
     maybe(text),
   ]),
-  beginToolSignin: tuple([text]),
-  completeToolSignin: tuple([text, maybe(text)]),
 
   // A session's credential and its CawCo tools.
   forgetCredentials: tuple([texts]),

@@ -8,13 +8,7 @@ import type { Bounded } from "@cawco/core/bounded";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
-import {
-  couldNot,
-  hubData,
-  hubRefusal,
-  type Refused,
-  unreachedAnswer,
-} from "#lib/platform/hub-read.js";
+import { couldNot, hubData } from "#lib/platform/hub-read.js";
 import { machineControl } from "./stores/machines";
 
 /**
@@ -55,67 +49,3 @@ export const installTool = (
   id: string
 ): Promise<Bounded<ToolStatus>> =>
   machineControl(machineId, "installTool", [id], INSTALL_TIMEOUT_MS);
-
-/**
- * A tool sign-in's refusal, in the hub's words (hub routes/tools.ts, the
- * tool sign-in routes). `spent`: the machine answered with its failure, so
- * its sign-in is over and its link is dead (a `502`); a machine away
- * (`503`) or silent (`504`) may still hold it.
- */
-export class ToolSigninRefusal extends Error {
-  readonly spent: boolean;
-  constructor(words: string, spent: boolean) {
-    super(words);
-    this.name = "ToolSigninRefusal";
-    this.spent = spent;
-  }
-}
-
-/** A tool sign-in route's refusal as the {@link ToolSigninRefusal} it throws. */
-function signinRefusal(refused: Refused): ToolSigninRefusal {
-  // Read first: a request that got no answer rejects here as it was thrown.
-  const words = hubRefusal(refused).message;
-  // The machine's failure, never the dashboard's own 502 for a hub that
-  // didn't answer, which says nothing of the machine's sign-in.
-  const spent =
-    refused.response.status === 502 && !unreachedAnswer(refused.response);
-  const said = refused.error.value;
-  // The machine's own refusal, whole: its sentence, then the tool's screen
-  // lines one per line (core words/tools `screenOf`), which the hub's
-  // one-line refusal reading would cut to the first. No status after it: it
-  // would read as one more line of the tool's screen.
-  if (spent && typeof said === "string") {
-    const whole = said.trim();
-    if (whole && !whole.startsWith("{")) {
-      return new ToolSigninRefusal(whole, true);
-    }
-  }
-  return new ToolSigninRefusal(words, spent);
-}
-
-/**
- * Starts the tool's own sign-in on the machine (core `ToolSpec.signin`):
- * the link the person opens in their own browser, and until when the
- * machine waits for its code. One already waiting answers its kept link.
- */
-export async function beginToolSignin(machineId: string, toolId: string) {
-  return await hubData(
-    hub.api.machines({ machineId }).tools({ toolId }).signin.post(),
-    signinRefusal
-  );
-}
-
-/** Types the pasted code into the machine's waiting sign-in: the tool's status there, its sign-in read again. */
-export async function completeToolSignin(
-  machineId: string,
-  toolId: string,
-  code: string
-) {
-  return await hubData(
-    hub.api
-      .machines({ machineId })
-      .tools({ toolId })
-      .signin.complete.post({ code }),
-    signinRefusal
-  );
-}

@@ -35,19 +35,13 @@ import {
   MachineCapabilitySchema,
   MediaPathShape,
   PermissionModeShape,
-  ToolSigninSchema,
   WorkspaceToolSchema,
 } from "@cawco/core/stored-shapes";
-import type {
-  ReportedToolStatus,
-  ToolSignin,
-  ToolStatus,
-} from "@cawco/core/tools";
+import type { ToolStatus } from "@cawco/core/tools";
 import {
   machinePauseWords,
   stoppedWords,
 } from "@cawco/core/words/machine-pause";
-import { toolWords } from "@cawco/core/words/tools";
 import { and, asc, eq, getTableName, isNotNull, ne, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
@@ -119,12 +113,6 @@ const harnessReportOf = ({
   return parsed.success ? parsed.data : undefined;
 };
 
-/** A tool's sign-in state as its machine said it, read: one this build does not know is `unknown`, as a read that said neither is. */
-const signinStateOf = (state: string): ToolSignin["state"] => {
-  const parsed = ToolSigninSchema.shape.state.safeParse(state);
-  return parsed.success ? parsed.data : "unknown";
-};
-
 /**
  * What the hub keeps of what a machine reported it has installed (core
  * `KeptMachineCapabilities`), read, its platform the one its `os` names
@@ -153,14 +141,6 @@ const capabilitiesOf = (
     });
     return parsed.success ? [parsed.data] : [];
   }),
-});
-
-/** A tool's sign-in as its row's columns keep it; a sign-in said lets one kept as not read go. */
-const signinCells = (signin: ReportedToolStatus["signin"]) => ({
-  signinState: signin?.state ?? null,
-  signinAt: signin === undefined ? null : new Date(signin.at),
-  signinDetail: signin?.detail ?? null,
-  signinUnread: null,
 });
 
 export interface MachinesDb {
@@ -285,10 +265,7 @@ export interface MachinesDb {
     harnesses: NamedHarnessReport[]
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
-  readonly mergeAgentTools: (
-    machineId: string,
-    statuses: ReportedToolStatus[]
-  ) => void;
+  readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
   /** Every machine by its id and hostname, in {@link machineFacts}' order: what a machine's name is read from. */
   readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
@@ -332,10 +309,7 @@ export interface MachinesDb {
     machineId: string,
     outcome: FleetSyncOutcome
   ) => void;
-  readonly setAgentToolCell: (
-    machineId: string,
-    status: ReportedToolStatus
-  ) => void;
+  readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /**
    * Pauses a machine until `until`, with what the pause stopped as it began,
    * or ends its pause (null, null); false when no such machine (machine-pause.ts).
@@ -406,35 +380,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     tx.delete(agents).where(eq(agents.machineId, from)).run();
   };
 
-  /**
-   * A tool's sign-in as its row keeps it: none while the machine said none;
-   * signed out, at the row's time, while the one kept does not read
-   * (`signin_unread`, hub migration 0424).
-   */
-  const signinOf = (
-    row: typeof agentTools.$inferSelect
-  ): { signin?: ToolSignin } => {
-    if (row.signinUnread !== null) {
-      return {
-        signin: {
-          state: "signed-out",
-          at: row.at.getTime(),
-          detail: toolWords.signinKeptUnread,
-        },
-      };
-    }
-    if (row.signinState === null || row.signinAt === null) {
-      return {};
-    }
-    return {
-      signin: {
-        state: signinStateOf(row.signinState),
-        at: row.signinAt.getTime(),
-        ...(row.signinDetail === null ? {} : { detail: row.signinDetail }),
-      },
-    };
-  };
-
   /** A tool's row as the status the wire carries: what it does not say is left out. */
   const toolStatusOf = (row: typeof agentTools.$inferSelect): ToolStatus => ({
     id: row.toolId,
@@ -443,7 +388,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.version === null ? {} : { version: row.version }),
     ...(row.method === null ? {} : { method: row.method }),
     ...(row.detail === null ? {} : { detail: row.detail }),
-    ...signinOf(row),
     ...(row.copy === null ? {} : { copy: row.copy }),
     ...(row.wants === null ? {} : { wants: row.wants }),
     ...(row.triedAt === null ? {} : { triedAt: row.triedAt.getTime() }),
@@ -477,10 +421,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     toolsByMachine(machineId).get(machineId) ?? {};
 
   /** Each status over the machine's cell for its tool, the rest kept, in one transaction. */
-  const putToolCells = (
-    machineId: string,
-    statuses: ReportedToolStatus[]
-  ): void => {
+  const putToolCells = (machineId: string, statuses: ToolStatus[]): void => {
     db.transaction((tx) => {
       // A machine the hub keeps no row for has no cells to keep.
       if (!machineKept(tx, machineId)) {
@@ -492,7 +433,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           version: status.version ?? null,
           method: status.method ?? null,
           detail: status.detail ?? null,
-          ...signinCells(status.signin),
           copy: status.copy ?? null,
           wants: status.wants ?? null,
           triedAt:

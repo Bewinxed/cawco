@@ -14,9 +14,8 @@
  *   `paused_until`, untouched, so the machine stays paused until then; its
  *   row says it stopped work it no longer counts (core words
  *   `machinePauseWords.stoppedUncounted`), until the pause ends.
- * - a sign-in: nothing placed; it reads as signed out (core words
- *   `toolWords.signinKeptUnread`), so nothing that needs the tool signed in
- *   runs on it, until the machine says its sign-in again.
+ * - a sign-in: nothing placed. Migration 0494 drops the sign-in columns
+ *   whole, since no tool keeps a sign-in of its own any more.
  *
  * The predicates below are 0424's own: its SQL was written from them, over
  * the columns as they stand before it. {@link STOPPED} and {@link SIGNIN}

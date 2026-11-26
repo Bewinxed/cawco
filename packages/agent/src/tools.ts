@@ -22,7 +22,7 @@ import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { identifiedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
+import { spawnRead, untether } from "@cawco/core/tether";
 import { MINUTE_MS } from "@cawco/core/time";
 import type {
   ToolCopy,
@@ -30,7 +30,6 @@ import type {
   ToolInstallMethod,
   ToolLauncher,
   ToolPlatform,
-  ToolSignin,
   ToolSpec,
   ToolStatus,
   ToolUpdateSwitches,
@@ -48,7 +47,7 @@ import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
 import { systemProgram } from "@cawco/core/workspace-needs";
-import { Deferred, Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { codexNative, type NativeBinary, nativeEnv } from "./codex-native";
@@ -1711,7 +1710,7 @@ const LAUNCHERS: Record<ToolLauncher, (found: string) => NativeBinary> = {
 export const runnable = (spec: ToolSpec, path: string): NativeBinary =>
   spec.launcher
     ? LAUNCHERS[spec.launcher](path)
-    : { kind: "native", bin: path, env: {} };
+    : { kind: "native", bin: path, env: spec.runEnv ?? {} };
 
 /** Why `spec`'s copy at `path` has nothing to run ({@link runnable}), and how it gets one: with `method`, the one it came from, when known. */
 const nothingToRun = (
@@ -2159,207 +2158,7 @@ export const probeTools = async (): Promise<ToolStatus[]> => {
     );
   });
   await tookOver;
-  return await Promise.all(TOOL_CATALOG.map((spec) => probeToolStatus(spec)));
-};
-
-/**
- * One catalog tool as {@link probeTools} reports it: for a tool with its own
- * sign-in that is installed here, with whether it is signed in
- * ({@link toolSignin}).
- */
-export const probeToolStatus = async (
-  spec: ToolSpec,
-  { fresh = false }: { fresh?: boolean } = {}
-): Promise<ToolStatus> => {
-  const status = await probeReported(spec);
-  return spec.signin && status.state === "installed"
-    ? {
-        ...status,
-        signin: await toolSignin(spec, { fresh, version: status.version }),
-      }
-    : status;
-};
-
-/** How long a tool's sign-in read stands before a probe reads it again. */
-const SIGNIN_FRESH_MS = 10 * 60_000;
-
-/** How long a tool's sign-in read may run: it starts the tool, which may start its own server. */
-const SIGNIN_READ_MS = 60_000;
-
-/** Each tool's last sign-in read, and the version of the copy it read. */
-const signins = new Map<string, { signin: ToolSignin; version?: string }>();
-
-/**
- * Whether `spec`'s copy here is signed in, by its own read
- * ({@link ToolSigninSpec.status}): signed in when it exits 0 saying none of
- * its signed-out words; signed out when it says one; else unknown, in its
- * own words. A read stands {@link SIGNIN_FRESH_MS} for the same copy
- * (`version`); `fresh` reads again. Spends nothing of the person's: the
- * read is the tool's own, run as it is.
- */
-const toolSignin = async (
-  spec: ToolSpec,
-  { fresh = false, version }: { fresh?: boolean; version?: string } = {}
-): Promise<ToolSignin> => {
-  const kept = signins.get(spec.id);
-  if (
-    !fresh &&
-    kept &&
-    kept.version === version &&
-    Date.now() - kept.signin.at < SIGNIN_FRESH_MS
-  ) {
-    return kept.signin;
-  }
-  const signin = await readSignin(spec);
-  signins.set(spec.id, { signin, ...(version ? { version } : {}) });
-  return signin;
-};
-
-/**
- * The first line a run of a tool said (`heard`, its stdout then its stderr)
- * that holds one of the tool's signed-out words; none while it has said none.
- */
-const signedOutLine = (
-  signedOut: readonly string[],
-  heard: ToolHeard
-): string | undefined =>
-  Bun.stripANSI(`${heard.out}\n${heard.err}`)
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => {
-      const lower = line.toLowerCase();
-      return signedOut.some((word) => lower.includes(word.toLowerCase()));
-    });
-
-/** What a run of a tool said so far, on its stdout and its stderr. */
-interface ToolHeard {
-  err: string;
-  out: string;
-}
-
-/**
- * How a run of a tool with a sign-in of its own ended, as
- * {@link heardUntilSignedOut} heard it: its exit, or the first line it said
- * that holds a signed-out word, said before or as it ended.
- */
-export type ToolRunEnd = ToolHeard & ({ code: number } | { line: string });
-
-/**
- * THE ONE READER of every run of a tool with a sign-in of its own (core
- * `ToolSigninSpec.signedOut`): its stdout and stderr read as they come, and
- * its end the first of its exit and its first line holding a signed-out
- * word. A run that says it is signed out is not waited on: agy 1.5.2 says
- * "Authentication required. Please visit the URL to log in:" on any print
- * run and then waits 60 s for a login no one is at (measured 2026-11-07, a
- * HOME with no sign-in), which held the machine's whole tools read, Claude
- * Code's cell with it, for that minute, and an image run as long. A run
- * still going when this answers is the caller's to end, its own way (the
- * tether's pipe, its process group).
- */
-export const heardUntilSignedOut = Effect.fnUntraced(function* (
-  child: {
-    exited: Promise<number>;
-    stderr: ReadableStream<Uint8Array>;
-    stdout: ReadableStream<Uint8Array>;
-  },
-  signedOut: readonly string[]
-): Effect.fn.Return<ToolRunEnd> {
-  const heard: ToolHeard = { out: "", err: "" };
-  /** Its first line holding a signed-out word, once one is said. */
-  const saidOut = Deferred.makeUnsafe<string>();
-  const listen = async (
-    stream: ReadableStream<Uint8Array>,
-    into: keyof ToolHeard
-  ): Promise<void> => {
-    const decoder = new TextDecoder();
-    try {
-      for await (const chunk of stream) {
-        heard[into] += decoder.decode(chunk, { stream: true });
-        const line = signedOutLine(signedOut, heard);
-        if (line !== undefined) {
-          Deferred.doneUnsafe(saidOut, Exit.succeed(line));
-        }
-      }
-    } catch {
-      // A pipe that fails has nothing more to say: what it said stands.
-    }
-  };
-  const exited = async (): Promise<{ code: number }> => {
-    const [code] = await Promise.all([
-      child.exited,
-      listen(child.stdout, "out"),
-      listen(child.stderr, "err"),
-    ]);
-    return { code };
-  };
-  // The reads go on past a signed-out line, as the run does, for the caller
-  // to end.
-  const ended = yield* Effect.race(
-    Effect.promise(exited),
-    Deferred.await(saidOut).pipe(Effect.map((said) => ({ line: said })))
-  );
-  if ("line" in ended) {
-    return { ...heard, ...ended };
-  }
-  // Said as it ended, in the last chunk read.
-  const line = signedOutLine(signedOut, heard);
-  return line === undefined ? { ...heard, ...ended } : { ...heard, line };
-});
-
-/** {@link toolSignin}'s read itself. */
-const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
-  const words = spec.signin;
-  const bin = await toolBinary(spec);
-  if (!(words && bin)) {
-    return {
-      state: "unknown",
-      detail: toolWords.signinNoCopy(spec.name),
-      at: Date.now(),
-    };
-  }
-  // Tethered (core tether.ts): the read starts the tool, which may run on
-  // past an agent stopped mid-read, as `agy -p /usage` did past a scratch
-  // fleet's agent (2026-11-04); the tether ends it with the agent.
-  const read = await readWithin(SIGNIN_READ_MS, async (signal) => {
-    // stdin is the agent's end of the pipe whose close ends the read.
-    const child = spawnTethered([bin, ...words.status], {
-      env: toolEnv(),
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    // The promise edge of heardUntilSignedOut.
-    const ended = await Effect.runPromise(
-      heardUntilSignedOut(child, words.signedOut)
-    );
-    untether(child.stdin);
-    return ended;
-  }).catch(() => undefined);
-  const asked = read?.kind === "answered" ? read.value : undefined;
-  if (!asked) {
-    return {
-      state: "unknown",
-      detail: toolWords.signinSilent(spec.name, SIGNIN_READ_MS / 1000),
-      at: Date.now(),
-    };
-  }
-  if ("line" in asked) {
-    return { state: "signed-out", detail: asked.line, at: Date.now() };
-  }
-  const said = Bun.stripANSI(`${asked.out}\n${asked.err}`).trim();
-  return asked.code === 0
-    ? { state: "signed-in", at: Date.now() }
-    : {
-        state: "unknown",
-        detail: toolWords.signinUnread(spec.name, asked.code, tail(said)),
-        at: Date.now(),
-      };
-};
-
-/** A tool's sign-in may have moved (its own sign-in ended here): its next read is fresh, and the hub hears. */
-export const signinMoved = (id: string): void => {
-  signins.delete(id);
-  toolsMoved();
+  return await Promise.all(TOOL_CATALOG.map((spec) => probeReported(spec)));
 };
 
 /**

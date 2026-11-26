@@ -31,7 +31,6 @@ import { startNewSession } from "./spawn/new-session.svelte";
 import { startParked } from "./spawn/parked.svelte";
 import { stopWork } from "./stop-work.svelte";
 import { startMinute } from "./stores/clock.svelte";
-import { startToolSignins } from "./tool-signin.svelte";
 import { startConnectSignIns } from "./transcript/connect-sign-ins.svelte";
 import { startUsageBench } from "./usage/forecast.svelte";
 import { startWorkspace } from "./workspace/workspace.svelte";
@@ -75,8 +74,6 @@ export function startApp(): () => void {
     drafts.start(),
     // The account sign-ins under way, taking up each accounts read.
     startFlows(),
-    // The tool sign-ins a reload kept, and their lapses.
-    startToolSignins(),
   ];
   return () => {
     for (const stop of stops.reverse()) {

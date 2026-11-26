@@ -17,7 +17,7 @@ import { configurePage } from "./configure";
 /** Each provider by the name a person knows it by, and what it runs on. */
 const PROVIDER_NAMES: Readonly<Record<ImageProviderId, string>> = {
   chatgpt: "ChatGPT, on this machine's ChatGPT login",
-  antigravity: "Gemini, through this machine's Antigravity CLI",
+  antigravity: "Gemini, through an Antigravity account on this machine",
   "gemini-api":
     "Gemini, on a Gemini API key held on this machine, billed per image",
 };
@@ -29,7 +29,7 @@ const SHORT_NAMES: Readonly<Record<ImageProviderId, string>> = {
   "gemini-api": "The Gemini API",
 };
 
-/** Where the Antigravity CLI is installed and signed in on each machine. */
+/** Where the Antigravity CLI is installed on each machine. */
 const AGY_ROW = `its row in ${configurePage("cli-tools")}`;
 
 const FORMAT_NAMES: Readonly<Record<ImageFormat, string>> = {
@@ -149,12 +149,12 @@ export const imageGenerationWords = {
   /** An Antigravity CLI CawCo doesn't run, in the tool probe's words. */
   agyNotRunnable: (detail: string) =>
     `Antigravity CLI on this machine can't run (${detail}), so no image request was sent. See ${AGY_ROW}.`,
-  /** Not signed in to Google, by its own read or its run. */
-  agySignedOut: (said: string) =>
-    `Antigravity CLI on this machine isn't signed in to Google${said ? ` (it said: ${said})` : ""}, so no image was made. Sign it in on ${AGY_ROW}.`,
-  /** A note: whether it is signed in couldn't be read, and the run went on. */
-  agySigninUnread: (detail: string) =>
-    `Whether Antigravity CLI is signed in couldn't be read beforehand (${detail}); the run went ahead.`,
+  /** No Antigravity account on the machine. */
+  agyNoAccount: (machine: string) =>
+    `${machine} has no Antigravity account, so no image request was sent. Add one in ${configurePage("accounts")}.`,
+  /** Every Antigravity account on the machine misses part of its sign-in here: each one's refusal. */
+  agyNoUsableAccount: (refused: readonly string[]) =>
+    `No Antigravity account on this machine can sign in, so no image request was sent. ${refused.join(" ")}`,
   /** A note: the plan is never readable on this route. */
   agyPlanUnread:
     "Antigravity CLI doesn't say which Google AI plan it is signed in on, so the plan wasn't checked; images need Pro or Ultra.",
@@ -166,7 +166,7 @@ export const imageGenerationWords = {
     `Antigravity CLI ended with "${error}" after it wrote the image; the image is the one it made.`,
   /** The run's quota is spent. */
   agyQuota: (error: string) =>
-    `Google's image quota for this machine's Antigravity sign-in is spent (${error}). No image was saved and no retry was submitted; failed attempts count against the quota too.`,
+    `Google's image quota for this Antigravity account is spent (${error}). No image was saved and no retry was submitted; failed attempts count against the quota too.`,
   /** The image tool failed inside Google's service. */
   agyInternal: (error: string) =>
     `Antigravity CLI's image tool failed (${error}). On Google AI Plus every image run fails this way; Pro or Ultra make images. No image was saved and no retry was submitted.`,

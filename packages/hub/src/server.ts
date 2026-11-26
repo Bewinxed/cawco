@@ -215,7 +215,6 @@ import {
   HookDraftSchema,
   NamedHarnessReportSchema,
   NamedMachineCapabilitiesSchema,
-  NamedToolSigninSchema,
   OpenCodeGoLimitsSchema,
   SentMessageSchema,
   ToolCopySchema,
@@ -231,7 +230,7 @@ import {
 import type { AttemptStart } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import type { ReportedToolStatus } from "@cawco/core/tools";
+import type { ToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { isThingParent, STANDING_CONTEXT_SHARE } from "@cawco/core/triggers";
@@ -1172,18 +1171,9 @@ const AUTH_STATES: readonly AgentAuth[] = [
   "unreadable-credentials",
 ];
 
-/** What is kept of a tool's status a machine reported: each stored shape it carries, as its type, its sign-in in the machine's own words (core `NamedToolSignin`). */
-const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus => ({
+/** What is kept of a tool's status a machine reported: each stored shape it carries, as its type. */
+const keptToolStatus = (tool: ToolStatus): ToolStatus => ({
   ...tool,
-  ...(tool.signin
-    ? {
-        signin: keptAs(
-          NamedToolSigninSchema,
-          tool.signin,
-          "a machine's report beat (a tool's sign-in)"
-        ),
-      }
-    : {}),
   ...(tool.copy
     ? {
         copy: keptAs(
@@ -1456,8 +1446,6 @@ export const createServer = (
     updateAll: () => updateAll,
     welcomeConverge: () => welcomeConverge,
     withdrawUnshown: () => withdrawUnshown,
-    TOOL_SIGNIN_BEGIN_MS: () => TOOL_SIGNIN_BEGIN_MS,
-    TOOL_SIGNIN_COMPLETE_MS: () => TOOL_SIGNIN_COMPLETE_MS,
     announceMcp: () => announceMcp,
     announceSkill: () => announceSkill,
     archiveView: () => archiveView,
@@ -1524,7 +1512,6 @@ export const createServer = (
     noteFetch: () => noteFetch,
     notifications: () => notifications,
     pending: () => pending,
-    pendingToolSignins: () => pendingToolSignins,
     pluginRow: () => pluginRow,
     projectTypes: () => projectTypes,
     publishUsage: () => publishUsage,
@@ -2033,7 +2020,6 @@ export const createServer = (
     joinOn,
     knownProviders,
     machineProviders,
-    pendingToolSignins,
     settleProviderSignin,
     settleSignin,
     startMove,
@@ -4355,10 +4341,6 @@ export const createServer = (
   if (db.accounts.leaves().length > 0) {
     tickLeaves();
   }
-  /** How long the machine may take to show a tool's sign-in link. */
-  const TOOL_SIGNIN_BEGIN_MS = 90_000;
-  /** How long the machine may take to finish a tool's sign-in once its code is typed. */
-  const TOOL_SIGNIN_COMPLETE_MS = 180_000;
 
   /** A PATCH changes the live harness first; its receipt files the stored mode. Why it did not, as the PATCH answers it. */
   const applyPermissionMode = async (row: InstanceRow, mode: string) => {
@@ -7831,10 +7813,7 @@ export const createServer = (
    * copy CawCo was already keeping current (agent tools.ts `takeOverKept`),
    * said in the hub's log the first time its cell says so.
    */
-  const sayTakenOver = (
-    machineId: string,
-    tools: ReportedToolStatus[]
-  ): void => {
+  const sayTakenOver = (machineId: string, tools: ToolStatus[]): void => {
     const before = db.agentTools(machineId);
     for (const tool of tools) {
       const copy = tool.copy?.by === "cawco" ? tool.copy : undefined;

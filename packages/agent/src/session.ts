@@ -160,13 +160,7 @@ import { isDamagedRecord } from "@cawco/core/state-file";
 import type { FrameProvenance, RegisterAckPayload } from "@cawco/core/stream";
 import { alreadyIngested, resumeCursor } from "@cawco/core/stream";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import {
-  CONTROL_BEGIN_TOOL_SIGNIN,
-  CONTROL_COMPLETE_TOOL_SIGNIN,
-  INSTALL_TOOL,
-  LIST_TOOLS,
-  type ToolStatus,
-} from "@cawco/core/tools";
+import { INSTALL_TOOL, LIST_TOOLS, type ToolStatus } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
 import {
@@ -286,7 +280,6 @@ import {
 import { SpinOffs } from "./spin-offs";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
-import { beginToolSignin, completeToolSignin } from "./tool-signin";
 import { installTool, probeTools } from "./tools";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
@@ -1270,12 +1263,6 @@ export class SessionSupervisor {
       call: (dir, since) => gitChanges(dir, since),
     },
     [LIST_TOOLS]: { call: () => probeTools() },
-    [CONTROL_BEGIN_TOOL_SIGNIN]: {
-      call: (tool) => beginToolSignin(tool),
-    },
-    [CONTROL_COMPLETE_TOOL_SIGNIN]: {
-      call: (tool, code) => completeToolSignin(tool, code ?? ""),
-    },
     // Each ask in a lane of its own, never queued behind another: a second
     // ask of the same tool while its install runs joins it (tools.ts
     // `installTool`), where queued it ran a second install once the first

@@ -32,7 +32,6 @@ import {
 import type { Bounded } from "@cawco/core/bounded";
 import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type { ToolSigninChallenge } from "@cawco/core/tools";
 import { ElysiaStatus, problem } from "elysia";
 import { marksRenewed } from "./account-marks";
 import {
@@ -385,14 +384,6 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   /** A machine that did not answer a sign-in step, in a sentence. */
   const awayWords = (machineId: string, answer: Unanswered) =>
     `${ctx.silentWords(machineId, answer)}.`;
-
-  /**
-   * A tool's own sign-in a machine has begun and not finished (core
-   * `ToolSpec.signin`), by `machineId:toolId`: its link, kept until it is
-   * used or lapses, so a screen that reloads or reopens shows that link
-   * again instead of starting another.
-   */
-  const pendingToolSignins = new Map<string, ToolSigninChallenge>();
 
   /**
    * Starts moving one credential out of a machine's own store into the
@@ -876,7 +867,6 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     accountKindRefusal,
     homeCredentialOf,
     awayWords,
-    pendingToolSignins,
     startMove,
     homeStamps,
     adoptHomeCredentials,

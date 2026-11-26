@@ -166,7 +166,7 @@ import type {
   RelayRuntimeRead,
   RelayStartArgs,
 } from "./stream-relay";
-import type { ToolSigninChallenge, ToolStatus } from "./tools";
+import type { ToolStatus } from "./tools";
 import type { TranscriptWindow } from "./transcript-types";
 import type {
   FolderLook,
@@ -252,7 +252,6 @@ interface ControlTable {
     [account: string, provider: string],
     ProviderSigninChallenge
   >;
-  beginToolSignin: Entry<[tool: string], ToolSigninChallenge>;
   borrowAccount: Entry<
     [
       account: string,
@@ -294,7 +293,6 @@ interface ControlTable {
     [code: string | null, account: string, expected?: AccountIdentity | null],
     ProviderSigninResult
   >;
-  completeToolSignin: Entry<[tool: string, code?: string | null], ToolStatus>;
   /** `policy`, the hub's, which the machine reads again where it keeps it. */
   configureBinaryUpdates: Unread<[policy: BinaryUpdatePolicy]>;
   deleteSession: Unread<[sessionKey: string, dir?: CatalogDir]>;

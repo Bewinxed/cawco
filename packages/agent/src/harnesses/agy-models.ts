@@ -6,13 +6,11 @@
  * conversation it made is removed from the home after.
  */
 import { existsSync, readdirSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import { client, methods } from "@agentclientprotocol/sdk";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { accountsRoot } from "@cawco/core/paths/claude";
-import { AGY_APP_DATA, agyAccountRecord } from "@cawco/core/paths/harnesses";
+import { agyAccountRecord } from "@cawco/core/paths/harnesses";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { Effect } from "effect";
 import { modelsOf } from "./agy-frames";
@@ -23,6 +21,7 @@ import {
   endGroup,
   prepareAgyHome,
   readAgySignIn,
+  removeAgyConversation,
   signInAcp,
   startAcp,
 } from "./agy-launch";
@@ -86,17 +85,7 @@ export const agyAccountModels = async (
     connection.close();
     endGroup(child);
     if (made) {
-      await removeConversation(home, made);
+      await removeAgyConversation(home, made);
     }
   }
-};
-
-/** The conversation `sessionId` agy made in `home`, removed: its store and its working files. */
-const removeConversation = async (
-  home: string,
-  sessionId: string
-): Promise<void> => {
-  const data = join(home, AGY_APP_DATA);
-  await rm(join(data, "conversations", `${sessionId}.db`), { force: true });
-  await rm(join(data, "brain", sessionId), { recursive: true, force: true });
 };

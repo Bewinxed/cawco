@@ -1,45 +1,22 @@
 /**
- * A machine's tools: their list, signing one in, and changing one; what the
+ * A machine's tools: their list, and changing one; what the
  * fleet does with a copy CawCo does not run, and updating every such copy.
  */
 
 import { type ToolUpdatesState, toolsBehind } from "@cawco/core/tool-updates";
-import {
-  CONTROL_BEGIN_TOOL_SIGNIN,
-  CONTROL_COMPLETE_TOOL_SIGNIN,
-  TOOL_CATALOG,
-  TOOL_UPDATES,
-  toolSpec,
-} from "@cawco/core/tools";
+import { TOOL_CATALOG, TOOL_UPDATES, toolSpec } from "@cawco/core/tools";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { unansweredIn } from "../machine-answers";
-
-import { unreachable } from "../unreachable";
 
 export const toolRoutes = ({
-  TOOL_SIGNIN_BEGIN_MS,
-  TOOL_SIGNIN_COMPLETE_MS,
-  awayWords,
-  machineCalls: { callAgent },
   db,
   keepCopiesOn,
   keptReleases,
-  pendingToolSignins,
   registry,
   updateAll,
 }: Pick<
   HubContext,
-  | "TOOL_SIGNIN_BEGIN_MS"
-  | "TOOL_SIGNIN_COMPLETE_MS"
-  | "awayWords"
-  | "db"
-  | "keepCopiesOn"
-  | "keptReleases"
-  | "machineCalls"
-  | "pendingToolSignins"
-  | "registry"
-  | "updateAll"
+  "db" | "keepCopiesOn" | "keptReleases" | "registry" | "updateAll"
 >) => {
   /** The fleet's choice and each tool some machine is behind on, as the cells stand now. */
   const fleetUpdates = (): ToolUpdatesState => {
@@ -108,101 +85,6 @@ export const toolRoutes = ({
         catalog: TOOL_CATALOG,
         policies: db.listToolPolicies(),
       }))
-      // A tool's own sign-in on a machine (core `ToolSpec.signin`: the
-      // Antigravity CLI's Google sign-in): the machine runs the tool's own
-      // sign-in and answers its link, which the person opens in their own
-      // browser. A sign-in already waiting there answers its kept link.
-      .post(
-        "/api/machines/:machineId/tools/:toolId/signin",
-        async ({ params }) => {
-          const spec = toolSpec(params.toolId);
-          if (!spec?.signin) {
-            return problem(404, {
-              code: "has-no-sign-own",
-              detail: `${params.toolId} has no sign-in of its own.`,
-            });
-          }
-          const key = `${params.machineId}:${params.toolId}`;
-          const kept = pendingToolSignins.get(key);
-          if (kept && kept.expiresAt > Date.now()) {
-            return kept;
-          }
-          pendingToolSignins.delete(key);
-          const answer = await callAgent(
-            params.machineId,
-            CONTROL_BEGIN_TOOL_SIGNIN,
-            [params.toolId],
-            TOOL_SIGNIN_BEGIN_MS
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              return unansweredIn(
-                params.machineId,
-                answer,
-                awayWords(params.machineId, answer)
-              );
-            case "answered": {
-              if (!answer.value.ok) {
-                return problem(502, {
-                  code: "tool-signin-not-started",
-                  detail: answer.value.error ?? "The sign-in did not start.",
-                });
-              }
-              const challenge = answer.value.result;
-              pendingToolSignins.set(key, challenge);
-              return challenge;
-            }
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
-      // The code the person pasted, typed into the machine's waiting
-      // sign-in; answered with the tool's status there, its sign-in read
-      // again, which is the machine's cell from now.
-      .post(
-        "/api/machines/:machineId/tools/:toolId/signin/complete",
-        { body: t.Object({ code: t.String() }) },
-        async ({ params, body }) => {
-          const spec = toolSpec(params.toolId);
-          if (!spec?.signin) {
-            return problem(404, {
-              code: "has-no-sign-own",
-              detail: `${params.toolId} has no sign-in of its own.`,
-            });
-          }
-          const answer = await callAgent(
-            params.machineId,
-            CONTROL_COMPLETE_TOOL_SIGNIN,
-            [params.toolId, body.code],
-            TOOL_SIGNIN_COMPLETE_MS
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              return unansweredIn(
-                params.machineId,
-                answer,
-                awayWords(params.machineId, answer)
-              );
-            case "answered": {
-              // Used or refused, the machine's sign-in is spent.
-              pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
-              if (!answer.value.ok) {
-                return problem(502, {
-                  code: "tool-signin-not-finished",
-                  detail: answer.value.error ?? "The sign-in did not finish.",
-                });
-              }
-              const tool = answer.value.result;
-              db.setAgentToolCell(params.machineId, tool);
-              keepCopiesOn(params.machineId);
-              return tool;
-            }
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
       .put(
         "/api/tools/:id",
         {

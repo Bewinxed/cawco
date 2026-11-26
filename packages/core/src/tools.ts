@@ -214,11 +214,11 @@ export interface ToolSpec {
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   requires?: ToolRequirement[];
   /**
-   * For a tool that signs in to its own service with the machine's person's
-   * own login, which CawCo never holds: how a machine reads whether it is
-   * signed in, and runs its own sign-in.
+   * Variables set on every run of the tool CawCo starts: its version read
+   * here, and each session or run its harness starts (agent
+   * harnesses/agy-launch.ts `agyEnvironment`).
    */
-  signin?: ToolSigninSpec;
+  runEnv?: Record<string, string>;
   /**
    * How a machine turns this tool's own updates off, for a tool CawCo keeps
    * current ({@link release}): the switches its owner set are CawCo's too.
@@ -234,63 +234,6 @@ export interface ToolSpec {
    */
   wellKnownPaths?: string[];
 }
-
-/**
- * A tool's own sign-in, run as the tool itself on the machine (agent
- * tool-signin.ts): CawCo reads what it prints and types what the person
- * pasted into it, and never sees or keeps the login it stores.
- */
-export interface ToolSigninSpec {
-  /** Arguments after the binary for the tool's own interactive sign-in: it prints a link, takes the code pasted on its input, and ends once signed in. */
-  login: string[];
-  /** The hosts its sign-in link may be on; no other link on its screen is read. */
-  loginHosts: string[];
-  /** Words, any case, in what {@link status} prints when it is not signed in. */
-  signedOut: string[];
-  /** Arguments after the binary for a read that spends nothing and exits 0 only when signed in. */
-  status: string[];
-}
-
-/**
- * Whether a tool on a machine is signed in, as its own {@link
- * ToolSigninSpec.status} read said when it was last read (`at`, ms epoch):
- * `unknown` when that read said neither, with its words in `detail`.
- */
-export interface ToolSignin {
-  at: number;
-  detail?: string;
-  state: "signed-in" | "signed-out" | "unknown";
-}
-
-/**
- * A {@link ToolSignin} in its machine's own words: its state the string the
- * machine sent, which may be one this build does not know (a newer
- * agent's). What the hub keeps (`agent_tools.signin`), and reads as a
- * {@link ToolSignin}, a state it does not know read as `unknown` (hub db
- * machines.ts `toolStatusOf`).
- */
-export type NamedToolSignin = Omit<ToolSignin, "state"> & { state: string };
-
-/** A {@link ToolStatus} as its machine sent it, its sign-in in the machine's own words ({@link NamedToolSignin}). */
-export type ReportedToolStatus = Omit<ToolStatus, "signin"> & {
-  signin?: NamedToolSignin;
-};
-
-/** A tool's sign-in begun on a machine: the link the person opens, and until when it is kept (ms epoch). */
-export interface ToolSigninChallenge {
-  expiresAt: number;
-  url: string;
-}
-
-/**
- * A tool sign-in's controls, each the hub's to the machine (agent
- * tool-signin.ts). Begin (args: tool id) starts the tool's own sign-in and
- * answers a {@link ToolSigninChallenge}; Complete (args: tool id, the
- * pasted code) types the code into it, waits for it to end, and answers the
- * tool's {@link ToolStatus} with its sign-in read again.
- */
-export const CONTROL_BEGIN_TOOL_SIGNIN = "beginToolSignin";
-export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 
 /** The machine's tools as its tool probe finds them: no args; answers {@link ToolStatus}[]. Machine-scoped. */
 export const LIST_TOOLS = "listTools";
@@ -367,8 +310,6 @@ export interface ToolStatus {
   id: string;
   /** The {@link ToolInstallMethod.label} that installed it or failed trying. */
   method?: string;
-  /** For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in. */
-  signin?: ToolSignin;
   /**
    * On `installing`: who started the install. `cawco`: the hub's own (an
    * update of CawCo's copy, a required tool, adding a machine); `person`: a
@@ -832,26 +773,20 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: "Antigravity CLI",
     homepage: "https://antigravity.google",
     bin: "agy",
-    versionCommand: "agy --version",
+    versionCommand: "agy --disable-telemetry --version",
     // The release CawCo's Antigravity harness was built and proven on
     // (tsk-340): its ACP sign-in methods, its hook decisions and its
     // `session/new` model list as agy-runtime.ts reads them.
     minVersion: "1.5.18",
-    // Its own reads and sign-in, never a request of CawCo's to Google
-    // (Antigravity's terms §6, https://antigravity.google/terms). `/usage`
-    // in print mode is answered by the CLI itself, spends nothing, and
-    // prints the quota buckets only when signed in; signed out, headless
-    // runs fail with "authentication required"
-    // (https://antigravity.google/docs/cli/headless/), which 1.5.2 says
-    // ("Authentication required. Please visit the URL to log in:") and then
-    // waits 60 s for a login before it exits (measured 2026-11-07), so the
-    // read ends where the words are said (agent tools.ts `readSignin`). `acp --login`: "Log
-    // in with Google interactively, then exit" (`agy acp --help`, 1.5.0).
-    signin: {
-      status: ["-p", "/usage", "--output-format", "json"],
-      signedOut: ["authentication required"],
-      login: ["acp", "--login"],
-      loginHosts: ["accounts.google.com"],
+    // Every run CawCo starts has telemetry, crash reports and self-update
+    // off (tsk-340): `--disable-telemetry` is a flag of agy's every command
+    // on 1.5.18 (`agy --help`), the version read's included; the crash
+    // reports' sample rate is a variable of the binary's own
+    // (`ANTIGRAVITY_SENTRY_SAMPLE_RATE`, in its strings); and CawCo keeps it
+    // current through its tool updates instead.
+    runEnv: {
+      AGY_CLI_DISABLE_AUTO_UPDATE: "true",
+      ANTIGRAVITY_SENTRY_SAMPLE_RATE: "0",
     },
     // The official scripts: ~/.local/bin on linux/darwin, LocalAppData on
     // Windows. A static Go binary — no runtime to require.
@@ -860,9 +795,9 @@ export const TOOL_CATALOG: ToolSpec[] = [
       // Verified 2026-08-06 (v1.1.10). The installer script takes no version
       // argument — the binary self-updates (AGY_CLI_DISABLE_AUTO_UPDATE=true
       // turns that off), so only winget can honour a policy pin; elsewhere a
-      // pinned install says it can't put that version on, and runs nothing. Auth stays the user's: Google sign-in into the OS
-      // keyring, once per machine (`agy` prints an URL + code over SSH);
-      // Google says API keys are not supported (antigravity-cli#78).
+      // pinned install says it can't put that version on, and runs nothing. Sign-in is
+      // per Antigravity account, in the account's own agy home (agent
+      // harnesses/agy-launch.ts), never the machine's.
       {
         label: "curl script",
         platforms: ["linux", "darwin"],

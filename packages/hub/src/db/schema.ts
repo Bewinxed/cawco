@@ -454,22 +454,6 @@ export const agentTools = sqliteTable(
     version: text("version"),
     method: text("method"),
     detail: text("detail"),
-    /**
-     * For a tool with its own sign-in: whether it is signed in there, as the
-     * machine last read it, in its own word (core `NamedToolSignin.state`);
-     * null when the machine said nothing of it.
-     */
-    signinState: text("signin_state"),
-    /** When that sign-in was read (core `ToolSignin.at`). */
-    signinAt: timestamp("signin_at"),
-    /** What that read said when it said neither (core `ToolSignin.detail`). */
-    signinDetail: text("signin_detail"),
-    /**
-     * The sign-in as migration 0424 found it stored, kept as it was when it
-     * did not read (db/machine-columns-unread.ts): read as signed out until
-     * the machine says it again.
-     */
-    signinUnread: text("signin_unread"),
     /** Whose the copy there is, as the machine judged it (core `ToolCopy`); null from an older machine, or with no copy. */
     copy: storedJson(ToolCopySchema)("copy"),
     /** While the copy there is one its CawCo does not run: the version it runs (core `ToolWants`). */

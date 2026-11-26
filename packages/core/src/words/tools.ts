@@ -247,28 +247,13 @@ export const toolWords = {
   notUpdatedHead: (name: string, version: string, machine: string) =>
     `${name} ${version} on ${machine} didn't update`,
 
-  /** A tool's sign-in read (agent tools.ts `toolSignin`) found no copy to ask. */
-  signinNoCopy: (name: string) =>
-    `${name} isn't on this machine, so whether it is signed in can't be read.`,
-  /** The read ended saying neither signed in nor signed out: its last lines, one per line, and its exit. */
-  signinUnread: (name: string, code: number, said: string) =>
-    `${name} didn't say whether it is signed in.${screenOf(said, code)}`,
-  /** The read did not end in time. */
-  signinSilent: (name: string, seconds: number) =>
-    `${name} didn't say whether it is signed in within ${seconds} s, or couldn't be started.`,
-  /** A sign-in asked of a tool without one of its own. */
-  signinNone: (name: string) => `${name} has no sign-in of its own.`,
-  /** A sign-in asked of a tool not on the machine. */
-  signinNotInstalled: (name: string) =>
-    `${name} isn't installed on this machine. Install it in Configure › Command-line tools, then sign in.`,
   /** Where a sign-in's refusal turns to the tool's own screen: the row shows the sentence before it, the popover the whole. */
   signinScreen: SIGNIN_SCREEN,
   /** The tool's sign-in printed no link it may be signed in at, or ended first: what its screen said. */
   signinNoLink: (name: string, said: string) =>
     `${name} showed no sign-in link, so CawCo stopped it.${said ? screenOf(said) : " Its screen said nothing."}`,
   /** A code sent with no sign-in waiting for it. */
-  signinNotWaiting: (name: string) =>
-    `No ${name} sign-in is waiting for a code on this machine. It ended or was never started.`,
+  signinNotWaiting: "No sign-in is waiting for a code on this machine.",
   /** A code that was empty. */
   signinNoCode: "Paste the code from the sign-in page.",
   /** The sign-in did not end in time after the code. */
@@ -288,42 +273,6 @@ export const toolWords = {
   unknownHarnesses: (names: string[]) => `also reports ${listed(names)}`,
   unknownHarnessesTail: ", which this hub can't run",
 
-  // ── A tool's own sign-in, on its ledger (ToolMatrix, tool-signin.svelte.ts) ─
-  /** The column's head. */
-  signinHead: "Sign-in",
-  /** The ledger head's count, after "n/m installed", only above 0. */
-  signedInCount: (count: number) => `${count} signed in`,
   /** The ledger head's count of copies at a version CawCo doesn't run (their rows' "can't run"), after "n/m installed", only above 0. */
   cantRunCount: (count: number) => `${count} can't run`,
-  signedIn: "Signed in",
-  signedOut: "Not signed in",
-  signinUnknown: "Unknown",
-  /** The Unknown trigger's name. */
-  signinUnknownHead: (name: string, machine: string) =>
-    `${name} on ${machine} didn't say whether it is signed in`,
-  /** The tool's read left no words. */
-  signinUnknownSilent: "Its screen said nothing.",
-  signIn: "Sign in",
-  /** A sign-in under way, its popover put away: one press opens it again as it was. */
-  pasteCode: "Paste code",
-  /** What the cell says while its sign-in waits, the popover put away. */
-  signinWaiting: "Waiting for the pasted code",
-  /** The cell's button's name: "Sign in Antigravity CLI on obelisk". */
-  signInOn: (verb: string, name: string, machine: string) =>
-    `${verb} ${name} on ${machine}`,
-  /** The popover's head. */
-  signinTitle: (name: string, machine: string) => `${name} on ${machine}`,
-  /** The link lapsed before a code came: the machine stopped waiting. Its life is the machine's, so no length is said. */
-  signinExpired: (name: string) =>
-    `The sign-in link expired before a code was pasted, so ${name} stopped waiting.`,
-  /** The machine took the code and the tool still reads signed out; that link is spent. */
-  signinRefused: (name: string) =>
-    `That code didn't sign ${name} in. That link is spent.`,
-  /**
-   * A tool's sign-in the hub kept and could not read (hub migration 0424):
-   * its `detail`, the tool read as signed out until the machine reads its
-   * sign-in again (hub db machines.ts `toolStatusOf`).
-   */
-  signinKeptUnread:
-    "The kept sign-in didn't read, so this reads as signed out until the machine checks it again.",
 } as const;

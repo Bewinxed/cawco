@@ -8,39 +8,29 @@
     type ToolUpdates,
     toolRuns,
   } from "@cawco/core/tools";
-  import { commonWords } from "@cawco/core/words/common";
   import { toolUpdateWords } from "@cawco/core/words/tool-updates";
   import { toolWords } from "@cawco/core/words/tools";
-  import Check from "#lib/cawco/accounts/Check.svelte";
-  import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
   import HarnessLogo, { hasMark } from "#lib/cawco/HarnessLogo.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { quotedScreen } from "#lib/cawco/signin-screen.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
-    IconAsk,
     IconCheck,
     IconExternal,
-    IconNotYet,
     IconTerminal,
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
-  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { blockingBehind } from "./blocking";
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";
   import MachineLedger from "./MachineLedger.svelte";
-  import NsPopover from "./spawn/NsPopover.svelte";
-  import NsPopoverGroup from "./spawn/NsPopoverGroup.svelte";
   import type { Machine } from "./stores/board.svelte";
   import ToolUpdateCell from "./ToolUpdateCell.svelte";
   import {
@@ -48,17 +38,6 @@
     pressPending,
     pressRefused,
   } from "./tool-presses.svelte";
-  import {
-    dropToolSignin,
-    heldToolSignin,
-    openToolSignin,
-    reopenToolSignin,
-    showToolSignin,
-    signinOf,
-    type ToolSigninFlow,
-    toolSigninFlow,
-    toolSigninKey,
-  } from "./tool-signin.svelte";
   import { policyFor, setPolicy } from "./tools";
 
   let {
@@ -116,156 +95,6 @@
   const blocked = $derived(blockingBehind(machines, updates, releases));
   const cantRunOn = (spec: ToolSpec): number =>
     blocked.find((entry) => entry.toolId === spec.id)?.machines.length ?? 0;
-  /** Machines whose copy of a tool with its own sign-in reads signed in. */
-  const signedInOn = (spec: ToolSpec): number =>
-    machines.filter((machine) => {
-      const tool = machine.tools?.[spec.id];
-      return hasCopy(tool) && tool?.signin?.state === "signed-in";
-    }).length;
-
-  /**
-   * A sign-in's popover (core `ToolSpec.signin`), one per cell, all one
-   * surface gliding between them (NsPopoverGroup). Opening draws the cell's
-   * sign-in, the same one if it is under way; ×, Esc or a press outside put
-   * it away and leave the sign-in going, parked on its cell. One with
-   * nothing under way and nothing to tell is let go; one that signed in
-   * stays, so the popover leaves with its outcome drawn.
-   *
-   * While its popover is open the cell stands as it stood when it opened
-   * (`heldView`: its state, its act's words, its refusal line): the popover
-   * is where the sign-in moves, so the row behind it never grows, shrinks
-   * or says a refusal twice. Put away, the cell says what the sign-in came
-   * to, a tick drawing there once it signed in.
-   */
-  function setOpen(
-    machineId: string,
-    toolId: string,
-    open: boolean,
-    shown?: SigninView
-  ) {
-    const key = toolSigninKey(machineId, toolId);
-    if (open) {
-      if (shown) {
-        heldView[key] = shown;
-      }
-      toolSigninFlow(machineId, toolId);
-      showToolSignin(key);
-      return;
-    }
-    if (openToolSignin() === key) {
-      showToolSignin(null);
-    }
-    delete heldView[key];
-    const flow = heldToolSignin(key);
-    if (
-      flow &&
-      !flow.live &&
-      flow.problem === null &&
-      flow.phase !== "signed-in"
-    ) {
-      dropToolSignin(key);
-    }
-  }
-
-  /** What a sign-in cell says: its state, its act's words, its refusal line. */
-  interface SigninView {
-    line: string | null;
-    state: SigninState;
-    verb: string;
-  }
-  /** Each open popover's cell, as it stood when the popover opened. */
-  let heldView = $state<Record<string, SigninView>>({});
-  /** The cell as the machine's read and the sign-in here make it now. */
-  function signinView(
-    read: ToolStatus["signin"],
-    flow: ToolSigninFlow | undefined
-  ): SigninView {
-    const parked = flow?.live === true;
-    // A refusal is kept on its cell once put away, never one under way or signed in.
-    const line =
-      flow?.problem && flow.phase !== "signed-in" && !parked
-        ? quotedScreen(flow.problem).sentence
-        : null;
-    return {
-      state: signinStateOf(read?.state === "signed-in", parked, read?.state),
-      verb: signinVerbOf(parked, line !== null),
-      line,
-    };
-  }
-
-  /**
-   * Where focus goes as a sign-in popover closes: onto its cell's Signed in
-   * once it signed in (its trigger is gone with it), else back to the
-   * trigger (NsPopoverGroup's own).
-   */
-  function closeFocus(key: string): boolean {
-    if (heldToolSignin(key)?.phase !== "signed-in") {
-      return false;
-    }
-    document.getElementById(`tool-signin-state-${key}`)?.focus();
-    return true;
-  }
-
-  reopenToolSignin();
-
-  // Signed in: the tick draws and holds, then the popover goes; the cell
-  // reads the machine's new status, which the hub published with its answer.
-  $effect(() => {
-    const key = openToolSignin();
-    if (key === null || heldToolSignin(key)?.phase !== "signed-in") {
-      return;
-    }
-    const { machineId, toolId } = signinOf(key);
-    const timer = setTimeout(() => {
-      setOpen(machineId, toolId, false);
-    }, dur("--duration-hold"));
-    return () => clearTimeout(timer);
-  });
-
-  type SigninState = "signed-in" | "waiting" | "unknown" | "signed-out";
-  /** What a sign-in cell says: the machine's read, or a sign-in under way here. */
-  function signinStateOf(
-    signedIn: boolean,
-    parked: boolean,
-    read: string | undefined
-  ): SigninState {
-    if (signedIn) {
-      return "signed-in";
-    }
-    if (parked) {
-      return "waiting";
-    }
-    return read === "unknown" ? "unknown" : "signed-out";
-  }
-  const SIGNIN_WORDS: Record<SigninState, string> = {
-    "signed-in": toolWords.signedIn,
-    waiting: toolWords.signinWaiting,
-    unknown: toolWords.signinUnknown,
-    "signed-out": toolWords.signedOut,
-  };
-  /** The cell's act: back to a waiting sign-in, again after a refusal, or a first one. */
-  function signinVerbOf(parked: boolean, spent: boolean): string {
-    if (parked) {
-      return toolWords.pasteCode;
-    }
-    return spent ? commonWords.signInAgain : toolWords.signIn;
-  }
-  /** Every wording the act takes, stood in one cell (The Steady Swap Rule). */
-  const SIGNIN_VERBS = [
-    toolWords.signIn,
-    toolWords.pasteCode,
-    commonWords.signInAgain,
-  ];
-  /** The tool's sign-in read whose popover is open (Unknown's), by `machine:tool`. */
-  let readOpen = $state<string | null>(null);
-  function showRead(key: string, open: boolean) {
-    if (open) {
-      readOpen = key;
-    } else if (readOpen === key) {
-      readOpen = null;
-    }
-  }
-
   async function requireEverywhere(spec: ToolSpec, required: boolean) {
     saving[spec.id] = true;
     delete policyRefused[spec.id];
@@ -563,148 +392,6 @@
   />
 {/snippet}
 
-<!-- A tool's own sign-in on the machine (core ToolSpec.signin), beside the
-     machine it is about. Nothing where there is no copy to sign in; signed
-     in is the quiet tick and its word; any other state says so in muted
-     words and carries its one act, Sign in, which opens the sign-in popover
-     on the cell. Put away, a sign-in under way parks here (Waiting for the
-     pasted code, and Paste code, which opens it again as it was), and a
-     refusal stays under the cell, its sentence without the tool's screen
-     (the popover holds that), until it is tried again. Offline, the state
-     stands alone. -->
-{#snippet signinCell(machine: Machine, spec: ToolSpec, online: boolean)}
-  {@const toolStatus = machine.tools?.[spec.id]}
-  {@const key = toolSigninKey(machine.machineId, spec.id)}
-  {@const flow = heldToolSignin(key)}
-  {@const open = openToolSignin() === key}
-  {@const where = machineLabel(machine.hostname)}
-  {@const read = toolStatus?.signin}
-  {@const signedIn = read?.state === "signed-in"}
-  {@const now = signinView(read, flow)}
-  {@const { state, verb, line } = open ? (heldView[key] ?? now) : now}
-  {#if hasCopy(toolStatus) || flow}
-    <div
-      class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-c-ledger-text-inset"
-    >
-      <!-- One line on the row's first line: the state's glyph and word at
-         the column's start, in meta, and its act at the column's end. -->
-      <span
-        class="flex items-center justify-between gap-space-2 @phone/table:min-h-c-ledger-row-h"
-      >
-        <span
-          class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
-          data-signin={state}
-        >
-          <!-- On the words' first line; a phone's narrow card may wrap them. -->
-          <span class="mark-cell w-icon-md">
-            {#if state === "signed-in" && flow?.phase === "signed-in"}
-              <Check />
-            {:else if state === "signed-in"}
-              <IconCheck class="size-icon-md text-status-done-glyph" />
-            {:else if state === "waiting"}
-              <LiveDot />
-            {:else if state === "unknown"}
-              <IconAsk class="size-icon-md" />
-            {:else}
-              <IconNotYet class="size-icon-md" />
-            {/if}
-          </span>
-          {#if state === "unknown"}
-            <!-- The word is the way to the tool's own words. -->
-            <span data-box>
-              <NsPopover
-                align="start"
-                id="tool-signin-read-{key}"
-                label={toolWords.signinUnknownHead(spec.name, where)}
-                onchange={(next) => showRead(key, next)}
-                open={readOpen === key}
-                triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
-                width="var(--spacing-c-signin-pop-w)"
-              >
-                {#snippet trigger()}
-                  {toolWords.signinUnknown}
-                {/snippet}
-                {@render signinFrame(
-                  toolWords.signinTitle(spec.name, where),
-                  read?.detail ?? toolWords.signinUnknownSilent
-                )}
-              </NsPopover>
-            </span>
-          {:else}
-            <!-- Where focus lands once a sign-in here signs in (`closeFocus`). -->
-            <span
-              id="tool-signin-state-{key}"
-              class="min-w-0 rounded-xs text-pretty focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
-              tabindex="-1">{SIGNIN_WORDS[state]}</span
-            >
-          {/if}
-        </span>
-        {#if online && (!signedIn || open)}
-          <!-- Its end edge holds still on the column's end; its words stand
-             in one cell as wide as the widest (The Steady Swap Rule), so
-             the popover hung from that edge never moves. -->
-          <NsPopover
-            align="end"
-            id="tool-signin-{key}"
-            label={toolWords.signInOn(verb, spec.name, where)}
-            onchange={(next) => setOpen(machine.machineId, spec.id, next, now)}
-            onclosefocus={() => closeFocus(key)}
-            {open}
-            triggerClass={buttonVariants({ variant: "outline", size: "xs" })}
-            width="var(--spacing-c-signin-pop-w)"
-          >
-            {#snippet trigger()}
-              <span class="grid">
-                {#each SIGNIN_VERBS as word (word)}
-                  <span
-                    class={[
-                      "col-start-1 row-start-1 text-center",
-                      word !== verb && "invisible",
-                    ]}>{word}</span
-                  >
-                {/each}
-              </span>
-            {/snippet}
-            <div class="flex flex-col gap-space-3 p-space-2">
-              <p data-slot="title" class="type-label text-ink-strong">
-                {toolWords.signinTitle(spec.name, where)}
-              </p>
-              {#if flow}
-                <SigninPanel
-                  {flow}
-                  got={toolWords.signedIn}
-                  machine={where}
-                  {online}
-                />
-              {/if}
-            </div>
-          </NsPopover>
-        {/if}
-      </span>
-      <!-- The refusal, on its cell until tried again, held as it stood while
-         the popover is open (`heldView`). The popover announced it; here it
-         stands, said once. Its way on is the cell's own act; the tool's
-         screen is in the popover. -->
-      <RowFault live={false} reason={line} />
-    </div>
-  {/if}
-{/snippet}
-
-<!-- The frame both sign-in popovers share: the title, then the words. A
-     tool's screen it quotes stands as its own lines in the code face, the
-     sentence before it in meta. -->
-{#snippet signinFrame(title: string, words: string)}
-  {@const { sentence, lines } = quotedScreen(words)}
-  <div class="flex flex-col gap-space-3 p-space-2">
-    <p data-slot="title" class="type-label text-ink-strong">{title}</p>
-    <p class="type-meta text-pretty text-ink-strong">{sentence}</p>
-    {#if lines}
-      <pre
-        class="max-h-56 overflow-auto type-code whitespace-pre-wrap wrap-anywhere text-ink-muted">{lines}</pre>
-    {/if}
-  </div>
-{/snippet}
-
 {#if catalog.length === 0}
   <!-- The catalog ships in the hub's build (core TOOL_CATALOG), so no
        session can fill it (The Empty Starts Work Rule's second sentence):
@@ -729,148 +416,125 @@
        scrolls sideways: under 640px each row is a card, the machine across
        its start and the tool's state at its end. An offline machine says so
        in words; its row keeps full ink. -->
-  <NsPopoverGroup>
-    <div class="flex flex-col gap-space-6">
-      {#each catalog as spec (spec.id)}
-        {@const policy = policyOf(spec)}
-        <section
-          aria-labelledby="tool-{spec.id}"
-          class="flex min-w-0 flex-col gap-space-2"
-          data-tool={spec.id}
+  <div class="flex flex-col gap-space-6">
+    {#each catalog as spec (spec.id)}
+      {@const policy = policyOf(spec)}
+      <section
+        aria-labelledby="tool-{spec.id}"
+        class="flex min-w-0 flex-col gap-space-2"
+        data-tool={spec.id}
+      >
+        <header
+          class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
         >
-          <header
-            class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
-          >
-            <span class="mark-line flex min-w-0 items-center gap-space-2">
-              <!-- The CLI's own mark, as harness marks stand beside their names. -->
-              {#if hasMark(spec.id)}
-                <HarnessLogo data-box harness={spec.id} />
-              {/if}
-              <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
-                {spec.name}
-              </h2>
-              <a
-                data-box
-                aria-label="{spec.name} homepage"
-                class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
-                href={spec.homepage}
-                rel="noreferrer"
-                target="_blank"
-                title={spec.homepage}
-              >
-                <IconExternal class="size-icon-sm" />
-              </a>
-              <span data-slot="num" class="num type-meta text-ink-muted"
-                >{installedOn(spec)}/{machines.length} installed{#if cantRunOn(spec) > 0}{` · ${toolWords.cantRunCount(cantRunOn(spec))}`}{/if}{#if spec.signin && signedInOn(spec) > 0}{` · ${toolWords.signedInCount(signedInOn(spec))}`}{/if}</span
-              >
-            </span>
-            <label
-              class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
+          <span class="mark-line flex min-w-0 items-center gap-space-2">
+            <!-- The CLI's own mark, as harness marks stand beside their names. -->
+            {#if hasMark(spec.id)}
+              <HarnessLogo data-box harness={spec.id} />
+            {/if}
+            <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
+              {spec.name}
+            </h2>
+            <a
+              data-box
+              aria-label="{spec.name} homepage"
+              class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
+              href={spec.homepage}
+              rel="noreferrer"
+              target="_blank"
+              title={spec.homepage}
             >
-              <Switch
-                data-box
-                checked={policy.required}
-                disabled={saving[spec.id] === true}
-                onCheckedChange={(next) => requireEverywhere(spec, next)}
-                size="sm"
-              />
-              <span>Required on every machine</span>
-            </label>
-          </header>
-          <RowFault
-            again={() => requireEverywhere(spec, !policy.required)}
-            reason={policyRefused[spec.id]}
-          />
-          <MachineLedger
-            {machines}
-            online={(machine) => machine.status === "online"}
-            rowClass="group/cell"
-            settle="top"
+              <IconExternal class="size-icon-sm" />
+            </a>
+            <span data-slot="num" class="num type-meta text-ink-muted"
+              >{installedOn(spec)}/{machines.length} installed{#if cantRunOn(spec) > 0}{` · ${toolWords.cantRunCount(cantRunOn(spec))}`}{/if}</span
+            >
+          </span>
+          <label
+            class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
           >
-            {#snippet heads()}
-              {#if spec.signin}
-                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-                <Table.Head class="w-c-signin-col-w" scope="col" variant="band"
-                  >{toolWords.signinHead}</Table.Head
-                >
-              {/if}
-              <Table.Head class="w-c-version-col-w" variant="band"
-                >{toolUpdateWords.versionHead}</Table.Head
-              >
-              <Table.Head class="w-c-tool-state-col-w" variant="band"
-                >{toolUpdateWords.stateHead}</Table.Head
-              >
-            {/snippet}
-            {#snippet cells(machine: Machine, online: boolean)}
-              {#if spec.signin}
-                <!-- On a phone's card, its own line under the machine and its
-                     State, from the machine's name to the card's end; no
-                     line where there is nothing to sign in. -->
-                <Table.Cell
-                  class="@max-phone/table:col-span-full @max-phone/table:row-start-2"
-                  inCard="drops-empty"
-                  settle="top"
-                  variant="ledger-stacks"
-                >
-                  {@render signinCell(machine, spec, online)}
-                </Table.Cell>
-              {/if}
-              <!-- On a phone's card the cell gives its parts to the card's
+            <Switch
+              data-box
+              checked={policy.required}
+              disabled={saving[spec.id] === true}
+              onCheckedChange={(next) => requireEverywhere(spec, next)}
+              size="sm"
+            />
+            <span>Required on every machine</span>
+          </label>
+        </header>
+        <RowFault
+          again={() => requireEverywhere(spec, !policy.required)}
+          reason={policyRefused[spec.id]}
+        />
+        <MachineLedger
+          {machines}
+          online={(machine) => machine.status === "online"}
+          rowClass="group/cell"
+          settle="top"
+        >
+          {#snippet heads()}
+            <Table.Head class="w-c-version-col-w" variant="band"
+              >{toolUpdateWords.versionHead}</Table.Head
+            >
+            <Table.Head class="w-c-tool-state-col-w" variant="band"
+              >{toolUpdateWords.stateHead}</Table.Head
+            >
+          {/snippet}
+          {#snippet cells(machine: Machine, online: boolean)}
+            <!-- On a phone's card the cell gives its parts to the card's
                    grid: the state at the card's end beside the machine, a
                    refusal on its own line under them. -->
-              {@const v = machine.tools?.[spec.id]}
-              <Table.Cell settle="top" variant="ledger-stacks">
-                <span
-                  class="flex items-center @phone/table:min-h-c-ledger-row-h"
+            {@const v = machine.tools?.[spec.id]}
+            <Table.Cell settle="top" variant="ledger-stacks">
+              <span class="flex items-center @phone/table:min-h-c-ledger-row-h">
+                <code
+                  data-slot="num"
+                  class={[
+                    "num type-code",
+                    v?.version ? "text-ink-strong" : "text-ink-muted",
+                  ]}>{v?.version ?? "—"}</code
                 >
-                  <code
-                    data-slot="num"
-                    class={[
-                      "num type-code",
-                      v?.version ? "text-ink-strong" : "text-ink-muted",
-                    ]}>{v?.version ?? "—"}</code
-                  >
-                </span>
-              </Table.Cell>
-              <Table.Cell inCard="lends" settle="top" variant="ledger-stacks">
-                <div
-                  class="flex flex-col items-start gap-space-1 whitespace-normal @max-phone/table:contents"
-                >
-                  {@render cell(machine, spec, online)}
-                </div>
-              </Table.Cell>
-            {/snippet}
-          </MachineLedger>
-        </section>
-      {/each}
-      {#if unknownOn.length > 0}
-        <!-- Harnesses a machine reported that this hub cannot run (core
+              </span>
+            </Table.Cell>
+            <Table.Cell inCard="lends" settle="top" variant="ledger-stacks">
+              <div
+                class="flex flex-col items-start gap-space-1 whitespace-normal @max-phone/table:contents"
+              >
+                {@render cell(machine, spec, online)}
+              </div>
+            </Table.Cell>
+          {/snippet}
+        </MachineLedger>
+      </section>
+    {/each}
+    {#if unknownOn.length > 0}
+      <!-- Harnesses a machine reported that this hub cannot run (core
              AgentRow.unknownHarnesses): one quiet line per machine, under
              the ledgers of the ones it can. -->
-        <div
-          class="flex min-w-0 flex-col gap-space-1 contain-inline-size"
-          data-unknown-harnesses
-        >
-          {#each unknownOn as machine (machine.machineId)}
-            {@const where = machineLabel(machine.hostname)}
-            {@const names = toolWords.unknownHarnesses(
-              machine.unknownHarnesses ?? []
-            )}
-            <!-- The machine's name and the names give way to the room, the
+      <div
+        class="flex min-w-0 flex-col gap-space-1 contain-inline-size"
+        data-unknown-harnesses
+      >
+        {#each unknownOn as machine (machine.machineId)}
+          {@const where = machineLabel(machine.hostname)}
+          {@const names = toolWords.unknownHarnesses(
+            machine.unknownHarnesses ?? []
+          )}
+          <!-- The machine's name and the names give way to the room, the
                  machine's never past half the line; why they are here
                  stays whole. -->
-            <p
-              class="flex min-w-0 type-meta whitespace-nowrap text-ink-muted"
-              title="{where} {names}{toolWords.unknownHarnessesTail}"
-            >
-              <span class="max-w-1/2 truncate">{where}</span><span
-                class="overflow-hidden text-ellipsis whitespace-pre"
-                >{` ${names}`}</span
-              ><span class="shrink-0">{toolWords.unknownHarnessesTail}</span>
-            </p>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  </NsPopoverGroup>
+          <p
+            class="flex min-w-0 type-meta whitespace-nowrap text-ink-muted"
+            title="{where} {names}{toolWords.unknownHarnessesTail}"
+          >
+            <span class="max-w-1/2 truncate">{where}</span><span
+              class="overflow-hidden text-ellipsis whitespace-pre"
+              >{` ${names}`}</span
+            ><span class="shrink-0">{toolWords.unknownHarnessesTail}</span>
+          </p>
+        {/each}
+      </div>
+    {/if}
+  </div>
 {/if}

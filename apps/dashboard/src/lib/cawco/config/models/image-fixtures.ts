@@ -10,16 +10,11 @@ import type { ToolStatus } from "@cawco/core/tools";
 
 const AT = Date.parse("2026-11-05T09:00:00Z");
 
-const agy = (
-  state: ToolStatus["state"],
-  signedIn?: "signed-in" | "signed-out",
-  detail?: string
-): ToolStatus => ({
+const agy = (state: ToolStatus["state"], detail?: string): ToolStatus => ({
   id: "antigravity",
   at: AT,
   state,
-  ...(state === "installed" ? { version: "1.5.0" } : {}),
-  ...(signedIn ? { signin: { at: AT, state: signedIn } } : {}),
+  ...(state === "installed" ? { version: "1.5.18" } : {}),
   ...(detail ? { detail } : {}),
 });
 
@@ -39,15 +34,15 @@ const machine = (
 
 /**
  * As it stands today: ChatGPT on three of four (uwucloud holds no login),
- * Antigravity on one (the Mac hasn't it, niftybot.art's is signed out,
- * uwucloud's is installing), the Gemini API on one (obelisk-of-light's key).
+ * Antigravity on one (the Mac hasn't it, niftybot.art has it and no
+ * Antigravity account, uwucloud's is installing), the Gemini API on one (obelisk-of-light's key).
  */
 export const MACHINES: ImageMachine[] = [
   machine(
     "d04ca118428001f1",
     "obelisk-of-light",
     "linux-x64",
-    agy("installed", "signed-in")
+    agy("installed")
   ),
   machine(
     "271a214a5d568e4c",
@@ -55,12 +50,7 @@ export const MACHINES: ImageMachine[] = [
     "darwin-arm64",
     agy("missing")
   ),
-  machine(
-    "b106e1516d863601",
-    "niftybot.art",
-    "linux-x64",
-    agy("installed", "signed-out")
-  ),
+  machine("b106e1516d863601", "niftybot.art", "linux-x64", agy("installed")),
   machine(
     "50b2e0c25123cc41",
     "uwucloud",
@@ -73,6 +63,7 @@ export const MACHINES: ImageMachine[] = [
 const PERSONAL = "acct-chatgpt-personal";
 const BOT = "acct-chatgpt-bot";
 const KEY = "acct-gemini-key";
+const GOOGLE = "acct-antigravity-google";
 
 const signin = (accountId: string, machineId: string, signedIn = true) => ({
   accountId,
@@ -103,6 +94,13 @@ export const ACCOUNTS: ImageAccounts = {
       label: "Studio key",
       email: null,
     },
+    {
+      id: GOOGLE,
+      provider: "antigravity",
+      kind: "oauth",
+      label: null,
+      email: "omar@petralab.dev",
+    },
   ],
   readings: [
     { accountId: PERSONAL, subscription: "pro" },
@@ -114,14 +112,15 @@ export const ACCOUNTS: ImageAccounts = {
     signin(BOT, "b106e1516d863601"),
     signin(PERSONAL, "b106e1516d863601", false),
     signin(KEY, "d04ca118428001f1"),
+    signin(GOOGLE, "d04ca118428001f1"),
   ],
 };
 
-/** Every machine holds every provider's sign-in, the CLI included. */
+/** Every machine holds every provider's sign-in, an Antigravity account's included. */
 export const READY_MACHINES: ImageMachine[] = MACHINES.map((one) => ({
   ...one,
   status: "online",
-  tools: { antigravity: agy("installed", "signed-in") },
+  tools: { antigravity: agy("installed") },
 }));
 
 export const READY_ACCOUNTS: ImageAccounts = {
@@ -130,6 +129,7 @@ export const READY_ACCOUNTS: ImageAccounts = {
   signins: MACHINES.flatMap((one) => [
     signin(PERSONAL, one.machineId),
     signin(KEY, one.machineId),
+    signin(GOOGLE, one.machineId),
   ]),
 };
 

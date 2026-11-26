@@ -111,10 +111,7 @@ const missing = (id: string): ToolStatus => ({
   state: "missing",
   at: ago(1),
 });
-const agy = (signedIn = true): ToolStatus => ({
-  ...ok("antigravity", "1.5.0"),
-  signin: { state: signedIn ? "signed-in" : "signed-out", at: ago(4) },
-});
+const agy = (): ToolStatus => ok("antigravity", "1.5.18");
 
 const machine = (
   machineId: string,
@@ -157,7 +154,7 @@ const eight = (): Machine[] => [
     claude: ok("claude", CC, 40),
     opencode: failed("opencode", "2.0.29"),
     pi: ok("pi", "1.4.0"),
-    antigravity: agy(false),
+    antigravity: agy(),
   }),
   machine(
     "m-hangar",

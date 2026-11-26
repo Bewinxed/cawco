@@ -579,7 +579,7 @@ import type { TailnetServing } from "./tailnet-https";
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 114;
+export const WIRE_PROTOCOL = 115;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

@@ -404,6 +404,13 @@ if (TSC) {
 }
 
 /* Lint: Golar's rules, then Biome, over the affected files. */
+/**
+ * The longest one environment string may be on Linux, its terminating NUL
+ * and `CAWCO_CHECK_FILES=` among it: a longer one fails the spawn with
+ * E2BIG, as a change to the dashboard's theme reaching 2,695 files did.
+ */
+// @limit external: Linux's MAX_ARG_STRLEN, 32 pages of 4 KiB (include/uapi/linux/binfmts.h)
+const ENV_STRING_MAX = 32 * 4096 - "CAWCO_CHECK_FILES=".length - 1;
 /** Golar's lint run: the script and what it reads (its config, rules, patches and stylesheets declare theirs). */
 const GOLAR_LINT = "scripts/lint/golar-lint.ts";
 // The files golar.config.ts lints: its globs, as one pattern.
@@ -446,7 +453,11 @@ const linted = files.filter(
       name: `golar lint (${linted.length} files)`,
       dir: ROOT,
       argv: [BUN, GOLAR_LINT],
-      env: everything ? {} : { CAWCO_CHECK_FILES: linted.join("\n") },
+      // A list longer than one environment string holds lints every file.
+      env:
+        everything || linted.join("\n").length >= ENV_STRING_MAX
+          ? {}
+          : { CAWCO_CHECK_FILES: linted.join("\n") },
       after: SYNC,
       stamp: { file: stampFile("golar-lint"), key },
     });

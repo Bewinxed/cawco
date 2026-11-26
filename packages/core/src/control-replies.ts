@@ -345,7 +345,6 @@ import {
   StageStateSchema,
   SupportedCommandsSchema,
   TaskOutputSchema,
-  ToolSigninChallengeSchema,
   TranscriptAnswerSchema,
   TranscriptPlacesSchema,
   TranscriptTurnsSchema,
@@ -376,10 +375,7 @@ import {
   RELAY_START,
   RELAY_STOP,
 } from "./stream-relay";
-import type { ToolSigninChallenge } from "./tools";
 import {
-  CONTROL_BEGIN_TOOL_SIGNIN,
-  CONTROL_COMPLETE_TOOL_SIGNIN,
   INSTALL_TOOL,
   isToolStatus,
   LIST_TOOLS,
@@ -632,11 +628,6 @@ const CONTROLS = {
   [CONTROL_GH_REPOS]: reply<GhRepoList>(GhRepoListSchema),
   [CONTROL_GH_REPO]: reply<GhRepoLookup>(GhRepoLookupSchema),
   [CONTROL_FORGE_POST]: reply<ForgeVerdict>(ForgeVerdictSchema),
-  // A machine's tools and their sign-ins (tools.ts).
-  [CONTROL_BEGIN_TOOL_SIGNIN]: reply<ToolSigninChallenge>(
-    ToolSigninChallengeSchema
-  ),
-  [CONTROL_COMPLETE_TOOL_SIGNIN]: TOOL_STATUS,
   // Skills and harness settings read off a machine (fleet.ts).
   [INSPECT_CONFIG]: reply<ConfigInspection>(ConfigInspectionSchema),
   [FLEET_DELTA]: reply<FleetAck>(FleetAckSchema),

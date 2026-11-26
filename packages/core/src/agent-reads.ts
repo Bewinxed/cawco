@@ -21,7 +21,7 @@ import type {
   SessionCustody,
   SessionTooling,
 } from "./protocol";
-import type { ReportedToolStatus } from "./tools";
+import type { ToolStatus } from "./tools";
 import type { OpenCodeGoLimits, ReportedUsageBucket } from "./usage/types";
 
 /** What the register and a beat both read: the machine's word on its binary update. */
@@ -133,7 +133,7 @@ export interface HeartbeatReads
    * same as a machine with none of them: the difference is what stops the
    * hub installing the whole catalog onto a machine not yet probed.
    */
-  tools: ReportedToolStatus[];
+  tools: ToolStatus[];
 }
 
 /** A machine's usage report (USAGE-SPEC.md §6.4), read once. */
