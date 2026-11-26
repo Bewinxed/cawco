@@ -85,7 +85,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { agyWords } from "@cawco/core/words/agy";
 import { readPolicy } from "@cawco/core/workspace-judge";
-import { Deferred, Effect, Exit, Scope, Semaphore } from "effect";
+import { Deferred, Effect, Exit, Option, Scope, Semaphore } from "effect";
 import type { SessionControls, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { carriedOf, carriedWords, keepCarried } from "./agy-carry";
@@ -109,6 +109,7 @@ import type { AgyAnswer, AgySession as Judged } from "./agy-judge";
 import { type AgyChild, endGroup, signInAcp, startAcp } from "./agy-launch";
 import { lastStep, type TurnFault, turnFault } from "./agy-outcome";
 import { sendRefusal } from "./agy-pictures";
+import { writtenResult } from "./agy-transcript";
 import { credentialControls } from "./credential-controls";
 
 /** A start's command, as the host was handed it. */
@@ -258,6 +259,8 @@ class AgySession {
   readonly #ran = new Map<string, boolean>();
   /** Why the host stopped agy as no longer to be trusted, once it has. */
   #refused: string | undefined;
+  /** What agy wrote of each ended call in its transcript, by agy's id, until its end is said (agy-transcript.ts). */
+  readonly #written = new Map<string, string>();
   #models: ModelInfo[] = [];
   #commands: SlashCommand[] = [];
   /** The last answer that named the session's config options: what thinking levels its model takes. */
@@ -383,9 +386,14 @@ class AgySession {
     await makeFolder(dirname(launch.judgeSocket));
     const judged = this.#judged();
     await Effect.runPromise(
-      serveAgyJudge(launch.judgeSocket, (line) =>
-        this.#fleet.answer(line, judged)
-      ).pipe(Scope.provide(this.#judge))
+      serveAgyJudge(launch.judgeSocket, async (line) => {
+        const answer = await this.#fleet.answer(line, judged);
+        const written = await Effect.runPromise(writtenResult(line));
+        if (Option.isSome(written)) {
+          this.#written.set(written.value.id, written.value.text);
+        }
+        return answer;
+      }).pipe(Scope.provide(this.#judge))
     );
     await this.#startAgy();
     const resumed = this.#start.spec.resume?.sessionKey;
@@ -709,6 +717,8 @@ class AgySession {
     update: { content?: readonly unknown[] | null; rawOutput?: unknown }
   ): void {
     this.#calls.set(id, "ended");
+    const written = this.#written.get(id);
+    this.#written.delete(id);
     this.#emit({
       type: "user",
       parent_tool_use_id: null,
@@ -718,7 +728,7 @@ class AgySession {
           {
             type: "tool_result",
             tool_use_id: id,
-            content: callResult(update),
+            content: callResult(update, written),
             is_error: failed,
           },
         ],
@@ -1084,6 +1094,7 @@ class AgySession {
     });
     this.#turn = undefined;
     this.#calls.clear();
+    this.#written.clear();
     this.#ctx.busy(false);
     if (stopReason === "end_turn" && !fault) {
       this.#stopHooks().catch((error: unknown) => this.#ctx.failed(error));

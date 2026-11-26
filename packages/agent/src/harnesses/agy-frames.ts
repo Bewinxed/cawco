@@ -49,20 +49,29 @@ export const carriesHookNotice = (update: {
   ) ||
   (isRawOutput(update.rawOutput) && HOOK_NOTICE.test(update.rawOutput.output));
 
-/** What a finished call said, as its result: its text content, else its raw output's, without CawCo's notice. */
-export const callResult = (update: {
-  content?: readonly unknown[] | null;
-  rawOutput?: unknown;
-}): string => {
+/**
+ * What a finished call said, as its result: its text content, else its raw
+ * output's, else what agy wrote of it in its transcript (`written`,
+ * agy-transcript.ts: agy says an MCP tool's or `read_file`'s result
+ * there alone), without CawCo's notice.
+ */
+export const callResult = (
+  update: {
+    content?: readonly unknown[] | null;
+    rawOutput?: unknown;
+  },
+  written: string | undefined
+): string => {
   const texts = (update.content ?? []).flatMap((part) =>
     isTextContent(part) ? [part.content.text] : []
   );
   if (texts.length > 0) {
     return withoutHookNotice(texts.join("\n"));
   }
-  return withoutHookNotice(
-    isRawOutput(update.rawOutput) ? update.rawOutput.output : ""
-  );
+  if (isRawOutput(update.rawOutput)) {
+    return withoutHookNotice(update.rawOutput.output);
+  }
+  return withoutHookNotice(written ?? "");
 };
 
 const Args = Schema.Record(Schema.String, Schema.Unknown);
