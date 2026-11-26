@@ -451,7 +451,7 @@ export const createWrites = (deps: WritesDeps) => {
    * body holds `marker`, else a new issue. Two of one marker at one moment
    * would both open one: the caller sends one marker's at a time.
    */
-  const issueOnce = (input: {
+  const issueOnce = Effect.fnUntraced(function* (input: {
     body: string;
     by: WriteBy;
     marker: string;
@@ -459,37 +459,36 @@ export const createWrites = (deps: WritesDeps) => {
     search: string;
     target: { machine: string; repo: string };
     title: string;
-  }): Effect.Effect<MachineWritten, WriteRefused> =>
-    Effect.gen(function* () {
-      const base = {
-        by: input.by,
-        projectId: input.projectId,
-        target: input.target,
-      };
-      const found = yield* post({
+  }): Effect.fn.Return<MachineWritten, WriteRefused> {
+    const base = {
+      by: input.by,
+      projectId: input.projectId,
+      target: input.target,
+    };
+    const found = yield* post({
+      ...base,
+      op: {
+        op: "issue.find-marked",
+        marker: input.marker,
+        search: input.search,
+      },
+    });
+    if (found.item) {
+      const commented = yield* post({
         ...base,
         op: {
-          op: "issue.find-marked",
-          marker: input.marker,
-          search: input.search,
+          op: "comment.create",
+          on: { kind: "issue", key: found.item.key },
+          body: input.body,
         },
       });
-      if (found.item) {
-        const commented = yield* post({
-          ...base,
-          op: {
-            op: "comment.create",
-            on: { kind: "issue", key: found.item.key },
-            body: input.body,
-          },
-        });
-        return { ...commented, existing: true };
-      }
-      return yield* post({
-        ...base,
-        op: { op: "issue.create", title: input.title, body: input.body },
-      });
+      return { ...commented, existing: true };
+    }
+    return yield* post({
+      ...base,
+      op: { op: "issue.create", title: input.title, body: input.body },
     });
+  });
 
   /**
    * What a session's call of a connection's write tool made, read off its

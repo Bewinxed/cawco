@@ -73,7 +73,7 @@ import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
@@ -437,10 +437,6 @@ const responses = (state: Record<string, ChoiceEntry>): ChoiceEntry[] =>
 const recordText = (record: StoredRecord): string =>
   `${JSON.stringify(record, null, 2)}\n`;
 
-/** An object, as a page's state holds one under a key. */
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 /** A dials panel named as a card, its values in order, each as written. */
 const dialsOf = (
   state: Record<string, ChoiceEntry>,
@@ -448,11 +444,11 @@ const dialsOf = (
 ): [string, string][] => {
   const dials: ChoiceEntry | undefined = state.dials;
   const panels = dials?.value;
-  if (!isObject(panels)) {
+  if (!Predicate.isObject(panels)) {
     return [];
   }
   const panel = panels[card];
-  if (!isObject(panel)) {
+  if (!Predicate.isObjectOrArray(panel)) {
     return [];
   }
   return Object.entries(panel).map(([key, value]) => [

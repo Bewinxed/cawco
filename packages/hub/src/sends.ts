@@ -895,65 +895,63 @@ export const createSends = (ctx: SendsContext) => {
    * puts the session's next read off ({@link SETTLE_READS}); one answered
    * clears that.
    */
-  const askSettle = (
+  const askSettle = Effect.fnUntraced(function* (
     row: InstanceRow & { sessionId: string }
-  ): Effect.Effect<Bounded<CallAnswer<SessionMessage[]>>, unknown> =>
-    Effect.gen(function* () {
-      const backoff = settleBackoff.get(row.id);
-      if (backoff && backoff.until > Date.now()) {
-        yield* Effect.sleep(backoff.until - Date.now());
-      }
-      return yield* inSettleTurn(
-        row.machineId,
-        Effect.gen(function* () {
-          const askedAt = Date.now();
-          const answer = yield* Effect.tryPromise({
-            try: () => settleWindows(row),
-            catch: (error) => error,
-          });
-          if (answer.kind !== "unanswered") {
-            settleBackoff.delete(row.id);
-            return answer;
-          }
-          // The count lives on the session's entry, across its reads: a
-          // backoff kept between reads, not a retry of this one.
-          const tries = (backoff?.tries ?? 0) + 1;
-          const ms = backoffWait(SETTLE_READS, tries);
-          const until = Date.now() + ms;
-          settleBackoff.set(row.id, { tries, until });
-          console.warn(
-            `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${Math.round(ms / 1000)} s on`
-          );
+  ): Effect.fn.Return<Bounded<CallAnswer<SessionMessage[]>>, unknown> {
+    const backoff = settleBackoff.get(row.id);
+    if (backoff && backoff.until > Date.now()) {
+      yield* Effect.sleep(backoff.until - Date.now());
+    }
+    return yield* inSettleTurn(
+      row.machineId,
+      Effect.gen(function* () {
+        const askedAt = Date.now();
+        const answer = yield* Effect.tryPromise({
+          try: () => settleWindows(row),
+          catch: (error) => error,
+        });
+        if (answer.kind !== "unanswered") {
+          settleBackoff.delete(row.id);
           return answer;
-        })
-      );
-    });
+        }
+        // The count lives on the session's entry, across its reads: a
+        // backoff kept between reads, not a retry of this one.
+        const tries = (backoff?.tries ?? 0) + 1;
+        const ms = backoffWait(SETTLE_READS, tries);
+        const until = Date.now() + ms;
+        settleBackoff.set(row.id, { tries, until });
+        console.warn(
+          `[hub] ${row.id}: settle read on ${ctx.machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${Math.round(ms / 1000)} s on`
+        );
+        return answer;
+      })
+    );
+  });
 
   /** {@link storedIn}'s one read of the session, through {@link askSettle}. */
-  const settleRead = (
+  const settleRead = Effect.fnUntraced(function* (
     instanceId: string
-  ): Effect.Effect<Map<string, boolean> | { unread: string }, unknown> =>
-    Effect.gen(function* () {
-      const [row] = ctx.db.getInstancesByIds([instanceId]);
-      if (!row?.sessionId) {
-        return new Map<string, boolean>();
-      }
-      const answer = yield* askSettle({ ...row, sessionId: row.sessionId });
-      switch (answer.kind) {
-        case "unanswered":
-          return { unread: ctx.silentWords(row.machineId, answer) };
-        case "answered":
-          if (!answer.value.ok) {
-            return {
-              unread: `${ctx.machineName(row.machineId)} could not read its transcript: ${answer.value.error ?? "it gave no reason"}`,
-            };
-          }
-          break;
-        default:
-          throw unreachable(answer);
-      }
-      return storedOf(instanceId, answer.value.result);
-    });
+  ): Effect.fn.Return<Map<string, boolean> | { unread: string }, unknown> {
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!row?.sessionId) {
+      return new Map<string, boolean>();
+    }
+    const answer = yield* askSettle({ ...row, sessionId: row.sessionId });
+    switch (answer.kind) {
+      case "unanswered":
+        return { unread: ctx.silentWords(row.machineId, answer) };
+      case "answered":
+        if (!answer.value.ok) {
+          return {
+            unread: `${ctx.machineName(row.machineId)} could not read its transcript: ${answer.value.error ?? "it gave no reason"}`,
+          };
+        }
+        break;
+      default:
+        throw unreachable(answer);
+    }
+    return storedOf(instanceId, answer.value.result);
+  });
 
   /**
    * The sends a settle read's entries hold, read as the newest history page

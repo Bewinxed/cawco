@@ -146,38 +146,37 @@ interface Fetched {
   root?: string;
 }
 
-const fetchMarketplace = (
+const fetchMarketplace = Effect.fnUntraced(function* (
   source: string,
   work: string
-): Effect.Effect<Fetched, FetchFailed> =>
-  Effect.gen(function* () {
-    const trimmed = source.trim();
-    if (isManifestUrl(trimmed)) {
-      const response = yield* get(trimmed);
-      if (!response.ok) {
-        return yield* new FetchFailed({
-          message: `${trimmed} answered ${response.status}`,
-        });
-      }
-      const manifest = manifestOf(
-        yield* Effect.promise(() => response.json().catch(() => undefined))
-      );
-      if (!manifest) {
-        return yield* new FetchFailed({
-          message: `${trimmed} is not a marketplace.json cawco could read`,
-        });
-      }
-      return { manifest };
-    }
-    const root = yield* marketplaceRoot(trimmed, work);
-    const manifest = yield* Effect.promise(() => readManifest(root));
-    if (!manifest) {
+): Effect.fn.Return<Fetched, FetchFailed> {
+  const trimmed = source.trim();
+  if (isManifestUrl(trimmed)) {
+    const response = yield* get(trimmed);
+    if (!response.ok) {
       return yield* new FetchFailed({
-        message: `${source} has no .claude-plugin/marketplace.json cawco could read`,
+        message: `${trimmed} answered ${response.status}`,
       });
     }
-    return { manifest, root };
-  });
+    const manifest = manifestOf(
+      yield* Effect.promise(() => response.json().catch(() => undefined))
+    );
+    if (!manifest) {
+      return yield* new FetchFailed({
+        message: `${trimmed} is not a marketplace.json cawco could read`,
+      });
+    }
+    return { manifest };
+  }
+  const root = yield* marketplaceRoot(trimmed, work);
+  const manifest = yield* Effect.promise(() => readManifest(root));
+  if (!manifest) {
+    return yield* new FetchFailed({
+      message: `${source} has no .claude-plugin/marketplace.json cawco could read`,
+    });
+  }
+  return { manifest, root };
+});
 
 /**
  * A fetch of the marketplace in a work directory of its own, gone once `use`
@@ -228,48 +227,45 @@ const localRoot = async (source: string): Promise<string | undefined> => {
  * directory a relative path could mean). The manifest is read from the root,
  * `.claude-plugin/marketplace.json`, as Claude Code reads it.
  */
-const marketplaceRoot = (
+const marketplaceRoot = Effect.fnUntraced(function* (
   source: string,
   work: string
-): Effect.Effect<string, FetchFailed> =>
-  Effect.gen(function* () {
-    const trimmed = source.trim();
-    const local = yield* fetchStep(() => localRoot(trimmed));
-    if (local) {
-      return local;
-    }
-    const slug = GITHUB_SLUG.exec(trimmed);
-    if (slug?.[1] && slug[2]) {
-      return yield* downloadRepo(slug[1], slug[2], slug[3], work);
-    }
+): Effect.fn.Return<string, FetchFailed> {
+  const trimmed = source.trim();
+  const local = yield* fetchStep(() => localRoot(trimmed));
+  if (local) {
+    return local;
+  }
+  const slug = GITHUB_SLUG.exec(trimmed);
+  if (slug?.[1] && slug[2]) {
+    return yield* downloadRepo(slug[1], slug[2], slug[3], work);
+  }
 
-    const url = HTTP_URL_PREFIX.test(trimmed)
-      ? yield* urlOf(trimmed)
-      : undefined;
-    if (url?.hostname === "github.com") {
-      const [owner, repo] = url.pathname
-        .replace(LEADING_SLASHES, "")
-        .replace(DOT_GIT_SUFFIX, "")
-        .split("/");
-      if (owner && repo) {
-        return yield* downloadRepo(owner, repo, undefined, work);
-      }
+  const url = HTTP_URL_PREFIX.test(trimmed) ? yield* urlOf(trimmed) : undefined;
+  if (url?.hostname === "github.com") {
+    const [owner, repo] = url.pathname
+      .replace(LEADING_SLASHES, "")
+      .replace(DOT_GIT_SUFFIX, "")
+      .split("/");
+    if (owner && repo) {
+      return yield* downloadRepo(owner, repo, undefined, work);
     }
-    if (url) {
-      const response = yield* get(url.href);
-      if (!response.ok) {
-        return yield* new FetchFailed({
-          message: `${url.href} answered ${response.status}`,
-        });
-      }
-      return yield* unpack(response, work, url.pathname);
+  }
+  if (url) {
+    const response = yield* get(url.href);
+    if (!response.ok) {
+      return yield* new FetchFailed({
+        message: `${url.href} answered ${response.status}`,
+      });
     }
-    return yield* new FetchFailed({
-      message:
-        `${source} is not a marketplace source cawco knows how to fetch — ` +
-        "give owner/repo, a git URL, or an absolute directory path on the hub",
-    });
+    return yield* unpack(response, work, url.pathname);
+  }
+  return yield* new FetchFailed({
+    message:
+      `${source} is not a marketplace source cawco knows how to fetch — ` +
+      "give owner/repo, a git URL, or an absolute directory path on the hub",
   });
+});
 
 /**
  * Where one plugin's files are, given how its manifest entry names them. Every
@@ -346,35 +342,34 @@ const githubRoot = (
 };
 
 /** A plugin whose source is an archive at `href`, its files at `source.path` in it when it names one. */
-const archiveRoot = (
+const archiveRoot = Effect.fnUntraced(function* (
   href: string,
   source: Record<string, unknown>,
   work: string
-): Effect.Effect<string, FetchFailed> =>
-  Effect.gen(function* () {
-    const into = yield* scratchIn(work);
-    const url = yield* urlOf(href);
-    let root: string;
-    if (url.hostname === "github.com") {
-      const [owner, repo] = url.pathname
-        .replace(LEADING_SLASHES, "")
-        .replace(DOT_GIT_SUFFIX, "")
-        .split("/");
-      if (!(owner && repo)) {
-        return yield* failed(`${href} is not a github repository`);
-      }
-      const ref = typeof source.sha === "string" ? source.sha : undefined;
-      root = yield* downloadRepo(owner, repo, ref, into);
-    } else {
-      const response = yield* get(href);
-      if (!response.ok) {
-        return yield* failed(`${href} answered ${response.status}`);
-      }
-      root = yield* unpack(response, into, url.pathname);
+): Effect.fn.Return<string, FetchFailed> {
+  const into = yield* scratchIn(work);
+  const url = yield* urlOf(href);
+  let root: string;
+  if (url.hostname === "github.com") {
+    const [owner, repo] = url.pathname
+      .replace(LEADING_SLASHES, "")
+      .replace(DOT_GIT_SUFFIX, "")
+      .split("/");
+    if (!(owner && repo)) {
+      return yield* failed(`${href} is not a github repository`);
     }
-    const path = typeof source.path === "string" ? source.path : undefined;
-    return path ? yield* inside(root, path) : root;
-  });
+    const ref = typeof source.sha === "string" ? source.sha : undefined;
+    root = yield* downloadRepo(owner, repo, ref, into);
+  } else {
+    const response = yield* get(href);
+    if (!response.ok) {
+      return yield* failed(`${href} answered ${response.status}`);
+    }
+    root = yield* unpack(response, into, url.pathname);
+  }
+  const path = typeof source.path === "string" ? source.path : undefined;
+  return path ? yield* inside(root, path) : root;
+});
 
 /**
  * A marketplace read from its source, one download: what it calls itself and

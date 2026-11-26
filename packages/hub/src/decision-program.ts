@@ -73,6 +73,7 @@ import {
   split,
   tokenize,
 } from "@openuidev/lang-core";
+import { Predicate } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
@@ -122,10 +123,6 @@ const programRefusal = <const Code extends string>(
         : `The program has ${unique.length} problems:\n- ${listWithin(unique, TOOL_ANSWER_CHARS, "\n- ")}`,
   });
 };
-
-/** A JSON object, as a piece's props hold one. */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isElement = (value: unknown): value is ElementNode =>
   typeof value === "object" &&
@@ -431,7 +428,7 @@ const designProblems = (root: ElementNode | null): string[] =>
  */
 const dialsProblems = (root: ElementNode | null): string[] =>
   elementsNamed(root, "Dials").flatMap(({ props }) => {
-    const config: Record<string, unknown> = isRecord(props.config)
+    const config: Record<string, unknown> = Predicate.isObject(props.config)
       ? props.config
       : {};
     return dialsOfConfig(config, () => false).unread.map(

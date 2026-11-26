@@ -1321,47 +1321,48 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return db.byId(r.id) ?? r;
   };
 
-  const connect = (r: ConnectionRow): Effect.Effect<Bounded<Client>, unknown> =>
-    Effect.gen(function* () {
-      if (r.auth === "oauth") {
-        yield* Effect.tryPromise({
-          try: () => oauthRefreshed(r),
-          catch: (error) => error,
-        });
-      }
-      const client = new Client(
-        { name: "CawCo hub", version: "1.0.0" },
-        {
-          // The server's own word that its tools changed re-lists them here,
-          // so sessions' lists follow it.
-          listChanged: {
-            tools: {
-              onChanged: (error, tools) => {
-                if (!error && tools) {
-                  keepListing(r.id, tools);
-                }
-              },
-            },
-          },
-        }
-      );
-      const connected = Effect.tryPromise({
-        try: async (signal) => {
-          // An app's token is minted, a gh token read or a code sign-in's
-          // refreshed, within the same time.
-          const bearer = await bearerOf(r);
-          if (bearer) {
-            appExpiry.set(r.id, bearer.expiresAt);
-          }
-          const transport = transportOf(r, bearer?.token);
-          // The SDK's own clock (60 s unless given) never decides: the bounded read does.
-          await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
-          return client;
-        },
+  const connect = Effect.fnUntraced(function* (
+    r: ConnectionRow
+  ): Effect.fn.Return<Bounded<Client>, unknown> {
+    if (r.auth === "oauth") {
+      yield* Effect.tryPromise({
+        try: () => oauthRefreshed(r),
         catch: (error) => error,
       });
-      return yield* boundedOf(CONNECT_MS, connected);
+    }
+    const client = new Client(
+      { name: "CawCo hub", version: "1.0.0" },
+      {
+        // The server's own word that its tools changed re-lists them here,
+        // so sessions' lists follow it.
+        listChanged: {
+          tools: {
+            onChanged: (error, tools) => {
+              if (!error && tools) {
+                keepListing(r.id, tools);
+              }
+            },
+          },
+        },
+      }
+    );
+    const connected = Effect.tryPromise({
+      try: async (signal) => {
+        // An app's token is minted, a gh token read or a code sign-in's
+        // refreshed, within the same time.
+        const bearer = await bearerOf(r);
+        if (bearer) {
+          appExpiry.set(r.id, bearer.expiresAt);
+        }
+        const transport = transportOf(r, bearer?.token);
+        // The SDK's own clock (60 s unless given) never decides: the bounded read does.
+        await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
+        return client;
+      },
+      catch: (error) => error,
     });
+    return yield* boundedOf(CONNECT_MS, connected);
+  });
 
   /**
    * A connect that landed: its client kept for every later call, unless it

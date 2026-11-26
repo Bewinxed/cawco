@@ -111,43 +111,40 @@ export const createCallKeys = ({
    * on its row; one whose row was taken before (by a run that ended, or a
    * hub that stopped) answers what the row holds.
    */
-  const firstRun = (
+  const firstRun = Effect.fnUntraced(function* (
     id: string,
     instanceId: string,
     name: string,
     run: () => Promise<CallToolResult>
-  ): Effect.Effect<CallToolResult> =>
-    Effect.gen(function* () {
-      if (!db.take(id, Date.now())) {
-        const row = db.get(id);
-        if (row?.state === "answered" && row.body) {
-          console.info(
-            `[call-keys] ${name} from ${instanceId} sent again once answered: its first answer, not run again`
-          );
-          return CallToolResultSchema.parse(
-            JSON.parse(decoder.decode(row.body))
-          );
-        }
-        return {
-          isError: true,
-          content: [{ type: "text", text: INTERRUPTED_CALL }],
-        } satisfies CallToolResult;
+  ): Effect.fn.Return<CallToolResult> {
+    if (!db.take(id, Date.now())) {
+      const row = db.get(id);
+      if (row?.state === "answered" && row.body) {
+        console.info(
+          `[call-keys] ${name} from ${instanceId} sent again once answered: its first answer, not run again`
+        );
+        return CallToolResultSchema.parse(JSON.parse(decoder.decode(row.body)));
       }
-      const result = yield* Effect.tryPromise({
-        try: run,
-        catch: (error) => error,
-      }).pipe(Effect.catch((error) => Effect.succeed(failedAnswer(error))));
-      db.answer(
-        id,
-        {
-          status: 200,
-          headers: [],
-          body: encoder.encode(JSON.stringify(result)),
-        },
-        Date.now()
-      );
-      return result;
-    });
+      return {
+        isError: true,
+        content: [{ type: "text", text: INTERRUPTED_CALL }],
+      } satisfies CallToolResult;
+    }
+    const result = yield* Effect.tryPromise({
+      try: run,
+      catch: (error) => error,
+    }).pipe(Effect.catch((error) => Effect.succeed(failedAnswer(error))));
+    db.answer(
+      id,
+      {
+        status: 200,
+        headers: [],
+        body: encoder.encode(JSON.stringify(result)),
+      },
+      Date.now()
+    );
+    return result;
+  });
 
   return {
     /**

@@ -249,34 +249,35 @@ const CATCH_UP_MS = 1000;
  * looked at every {@link QUIET_MS}, the first look one quiet turn after the
  * start, until a look finds it unmoved or {@link CATCH_UP_MS} has passed.
  */
-export const caughtUp = (socketId: string): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    let seen = lines.get(socketId)?.received;
-    if (seen === undefined) {
-      return;
-    }
-    /** Whether the socket handed over nothing since the last look (or is gone). */
-    const quiet = Effect.sync(() => {
-      const now = lines.get(socketId)?.received;
-      const still = now === undefined || now === seen;
-      seen = now;
-      return still;
-    });
-    yield* lookUntil(
-      {
-        every: QUIET_MS,
-        deadlineMs: CATCH_UP_MS - QUIET_MS,
-        until: (still: boolean) => still,
-      },
-      quiet
-    ).pipe(Effect.delay(QUIET_MS));
-    const line = lines.get(socketId);
-    if (line) {
-      yield* Effect.callback<void>((resume) => {
-        line.inbox.push(0, () => resume(Effect.void));
-      });
-    }
+export const caughtUp = Effect.fnUntraced(function* (
+  socketId: string
+): Effect.fn.Return<void> {
+  let seen = lines.get(socketId)?.received;
+  if (seen === undefined) {
+    return;
+  }
+  /** Whether the socket handed over nothing since the last look (or is gone). */
+  const quiet = Effect.sync(() => {
+    const now = lines.get(socketId)?.received;
+    const still = now === undefined || now === seen;
+    seen = now;
+    return still;
   });
+  yield* lookUntil(
+    {
+      every: QUIET_MS,
+      deadlineMs: CATCH_UP_MS - QUIET_MS,
+      until: (still: boolean) => still,
+    },
+    quiet
+  ).pipe(Effect.delay(QUIET_MS));
+  const line = lines.get(socketId);
+  if (line) {
+    yield* Effect.callback<void>((resume) => {
+      line.inbox.push(0, () => resume(Effect.void));
+    });
+  }
+});
 
 /** The socket closed: its queue and any half-received message go with it. */
 export const closeLine = (socket: HubSocket): void => {

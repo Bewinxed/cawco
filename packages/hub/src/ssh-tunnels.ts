@@ -550,32 +550,31 @@ const refusedByServer = (
   );
 
 /** Where the machine binds the probe forward `probed` made: a refusal, or nothing when it binds on its loopback alone. */
-const readBinding = (
+const readBinding = Effect.fnUntraced(function* (
   path: string,
   target: string,
   probed: Answer
-): Effect.Effect<TunnelRefusal | null> =>
-  Effect.gen(function* () {
-    const port = Number(probed.out);
-    if (!PORT_LINE.test(probed.out)) {
-      return {
-        kind: "failed",
-        step: "forwarding a port on the machine",
-        said: `ssh named no port: ${probed.out}`,
-      };
-    }
-    const read = yield* onMachine(path, target, listenersOn(port));
-    const bound = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
-    if (bound.length === 0) {
-      return {
-        kind: "failed",
-        step: `reading where the machine listens on port ${port}`,
-        said: read?.code === 0 ? "it lists no listener there" : saidBy(read),
-      };
-    }
-    const beyond = bound.filter((address) => !onLoopback(address));
-    return beyond.length > 0 ? { kind: "exposed", bound: beyond } : null;
-  });
+): Effect.fn.Return<TunnelRefusal | null> {
+  const port = Number(probed.out);
+  if (!PORT_LINE.test(probed.out)) {
+    return {
+      kind: "failed",
+      step: "forwarding a port on the machine",
+      said: `ssh named no port: ${probed.out}`,
+    };
+  }
+  const read = yield* onMachine(path, target, listenersOn(port));
+  const bound = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
+  if (bound.length === 0) {
+    return {
+      kind: "failed",
+      step: `reading where the machine listens on port ${port}`,
+      said: read?.code === 0 ? "it lists no listener there" : saidBy(read),
+    };
+  }
+  const beyond = bound.filter((address) => !onLoopback(address));
+  return beyond.length > 0 ? { kind: "exposed", bound: beyond } : null;
+});
 
 /**
  * Where the machine binds a forward, before the hub is forwarded there: a
@@ -585,38 +584,37 @@ const readBinding = (
  * forwarded" and leaves it, measured on OpenSSH 10.2). A refusal, or
  * nothing when it binds on its loopback alone.
  */
-const checkBinding = (
+const checkBinding = Effect.fnUntraced(function* (
   path: string,
   target: string
-): Effect.Effect<TunnelRefusal | null> =>
-  Effect.gen(function* () {
-    const probe = `127.0.0.1:0:127.0.0.1:${freePort()}`;
-    const probed = yield* control([
-      "ssh",
-      "-S",
-      path,
-      "-O",
-      "forward",
-      "-R",
-      probe,
-      "--",
-      target,
-    ]);
-    if (probed?.code !== 0) {
-      return (yield* refusedByServer(path, target))
-        ? { kind: "forwarding" }
-        : {
-            kind: "failed",
-            step: "forwarding a port on the machine",
-            said: saidBy(probed),
-          };
-    }
-    return yield* readBinding(path, target, probed).pipe(
-      Effect.ensuring(
-        control(["ssh", "-S", path, "-O", "cancel", "-R", probe, "--", target])
-      )
-    );
-  });
+): Effect.fn.Return<TunnelRefusal | null> {
+  const probe = `127.0.0.1:0:127.0.0.1:${freePort()}`;
+  const probed = yield* control([
+    "ssh",
+    "-S",
+    path,
+    "-O",
+    "forward",
+    "-R",
+    probe,
+    "--",
+    target,
+  ]);
+  if (probed?.code !== 0) {
+    return (yield* refusedByServer(path, target))
+      ? { kind: "forwarding" }
+      : {
+          kind: "failed",
+          step: "forwarding a port on the machine",
+          said: saidBy(probed),
+        };
+  }
+  return yield* readBinding(path, target, probed).pipe(
+    Effect.ensuring(
+      control(["ssh", "-S", path, "-O", "cancel", "-R", probe, "--", target])
+    )
+  );
+});
 
 /**
  * Ends this hub's own earlier connection's session that still holds `port`
@@ -626,38 +624,37 @@ const checkBinding = (
  * whatever it is (the person's own sshd, a session of theirs): the forward
  * then says the port is taken.
  */
-const endStale = (
+const endStale = Effect.fnUntraced(function* (
   path: string,
   target: string,
   port: number,
   session: string | null
-): Effect.Effect<TunnelRefusal | null> =>
-  Effect.gen(function* () {
-    if (!(session && SESSION.test(session))) {
-      return null;
-    }
-    const ended = yield* onMachine(path, target, endOwnOn(port, session));
-    if (ended?.code !== 0) {
-      return {
-        kind: "failed",
-        step: `freeing port ${port} on the machine`,
-        said: saidBy(ended),
-      };
-    }
-    if (!ended.out) {
-      return null;
-    }
-    console.info(
-      `[ssh] ${target}: ended the stale session holding port ${port} (pid ${ended.out.split("\n").join(", ")})`
-    );
-    yield* lookUntil(
-      { every: Duration.millis(MASTER_POLL_MS), deadlineMs: STALE_GONE_MS },
-      onMachine(path, target, listenersOn(port)).pipe(
-        Effect.map((read) => (read?.code === 0 && !read.out) || undefined)
-      )
-    );
+): Effect.fn.Return<TunnelRefusal | null> {
+  if (!(session && SESSION.test(session))) {
     return null;
-  });
+  }
+  const ended = yield* onMachine(path, target, endOwnOn(port, session));
+  if (ended?.code !== 0) {
+    return {
+      kind: "failed",
+      step: `freeing port ${port} on the machine`,
+      said: saidBy(ended),
+    };
+  }
+  if (!ended.out) {
+    return null;
+  }
+  console.info(
+    `[ssh] ${target}: ended the stale session holding port ${port} (pid ${ended.out.split("\n").join(", ")})`
+  );
+  yield* lookUntil(
+    { every: Duration.millis(MASTER_POLL_MS), deadlineMs: STALE_GONE_MS },
+    onMachine(path, target, listenersOn(port)).pipe(
+      Effect.map((read) => (read?.code === 0 && !read.out) || undefined)
+    )
+  );
+  return null;
+});
 
 /**
  * A held connection ended, and why: a failure of its series of opens, or,
@@ -755,32 +752,31 @@ export const createSshTunnels = ({
    * in: where it binds checked, its stale session ended, then the forward.
    * Answers the machine's port, or what it would not do.
    */
-  const forwardHub = (
+  const forwardHub = Effect.fnUntraced(function* (
     row: SshMachineRow,
     path: string
-  ): Effect.Effect<{ port: number } | { refusal: TunnelRefusal }> =>
-    Effect.gen(function* () {
-      const binding = yield* checkBinding(path, row.target);
-      if (binding) {
-        return { refusal: binding };
+  ): Effect.fn.Return<{ port: number } | { refusal: TunnelRefusal }> {
+    const binding = yield* checkBinding(path, row.target);
+    if (binding) {
+      return { refusal: binding };
+    }
+    if (row.boxPort !== null) {
+      const stale = yield* endStale(
+        path,
+        row.target,
+        row.boxPort,
+        row.boxSession
+      );
+      if (stale) {
+        return { refusal: stale };
       }
-      if (row.boxPort !== null) {
-        const stale = yield* endStale(
-          path,
-          row.target,
-          row.boxPort,
-          row.boxSession
-        );
-        if (stale) {
-          return { refusal: stale };
-        }
-      }
-      const forwarded = yield* forwardDoor(row, path);
-      if ("port" in forwarded) {
-        yield* recordSession(row, path, forwarded.port);
-      }
-      return forwarded;
-    });
+    }
+    const forwarded = yield* forwardDoor(row, path);
+    if ("port" in forwarded) {
+      yield* recordSession(row, path, forwarded.port);
+    }
+    return forwarded;
+  });
 
   /**
    * The process on the machine holding this connection's forward, recorded
@@ -809,56 +805,55 @@ export const createSshTunnels = ({
     );
 
   /** The forward itself: the machine's port, kept the first time, to the hub's door. */
-  const forwardDoor = (
+  const forwardDoor = Effect.fnUntraced(function* (
     row: SshMachineRow,
     path: string
-  ): Effect.Effect<{ port: number } | { refusal: TunnelRefusal }> =>
-    Effect.gen(function* () {
-      const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door.port(row.id, row.target)}`;
-      const answer = yield* control([
-        "ssh",
-        "-S",
-        path,
-        "-O",
-        "forward",
-        "-R",
-        spec,
-        "--",
-        row.target,
-      ]);
-      if (answer?.code !== 0) {
-        if (!(yield* refusedByServer(path, row.target))) {
-          return {
-            refusal: {
-              kind: "failed",
-              step: "forwarding the hub to the machine",
-              said: saidBy(answer),
-            },
-          };
-        }
-        return {
-          refusal:
-            row.boxPort === null
-              ? { kind: "forwarding" }
-              : { kind: "held", port: row.boxPort },
-        };
-      }
-      if (row.boxPort !== null) {
-        return { port: row.boxPort };
-      }
-      if (!PORT_LINE.test(answer.out)) {
+  ): Effect.fn.Return<{ port: number } | { refusal: TunnelRefusal }> {
+    const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door.port(row.id, row.target)}`;
+    const answer = yield* control([
+      "ssh",
+      "-S",
+      path,
+      "-O",
+      "forward",
+      "-R",
+      spec,
+      "--",
+      row.target,
+    ]);
+    if (answer?.code !== 0) {
+      if (!(yield* refusedByServer(path, row.target))) {
         return {
           refusal: {
             kind: "failed",
             step: "forwarding the hub to the machine",
-            said: `ssh named no port: ${answer.out}`,
+            said: saidBy(answer),
           },
         };
       }
-      const port = Number(answer.out);
-      db.update(row.id, { boxPort: port });
-      return { port };
-    });
+      return {
+        refusal:
+          row.boxPort === null
+            ? { kind: "forwarding" }
+            : { kind: "held", port: row.boxPort },
+      };
+    }
+    if (row.boxPort !== null) {
+      return { port: row.boxPort };
+    }
+    if (!PORT_LINE.test(answer.out)) {
+      return {
+        refusal: {
+          kind: "failed",
+          step: "forwarding the hub to the machine",
+          said: `ssh named no port: ${answer.out}`,
+        },
+      };
+    }
+    const port = Number(answer.out);
+    db.update(row.id, { boxPort: port });
+    return { port };
+  });
 
   /** One line of `tunnel`'s `ssh`: kept for the add that waits on it, and for why a held one ended. */
   const hear = (
@@ -885,23 +880,22 @@ export const createSshTunnels = ({
    * hub, and the connection up. What the machine would not do, or nothing;
    * a master refused, or not signed in in time, is ended: nothing holds it.
    */
-  const bringUp = (
+  const bringUp = Effect.fnUntraced(function* (
     tunnel: Tunnel,
     row: SshMachineRow,
     path: string,
     child: Bun.Subprocess
-  ): Effect.Effect<TunnelRefusal | null> =>
-    Effect.gen(function* () {
-      const ready = yield* masterReady(child, path, row.target);
-      const forwarded =
-        ready && !tunnel.stopped ? yield* forwardHub(row, path) : null;
-      if (forwarded && "port" in forwarded) {
-        cameUp(tunnel, row, forwarded.port);
-        return null;
-      }
-      end(child);
-      return forwarded?.refusal ?? null;
-    });
+  ): Effect.fn.Return<TunnelRefusal | null> {
+    const ready = yield* masterReady(child, path, row.target);
+    const forwarded =
+      ready && !tunnel.stopped ? yield* forwardHub(row, path) : null;
+    if (forwarded && "port" in forwarded) {
+      cameUp(tunnel, row, forwarded.port);
+      return null;
+    }
+    end(child);
+    return forwarded?.refusal ?? null;
+  });
 
   /**
    * `tunnel`'s master, run once and followed until `ssh` exits: its exit
@@ -949,61 +943,60 @@ export const createSshTunnels = ({
    * never joined, the hub closing). Whatever ends it, every add waiting on
    * it is told how it came out.
    */
-  const connect = (
+  const connect = Effect.fnUntraced(function* (
     tunnel: Tunnel
-  ): Effect.Effect<Dropped | undefined, Dropped> =>
-    Effect.gen(function* () {
-      const row = db.get(tunnel.id);
-      if (!row || tunnel.stopped || tunnel.running) {
-        return;
-      }
-      tunnel.running = true;
-      tunnel.upAt = 0;
-      makeFolderSync(controlDir(), { mode: 0o700 });
-      const path = controlPath(row.id);
-      const heard: { lines: string[]; since: string[] } = {
-        lines: [],
-        since: [],
-      };
-      const letGo = (): boolean => {
-        const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
-        tunnel.child = null;
-        tunnel.running = false;
-        tunnel.up = false;
-        tunnel.carried = noneCarried();
-        rmSync(path, { force: true });
-        return steady;
-      };
-      const ran = yield* runMaster(tunnel, row, path, heard).pipe(
-        Effect.onExit((exit) =>
-          Exit.isSuccess(exit)
-            ? Effect.void
-            : Effect.sync(() => {
-                letGo();
-                settle(tunnel, {
-                  kind: "ended",
-                  code: null,
-                  lines: heard.lines,
-                  refusal: null,
-                });
-              })
-        )
-      );
-      if (ran === null) {
-        tunnel.running = false;
-        settle(tunnel, { kind: "ended", code: null, lines: [], refusal: null });
-        return;
-      }
-      const steady = letGo();
-      settle(tunnel, {
-        kind: "ended",
-        code: ran.code,
-        lines: heard.lines,
-        refusal: ran.refusal,
-      });
-      const dropped = droppedBy(tunnel, row.id, ran, heard);
-      return dropped === undefined || steady ? dropped : yield* dropped;
+  ): Effect.fn.Return<Dropped | undefined, Dropped> {
+    const row = db.get(tunnel.id);
+    if (!row || tunnel.stopped || tunnel.running) {
+      return;
+    }
+    tunnel.running = true;
+    tunnel.upAt = 0;
+    makeFolderSync(controlDir(), { mode: 0o700 });
+    const path = controlPath(row.id);
+    const heard: { lines: string[]; since: string[] } = {
+      lines: [],
+      since: [],
+    };
+    const letGo = (): boolean => {
+      const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
+      tunnel.child = null;
+      tunnel.running = false;
+      tunnel.up = false;
+      tunnel.carried = noneCarried();
+      rmSync(path, { force: true });
+      return steady;
+    };
+    const ran = yield* runMaster(tunnel, row, path, heard).pipe(
+      Effect.onExit((exit) =>
+        Exit.isSuccess(exit)
+          ? Effect.void
+          : Effect.sync(() => {
+              letGo();
+              settle(tunnel, {
+                kind: "ended",
+                code: null,
+                lines: heard.lines,
+                refusal: null,
+              });
+            })
+      )
+    );
+    if (ran === null) {
+      tunnel.running = false;
+      settle(tunnel, { kind: "ended", code: null, lines: [], refusal: null });
+      return;
+    }
+    const steady = letGo();
+    settle(tunnel, {
+      kind: "ended",
+      code: ran.code,
+      lines: heard.lines,
+      refusal: ran.refusal,
     });
+    const dropped = droppedBy(tunnel, row.id, ran, heard);
+    return dropped === undefined || steady ? dropped : yield* dropped;
+  });
 
   /** Why `tunnel`'s master ended, as `ran` and `heard` say; nothing when nothing opens it again (it stopped, its machine never joined, the hub closing). */
   const droppedBy = (
@@ -1064,13 +1057,14 @@ export const createSshTunnels = ({
     reopenSeries(connect(tunnel), reopens(tunnel), Option.fromNullishOr(held));
 
   /** `tunnel`'s connection, opened now and again after each drop for as long as it is held. */
-  const follow = (tunnel: Tunnel): Effect.Effect<void, Dropped> =>
-    Effect.gen(function* () {
-      let held = yield* series(tunnel, undefined);
-      while (held) {
-        held = yield* series(tunnel, held);
-      }
-    });
+  const follow = Effect.fnUntraced(function* (
+    tunnel: Tunnel
+  ): Effect.fn.Return<void, Dropped> {
+    let held = yield* series(tunnel, undefined);
+    while (held) {
+      held = yield* series(tunnel, held);
+    }
+  });
 
   /** `tunnel`'s connection opened now, a wait for the next open cut short. */
   const openNow = (tunnel: Tunnel): void => {

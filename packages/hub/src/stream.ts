@@ -53,7 +53,7 @@ import {
   type StreamSubscribe,
 } from "@cawco/core/stream";
 import { pictureWords } from "@cawco/core/words/pictures";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
@@ -188,9 +188,6 @@ interface Follower {
   readonly sessions: Set<string>;
   socket: ClientSocket;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 
 const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -438,7 +435,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return;
     }
 
-    const payload = isRecord(message.payload) ? message.payload : undefined;
+    const payload = Predicate.isObject(message.payload)
+      ? message.payload
+      : undefined;
     if (!payload) {
       fail(socket, commandId, `a ${kind} command carries no payload`);
       return;
@@ -448,7 +447,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // either way, failed with why when nobody can take it, and that record —
     // not this ack — is what every tab draws.
     if (kind === "send") {
-      if (!isRecord(payload.message)) {
+      if (!Predicate.isObject(payload.message)) {
         fail(socket, commandId, "a send command carries no message");
         return;
       }
@@ -456,7 +455,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       // says it is from. Who else speaks (CawCo, another session) is the
       // hub's to say where it makes the send, never a client's (core
       // transcript-rules.ts `sendRow` draws a send by its origin).
-      const origin = isRecord(payload.message.origin)
+      const origin = Predicate.isObject(payload.message.origin)
         ? payload.message.origin
         : undefined;
       if (origin && origin.kind !== "human") {
@@ -473,10 +472,12 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         Array.isArray(payload.images) ? payload.images : []
       ).find(
         (image: unknown) =>
-          !(isRecord(image) && isImageMediaType(image.mediaType))
+          !(Predicate.isObject(image) && isImageMediaType(image.mediaType))
       );
       if (picture !== undefined) {
-        const said = isRecord(picture) ? picture.mediaType : undefined;
+        const said = Predicate.isObject(picture)
+          ? picture.mediaType
+          : undefined;
         fail(
           socket,
           commandId,
@@ -785,7 +786,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   ]);
 
   const handleClientMessage = (socket: ClientSocket, raw: unknown): boolean => {
-    if (!isRecord(raw) || typeof raw.type !== "string") {
+    if (!Predicate.isObject(raw) || typeof raw.type !== "string") {
       return false;
     }
 

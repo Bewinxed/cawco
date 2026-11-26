@@ -546,59 +546,60 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    * worked when it had some (`putPluginPayload`); one that never had files
    * reaches no machine, and each machine's row says why.
    */
-  const resolvePlugins = (ids: readonly string[]): Effect.Effect<void> =>
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
-    Effect.gen(function* () {
-      if (ids.length === 0) {
-        return;
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
+  const resolvePlugins = Effect.fnUntraced(function* (
+    ids: readonly string[]
+  ): Effect.fn.Return<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    const sources = new Map(
+      ctx.db
+        .fleetConfig()
+        .marketplaces.map(({ name, source }) => [name, source])
+    );
+
+    const byMarketplace = new Map<string, string[]>();
+    for (const id of ids) {
+      const marketplace = id.split("@")[1] ?? "";
+      byMarketplace.set(marketplace, [
+        ...(byMarketplace.get(marketplace) ?? []),
+        id,
+      ]);
+    }
+
+    for (const [marketplace, wanted] of byMarketplace) {
+      const source = sources.get(marketplace);
+      if (!source) {
+        for (const id of wanted) {
+          ctx.db.putPluginPayload({
+            id,
+            error: `no marketplace called ${marketplace} in this fleet`,
+          });
+        }
+        continue;
       }
-      const sources = new Map(
-        ctx.db
-          .fleetConfig()
-          .marketplaces.map(({ name, source }) => [name, source])
+      const resolved = yield* resolveMarketplacePlugins(
+        marketplace,
+        source,
+        wanted.map((id) => id.split("@")[0] ?? id)
       );
-
-      const byMarketplace = new Map<string, string[]>();
-      for (const id of ids) {
-        const marketplace = id.split("@")[1] ?? "";
-        byMarketplace.set(marketplace, [
-          ...(byMarketplace.get(marketplace) ?? []),
-          id,
-        ]);
-      }
-
-      for (const [marketplace, wanted] of byMarketplace) {
-        const source = sources.get(marketplace);
-        if (!source) {
-          for (const id of wanted) {
-            ctx.db.putPluginPayload({
-              id,
-              error: `no marketplace called ${marketplace} in this fleet`,
-            });
-          }
-          continue;
-        }
-        const resolved = yield* resolveMarketplacePlugins(
-          marketplace,
-          source,
-          wanted.map((id) => id.split("@")[0] ?? id)
-        );
-        for (const plugin of resolved) {
-          const id = `${plugin.name}@${marketplace}`;
-          if ("error" in plugin) {
-            ctx.db.putPluginPayload({ id, error: plugin.error });
-          } else {
-            ctx.db.putPluginPayload({
-              id,
-              hash: plugin.hash,
-              bytes: plugin.bytes,
-              files: plugin.files,
-              version: plugin.version,
-            });
-          }
+      for (const plugin of resolved) {
+        const id = `${plugin.name}@${marketplace}`;
+        if ("error" in plugin) {
+          ctx.db.putPluginPayload({ id, error: plugin.error });
+        } else {
+          ctx.db.putPluginPayload({
+            id,
+            hash: plugin.hash,
+            bytes: plugin.bytes,
+            files: plugin.files,
+            version: plugin.version,
+          });
         }
       }
-    });
+    }
+  });
 
   /**
    * The one way a fleet change reaches the machines: each ready machine is

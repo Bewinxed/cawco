@@ -528,43 +528,42 @@ const Packument = looseObject({
   ),
 });
 
-const npmRoot = (
+const npmRoot = Effect.fnUntraced(function* (
   source: SkillSource & { kind: "npm" },
   work: string
-): Effect.Effect<string, FetchFailed> =>
-  Effect.gen(function* () {
-    const metadata = yield* get(`https://registry.npmjs.org/${source.pkg}`);
-    if (!metadata.ok) {
-      return yield* new FetchFailed({
-        message: `the npm registry answered ${metadata.status} for ${source.pkg}`,
-      });
-    }
+): Effect.fn.Return<string, FetchFailed> {
+  const metadata = yield* get(`https://registry.npmjs.org/${source.pkg}`);
+  if (!metadata.ok) {
+    return yield* new FetchFailed({
+      message: `the npm registry answered ${metadata.status} for ${source.pkg}`,
+    });
+  }
 
-    const read = safeParse(Packument, yield* fetchStep(() => metadata.json()));
-    if (!read.success) {
-      return yield* new FetchFailed({
-        message: `the npm registry's answer for ${source.pkg} is no packument`,
-      });
-    }
-    const packument = read.output;
-    const version = source.version ?? packument["dist-tags"]?.latest;
-    const tarball = version
-      ? packument.versions?.[version]?.dist?.tarball
-      : undefined;
-    if (!tarball) {
-      return yield* new FetchFailed({
-        message: `the npm registry has no ${source.pkg}@${version ?? "latest"}`,
-      });
-    }
+  const read = safeParse(Packument, yield* fetchStep(() => metadata.json()));
+  if (!read.success) {
+    return yield* new FetchFailed({
+      message: `the npm registry's answer for ${source.pkg} is no packument`,
+    });
+  }
+  const packument = read.output;
+  const version = source.version ?? packument["dist-tags"]?.latest;
+  const tarball = version
+    ? packument.versions?.[version]?.dist?.tarball
+    : undefined;
+  if (!tarball) {
+    return yield* new FetchFailed({
+      message: `the npm registry has no ${source.pkg}@${version ?? "latest"}`,
+    });
+  }
 
-    const response = yield* get(tarball);
-    if (!response.ok) {
-      return yield* new FetchFailed({
-        message: `${tarball} answered ${response.status}`,
-      });
-    }
-    return yield* unpack(response, work, tarball);
-  });
+  const response = yield* get(tarball);
+  if (!response.ok) {
+    return yield* new FetchFailed({
+      message: `${tarball} answered ${response.status}`,
+    });
+  }
+  return yield* unpack(response, work, tarball);
+});
 
 /** Every directory under `container` that holds a `SKILL.md`, which is what a skill is. */
 const discover = async (container: string): Promise<string[]> => {
@@ -753,53 +752,48 @@ const readSkill = async (dir: string): Promise<ResolvedSkill> => {
 };
 
 /** A URL is either the skill's own file or an archive holding it. */
-const fetchUrl = (
+const fetchUrl = Effect.fnUntraced(function* (
   url: string,
   work: string,
   held: readonly string[]
-): Effect.Effect<ResolvedSkill | UnresolvedSkill, FetchFailed> =>
-  Effect.gen(function* () {
-    const response = yield* get(url);
-    if (!response.ok) {
-      return yield* new FetchFailed({
-        message: `${url} answered ${response.status}`,
-      });
-    }
+): Effect.fn.Return<ResolvedSkill | UnresolvedSkill, FetchFailed> {
+  const response = yield* get(url);
+  if (!response.ok) {
+    return yield* new FetchFailed({
+      message: `${url} answered ${response.status}`,
+    });
+  }
 
-    const path = new URL(url).pathname;
-    if (MD_PATH_RE.test(path)) {
-      const content = Buffer.from(
-        yield* fetchStep(() => response.arrayBuffer())
-      );
-      const files: SkillFile[] = [
-        {
-          path: "SKILL.md",
-          contentBase64: content.toString("base64"),
-          executable: false,
-        },
-      ];
-      // A lone file has no directory of its own; the one it was served from names it.
-      return {
-        name: basename(dirname(path)),
-        hash: hashFiles(files),
-        bytes: content.byteLength,
-        files,
-      };
-    }
-    if (!ARCHIVE_PATH_RE.test(path)) {
-      yield* fetchStep(async () => {
-        await response.body?.cancel();
-      });
-      return yield* new FetchFailed({
-        message: `${url} is neither a SKILL.md nor an archive`,
-      });
-    }
+  const path = new URL(url).pathname;
+  if (MD_PATH_RE.test(path)) {
+    const content = Buffer.from(yield* fetchStep(() => response.arrayBuffer()));
+    const files: SkillFile[] = [
+      {
+        path: "SKILL.md",
+        contentBase64: content.toString("base64"),
+        executable: false,
+      },
+    ];
+    // A lone file has no directory of its own; the one it was served from names it.
+    return {
+      name: basename(dirname(path)),
+      hash: hashFiles(files),
+      bytes: content.byteLength,
+      files,
+    };
+  }
+  if (!ARCHIVE_PATH_RE.test(path)) {
+    yield* fetchStep(async () => {
+      await response.body?.cancel();
+    });
+    return yield* new FetchFailed({
+      message: `${url} is neither a SKILL.md nor an archive`,
+    });
+  }
 
-    const root = yield* unpack(response, work, path);
-    return yield* fetchStep(() =>
-      pickAndRead(root, { kind: "url", url }, held)
-    );
-  });
+  const root = yield* unpack(response, work, path);
+  return yield* fetchStep(() => pickAndRead(root, { kind: "url", url }, held));
+});
 
 /** The skill out of a fetched `root`, or why none. */
 const pickAndRead = async (

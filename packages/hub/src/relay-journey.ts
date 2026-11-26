@@ -743,53 +743,53 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   };
 
   /** The name asked of DNS: pointed at the machine, unresolved, behind Cloudflare's proxy, or elsewhere. */
-  const checkName = (
+  const checkName = Effect.fnUntraced(function* (
     name: string,
     address: string
-  ): Effect.Effect<void, unknown> =>
-    Effect.gen(function* () {
-      const answers = yield* Effect.promise(() => resolve4(name));
-      const askedAt = Date.now();
-      if (answers.includes(address)) {
-        db.journeyUpdate({ nameState: "pointed" });
-        nameCheck = null;
-        return;
-      }
-      if (answers.length === 0) {
-        nameCheck = { name, askedAt, finding: "unresolved" };
-        return;
-      }
-      const proxied = (yield* awaited(() =>
-        Promise.all(answers.map((one) => isCloudflareAddress(one)))
-      )).some(Boolean);
-      nameCheck = proxied
-        ? { name, askedAt, finding: "proxied" }
-        : { name, askedAt, finding: "elsewhere", answers: answers[0] };
-    });
+  ): Effect.fn.Return<void, unknown> {
+    const answers = yield* Effect.promise(() => resolve4(name));
+    const askedAt = Date.now();
+    if (answers.includes(address)) {
+      db.journeyUpdate({ nameState: "pointed" });
+      nameCheck = null;
+      return;
+    }
+    if (answers.length === 0) {
+      nameCheck = { name, askedAt, finding: "unresolved" };
+      return;
+    }
+    const proxied = (yield* awaited(() =>
+      Promise.all(answers.map((one) => isCloudflareAddress(one)))
+    )).some(Boolean);
+    nameCheck = proxied
+      ? { name, askedAt, finding: "proxied" }
+      : { name, askedAt, finding: "elsewhere", answers: answers[0] };
+  });
 
   /** The machine's runtime read: whether it holds what the relay needs. */
-  const readRuntime = (machineId: string): Effect.Effect<void, unknown> =>
-    Effect.gen(function* () {
-      const read = yield* awaited(() =>
-        call(machineId, RELAY_RUNTIME, [], READ_MS)
-      );
-      if (read.kind === "unanswered") {
-        return;
-      }
-      if (!read.value.ok) {
-        runtimeRead = { machineId, read: "failed" };
-        return;
-      }
-      const runtime = read.value.result;
-      runtimeRead = { machineId, read: runtime };
-      // Kept as whether the runtime holds what the relay needs, so the step
-      // stands ticked across a hub restart until the next read.
-      const holds = runtime.need === null;
-      const journey = db.journey();
-      if (journey && journey.runtimeHolds !== holds) {
-        db.journeyUpdate({ runtimeHolds: holds });
-      }
-    });
+  const readRuntime = Effect.fnUntraced(function* (
+    machineId: string
+  ): Effect.fn.Return<void, unknown> {
+    const read = yield* awaited(() =>
+      call(machineId, RELAY_RUNTIME, [], READ_MS)
+    );
+    if (read.kind === "unanswered") {
+      return;
+    }
+    if (!read.value.ok) {
+      runtimeRead = { machineId, read: "failed" };
+      return;
+    }
+    const runtime = read.value.result;
+    runtimeRead = { machineId, read: runtime };
+    // Kept as whether the runtime holds what the relay needs, so the step
+    // stands ticked across a hub restart until the next read.
+    const holds = runtime.need === null;
+    const journey = db.journey();
+    if (journey && journey.runtimeHolds !== holds) {
+      db.journeyUpdate({ runtimeHolds: holds });
+    }
+  });
 
   /** The certificate issued on the relay's machine, by DNS at Cloudflare, begun on a fork; its refusal kept on the step. */
   const certify = (journey: StoredJourney): void => {
