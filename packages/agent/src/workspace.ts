@@ -100,9 +100,9 @@ import {
   systemProgram,
 } from "@cawco/core/workspace-needs";
 import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
-import { Effect } from "effect";
 import { namedAndMore } from "@cawco/providers/names";
 import { quote } from "@cawco/providers/quote";
+import { Effect } from "effect";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
 import { ensureBoundary } from "./boundary/ensure";

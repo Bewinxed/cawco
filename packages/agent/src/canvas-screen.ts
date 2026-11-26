@@ -20,8 +20,8 @@ import {
   type CanvasScreenClose,
   type CanvasScreenOpen,
 } from "@cawco/core/canvas";
-import { Duration, Effect, Fiber } from "effect";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
+import { Duration, Effect, Fiber } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 

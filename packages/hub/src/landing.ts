@@ -54,9 +54,9 @@ import type { CommandResult } from "@cawco/core/commands/controls";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { outputTail } from "@cawco/core/output-tail";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { shortSha } from "@cawco/core/short-id";
 import { Cause, Duration, Effect, Schedule, Schema } from "effect";
 import type { HubLifetimeShape } from "./lifetime";
-import { shortSha } from "@cawco/core/short-id";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**

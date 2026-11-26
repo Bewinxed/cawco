@@ -30,8 +30,8 @@ import {
 } from "@cawco/core/stage";
 import { type NamedStory, shownName } from "@cawco/core/stage-graph";
 import { storyReadWords as reasons } from "@cawco/core/words/story-read";
-import { Schema } from "effect";
 import { derivedName } from "@cawco/providers/derived-name";
+import { Schema } from "effect";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {

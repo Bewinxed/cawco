@@ -34,8 +34,8 @@ import { fileURLToPath } from "node:url";
 import { type Bounded, Gone } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { boundedRead, Gone as EndedFirst } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import { answers } from "@cawco/core/keepers";
 import {
   keepLimitReadings,

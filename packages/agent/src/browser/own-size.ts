@@ -34,8 +34,8 @@
  * which would post a form again), the one way left that sets it right.
  */
 import { lookUntil } from "@cawco/core/effect/poll";
-import { Effect } from "effect";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { Effect } from "effect";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 

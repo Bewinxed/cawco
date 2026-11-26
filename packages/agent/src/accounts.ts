@@ -808,30 +808,32 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
   });
   return yield* timedEffect(
     boundedRead(
-    CHECK_TIMEOUT_MS,
-    asIs(async (): Promise<AccountCheck> => {
-      for await (const message of handle) {
-        if (
-          message.type === "assistant" &&
-          !message.parent_tool_use_id &&
-          message.error
-        ) {
-          return {
-            kind: "error",
-            error: message.error,
-            text: message.message.content
-              .flatMap((block) => (block.type === "text" ? [block.text] : []))
-              .join("\n"),
-          };
-        }
-        if (message.type === "result") {
-          if (message.subtype === "success" && !message.is_error) {
+      CHECK_TIMEOUT_MS,
+      asIs(async (): Promise<AccountCheck> => {
+        for await (const message of handle) {
+          if (
+            message.type === "assistant" &&
+            !message.parent_tool_use_id &&
+            message.error
+          ) {
+            return {
+              kind: "error",
+              error: message.error,
+              text: message.message.content
+                .flatMap((block) => (block.type === "text" ? [block.text] : []))
+                .join("\n"),
+            };
+          }
+          if (
+            message.type === "result" &&
+            message.subtype === "success" &&
+            !message.is_error
+          ) {
             return { kind: "answered" };
           }
         }
-      }
-      throw new Error("Claude Code ended before the check's turn did");
-    })
+        throw new Error("Claude Code ended before the check's turn did");
+      })
     ),
     (ms) => recordLimitReading("agent.account-check-ms", ms)
   ).pipe(

@@ -30,8 +30,8 @@ import {
   type Interface as ReadlineInterface,
 } from "node:readline";
 import type { BrowserKey } from "@cawco/core/browser";
-import { Effect } from "effect";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { Effect } from "effect";
 import { detectPasskeyRelay } from "./passkey-detect";
 
 /** What `file` printed, given 5 s, or why it failed. */

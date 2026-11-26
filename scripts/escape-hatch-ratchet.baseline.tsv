@@ -17,8 +17,6 @@ as-cast	(typeof TARGETS)[number]	scripts/build-binary.ts	1
 as-cast	(typeof TARGETS)[number]	scripts/release/steps/promote.ts	2
 as-cast	(typeof was)[0]	scripts/codemods/theme-unify.ts	2
 as-cast	(typeof work)[number]	scripts/lib/import-graph.ts	1
-as-cast	(value: unknown) => void	packages/agent/src/stores/client.ts	1
-as-cast	(value: unknown) => void	packages/agent/src/search/process.ts	2
 as-cast	(Window & typeof globalThis) | null	packages/preview/src/overlay/frames.ts	1
 as-cast	[ (typeof found)[number], (typeof found)[number], (typeof found)[number], ]	scripts/border-width-check.ts	1
 as-cast	[ keyof typeof SECRET_VARIABLES, string, ][]	scripts/release-signing.ts	1
@@ -463,10 +461,6 @@ catch-drops-reason	CallExpression	packages/agent/src/browser/gate.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/claude-transcript.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/opencode.ts	3
-catch-drops-reason	CallExpression	packages/agent/src/provider-accounts.ts	1
-catch-drops-reason	CallExpression	packages/agent/src/keepers.ts	1
-catch-drops-reason	CallExpression	packages/agent/src/session-containers.ts	1
-catch-drops-reason	CallExpression	packages/hub/src/git-remote.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
 catch-drops-reason	CallExpression	scripts/binary/sign-agent-bundle.ts	1

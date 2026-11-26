@@ -31,8 +31,8 @@
  */
 
 import { lookUntil } from "@cawco/core/effect/poll";
-import { Effect } from "effect";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { Effect } from "effect";
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 import { idbRead, idbWrite } from "./sign-ins-page";

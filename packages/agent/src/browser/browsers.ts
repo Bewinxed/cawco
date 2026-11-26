@@ -50,8 +50,8 @@ import { lookUntil } from "@cawco/core/effect/poll";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { Deferred, Effect } from "effect";
 import { namedAndMore } from "@cawco/providers/names";
+import { Deferred, Effect } from "effect";
 import type { AgentPorts } from "../agent-ports";
 import {
   ContainerHost,

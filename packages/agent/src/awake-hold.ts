@@ -8,8 +8,8 @@
 import { spawn } from "node:child_process";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { findProgram } from "@cawco/core/workspace-needs";
-import { Effect } from "effect";
 import { quote } from "@cawco/providers/quote";
+import { Effect } from "effect";
 import { resolveBin, toolEnv } from "./tools";
 
 /** The argv that holds idle sleep off while `why` runs, for as long as `pid` lives, or why this machine has none. */

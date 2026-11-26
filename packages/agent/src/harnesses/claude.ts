@@ -129,7 +129,7 @@ import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
+import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import {
   accountConfigDir,
@@ -5191,16 +5191,15 @@ class ClaudeSession implements HarnessSession {
     await Effect.runPromise(
       timedEffect(this.#turn.settle(SETTLE_TIMEOUT_MS), (ms) =>
         recordLimitReading("agent.claude-settle-ms", ms)
-      )
-        .pipe(
-          Effect.catchTag("Unanswered", (unanswered) =>
-            Effect.sync(() =>
-              console.warn(
-                `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
-              )
+      ).pipe(
+        Effect.catchTag("Unanswered", (unanswered) =>
+          Effect.sync(() =>
+            console.warn(
+              `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
             )
           )
         )
+      )
     );
     // The interrupted turn's end read the effort: it lands while the query
     // is open. A CLI that answers nothing within the turn's own wait gets

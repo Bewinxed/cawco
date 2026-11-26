@@ -11,9 +11,8 @@ import {
   type FleetSyncReport,
   mcpFleetState,
 } from "@cawco/core/fleet";
-import { Effect } from "effect";
 import { recordLimitReading } from "@cawco/core/limit-readings";
-import { unhandled } from "@cawco/core/unhandled";
+import { Effect } from "effect";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
@@ -183,9 +182,7 @@ export const readMcpRuntime = async (
     const first = yield* timedEffect(
       boundedRead(START_TIMEOUT_MS, statusOf(handle)),
       (ms) => recordLimitReading("agent.mcp-status-start-ms", ms)
-    ).pipe(
-      Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
-    );
+    ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(undefined)));
     if (first === undefined) {
       unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
       return report();

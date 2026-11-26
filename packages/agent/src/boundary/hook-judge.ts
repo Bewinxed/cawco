@@ -320,41 +320,41 @@ const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
 const judgeSays = (socket: string): Effect.Effect<string, Unanswered> =>
   timedEffect(
     boundedRead(
-    HOOK_LIMIT_S * 1000,
-    Effect.gen(function* () {
-      const answer = yield* Deferred.make<string>();
-      const said = (words: string) =>
-        Deferred.doneUnsafe(answer, Effect.succeed(words));
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const chunks: Buffer[] = [];
-          const connection = createConnection(socket);
-          connection.on("connect", () => {
-            connection.write(`${JUDGE_BUILD_QUESTION}\n`);
-          });
-          // Its answer is whole at its end mark (protocol.ts
-          // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
-          // macOS at times never sent.
-          connection.on("data", (chunk: Buffer) => {
-            chunks.push(chunk);
-            const read = Buffer.concat(chunks);
-            const end = read.indexOf(JUDGE_ANSWER_END);
-            if (end >= 0) {
-              said(read.subarray(0, end).toString("utf8"));
-            }
-          });
-          connection.on("end", () => {
-            said(Buffer.concat(chunks).toString("utf8"));
-          });
-          connection.on("error", (error) => {
-            said(`nothing (${error.message})`);
-          });
-          return connection;
-        }),
-        (connection) => Effect.sync(() => connection.destroy())
-      );
-      return yield* Deferred.await(answer);
-    }).pipe(Effect.scoped)
+      HOOK_LIMIT_S * 1000,
+      Effect.gen(function* () {
+        const answer = yield* Deferred.make<string>();
+        const said = (words: string) =>
+          Deferred.doneUnsafe(answer, Effect.succeed(words));
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const chunks: Buffer[] = [];
+            const connection = createConnection(socket);
+            connection.on("connect", () => {
+              connection.write(`${JUDGE_BUILD_QUESTION}\n`);
+            });
+            // Its answer is whole at its end mark (protocol.ts
+            // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
+            // macOS at times never sent.
+            connection.on("data", (chunk: Buffer) => {
+              chunks.push(chunk);
+              const read = Buffer.concat(chunks);
+              const end = read.indexOf(JUDGE_ANSWER_END);
+              if (end >= 0) {
+                said(read.subarray(0, end).toString("utf8"));
+              }
+            });
+            connection.on("end", () => {
+              said(Buffer.concat(chunks).toString("utf8"));
+            });
+            connection.on("error", (error) => {
+              said(`nothing (${error.message})`);
+            });
+            return connection;
+          }),
+          (connection) => Effect.sync(() => connection.destroy())
+        );
+        return yield* Deferred.await(answer);
+      }).pipe(Effect.scoped)
     ),
     (ms) => recordLimitReading("agent.boundary-judge-answer-ms", ms)
   );

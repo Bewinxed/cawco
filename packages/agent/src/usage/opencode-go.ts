@@ -121,32 +121,32 @@ class GoReadFailed extends Schema.TaggedError<GoReadFailed>()("GoReadFailed", {
 /** The usage endpoint's answer to `key`, within {@link TIMEOUT_MS}: its windows, or the HTTP status it refused with. */
 const readGo = Effect.fn("readGo")((key: string) =>
   timedEffect(
-  boundedRead(
-    TIMEOUT_MS,
-    Effect.tryPromise({
-      try: async (signal) => {
-        const res = await fetch(usageUrl(), {
-          headers: { Authorization: `Bearer ${key}` },
-          redirect: "error",
-          signal,
-        });
-        if (!res.ok) {
-          await res.body?.cancel();
-          return { ok: false as const, status: res.status };
-        }
-        return {
-          ok: true as const,
-          windows: windowsOf(GoUsageResponse.parse(await res.json())),
-        };
-      },
-      catch: (cause) =>
-        new GoReadFailed({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    })
-  ),
-  (ms) => recordLimitReading("agent.opencode-go-usage-ms", ms)
+    boundedRead(
+      TIMEOUT_MS,
+      Effect.tryPromise({
+        try: async (signal) => {
+          const res = await fetch(usageUrl(), {
+            headers: { Authorization: `Bearer ${key}` },
+            redirect: "error",
+            signal,
+          });
+          if (!res.ok) {
+            await res.body?.cancel();
+            return { ok: false as const, status: res.status };
+          }
+          return {
+            ok: true as const,
+            windows: windowsOf(GoUsageResponse.parse(await res.json())),
+          };
+        },
+        catch: (cause) =>
+          new GoReadFailed({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      })
+    ),
+    (ms) => recordLimitReading("agent.opencode-go-usage-ms", ms)
   )
 );
 

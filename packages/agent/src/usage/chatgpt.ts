@@ -134,42 +134,42 @@ export const chatgptUsage = Effect.fn("chatgptUsage")(
     chatgptAccountId: string
   ): Effect.Effect<ChatgptUsageRead> =>
     timedEffect(
-    boundedRead(
-      TIMEOUT_MS,
-      Effect.tryPromise({
-        try: async (signal): Promise<ChatgptUsageRead> => {
-          const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "ChatGPT-Account-Id": chatgptAccountId,
-              accept: "application/json",
-            },
-            redirect: "error",
-            signal,
-          });
-          if (!response.ok) {
-            await response.body?.cancel();
+      boundedRead(
+        TIMEOUT_MS,
+        Effect.tryPromise({
+          try: async (signal): Promise<ChatgptUsageRead> => {
+            const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "ChatGPT-Account-Id": chatgptAccountId,
+                accept: "application/json",
+              },
+              redirect: "error",
+              signal,
+            });
+            if (!response.ok) {
+              await response.body?.cancel();
+              return {
+                ok: false,
+                status: response.status,
+                error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+              };
+            }
+            const body = UsageRaw.parse(await response.json());
             return {
-              ok: false,
-              status: response.status,
-              error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+              ok: true,
+              plan: body.plan_type ?? null,
+              windows: chatgptWindows(body),
             };
-          }
-          const body = UsageRaw.parse(await response.json());
-          return {
-            ok: true,
-            plan: body.plan_type ?? null,
-            windows: chatgptWindows(body),
-          };
-        },
-        catch: (error): ChatgptUsageRead => ({
-          ok: false,
-          status: null,
-          error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
-        }),
-      })
-    ),
-    (ms) => recordLimitReading("agent.chatgpt-usage-ms", ms)
+          },
+          catch: (error): ChatgptUsageRead => ({
+            ok: false,
+            status: null,
+            error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+        })
+      ),
+      (ms) => recordLimitReading("agent.chatgpt-usage-ms", ms)
     ).pipe(
       Effect.catchTag("Unanswered", ({ after }) => {
         // No reading: the caller keeps the last one it holds.

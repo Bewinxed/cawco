@@ -42,8 +42,8 @@
  */
 
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import {
   keepLimitReadings,
   LimitReadingSchema,
@@ -292,12 +292,12 @@ const sweepUntil = Effect.fnUntraced(function* (page: Page, deadline: number) {
       if (now !== "stopped") {
         last = now;
       }
-      if (last?.swept && last.reports > 0) {
+      const drawn = last?.swept && last.reports > 0 ? last : undefined;
+      if (drawn) {
         // The poll at which the page had drawn everything.
         recordLimitReading("agent.sweep-polls", polls);
-        return last;
       }
-      return undefined;
+      return drawn;
     })
   );
   const looked = yield* lookUntil(

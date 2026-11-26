@@ -55,8 +55,8 @@ import {
 } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { lookUntil } from "@cawco/core/effect/poll";
+import { timedEffect } from "@cawco/core/effect/timed";
 import type {
   DaemonFrame,
   MachineIdentity,

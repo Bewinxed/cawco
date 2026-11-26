@@ -45,8 +45,8 @@ import {
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { Effect, Fiber } from "effect";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
+import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 

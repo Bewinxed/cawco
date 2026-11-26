@@ -10,10 +10,9 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
-import { Deferred, Effect, Exit, Schema } from "effect";
-import { readWithin } from "@cawco/core/bounded";
 import { lastOutput } from "@cawco/core/output-tail";
 import { shortId } from "@cawco/core/short-id";
+import { Deferred, Effect, Exit, Schema } from "effect";
 import type {
   ClientRequest,
   InitializeResponse,
