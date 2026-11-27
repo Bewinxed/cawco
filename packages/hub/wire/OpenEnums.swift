@@ -2524,6 +2524,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ControlResultFrameReason`.
+    public enum ControlResultFrameReason: OpenEnum {
+        case dead
+        case timeout
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "dead": self = .dead
+            case "timeout": self = .timeout
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .dead: "dead"
+            case .timeout: "timeout"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.dead, .timeout]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DamagedRowRemedy`.
     public enum DamagedRowRemedy: OpenEnum {
         case archive

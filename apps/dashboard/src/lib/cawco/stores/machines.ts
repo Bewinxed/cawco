@@ -25,7 +25,6 @@ import type { FsPayload } from "@cawco/core/protocol";
 import { knowsNotControl } from "@cawco/core/session/controls";
 import { machineWords } from "@cawco/core/words/machine";
 import { sidebarWords } from "@cawco/core/words/sidebar";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
@@ -53,7 +52,6 @@ export async function machineControl<K extends ControlName>(
   machineId: string,
   method: K,
   args: ControlArgs<K>,
-  replyTimeoutMs = CONTROL_TIMEOUT_MS,
   harness?: HarnessKind
 ): Promise<Bounded<ControlReply<K>>> {
   const benchControl = standingBench()?.control;
@@ -70,10 +68,7 @@ export async function machineControl<K extends ControlName>(
     };
   }
   await waitForHub();
-  return await askMachine(machineId, method, args, {
-    timeoutMs: replyTimeoutMs,
-    ...(harness ? { harness } : {}),
-  });
+  return await askMachine(machineId, method, args, harness ? { harness } : {});
 }
 
 /**
@@ -113,7 +108,6 @@ export async function machineFs<O extends FsOp>(
   return await askOf(
     machineId,
     requestId,
-    CONTROL_TIMEOUT_MS,
     () => send({ verb: "fs", machineId, requestId, payload }),
     (result) => readReply(FS_REPLIES[op], `fs ${op}`, result)
   );
@@ -234,7 +228,6 @@ export async function deleteTranscript(
     machineId,
     "deleteSession",
     [sessionId, { dir }],
-    undefined,
     harness
   );
 }

@@ -1233,6 +1233,80 @@ export async function cpuTimeUsed(pid: number): Promise<number | undefined> {
         LINUX_TICKS_PER_SECOND;
 }
 
+/**
+ * The CPU time each process under `leader` has used, by pid, in
+ * microseconds ({@link cpuTimeUsed}'s reading of each): every process in
+ * its group and every descendant of it, whatever group that one leads
+ * (an install a `cawco binary-pins` runs in a group of its own). On Linux
+ * from each process's `stat`; on macOS from the one `kern.proc.all`
+ * sysctl, asking only those processes for their task. Empty when none is
+ * left.
+ */
+export async function treeCpuTimes(
+  leader: number
+): Promise<Map<number, number>> {
+  const rows: {
+    cpu: () => number | undefined;
+    pgid: number;
+    pid: number;
+    ppid: number;
+  }[] = [];
+  if (process.platform === "linux") {
+    const read = await Promise.all(
+      (await linuxPids()).map(async (pid) => {
+        const fields = (await linuxStat(pid))?.fields;
+        if (fields?.[12] === undefined) {
+          return;
+        }
+        const used =
+          ((Number(fields[11]) + Number(fields[12])) * 1_000_000) /
+          LINUX_TICKS_PER_SECOND;
+        return {
+          pid,
+          ppid: Number(fields[1]),
+          pgid: Number(fields[2]),
+          cpu: () => used,
+        };
+      })
+    );
+    for (const row of read) {
+      if (row) {
+        rows.push(row);
+      }
+    }
+  } else {
+    for (const info of darwinKinfos()) {
+      rows.push({
+        pid: info.pid,
+        ppid: info.ppid,
+        pgid: info.pgid,
+        cpu: () => darwinCpuMicroseconds(info.pid),
+      });
+    }
+  }
+  const children = new Map<number, number[]>();
+  for (const row of rows) {
+    children.set(row.ppid, [...(children.get(row.ppid) ?? []), row.pid]);
+  }
+  const under = new Set(
+    rows.filter((row) => row.pgid === leader).map((row) => row.pid)
+  );
+  under.add(leader);
+  for (const pid of under) {
+    for (const child of children.get(pid) ?? []) {
+      under.add(child);
+    }
+  }
+  const times = new Map<number, number>();
+  for (const row of rows) {
+    const used = under.has(row.pid) ? row.cpu() : undefined;
+    if (used !== undefined) {
+      times.set(row.pid, used);
+    }
+  }
+  return times;
+}
+
 /** The whitespace between a `/proc/net/tcp` row's fields. */
 const PROC_NET_FIELDS = /\s+/u;
 

@@ -62,7 +62,11 @@ export const runtimeCommit =
  * as no write it knows, and an epoch-9 hub sends a `write` and reads a
  * `made`, which an epoch-10 agent refuses. Epoch 11: the hub keeps no
  * bound readings, so it answers no `POST /api/limit-readings/:machine`,
- * which an epoch-10 agent's verbs call as they end. A hub sends a launch only to an
+ * which an epoch-10 agent's verbs call as they end; and a call from the hub
+ * waits while the machine's beat names it (core protocol.ts
+ * `HeartbeatPayload.working`, hub machine-calls.ts `beatNamed`), so an
+ * epoch-10 agent, whose beats name nothing, has every call let go one quiet
+ * spell after it was sent. A hub sends a launch only to an
  * agent whose range holds its own, and a joined machine installs only a
  * build whose range overlaps its hub's.
  */

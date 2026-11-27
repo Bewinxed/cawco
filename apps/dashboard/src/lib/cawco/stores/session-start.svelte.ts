@@ -4,7 +4,7 @@
  * the row the hub opens for it.
  */
 
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
@@ -15,7 +15,6 @@ import {
 import { isOneOf } from "@cawco/core/one-of";
 import type { NamedSpawn, SpawnPayload } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
 import {
   answered,
@@ -81,8 +80,9 @@ function whenTrue(ready: () => boolean, ms: number): Promise<Bounded<void>> {
 /**
  * What `machineId` reports of `harness`, its permission modes among it. Which
  * modes a machine takes is its report's, so a start waits for the report (the
- * first fleet read, a machine whose report is on its way) up to {@link
- * CONTROL_TIMEOUT_MS}; one still missing then is the machine's own word.
+ * first fleet read, a machine whose report is on its way) for one quiet
+ * spell (core bounded.ts `QUIET_MS`, two of the machine's beats, the
+ * report rides one); one still missing then is the machine's own word.
  */
 async function reportOf(
   machineId: string,
@@ -93,7 +93,7 @@ async function reportOf(
       boardState.fleetRead &&
       boardState.machines.find((row) => row.machineId === machineId)
         ?.harnesses !== undefined,
-    CONTROL_TIMEOUT_MS
+    QUIET_MS
   );
   return boardState.machines
     .find((row) => row.machineId === machineId)
@@ -159,7 +159,6 @@ async function start({
     try {
       taken = await ask(
         requestId,
-        CONTROL_TIMEOUT_MS,
         () => {
           opening.set(instanceId, requestId);
           send({ verb: "spawn", machineId, instanceId, requestId, payload });

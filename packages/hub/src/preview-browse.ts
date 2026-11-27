@@ -1,4 +1,4 @@
-import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
+import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { isRecord } from "@cawco/core/is-record";
 import {
   placeAtLink,
@@ -24,12 +24,6 @@ import { unreachable } from "./unreachable";
 const NOT_NAME = /[^a-z0-9]+/gu;
 const NAME_ENDS = /^-+|-+$/gu;
 const NAME_TAIL = /-+$/u;
-/**
- * Workspace controls other than create/archive: enough for their boundary work.
- * Create and its discard share the longer git-plus-boundary budget; archive
- * may be queued behind the create it must remove.
- */
-export const WORKSPACE_TIMEOUT_MS = 60_000;
 
 export type PreviewBrowseContext = Pick<
   HubContext,
@@ -276,8 +270,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
           artifact: { id: row.id, kind: row.kind, name: row.name },
           sync: `/__cawco/artifact/${row.id}`,
         },
-      ],
-      PICTURE_LIMITS.askMs
+      ]
     );
     switch (asked.kind) {
       case "unanswered":
@@ -330,8 +323,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     const asked = await ctx.machineCalls.callAgent(
       instance.machineId,
       CONTROL_WORKSPACE_SAVE,
-      [workspace, path, png],
-      WORKSPACE_TIMEOUT_MS
+      [workspace, path, png]
     );
     switch (asked.kind) {
       case "unanswered":

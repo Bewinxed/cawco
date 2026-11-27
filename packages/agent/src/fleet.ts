@@ -11,7 +11,7 @@
 
 import { lstat, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS } from "@cawco/core/bounded";
 import { TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import {
   installedPluginsOf,
@@ -82,8 +82,10 @@ import {
   fleetPlacedDir,
   fleetPlacesDir,
 } from "@cawco/core/paths/fleet";
+import { type Ran as LiveRan, runLive } from "@cawco/core/run-captured";
 import { writeStateFile } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
@@ -254,9 +256,6 @@ const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
 
 /** Where the local installer puts the CLI when it is not on any PATH. */
 const LOCAL_CLAUDE = userLayerPath("local", "claude");
-
-/** How long one `claude plugin …` gets: a first clone of a marketplace is slow. */
-const CLI_TIMEOUT_MS = 120_000;
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
@@ -811,42 +810,20 @@ const CLAUDE_ELSEWHERE = [
   "/usr/local/bin/claude",
 ];
 
-/**
- * How long one `claude --version` gets. Our choice, because: this is a probe
- * run for diagnostics beside a sync that already takes minutes, and a CLI that
- * will not print a version string in five seconds is one whose version is not
- * worth holding the report open for. A probe that times out reports the path
- * with no version, which is still the fact that matters.
- */
-const VERSION_TIMEOUT_MS = 5000;
-
 /** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
-  let read: Bounded<string | undefined>;
+  let read: Bounded<LiveRan>;
   try {
-    read = await readWithin(VERSION_TIMEOUT_MS, async (signal) => {
-      const child = Bun.spawn([path, "--version"], {
-        env: toolEnv(),
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-      });
-      const [out, err] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      await child.exited;
-      return versionSaid(`${out}${err}`);
-    });
+    read = await runLive([path, "--version"], { env: toolEnv() });
   } catch {
     return undefined;
   }
   switch (read.kind) {
     case "answered":
-      return read.value;
+      return versionSaid(`${read.value.stdout}${read.value.stderr}`);
     case "unanswered":
       console.info(
-        `[fleet] ${path} --version did not answer in ${VERSION_TIMEOUT_MS / 1000} s; its version is not known`
+        `[fleet] ${path} --version wrote nothing and did no work for ${secondsOf(QUIET_MS)} s; its version is not known`
       );
       return undefined;
     default:
@@ -926,7 +903,7 @@ interface Ran {
   output: string;
   /** Everything it printed on stdout, for a command whose answer is its output. */
   stdout: string;
-  /** It did not answer within {@link CLI_TIMEOUT_MS}, and was killed. */
+  /** It went a quiet spell with no output and no work, and was ended. */
   timedOut?: true;
 }
 
@@ -940,42 +917,28 @@ const runClaude = async (
   args: string[],
   cwd?: string
 ): Promise<Ran> => {
-  const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
-    const child = Bun.spawn([bin, ...args], {
-      // A project or local scope is the project the command runs in.
-      ...(cwd ? { cwd } : {}),
-      // `$HOME/.claude`, the dir every path in this file names, whatever
-      // config dir the daemon itself was started in.
-      env: claudeHomeEnv(),
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [stdout, stderr] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    const code = await child.exited;
-    if (child.signalCode) {
-      return {
-        code: null,
-        output: `was ended by ${child.signalCode}`,
-        stdout,
-      };
-    }
-    return {
-      code,
-      output: tail(stderr) || tail(stdout) || `exited ${code}`,
-      stdout,
-    };
+  // A project or local scope is the project the command runs in; its
+  // environment names the home's own Claude dir, the one every path in this
+  // file names, whatever config dir the daemon itself was started in.
+  const ran = await runLive([bin, ...args], {
+    ...(cwd ? { cwd } : {}),
+    env: claudeHomeEnv(),
   });
   switch (ran.kind) {
-    case "answered":
-      return ran.value;
+    case "answered": {
+      const { code, signalCode, stderr, stdout } = ran.value;
+      return signalCode
+        ? { code: null, output: `was ended by ${signalCode}`, stdout }
+        : {
+            code,
+            output: tail(stderr) || tail(stdout) || `exited ${code}`,
+            stdout,
+          };
+    }
     case "unanswered":
       return {
         code: null,
-        output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s`,
+        output: `wrote nothing and did no work for ${secondsOf(QUIET_MS)} s`,
         stdout: "",
         timedOut: true,
       };

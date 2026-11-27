@@ -30,7 +30,6 @@ import {
 } from "@cawco/core/session/controls";
 import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
-import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { HeldPicks, SettingPick } from "./setting-pick-shapes";
 import { unreachable } from "./unreachable";
 
@@ -161,7 +160,6 @@ export const createSettingPicks = (ctx: SettingPicksContext) => {
         row.machineId,
         method,
         args,
-        BUSY_TIMEOUT_MS,
         undefined,
         row.id
       );

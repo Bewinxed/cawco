@@ -248,6 +248,16 @@ export const arrive = (
   );
 };
 
+/**
+ * The ids of the requests this machine runs now, arrived and not yet
+ * answered: what every beat names, so the hub waits on each while it runs
+ * (core protocol.ts `HeartbeatPayload.working`).
+ */
+export const runningIds = (): string[] =>
+  [...entries].flatMap(([id, entry]) =>
+    entry.state === "running" ? [id] : []
+  );
+
 /** A request's answer, as it goes out: kept for the time it comes again. */
 export const keepAnswer = (frame: ControlResult): void => {
   const { requestId } = frame;

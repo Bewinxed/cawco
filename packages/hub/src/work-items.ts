@@ -195,7 +195,6 @@ import {
 import type { WorkPlace } from "./work-place";
 import {
   createWorkspaces,
-  GIT_TIMEOUT_MS,
   type HeldWork,
   isFolderOverlay,
   isHostFolder,
@@ -3054,7 +3053,7 @@ export const createWorkItems = ({
       workspace.machineId,
       "/",
       `test -d ${shellQuote(`${workspace.path}/.git`)}`,
-      GIT_TIMEOUT_MS
+      undefined
     );
     return there.exitCode === 0 ? workspace : undefined;
   };
@@ -4922,7 +4921,7 @@ export const createWorkItems = ({
       workspace.machineId,
       workspace.path,
       `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(db.workItemOutputs(item.id))} | wc -l`,
-      GIT_TIMEOUT_MS,
+      undefined,
       refOf(workspace),
       { noWait: true }
     );
@@ -5030,7 +5029,7 @@ export const createWorkItems = ({
     }
     const run = landingRun.runIn(workspace, item);
     const read = async (what: string, cmd: string): Promise<string> => {
-      const result = await run(cmd, GIT_TIMEOUT_MS);
+      const result = await run(cmd, undefined);
       if (result.exitCode !== 0) {
         throw new Error(
           `the hub could not read ${what} in workspace ${shortId(workspace.id)}: ${failedWith(result)}`

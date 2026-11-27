@@ -16,13 +16,13 @@
  * (project/conversation.ts), marked `caw`: his panel says how it ended.
  */
 
+import { QUIET_MS } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { commonWords } from "@cawco/core/words/common";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { z } from "zod";
 import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { track } from "#lib/platform/track.js";
 import {
@@ -375,7 +375,9 @@ function recover(start: ParkedStart): void {
     }
     return;
   }
-  const deadline = start.askedAt + CONTROL_TIMEOUT_MS;
+  // The board lists a start within a beat of its machine taking it; one it
+  // has not listed a quiet spell after it was asked was not taken.
+  const deadline = start.askedAt + QUIET_MS;
   if (Date.now() >= deadline) {
     failStart(start.id, NOT_LISTED);
     return;

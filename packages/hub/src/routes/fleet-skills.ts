@@ -10,7 +10,6 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { pushTarget, skillFilesOff, unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
@@ -340,12 +339,9 @@ export const fleetSkillRoutes = (
             });
           }
 
-          const asked = await readAgent(
-            body.machineId,
-            READ_SKILL_FILES,
-            [params.name],
-            READ_TIMEOUT_MS
-          );
+          const asked = await readAgent(body.machineId, READ_SKILL_FILES, [
+            params.name,
+          ]);
           switch (asked.kind) {
             case "unanswered": {
               return unansweredProblem(ctx, body.machineId, asked);

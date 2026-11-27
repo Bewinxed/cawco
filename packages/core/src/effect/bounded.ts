@@ -3,6 +3,7 @@ import {
   type Bounded,
   Gone as GoneThrown,
   readWhileHeard,
+  readWhileLive,
   readWhileMoving,
   readWithin,
 } from "../bounded";
@@ -135,4 +136,22 @@ export const boundedWhileHeard = <A, E, R>(
       (inner, heard) => promiseRead(read(Effect.sync(heard)), context)(inner),
       { signal }
     )
+  );
+
+/**
+ * `read` for as long as it shows life (`readWhileLive`): let go once the
+ * fleet's one quiet spell (`QUIET_MS`, two of the daemon's beats) passes
+ * with no `alive()`, counted from the read's start or its last `alive()`.
+ * `read` is handed `alive`, a plain call so a callback, a stream or a
+ * promise step inside the read can say it at each sign of life its work
+ * gives; it fails with {@link Gone} when the side it waits on ended, which
+ * answers {@link Unanswered} "dead".
+ */
+export const boundedWhileLive = <A, E, R>(
+  read: (alive: () => void) => Effect.Effect<A, E | Gone, R>
+): Effect.Effect<A, E | Unanswered, R> =>
+  settle<A, E, R>((context, signal) =>
+    readWhileLive((inner, alive) => promiseRead(read(alive), context)(inner), {
+      signal,
+    })
   );

@@ -474,18 +474,22 @@ function takeError(frame: FrameOf<"error">): void {
 }
 
 function takeControlResult(frame: FrameOf<"control_result">): void {
-  const answered = settle(frame.requestId, (waiter) =>
-    frame.ok
-      ? waiter.resolve(frame.result, {
-          unanswered: frame.unanswered ?? [],
-          failed: frame.failed ?? [],
-        })
-      : waiter.reject(
-          new Error(
-            frame.error ?? "The machine could not carry out that request."
-          )
+  const answered = settle(frame.requestId, (waiter) => {
+    if (frame.lapsed) {
+      waiter.lapse(frame.lapsed);
+    } else if (frame.ok) {
+      waiter.resolve(frame.result, {
+        unanswered: frame.unanswered ?? [],
+        failed: frame.failed ?? [],
+      });
+    } else {
+      waiter.reject(
+        new Error(
+          frame.error ?? "The machine could not carry out that request."
         )
-  );
+      );
+    }
+  });
   if (answered) {
     return;
   }

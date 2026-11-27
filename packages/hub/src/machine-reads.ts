@@ -17,7 +17,6 @@ import { ElysiaStatus, problem } from "elysia";
 import type { HubContext } from "./hub-context";
 import type { Unanswered } from "./machine-answers";
 import { awayProblem, unansweredIn } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { unreachable } from "./unreachable";
 
 /** What a machine read reads of the hub. */
@@ -123,8 +122,7 @@ export const skillFilesOff = async (
   const asked = await ctx.machineCalls.readAgent(
     machineId,
     READ_SKILL_FILES,
-    args,
-    READ_TIMEOUT_MS
+    args
   );
   switch (asked.kind) {
     case "unanswered":
@@ -187,12 +185,7 @@ const readOffMachine = async <K extends ControlName>(
   args: ControlArgs<K>,
   failed: string
 ) => {
-  const answer = await ctx.machineCalls.readAgent(
-    machineId,
-    method,
-    args,
-    READ_TIMEOUT_MS
-  );
+  const answer = await ctx.machineCalls.readAgent(machineId, method, args);
   switch (answer.kind) {
     case "unanswered":
       return unansweredProblem(ctx, machineId, answer);

@@ -19,7 +19,7 @@ import {
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Bounded } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import type { FsEntry, FsPayload } from "@cawco/core/protocol";
@@ -27,7 +27,6 @@ import { artifactSessionWords } from "@cawco/core/words/artifact-session";
 import { z } from "zod";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "../../platform/id";
 import { rowHref } from "../links";
 import { TRY_AGAIN, unansweredWords } from "../unanswered";
@@ -63,6 +62,8 @@ const FsEntriesSchema = z.array(
 ) satisfies z.ZodType<FsEntry[]>;
 
 interface Waiter {
+  /** No answer came: the machine's beats stopped naming the ask (core frames.ts `lapsed`). */
+  lapse: (missed: { after: number; reason: "timeout" | "dead" }) => void;
   reject: (error: Error) => void;
   resolve: (result: unknown) => void;
 }
@@ -76,6 +77,7 @@ export type ArtifactSessionHeard =
         | {
             error?: string;
             kind: "control_result";
+            lapsed?: { after: number; reason: "timeout" | "dead" };
             ok: boolean;
             result?: unknown;
           }
@@ -210,6 +212,11 @@ export class ArtifactSession implements PaneFleet {
         return;
       }
       this.#socket = null;
+      // What it asked is answered on the socket it asked on, or never.
+      for (const [id, waiter] of this.#asks) {
+        waiter.reject(new Error(artifactSessionWords.hubNotLinked));
+        this.#asks.delete(id);
+      }
       // A refusal stays true until the person acts: opening again would be
       // refused again, and the tab would never say why.
       if (REFUSALS.has(event.code)) {
@@ -243,6 +250,8 @@ export class ArtifactSession implements PaneFleet {
     const { payload } = heard;
     if (payload.kind === "error") {
       waiter.reject(new Error(payload.message));
+    } else if (payload.lapsed) {
+      waiter.lapse(payload.lapsed);
     } else if (payload.ok) {
       waiter.resolve(payload.result);
     } else {
@@ -280,8 +289,8 @@ export class ArtifactSession implements PaneFleet {
   }
 
   /**
-   * One `fs` ask of a machine, over this socket, answered by its `requestId`
-   * within {@link CONTROL_TIMEOUT_MS}; `unanswered` when no answer came.
+   * One `fs` ask of a machine, over this socket, answered by its `requestId`;
+   * `unanswered` when the hub says none came.
    */
   #fs<T>(
     machineId: string,
@@ -295,29 +304,25 @@ export class ArtifactSession implements PaneFleet {
     }
     const requestId = newId();
     const payload: FsPayload = { requestId, op, path };
-    return readWithin(
-      CONTROL_TIMEOUT_MS,
-      (signal) =>
-        new Promise<T>((resolve, reject) => {
-          this.#asks.set(requestId, {
-            resolve: (result) => {
-              const read = answer.safeParse(result);
-              if (read.success) {
-                resolve(read.data);
-              } else {
-                reject(read.error);
-              }
-            },
-            reject,
-          });
-          signal.addEventListener("abort", () => this.#asks.delete(requestId), {
-            once: true,
-          });
-          socket.send(
-            JSON.stringify({ verb: "fs", machineId, requestId, payload })
-          );
-        })
-    );
+    // The hub answers every ask it forwards: the machine's answer, or that
+    // none came once its beats stopped naming it (`lapsed`).
+    return new Promise<Bounded<T>>((resolve, reject) => {
+      this.#asks.set(requestId, {
+        resolve: (result) => {
+          const read = answer.safeParse(result);
+          if (read.success) {
+            resolve({ kind: "answered", value: read.data });
+          } else {
+            reject(read.error);
+          }
+        },
+        lapse: (missed) => resolve({ kind: "unanswered", ...missed }),
+        reject,
+      });
+      socket.send(
+        JSON.stringify({ verb: "fs", machineId, requestId, payload })
+      );
+    });
   }
 
   /** What the tab says when `machineId` didn't answer in time, in the fleet store's words (unanswered.ts). */

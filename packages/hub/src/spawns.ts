@@ -59,7 +59,6 @@ import {
   MachineProblem,
   silentProblem,
 } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
@@ -377,7 +376,6 @@ export const createSpawns = (ctx: SpawnsContext) => {
             agent.machineId,
             CONTROL_GET_SESSION_INFO,
             [id],
-            READ_TIMEOUT_MS,
             harness
           );
           switch (answer.kind) {
@@ -1849,7 +1847,6 @@ export const createSpawns = (ctx: SpawnsContext) => {
     }
     const reply = await ctx.machineCalls.awaitStart(
       machineId,
-      payload.instanceId,
       requestId,
       () => sent
     );
@@ -2072,17 +2069,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (bound instanceof ElysiaStatus) {
       return bound;
     }
-    const reply = await ctx.machineCalls.awaitStart(
-      machineId,
-      payload.instanceId,
-      requestId,
-      () =>
-        ctx.machineCalls.sendAnswerable(agent, {
-          verb: "spawn",
-          machineId,
-          instanceId: payload.instanceId,
-          payload: { ...bound, requestId },
-        } satisfies HubEnvelope<"spawn">)
+    const reply = await ctx.machineCalls.awaitStart(machineId, requestId, () =>
+      ctx.machineCalls.sendAnswerable(agent, {
+        verb: "spawn",
+        machineId,
+        instanceId: payload.instanceId,
+        payload: { ...bound, requestId },
+      } satisfies HubEnvelope<"spawn">)
     );
     return startedOrThrown(reply, machineId, payload.harness);
   };

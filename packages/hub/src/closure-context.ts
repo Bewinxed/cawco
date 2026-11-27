@@ -1165,7 +1165,6 @@ export interface ClosureContext {
     | "started"
     | "summarising"
   >;
-  SLEEP_TIMEOUT_MS: number;
   saidCompactionFolded: (
     row: { id: string },
     plan: ReturnType<DbShape["atLimit"]["compaction"]>,

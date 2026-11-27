@@ -1,4 +1,5 @@
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { fetchHeard } from "@cawco/core/bounded";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import { secondsOf } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { Effect } from "effect";
@@ -31,7 +32,6 @@ import { fromPromise } from "../rejected";
  */
 
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
-const TIMEOUT_MS = 10_000;
 
 const TRAILING_SLASHES = /\/+$/u;
 
@@ -132,18 +132,21 @@ export const chatgptUsage = Effect.fn("chatgptUsage")(
     accessToken: string,
     chatgptAccountId: string
   ): Effect.Effect<ChatgptUsageRead> =>
-    boundedRead(
-      TIMEOUT_MS,
+    boundedWhileLive((alive) =>
       fromPromise(async (signal): Promise<ChatgptUsageRead> => {
-        const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "ChatGPT-Account-Id": chatgptAccountId,
-            accept: "application/json",
+        const response = await fetchHeard(
+          `${chatgptBaseUrl()}/wham/usage`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "ChatGPT-Account-Id": chatgptAccountId,
+              accept: "application/json",
+            },
+            redirect: "error",
+            signal,
           },
-          redirect: "error",
-          signal,
-        });
+          alive
+        );
         if (!response.ok) {
           await response.body?.cancel();
           return {

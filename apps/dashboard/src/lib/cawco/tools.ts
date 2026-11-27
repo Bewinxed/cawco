@@ -6,7 +6,6 @@
 
 import type { Bounded } from "@cawco/core/bounded";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
-import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { couldNot, hubData } from "#lib/platform/hub-read.js";
 import { machineControl } from "./stores/machines";
@@ -48,4 +47,4 @@ export const installTool = (
   machineId: string,
   id: string
 ): Promise<Bounded<ToolStatus>> =>
-  machineControl(machineId, "installTool", [id], INSTALL_TIMEOUT_MS);
+  machineControl(machineId, "installTool", [id]);

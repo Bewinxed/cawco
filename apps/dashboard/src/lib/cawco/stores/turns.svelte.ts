@@ -9,9 +9,7 @@ import { detach } from "@cawco/core/detach";
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { relaunchOf } from "@cawco/core/relaunch";
-import { HOUR_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
 import { answered, ask, rereadHub, send } from "../hub/socket.svelte";
 import type { Message } from "../types";
@@ -70,13 +68,6 @@ export function userTurnActions(message: Message): {
 }
 
 /**
- * How long a start again asked during a turn waits for its answer: the
- * machine gives it once that turn has ended and the session runs again, and
- * a turn may run long.
- */
-const RELAUNCH_AT_TURN_END_MS = HOUR_MS;
-
-/**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
  * session into it — and so is `fullSend`, which runs the CLI in bypass. A
  * session that wants either from another mode is started again in place:
@@ -127,14 +118,13 @@ export async function relaunchSession(
 
   const previous = target.permissionMode;
   // A turn is never cut for it: its machine starts it again once the turn
-  // running now has ended (agent session.ts `#turnEnded`), and answers then.
-  const inTurn = target.busy || target.pending.length > 0;
+  // running now has ended (agent session.ts `#turnEnded`), and answers then;
+  // its beats name the start while it waits, so the hub waits with it.
   target.permissionMode = permissionMode;
   target.relaunching = true;
   try {
     const relaunched = await ask(
       requestId,
-      inTurn ? RELAUNCH_AT_TURN_END_MS : CONTROL_TIMEOUT_MS,
       () => send({ verb: "spawn", machineId, instanceId, requestId, payload }),
       answered
     );
@@ -359,7 +349,6 @@ export async function editAndResend(
   try {
     const rewound = await ask(
       requestId,
-      CONTROL_TIMEOUT_MS,
       () => send({ verb: "spawn", machineId, instanceId, requestId, payload }),
       answered
     );

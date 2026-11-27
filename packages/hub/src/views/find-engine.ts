@@ -11,9 +11,8 @@
  * (views/find-index.ts), and answers in milliseconds:
  * every word of the query, in any order, has to match one of a result's
  * recognisers (find-names.ts). The transcripts part asks every machine's
- * index (`searchTranscripts`, agent search/index.ts), each within its
- * asker's deadline ({@link FindRequest.asker}), and folds what they
- * say into conversations, each with its best moments; a machine that did
+ * index (`searchTranscripts`, agent search/index.ts), each waited on while
+ * the machine's beats name it, and folds what they say into conversations, each with its best moments; a machine that did
  * not answer is named in the answer's coverage, never dropped in silence.
  *
  * Ranking, one order for both parts: how well the words matched (a title
@@ -29,24 +28,22 @@ import {
   unparked,
 } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
-import {
-  type FindAnswer,
-  type FindAsker,
-  type FindConversation,
-  type FindCoverage,
-  type FindKind,
-  type FindLeftOut,
-  type FindLiveState,
-  type FindMachineCoverage,
-  type FindMoment,
-  type FindResult,
-  type MomentAuthor,
-  TRANSCRIPT_ANSWER_MS,
-  TRANSCRIPT_CALL_MS,
-  type TranscriptAnswer,
-  type TranscriptQuery,
-  type WaitingAnswer,
-  type WaitingItem,
+import type {
+  FindAnswer,
+  FindAsker,
+  FindConversation,
+  FindCoverage,
+  FindKind,
+  FindLeftOut,
+  FindLiveState,
+  FindMachineCoverage,
+  FindMoment,
+  FindResult,
+  MomentAuthor,
+  TranscriptAnswer,
+  TranscriptQuery,
+  WaitingAnswer,
+  WaitingItem,
 } from "@cawco/core/find";
 import {
   marksOf,
@@ -123,10 +120,9 @@ export interface FindWhere {
 /** What a page of a find is asked for. */
 export interface FindRequest {
   /**
-   * Who waits on it: a person typing (find.ts), each machine waited for
-   * {@link TRANSCRIPT_ANSWER_MS}, or an agent's one call (find-tool.ts),
-   * each machine waited for {@link TRANSCRIPT_CALL_MS} and answering from
-   * a reader of its own (core `TranscriptQuery.call`).
+   * Who waits on it: a person typing (find.ts), or an agent's one call
+   * (find-tool.ts), which each machine answers from a reader of its own
+   * (core `TranscriptQuery.call`).
    */
   asker: FindAsker;
   /** Only words said by this author (`by=me`: the person's own). */
@@ -381,14 +377,14 @@ const offsetOf = (cursor: string | undefined): number | null => {
 export interface EngineDeps {
   /**
    * One machine's transcript answer, or why it gave none: asked of the hub's
-   * thread, which holds its socket, given `timeoutMs`, and the machine told
-   * to stop the search once that passes or the find's asker goes.
+   * thread, which holds its socket, waited on while the machine's beats
+   * name it, and the machine told to stop the search once they stop or the
+   * find's asker goes.
    */
   askMachine: (
     machineId: string,
     query: string,
     options: TranscriptQuery & { limit: number },
-    timeoutMs: number,
     ask: Pick<FindRequest, "caller" | "requestId">
   ) => Promise<TranscriptAnswer | { error: string }>;
   catalogs: Catalogs;
@@ -596,7 +592,6 @@ export const createFindEngine = (deps: EngineDeps) => {
       machine.machineId,
       query,
       options,
-      ask.asker === "call" ? TRANSCRIPT_CALL_MS : TRANSCRIPT_ANSWER_MS,
       ask
     );
     const tookMs = Math.round(performance.now() - started);

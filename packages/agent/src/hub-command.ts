@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
+import { QUIET_MS } from "@cawco/core/bounded";
 import {
   type CONTROL_RUN_COMMAND,
   type CommandQueue,
@@ -23,6 +24,7 @@ import {
 import { recordedPool } from "@cawco/core/object-pool";
 import { lastOutput } from "@cawco/core/output-tail";
 import { workspaceScratchDir } from "@cawco/core/paths/workspace";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
@@ -31,7 +33,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -49,13 +51,20 @@ import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
 
-/** How long a command runs when its caller names no limit. */
-const DEFAULT_TIMEOUT_MS = 300_000;
-/** A command's limit as the hub names it (ms of its own work); none, {@link DEFAULT_TIMEOUT_MS}. */
+/**
+ * A command's limit as its caller names it (ms of its own work); none, it
+ * runs while it lives: each line it writes and each beat its group spends
+ * CPU time is a sign of life, and one quiet for `QUIET_MS` is stopped, as
+ * is one whose caller lets it go.
+ */
 type Limit = number | null | undefined;
 
-/** How long a stopped command's process group has between SIGTERM and SIGKILL. */
-const KILL_GRACE_MS = 5000;
+/**
+ * How long a stopped command's process group has between SIGTERM and
+ * SIGKILL: one quiet spell, as every group CawCo ends (core
+ * run-captured.ts `runLive`).
+ */
+const KILL_AFTER_MS = QUIET_MS;
 
 /** How long a cancel for a run not running yet is kept for that run to come up. */
 const EARLY_CANCEL_KEPT_MS = DAY_MS;
@@ -201,30 +210,22 @@ export function folderTurn(
   };
 }
 
-/** How long a boundary may take to start before its command says it waits for it. */
-const BOUNDARY_QUIET_MS = 2000;
-
 /**
  * The executor of `workspace`'s boundary, started or found ({@link
- * ensureBoundary}); a start past {@link BOUNDARY_QUIET_MS} is the run's wait,
- * told to the hub, for nothing else says what it waits on then.
+ * ensureBoundary}); the time it takes is the run's wait, told to the hub as
+ * it begins and cleared as it ends, for nothing else says what it waits on
+ * then. A boundary already up answers in the same turn, and its wait goes
+ * and clears together.
  */
 const boundaryExec = async (
   workspace: WorkspaceRef,
   run: Followed | undefined
 ): Promise<string> => {
-  let waiting = false;
-  const timer = setTimeout(() => {
-    waiting = true;
-    tellWait(run, { slot: "boundary", holders: "" });
-  }, BOUNDARY_QUIET_MS);
+  tellWait(run, { slot: "boundary", holders: "" });
   try {
     return (await ensureBoundary(workspace)).exec;
   } finally {
-    clearTimeout(timer);
-    if (waiting) {
-      tellWait(run, null);
-    }
+    tellWait(run, null);
   }
 };
 
@@ -244,17 +245,19 @@ const commandLine = async (
 /**
  * The command's clock: its limit counts only the time no slot wait is open.
  * While one is, the work timer stands and the queue timer runs, over every
- * wait of the command together, up to `queueMaxMs`.
+ * wait of the command together, up to `queueMaxMs`. With no limit named,
+ * the work timer is a quiet spell (`QUIET_MS`), set again by each sign of
+ * life ({@link heard}): a line it writes, a beat its group spent CPU time.
  */
 const commandClock = (
-  limitMs: number,
+  limitMs: number | undefined,
   queueMaxMs: number,
   expire: (why: string) => void,
   report: (queue: CommandQueue | null) => void
 ) => {
   /** Open waits by slot, with what their last marker said. */
   const waits = new Map<QueueSlot, CommandQueue>();
-  let workLeft = limitMs;
+  let workLeft = limitMs ?? QUIET_MS;
   let queueLeft = queueMaxMs;
   let since = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -283,6 +286,14 @@ const commandClock = (
   };
   arm();
   return {
+    /** A sign of life: with no limit named, the quiet spell starts again. */
+    heard() {
+      if (limitMs !== undefined || waits.size > 0) {
+        return;
+      }
+      workLeft = QUIET_MS;
+      arm();
+    },
     /** One line of output: a queue marker opens or closes a wait. */
     line(text: string) {
       const marker = QUEUE_LINE.exec(text);
@@ -394,7 +405,9 @@ const underSlot = async (
 
 /**
  * `CONTROL_RUN_COMMAND`: runs `cmd` in `cwd` on this machine, killed with its
- * whole process group after `timeoutMs` of its own work (exit 124): the
+ * whole process group after `timeoutMs` of its own work, or, with none
+ * named, once it has gone a quiet spell with no line and no CPU time
+ * (exit 124): the
  * clock stands while the command waits for a shared machine slot
  * ({@link commandClock}), and a command whose waits pass the run's
  * `queueMaxMs` (the hub sends {@link QUEUE_WAIT_MAX_MS}; a run the hub did
@@ -407,7 +420,7 @@ const underSlot = async (
  * way and answers `cancelled`.
  *
  * Every command the runner ends itself ends one way: SIGTERM to its process
- * group, then SIGKILL to what is left of it {@link KILL_GRACE_MS} later. The
+ * group, then SIGKILL to what is left of it {@link KILL_AFTER_MS} later. The
  * TERM comes first because a workspace's executor passes it on to the
  * command's own group inside the boundary (its trap), which a KILL to the
  * executor never reaches.
@@ -566,7 +579,7 @@ const spawned = ({
             } catch (error) {
               console.warn(`could not kill command group ${leader}: ${error}`);
             }
-          }, KILL_GRACE_MS).unref();
+          }, KILL_AFTER_MS).unref();
         },
       };
       if (spawnedPid(child) !== undefined) {
@@ -580,20 +593,32 @@ const spawned = ({
           ? agentCommandStarted(workspace.id, executor)
           : undefined;
       const clock = commandClock(
-        timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        timeoutMs ?? undefined,
         named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
         (why) => {
-          said = why;
+          said =
+            why ||
+            (timeoutMs
+              ? ""
+              : `\nCawCo: this command wrote nothing and did no work for ${secondsOf(QUIET_MS)} s, so it was stopped.\n`);
           running.stop("expired");
         },
         (queue) => tellWait(named, queue)
       );
+      // Its group's CPU time is a sign of life too: a command silent by
+      // nature (a large checkout's status, a repack) runs while it works.
+      const cpuWatch = new AbortController();
+      const leaderPid = spawnedPid(child);
+      if (leaderPid !== undefined) {
+        watchTreeCpu(leaderPid, () => clock.heard(), cpuWatch.signal);
+      }
       const collect = (into: Buffer[]) => {
         const scan = lines((line) => clock.line(line));
         return (chunk: Buffer) => {
           if (stopped === "overflowed") {
             return;
           }
+          clock.heard();
           written += chunk.length;
           if (written > OUTPUT_LIMIT) {
             stdout.length = 0;
@@ -615,6 +640,7 @@ const spawned = ({
       child.stdout.on("data", collect(stdout));
       child.stderr.on("data", collect(stderr));
       child.on("error", (error) => {
+        cpuWatch.abort();
         clock.stop();
         live.delete(running);
         letGo?.();
@@ -623,6 +649,7 @@ const spawned = ({
       // A stopped command's KILL still comes after its leader closes: what is
       // left of its group (a child that let go of the pipes) goes with it.
       child.on("close", (code) => {
+        cpuWatch.abort();
         clock.stop();
         live.delete(running);
         letGo?.();
@@ -739,7 +766,7 @@ const insideRead = async (
   const read = await runHubCommand(
     workspace.path,
     `${SAFE_GIT_SHELL}${cmd}`,
-    READ_TIMEOUT_MS,
+    undefined,
     workspace
   );
   return read.exitCode === 0
@@ -750,9 +777,6 @@ const insideRead = async (
           read.stderr.trim() || read.stdout.trim() || `exit ${read.exitCode}`,
       };
 };
-
-/** How long a move's reads inside the boundary may take. */
-const READ_TIMEOUT_MS = 60_000;
 
 /** The deny paths among NUL-ended `git diff --name-only -z` output. */
 const namesIn = (out: string): string[] =>

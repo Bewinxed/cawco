@@ -79,7 +79,6 @@ export interface HubOps {
       options: TranscriptQuery & { limit: number };
       query: string;
       requestId: number;
-      timeoutMs: number;
     };
     answer: TranscriptAnswer | { error: string };
   };

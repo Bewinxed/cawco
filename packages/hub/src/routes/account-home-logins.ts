@@ -6,7 +6,6 @@ import {
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { SIGNIN_TIMEOUT_MS } from "../login-moves";
 import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { unreachable } from "../unreachable";
@@ -41,19 +40,8 @@ export const accountHomeLoginRoutes = (
         { query: t.Object({ machineId: t.String() }) },
         async ({ query }) => {
           const [claude, others] = await Promise.all([
-            readAgent(
-              query.machineId,
-              CONTROL_READ_HOME_LOGIN,
-              [],
-              SIGNIN_TIMEOUT_MS,
-              "claude"
-            ),
-            readAgent(
-              query.machineId,
-              CONTROL_READ_HOME_CREDENTIALS,
-              [],
-              SIGNIN_TIMEOUT_MS
-            ),
+            readAgent(query.machineId, CONTROL_READ_HOME_LOGIN, [], "claude"),
+            readAgent(query.machineId, CONTROL_READ_HOME_CREDENTIALS, []),
           ]);
           switch (others.kind) {
             case "unanswered":

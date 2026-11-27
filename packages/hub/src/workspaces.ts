@@ -253,9 +253,6 @@ export const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
   return { id: workspace.id, path: workspace.path };
 };
 
-/** How long the report's git reads may take. */
-export const GIT_TIMEOUT_MS = 60_000;
-
 /** Runs of whitespace between the counts a git read prints. */
 export const SPACES = /\s+/u;
 
@@ -1947,7 +1944,7 @@ export const createWorkspaces = ({
         workspace.machineId,
         workspace.path,
         `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
-        GIT_TIMEOUT_MS,
+        undefined,
         refOf(workspace),
         { noWait: true }
       );
@@ -2909,7 +2906,7 @@ export const createWorkspaces = ({
         workspace.machineId,
         workspace.path,
         `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
-        GIT_TIMEOUT_MS,
+        undefined,
         refOf(workspace),
         // A checkout: one that left a path the boundary keeps other than
         // the commit has it fails, never passes with it dropped.
@@ -2948,7 +2945,7 @@ export const createWorkspaces = ({
       workspace.machineId,
       workspace.path,
       `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
-      GIT_TIMEOUT_MS,
+      undefined,
       refOf(workspace),
       { moves: at }
     ).catch((error: unknown) => ({

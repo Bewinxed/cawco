@@ -458,8 +458,8 @@ export type GitChanges =
       repo: "unread";
       command: "status" | "log";
       exitCode: number;
-      /** The limit it ran out at, when it did (exit 124). */
-      limitMs?: number;
+      /** It went a quiet spell with no output and no work, and was stopped (exit 124). */
+      quiet?: true;
     };
 
 /**

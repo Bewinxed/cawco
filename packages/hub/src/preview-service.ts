@@ -23,9 +23,7 @@ export interface PreviewServiceDeps {
   address: (machineId: string) => string | undefined;
   /** {@link call} as an Effect (machine-calls.ts `askMachine`). */
   ask: AgentAsk;
-  /** How long a machine has to answer a listener's start or stop. */
-  busyMs: number;
-  /** Asks machine `machineId`'s agent: its answer, or that it gave none within `timeoutMs`. */
+  /** Asks machine `machineId`'s agent: its answer, or that it went quiet on it. */
   call: AgentCall;
   /** Whether machine `machineId` is reached through the hub's SSH connection to it. */
   carried: (machineId: string) => boolean;
@@ -96,12 +94,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
   const stop = (machineId: string, key: string, token: string): void => {
     deps.lifetime.fork(
       "preview listener stop",
-      deps.ask(
-        machineId,
-        PREVIEW_STOP,
-        [{ instanceId: key, token }],
-        deps.busyMs
-      )
+      deps.ask(machineId, PREVIEW_STOP, [{ instanceId: key, token }])
     );
   };
 
@@ -188,12 +181,9 @@ export function createPreviewService(deps: PreviewServiceDeps) {
         stop: { kind: "paused" },
       };
     }
-    const asked = await deps.call(
-      machineId,
-      PREVIEW_START,
-      [{ instanceId: key, ...source, token: start.token, for: start.for }],
-      deps.busyMs
-    );
+    const asked = await deps.call(machineId, PREVIEW_START, [
+      { instanceId: key, ...source, token: start.token, for: start.for },
+    ]);
     switch (asked.kind) {
       case "unanswered":
         if (asked.reason === "dead") {

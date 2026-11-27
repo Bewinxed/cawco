@@ -305,6 +305,9 @@ const ArtifactSessionHeardShape = z.union([
       z.object({
         error: z.string().optional(),
         kind: z.literal("control_result"),
+        lapsed: z
+          .object({ after: z.number(), reason: z.enum(["timeout", "dead"]) })
+          .optional(),
         ok: z.boolean(),
         result: z.unknown().optional(),
       }),

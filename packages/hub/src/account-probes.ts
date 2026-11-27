@@ -31,7 +31,6 @@ import {
   usageLimits,
 } from "./accounts";
 import type { ClosureContext } from "./closure-context";
-import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { unreachable } from "./unreachable";
 
 export type AccountProbesContext = Pick<
@@ -156,7 +155,6 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       machineId,
       CONTROL_PROBE_ACCOUNT,
       [account],
-      SIGNIN_TIMEOUT_MS,
       harness
     );
     // Unanswered or refused, the account keeps what the hub last knew of it
@@ -194,12 +192,6 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     }
   };
 
-  /**
-   * How long a check's turn as an account may take on its machine: the
-   * agent's own bound on the turn (agent accounts.ts `CHECK_TIMEOUT_MS`),
-   * with its start and the keychain's look before it.
-   */
-  const REFUSAL_CHECK_TIMEOUT_MS = 2 * MINUTE_MS;
   /** The check of each account under way now, by account id: a second ask joins it ({@link checkRefused}). */
   const refusalChecks = makeJoin<string, RefusalVerdict, unknown>();
   /**
@@ -235,7 +227,6 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
           machineId,
           CONTROL_CHECK_ACCOUNT,
           [account],
-          REFUSAL_CHECK_TIMEOUT_MS,
           "claude"
         );
         switch (answer.kind) {
@@ -486,13 +477,6 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
   };
 
   /**
-   * How long the hub waits on a machine's read of one account now: the
-   * provider's answer (5 s on Claude's, its CLI's own bound) and, for a
-   * login past its expiry, Claude Code's `auth status` renewing it first.
-   */
-  const READ_NOW_TIMEOUT_MS = 10_000;
-
-  /**
    * One account's windows read now, from its provider's usage endpoint on a
    * connected machine it is signed in on, each tried in turn until one
    * reads them (agent provider-usage.ts `readAccountUsage`): the check a pick
@@ -527,8 +511,7 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       const answer = await ctx.machineCalls.readAgent(
         machineId,
         CONTROL_READ_ACCOUNT_USAGE,
-        [accountId],
-        READ_NOW_TIMEOUT_MS
+        [accountId]
       );
       const machine = ctx.machineName(machineId);
       if (answer.kind === "unanswered") {

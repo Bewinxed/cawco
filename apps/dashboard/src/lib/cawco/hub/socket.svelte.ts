@@ -107,6 +107,8 @@ export const connectionState = $state<{
 });
 
 interface Waiter {
+  /** No answer came: the machine's beats stopped naming the request (core frames.ts `lapsed`). */
+  lapse: (missed: { after: number; reason: "timeout" | "dead" }) => void;
   reject: (error: Error) => void;
   /** The answer's `result`, and the harnesses a `listSessions` answer left out ({@link LeftOut}). */
   resolve: (result: unknown, leftOut?: LeftOut) => void;
@@ -931,44 +933,39 @@ export async function waitForHub(timeoutMs = 5000): Promise<void> {
 export const answered = (): void => undefined;
 
 /**
- * Sends something the agent answers by `requestId`, and waits `timeoutMs` for
- * that answer, read by `readAnswer` (a control's by its reply's schema,
- * control.ts `askMachine`; a start's or a stop's taken as done). A refusal
- * rejects in the machine's words, and so does an answer `readAnswer` throws
- * on; no answer in time is its own outcome, `unanswered`, which every caller
- * says as such ({@link didntAnswer}).
+ * Sends something the agent answers by `requestId`, and waits for that
+ * answer, read by `readAnswer` (a control's by its reply's schema,
+ * control.ts `askMachine`; a start's or a stop's taken as done). The hub
+ * answers every request it forwards: the machine's answer, or, once its
+ * beats stopped naming the request, that none came (`unanswered`, which
+ * every caller says as such, {@link didntAnswer}). A refusal rejects in the
+ * machine's words, and so does an answer `readAnswer` throws on; the
+ * socket's close rejects what it still waits on.
  */
 export function ask<T>(
   requestId: string,
-  timeoutMs: number,
   dispatch: () => void,
   readAnswer: (result: unknown, leftOut?: LeftOut) => T
 ): Promise<Bounded<T>> {
-  return readWithin(
-    timeoutMs,
-    (signal) =>
-      new Promise<T>((resolve, reject) => {
-        inflight.set(requestId, {
-          resolve: (result, leftOut) => {
-            try {
-              resolve(readAnswer(result, leftOut));
-            } catch (error) {
-              reject(error instanceof Error ? error : new Error(String(error)));
-            }
-          },
-          reject,
-        });
-        signal.addEventListener("abort", () => inflight.delete(requestId), {
-          once: true,
-        });
+  return new Promise<Bounded<T>>((resolve, reject) => {
+    inflight.set(requestId, {
+      resolve: (result, leftOut) => {
         try {
-          dispatch();
+          resolve({ kind: "answered", value: readAnswer(result, leftOut) });
         } catch (error) {
-          inflight.delete(requestId);
           reject(error instanceof Error ? error : new Error(String(error)));
         }
-      })
-  );
+      },
+      lapse: (missed) => resolve({ kind: "unanswered", ...missed }),
+      reject,
+    });
+    try {
+      dispatch();
+    } catch (error) {
+      inflight.delete(requestId);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 /**

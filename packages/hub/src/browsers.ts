@@ -95,9 +95,6 @@ const BROWSER_ARTIFACT_NAME = "browser";
 /** The states in which a browser runs nothing: a forget has nothing of it to stop. */
 const RESTING: ReadonlySet<BrowserState> = new Set(["asleep", "failed"]);
 
-/** How long a take-over, a start or a stop has on its machine: a start may build the image first. A browser ask's page waits as long, as it may wake its browser (server.ts `pageOf`). */
-export const BROWSER_CALL_MS = 15 * 60_000;
-
 /** How long a browser's own stream relay credential lasts (Projects spec item 4). */
 const RELAY_TTL_MS = 7 * DAY_MS;
 
@@ -273,7 +270,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
   const shield = async (machineId: string, args: BrowserShieldArgs) => {
     const row = answered(
-      await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
+      await deps.call(machineId, BROWSER_SHIELD, [args]),
       machineId,
       deps.machineName(machineId),
       "be taken over"
@@ -501,7 +498,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      */
     async connected(machineId: string) {
       const frame = answered(
-        await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
+        await deps.call(machineId, BROWSER_ROWS, []),
         machineId,
         deps.machineName(machineId),
         "say what it runs"
@@ -567,12 +564,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         return machineId;
       }
       const back = answered(
-        await deps.call(
-          machineId,
-          BROWSER_HANDBACK,
-          [{ key }],
-          BROWSER_CALL_MS
-        ),
+        await deps.call(machineId, BROWSER_HANDBACK, [{ key }]),
         machineId,
         deps.machineName(machineId),
         "be handed back"
@@ -591,12 +583,9 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       const relay = deps.mint(`browser:${key}`, RELAY_TTL_MS);
       const row = answered(
-        await deps.call(
-          machineId,
-          BROWSER_START,
-          [{ key, ...(relay ? { relay } : {}) }],
-          BROWSER_CALL_MS
-        ),
+        await deps.call(machineId, BROWSER_START, [
+          { key, ...(relay ? { relay } : {}) },
+        ]),
         machineId,
         deps.machineName(machineId),
         "start"
@@ -621,7 +610,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         }
       }
       const row = answered(
-        await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
+        await deps.call(machineId, BROWSER_STOP, [{ key }]),
         machineId,
         deps.machineName(machineId),
         "stop"
@@ -652,7 +641,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         });
       }
       const removed = answered(
-        await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
+        await deps.call(machineId, BROWSER_REMOVE, [{ key }]),
         machineId,
         deps.machineName(machineId),
         "be removed"
@@ -701,20 +690,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         return machineId;
       }
       const sent = answered(
-        await deps.call(
-          machineId,
-          BROWSER_INJECT_ADVERT,
-          [
-            {
-              key,
-              serviceData: advert,
-              rssi: 0,
-              capturedAt: Date.now(),
-              sourceMachineId: machineId,
-            } satisfies BrowserInjectAdvertArgs,
-          ],
-          BROWSER_CALL_MS
-        ),
+        await deps.call(machineId, BROWSER_INJECT_ADVERT, [
+          {
+            key,
+            serviceData: advert,
+            rssi: 0,
+            capturedAt: Date.now(),
+            sourceMachineId: machineId,
+          } satisfies BrowserInjectAdvertArgs,
+        ]),
         machineId,
         deps.machineName(machineId),
         "receive the passkey advert"
@@ -781,20 +765,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         targets.map(async ({ machineId, key }) => {
           heard.captured(key);
           try {
-            await deps.call(
-              machineId,
-              BROWSER_INJECT_ADVERT,
-              [
-                {
-                  key,
-                  serviceData: args.serviceData,
-                  rssi: args.rssi,
-                  capturedAt: args.capturedAt,
-                  sourceMachineId,
-                } satisfies BrowserInjectAdvertArgs,
-              ],
-              PASSKEY_ADVERT_MAX_AGE_MS
-            );
+            await deps.call(machineId, BROWSER_INJECT_ADVERT, [
+              {
+                key,
+                serviceData: args.serviceData,
+                rssi: args.rssi,
+                capturedAt: args.capturedAt,
+                sourceMachineId,
+              } satisfies BrowserInjectAdvertArgs,
+            ]);
             heard.injected(key);
           } catch (error) {
             console.warn(

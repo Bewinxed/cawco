@@ -1,5 +1,6 @@
 import { backoffWait } from "@cawco/core/backoff";
-import { boundedRead, Unanswered } from "@cawco/core/effect/bounded";
+import { heardStream } from "@cawco/core/bounded";
+import { boundedWhileLive, Unanswered } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
 import {
   type JsonRpcMessage,
@@ -46,8 +47,6 @@ import type { HubLifetimeShape } from "./lifetime";
 
 /** A list kept for sessions is fetched again when a session asks after this long. */
 const LISTING_TTL_MS = 5 * 60_000;
-/** How long one of the lister's own upstream requests may take. */
-const LISTER_TIMEOUT_MS = 30_000;
 /** A session the hub has not heard from in this long, with no stream open, is forgotten. */
 const IDLE_MS = 30 * 60_000;
 /** A kept session's use is written at most this often. */
@@ -973,8 +972,9 @@ function sendUpstream(
 /**
  * A JSON-RPC request the hub makes for every session, and the upstream's
  * answer to it: read off a JSON body or the event stream it opened, which
- * may also carry list changes. Each attempt, its reply read included, has
- * {@link LISTER_TIMEOUT_MS}; none in that time is {@link NoAnswer}.
+ * may also carry list changes. Each attempt, its reply read included, is
+ * waited on while its bytes arrive (core bounded.ts `readWhileLive`); one
+ * that goes a quiet spell with none is {@link NoAnswer}.
  */
 function upstreamRpc(
   lifetime: HubLifetimeShape,
@@ -1022,7 +1022,7 @@ function upstreamRpc(
           reply: await replyOn(name, state, response.body, message.id),
         };
       },
-      LISTER_TIMEOUT_MS
+      true
     )
   );
 }
@@ -1040,7 +1040,7 @@ function sendTaking<T>(
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
-  ms?: number
+  live = false
 ): Effect.Effect<T, unknown> {
   return Effect.gen(function* () {
     if (!state.limited) {
@@ -1050,7 +1050,7 @@ function sendTaking<T>(
         upstream,
         exchange,
         take,
-        ms
+        live
       );
       if (taken) {
         return taken.taken;
@@ -1058,7 +1058,7 @@ function sendTaking<T>(
     }
     state.queued += 1;
     return yield* state.gate
-      .withPermit(heldTurn(name, state, upstream, exchange, take, ms))
+      .withPermit(heldTurn(name, state, upstream, exchange, take, live))
       .pipe(
         Effect.ensuring(
           Effect.sync(() => {
@@ -1159,7 +1159,7 @@ function heldTurn<T>(
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
-  ms?: number
+  live = false
 ): Effect.Effect<T, unknown> {
   const turn = Effect.gen(function* () {
     yield* stillAsked(exchange.signal);
@@ -1175,7 +1175,7 @@ function heldTurn<T>(
       upstream,
       exchange,
       take,
-      ms
+      live
     );
     if (!taken) {
       return yield* new Limited();
@@ -1294,33 +1294,35 @@ function attemptUpstream<T>(
   upstream: Upstream,
   exchange: Exchange,
   take: (response: Response) => Promise<T>,
-  ms?: number
+  live = false
 ): Effect.Effect<{ taken: T } | undefined, unknown> {
-  const once = step(async (signal): Promise<Attempted<T>> => {
-    const response = await upstream({
-      ...exchange,
-      signal: exchange.signal
-        ? AbortSignal.any([signal, exchange.signal])
-        : signal,
+  const attempt = (alive?: () => void) =>
+    step(async (signal): Promise<Attempted<T>> => {
+      const sent = await upstream({
+        ...exchange,
+        signal: exchange.signal
+          ? AbortSignal.any([signal, exchange.signal])
+          : signal,
+      });
+      alive?.();
+      const response = alive ? heardStream(sent, alive) : sent;
+      if (response.status === 429) {
+        await response.body?.cancel();
+        return { limited: response.headers };
+      }
+      if (response.ok) {
+        state.misses = 0;
+      }
+      return { taken: await take(response) };
     });
-    if (response.status === 429) {
-      await response.body?.cancel();
-      return { limited: response.headers };
-    }
-    if (response.ok) {
-      state.misses = 0;
-    }
-    return { taken: await take(response) };
-  });
   return Effect.gen(function* () {
-    const attempted =
-      ms === undefined
-        ? yield* once
-        : yield* boundedRead(ms, once).pipe(
-            Effect.mapError((error) =>
-              error instanceof Unanswered ? noAnswer(error.after) : error
-            )
-          );
+    const attempted = live
+      ? yield* boundedWhileLive((alive) => attempt(alive)).pipe(
+          Effect.mapError((error) =>
+            error instanceof Unanswered ? noAnswer(error.after) : error
+          )
+        )
+      : yield* attempt();
     if ("taken" in attempted) {
       return attempted;
     }

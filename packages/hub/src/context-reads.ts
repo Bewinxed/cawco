@@ -34,7 +34,6 @@ import {
   silentProblem,
   type Unanswered,
 } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { createSpawns } from "./spawns";
 import { unreachable } from "./unreachable";
 
@@ -241,7 +240,6 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       machineId,
       CONTROL_MODEL_CATALOG,
       [],
-      READ_TIMEOUT_MS,
       harness
     );
     switch (asked.kind) {
@@ -303,7 +301,6 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       row.machineId,
       CONTROL_READ_SESSION_CONTEXT,
       [row.sessionId, row.cwd],
-      2000,
       row.harness
     );
     switch (answer.kind) {
@@ -404,7 +401,6 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       where.machineId,
       CONTROL_GET_SESSION_INFO,
       [where.sessionId, where.cwd || undefined],
-      READ_TIMEOUT_MS,
       where.harness
     );
     switch (answer.kind) {
@@ -447,8 +443,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     const answer = await ctx.machineCalls.readAgent(
       where.machineId,
       CONTROL_GIT_CHANGES,
-      [where.cwd, since],
-      READ_TIMEOUT_MS
+      [where.cwd, since]
     );
     switch (answer.kind) {
       case "unanswered":
@@ -484,7 +479,6 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         where.sessionId,
         { dir: where.cwd || undefined, ...(whole ? { whole } : {}) },
       ],
-      READ_TIMEOUT_MS,
       where.harness
     );
     switch (answer.kind) {

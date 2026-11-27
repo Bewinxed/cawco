@@ -127,7 +127,6 @@ import { recordsProjectOf } from "./records-project";
 import type { CarryRoutines } from "./routine-carry";
 import {
   answerOf,
-  CHECK_LIMIT_MS,
   checkInput,
   checkRowOf,
   hostCommand,
@@ -294,7 +293,7 @@ export interface RoutineDeps {
   readonly runOnHost: (
     machineId: string,
     cmd: string,
-    timeoutMs: number,
+    timeoutMs: number | undefined,
     how: CommandOptions
   ) => Promise<CommandResult>;
   /** The project's tasks: routines are filed, read and moved here. */
@@ -1011,17 +1010,16 @@ export const createRoutines = ({
         why: checkWords.unknownMachine(machine),
       };
     }
-    const began = Date.now();
     try {
       const result = await runOnHost(
         placed.machineId,
         hostCommand(command),
-        CHECK_LIMIT_MS,
+        undefined,
         {
           noWait: true,
         }
       );
-      return answerOf(machine, result, CHECK_LIMIT_MS, Date.now() - began);
+      return answerOf(machine, result);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       return error instanceof WouldWait

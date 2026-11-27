@@ -7,7 +7,6 @@
  */
 import { CONTROL_FOLDERS_STAND } from "@cawco/core/workspace/controls";
 import type { AgentCall } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 
 /** Whether a folder stands at `path` on `machineId`; undefined when the machine did not say (away, silent, or an agent that predates the read). */
 export const folderStandsOn = async (
@@ -15,12 +14,7 @@ export const folderStandsOn = async (
   machineId: string,
   path: string
 ): Promise<boolean | undefined> => {
-  const answer = await readAgent(
-    machineId,
-    CONTROL_FOLDERS_STAND,
-    [[path]],
-    READ_TIMEOUT_MS
-  );
+  const answer = await readAgent(machineId, CONTROL_FOLDERS_STAND, [[path]]);
   return answer.kind === "answered" && answer.value.ok
     ? answer.value.result[0]
     : undefined;

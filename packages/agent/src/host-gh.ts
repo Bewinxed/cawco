@@ -9,13 +9,14 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fetchHeard } from "@cawco/core/bounded";
 import type {
   GhAccount,
   GhRepo,
   GhRepoList,
   GhRepoLookup,
 } from "@cawco/core/connections";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import { workspaceScratchRoot } from "@cawco/core/paths/roots";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import { repoIdentity } from "@cawco/core/protocol";
@@ -398,8 +399,6 @@ const githubRepo = async (
   );
 };
 
-/** How long a repository's web page has to answer {@link pageSays}. */
-const PAGE_TIMEOUT_MS = 4000;
 const OG_FIELD = /^og:(?:description|image)$/u;
 const WEB_URL = /^https?:$/u;
 const DOT_GIT_END = /\.git\/?$/u;
@@ -418,7 +417,8 @@ interface PageSays {
 /**
  * The `og:description` and `og:image` of the web page an `https://` git URL
  * names (the URL without its `.git`, its login dropped), read with Bun's
- * HTMLRewriter as the page streams, waiting {@link PAGE_TIMEOUT_MS} at most.
+ * HTMLRewriter, waited on while its bytes arrive (core bounded.ts
+ * `fetchHeard`: its head, then each chunk).
  * None of either for any other URL, or a page that fails, is not HTML or
  * says neither; an image only at an `http(s)` address.
  */
@@ -431,10 +431,9 @@ const pageSays = async (url: string): Promise<PageSays> => {
   page.username = "";
   page.password = "";
   return await runPromise(
-    boundedRead(
-      PAGE_TIMEOUT_MS,
+    boundedWhileLive((alive) =>
       Effect.tryPromise({
-        try: (signal) => readPage(page, signal),
+        try: (signal) => readPage(page, signal, alive),
         catch: (cause) => new PageUnread({ cause }),
       })
     ).pipe(
@@ -450,11 +449,16 @@ const pageSays = async (url: string): Promise<PageSays> => {
 };
 
 /** {@link pageSays}'s read of `page`, its fetch stopped by `signal`. */
-const readPage = async (page: URL, signal: AbortSignal): Promise<PageSays> => {
-  const answer = await fetch(page, {
-    headers: { accept: "text/html" },
-    signal,
-  });
+const readPage = async (
+  page: URL,
+  signal: AbortSignal,
+  alive: () => void
+): Promise<PageSays> => {
+  const answer = await fetchHeard(
+    page,
+    { headers: { accept: "text/html" }, signal },
+    alive
+  );
   if (!(
     answer.ok && answer.headers.get("content-type")?.includes("text/html")
   )) {
@@ -475,7 +479,7 @@ const readPage = async (page: URL, signal: AbortSignal): Promise<PageSays> => {
     .transform(answer)
     .text();
   const image = said.get("og:image");
-  const at = image ? URL.parse(image, answer.url) : null;
+  const at = image ? URL.parse(image, page.href) : null;
   return {
     description: said.get("og:description") ?? null,
     socialImageUrl: at && WEB_URL.test(at.protocol) ? at.href : null,

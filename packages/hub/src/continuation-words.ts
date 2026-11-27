@@ -4,10 +4,12 @@
  * machine extracts what a continuation takes from its transcript (core
  * continuation-read.ts); this file only decides the words.
  */
+import { QUIET_MS } from "@cawco/core/bounded";
 import { SUMMARY_CAP_TOKENS } from "@cawco/core/continuation";
 import { blocksOf, type Extracted } from "@cawco/core/continuation-read";
 import type { GitChanges } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
+import { secondsOf } from "@cawco/core/time";
 import type { ContinuationSource } from "./db/stored-types";
 
 /** Lines of git output the artifact index carries before it says how many it cut. */
@@ -25,9 +27,9 @@ export function gitSection(changes: GitChanges, since: string): string {
   }
   if (changes.repo === "unread") {
     return `${title}\n${
-      changes.limitMs === undefined
-        ? `git ${changes.command} failed (exit ${changes.exitCode}) in this folder`
-        : `git ${changes.command} did not answer within ${changes.limitMs / 1000} s in this folder`
+      changes.quiet
+        ? `git ${changes.command} said nothing and did no work for ${secondsOf(QUIET_MS)} s in this folder`
+        : `git ${changes.command} failed (exit ${changes.exitCode}) in this folder`
     }`;
   }
   const lines = [

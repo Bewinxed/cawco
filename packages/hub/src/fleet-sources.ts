@@ -43,7 +43,6 @@ import { hubHttpUrl } from "./hub-self";
 import type { FetchedCopy, FolderSkillBody } from "./hub-shapes";
 import { nextTurn } from "./lifetime";
 import type { CallAnswer, FsAnswer } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
 import { readMarketplace, resolveMarketplacePlugins } from "./plugins";
 import { projectRowsFor, unbound } from "./project-placements";
@@ -59,15 +58,6 @@ import {
 } from "./skills";
 import { unreachable } from "./unreachable";
 import type { MachineSocket } from "./wire-socket";
-
-/**
- * How long a session is given to take fleet MCP changes and say what each
- * came to (core `CONTROL_MCP_FLEET_CHANGED`): Claude Code's take waits on
- * the takes before it, connects the servers it lacks and redials the rest,
- * each a connect of up to a minute (agent mcp-status.ts `MCP_CONNECT_MS`).
- * Past it, a connect ask waiting on the take says its machine did not say.
- */
-export const FLEET_MCP_TAKE_MS = 150_000;
 
 /** A session's answer to a fleet MCP take or heal, as connect asks read it: its servers, or none. */
 export const tookOf = (
@@ -320,7 +310,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
             machineId,
             CONTROL_MCP_FLEET_CHANGED,
             [changes],
-            FLEET_MCP_TAKE_MS,
             undefined,
             row.id
           )
@@ -413,18 +402,13 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   ): Promise<Bounded<FsAnswer<O>>> => {
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
-    return ctx.machineCalls.awaitFs(
-      machineId,
-      op.op,
-      requestId,
-      READ_TIMEOUT_MS,
-      () =>
-        ctx.machineCalls.sendAnswerable(agent, {
-          verb: "fs",
-          machineId,
-          requestId,
-          payload,
-        } satisfies HubEnvelope<"fs">)
+    return ctx.machineCalls.awaitFs(machineId, op.op, requestId, () =>
+      ctx.machineCalls.sendAnswerable(agent, {
+        verb: "fs",
+        machineId,
+        requestId,
+        payload,
+      } satisfies HubEnvelope<"fs">)
     );
   };
 

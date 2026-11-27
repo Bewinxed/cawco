@@ -1,5 +1,5 @@
 import type { BackoffPolicy } from "@cawco/core/backoff";
-import { readWithin } from "@cawco/core/bounded";
+import { heardBody, QUIET_MS, readWhileLive } from "@cawco/core/bounded";
 import {
   type BackoffTries,
   backoffSchedule,
@@ -134,7 +134,6 @@ const identityOf = (tokens: { id_token?: unknown }): string | null => {
   );
   return said?.trim() ?? null;
 };
-const DISCOVERY_TIMEOUT_MS = 15_000;
 /**
  * Re-probes of a server the hub could not reach: from 30 s, doubling to 15
  * min, for a day; then it waits for the server to be saved again.
@@ -144,15 +143,6 @@ const REPROBES: BackoffPolicy = {
   mostMs: 15 * MINUTE_MS,
   giveUp: { afterMs: DAY_MS },
 };
-/**
- * A token request's own deadline, far past what a request waiting on it
- * waits ({@link REFRESH_WAIT_MS}). A public client's refresh token is
- * rotated by the provider the moment it answers (MCP authorization spec:
- * "For public clients, authorization servers MUST rotate refresh tokens"),
- * so an answer let go at a short deadline loses the only refresh token
- * that still works, and the next refresh spends the old one and is refused.
- */
-const TOKEN_DEADLINE_MS = 120_000;
 /** How long a request waits on a refresh before it is answered 502 to retry; the refresh itself goes on. */
 const REFRESH_WAIT_MS = 20_000;
 /** One renewal's token requests: six, from 0.5 s apart, doubling to 8 s (CawCo's own call). */
@@ -332,35 +322,41 @@ const bearerWords = (response: Response): string => {
  * A fetch whose failure to get the server's own answer is told apart from what
  * that answer said. A 5xx is no answer either: it is what an edge or a proxy in
  * front of the server says while the server cannot be reached, and taking it
- * for "direct" would delete a signed-in server's OAuth row. `take` reads what
- * is wanted of the response inside the same deadline, so a body cut off by
- * it is as unanswered as a connection that never opened.
+ * for "direct" would delete a signed-in server's OAuth row. It is waited on
+ * while its bytes arrive (core bounded.ts `readWhileLive`): `take` reads what
+ * is wanted of the response, telling `alive` of each chunk it reads, so a
+ * body that stops is as unanswered as a connection that never opened. A
+ * token request is never joined with a waiting request's signal: a public
+ * client's refresh token is rotated by the provider the moment it answers
+ * (MCP authorization spec: "For public clients, authorization servers MUST
+ * rotate refresh tokens"), so an answer let go early loses the only refresh
+ * token that still works; only its own quiet ends it.
  */
 const reachWithin = async (
   input: string | URL,
   init: RequestInit | undefined,
-  take: (response: Response) => Promise<Response>,
-  deadline = DISCOVERY_TIMEOUT_MS
+  take: (response: Response, alive: () => void) => Promise<Response>
 ): Promise<Response> => {
-  const reached = await readWithin(deadline, async (signal) => {
+  const reached = await readWhileLive(async (signal, alive) => {
     let response: Response;
     try {
       response = await fetch(input, { ...init, signal });
     } catch (error) {
       throw noResponse(error);
     }
+    alive();
     if (response.status >= 500) {
       await response.body?.cancel();
       throw new Unreachable({ message: `HTTP ${response.status}.` });
     }
-    return await take(response);
+    return await take(response, alive);
   });
   switch (reached.kind) {
     case "answered":
       return reached.value;
     case "unanswered":
       throw new Unreachable({
-        message: `No answer within ${secondsOf(reached.after)} s.`,
+        message: `Nothing heard for ${secondsOf(QUIET_MS)} s.`,
       });
     default:
       unhandled("read", reached);
@@ -369,7 +365,7 @@ const reachWithin = async (
 
 /** {@link reachWithin} with the whole body read: the SDK's discovery fetches. */
 const reach = (input: string | URL, init?: RequestInit): Promise<Response> =>
-  reachWithin(input, init, wholeResponse);
+  reachWithin(input, init, (response, alive) => heardBody(response, alive));
 
 /**
  * An OAuth error nested under `detail`, as a FastAPI server answers one
@@ -419,27 +415,21 @@ const oauthShaped = async (response: Response): Promise<Response> => {
 };
 
 /**
- * {@link reach} for the token endpoint: its own long deadline
- * ({@link TOKEN_DEADLINE_MS}), and a 429 or 408 is no answer either, tried
+ * {@link reach} for the token endpoint: a 429 or 408 is no answer either, tried
  * again, never a refusal. A refusal reaches the SDK in RFC 6749's shape
  * ({@link oauthShaped}). `heard` is told the status of each answer taken.
  */
 const reachToken =
   (heard: (status: number) => void) =>
   (input: string | URL, init?: RequestInit): Promise<Response> =>
-    reachWithin(
-      input,
-      init,
-      async (response) => {
-        if (response.status === 429 || response.status === 408) {
-          await response.body?.cancel();
-          throw new Unreachable({ message: `HTTP ${response.status}.` });
-        }
-        heard(response.status);
-        return await oauthShaped(response);
-      },
-      TOKEN_DEADLINE_MS
-    );
+    reachWithin(input, init, async (response, alive) => {
+      if (response.status === 429 || response.status === 408) {
+        await response.body?.cancel();
+        throw new Unreachable({ message: `HTTP ${response.status}.` });
+      }
+      heard(response.status);
+      return await oauthShaped(await heardBody(response, alive));
+    });
 
 /** {@link reachWithin} for the status and headers only: the body (perhaps a stream that stays open) is let go. */
 const reachHead = (

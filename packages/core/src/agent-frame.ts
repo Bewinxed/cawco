@@ -341,6 +341,7 @@ const heartbeatOf = (
 ): HeartbeatReads => ({
   ...fields.binaryUpdate(),
   instances: stringsOf(said.instances),
+  working: stringsOf(said.working),
   sessionAddresses: sessionAddressesOf(said.sessionAddresses),
   custody: said.custody === undefined ? undefined : custodyOf(said.custody),
   resumableAt: resumableAtOf(said.resumableAt),

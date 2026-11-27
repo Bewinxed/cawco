@@ -56,9 +56,9 @@ export const checkWords = {
   /** A non-zero exit, with the command's last line of stderr (else stdout). */
   exited: (code: number, said: string | null) =>
     `The command exited ${code}${said ? `: ${said}` : "."}`,
-  /** Ran past its limit: the hub's runner stopped it (exit 124). */
+  /** Went a quiet spell with no output and no work: its machine's runner stopped it (exit 124). */
   timedOut: (seconds: number) =>
-    `The command ran past its ${seconds} s limit, so it was stopped.`,
+    `The command wrote nothing and did no work for ${seconds} s, so it was stopped.`,
   /** Exited 124 itself, well inside its limit: a timeout of its own (`timeout 5 curl …`). */
   timedOutItself: (said: string | null) =>
     `The command timed out (exit 124)${said ? `: ${said}` : "."}`,

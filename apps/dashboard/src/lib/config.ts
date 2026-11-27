@@ -15,15 +15,6 @@ export const WS_RECONNECTS = {
   },
 } as const;
 
-/** How long a control call waits for the frame that answers its `requestId`. */
-export const CONTROL_TIMEOUT_MS = 15_000;
-
-/** Discarding a spin-off removes a git worktree, which is slower disk work. */
-export const DISCARD_TIMEOUT_MS = 30_000;
-
-/** Installing a tool fetches an installer and runs it — slower still. */
-export const INSTALL_TIMEOUT_MS = 300_000;
-
 /**
  * Blocks per older transcript page, read one page at a time as the reader
  * nears the first rows on screen. The newest page is the hub's own size

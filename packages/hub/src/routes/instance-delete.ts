@@ -2,7 +2,6 @@ import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import { Elysia, problem } from "elysia";
 import type { HubContext } from "../hub-context";
 import { unansweredIn } from "../machine-answers";
-import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 
 import { unreachable } from "../unreachable";
 
@@ -70,7 +69,6 @@ export const instanceDeleteRoutes = ({
           row.machineId,
           CONTROL_GET_SESSION_INFO,
           [row.sessionId, row.cwd || undefined],
-          READ_TIMEOUT_MS,
           row.harness
         );
         switch (stored.kind) {

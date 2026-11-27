@@ -13,7 +13,6 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import { type MachineReadsContext, unansweredProblem } from "../machine-reads";
 import { boundFields } from "./bound-fields";
 
@@ -120,12 +119,7 @@ export const fleetMcpCalls = (
     name: string,
     cwd: string | undefined
   ) => {
-    const asked = await readAgent(
-      machineId,
-      INSPECT_CONFIG,
-      [cwd],
-      READ_TIMEOUT_MS
-    );
+    const asked = await readAgent(machineId, INSPECT_CONFIG, [cwd]);
     if (asked.kind === "unanswered") {
       return unansweredProblem(ctx, machineId, asked);
     }

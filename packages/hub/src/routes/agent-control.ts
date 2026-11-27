@@ -13,22 +13,10 @@ import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
 import { awayProblem, silentProblem } from "../machine-answers";
-import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
-
-/** An update is a pull, an install and a dashboard build — minutes, not seconds. */
-const UPDATE_TIMEOUT_MS = 10 * 60_000;
-
-/**
- * A folder's `/` menu read before a session: a harness started without a
- * turn (Claude Code answers its initialize in 0.3–2.4 s, measured
- * 2026-11-05), with room for a cold start on a busy machine.
- */
-// @limit measured: Claude Code answers its initialize in 0.3 to 2.4 s, measured 2026-11-05; 30 s leaves room for a cold start
-const FOLDER_COMMANDS_TIMEOUT_MS = 30_000;
 
 /** What an update is asked with. */
 export const agentUpdateBody = t.Object({
@@ -52,12 +40,7 @@ export const agentUpdate =
   async (machineId: string, body: Static<typeof agentUpdateBody>) => {
     const { machineName } = ctx;
     const { callAgent } = ctx.machineCalls;
-    const answer = await callAgent(
-      machineId,
-      UPDATE_CAWCO,
-      [body],
-      UPDATE_TIMEOUT_MS
-    );
+    const answer = await callAgent(machineId, UPDATE_CAWCO, [body]);
     switch (answer.kind) {
       case "unanswered":
         // A machine that restarts the hub as part of its update answers
@@ -92,12 +75,7 @@ export const agentControlRoutes = (
   return (
     new Elysia()
       .get("/api/agents/:machineId/busy", async ({ params }) => {
-        const answer = await readAgent(
-          params.machineId,
-          AGENT_BUSY,
-          [],
-          BUSY_TIMEOUT_MS
-        );
+        const answer = await readAgent(params.machineId, AGENT_BUSY, []);
         switch (answer.kind) {
           case "unanswered":
             return unansweredProblem(ctx, params.machineId, answer);
@@ -126,12 +104,9 @@ export const agentControlRoutes = (
         "/api/agents/:machineId/inspect",
         { body: t.Object({ cwd: t.Optional(t.String()) }) },
         async ({ params, body }) => {
-          const answer = await readAgent(
-            params.machineId,
-            INSPECT_CONFIG,
-            [body.cwd],
-            READ_TIMEOUT_MS
-          );
+          const answer = await readAgent(params.machineId, INSPECT_CONFIG, [
+            body.cwd,
+          ]);
           switch (answer.kind) {
             case "unanswered":
               return unansweredProblem(ctx, params.machineId, answer);
@@ -174,7 +149,6 @@ export const agentControlRoutes = (
             params.machineId,
             CONTROL_FOLDER_COMMANDS,
             [query.cwd, account, query.model],
-            FOLDER_COMMANDS_TIMEOUT_MS,
             query.harness
           );
           switch (answer.kind) {

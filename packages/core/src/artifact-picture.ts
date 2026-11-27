@@ -76,6 +76,4 @@ export const PICTURE_LIMITS = {
   settleMs: 1000,
   /** The picture itself, once the page settled. Our call. */
   shotMs: 15_000,
-  /** How long the hub waits for the daemon's answer, launch to picture: the load, the settle and the picture, with room for the launch. Our call. */
-  askMs: 100_000,
 } as const;

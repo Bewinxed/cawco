@@ -1,4 +1,5 @@
 import type { AccountMove } from "@cawco/core/accounts";
+import { QUIET_MS } from "@cawco/core/bounded";
 import {
   ACCOUNT_MOVE,
   CUSTODY_HELD,
@@ -32,7 +33,6 @@ import type { HubLineMessage } from "./compaction";
 import { contextLine } from "./compaction";
 import { freshStartLine, machineLine } from "./cut-turns";
 import type { PriorConversation } from "./db/schema";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages } from "./media";
 import { unsentLine } from "./owed-ends";
 import { recapLine } from "./return-recap";
@@ -287,7 +287,7 @@ export const createHistory = (ctx: HistoryContext) => {
    * (tool-facts.ts): between its register and its first tools report they
    * are the previous connection's, which the update pass never acts on
    * either, so the read waits for that report, as long as a machine's read
-   * is given ({@link READ_TIMEOUT_MS}), then decides. A machine that never
+   * is given (one quiet spell, core bounded.ts `QUIET_MS`), then decides. A machine that never
    * says its tools in that time is said as not answering (`timeout`), one
    * gone meanwhile as offline: neither is a read of the transcript that
    * failed.
@@ -300,7 +300,7 @@ export const createHistory = (ctx: HistoryContext) => {
       return;
     }
     const { machineId } = where;
-    if (!(await ctx.toolFacts.until(machineId, READ_TIMEOUT_MS))) {
+    if (!(await ctx.toolFacts.until(machineId, QUIET_MS))) {
       return ctx.registry.agent(machineId)
         ? {
             fault: "timeout",
@@ -393,7 +393,6 @@ export const createHistory = (ctx: HistoryContext) => {
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,
       [where.sessionKey, { dir: where.cwd || undefined, window }],
-      READ_TIMEOUT_MS,
       where.harness
     );
     // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".

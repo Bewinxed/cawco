@@ -48,7 +48,6 @@ import type { ContinueOutcome } from "./hub-shapes";
 import { MachineAway, type SessionLocation } from "./hub-shapes";
 import { leafOf, sessionLabel } from "./labels";
 import { MachineProblem, silentProblem } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { filingPrompt } from "./open-items";
 import { askEnvelope } from "./pending";
 import type { createSends } from "./sends";
@@ -162,7 +161,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       where.machineId,
       CONTROL_READ_CONTINUATION,
       [where.sessionId, options],
-      READ_TIMEOUT_MS,
       where.harness
     );
     switch (answer.kind) {
@@ -403,7 +401,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       row.machineId,
       CONTROL_WORK_IN_FLIGHT,
       [],
-      READ_TIMEOUT_MS,
       row.harness,
       instanceId
     );

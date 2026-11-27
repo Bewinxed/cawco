@@ -12,18 +12,16 @@ import {
   type FileAttachment,
   type TextAttachment,
 } from "@cawco/core/attachments";
-import { readWithin } from "@cawco/core/bounded";
+import { heardBody, QUIET_MS, readWhileLive } from "@cawco/core/bounded";
 import type { SendPayload } from "@cawco/core/protocol";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "./delegation";
 import { provenFetch } from "./hub-proof";
 
 const attachmentsDir = (): string => join(homedir(), ".cawco", "attachments");
-
-/** How long one file's fetch from the hub may take. */
-const FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 const fetchFailed = (file: FileAttachment, why: string): Error =>
   new Error(
@@ -39,18 +37,20 @@ async function deliverFile(
   file: FileAttachment
 ): Promise<string> {
   const path = join(attachmentsDir(), attachedFileName(sessionId, file));
-  const read = await readWithin<{ bytes: Uint8Array } | { status: number }>(
-    FETCH_TIMEOUT_MS,
-    async (signal) => {
+  // Waited on while its bytes arrive: its head, then each chunk.
+  const read = await readWhileLive<{ bytes: Uint8Array } | { status: number }>(
+    async (signal, alive) => {
       // As this machine, with its key's proof: a hub that requires paired
       // devices, and the door of an SSH-added machine, take no request
       // without one (hub hub-auth.ts).
       const response = await provenFetch(`${delegationHubUrl()}${file.ref}`, {
         signal,
       });
-      return response.ok
-        ? { bytes: new Uint8Array(await response.arrayBuffer()) }
-        : { status: response.status };
+      alive();
+      const whole = await heardBody(response, alive);
+      return whole.ok
+        ? { bytes: new Uint8Array(await whole.arrayBuffer()) }
+        : { status: whole.status };
     }
   ).catch((error: unknown) => {
     throw fetchFailed(
@@ -69,7 +69,7 @@ async function deliverFile(
     case "unanswered":
       throw fetchFailed(
         file,
-        `the hub did not answer within ${FETCH_TIMEOUT_MS / 1000} s`
+        `the hub sent nothing for ${secondsOf(QUIET_MS)} s`
       );
     default:
       unhandled("read", read);

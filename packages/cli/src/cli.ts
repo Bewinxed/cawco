@@ -687,8 +687,8 @@ const runBinaryPins = async (args: Args): Promise<number> => {
         "binary-pins takes nothing, or back <the build that will not run>"
       );
     }
-    const { endEveryGroup } = await import("@cawco/agent/group-run");
-    // Asked to end (its update let it go at a sleep or its quiet bound,
+    const { endEveryGroup } = await import("@cawco/core/run-captured");
+    // Asked to end (its update let it go at a sleep or once it went quiet,
     // agent pin-record.ts): each install it runs ends first, and it exits
     // once they have gone, so none runs on beside the put-back after it.
     process.once("SIGTERM", () => {

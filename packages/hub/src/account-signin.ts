@@ -59,7 +59,6 @@ import type {
   SigninFinished,
 } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
-import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import {
   answerAs,
   awayProblem,
@@ -236,8 +235,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       const answer = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_FORGET_CODEX_LOGIN,
-        [accountId],
-        SIGNIN_TIMEOUT_MS
+        [accountId]
       );
       if (answer.kind === "answered" && answer.value.ok) {
         noteCodexSignin(accountId, machineId, false);
@@ -377,7 +375,6 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           machineId,
           CONTROL_READ_HOME_LOGIN,
           [],
-          SIGNIN_TIMEOUT_MS,
           store
         )
       );
@@ -401,8 +398,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       await ctx.machineCalls.readAgent(
         machineId,
         CONTROL_READ_HOME_CREDENTIALS,
-        [],
-        SIGNIN_TIMEOUT_MS
+        []
       )
     );
     if (read instanceof ElysiaStatus) {
@@ -535,8 +531,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     const read = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_READ_HOME_CREDENTIALS,
-      [],
-      SIGNIN_TIMEOUT_MS
+      []
     );
     switch (read.kind) {
       case "unanswered":
@@ -665,14 +660,12 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
             machineId,
             CONTROL_JOIN_ACCOUNT_LOGIN,
             [fromId, existing.id, identity],
-            SIGNIN_TIMEOUT_MS,
             "claude"
           )
         : await ctx.machineCalls.callAgent(
             machineId,
             CONTROL_JOIN_PROVIDER_ACCOUNT,
-            [fromId, existing.id, identity],
-            SIGNIN_TIMEOUT_MS
+            [fromId, existing.id, identity]
           );
     switch (asked.kind) {
       case "unanswered":
@@ -839,7 +832,6 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           machineId,
           CONTROL_COMPLETE_ACCOUNT_LOGIN,
           [code ?? null, signinId, expectedOf(account)],
-          SIGNIN_TIMEOUT_MS,
           "claude"
         ),
         (result): SigninFinished => ({ kind: "account", result })
@@ -852,8 +844,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
         await ctx.machineCalls.callAgent(
           machineId,
           CONTROL_COMPLETE_AGY_LOGIN,
-          [code ?? "", signinId],
-          SIGNIN_TIMEOUT_MS
+          [code ?? "", signinId]
         ),
         (result): SigninFinished => ({ kind: "provider", result })
       );
@@ -862,8 +853,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_COMPLETE_PROVIDER_LOGIN,
-        [code ?? null, signinId, expectedOf(account)],
-        SIGNIN_TIMEOUT_MS
+        [code ?? null, signinId, expectedOf(account)]
       ),
       (result): SigninFinished => ({ kind: "provider", result })
     );

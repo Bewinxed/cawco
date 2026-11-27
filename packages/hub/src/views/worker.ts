@@ -93,7 +93,7 @@ const startViews = (path: string) => {
   const engine = createFindEngine({
     index,
     catalogs,
-    askMachine: (machineId, query, options, timeoutMs, asker) =>
+    askMachine: (machineId, query, options, asker) =>
       ask(
         {
           op: "askMachine",
@@ -101,7 +101,6 @@ const startViews = (path: string) => {
             machineId,
             query,
             options,
-            timeoutMs,
             caller: asker.caller,
             requestId: asker.requestId,
           },

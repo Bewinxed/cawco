@@ -9,8 +9,8 @@ import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { fetchLive, QUIET_MS } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
-import { boundedRead } from "@cawco/core/effect/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
   frontMatterBlock,
@@ -19,6 +19,7 @@ import {
   skillDescription,
 } from "@cawco/core/fleet";
 import { makeFolder } from "@cawco/core/folders";
+import { runLive } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -81,9 +82,6 @@ export interface UnresolvedSkill {
   choices?: string[];
   error: string;
 }
-
-/** How long a download gets before the hub stops waiting on it. */
-const FETCH_TIMEOUT_MS = 60_000;
 
 /*
  * A skill carries no media its instructions never name: an image or video
@@ -320,32 +318,20 @@ const describe = (source: SkillSource): string => {
 };
 
 /**
- * One GET within {@link FETCH_TIMEOUT_MS}, its body read inside the same
- * time. Not answered in time throws so, as every failure here is a sentence.
+ * One GET waited on while its bytes arrive (core bounded.ts `fetchLive`):
+ * its head, then each chunk of its body. One that goes a quiet spell with
+ * none throws so, as every failure here is a sentence.
  */
 export const get = (url: string): Effect.Effect<Response, FetchFailed> =>
-  boundedRead(
-    FETCH_TIMEOUT_MS,
-    fetchStep(async (signal) => {
-      const response = await fetch(url, { signal });
-      return new Response(
-        [204, 205, 304].includes(response.status)
-          ? null
-          : await response.arrayBuffer(),
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        }
-      );
-    })
-  ).pipe(
-    Effect.catchTag("Unanswered", ({ after }) =>
-      Effect.fail(
-        new FetchFailed({
-          message: `${url} did not answer within ${secondsOf(after)} s`,
-        })
-      )
+  fetchStep((signal) => fetchLive(url, { signal })).pipe(
+    Effect.flatMap((read) =>
+      read.kind === "answered"
+        ? Effect.succeed(read.value)
+        : Effect.fail(
+            new FetchFailed({
+              message: `${url} sent nothing for ${secondsOf(QUIET_MS)} s`,
+            })
+          )
     )
   );
 
@@ -386,12 +372,6 @@ const extract = async (
 };
 
 /**
- * How long one `git` step of a repo download gets. A shallow fetch of a large
- * marketplace is tens of megabytes, which is more than a page fetch.
- */
-const GIT_TIMEOUT_MS = 180_000;
-
-/**
  * A GitHub repo at one ref, extracted, fetched through the system `git`.
  *
  * `git` because it needs nothing of cawco's: a public repository is read with
@@ -417,47 +397,42 @@ export const downloadRepo = (
 ): Effect.Effect<string, FetchFailed> => {
   const slug = `${owner}/${repo}`;
   const store = join(work, "repo.git");
-  // One `git` child per step, killed when the step is cut short: by its
-  // deadline, or by whatever interrupts the fetch.
+  // One `git` child per step, run while it lives (core run-captured.ts
+  // `runLive`), and ended with its group when it goes quiet or whatever
+  // interrupts the fetch lets it go. A stalled transfer ends itself by
+  // git's own rule over the same quiet spell (`http.lowSpeedTime`).
   const git = (step: string, args: string[]) =>
-    boundedRead(
-      GIT_TIMEOUT_MS,
-      Effect.acquireUseRelease(
-        Effect.sync(() =>
-          Bun.spawn(safeGitArgv([`--git-dir=${store}`, step, ...args]), {
-            env: { ...process.env, ...SAFE_GIT_ENV },
-            stdout: "ignore",
-            stderr: "pipe",
-          })
-        ),
-        (child) =>
-          fetchStep(() =>
-            Promise.all([child.exited, new Response(child.stderr).text()])
-          ),
-        (child) =>
-          Effect.sync(() => {
-            if (child.exitCode === null) {
-              child.kill();
-            }
-          })
+    fetchStep((signal) =>
+      runLive(
+        safeGitArgv([
+          `--git-dir=${store}`,
+          "-c",
+          "http.lowSpeedLimit=1",
+          "-c",
+          `http.lowSpeedTime=${secondsOf(QUIET_MS)}`,
+          step,
+          ...args,
+        ]),
+        { env: { ...process.env, ...SAFE_GIT_ENV }, signal }
       )
     ).pipe(
-      Effect.catchTag("Unanswered", ({ after }) =>
-        Effect.fail(
-          new FetchFailed({
-            message: `git ${step} for ${slug} did not finish within ${secondsOf(after)} s`,
-          })
-        )
-      ),
-      Effect.flatMap(([code, stderr]) =>
-        code === 0
+      Effect.flatMap((ran) => {
+        if (ran.kind === "unanswered") {
+          return Effect.fail(
+            new FetchFailed({
+              message: `git ${step} for ${slug} said nothing and did no work for ${secondsOf(QUIET_MS)} s, so it was stopped`,
+            })
+          );
+        }
+        const { code, stderr } = ran.value;
+        return code === 0
           ? Effect.void
           : Effect.fail(
               new FetchFailed({
                 message: `git ${step} failed for ${slug}: ${stderr.trim() || `exit ${code}`}`,
               })
-            )
-      )
+            );
+      })
     );
 
   // One wrapping directory, so `extract` strips exactly it whatever the root holds.
@@ -465,7 +440,7 @@ export const downloadRepo = (
   return Effect.gen(function* () {
     yield* git("init", ["--quiet", "--bare"]);
     yield* git("fetch", [
-      "--quiet",
+      "--progress",
       "--depth",
       "1",
       `https://github.com/${slug}.git`,

@@ -88,8 +88,6 @@ const TICK_MS = 2000;
 const NAME_MS = 30_000;
 /** How long a proof's credential is good. */
 const TRY_MS = 60_000;
-/** How long a runtime read, and a fleet machine's proof, may take. */
-const READ_MS = 8000;
 /** How often a fleet machine on another network is asked to prove the relay, until one has. */
 const FLEET_PROOF_MS = 60_000;
 /** How long a certificate's issue waits before it is tried again after its machine was away. */
@@ -770,9 +768,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const readRuntime = Effect.fnUntraced(function* (
     machineId: string
   ): Effect.fn.Return<void, unknown> {
-    const read = yield* awaited(() =>
-      call(machineId, RELAY_RUNTIME, [], READ_MS)
-    );
+    const read = yield* awaited(() => call(machineId, RELAY_RUNTIME, []));
     if (read.kind === "unanswered") {
       return;
     }
@@ -904,7 +900,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       },
       Effect.gen(function* () {
         const read = yield* awaited(() =>
-          call(away.machineId, RELAY_PROVE, [{ urls }], READ_MS)
+          call(away.machineId, RELAY_PROVE, [{ urls }])
         );
         if (!(read.kind === "answered" && read.value.ok)) {
           return;

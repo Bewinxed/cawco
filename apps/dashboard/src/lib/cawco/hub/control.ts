@@ -15,7 +15,6 @@ import { unhandled } from "@cawco/core/unhandled";
 import { controlWords } from "@cawco/core/words/controls";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 import type { z } from "zod";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { newId } from "#lib/platform/id.js";
 import { machineConnected, machineName } from "../stores/board.svelte";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "../unanswered";
@@ -54,7 +53,6 @@ export const readReply = <T>(
 export function askOf<T>(
   machineId: string,
   requestId: string,
-  timeoutMs: number,
   dispatch: () => void,
   readAnswer: (result: unknown, leftOut?: LeftOut) => T
 ): Promise<Bounded<T>> {
@@ -63,7 +61,7 @@ export function askOf<T>(
       new Error(machineFaultWords(machineName(machineId), "offline"))
     );
   }
-  return ask(requestId, timeoutMs, dispatch, readAnswer);
+  return ask(requestId, dispatch, readAnswer);
 }
 
 /**
@@ -76,11 +74,7 @@ export function askMachine<K extends ControlName>(
   machineId: string,
   method: K,
   args: ControlArgs<K>,
-  {
-    harness,
-    instanceId,
-    timeoutMs = CONTROL_TIMEOUT_MS,
-  }: { harness?: HarnessKind; instanceId?: string; timeoutMs?: number } = {}
+  { harness, instanceId }: { harness?: HarnessKind; instanceId?: string } = {}
 ): Promise<Bounded<ControlReply<K>>> {
   const requestId = newId();
   const payload: ControlPayload = {
@@ -93,7 +87,6 @@ export function askMachine<K extends ControlName>(
   return askOf(
     machineId,
     requestId,
-    timeoutMs,
     () =>
       send({
         verb: "control",

@@ -13,7 +13,13 @@
 
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import type { BinaryInstallation } from "@cawco/core/binary-installation";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  type Bounded,
+  heardBody,
+  readWhileLive,
+  readWithin,
+} from "@cawco/core/bounded";
+
 import { unhandled } from "@cawco/core/unhandled";
 import {
   dataOf,
@@ -28,19 +34,22 @@ import {
   succeeded,
 } from "@cawco/hub/client";
 
-/**
- * How long one request of a probe is waited on: 30 s, and never past the
- * trial's deadline ({@link probeHealth}'s `byMs`). A hub that answers is
- * answering, however loaded: on 2026-11-05 obelisk's hub, at load average 45,
- * answered a machine's row in 0.6 to 2.2 s on its own port and in 4.2 s or
- * more through uwucloud's SSH forward. Against the 3 s this was then, every
- * attempt of uwucloud's trial of 6796 read as the hub's silence, and its
- * third rollback failed the build for good while its agent had registered on
- * it each time. Thirty seconds of nothing is a hub that says nothing; the
- * verification asks again after it.
- */
-const PROBE_TIMEOUT_MS = 30_000;
+/** A read inside a read: the inner one's outcome, or the outer one's when it let go first. */
+const flat = <T>(outer: Bounded<Bounded<T>>): Bounded<T> =>
+  outer.kind === "answered" ? outer.value : outer;
 
+/*
+ * One request of a probe is waited on while its bytes arrive (core
+ * bounded.ts `readWhileLive`: its head, then each chunk), and never past the
+ * trial's deadline ({@link probeHealth}'s `byMs`). A hub that answers is
+ * answering, however loaded: on 2026-11-05 obelisk's hub, at load average
+ * 45, answered a machine's row in 0.6 to 2.2 s on its own port and in 4.2 s
+ * or more through uwucloud's SSH forward. Against the 3 s this was then,
+ * every attempt of uwucloud's trial of 6796 read as the hub's silence, and
+ * its third rollback failed the build for good while its agent had
+ * registered on it each time. A quiet spell of nothing is a hub that says
+ * nothing; the verification asks again after it.
+ */
 /** The least a request is waited on, however near the deadline it is asked. */
 const PROBE_FLOOR_MS = 1000;
 
@@ -63,21 +72,24 @@ interface Tried<T> {
   value?: T;
 }
 
-/** One read of a probe, ended by `byMs` (or {@link PROBE_TIMEOUT_MS} from now, whichever is sooner). */
+/** One read of a probe, while it is heard, ended by `byMs` at the latest (the trial's deadline). */
 async function askWithin<T>(
   url: string,
-  try_: (signal: AbortSignal) => Promise<Tried<T>>,
+  try_: (signal: AbortSignal, alive: () => void) => Promise<Tried<T>>,
   byMs = Number.POSITIVE_INFINITY
 ): Promise<Asked<T>> {
   const started = performance.now();
   const after = () => `after ${Math.round(performance.now() - started)}ms`;
-  const within = Math.max(
-    PROBE_FLOOR_MS,
-    Math.min(PROBE_TIMEOUT_MS, byMs - Date.now())
-  );
   let got: Bounded<Tried<T>>;
   try {
-    got = await readWithin(within, try_);
+    got = Number.isFinite(byMs)
+      ? flat(
+          await readWithin(
+            Math.max(PROBE_FLOOR_MS, byMs - Date.now()),
+            (trial) => readWhileLive(try_, { signal: trial })
+          )
+        )
+      : await readWhileLive(try_);
   } catch (error) {
     return {
       kind: "failed",
@@ -88,7 +100,7 @@ async function askWithin<T>(
     case "unanswered":
       return {
         kind: "unanswered",
-        said: `GET ${url}: no answer within ${got.after}ms`,
+        said: `GET ${url}: nothing heard, let go after ${got.after}ms`,
       };
     case "answered": {
       const { status, value, unread } = got.value;
@@ -104,7 +116,7 @@ async function askWithin<T>(
   }
 }
 
-/** GETs `url` once as this machine; `read` takes the body of a 2xx answer, within the same time, which ends by `byMs` (or {@link PROBE_TIMEOUT_MS} from now, whichever is sooner). */
+/** GETs `url` once as this machine; `read` takes the body of a 2xx answer, waited on while it arrives and ended by `byMs` at the latest. */
 const ask = <T>(
   url: string,
   read: (response: Response) => Promise<T>,
@@ -112,12 +124,15 @@ const ask = <T>(
 ): Promise<Asked<T>> =>
   askWithin(
     url,
-    async (signal) => {
+    async (signal, alive) => {
       // As this machine: a hub that requires paired devices answers an
       // admitted machine its own row (machine-key.ts).
-      const response = await machineFetch(url, { signal });
+      const response = await heardBody(
+        await machineFetch(url, { signal }),
+        alive
+      );
+      alive();
       if (!response.ok) {
-        await response.body?.cancel();
         return { status: response.status };
       }
       try {

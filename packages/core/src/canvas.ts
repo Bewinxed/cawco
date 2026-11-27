@@ -84,10 +84,6 @@ export const CANVAS_LIMITS = {
    * closes one the hub has not held on for twice this. Our call.
    */
   screenHoldMs: 15_000,
-  /** How long the hub waits for the daemon to launch its Chromium and load the canvas page. Our call. */
-  screenOpenMs: 45_000,
-  /** How long the daemon gives the canvas page to load, inside {@link CANVAS_LIMITS.screenOpenMs}. Our call. */
-  screenLoadMs: 30_000,
 } as const;
 
 /**

@@ -62,7 +62,6 @@ import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { Effect, Schema } from "effect";
@@ -89,8 +88,7 @@ export interface MovesDeps {
   readonly call: <K extends ControlName>(
     machineId: string,
     method: K,
-    args: ControlArgs<K>,
-    timeoutMs: number
+    args: ControlArgs<K>
   ) => Promise<ControlReply<K>>;
   readonly db: DbShape;
   /** The hub's git remote's repositories (git-remote.ts). */
@@ -146,9 +144,6 @@ export interface MovesDeps {
   ) => Promise<MachinePath | SpawnProblem>;
 }
 
-/** How long a step may take before the hub stops waiting on its answer. */
-const STEP_TIMEOUT_MS = DAY_MS;
-const INSPECT_TIMEOUT_MS = 60_000;
 /** How long a started or cancelled job is kept for a screen that was away. */
 const SETTLED_KEPT_MS = 10 * 60 * 1000;
 /** Progress is written to the record at most this often; frames go out at most every quarter second. */
@@ -496,14 +491,13 @@ export const createMoves = (deps: MovesDeps) => {
       ? await deps.call(
           row.state.sourceMachineId,
           CONTROL_MOVE_REMOTE_CREDENTIAL,
-          [row.state.sourcePath],
-          INSPECT_TIMEOUT_MS
+          [row.state.sourcePath]
         )
       : {};
 
   /** A machine's inspection of `path`, as its type (core control-replies.ts): its large files, LFS and ignores are kept in the move's record. */
   const inspect = (machineId: string, path: string): Promise<MoveInspection> =>
-    deps.call(machineId, CONTROL_MOVE_INSPECT, [path], INSPECT_TIMEOUT_MS);
+    deps.call(machineId, CONTROL_MOVE_INSPECT, [path]);
 
   /** Whether the hub's repository `key` already holds `commit` on a branch. */
   const onHub = async (key: HubRepoKey, commit: string): Promise<boolean> => {
@@ -1160,18 +1154,13 @@ export const createMoves = (deps: MovesDeps) => {
     const hub = { projectId: row.projectId };
     switch (stage) {
       case "approval": {
-        await deps.call(
-          state.sourceMachineId,
-          CONTROL_MOVE_PREPARE,
-          [
-            {
-              jobId: row.id,
-              path: state.sourcePath,
-              bigFiles: state.bigFiles.map((file) => file.path),
-            },
-          ],
-          STEP_TIMEOUT_MS
-        );
+        await deps.call(state.sourceMachineId, CONTROL_MOVE_PREPARE, [
+          {
+            jobId: row.id,
+            path: state.sourcePath,
+            bigFiles: state.bigFiles.map((file) => file.path),
+          },
+        ]);
         return {};
       }
       case "snapshot": {
@@ -1186,8 +1175,7 @@ export const createMoves = (deps: MovesDeps) => {
               hub,
               remote: state.from.kind,
             },
-          ],
-          STEP_TIMEOUT_MS
+          ]
         );
         // A repository with no origin has the hub's as its remote from here.
         if (kept.hub) {
@@ -1216,8 +1204,7 @@ export const createMoves = (deps: MovesDeps) => {
               bytes: state.bytes,
               snapshot: state.snapshot,
             },
-          ],
-          STEP_TIMEOUT_MS
+          ]
         );
         return {
           ...(made ? { made: true as const } : {}),
@@ -1231,21 +1218,16 @@ export const createMoves = (deps: MovesDeps) => {
             "There is no snapshot to fetch large files for: the source had no commit."
           );
         }
-        const lfs = await deps.call(
-          state.targetMachineId,
-          CONTROL_MOVE_LFS,
-          [
-            {
-              jobId: row.id,
-              path: state.targetPath,
-              machine: target,
-              fromHub: state.from.kind === "hub",
-              ...(await remoteAuthFor(row, stage)),
-              snapshot: state.snapshot,
-            },
-          ],
-          STEP_TIMEOUT_MS
-        );
+        const lfs = await deps.call(state.targetMachineId, CONTROL_MOVE_LFS, [
+          {
+            jobId: row.id,
+            path: state.targetPath,
+            machine: target,
+            fromHub: state.from.kind === "hub",
+            ...(await remoteAuthFor(row, stage)),
+            snapshot: state.snapshot,
+          },
+        ]);
         return {
           lfs,
           progress: undefined,
@@ -1544,8 +1526,7 @@ export const createMoves = (deps: MovesDeps) => {
       deps.lifetime.fork(
         `move ${id} cancel`,
         Effect.tryPromise({
-          try: () =>
-            deps.call(machine, CONTROL_MOVE_CANCEL, [id], INSPECT_TIMEOUT_MS),
+          try: () => deps.call(machine, CONTROL_MOVE_CANCEL, [id]),
           catch: (cause) => new MoveJobFailed({ cause }),
         })
       );
@@ -1641,13 +1622,7 @@ export const createMoves = (deps: MovesDeps) => {
         deps.lifetime.fork(
           `move ${row.id} cancel`,
           Effect.tryPromise({
-            try: () =>
-              deps.call(
-                machineId,
-                CONTROL_MOVE_CANCEL,
-                [row.id],
-                INSPECT_TIMEOUT_MS
-              ),
+            try: () => deps.call(machineId, CONTROL_MOVE_CANCEL, [row.id]),
             catch: (cause) => new MoveJobFailed({ cause }),
           })
         );

@@ -1,8 +1,9 @@
 import type { Bounded } from "@cawco/core/bounded";
+import { QUIET_MS } from "@cawco/core/bounded";
 import type { CommandQueue } from "@cawco/core/commands/controls";
 import { type FsOp, SPAWN_REPLY } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileMoving } from "@cawco/core/effect/bounded";
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -11,7 +12,6 @@ import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { Context, Deferred, Effect, Layer, Schema } from "effect";
-import { SPAWN_START_TIMEOUT_MS } from "./config";
 import { Db, type DbShape } from "./db";
 import { HandoverState } from "./handover-state";
 import type { SessionLocation } from "./hub-shapes";
@@ -26,7 +26,6 @@ import {
   MACHINE_DISCONNECTED,
   parsedAs,
 } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { MachineWords } from "./machine-words";
 import { Registry, type RegistryShape } from "./registry";
 import { sessionControl } from "./session-word";
@@ -36,17 +35,20 @@ import { unreachable } from "./unreachable";
 import type { MachineSocket } from "./wire-socket";
 import { caughtUp, sendToMachine as writeToMachine } from "./wire-socket";
 
-/** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
-const ABANDON_MS = 5000;
 /** Deduplicate recently orphaned replies without retaining every request forever. */
 const UNROUTED_REPLY_LIMIT = 4096;
 
-/** `answer` read with `timeoutMs` to come: the kit's bounded read, as {@link Bounded}. */
-const answeredWithin = (
-  timeoutMs: number,
+/**
+ * `answer` waited on while its machine says it works on it: let go one
+ * quiet spell (core bounded.ts `QUIET_MS`) after the last beat that named
+ * it, `namedAt()` (or after it was sent, when none has yet), as
+ * {@link Bounded}.
+ */
+const answeredWhileNamed = (
+  namedAt: () => number,
   answer: Deferred.Deferred<ControlResult>
 ): Effect.Effect<Bounded<ControlResult>> =>
-  boundedRead(timeoutMs, Deferred.await(answer)).pipe(
+  boundedWhileMoving(QUIET_MS, namedAt, Deferred.await(answer)).pipe(
     Effect.map((value): Bounded<ControlResult> => ({
       kind: "answered",
       value,
@@ -143,6 +145,36 @@ const make = ({
       socketId: string | undefined;
     }
   >();
+  /**
+   * A CALL WAITS WHILE ITS MACHINE WORKS ON IT. When a beat of its machine
+   * last named each request the hub waits on, by request id: every beat
+   * names the hub's requests the machine holds running (agent
+   * request-record.ts `runningIds`, core protocol.ts `HeartbeatPayload`
+   * `working`). A call whose request no beat has named for one quiet spell
+   * is let go (`answeredWhileNamed`), so no call has a number of its own:
+   * a slow machine that works is waited on, one that stopped is not.
+   */
+  const namedAt = new Map<string, number>();
+  /**
+   * The requests a dashboard asked that the hub forwarded (server.ts
+   * `forward`), by id: what the machine's beat names for them is heard
+   * too, and one not named for a quiet spell is answered unanswered to its
+   * dashboard ({@link watchForwarded}). Each is done at its answer.
+   */
+  const forwarded = new Map<string, Deferred.Deferred<void>>();
+  /**
+   * A beat of `machineId` named `ids` running: each the hub waits on is
+   * named now. Heard as the beat is read off the socket (server.ts
+   * `agentMessage`), before it waits its turn to be worked.
+   */
+  const beatNamed = (ids: readonly string[]): void => {
+    const now = Date.now();
+    for (const id of ids) {
+      if (waiting.has(id) || forwarded.has(id)) {
+        namedAt.set(id, now);
+      }
+    }
+  };
   /** A call to `machineId` now waits on the socket the machine has now. */
   const waitOn = (requestId: string, machineId: string): void => {
     waitingMachines.set(requestId, {
@@ -189,14 +221,14 @@ const make = ({
    */
   const lapsed = new Map<
     string,
-    { machineId: string; sentAt: number; timeoutMs: number; what?: string }
+    { lapsedAt: number; machineId: string; sentAt: number; what?: string }
   >();
   const noteLapsed = (
     requestId: string,
     call: {
+      lapsedAt: number;
       machineId: string;
       sentAt: number;
-      timeoutMs: number;
       what?: string;
     }
   ): void => {
@@ -221,8 +253,8 @@ const make = ({
         machineName(call.machineId),
         call.what ?? "a request",
         requestId,
-        Date.now() - call.sentAt - call.timeoutMs,
-        call.timeoutMs
+        Date.now() - call.sentAt,
+        Date.now() - call.lapsedAt
       )
     );
     return true;
@@ -289,15 +321,15 @@ const make = ({
    * next register ({@link resendHeld}), as one in flight when its link
    * dropped is; offline, it is not sent (unanswered, reason "dead"). Asked
    * while away, a create's inputs write failed at once with "isn't
-   * connected" while the machine was back 3 s later (2026-10-20). One that
-   * will not answer is unanswered, reason "timeout"; an answered frame with
-   * `ok: false` is the machine's refusal.
+   * connected" while the machine was back 3 s later (2026-10-20). One its
+   * machine's beats stop naming is unanswered, reason "timeout", a quiet
+   * spell after ({@link awaitFrame}); an answered frame with `ok: false` is
+   * the machine's refusal.
    */
   const askMachine = <K extends ControlName>(
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
   ): Effect.Effect<Bounded<ControlAnswer<K>>> => {
@@ -314,7 +346,7 @@ const make = ({
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return replyTo(machineId, method, requestId, timeoutMs, () => {
+    return replyTo(machineId, method, requestId, () => {
       const frame = {
         verb: "control",
         machineId,
@@ -334,16 +366,13 @@ const make = ({
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
   ): Promise<Bounded<ControlAnswer<K>>> =>
-    lifetime.run(
-      askMachine(machineId, method, args, timeoutMs, harness, instanceId)
-    );
+    lifetime.run(askMachine(machineId, method, args, harness, instanceId));
 
   /**
-   * A read's answer: one held past its deadline with its machine still away
+   * A read's answer: one let go with its machine still away
    * (MACHINE_DISCONNECTED) is its machine not connected, unanswered "dead",
    * as a read asked of a machine already gone is, so the read's own words
    * for an offline machine say it and its route answers `awayProblem`.
@@ -368,7 +397,7 @@ const make = ({
   ): Promise<Bounded<ControlAnswer<K>>> => {
     const requestId = crypto.randomUUID();
     return lifetime.run(
-      replyTo(row.machineId, method, requestId, READ_TIMEOUT_MS, () => {
+      replyTo(row.machineId, method, requestId, () => {
         const agent = registry.agent(row.machineId);
         return agent
           ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
@@ -382,13 +411,10 @@ const make = ({
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
   ): Promise<Bounded<ControlAnswer<K>>> =>
-    asRead(
-      await callAgent(machineId, method, args, timeoutMs, harness, instanceId)
-    );
+    asRead(await callAgent(machineId, method, args, harness, instanceId));
 
   /**
    * The machine a skill folder's source names by its host (skills.ts
@@ -481,12 +507,7 @@ const make = ({
    */
   const readSkillFolder: SkillFolderReader = async (host, path) => {
     const machineId = skillFolderMachine(host);
-    const asked = await readAgent(
-      machineId,
-      READ_SKILL_FOLDER,
-      [path],
-      READ_TIMEOUT_MS
-    );
+    const asked = await readAgent(machineId, READ_SKILL_FOLDER, [path]);
     switch (asked.kind) {
       case "unanswered":
         throw unansweredError(machineId, asked, `reading ${path}`);
@@ -506,18 +527,17 @@ const make = ({
   /**
    * {@link readAgent} for a read the machine stops once the hub stops
    * waiting for it (core `CONTROL_ABANDON`, agent session.ts
-   * `declareRead`): when `timeoutMs` passes with no answer, or
-   * `ask.signal` aborts (its asker typed on), the machine is told under the
-   * read's own request id, and stops it where it runs. A deadline that
-   * passes is logged with who asked, so a late answer's line (`lateAnswer`,
-   * by the same id) is read back to its caller. Answers `null` when its asker
-   * let it go.
+   * `declareRead`): when its machine's beats stop naming it for a quiet
+   * spell, or `ask.signal` aborts (its asker typed on, its request ended),
+   * the machine is told under the read's own request id, and stops it where
+   * it runs. A read let go for its quiet is logged with who asked, so a
+   * late answer's line (`lateAnswer`, by the same id) is read back to its
+   * caller. Answers `null` when its asker let it go.
    */
   const readStoppable = async <K extends ControlName>(
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     ask: { caller: string; signal?: AbortSignal | undefined }
   ): Promise<Bounded<ControlAnswer<K>> | null> => {
     if (
@@ -534,7 +554,7 @@ const make = ({
     const stop = () =>
       lifetime.fork(
         "a let-go read",
-        askMachine(machineId, CONTROL_ABANDON, [requestId], ABANDON_MS).pipe(
+        askMachine(machineId, CONTROL_ABANDON, [requestId]).pipe(
           Effect.tap((answer) =>
             answer.kind === "unanswered"
               ? Effect.sync(() =>
@@ -550,7 +570,6 @@ const make = ({
       machineId,
       method,
       requestId,
-      timeoutMs,
       () => {
         const agent = registry.agent(machineId);
         const frame = {
@@ -575,7 +594,12 @@ const make = ({
           const answer = asRead(reply);
           if (answer.kind === "unanswered" && answer.reason === "timeout") {
             console.warn(
-              `[find] ${machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
+              machineReadWords.quietLine(
+                machineName(machineId),
+                method,
+                ask.caller,
+                requestId
+              )
             );
             stop();
           }
@@ -593,28 +617,29 @@ const make = ({
 
   /**
    * Sends something a machine answers under `requestId`, and waits for that
-   * answer, until `timeoutMs`. `send` sends it and gives the frame it sent:
-   * the one sent again, under the same id, if the link drops before the
-   * answer ({@link resendHeld}). A deadline that passes with the machine
-   * away answers MACHINE_DISCONNECTED; one that passes with it there is
-   * unanswered, a machine that did not answer.
+   * answer while the machine's beats name it ({@link namedAt}): let go a
+   * quiet spell after the last beat that did, or after it was sent when
+   * none has. `send` sends it and gives the frame it sent: the one sent
+   * again, under the same id, if the link drops before the answer
+   * ({@link resendHeld}). One let go with the machine away answers
+   * MACHINE_DISCONNECTED; one let go with it there is unanswered, a
+   * machine that stopped working on it.
    *
    * The answer is a {@link Deferred} parked in {@link waiting} under the
    * request id, claimed and sent before the wait's first step, and done by
-   * the frame that answers (agent-socket/control-replies.ts). The deadline
-   * is the kit's bounded read over it; past the deadline the Deferred is
-   * still the answer when it came while the hub caught up with the socket.
+   * the frame that answers (agent-socket/control-replies.ts). The quiet
+   * spell is the kit's bounded read over it; past it the Deferred is still
+   * the answer when it came while the hub caught up with the socket.
    */
   const awaitFrame = Effect.fnUntraced(function* <E = never>(
     machineId: string,
     requestId: string,
-    timeoutMs: number,
     send: () => HubEnvelope | undefined,
     letGo?: Effect.Effect<never, E>
   ): Effect.fn.Return<Bounded<ControlResult>, E> {
     const sentAt = Date.now();
     const { answer, forget } = park(machineId, requestId, send);
-    const read = answeredWithin(timeoutMs, answer);
+    const read = answeredWhileNamed(() => namedAt.get(requestId) ?? 0, answer);
     const reply = yield* (letGo ? Effect.raceFirst(read, letGo) : read).pipe(
       Effect.tapError(() => Effect.sync(forget))
     );
@@ -626,7 +651,7 @@ const make = ({
       return reply;
     }
     return yield* pastDeadline(
-      { machineId, requestId, sentAt, timeoutMs },
+      { machineId, requestId, sentAt },
       answer,
       forget,
       reply
@@ -648,6 +673,7 @@ const make = ({
     const forget = () => {
       waiting.delete(requestId);
       waitingMachines.delete(requestId);
+      namedAt.delete(requestId);
     };
     waitOn(requestId, machineId);
     waiting.set(requestId, (frame) => {
@@ -669,9 +695,9 @@ const make = ({
   };
 
   /**
-   * A call's deadline passed unanswered ({@link awaitFrame}). The hub
-   * catches up with the machine's socket first (wire-socket.ts
-   * `caughtUp`): after its thread was held, the deadline's timer runs
+   * A call's machine stopped naming it, unanswered ({@link awaitFrame}).
+   * The hub catches up with the machine's socket first (wire-socket.ts
+   * `caughtUp`): after its thread was held, the quiet spell's timer runs
    * before the socket is read, and an answer read in time can wait in the
    * inbox behind the frames before it (2026-10-23, three machines' answers
    * to one configure logged as unrouted in the same second, while twenty
@@ -683,7 +709,6 @@ const make = ({
       machineId: string;
       requestId: string;
       sentAt: number;
-      timeoutMs: number;
     },
     answer: Deferred.Deferred<ControlResult>,
     forget: () => void,
@@ -710,7 +735,7 @@ const make = ({
           ? held.again.payload.method
           : held?.again?.verb,
       sentAt: call.sentAt,
-      timeoutMs: call.timeoutMs,
+      lapsedAt: Date.now(),
     });
     return awayAtDeadline
       ? ({
@@ -743,11 +768,10 @@ const make = ({
     machineId: string,
     method: K,
     requestId: string,
-    timeoutMs: number,
     send: () => HubEnvelope | undefined,
     letGo?: Effect.Effect<never, E>
   ): Effect.Effect<Bounded<ControlAnswer<K>>, E> =>
-    awaitFrame(machineId, requestId, timeoutMs, send, letGo).pipe(
+    awaitFrame(machineId, requestId, send, letGo).pipe(
       Effect.map((reply) =>
         parsedReply(reply, (frame) =>
           answerOf(method, frame, machineName(machineId))
@@ -763,7 +787,6 @@ const make = ({
     machineId: string,
     method: K,
     requestId: string,
-    timeoutMs: number,
     send: () => HubEnvelope | undefined,
     letGo?: AbortSignal
   ): Promise<Bounded<ControlAnswer<K>>> =>
@@ -772,7 +795,6 @@ const make = ({
         machineId,
         method,
         requestId,
-        timeoutMs,
         send,
         letGo ? whenLetGo(letGo) : undefined
       ).pipe(Effect.catchTag("LetGo", () => Effect.die(letGo?.reason)))
@@ -783,11 +805,10 @@ const make = ({
     machineId: string,
     op: O,
     requestId: string,
-    timeoutMs: number,
     send: () => HubEnvelope | undefined
   ): Promise<Bounded<FsAnswer<O>>> =>
     lifetime.run(
-      awaitFrame(machineId, requestId, timeoutMs, send).pipe(
+      awaitFrame(machineId, requestId, send).pipe(
         Effect.map((reply) =>
           parsedReply(reply, (frame) =>
             fsAnswerOf(op, frame, machineName(machineId))
@@ -803,53 +824,76 @@ const make = ({
    * gives nothing away. A machine that does not hear it now asks again as
    * it registers (`RegisterAckPayload.revokedCredentials`).
    */
-  /** How long a machine gets to drop credentials from its store: one small file written. */
-  const FORGET_CREDENTIALS_TIMEOUT_MS = 30_000;
-
   /**
-   * A session's start, waited on as {@link awaitReply} does, and on past
-   * {@link SPAWN_START_TIMEOUT_MS} for as long as its machine has said the
-   * start waits for memory since it was sent (a `room` line, core
-   * `ROOM_HELD`): a start is never refused for the machine's room. The spawn
-   * is sent once; a later wait listens for the same answer.
+   * A session's start, waited on as {@link awaitReply} does: a start that
+   * waits on its machine for memory (a `room` line, core `ROOM_HELD`) is
+   * named by the machine's beat as any request it holds running, so it is
+   * waited on for as long as it waits there, and never refused for the
+   * machine's room.
    */
   const awaitStart = (
     machineId: string,
-    instanceId: string,
     requestId: string,
     send: () => HubEnvelope | undefined
   ): Promise<Bounded<CallAnswer<unknown>>> =>
     lifetime.run(
-      Effect.gen(function* () {
-        const sentAt = Date.now();
-        let sent: HubEnvelope | undefined;
-        let reply = yield* awaitFrame(
-          machineId,
-          requestId,
-          SPAWN_START_TIMEOUT_MS,
-          () => {
-            sent = send();
-            return sent;
-          }
-        );
-        while (
-          reply.kind === "unanswered" &&
-          db
-            .machineLinesOf(instanceId)
-            .some((line) => line.kind === "room" && line.at >= sentAt)
-        ) {
-          reply = yield* awaitFrame(
-            machineId,
-            requestId,
-            SPAWN_START_TIMEOUT_MS,
-            () => sent
-          );
-        }
-        return parsedReply(reply, (frame) =>
-          parsedAs(SPAWN_REPLY, frame, machineName(machineId), "its start")
-        );
-      })
+      awaitFrame(machineId, requestId, send).pipe(
+        Effect.map((reply) =>
+          parsedReply(reply, (frame) =>
+            parsedAs(SPAWN_REPLY, frame, machineName(machineId), "its start")
+          )
+        )
+      )
     );
+
+  /**
+   * A request a dashboard asked that the hub forwarded to `machineId`
+   * (server.ts `forward`): watched while the machine's beats name it, and,
+   * once none has for a quiet spell or the machine is gone, `lapse` is told
+   * so its dashboard is answered that no answer came. Its answer, routed as
+   * it always was, ends the watch ({@link forwardAnswered}); so does its
+   * dashboard's leaving, which `lapse` finds.
+   */
+  const watchForwarded = (
+    machineId: string,
+    requestId: string,
+    lapse: (missed: Extract<Bounded<unknown>, { kind: "unanswered" }>) => void
+  ): void => {
+    const answered = Deferred.makeUnsafe<void>();
+    forwarded.set(requestId, answered);
+    lifetime.fork(
+      "a forwarded request's watch",
+      boundedWhileMoving(
+        QUIET_MS,
+        () => namedAt.get(requestId) ?? 0,
+        Deferred.await(answered)
+      ).pipe(
+        Effect.catchTag("Unanswered", ({ after, reason }) =>
+          Effect.sync(() =>
+            lapse({
+              kind: "unanswered",
+              after,
+              reason: registry.agent(machineId) ? reason : "dead",
+            })
+          )
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            forwarded.delete(requestId);
+            namedAt.delete(requestId);
+          })
+        )
+      )
+    );
+  };
+
+  /** A forwarded request's answer came: its watch ends ({@link watchForwarded}). */
+  const forwardAnswered = (requestId: string): void => {
+    const answered = forwarded.get(requestId);
+    if (answered) {
+      Deferred.doneUnsafe(answered, Effect.void);
+    }
+  };
 
   return {
     waiting,
@@ -875,8 +919,10 @@ const make = ({
     readStoppable,
     awaitReply,
     awaitFs,
-    FORGET_CREDENTIALS_TIMEOUT_MS,
     awaitStart,
+    beatNamed,
+    watchForwarded,
+    forwardAnswered,
   };
 };
 

@@ -40062,6 +40062,22 @@
               "control_result"
             ]
           },
+          "lapsed": {
+            "description": "The hub's word on a request a dashboard asked that its machine's beats\nstopped naming before it answered (hub machine-calls.ts\n`watchForwarded`): no answer came, `after` ms in. `error` says it in\nwords for a page that reads only those.",
+            "type": "object",
+            "properties": {
+              "after": {
+                "type": "number"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/ControlResultFrameReason"
+              }
+            },
+            "required": [
+              "after",
+              "reason"
+            ]
+          },
           "ok": {
             "type": "boolean"
           },
@@ -40162,6 +40178,13 @@
           "kind",
           "ok",
           "requestId"
+        ]
+      },
+      "ControlResultFrameReason": {
+        "type": "string",
+        "enum": [
+          "dead",
+          "timeout"
         ]
       },
       "Created": {

@@ -67,6 +67,7 @@ typeOverrides:
     ConnectionTransport: OpenEnums.ConnectionTransport
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
+    ControlResultFrameReason: OpenEnums.ControlResultFrameReason
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState

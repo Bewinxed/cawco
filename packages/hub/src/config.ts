@@ -98,14 +98,6 @@ export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
 ]);
 
 /**
- * How long a spawn the hub waits on (a continuation's sessions, a
- * `start_session`) is given to be in place. A cold harness (opencode starting
- * its server, claude its CLI) takes seconds; past this the machine is not
- * going to answer.
- */
-export const SPAWN_START_TIMEOUT_MS = 120_000;
-
-/**
  * Where the hub's sqlite file lives: core's one rule (`hubDbPath`), the
  * same whether the CLI's unit started the hub or `bun run hub` did.
  */

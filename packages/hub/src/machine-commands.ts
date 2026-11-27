@@ -124,7 +124,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     const answers = await Promise.all(
       runs.map(async ([runId]) => {
         const answer = await ctx.machineCalls
-          .callAgent(machineId, CONTROL_CANCEL_COMMAND, [runId], 15_000)
+          .callAgent(machineId, CONTROL_CANCEL_COMMAND, [runId])
           .catch((error: unknown) =>
             error instanceof Error ? error.message : String(error)
           );
@@ -165,8 +165,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     const answer = await ctx.machineCalls.callAgent(
       machineId,
       CONTROL_CANCEL_COMMAND,
-      [runId],
-      15_000
+      [runId]
     );
     switch (answer.kind) {
       case "unanswered":
@@ -250,8 +249,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
       const response = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_RUN_COMMAND,
-        [cwd, cmd, timeoutMs, workspace, run],
-        (timeoutMs ?? 300_000) + run.queueMaxMs + 10_000
+        [cwd, cmd, timeoutMs, workspace, run]
       );
       // A command that ran out its own limit is an answer (exit 124, in
       // `result`); only a reply that never came is unanswered.

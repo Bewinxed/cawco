@@ -3025,7 +3025,7 @@ const GitChangesShape = declared(
       repo: z.literal("unread"),
       command: z.enum(["status", "log"]),
       exitCode: z.number(),
-      limitMs: z.number().optional(),
+      quiet: z.literal(true).optional(),
     }),
   ]),
   "GitChanges",

@@ -173,7 +173,6 @@ export type AgentAsk = <K extends ControlName>(
   machineId: string,
   method: K,
   args: ControlArgs<K>,
-  timeoutMs: number,
   harness?: HarnessKind,
   instanceId?: string
 ) => Effect.Effect<Bounded<ControlAnswer<K>>>;
@@ -186,7 +185,6 @@ export type AgentCall = <K extends ControlName>(
   machineId: string,
   method: K,
   args: ControlArgs<K>,
-  timeoutMs: number,
   harness?: HarnessKind,
   instanceId?: string
 ) => Promise<Bounded<ControlAnswer<K>>>;

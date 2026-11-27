@@ -28,7 +28,7 @@ import {
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { workspaceReach } from "@cawco/core/boundary-reach";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PAGE, type BrowserPageArgs } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
@@ -37,11 +37,7 @@ import {
   PRESENCE_ID,
   pageOrigin,
 } from "@cawco/core/browser-gate";
-import {
-  CANVAS_LIMITS,
-  CANVAS_SCREEN_CLOSE,
-  CANVAS_SCREEN_OPEN,
-} from "@cawco/core/canvas";
+import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import type { NamedMachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { readClientEnvelope } from "@cawco/core/client-envelope";
@@ -264,24 +260,10 @@ import { triggerWords } from "@cawco/core/words/triggers";
 import { updatesWords } from "@cawco/core/words/updates";
 import { workWords } from "@cawco/core/words/work";
 import {
-  CONTROL_HOST_OUTPUTS,
   CONTROL_INPUTS_ADMIT,
-  CONTROL_INPUTS_CLEAR,
-  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
-  CONTROL_INPUTS_ROOM,
-  CONTROL_INPUTS_WRITE,
-  CONTROL_PLACE_PUSH,
-  CONTROL_PLACE_REPO,
   CONTROL_REPO_ROOT,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
-  WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { quote } from "@cawco/providers/quote";
 import { Context, Effect } from "effect";
@@ -355,7 +337,7 @@ import { answered as browserAnswered } from "./browser-answered";
 import { browserPassRoutes } from "./browser-passes";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
-import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
+import { browserRoutes, createBrowsers } from "./browsers";
 import { TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
@@ -374,7 +356,6 @@ import {
   HUB_VERSION,
   LFS_ROOT,
   PREVIEW_PORTS,
-  SPAWN_START_TIMEOUT_MS,
 } from "./config";
 import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
@@ -452,12 +433,7 @@ import { createFind } from "./find";
 import { createFindTool } from "./find-tool";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
-import {
-  createFleetSources,
-  FLEET_MCP_TAKE_MS,
-  tookOf,
-  UPDATE_CHECK_MS,
-} from "./fleet-sources";
+import { createFleetSources, tookOf, UPDATE_CHECK_MS } from "./fleet-sources";
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createFolderMoves } from "./folder-moves";
@@ -546,7 +522,6 @@ import {
   PAUSE_ORIGIN,
   type PauseCaller,
 } from "./machine-pause";
-import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { MachineRuntime } from "./machine-runtime";
 import { MachineWords } from "./machine-words";
@@ -596,7 +571,7 @@ import {
   shownArtifact,
 } from "./preview";
 import { mintSessionTicket } from "./preview-access";
-import { createPreviewBrowse, WORKSPACE_TIMEOUT_MS } from "./preview-browse";
+import { createPreviewBrowse } from "./preview-browse";
 import {
   fromPreviewServer,
   PreviewLink,
@@ -875,22 +850,6 @@ function searchMiss<T>(answer: Bounded<CallAnswer<T>>): string {
   }
 }
 
-/**
- * How long find waits on a machine's catalog of the sessions it keeps: read
- * in the background (find.ts), never on a keystroke, so a slow listing only
- * delays when a new terminal session becomes findable by name.
- */
-const STORED_LISTING_MS = 15_000;
-/** A machine's gh asked for its accounts or a token: gh checks each account with GitHub. Our choice. */
-const GH_ASK_MS = 20_000;
-/**
- * How long an agent's `find` waits on a machine for a conversation's turns
- * from its index (find-tool.ts `around`, a detailed hit's neighbours): one
- * read of a few records, and a sync first when the index is stale (agent
- * search/index.ts `SYNC_WAIT_MS`). Our call.
- */
-const FIND_TURNS_MS = 5000;
-
 /** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
 const WORKSPACE_READ_MS = 15_000;
 
@@ -1126,8 +1085,6 @@ const LEAKS_KEPT = 4096;
  * anything.
  */
 const HEARTBEAT_SETTLE_GRACE_MS = 45_000;
-/** How long a forge post may take its machine (agent forges/forge.ts gives each forge call a minute). */
-const FORGE_POST_MS = 6 * 60_000;
 
 /** Statuses whose session's parked asks survive a hub start: a process may hold them, or a move's approval waits on its `moving` row. */
 const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
@@ -1279,9 +1236,6 @@ type DashboardVerbs = {
   [V in ClientVerb]: (ws: DashboardSocket, message: ClientEnvelope<V>) => void;
 };
 
-/** How long a machine gets to interrupt a reply a folder move waits for. */
-const FOLDER_MOVE_INTERRUPT_MS = 20_000;
-
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
@@ -1319,7 +1273,7 @@ export const createServer = (
   const machineCalls = Context.get(services, MachineCalls);
   const board = Context.get(services, Board);
   const {
-    FORGET_CREDENTIALS_TIMEOUT_MS,
+    asRead,
     awaitReply,
     askMachine,
     bindFolderInstall,
@@ -1674,7 +1628,6 @@ export const createServer = (
     placedOn: () => placedOn,
     stepping: () => stepping,
     MOVE_TICK_MS: () => MOVE_TICK_MS,
-    SLEEP_TIMEOUT_MS: () => SLEEP_TIMEOUT_MS,
     mayRun: () => mayRun,
     owedCarries: () => owedCarries,
     reportedMachinePath: () => reportedMachinePath,
@@ -1965,7 +1918,6 @@ export const createServer = (
   } = createCutTurns(ctx);
   const {
     MOVE_TICK_MS,
-    SLEEP_TIMEOUT_MS,
     advanceMove,
     answerBorrow,
     carryOnMoves,
@@ -3020,7 +2972,7 @@ export const createServer = (
         workspaceId: sessionWorkspace(actor)?.id ?? actor.id,
       };
       const asked = browserAnswered(
-        await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
+        await callAgent(machineId, BROWSER_PAGE, [page]),
         machineId,
         machineName(machineId),
         `say which page of yours is open on ${origin}`
@@ -3062,7 +3014,6 @@ export const createServer = (
         actor.machineId,
         CONTROL_MCP_FLEET_HEAL,
         [[server]],
-        FLEET_MCP_TAKE_MS,
         undefined,
         actor.id
       ).then(tookOf, (): FleetMcpTook => ({ kind: "unanswered" })),
@@ -3094,12 +3045,7 @@ export const createServer = (
     machineId: string,
     ask: ForgeAsk
   ): Effect.fn.Return<MachineWriteCall> {
-    const answer = yield* askMachine(
-      machineId,
-      CONTROL_FORGE_POST,
-      [ask],
-      FORGE_POST_MS
-    );
+    const answer = yield* askMachine(machineId, CONTROL_FORGE_POST, [ask]);
     if (answer.kind === "unanswered") {
       return {
         kind: "failed",
@@ -3143,12 +3089,7 @@ export const createServer = (
     writes: writeDoor,
     online: () => onlineMachines(),
     ghHosts: async (machineId) => {
-      const answer = await readAgent(
-        machineId,
-        CONTROL_GH_ACCOUNTS,
-        [],
-        GH_ASK_MS
-      );
+      const answer = await readAgent(machineId, CONTROL_GH_ACCOUNTS, []);
       return answer.kind === "answered" &&
         answer.value.ok &&
         Array.isArray(answer.value.result)
@@ -3738,7 +3679,6 @@ export const createServer = (
       machineId,
       CONTROL_PI_DEFAULT_MODEL,
       [payload.cwd],
-      READ_TIMEOUT_MS,
       "pi"
     );
     switch (answer.kind) {
@@ -4318,12 +4258,7 @@ export const createServer = (
     for (const machineId of registry.machineIds()) {
       lifetime.fork(
         "revoked credentials",
-        askMachine(
-          machineId,
-          CONTROL_FORGET_CREDENTIALS,
-          [hashes],
-          FORGET_CREDENTIALS_TIMEOUT_MS
-        ).pipe(
+        askMachine(machineId, CONTROL_FORGET_CREDENTIALS, [hashes]).pipe(
           Effect.tap((answer) =>
             Effect.sync(() => {
               if (answer.kind === "unanswered") {
@@ -4361,7 +4296,6 @@ export const createServer = (
       row.machineId,
       CONTROL_SET_PERMISSION_MODE,
       [mode],
-      BUSY_TIMEOUT_MS,
       undefined,
       row.id
     );
@@ -5168,7 +5102,7 @@ export const createServer = (
       if (machineId) {
         lifetime.fork(
           "design let go",
-          askMachine(machineId, STAGE_UNPIN, [tree], BUSY_TIMEOUT_MS)
+          askMachine(machineId, STAGE_UNPIN, [tree])
         );
       }
     },
@@ -5230,24 +5164,14 @@ export const createServer = (
           `/__cawco/canvas/${artifact.id}/`
         ),
       };
-      const asked = await callAgent(
-        machineId,
-        CANVAS_SCREEN_OPEN,
-        [open],
-        CANVAS_LIMITS.screenOpenMs
-      );
+      const asked = await callAgent(machineId, CANVAS_SCREEN_OPEN, [open]);
       switch (asked.kind) {
         case "unanswered":
           if (asked.reason !== "dead") {
             // It may still open after this gave up: told to close.
             lifetime.fork(
               "late canvas screen close",
-              askMachine(
-                machineId,
-                CANVAS_SCREEN_CLOSE,
-                [{ token }],
-                BUSY_TIMEOUT_MS
-              )
+              askMachine(machineId, CANVAS_SCREEN_CLOSE, [{ token }])
             );
           }
           return asked.reason === "dead"
@@ -5274,18 +5198,13 @@ export const createServer = (
         hold: () => {
           lifetime.fork(
             "canvas screen hold",
-            askMachine(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS)
+            askMachine(machineId, CANVAS_SCREEN_OPEN, [open])
           );
         },
         release: () => {
           lifetime.fork(
             "canvas screen close",
-            askMachine(
-              machineId,
-              CANVAS_SCREEN_CLOSE,
-              [{ token }],
-              BUSY_TIMEOUT_MS
-            )
+            askMachine(machineId, CANVAS_SCREEN_CLOSE, [{ token }])
           );
         },
       };
@@ -5298,12 +5217,10 @@ export const createServer = (
     stopServed: async (machineId, { port, workspace }) => {
       // It ends and says nothing more: forgotten here now, so it holds its tree no longer.
       workspaceStages.get(workspace)?.ports.delete(port);
-      const asked = await callAgent(
-        machineId,
-        STAGE_SERVE_STOP,
-        [workspace, port],
-        BUSY_TIMEOUT_MS
-      );
+      const asked = await callAgent(machineId, STAGE_SERVE_STOP, [
+        workspace,
+        port,
+      ]);
       return asked.kind === "answered" && asked.value.ok
         ? asked.value.result
         : undefined;
@@ -5311,7 +5228,7 @@ export const createServer = (
     keepPins: (machineId, pins) => {
       lifetime.fork(
         "pins kept",
-        askMachine(machineId, STAGE_PINS, [pins], BUSY_TIMEOUT_MS).pipe(
+        askMachine(machineId, STAGE_PINS, [pins]).pipe(
           Effect.tap((asked) =>
             Effect.sync(() => {
               if (
@@ -5710,7 +5627,6 @@ export const createServer = (
   const previewService = createPreviewService({
     lifetime,
     address: (machineId) => registry.address(machineId),
-    busyMs: BUSY_TIMEOUT_MS,
     ask: askMachine,
     call: callAgent,
     carry: (machineId, port) => sshTunnels.carry(machineId, port),
@@ -5985,6 +5901,7 @@ export const createServer = (
     }
     const commandAnswered = streams.settleCommand(requestId, frame);
     const requester = registry.takeRequester(requestId);
+    machineCalls.forwardAnswered(requestId);
     if (requester) {
       sendToClient(requester, {
         ...message,
@@ -6127,7 +6044,6 @@ export const createServer = (
       row.machineId,
       CONTROL_GET_SESSION_INFO,
       [row.sessionId, row.cwd],
-      READ_TIMEOUT_MS,
       row.harness
     );
   /**
@@ -6180,19 +6096,14 @@ export const createServer = (
         .flatMap((row) => (row.sessionId ? [row.sessionId] : []));
       lifetime.fork(
         "removed-machine custody",
-        askMachine(
-          machineId,
-          "removedSessionCustody",
-          [
-            rows.map((row) => ({
-              id: row.id,
-              sessionId: row.sessionId,
-              cwd: row.cwd,
-            })),
-            claimed,
-          ],
-          READ_TIMEOUT_MS
-        ).pipe(
+        askMachine(machineId, "removedSessionCustody", [
+          rows.map((row) => ({
+            id: row.id,
+            sessionId: row.sessionId,
+            cwd: row.cwd,
+          })),
+          claimed,
+        ]).pipe(
           Effect.tap((answer) =>
             Effect.sync(() => {
               // Each result is read against the connection that was asked.
@@ -6254,10 +6165,8 @@ export const createServer = (
         machineId,
         requestId: payload.requestId,
         at,
-        timer: lifetime.after(
-          "stop dispatch timed out",
-          payload.discard ? 30_000 : READ_TIMEOUT_MS,
-          () => finishStopDispatch(key, "timed-out")
+        timer: lifetime.after("stop dispatch timed out", QUIET_MS, () =>
+          finishStopDispatch(key, "timed-out")
         ),
       });
       return true;
@@ -6322,7 +6231,6 @@ export const createServer = (
         row.machineId,
         DELETE_SESSION,
         [sessionId, row.cwd],
-        READ_TIMEOUT_MS,
         row.harness
       );
       let failed: string;
@@ -6351,7 +6259,7 @@ export const createServer = (
       refreshingCustody.add(machineId);
       lifetime.fork(
         "custody refresh",
-        askMachine(machineId, "sessionCustody", [], READ_TIMEOUT_MS).pipe(
+        askMachine(machineId, "sessionCustody", []).pipe(
           Effect.tap((answer) =>
             Effect.sync(() => {
               // Unanswered: custody keeps what the hub last knew.
@@ -6449,7 +6357,7 @@ export const createServer = (
     online: (machineId) => !!registry.agent(machineId),
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
-    timeoutMs: READ_TIMEOUT_MS,
+    timeoutMs: QUIET_MS,
   });
   // Locate folder: a project's checkout pointed at where its folder is now
   // (project-locate.ts); `merging` is read as a fold runs, once it is made.
@@ -6457,10 +6365,7 @@ export const createServer = (
   // Connect existing folder: another folder of a project's, two projects
   // made one only with the person's yes (project-connect.ts).
   const projectConnect = createProjectConnect(ctx);
-  const waitForEnd = (
-    instanceId: string,
-    waitMs = SPAWN_START_TIMEOUT_MS
-  ): Promise<void> =>
+  const waitForEnd = (instanceId: string, waitMs = QUIET_MS): Promise<void> =>
     new Promise((resolve, reject) => {
       const deadline = Date.now() + waitMs;
       const observe = () => {
@@ -6525,7 +6430,7 @@ export const createServer = (
       outcome?: string;
     }) => void = () => undefined;
     const receipt = readWithin(
-      discard ? 30_000 : READ_TIMEOUT_MS,
+      QUIET_MS,
       (signal) =>
         new Promise<{ frame: ControlResult; outcome?: string }>((resolve) => {
           settle = resolve;
@@ -6655,7 +6560,30 @@ export const createServer = (
     if (requestId) {
       outgoing = { ...outgoing, requestId };
       if (remember) {
+        // Answered whatever happens: the machine's answer as it comes, or,
+        // once its beats stop naming it, that none came.
         registry.rememberRequester(requestId, dashboard);
+        machineCalls.watchForwarded(envelope.machineId, requestId, (missed) => {
+          const asker = registry.takeRequester(requestId);
+          if (asker) {
+            sendToClient(asker, {
+              verb: "frames",
+              machineId: envelope.machineId,
+              requestId,
+              payload: {
+                kind: "control_result",
+                requestId,
+                ok: false,
+                error: unansweredError(
+                  envelope.machineId,
+                  missed,
+                  envelope.verb
+                ).message,
+                lapsed: { after: missed.after, reason: missed.reason },
+              },
+            });
+          }
+        });
       }
     }
     sendToMachine(agent, outgoing);
@@ -7312,14 +7240,12 @@ export const createServer = (
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     session?: { harness: HarnessKind; instanceId: string }
   ): Promise<ControlReply<K>> => {
     const asked = await callAgent(
       machineId,
       method,
       args,
-      timeoutMs,
       session?.harness,
       session?.instanceId
     );
@@ -7361,8 +7287,7 @@ export const createServer = (
     db,
     lifetime,
     gitRoot: GIT_ROOT,
-    call: (machineId, method, args, timeoutMs) =>
-      stepCall(machineId, method, args, timeoutMs),
+    call: (machineId, method, args) => stepCall(machineId, method, args),
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
     // A move starts a new session: its mode is the one its request names.
@@ -7442,7 +7367,6 @@ export const createServer = (
         row.machineId,
         CONTROL_INTERRUPT,
         [],
-        FOLDER_MOVE_INTERRUPT_MS,
         row.harness,
         instanceId
       );
@@ -8416,24 +8340,6 @@ export const createServer = (
    * machine's own words (502 machine-call-failed).
    */
   const callMachine: MachineCall = async (machineId, method, args) => {
-    const timeout =
-      method === CONTROL_WORKSPACE_CREATE ||
-      method === CONTROL_WORKSPACE_ARCHIVE ||
-      method === CONTROL_WORKSPACE_DISCARD ||
-      method === CONTROL_WORKSPACE_OUTPUTS ||
-      method === CONTROL_HOST_OUTPUTS ||
-      method === CONTROL_WORKSPACE_BUNDLE ||
-      method === CONTROL_WORKSPACE_AT ||
-      method === CONTROL_INPUTS_ADMIT ||
-      method === CONTROL_INPUTS_COPY ||
-      method === CONTROL_INPUTS_READ ||
-      method === CONTROL_INPUTS_ROOM ||
-      method === CONTROL_INPUTS_WRITE ||
-      method === CONTROL_INPUTS_CLEAR ||
-      method === CONTROL_PLACE_REPO ||
-      method === CONTROL_PLACE_PUSH
-        ? WORKSPACE_CREATE_TIMEOUT_MS
-        : WORKSPACE_TIMEOUT_MS;
     // A delegate's inputs admitted or read only look at its parent's files,
     // and a folder's checkout is only read (machine-calls.ts `asRead`); every other
     // method here changes the machine.
@@ -8441,8 +8347,8 @@ export const createServer = (
       method === CONTROL_INPUTS_ADMIT ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_REPO_ROOT
-        ? await readAgent(machineId, method, args, timeout)
-        : await callAgent(machineId, method, args, timeout);
+        ? await readAgent(machineId, method, args)
+        : await callAgent(machineId, method, args);
     switch (answer.kind) {
       case "unanswered":
         throw new MachineProblem(
@@ -9524,15 +9430,11 @@ export const createServer = (
     lifetime,
     path: DB_PATH,
     hub: {
-      askMachine: async (
-        { machineId, query, options, timeoutMs, caller },
-        signal
-      ) => {
+      askMachine: async ({ machineId, query, options, caller }, signal) => {
         const answer = await readStoppable(
           machineId,
           CONTROL_SEARCH_TRANSCRIPTS,
           [query, options],
-          timeoutMs,
           { caller, ...(signal ? { signal } : {}) }
         );
         if (answer === null) {
@@ -9559,12 +9461,7 @@ export const createServer = (
         return result;
       },
       listStored: async (machineId): Promise<Listed> => {
-        const answer = await readAgent(
-          machineId,
-          CONTROL_LIST_SESSIONS,
-          [{}],
-          STORED_LISTING_MS
-        );
+        const answer = await readAgent(machineId, CONTROL_LIST_SESSIONS, [{}]);
         switch (answer.kind) {
           case "unanswered":
             return { error: searchMiss(answer) };
@@ -10789,12 +10686,7 @@ export const createServer = (
         const asked = await Promise.all(
           onlineMachines().map(async (machineId) => ({
             machineId,
-            answer: await readAgent(
-              machineId,
-              CONTROL_GH_ACCOUNTS,
-              [],
-              GH_ASK_MS
-            ),
+            answer: await readAgent(machineId, CONTROL_GH_ACCOUNTS, []),
           }))
         );
         return {
@@ -10815,12 +10707,10 @@ export const createServer = (
         };
       },
       token: async (machineId, host, login) => {
-        const answer = await readAgent(
-          machineId,
-          CONTROL_GH_TOKEN,
-          [host, login],
-          GH_ASK_MS
-        );
+        const answer = await readAgent(machineId, CONTROL_GH_TOKEN, [
+          host,
+          login,
+        ]);
         if (answer.kind === "unanswered") {
           return {
             kind: "away",
@@ -11248,7 +11138,6 @@ export const createServer = (
         machineId,
         CONTROL_TRANSCRIPT_TURNS,
         [query],
-        FIND_TURNS_MS,
         { caller: "an agent's find, reading a hit's turns" }
       );
       if (answer === null) {
@@ -11664,24 +11553,19 @@ export const createServer = (
       const requestId = crypto.randomUUID();
       // The host's refresh is the session's; the hub only logs how it went.
       detach(
-        awaitReply(
-          row.machineId,
-          CONTROL_REFRESH_CAWCO_TOOLS,
-          requestId,
-          60_000,
-          () =>
-            sendAnswerable(agent, {
-              verb: "control",
-              machineId: row.machineId,
+        awaitReply(row.machineId, CONTROL_REFRESH_CAWCO_TOOLS, requestId, () =>
+          sendAnswerable(agent, {
+            verb: "control",
+            machineId: row.machineId,
+            instanceId: row.id,
+            requestId,
+            payload: {
               instanceId: row.id,
               requestId,
-              payload: {
-                instanceId: row.id,
-                requestId,
-                method: CONTROL_REFRESH_CAWCO_TOOLS,
-                args: [],
-              } satisfies AddressedControl,
-            } satisfies HubEnvelope<"control">)
+              method: CONTROL_REFRESH_CAWCO_TOOLS,
+              args: [],
+            } satisfies AddressedControl,
+          } satisfies HubEnvelope<"control">)
         ).then((reply) => {
           switch (reply.kind) {
             case "unanswered":
@@ -11775,12 +11659,9 @@ export const createServer = (
     if (!workspace) {
       return;
     }
-    const masked = await callAgent(
-      row.machineId,
-      CONTROL_WORKSPACE_BOUNDARY,
-      [workspace],
-      30_000
-    );
+    const masked = await callAgent(row.machineId, CONTROL_WORKSPACE_BOUNDARY, [
+      workspace,
+    ]);
     switch (masked.kind) {
       case "unanswered":
         throw new Error(
@@ -11844,7 +11725,6 @@ export const createServer = (
         row.machineId,
         INSTALL_SESSION_CREDENTIAL,
         requestId,
-        120_000,
         () =>
           sendAnswerable(agent, {
             verb: "control",
@@ -11903,12 +11783,7 @@ export const createServer = (
     if (!registry.agent(row.machineId)) {
       return false;
     }
-    const answer = await readAgent(
-      row.machineId,
-      AGENT_BUSY,
-      [],
-      BUSY_TIMEOUT_MS
-    );
+    const answer = await readAgent(row.machineId, AGENT_BUSY, []);
     // Not idle on its machine's word: nothing is put in now, and its caller
     // asks again at its next turn (R/WAIT).
     switch (answer.kind) {
@@ -12579,10 +12454,9 @@ export const createServer = (
         flushOwedStarts(machineId);
       }
     },
-    cancel: (machineId) =>
-      callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
+    cancel: (machineId) => callAgent(machineId, CANCEL_BINARY_UPDATE, []),
     configure: (machineId, policy: BinaryUpdatePolicy) =>
-      callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
+      callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy]),
   });
 
   // A machine's socket in its order: agent-socket/frame-stages.ts, machine-return-steps.ts.
@@ -13582,6 +13456,9 @@ export const createServer = (
     }
     sayLeftOut(addressed.machineId, read.dropped);
     if (read.envelope.verb === "heartbeat") {
+      // What it names running is heard as it comes, before the beat waits
+      // its turn: a call waits while its machine names it.
+      machineCalls.beatNamed(read.envelope.payload.working);
       admitBeat(ws, read.envelope);
       return;
     }

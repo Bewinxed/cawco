@@ -81,12 +81,6 @@ const STUN_MS = 3000;
 const HEALTH_MS = 60_000;
 /** How often a relay with a DNS name is asked to renew its certificate (certbot decides). */
 const RENEW_MS = DAY_MS;
-/** How long a relay start may take: a pull of coturn's image and its bind. */
-const START_MS = 240_000;
-/** How long a certificate's issue may take: certbot's pull and its challenge. */
-const CERTIFY_MS = 240_000;
-const STOP_MS = 30_000;
-const RENEW_CALL_MS = 240_000;
 
 /** One TURN REST API password: base64 of HMAC-SHA1 over the username, keyed by the shared secret. */
 const turnCredential = (secret: string, username: string): string =>
@@ -407,12 +401,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     if (args instanceof ElysiaStatus) {
       return failed(args);
     }
-    const read = yield* deps.ask(
-      relay.machineId,
-      RELAY_START,
-      [args],
-      START_MS
-    );
+    const read = yield* deps.ask(relay.machineId, RELAY_START, [args]);
     const frame = answered(
       read,
       relay.machineId,
@@ -489,12 +478,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     const args: RelayRenewArgs = { cloudflareToken: token };
-    const read = await call(
-      relay.machineId,
-      RELAY_RENEW,
-      [args],
-      RENEW_CALL_MS
-    );
+    const read = await call(relay.machineId, RELAY_RENEW, [args]);
     const done = answered(
       read,
       relay.machineId,
@@ -538,7 +522,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       );
     },
     certify: async (machineId, args) => {
-      const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
+      const read = await call(machineId, RELAY_CERTIFY, [args]);
       const certified = answered(
         read,
         machineId,
@@ -554,7 +538,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (before && before.machineId !== machineId) {
         // One relay for the fleet: the one before goes from its own machine,
         // its certificate volume and router mappings with it.
-        await call(before.machineId, RELAY_REMOVE, [], STOP_MS);
+        await call(before.machineId, RELAY_REMOVE, []);
       }
       probed = [];
       db.set({
@@ -590,7 +574,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
           detail: "The fleet has no stream relay to stop.",
         });
       }
-      const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
+      const read = await call(relay.machineId, RELAY_STOP, []);
       const frame = answered(
         read,
         relay.machineId,
@@ -610,7 +594,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       }
       // Its container, its certificate volume and its router mappings go
       // from the machine.
-      const read = await call(relay.machineId, RELAY_REMOVE, [], STOP_MS);
+      const read = await call(relay.machineId, RELAY_REMOVE, []);
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {

@@ -16,16 +16,8 @@ import {
 import { configurePage } from "@cawco/core/words/configure";
 import type { HubContext } from "./hub-context";
 import type { ControlAnswer } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { keptReleases, releaseTarget } from "./tool-releases";
 import type { MachineSocket } from "./wire-socket";
-
-/**
- * How long a tool install the hub runs itself (a joined machine's harness
- * CLIs, `readyHarnesses`) may take to answer: the dashboard's own install wait
- * (dashboard config.ts `INSTALL_TIMEOUT_MS`), so the two never disagree.
- */
-const TOOL_INSTALL_MS = 300_000;
 
 /** A machine Update all left, and why (`updateAll`). */
 interface UpdateAllLeft {
@@ -374,7 +366,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    * Puts a catalog tool on a machine and waits for its answer, as a press
    * on the dashboard does: the machine's cell reads `installing` for every
    * dashboard until the machine answers, and its answer is the cell (the
-   * `pendingInstalls` path). Unanswered past {@link TOOL_INSTALL_MS}.
+   * `pendingInstalls` path). Unanswered once its machine stops naming it.
    */
   const installAwaited = (
     machineId: string,
@@ -406,7 +398,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       machineId,
       INSTALL_TOOL,
       requestId,
-      TOOL_INSTALL_MS,
       () => {
         const frame = {
           verb: "control",
@@ -588,12 +579,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     machineId: string
   ): Promise<ToolStatus[] | { said: string }> => {
     const name = ctx.machineName(machineId);
-    const listed = await ctx.machineCalls.callAgent(
-      machineId,
-      LIST_TOOLS,
-      [],
-      READ_TIMEOUT_MS
-    );
+    const listed = await ctx.machineCalls.callAgent(machineId, LIST_TOOLS, []);
     if (listed.kind === "unanswered") {
       return {
         said: `${name} didn't say which tools it has (${ctx.silentWords(machineId, listed)}).`,

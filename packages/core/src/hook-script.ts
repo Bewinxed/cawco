@@ -12,7 +12,8 @@
  * installed, and a machine without the shell could not run it anyway.
  */
 import { basename } from "node:path";
-import { readWithin } from "./bounded";
+import { QUIET_MS } from "./bounded";
+import { runLive } from "./run-captured";
 import { secondsOf } from "./time";
 import { unhandled } from "./unhandled";
 import {
@@ -25,9 +26,8 @@ import {
 /** The shells a script can be checked with, by `<shell> -n`. */
 type HookShell = "bash" | "sh";
 
-/** How long one `<shell> -n` gets. Our choice: a parse of a hook script is
- * milliseconds, and one that hangs is not a script worth registering. */
-const PARSE_TIMEOUT_MS = 5000;
+/** The exit a POSIX shell gives a command it cannot find (POSIX "Command Search and Execution": 127). */
+const COMMAND_NOT_FOUND = 127;
 
 const WHITESPACE = /\s+/u;
 
@@ -73,50 +73,36 @@ export const scriptParseError = async (
   if (!shell) {
     return undefined;
   }
-  const parsed = await readWithin(PARSE_TIMEOUT_MS, async (signal) => {
-    // Bun throws as it spawns a program that is not on the PATH.
-    const spawn = () => {
-      try {
-        return Bun.spawn([shell, "-n"], {
-          env,
-          stdin: new TextEncoder().encode(script),
-          stdout: "ignore",
-          stderr: "pipe",
-          signal,
-        });
-      } catch (error) {
-        return error instanceof Error ? error : new Error(String(error));
-      }
-    };
-    const child = spawn();
-    if (child instanceof Error) {
-      return shellCheckMissing(shell);
-    }
-    const stderr = await new Response(child.stderr).text();
-    const code = await child.exited;
-    if (child.signalCode) {
-      return shellCheckEnded(shell, String(child.signalCode));
-    }
-    if (code === 0) {
-      return;
-    }
-    return (
-      stderr
-        .split("\n")
-        .find((line) => line.trim() !== "")
-        ?.trim() ?? shellCheckExited(shell, code)
-    );
-  });
+  // A parse of a hook script is milliseconds; one that goes quiet is not
+  // a script worth registering (core run-captured.ts `runLive`).
+  const parsed = await runLive([shell, "-n"], { env, input: script });
   switch (parsed.kind) {
-    case "answered":
-      return parsed.value === undefined
-        ? undefined
-        : { shell, said: parsed.value };
+    case "answered": {
+      const { code, signalCode, stderr } = parsed.value;
+      if (signalCode) {
+        return { shell, said: shellCheckEnded(shell, String(signalCode)) };
+      }
+      if (code === 0) {
+        return undefined;
+      }
+      // The shell's own exit for a program it could not find.
+      if (code === COMMAND_NOT_FOUND) {
+        return { shell, said: shellCheckMissing(shell) };
+      }
+      return {
+        shell,
+        said:
+          stderr
+            .split("\n")
+            .find((line) => line.trim() !== "")
+            ?.trim() ?? shellCheckExited(shell, code),
+      };
+    }
     case "unanswered":
       // Not known to parse: never registered on a parse nobody finished.
       return {
         shell,
-        said: shellCheckTimedOut(shell, secondsOf(PARSE_TIMEOUT_MS)),
+        said: shellCheckTimedOut(shell, secondsOf(QUIET_MS)),
       };
     default:
       unhandled("read", parsed);

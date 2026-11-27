@@ -131,6 +131,8 @@ export interface HeartbeatReads
    * hub installing the whole catalog onto a machine not yet probed.
    */
   tools: ToolStatus[];
+  /** The hub's requests the machine holds running, by id. */
+  working: string[];
 }
 
 /** A machine's usage report (USAGE-SPEC.md §6.4), read once. */

@@ -39,9 +39,8 @@ export interface TranscriptQuery {
   /**
    * The asker is one call (an agent's `find`), not a keystroke: the machine
    * answers it from a reader of its own (agent search/index.ts), so a search
-   * that runs for seconds, which an agent's find waits out
-   * ({@link TRANSCRIPT_CALL_MS}), never holds the reader a person's typing
-   * waits on.
+   * that runs for seconds, which the hub waits out while the machine's
+   * beats name it, never holds the reader a person's typing waits on.
    */
   call?: true;
   /**
@@ -107,16 +106,14 @@ interface TranscriptConversation {
 export type FindAsker = "typing" | "call";
 
 /**
- * How long the hub waits on each machine's transcript search while a person
- * types (Find, Jump, a mention; hub find.ts), ms: one query per keystroke,
- * so a slow machine is named as one that didn't answer rather than holding
- * every other machine's moments back. Chosen from what a current index
- * answers within ({@link TRANSCRIPT_QUERY_MS}), with room for the sync a
- * search may wait on first ({@link TRANSCRIPT_SYNC_WAIT_MS}). An agent's
- * `find` waits {@link TRANSCRIPT_CALL_MS}.
+ * The window a machine's transcript search answers a person's typing in
+ * (Find, Jump, a mention; hub find.ts), ms: one query per keystroke. Chosen
+ * from what a current index answers within ({@link TRANSCRIPT_QUERY_MS}),
+ * with room for the sync a search may wait on first
+ * ({@link TRANSCRIPT_SYNC_WAIT_MS}), which is what is left of it.
  */
 // @limit measured: what obelisk's index took to answer the person's Find as the hub saw it (GET /api/find, each machine's tookMs, 2026-11-26, a load average of 90 to 200 on 48 cores): "the" 571 to 1,117 ms, two or three words 104 to 315 ms, a rare word 9 ms
-export const TRANSCRIPT_ANSWER_MS = 1500;
+const TRANSCRIPT_ANSWER_MS = 1500;
 
 /**
  * The longest a query of a current index takes on the machine, ms: what
@@ -150,22 +147,6 @@ export const TRANSCRIPT_SYNC_WAIT_MS =
  * answers in under 0.8 s (jsonl-parser fts5.ts `MARKED_CHARS`). Our call.
  */
 export const TRANSCRIPT_READ_LIMIT_MS = 5000;
-
-/**
- * How long the hub waits on each machine's transcript search for an agent's
- * `find` (hub find-tool.ts), ms: every bound the machine itself holds the
- * search to, the sync it may wait on first ({@link TRANSCRIPT_SYNC_WAIT_MS})
- * and the question ({@link TRANSCRIPT_READ_LIMIT_MS}), with the wire
- * ({@link TRANSCRIPT_WIRE_MS}). An agent's find is one call, not a keystroke,
- * and a machine left out of it leaves the agent without that machine's
- * transcripts, so the hub never gives up on a search the machine still
- * works on; one past the machine's own limit is refused there, and its
- * reason is the answer. Held to the person's window instead, obelisk's
- * searches for agents were cut off 30 times in 26 hours (its journal,
- * 2026-11-25 to 26), one of them a search still running 5 s on.
- */
-export const TRANSCRIPT_CALL_MS =
-  TRANSCRIPT_SYNC_WAIT_MS + TRANSCRIPT_READ_LIMIT_MS + TRANSCRIPT_WIRE_MS;
 
 /** A machine's answer to a {@link TranscriptQuery}. */
 export interface TranscriptAnswer {

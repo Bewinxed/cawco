@@ -14,7 +14,8 @@
  *   each under its name, is the run's input ({@link checkInput}), one run
  *   for the slot; the routine's target (Caw, a delegate, an orchestrator)
  *   decides what to do with it, and its retry is given the same input.
- * - **Failed**: a non-zero exit, a run past {@link CHECK_LIMIT_MS}, a
+ * - **Failed**: a non-zero exit, a run its machine stopped for going a
+ *   quiet spell with no output and no work (agent hub-command.ts), a
  *   machine away or unknown ({@link answerOf}). Kept with its error on the
  *   machine's row and never quiet: with nothing woken the run fails, as any
  *   failed run does; beside a machine that woke, the failure joins the
@@ -23,18 +24,13 @@
  *   machine paused skips the slot.
  */
 
+import { QUIET_MS } from "@cawco/core/bounded";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { isRecord } from "@cawco/core/is-record";
 import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
+import { secondsOf } from "@cawco/core/time";
 import { checkWords } from "@cawco/core/words/routine-check";
 import type { CheckRow } from "./db/task-triggers";
-
-/**
- * The longest a check's command runs on a machine: the limit command
- * checks had at most, now every check's. A scan that takes longer belongs
- * in a job of its own on its machine, whose result the check reads.
- */
-export const CHECK_LIMIT_MS = 10 * 60_000;
 
 /**
  * The most of one machine's output a run's input carries, in characters:
@@ -93,17 +89,14 @@ const wakes = (stdout: string): boolean => {
 };
 
 /** The machine's words for a non-zero exit, from its last line of stderr, else of stdout. */
-const exitWhy = (
-  result: CommandResult,
-  limitMs: number,
-  tookMs: number
-): string => {
+const exitWhy = (result: CommandResult): string => {
   const code = result.exitCode;
   const said =
     linesOf(result.stderr).at(-1) ?? linesOf(result.stdout).at(-1) ?? null;
   if (code === EXIT_TIMED_OUT) {
-    return tookMs >= limitMs
-      ? checkWords.timedOut(Math.round(limitMs / 1000))
+    // Stopped by its machine for going quiet: the runner's own last line.
+    return said?.startsWith("CawCo: ")
+      ? checkWords.timedOut(secondsOf(QUIET_MS))
       : checkWords.timedOutItself(said);
   }
   if (code === EXIT_NOT_RUNNABLE) {
@@ -121,9 +114,7 @@ const exitWhy = (
 /** How the check went on `machine`, from what its command answered there. */
 export const answerOf = (
   machine: string,
-  result: CommandResult,
-  limitMs: number,
-  tookMs: number
+  result: CommandResult
 ): MachineAnswer => {
   if (result.cancelled) {
     return { machine, kind: "failed", why: checkWords.stopped };
@@ -132,7 +123,7 @@ export const answerOf = (
     return {
       machine,
       kind: "failed",
-      why: exitWhy(result, limitMs, tookMs),
+      why: exitWhy(result),
     };
   }
   return wakes(result.stdout)

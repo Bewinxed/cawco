@@ -1,5 +1,6 @@
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { fetchHeard } from "@cawco/core/bounded";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
 import { Clock, Effect, Result, Schema } from "effect";
@@ -32,7 +33,6 @@ const TRAILING_SLASHES = /\/+$/u;
 /** Where the Go usage read goes: OpenCode's host, or the stand-in `CAWCO_OPENCODE_BASE_URL` names. */
 const usageUrl = (): string =>
   `${(process.env.CAWCO_OPENCODE_BASE_URL || DEFAULT_BASE_URL).replace(TRAILING_SLASHES, "")}/zen/go/v1/usage`;
-const TIMEOUT_MS = 10_000;
 /** The same cadence the Claude reading keeps: the daemon ticks faster and is served from cache. */
 const CACHE_TTL_MS = 180_000;
 /**
@@ -116,17 +116,20 @@ class GoReadFailed extends Schema.TaggedError<GoReadFailed>()("GoReadFailed", {
   cause: Schema.Defect(),
 }) {}
 
-/** The usage endpoint's answer to `key`, within {@link TIMEOUT_MS}: its windows, or the HTTP status it refused with. */
+/** The usage endpoint's answer to `key`, within its quiet spell (core bounded.ts `fetchHeard`): its windows, or the HTTP status it refused with. */
 const readGo = Effect.fn("readGo")((key: string) =>
-  boundedRead(
-    TIMEOUT_MS,
+  boundedWhileLive((alive) =>
     Effect.tryPromise({
       try: async (signal) => {
-        const res = await fetch(usageUrl(), {
-          headers: { Authorization: `Bearer ${key}` },
-          redirect: "error",
-          signal,
-        });
+        const res = await fetchHeard(
+          usageUrl(),
+          {
+            headers: { Authorization: `Bearer ${key}` },
+            redirect: "error",
+            signal,
+          },
+          alive
+        );
         if (!res.ok) {
           await res.body?.cancel();
           return { ok: false as const, status: res.status };

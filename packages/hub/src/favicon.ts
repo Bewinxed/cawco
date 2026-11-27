@@ -22,7 +22,7 @@ import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
-import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
+import { boundedWhileLive, type Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { isPublicDestination } from "@cawco/core/public-address";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
@@ -38,7 +38,6 @@ const DIR = join(dirname(DB_PATH), "favicons");
 
 const ICON_KEPT_MS = 7 * DAY_MS;
 const MISS_KEPT_MS = DAY_MS;
-const TIMEOUT_MS = 5000;
 const PAGE_CAP = 256 * 1024;
 // @limit measured: the largest favicon kept is 16.6 KiB of 27 (obelisk, 2026-11-26)
 const ICON_CAP = 128 * 1024;
@@ -100,19 +99,20 @@ type Answer =
   | { kind: "body"; bytes: Buffer; type: string }
   | { kind: "redirect"; location: string };
 
-/** One GET through {@link publicLookup} within {@link TIMEOUT_MS}; the body is read up to `cap` bytes. */
+/** One GET through {@link publicLookup}, waited on while its bytes arrive (its head, then each chunk); the body is read up to `cap` bytes. */
 const getOnce = (
   url: URL,
   cap: number,
   accept: string
 ): Effect.Effect<Answer | undefined, Unanswered> =>
-  boundedRead(TIMEOUT_MS, fetchOnce(url, cap, accept));
+  boundedWhileLive((alive) => fetchOnce(url, cap, accept, alive));
 
 /** One GET, as {@link getOnce} has it read; interrupted, the request is let go. */
 const fetchOnce = (
   url: URL,
   cap: number,
-  accept: string
+  accept: string,
+  alive: () => void
 ): Effect.Effect<Answer | undefined> =>
   Effect.callback<Answer | undefined>((resume, signal) => {
     const done = (answer: Answer | undefined): void => {
@@ -126,6 +126,7 @@ const fetchOnce = (
         headers: { accept, "user-agent": "CawCo hub (site icon)" },
       },
       (response) => {
+        alive();
         const code = response.statusCode ?? 0;
         const { location } = response.headers;
         if (code >= 300 && code < 400 && location) {
@@ -144,6 +145,7 @@ const fetchOnce = (
         const chunks: Buffer[] = [];
         let size = 0;
         response.on("data", (chunk: Buffer) => {
+          alive();
           size += chunk.byteLength;
           if (size > cap) {
             response.destroy();

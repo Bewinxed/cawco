@@ -112,6 +112,157 @@ export const readWhileHeard = <T>(
 };
 
 /**
+ * The daemon's beat: how often a machine tells its hub it is there, and
+ * names what it is working on (agent daemon.ts, core protocol.ts
+ * `HeartbeatPayload`). The cadence {@link QUIET_MS} is counted in.
+ */
+export const BEAT_MS = 15_000;
+
+/**
+ * How long anything CawCo waits on may show no sign of life before it is
+ * let go: two of the daemon's beats. It is the one quiet spell of the
+ * fleet: the daemon drops its hub link after two unanswered pings (agent
+ * daemon.ts), an update's health probe gives a hub that says nothing
+ * thirty seconds (cli binary-health.ts), and the dashboard's socket beats
+ * every 20 s and hears for 10 more (core stream.ts). No call site passes a
+ * number of its own: work is waited on while it shows life, and its
+ * caller's signal is the only other way it ends early.
+ */
+// @limit external: two of the daemon's 15 s beats (BEAT_MS), the rule the daemon's hub link is already dropped by (agent daemon.ts, two unanswered pings), the same 30 s the update's health probe (cli binary-health.ts) and the dashboard's socket (core stream.ts, a 20 s beat and 10 s to hear) give a peer; curl calls 30 s with nothing moving a stalled transfer (--speed-time, "30 seconds by default", curl(1))
+export const QUIET_MS = 2 * BEAT_MS;
+
+/**
+ * Runs `read` for as long as it shows life: let go once {@link QUIET_MS}
+ * of this machine's awake time pass with no `alive()`, counted from the
+ * read's start or its last `alive()` ({@link readWhileHeard} with the
+ * fleet's one quiet spell). `read` calls `alive` at each sign the work
+ * gives: a line, a chunk, a message, CPU time spent. A read that throws
+ * {@link Gone} (its process exited, its socket closed) answers
+ * `unanswered`, reason "dead"; a caller's `signal` ends it at once.
+ */
+export const readWhileLive = <T>(
+  read: (signal: AbortSignal, alive: () => void) => Promise<T>,
+  options: { signal?: AbortSignal } = {}
+): Promise<Bounded<T>> => readWhileHeard(QUIET_MS, read, options);
+
+/** `chunks` as one array, as a browser reads it too (no `Buffer` there). */
+export const joinedBytes = (
+  chunks: readonly Uint8Array[]
+): Uint8Array<ArrayBuffer> => {
+  const whole = new Uint8Array(
+    chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+  );
+  let at = 0;
+  for (const chunk of chunks) {
+    whole.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return whole;
+};
+
+/** The statuses whose response carries no body (Fetch: "null body status"). */
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
+
+/** A fetch's init as {@link fetchHeard} and {@link fetchLive} take it: `take` is handed each chunk of a body too large to hold, and the answer's body is then empty. */
+export type LiveInit = RequestInit & {
+  take?: (chunk: Uint8Array) => void | Promise<void>;
+};
+
+/**
+ * A fetch whose every sign of life is told to `alive`: its response's head,
+ * then each chunk of its body, read to its end. Answers the response with
+ * its body held whole (or handed to `init.take` chunk by chunk), so a
+ * caller reads it as any response (`json()`, `text()`, `ok`) once nothing
+ * is left to wait for. The read inside {@link fetchLive}, and inside a
+ * {@link readWhileLive} that hears another sign too (a server's CPU time,
+ * its exit as {@link Gone}).
+ */
+export const fetchHeard = async (
+  input: string | URL | Request,
+  init: LiveInit,
+  alive: () => void
+): Promise<Response> => {
+  const { take, ...request } = init;
+  const response = await fetch(input, request);
+  alive();
+  return await heardBody(response, alive, take);
+};
+
+/**
+ * `response`'s body read to its end, `alive` told at each chunk: the same
+ * response with its body held whole, or handed to `take` chunk by chunk
+ * (its body then empty). For a sender other than the platform's `fetch`
+ * (a machine's proven one) read under {@link readWhileLive}.
+ */
+export const heardBody = async (
+  response: Response,
+  alive: () => void,
+  take?: (chunk: Uint8Array) => void | Promise<void>
+): Promise<Response> => {
+  const chunks: Uint8Array[] = [];
+  if (response.body) {
+    for await (const chunk of response.body) {
+      alive();
+      if (take) {
+        await take(chunk);
+      } else {
+        chunks.push(chunk);
+      }
+    }
+  }
+  return new Response(
+    NULL_BODY.has(response.status) ? null : joinedBytes(chunks),
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }
+  );
+};
+
+/**
+ * `response` with each chunk of its body told to `alive` as its reader reads
+ * it: for a body read as a stream (an event stream, a reply read off it), so
+ * whoever reads it is heard under {@link readWhileLive} at each chunk.
+ */
+export const heardStream = (response: Response, alive: () => void): Response =>
+  response.body
+    ? new Response(
+        response.body.pipeThrough(
+          new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, into) {
+              alive();
+              into.enqueue(chunk);
+            },
+          })
+        ),
+        {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        }
+      )
+    : response;
+
+/**
+ * A fetch waited on while bytes arrive ({@link fetchHeard} under
+ * {@link readWhileLive}): its head, then each chunk of its body, each a
+ * sign of life; one that goes {@link QUIET_MS} with none is let go,
+ * `unanswered`. `init.signal` is its caller's: an abort ends it at once
+ * and is thrown on, as {@link readWithin} throws a caller's abort.
+ */
+export const fetchLive = (
+  input: string | URL | Request,
+  init: LiveInit = {}
+): Promise<Bounded<Response>> => {
+  const { signal, ...rest } = init;
+  return readWhileLive(
+    (inner, alive) => fetchHeard(input, { ...rest, signal: inner }, alive),
+    signal ? { signal } : {}
+  );
+};
+
+/**
  * WHICH CLOCK A DEADLINE COUNTS. `left()` reads `performance.now()`, which
  * in Bun is Rust's `std::time::Instant` (bun-v1.4.4
  * src/jsc/virtual_machine_exports.rs `read_origin_timer`:

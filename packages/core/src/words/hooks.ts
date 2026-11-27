@@ -86,7 +86,7 @@ export const shellCheckExited = (shell: string, code: number): string =>
 
 /** Why a hook's script is taken as not parsing: `<shell> -n` did not answer in time. */
 export const shellCheckTimedOut = (shell: string, seconds: number): string =>
-  `${shell} -n did not answer within ${seconds} s`;
+  `${shell} -n said nothing and did no work for ${seconds} s`;
 
 /**
  * The hub's refusal of a hook whose script `shell` does not parse (hub

@@ -605,6 +605,14 @@ export interface HeartbeatPayload {
    * the same beat as `harnesses`, for the same reason.
    */
   tools?: ToolStatus[];
+  /**
+   * The ids of the hub's requests this machine holds running (agent
+   * request-record.ts `runningIds`), on every beat: the hub waits on a
+   * request while its machine's beats name it, and lets it go one quiet
+   * spell (core bounded.ts `QUIET_MS`) after they stop (hub
+   * machine-calls.ts `beatNamed`).
+   */
+  working: string[];
 }
 
 /**

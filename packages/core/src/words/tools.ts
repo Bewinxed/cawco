@@ -202,12 +202,12 @@ export const toolWords = {
     name: string,
     method: string,
     command: string,
-    minutes: number
+    seconds: number
   ) =>
-    `${name}: ${method} (${command}) did not finish within ${minutes} min, so CawCo ended it and everything it started. Retry runs it again.`,
+    `${name}: ${method} (${command}) wrote nothing and did no work for ${seconds} s, so CawCo ended it and everything it started. Retry runs it again.`,
   /** A copy's `--version` that ran out its bound (agent tools.ts `PROBE_MS`): it was ended, and no version is known. */
   versionUnanswered: (path: string, seconds: number) =>
-    `${path} --version did not answer within ${seconds} s`,
+    `${path} --version wrote nothing and did no work for ${seconds} s`,
   /**
    * A copy whose package's bin is a launcher CawCo runs past (core
    * `ToolSpec.launcher`), missing the optional package that holds the
@@ -258,7 +258,7 @@ export const toolWords = {
   signinNoCode: "Paste the code from the sign-in page.",
   /** The sign-in did not end in time after the code. */
   signinNotEnded: (name: string, seconds: number) =>
-    `${name} didn't finish signing in within ${seconds} s of the code, so CawCo stopped it.`,
+    `${name} said nothing for ${seconds} s after the code and didn't finish signing in, so CawCo stopped it.`,
   /** The sign-in ended without signing in: what its screen said, the code never shown, and its exit. */
   signinFailed: (name: string, code: number, said: string) =>
     `${name} stopped without signing in. That link is spent.${screenOf(said, code)}`,

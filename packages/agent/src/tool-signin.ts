@@ -1,3 +1,5 @@
+import { QUIET_MS } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
 import { Duration, Effect, Exit, Scope } from "effect";
@@ -14,12 +16,8 @@ import { heardUntil, openInTerminal, type TerminalRun } from "./login";
  * (an account on this machine, say) until its code comes or it lapses.
  */
 
-/** How long the sign-in may go without a word before it shows its link. */
-const LINK_MS = 60_000;
 /** How long a sign-in waits for its code before it is ended. */
 const KEEP_MS = 10 * 60_000;
-/** How long the program may go without a word once the code is typed, before it ends. */
-const EXCHANGE_MS = 120_000;
 /** How many of the screen's last lines a refusal quotes. */
 const SCREEN_LINES = 6;
 
@@ -128,16 +126,12 @@ const ended = (one: Waiting): boolean =>
 
 /**
  * Whether `done` held, on each chunk the program printed or when it ended;
- * let go once `quietMs` pass with nothing printed, and answered by `done`
+ * let go once a quiet spell passes with nothing printed, and answered by `done`
  * then. The promise edge of login.ts `heardUntil`.
  */
-const until = (
-  one: Waiting,
-  done: () => boolean,
-  quietMs: number
-): Promise<boolean> =>
+const until = (one: Waiting, done: () => boolean): Promise<boolean> =>
   runPromise(
-    heardUntil(one, done, quietMs).pipe(
+    heardUntil(one, done).pipe(
       Effect.map((answer) => (answer === "quiet" ? done() : answer))
     )
   );
@@ -194,7 +188,7 @@ export const beginPtySignin = async (
   const one: Waiting = { ...opened, run, scope, output: "" };
   heard = one;
   waiting.set(key, one);
-  await until(one, () => signinLinks(one).length > 0, LINK_MS);
+  await until(one, () => signinLinks(one).length > 0);
   const [url] = signinLinks(one);
   if (!url || ended(one)) {
     waiting.delete(key);
@@ -227,12 +221,12 @@ export const completePtySignin = async (
   waiting.delete(key);
   const from = one.output.length;
   one.terminal.write(`${trimmed}\r`);
-  const exited = await until(one, () => ended(one), EXCHANGE_MS);
+  const exited = await until(one, () => ended(one));
   const { exitCode } = one.child;
   const said = screen(one, from, trimmed);
   end(one);
   if (!exited) {
-    throw new Error(toolWords.signinNotEnded(name, EXCHANGE_MS / 1000));
+    throw new Error(toolWords.signinNotEnded(name, secondsOf(QUIET_MS)));
   }
   if (exitCode !== 0) {
     throw new Error(toolWords.signinFailed(name, exitCode ?? -1, said));

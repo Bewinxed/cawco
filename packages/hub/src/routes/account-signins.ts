@@ -18,7 +18,6 @@ import { CODEX } from "@cawco/core/harness/codex";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { marksRenewed } from "../account-marks";
 import type { HubContext } from "../hub-context";
-import { SIGNIN_TIMEOUT_MS } from "../login-moves";
 import { unansweredIn } from "../machine-answers";
 import { unreachable } from "../unreachable";
 
@@ -83,12 +82,7 @@ export const accountSigninRoutes = ({
     accountId: string,
     failed: string
   ) => {
-    const answer = await callAgent(
-      machineId,
-      control,
-      [accountId],
-      SIGNIN_TIMEOUT_MS
-    );
+    const answer = await callAgent(machineId, control, [accountId]);
     switch (answer.kind) {
       case "unanswered":
         return unansweredIn(machineId, answer, awayWords(machineId, answer));
@@ -115,23 +109,15 @@ export const accountSigninRoutes = ({
         machineId,
         CONTROL_BEGIN_ACCOUNT_LOGIN,
         [signinId, account.kind],
-        SIGNIN_TIMEOUT_MS,
         "claude"
       );
     }
     return account.agy
-      ? callAgent(
-          machineId,
-          CONTROL_BEGIN_AGY_LOGIN,
-          [signinId, account.agy],
-          SIGNIN_TIMEOUT_MS
-        )
-      : callAgent(
-          machineId,
-          CONTROL_BEGIN_PROVIDER_LOGIN,
-          [signinId, account.provider],
-          SIGNIN_TIMEOUT_MS
-        );
+      ? callAgent(machineId, CONTROL_BEGIN_AGY_LOGIN, [signinId, account.agy])
+      : callAgent(machineId, CONTROL_BEGIN_PROVIDER_LOGIN, [
+          signinId,
+          account.provider,
+        ]);
   };
   /**
    * A key account's key sent to `machineId`: written into the account's
@@ -140,18 +126,18 @@ export const accountSigninRoutes = ({
    */
   const keyOn = (account: Account, machineId: string, key?: string) =>
     account.agy
-      ? callAgent(
-          machineId,
-          CONTROL_CONNECT_AGY,
-          [account.id, account.agy, key ?? null, account.identity],
-          SIGNIN_TIMEOUT_MS
-        )
-      : callAgent(
-          machineId,
-          CONTROL_SET_PROVIDER_KEY,
-          [account.id, account.provider, key ?? "", account.identity],
-          SIGNIN_TIMEOUT_MS
-        );
+      ? callAgent(machineId, CONTROL_CONNECT_AGY, [
+          account.id,
+          account.agy,
+          key ?? null,
+          account.identity,
+        ])
+      : callAgent(machineId, CONTROL_SET_PROVIDER_KEY, [
+          account.id,
+          account.provider,
+          key ?? "",
+          account.identity,
+        ]);
   return (
     new Elysia()
       // Checks now whether Claude Code still refuses an account it refused
@@ -407,12 +393,9 @@ export const accountSigninRoutes = ({
           }
           const who = answer.email?.toLowerCase();
           if (account.email && who && account.email.toLowerCase() !== who) {
-            await callAgent(
-              params.machineId,
-              CONTROL_FORGET_CODEX_LOGIN,
-              [account.id],
-              SIGNIN_TIMEOUT_MS
-            );
+            await callAgent(params.machineId, CONTROL_FORGET_CODEX_LOGIN, [
+              account.id,
+            ]);
             noteCodexSignin(account.id, params.machineId, false);
             publishUsage(params.machineId);
             return { state: "mismatch" as const, email: answer.email };

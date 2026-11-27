@@ -10,19 +10,19 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
 import { ownIdentity } from "@cawco/core/process-identity";
-import { type Ran, runCaptured } from "@cawco/core/run-captured";
+import { type Ran, runCaptured, runLive } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { identifiedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { spawnRead, untether } from "@cawco/core/tether";
-import { MINUTE_MS } from "@cawco/core/time";
+import { secondsOf } from "@cawco/core/time";
 import type {
   ToolCopy,
   ToolFootprint,
@@ -52,7 +52,6 @@ import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { codexNative, type NativeBinary, nativeEnv } from "./codex-native";
 import { runPromise } from "./daemon-runtime";
 import { expandHome } from "./fs";
-import { runGroupWithin } from "./group-run";
 import { probeStarted } from "./probe-count";
 import { fromPromise } from "./rejected";
 import { ToolInstallsSchema } from "./stored-shapes";
@@ -1667,14 +1666,14 @@ const probeVersion = async (
     .trim()
     .split(WORDS)
     .filter(Boolean);
-  // Its own group: whatever its `--version` starts ends with it at the bound.
-  const ran = await runGroupWithin([run.bin, ...args], {
+  // Its own group: whatever its `--version` starts ends with it once it
+  // goes quiet.
+  const ran = await runLive([run.bin, ...args], {
     env: nativeEnv(toolEnv(), run.env),
-    ms: PROBE_MS,
   }).catch(() => undefined);
   if (ran?.kind === "unanswered") {
     console.warn(
-      `[tools] ${toolWords.versionUnanswered(shownPath(path), PROBE_MS / 1000)}`
+      `[tools] ${toolWords.versionUnanswered(shownPath(path), secondsOf(QUIET_MS))}`
     );
   }
   return ran?.kind === "answered"
@@ -1684,15 +1683,6 @@ const probeVersion = async (
 
 /** The spaces between a version command's words. */
 const WORDS = /\s+/u;
-
-/**
- * How long a copy's `--version` is given ({@link probeVersion}) before it
- * is ended and no version is known: a CLI answers in about a second
- * (OpenCode's, capabilities.ts), and a cold disk or a loaded host answers
- * late, not never (a method's need is given 15 s, `NEED_WAIT_MS`). 30 s,
- * our call.
- */
-const PROBE_MS = 30_000;
 
 /** Each launcher CawCo runs past ({@link ToolSpec.launcher}), and how it finds the binary that launcher fronts. */
 const LAUNCHERS: Record<ToolLauncher, (found: string) => NativeBinary> = {
@@ -2255,18 +2245,6 @@ const noMethod = (spec: ToolSpec, { unmet, pin }: Unmet): ToolStatus => {
 };
 
 /**
- * How long one install method is given before it is ended with everything
- * it started ({@link runMethod}). The largest download a method makes is
- * Codex's native package: codex-0.169.0-darwin-arm64.tgz is 153.8 MB
- * (registry.npmjs.org, its Content-Range, read 2026-11-19), and unpacks to
- * 376.5 MB (its `dist.unpackedSize`). 30 min takes it whole on a link of
- * 0.7 Mbit/s (85 KB/s), with its unpacking; a slower link, or an installer
- * that hung, is ended and said ({@link toolWords.installTimedOut}). Awake
- * time (core bounded.ts): a sleep runs none of it out. Our call.
- */
-const INSTALL_MS = 30 * MINUTE_MS;
-
-/**
  * Runs a method: whether it exited 0, and the tail of what it said (its
  * errors first when it failed). An updater can exit 0 and change nothing
  * (Claude Code's `claude update` on a Homebrew install says "Claude is up to
@@ -2284,11 +2262,10 @@ const runMethod = async (
   const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
   // The command is a POSIX shell line (`curl … -o x.sh && bash x.sh`), run
   // by `sh` as the leader of its own group: the download and the script it
-  // starts end with it at the bound (group-run.ts).
-  const ran = await runGroupWithin([systemProgram("sh"), "-c", command], {
+  // starts end with it once it goes quiet (core run-captured.ts `runLive`).
+  const ran = await runLive([systemProgram("sh"), "-c", command], {
     cwd: dir,
     env: toolEnv(),
-    ms: INSTALL_MS,
   })
     .catch((error: unknown): Bounded<Ran> => ({
       kind: "answered",
@@ -2305,7 +2282,7 @@ const runMethod = async (
       spec.name,
       method.label,
       command,
-      INSTALL_MS / MINUTE_MS
+      secondsOf(QUIET_MS)
     );
     console.warn(`[tools] ${said}`);
     return { ok: false, said };

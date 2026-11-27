@@ -52,7 +52,6 @@ import type {
   MoveResult,
   MoveRun,
 } from "@cawco/core/project-folders";
-import { DAY_MS } from "@cawco/core/time";
 import { blockWords, folderMoveWords } from "@cawco/core/words/folder-move";
 import { Effect } from "effect";
 import { problem } from "elysia";
@@ -79,7 +78,6 @@ export interface FolderMovesDeps {
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    timeoutMs: number,
     session?: { harness: HarnessKind; instanceId: string }
   ) => Promise<ControlReply<K>>;
   /**
@@ -113,9 +111,6 @@ export interface FolderMovesDeps {
   readonly tell: (instanceId: string, words: string) => void;
 }
 
-const READ_TIMEOUT_MS = 60_000;
-const STEP_TIMEOUT_MS = DAY_MS;
-const PAUSE_TIMEOUT_MS = 90_000;
 /** How often a move waiting on a reply looks again. */
 const WAIT_LOOK_MS = 3000;
 /** How long a done or called-off move is kept for a card that was away. */
@@ -468,27 +463,18 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
     targetPath: string
   ): Promise<[FolderMoveReading, FolderMoveReading]> => {
     if (sourceMachineId === targetMachineId) {
-      const both = await deps.call(
-        sourceMachineId,
-        CONTROL_FOLDER_MOVE_READ,
-        [{ source: sourcePath, destination: targetPath, walk: true }],
-        READ_TIMEOUT_MS
-      );
+      const both = await deps.call(sourceMachineId, CONTROL_FOLDER_MOVE_READ, [
+        { source: sourcePath, destination: targetPath, walk: true },
+      ]);
       return [both, both];
     }
     return await Promise.all([
-      deps.call(
-        sourceMachineId,
-        CONTROL_FOLDER_MOVE_READ,
-        [{ source: sourcePath, walk: true }],
-        READ_TIMEOUT_MS
-      ),
-      deps.call(
-        targetMachineId,
-        CONTROL_FOLDER_MOVE_READ,
-        [{ destination: targetPath, walk: false }],
-        READ_TIMEOUT_MS
-      ),
+      deps.call(sourceMachineId, CONTROL_FOLDER_MOVE_READ, [
+        { source: sourcePath, walk: true },
+      ]),
+      deps.call(targetMachineId, CONTROL_FOLDER_MOVE_READ, [
+        { destination: targetPath, walk: false },
+      ]),
     ]);
   };
 
@@ -1100,7 +1086,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         row.sourceMachineId,
         CONTROL_PAUSE_FOR_MOVE,
         [],
-        PAUSE_TIMEOUT_MS,
         { harness: one.harness, instanceId: one.instanceId }
       );
       if (answer.paused) {
@@ -1126,46 +1111,31 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
   const copy = async (row: FolderMoveRow) => {
     const { state } = row;
     if (state.way !== "relay") {
-      return await deps.call(
-        row.sourceMachineId,
-        CONTROL_FOLDER_MOVE_COPY,
-        [
-          {
-            jobId: row.id,
-            source: state.sourcePath,
-            destination: state.targetPath,
-          },
-        ],
-        STEP_TIMEOUT_MS
-      );
+      return await deps.call(row.sourceMachineId, CONTROL_FOLDER_MOVE_COPY, [
+        {
+          jobId: row.id,
+          source: state.sourcePath,
+          destination: state.targetPath,
+        },
+      ]);
     }
     const token = relay.open();
     try {
       const [, taken] = await Promise.all([
-        deps.call(
-          row.sourceMachineId,
-          CONTROL_FOLDER_MOVE_COPY,
-          [
-            {
-              jobId: row.id,
-              source: state.sourcePath,
-              relay: { side: "send", token },
-            },
-          ],
-          STEP_TIMEOUT_MS
-        ),
-        deps.call(
-          row.targetMachineId,
-          CONTROL_FOLDER_MOVE_COPY,
-          [
-            {
-              jobId: row.id,
-              destination: state.targetPath,
-              relay: { side: "take", token },
-            },
-          ],
-          STEP_TIMEOUT_MS
-        ),
+        deps.call(row.sourceMachineId, CONTROL_FOLDER_MOVE_COPY, [
+          {
+            jobId: row.id,
+            source: state.sourcePath,
+            relay: { side: "send", token },
+          },
+        ]),
+        deps.call(row.targetMachineId, CONTROL_FOLDER_MOVE_COPY, [
+          {
+            jobId: row.id,
+            destination: state.targetPath,
+            relay: { side: "take", token },
+          },
+        ]),
       ]);
       return taken;
     } finally {
@@ -1241,18 +1211,12 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       const token = relay.open();
       try {
         const [sent, taken] = await Promise.all([
-          deps.call(
-            row.sourceMachineId,
-            CONTROL_FOLDER_SESSIONS_CARRY,
-            [{ jobId: row.id, sessions, relay: { side: "send", token } }],
-            STEP_TIMEOUT_MS
-          ),
-          deps.call(
-            row.targetMachineId,
-            CONTROL_FOLDER_SESSIONS_CARRY,
-            [{ jobId: row.id, sessions, relay: { side: "take", token } }],
-            STEP_TIMEOUT_MS
-          ),
+          deps.call(row.sourceMachineId, CONTROL_FOLDER_SESSIONS_CARRY, [
+            { jobId: row.id, sessions, relay: { side: "send", token } },
+          ]),
+          deps.call(row.targetMachineId, CONTROL_FOLDER_SESSIONS_CARRY, [
+            { jobId: row.id, sessions, relay: { side: "take", token } },
+          ]),
         ]);
         carried = Object.fromEntries(
           Object.entries(taken).map(([id, outcome]) => {
@@ -1267,8 +1231,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
       carried = await deps.call(
         row.targetMachineId,
         CONTROL_FOLDER_SESSIONS_CARRY,
-        [{ jobId: row.id, sessions }],
-        STEP_TIMEOUT_MS
+        [{ jobId: row.id, sessions }]
       );
     }
     update(row.id, undefined, (state) => {
@@ -1377,8 +1340,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
           made: state.made,
           sessions: carriedAway,
         },
-      ],
-      STEP_TIMEOUT_MS
+      ]
     );
     update(row.id, undefined, (now) => ({
       ...now,
@@ -1463,8 +1425,7 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
               destination: state.targetPath,
               made: state.made,
             },
-          ],
-          STEP_TIMEOUT_MS
+          ]
         );
         if (!renamed.renamed) {
           // Another disk after all: the move copies.
@@ -1489,12 +1450,9 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         return true;
       }
       case "place":
-        await deps.call(
-          row.targetMachineId,
-          CONTROL_FOLDER_MOVE_PLACE,
-          [{ jobId: row.id, destination: state.targetPath, made: state.made }],
-          STEP_TIMEOUT_MS
-        );
+        await deps.call(row.targetMachineId, CONTROL_FOLDER_MOVE_PLACE, [
+          { jobId: row.id, destination: state.targetPath, made: state.made },
+        ]);
         return true;
       case "record":
         record(row);
@@ -1635,12 +1593,9 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
     const drop = (machineId: string, destination?: string) =>
       deps.online(machineId)
         ? deps
-            .call(
-              machineId,
-              CONTROL_FOLDER_MOVE_DROP,
-              [{ jobId: id, ...(destination ? { destination } : {}) }],
-              READ_TIMEOUT_MS
-            )
+            .call(machineId, CONTROL_FOLDER_MOVE_DROP, [
+              { jobId: id, ...(destination ? { destination } : {}) },
+            ])
             .catch((error: unknown) =>
               console.warn(
                 `[folder-moves] ${id}: its partial copy on ${deps.machineName(machineId)} stays: ${String(error)}`

@@ -37,7 +37,12 @@ import {
 } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
-import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import {
+  type Bounded,
+  Gone,
+  heardBody,
+  readWhileLive,
+} from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import {
@@ -359,9 +364,6 @@ const dashboardSockets = (): SocketSpec[] => {
   ];
 };
 
-/** How long a liveness probe is worth waiting for before it has said enough. */
-const PROBE_TIMEOUT_MS = 2000;
-
 const hubOrigin = (): string =>
   `http://127.0.0.1:${readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT}`;
 
@@ -373,9 +375,10 @@ type Said<T> =
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
 /**
- * One probe read, given {@link PROBE_TIMEOUT_MS} to answer. A request nothing
- * is listening for ended before it answered (`Gone`, reason "dead"); `read`
- * takes the response, the body within the same time.
+ * One probe read, waited on while its bytes arrive (core bounded.ts
+ * `readWhileLive`: its head, then each chunk). A request nothing is
+ * listening for ended before it answered (`Gone`, reason "dead"); `read`
+ * takes the response once its body is in.
  */
 const probe = <T>(
   url: string,
@@ -383,17 +386,16 @@ const probe = <T>(
   init: RequestInit = {},
   via: Fetcher = (target, options) => fetch(target, options)
 ): Promise<Bounded<T>> =>
-  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-    const response = await via(url, { ...init, signal }).catch(
-      (error: unknown) => {
-        throw signal.aborted
-          ? error
-          : new Gone(
-              `${url}: ${error instanceof Error ? error.message : String(error)}`
-            );
-      }
-    );
-    return read(response);
+  readWhileLive(async (signal, alive) => {
+    const sent = await via(url, { ...init, signal }).catch((error: unknown) => {
+      throw signal.aborted
+        ? error
+        : new Gone(
+            `${url}: ${error instanceof Error ? error.message : String(error)}`
+          );
+    });
+    alive();
+    return read(await heardBody(sent, alive));
   });
 
 /** A 2xx answer's JSON body, or the status that refused it. */
@@ -440,7 +442,7 @@ const askedHub = <A extends HubAnswer>(
   url: string,
   ask: (client: HubClient) => Promise<A>
 ): Promise<Bounded<Said<HubData<A>>>> =>
-  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+  readWhileLive(async (signal) => {
     const answer = await ask(
       hubClient(hub, (target, init) => asMachine(target, { ...init, signal }))
     );

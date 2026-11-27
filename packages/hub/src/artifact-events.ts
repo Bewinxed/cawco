@@ -23,14 +23,6 @@ import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { shortId } from "@cawco/core/short-id";
-import {
-  STAGE_CLONE_MS,
-  STAGE_INSTALL_MS,
-  STAGE_PICTURE,
-  STAGE_READY_MS,
-  STAGE_RENDER,
-  STAGE_RENDER_MS,
-} from "@cawco/core/stage";
 import { secondsOf } from "@cawco/core/time";
 import { transcriptUserText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
@@ -40,7 +32,6 @@ import { previewWords } from "@cawco/core/words/preview";
 import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_REPO_ROOT,
-  WORKSPACE_GIT_TIMEOUT_MS,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
@@ -704,8 +695,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     const asked = await ctx.machineCalls.readAgent(
       instance.machineId,
       CONTROL_REPO_ROOT,
-      [app],
-      WORKSPACE_GIT_TIMEOUT_MS + 15_000
+      [app]
     );
     switch (asked.kind) {
       case "unanswered":
@@ -904,17 +894,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     const asked = await ctx.machineCalls.callAgent(
       machineId,
       method,
-      args(workspace),
-      STAGE_READY_MS +
-        byWorkspaceIdKind(workspace.id, {
-          place: STAGE_CLONE_MS,
-          clone: STAGE_INSTALL_MS,
-          design: STAGE_INSTALL_MS,
-        }) +
-        (method === STAGE_RENDER || method === STAGE_PICTURE
-          ? STAGE_RENDER_MS
-          : 0) +
-        15_000
+      args(workspace)
     );
     switch (asked.kind) {
       case "unanswered":

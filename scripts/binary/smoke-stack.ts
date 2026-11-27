@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
-import { readWithin } from "../../packages/core/src/bounded";
+import { QUIET_MS, readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
 import { withFetchCap } from "../../packages/core/src/fetch-cap";
 import {
@@ -10,6 +10,7 @@ import {
   accountConfigDir,
 } from "../../packages/core/src/paths/claude";
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
+import { secondsOf } from "../../packages/core/src/time";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { loopWords } from "../../packages/core/src/words/loop";
 import {
@@ -213,8 +214,6 @@ const watchUnit: Watched = {
       "--no-pager",
     ]).catch((error: unknown) => String(error)),
 };
-/** The safety deadline: a busy machine is slow, never wrong (nightly e83078b6d). */
-const READY_DEADLINE_MS = 120_000;
 /** The test's hub, on its own port. */
 const HUB = "http://127.0.0.1:43456";
 /**
@@ -227,8 +226,18 @@ async function poll<T>(
   attempt: () => Promise<T | undefined>
 ): Promise<T> {
   let unanswered = "nothing yet";
-  const began = Date.now();
-  for (const end = began + READY_DEADLINE_MS; Date.now() < end;) {
+  // Waited on while the service it started writes (its stderr moves): a
+  // busy machine is slow, never wrong (nightly e83078b6d); one that goes a
+  // quiet spell with nothing written is not starting, and its exit ends
+  // the wait at once.
+  let said = await on.stderrTail();
+  let heardAt = performance.now();
+  while (performance.now() - heardAt < QUIET_MS) {
+    const now = await on.stderrTail();
+    if (now !== said) {
+      said = now;
+      heardAt = performance.now();
+    }
     const exited = await on.exited();
     if (exited !== undefined) {
       throw new Error(
@@ -248,7 +257,7 @@ async function poll<T>(
     await Bun.sleep(100);
   }
   throw new Error(
-    `Did not become ready within 120 s: ${what} (last answer: ${unanswered}); ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
+    `Did not become ready, ${on.name} writing nothing for ${secondsOf(QUIET_MS)} s: ${what} (last answer: ${unanswered}); ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
   );
 }
 /** Polls a hub route until it answers OK with `predicate` true of what it answers. */

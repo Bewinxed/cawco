@@ -217,6 +217,9 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       message.requestId && body.kind === "control_result"
         ? ctx.registry.takeRequester(message.requestId)
         : undefined;
+    if (message.requestId && body.kind === "control_result") {
+      ctx.machineCalls.forwardAnswered(message.requestId);
+    }
     if (body.kind === "control_result" && requester) {
       ctx.sendToClient(requester, { ...message, payload: body });
     }

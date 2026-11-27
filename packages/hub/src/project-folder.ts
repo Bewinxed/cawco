@@ -41,13 +41,13 @@ import {
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
-import { readWithin } from "@cawco/core/bounded";
+import { QUIET_MS } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
-import { runCaptured } from "@cawco/core/run-captured";
+import { runLive } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
@@ -125,7 +125,6 @@ const HISTORY_DEFAULT = 50;
 const HISTORY_LIMIT = 200;
 // @limit measured: the longest path in 15 project folders is 169 bytes (obelisk, 2026-11-26)
 const PATH_LIMIT = 1024;
-const GIT_TIMEOUT_MS = 30_000;
 
 const HUB_NAME = "CawCo hub";
 const NO_REPLY = "noreply@cawco.invalid";
@@ -443,27 +442,25 @@ const run = async (root: string, args: string[]) => {
         "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again.",
     });
   }
-  const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
-    runCaptured(
-      [
-        "git",
-        ...SAFE_GIT_FLAGS,
-        `--git-dir=${join(root, ".git")}`,
-        `--work-tree=${root}`,
-        "-c",
-        `user.name=${HUB_NAME}`,
-        "-c",
-        `user.email=${NO_REPLY}`,
-        "-c",
-        "init.defaultBranch=main",
-        "-c",
-        "commit.gpgsign=false",
-        "-c",
-        "core.quotePath=false",
-        ...args,
-      ],
-      { cwd: root, env: gitEnv(), signal }
-    )
+  const ran = await runLive(
+    [
+      "git",
+      ...SAFE_GIT_FLAGS,
+      `--git-dir=${join(root, ".git")}`,
+      `--work-tree=${root}`,
+      "-c",
+      `user.name=${HUB_NAME}`,
+      "-c",
+      `user.email=${NO_REPLY}`,
+      "-c",
+      "init.defaultBranch=main",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.quotePath=false",
+      ...args,
+    ],
+    { cwd: root, env: gitEnv() }
   );
   switch (ran.kind) {
     case "answered":
@@ -472,7 +469,7 @@ const run = async (root: string, args: string[]) => {
       // Not a git answer: never read as a failed or empty one.
       return problem(504, {
         code: "folder-git-unanswered",
-        detail: `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`,
+        detail: `git ${args[0]} said nothing and did no work for ${secondsOf(QUIET_MS)} s in the project folder, so it was stopped.`,
       });
     default:
       unhandled("read", ran);

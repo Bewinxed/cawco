@@ -55,7 +55,6 @@ import { answeredWithOriginal } from "./ask-presentation";
 import type { ClosureContext } from "./closure-context";
 import type { PublicInstanceRow } from "./db/instances";
 import type { ControlResult } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
 import { PERSON_CONTROLS } from "./person-acts";
@@ -361,7 +360,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         parked.machineId,
         RESOLVE_PERMISSION,
         [requestId, result],
-        READ_TIMEOUT_MS,
         undefined,
         instanceId
       );
@@ -404,7 +402,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       ask.machineId,
       RESOLVE_PERMISSION,
       [requestId, { behavior: "allow", updatedInput: input }],
-      READ_TIMEOUT_MS,
       undefined,
       ask.instanceId
     );
@@ -442,7 +439,6 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       ask.machineId,
       WITHDRAW_PERMISSION,
       [requestId, unshownAskMessage(question, why)],
-      READ_TIMEOUT_MS,
       undefined,
       ask.instanceId
     );

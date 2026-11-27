@@ -3,7 +3,6 @@ import { isMachineWrite, readForgeAsk } from "@cawco/core/forge-post";
 import {
   effectiveImageChoice,
   GENERATE_IMAGE,
-  IMAGE_GENERATION_TIMEOUT_MS,
   type ImageGenerationRequest,
   imageProviderOf,
 } from "@cawco/core/image-generation";
@@ -525,8 +524,7 @@ export const mediaCalls = ({
           { ...asked, ...chosen },
           sessionWorkspace(row) ?? null,
           row.projectId ?? null,
-        ],
-        IMAGE_GENERATION_TIMEOUT_MS + 30_000
+        ]
       );
       switch (answer.kind) {
         case "unanswered":

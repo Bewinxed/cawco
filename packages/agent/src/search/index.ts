@@ -112,8 +112,8 @@ export class TranscriptSearchService {
   /**
    * The index's reader for agents' `find` (core `TranscriptQuery.call`, and
    * a hit's turns), in a process of its own, started at its first question.
-   * The hub waits out an agent's search as long as this machine works on it
-   * (core `TRANSCRIPT_CALL_MS`), and a reader answers one question at a
+   * The hub waits out an agent's search while this machine's beats name
+   * it, and a reader answers one question at a
    * time: on one reader, a search that ran for seconds held every keystroke
    * of the person's Find behind it.
    */

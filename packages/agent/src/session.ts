@@ -579,10 +579,10 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
       ? await runHubCommand(
           dir,
           `${SAFE_GIT_SHELL}git ${args}`,
-          GIT_CHANGES_TIMEOUT_MS,
+          undefined,
           workspace
         )
-      : await runHubCommand(dir, `${SAFE_GIT} ${args}`, GIT_CHANGES_TIMEOUT_MS);
+      : await runHubCommand(dir, `${SAFE_GIT} ${args}`, undefined);
   const status = await git("status --porcelain");
   if (status.exitCode === GIT_NOT_A_REPO) {
     return { repo: false };
@@ -603,13 +603,10 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   };
 };
 
-/** How long each of {@link gitChanges}' two git commands may take. */
-const GIT_CHANGES_TIMEOUT_MS = 30_000;
-
 /** git's own exit code for "not a git repository". */
 const GIT_NOT_A_REPO = 128;
 
-/** The exit code a command that ran out of its time ends with (hub-command.ts). */
+/** The exit code a command stopped for going quiet ends with (hub-command.ts). */
 const COMMAND_TIMED_OUT = 124;
 
 /** {@link gitChanges}' answer for a git call that ran out or failed in a way that does not say there is no repository. */
@@ -620,9 +617,7 @@ const unreadGit = (
   repo: "unread",
   command,
   exitCode,
-  ...(exitCode === COMMAND_TIMED_OUT
-    ? { limitMs: GIT_CHANGES_TIMEOUT_MS }
-    : {}),
+  ...(exitCode === COMMAND_TIMED_OUT ? { quiet: true as const } : {}),
 });
 
 /** A reason's own full stop, dropped where a sentence carries on after it. */

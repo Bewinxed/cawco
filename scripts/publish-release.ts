@@ -21,12 +21,14 @@
  * upload's 404 while the draft still stands ({@link uploadAssets}).
  */
 import { basename, join } from "node:path";
-import type { Subprocess } from "bun";
 import {
   NIGHTLY_TAG_PREFIX,
   RELEASE_REPOSITORY,
 } from "../packages/core/src/binary-distribution";
+import { QUIET_MS } from "../packages/core/src/bounded";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
+import { runLive } from "../packages/core/src/run-captured";
+import { secondsOf } from "../packages/core/src/time";
 import {
   type Answer,
   NoAnswer,
@@ -40,16 +42,13 @@ import {
 // @limit measured: 5 builds of at most 3 GB each (a nightly's whole output, scripts/release/steps/promote.ts, 2026-10-26) fit in 15 GB, 0.8% of obelisk's 1.8 TB disk (df, 2026-11-26)
 const NIGHTLIES_KEPT = 5;
 const REPO = `repos/${RELEASE_REPOSITORY}`;
-/** One request's time; an archive's upload gets more. */
-const CALL_TIMEOUT_MS = 60_000;
-const UPLOAD_TIMEOUT_MS = 15 * 60_000;
 /** gh's exit for "not signed in" (cli/cli cmd/gh/main.go `exitAuth`): a refusal, not a dropped call. */
 const GH_EXIT_AUTH = 4;
 /** The `{?name,label}` a release's upload_url ends in. */
 const URI_TEMPLATE = /\{.*$/u;
 
 /** The gh calls running now, so a stop can end them before it removes the draft they write to. */
-const calls = new Set<Subprocess>();
+const calls = new Set<{ done: Promise<unknown>; stop: AbortController }>();
 /** Stops so far: a call begun before one is not asked again after it. */
 let stops = 0;
 
@@ -62,10 +61,12 @@ async function request(
     body?: object;
     file?: string;
     headers?: string[];
-    timeoutMs?: number;
   } = {}
 ): Promise<Answer> {
-  const child = Bun.spawn(
+  // Run while gh writes or works (an upload's CPU time included), and ended
+  // with its group once it goes quiet or a stop lets it go.
+  const stop = new AbortController();
+  const ran = runLive(
     [
       "gh",
       "api",
@@ -78,24 +79,20 @@ async function request(
     ],
     {
       env: process.env,
-      stdin: options.body
-        ? Buffer.from(JSON.stringify(options.body))
-        : "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
+      ...(options.body ? { input: JSON.stringify(options.body) } : {}),
+      signal: stop.signal,
     }
   );
-  calls.add(child);
-  const timer = setTimeout(
-    () => child.kill("SIGTERM"),
-    options.timeoutMs ?? CALL_TIMEOUT_MS
-  );
+  const running = { stop, done: ran.catch(() => undefined) };
+  calls.add(running);
   try {
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+    const read = await ran;
+    if (read.kind === "unanswered") {
+      throw new NoAnswer(
+        `${what}: gh api wrote nothing and did no work for ${secondsOf(QUIET_MS)} s, so it was stopped`
+      );
+    }
+    const { code, signalCode, stderr: err, stdout: out } = read.value;
     const answer = printedAnswer(out);
     if (answer) {
       return sorted(what, answer);
@@ -107,11 +104,10 @@ async function request(
       throw new Refused(what, 401, err);
     }
     throw new NoAnswer(
-      `${what}: gh api exited ${child.signalCode ?? code}: ${err.trim()}`
+      `${what}: gh api exited ${signalCode ?? code}: ${err.trim()}`
     );
   } finally {
-    clearTimeout(timer);
-    calls.delete(child);
+    calls.delete(running);
   }
 }
 
@@ -130,10 +126,10 @@ function call<T>(what: string, attempt: (n: number) => Promise<T>): Promise<T> {
 export async function endCalls(): Promise<void> {
   stops += 1;
   const ending = [...calls];
-  for (const child of ending) {
-    child.kill("SIGTERM");
+  for (const one of ending) {
+    one.stop.abort();
   }
-  await Promise.all(ending.map((child) => child.exited));
+  await Promise.all(ending.map((one) => one.done));
 }
 
 interface Release {
@@ -320,7 +316,6 @@ export async function uploadAssets(
             {
               file,
               headers: ["Content-Type: application/octet-stream"],
-              timeoutMs: UPLOAD_TIMEOUT_MS,
             }
           );
         } catch (error) {

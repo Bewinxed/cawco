@@ -15,14 +15,14 @@ import {
   versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
-import { readWithin } from "@cawco/core/bounded";
+import { QUIET_MS, readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
+import { runLive } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { MINUTE_MS } from "@cawco/core/time";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubClient } from "@cawco/hub/client";
 import { z } from "zod";
-import { runGroupWithin } from "./group-run";
 import { provenFetch } from "./hub-proof";
 import {
   type FleetUpdates,
@@ -126,27 +126,6 @@ export async function forgetPins(): Promise<void> {
 }
 
 /**
- * How long a `binary-pins` may go without a line before it is ended: each
- * step it takes is bounded on its own and says a line as it begins (an
- * install's method, tools.ts `runMethod`, bounded by `INSTALL_MS`, 30
- * min), and between two lines it runs at most one install and the reads
- * around it (each copy's `--version`, `PROBE_MS`, 30 s, four times; a
- * method's need, 15 s; the tool's settings, 30 s; the hub's word on the
- * fleet's updates, 10 s). 35 min holds the longest of those with room, so
- * a slow install is waited out however many pins move, and one that went
- * still is ended a quiet spell after. Awake time (core bounded.ts): a
- * sleep is no quiet.
- */
-const PINS_QUIET_MS = 35 * MINUTE_MS;
-
-/**
- * Between `binary-pins`'s SIGTERM and its group's SIGKILL: it ends each
- * install it runs first and waits on each through their own grace (cli.ts
- * `runBinaryPins`, group-run.ts `endEveryGroup`), so its own is longer.
- */
-const PINS_GRACE_MS = 15_000;
-
-/**
  * `cawco binary-pins`, run from `from`'s own executable. With no `back`:
  * `from`'s pinned harnesses put on, with the methods `from`'s catalog knows
  * (the build before may not know one a copy here came from). With `back`
@@ -157,7 +136,8 @@ const PINS_GRACE_MS = 15_000;
  * (core cli-failure.ts).
  *
  * It runs as the leader of a process group of its own, tethered to this
- * process (group-run.ts): one gone still {@link PINS_QUIET_MS}, or let go
+ * process (core run-captured.ts `runLive`): alive while it, or an install
+ * it runs, writes or spends CPU time; one gone quiet, or let go
  * through `signal` (a sleep, binary-update.ts), is ended with each install
  * it started, and this answers only once all of it has gone, so the
  * put-back that follows never runs beside an install of its.
@@ -167,13 +147,10 @@ export async function runBinaryPins(
   back?: string,
   signal?: AbortSignal
 ): Promise<string> {
-  const ran = await runGroupWithin(
+  const ran = await runLive(
     [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
     {
       env: hostEnvironment(),
-      graceMs: PINS_GRACE_MS,
-      ms: PINS_QUIET_MS,
-      quiet: true,
       ...(signal ? { signal } : {}),
     }
   );
@@ -192,7 +169,7 @@ export async function runBinaryPins(
     }
     case "unanswered":
       throw new Error(
-        `${from}'s binary-pins said nothing for ${PINS_QUIET_MS / MINUTE_MS} minutes, so it was ended with every install it started`
+        `${from}'s binary-pins said nothing and did no work for ${secondsOf(QUIET_MS)} s, so it was ended with every install it started`
       );
     default:
       unhandled("read", ran);

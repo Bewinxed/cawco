@@ -15,11 +15,13 @@
  * `CANVAS_LIMITS.screenHoldMs`.
  */
 
+import { QUIET_MS, readWhileLive } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
   type CanvasScreenClose,
   type CanvasScreenOpen,
 } from "@cawco/core/canvas";
+import { secondsOf } from "@cawco/core/time";
 import { Duration, Effect, Fiber, Layer } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
@@ -70,7 +72,27 @@ export async function openCanvasScreen(
       viewport: { width: 1440, height: 900 },
     });
     await page.addInitScript(HOST_STAND_IN);
-    await page.goto(url, { timeout: CANVAS_LIMITS.screenLoadMs });
+    // Loaded while it shows life: each request the page finishes is one;
+    // a page that goes a quiet spell with none is let go (core bounded.ts
+    // `readWhileLive`), and the browser closes with it below.
+    const loaded = await readWhileLive((signal, alive) => {
+      page.on("requestfinished", alive);
+      signal.addEventListener(
+        "abort",
+        () => page.close().catch(() => undefined),
+        {
+          once: true,
+        }
+      );
+      return page
+        .goto(url, { timeout: 0 })
+        .finally(() => page.off("requestfinished", alive));
+    });
+    if (loaded.kind === "unanswered") {
+      throw new Error(
+        `The canvas page loaded nothing for ${secondsOf(QUIET_MS)} s, so it was closed.`
+      );
+    }
     // The dashboard's hello (stage.svelte.ts `hello`), its canvas docked: no inset.
     await greet(
       page,

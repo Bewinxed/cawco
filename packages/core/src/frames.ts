@@ -653,6 +653,13 @@ export interface ControlResultFrame {
   instanceId?: string;
   /** No `instanceId` when the call it answers was machine-scoped. */
   kind: "control_result";
+  /**
+   * The hub's word on a request a dashboard asked that its machine's beats
+   * stopped naming before it answered (hub machine-calls.ts
+   * `watchForwarded`): no answer came, `after` ms in. `error` says it in
+   * words for a page that reads only those.
+   */
+  lapsed?: { after: number; reason: "timeout" | "dead" };
   ok: boolean;
   /** Why the machine's agent refused the call, typed; absent on an answer, and on a refusal the hub made itself. */
   refusal?: ControlRefusal;

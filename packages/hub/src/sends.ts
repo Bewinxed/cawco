@@ -66,7 +66,6 @@ import {
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import type { CallAnswer, ControlAnswer, Unanswered } from "./machine-answers";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
 import { OWED_NOTICE_DAYS, owedNoticeEnd, unsentLine } from "./owed-ends";
 import { talksWithPerson } from "./roles";
@@ -858,7 +857,6 @@ export const createSends = (ctx: SendsContext) => {
         row.machineId,
         CONTROL_READ_TRANSCRIPT_WINDOW,
         [row.sessionId, { dir: row.cwd || undefined, window: ask }],
-        READ_TIMEOUT_MS,
         row.harness
       );
       if (answer.kind !== "answered") {
@@ -1323,7 +1321,6 @@ export const createSends = (ctx: SendsContext) => {
       machineId,
       "withdrawSend",
       [row.uuid],
-      READ_TIMEOUT_MS,
       undefined,
       row.instanceId
     );
@@ -1387,7 +1384,6 @@ export const createSends = (ctx: SendsContext) => {
         row.machineId,
         "withdrawSend",
         [send.uuid],
-        READ_TIMEOUT_MS,
         undefined,
         instanceId
       );

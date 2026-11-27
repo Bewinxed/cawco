@@ -10,7 +10,6 @@ import type { StopRequest } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { sidebarWords } from "@cawco/core/words/sidebar";
-import { CONTROL_TIMEOUT_MS, DISCARD_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
@@ -70,7 +69,6 @@ export async function stopSession(
   try {
     const stopped = await ask(
       requestId,
-      CONTROL_TIMEOUT_MS,
       () => send({ verb: "stop", machineId, instanceId, requestId, payload }),
       answered
     );
@@ -102,7 +100,6 @@ export async function discardSession(
   try {
     const discarded = await ask(
       requestId,
-      DISCARD_TIMEOUT_MS,
       () => send({ verb: "stop", machineId, instanceId, requestId, payload }),
       answered
     );
@@ -178,7 +175,6 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
       target.machineId,
       "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],
-      CONTROL_TIMEOUT_MS,
       harnessOfSession(instanceId)
     );
   }

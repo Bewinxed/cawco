@@ -29,7 +29,12 @@ import { isGone } from "@cawco/core/absent";
 import { providersOpenedBy } from "@cawco/core/accounts";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  type Bounded,
+  fetchHeard,
+  readWhileLive,
+  readWithin,
+} from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
@@ -1994,9 +1999,6 @@ const SIGN_IN_FAULTS = opencodeRecordFile("sign-in-faults.json");
 
 /** How often the machine's own sign-ins are checked when none changed, and the least time between two requests for one key. Ours: an hour, so a check spends at most one request per key an hour. */
 const SIGN_IN_CHECK_MS = HOUR_MS;
-
-/** How long a key's check request may take. Ours: a list of models answers in well under a second; past this it says nothing. */
-const KEY_CHECK_TIMEOUT_MS = 20_000;
 
 /** Anthropic's API, where OpenCode's Anthropic provider sends when its config names no other (`@ai-sdk/anthropic`'s default). */
 const ANTHROPIC_API = "https://api.anthropic.com/v1";
@@ -4186,11 +4188,13 @@ class OpencodeHarness implements Harness<"opencode"> {
     this.#keyAsked.set(id, { at: Date.now(), value: hash });
     let checked: Bounded<{ message: string; ok: boolean; status: number }>;
     try {
-      checked = await readWithin(KEY_CHECK_TIMEOUT_MS, async (signal) => {
-        const response = await fetch(request.url, {
-          headers: request.headers,
-          signal,
-        });
+      // Waited on while its bytes arrive (core bounded.ts `readWhileLive`).
+      checked = await readWhileLive(async (signal, alive) => {
+        const response = await fetchHeard(
+          request.url,
+          { headers: request.headers, signal },
+          alive
+        );
         if (response.status !== 401 && response.status !== 403) {
           return { ok: response.ok, status: response.status, message: "" };
         }

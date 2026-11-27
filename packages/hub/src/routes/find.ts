@@ -38,15 +38,6 @@ const findCaller = (request: Request): string => {
     : "the dashboard's Find (⌘K)";
 };
 
-/**
- * How long the person's find in a conversation waits on its machine for
- * the places (find-places.ts): one phrase read of the index, a sync first
- * when it is stale (agent search/index.ts `SYNC_WAIT_MS`). Past it, the
- * places in the turns loaded stand, the machine named. Our call, as
- * `FIND_TURNS_MS`.
- */
-const FIND_PLACES_MS = 5000;
-
 export const findRoutes = ({
   db,
   find,
@@ -118,7 +109,6 @@ export const findRoutes = ({
           row.machineId,
           CONTROL_TRANSCRIPT_PLACES,
           [placesQuery(sessions, words, query)],
-          FIND_PLACES_MS,
           {
             caller: "the person's find in a conversation",
             signal: request.signal,

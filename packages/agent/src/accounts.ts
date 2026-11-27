@@ -19,7 +19,8 @@ import {
   type AccountReport,
   identityOf,
 } from "@cawco/core/accounts";
-import { boundedRead, Gone, Unanswered } from "@cawco/core/effect/bounded";
+import { QUIET_MS } from "@cawco/core/bounded";
+import { boundedWhileLive, Gone, Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
@@ -39,6 +40,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
 import { shortId } from "@cawco/core/short-id";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import type { Subprocess } from "bun";
@@ -92,20 +94,6 @@ const envFor = (account: string): Record<string, string | undefined> => ({
   ...bareEnv(),
   ...accountEnv(account),
 });
-
-/**
- * How long one dir's sign-in read may take: the keychain looks that come
- * first on a Mac ({@link lockedAway}) and `claude auth status` itself, all of
- * it. Our choice, because:
- * every account dir is read this way each minute and on every report, and a
- * CLI that never answers would hold all of them; a read cut by it is
- * unanswered, never signed out ({@link authStatusIn}). Ending it can cut a
- * token refresh short, which signed accounts out before Claude Code 2.1.301
- * ("Fixed sign-in refresh timeouts and unexpected sign-outs after a short
- * command such as `claude auth status` … exited in the middle of a token
- * refresh"), so it runs on nothing older ({@link claudeToStart}).
- */
-const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 /**
  * What `claude auth status --json` said for a config dir: its sign-in, or
@@ -181,7 +169,7 @@ const noAuthAnswer = (
   { after, reason }: { after: number; reason: "timeout" | "dead" }
 ): string =>
   reason === "timeout"
-    ? `The sign-in of ${dir} was not read within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (the keychain looks and \`claude auth status\`; let go after ${after} ms).`
+    ? `The sign-in of ${dir} was not read: the keychain looks and \`claude auth status\` said nothing for ${secondsOf(QUIET_MS)} s (let go after ${after} ms).`
     : `The sign-in read of ${dir} ended before it answered (\`claude auth status\` or a keychain look ended by a signal), after ${after} ms. Its sign-in was not read.`;
 
 /**
@@ -225,8 +213,9 @@ const statusIn = (
 /**
  * What `claude auth status --json` says, run in `env` (its config dir is
  * `dir`): signed in, how, and as whom ({@link AuthStatus}). Unanswered when
- * the read ran out of {@link AUTH_STATUS_TIMEOUT_MS} (the keychain looks
- * included, and however the process then took its end), or something else
+ * the read went a quiet spell with no answer (core bounded.ts `QUIET_MS`,
+ * the keychain looks included, and however the process then took its
+ * end), or something else
  * ended it before it answered: `unread`, with {@link noAuthAnswer}'s
  * sentence. Not run, and `locked`, when the dir's login is in the locked
  * login keychain ({@link lockedAway}).
@@ -247,10 +236,7 @@ export const authStatus = Effect.fn("authStatus")(function* (
       why: authStatusNotRun(dir, executable.refused),
     } satisfies AuthStatus;
   }
-  return yield* boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
-    statusOfDir(executable, env, dir)
-  ).pipe(
+  return yield* boundedWhileLive(() => statusOfDir(executable, env, dir)).pipe(
     Effect.catchTag("Unanswered", (none) =>
       Effect.succeed<AuthStatus>({
         kind: "unread",
@@ -588,10 +574,7 @@ const lockReads = makeJoin<"login", boolean, Gone | LockUnread>();
 
 const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
   "login",
-  boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
-    keychainLockState(loginKeychainPath())
-  ).pipe(
+  boundedWhileLive(() => keychainLockState(loginKeychainPath())).pipe(
     // The account read waiting on it ends unanswered with it.
     Effect.catchTag("Unanswered", ({ reason, after }) =>
       Effect.fail(
@@ -679,9 +662,6 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
     : `No Claude account is signed in on this machine. Add one in ${configurePage("accounts")} and sign it in there.`;
 };
 
-/** How long a probe may take to be answered at initialize. */
-const PROBE_TIMEOUT_MS = 60_000;
-
 /** Why an account dir's Claude Code is not started, in a sentence. */
 class NotStarted extends Schema.TaggedError<NotStarted>()("NotStarted", {
   message: Schema.String,
@@ -697,14 +677,13 @@ export const startable = Effect.fn("startable")(function* (
   account: string,
   done: string
 ) {
-  const away = yield* boundedRead(
-    AUTH_STATUS_TIMEOUT_MS,
+  const away = yield* boundedWhileLive(() =>
     lockedAway(keychainService(account))
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }: Unanswered) =>
       Effect.fail(
         new NotStarted({
-          message: `${accountConfigDir(account)} was not ${done}: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${after} ms).`,
+          message: `${accountConfigDir(account)} was not ${done}: the keychain looks before it said nothing for ${secondsOf(QUIET_MS)} s (let go after ${after} ms).`,
         })
       )
     )
@@ -715,9 +694,6 @@ export const startable = Effect.fn("startable")(function* (
     });
   }
 });
-
-/** How long a check's one turn may take to end. */
-const CHECK_TIMEOUT_MS = 90_000;
 
 /**
  * What the check asks: the shortest prompt that still gets a turn. Its
@@ -736,7 +712,8 @@ const CHECK_PROMPT = "Reply with OK.";
  * own one-line system prompt, one turn. `answered` when the turn ended with
  * an answer; `error` with Claude Code's `SDKAssistantMessageError` and its
  * words when its error stood in for one. Throws when the turn neither
- * answered nor was refused in {@link CHECK_TIMEOUT_MS} (or never started),
+ * answered nor was refused while it gave messages (core bounded.ts
+ * `QUIET_MS` with none lets it go), or never started,
  * which says nothing of the account.
  */
 export const checkAccount = (account: string): Promise<AccountCheck> =>
@@ -761,12 +738,9 @@ const heldQuery = (
     (handle) => Effect.sync(() => handle.close())
   );
 
-/** A held session's initialize response within {@link PROBE_TIMEOUT_MS}; past it, `late` is the failure. */
+/** A held session's initialize response, waited on for a quiet spell (core bounded.ts `QUIET_MS`); past it, `late` is the failure. */
 const initialized = (handle: ReturnType<typeof query>, late: string) =>
-  boundedRead(
-    PROBE_TIMEOUT_MS,
-    fromPromise(() => handle.initializationResult())
-  ).pipe(
+  boundedWhileLive(() => fromPromise(() => handle.initializationResult())).pipe(
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(new ClaudeUnanswered({ message: late }))
     )
@@ -793,10 +767,11 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
       systemPrompt: CHECK_PROMPT,
     },
   });
-  return yield* boundedRead(
-    CHECK_TIMEOUT_MS,
+  return yield* boundedWhileLive((alive) =>
     fromPromise(async (): Promise<AccountCheck> => {
       for await (const message of handle) {
+        // Each message of the turn is a sign of life.
+        alive();
         if (
           message.type === "assistant" &&
           !message.parent_tool_use_id &&
@@ -824,7 +799,7 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(
         new ClaudeUnanswered({
-          message: `Claude Code did not end the check's turn within ${CHECK_TIMEOUT_MS / 1000}s`,
+          message: `Claude Code said nothing of the check's turn for ${secondsOf(QUIET_MS)} s`,
         })
       )
     )
@@ -861,7 +836,7 @@ const accountProbe = Effect.fn("accountProbe")(function* (account: string) {
   });
   const init = yield* initialized(
     handle,
-    `Claude Code did not answer initialize within ${PROBE_TIMEOUT_MS / 1000}s`
+    `Claude Code did not answer initialize in ${secondsOf(QUIET_MS)} s`
   );
   // Who it is, keyed on its organization's id, which only `auth status`
   // names: read now, so the id is this login's ({@link dirIdentity}).
@@ -934,7 +909,7 @@ const commandsOfFolder = Effect.fn("commandsOfFolder")(function* (
   });
   const init = yield* initialized(
     handle,
-    `Claude Code did not list the commands of ${cwd} within ${PROBE_TIMEOUT_MS / 1000}s`
+    `Claude Code did not list the commands of ${cwd} in ${secondsOf(QUIET_MS)} s`
   );
   return init.commands;
 }, Effect.scoped);

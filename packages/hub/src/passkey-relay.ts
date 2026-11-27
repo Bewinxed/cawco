@@ -33,9 +33,6 @@ import type { AgentAsk } from "./machine-answers";
 /** How long the relay waits for a BLE advert before timing out. */
 const PASSKEY_RELAY_TIMEOUT_MS = 30_000;
 
-/** How long a machine gets to take a scan command. */
-const SCAN_CALL_MS = 5000;
-
 /** One relay attempt in flight, by browser key. */
 interface RelayAttempt {
   key: BrowserKey;
@@ -89,12 +86,9 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
       deps.lifetime.fork(
         "passkey scan stopped",
         deps
-          .call(
-            machine.id,
-            PASSKEY_SCAN_STOP,
-            [{ key: attempt.key } satisfies PasskeyScanArgs],
-            SCAN_CALL_MS
-          )
+          .call(machine.id, PASSKEY_SCAN_STOP, [
+            { key: attempt.key } satisfies PasskeyScanArgs,
+          ])
           .pipe(
             Effect.catchDefect((cause) =>
               Effect.sync(() =>
@@ -168,12 +162,9 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
         deps.lifetime.fork(
           "passkey scan started",
           deps
-            .call(
-              machine.id,
-              PASSKEY_SCAN_START,
-              [{ key } satisfies PasskeyScanArgs],
-              SCAN_CALL_MS
-            )
+            .call(machine.id, PASSKEY_SCAN_START, [
+              { key } satisfies PasskeyScanArgs,
+            ])
             .pipe(
               Effect.catchDefect((cause) =>
                 Effect.sync(() =>

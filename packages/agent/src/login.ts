@@ -6,8 +6,9 @@ import {
   type AccountSigninResult,
   sameIdentity,
 } from "@cawco/core/accounts";
+import { QUIET_MS } from "@cawco/core/bounded";
 import { failureOf } from "@cawco/core/detach";
-import { boundedRead, boundedWhileHeard } from "@cawco/core/effect/bounded";
+import { boundedRead, boundedWhileLive } from "@cawco/core/effect/bounded";
 import {
   accountConfigDir,
   accountIds,
@@ -28,6 +29,7 @@ import {
   readRecordSync,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
@@ -48,7 +50,6 @@ import { ClaudeRefused, claudeToStart } from "./claude-version";
 import {
   runFork,
   runPromise,
-  runSync,
   runSyncExit,
   thrownOf,
 } from "./daemon-runtime";
@@ -92,12 +93,6 @@ const AUTHORIZE_PARAMS = ["client_id", "code_challenge", "state"];
  * link still arriving is never read cut short.
  */
 const LINKS = /https:\/\/\S+(?=\s)/gu;
-
-/** How long the CLI may go without a word while it boots and prints its link. */
-const LINK_TIMEOUT_MS = 30_000;
-
-/** How long the CLI may go without a word while it exchanges the code and stores the login. */
-const EXCHANGE_TIMEOUT_MS = 60_000;
 
 /**
  * A sign-in in flight: one per config dir, since each `claude auth login`
@@ -277,7 +272,7 @@ const noLink = (
   why: "timeout" | "ended" | "several"
 ): string => {
   const what = {
-    timeout: `Claude Code on this machine didn't show its sign-in link within ${LINK_TIMEOUT_MS / 1000} s, so the sign-in stopped.`,
+    timeout: `Claude Code on this machine said nothing for ${secondsOf(QUIET_MS)} s before it showed its sign-in link, so the sign-in stopped.`,
     ended:
       "Claude Code's sign-in on this machine ended before it showed its sign-in link.",
     several:
@@ -295,18 +290,17 @@ export interface TerminalRun {
 
 /**
  * Answered true once `done` holds, answered with `done()` once the CLI
- * exits; `quiet` when neither happened and the CLI printed nothing for
- * `quietMs`.
+ * exits; `quiet` when neither happened and the CLI printed nothing for a
+ * quiet spell (core bounded.ts `QUIET_MS`).
  */
 export const heardUntil = (
   run: TerminalRun,
-  done: () => boolean,
-  quietMs: number
+  done: () => boolean
 ): Effect.Effect<boolean | "quiet"> =>
-  boundedWhileHeard(quietMs, (heard) =>
+  boundedWhileLive((heard) =>
     Effect.callback<boolean>((resume) => {
       run.heard = () => {
-        runSync(heard);
+        heard();
         if (done()) {
           resume(Effect.succeed(true));
         }
@@ -328,9 +322,8 @@ export const heardUntil = (
 /** The promise edge of {@link heardUntil}. */
 const until = (
   signIn: SignIn,
-  done: () => boolean,
-  quietMs: number
-): Promise<boolean | "quiet"> => runPromise(heardUntil(signIn, done, quietMs));
+  done: () => boolean
+): Promise<boolean | "quiet"> => runPromise(heardUntil(signIn, done));
 
 /**
  * A CLI's terminal and the CLI itself, opened in `scope`, which ends both
@@ -432,11 +425,7 @@ const beginSignIn = async (
   );
 
   // Ready once its authorize link is on the screen, whatever its prompt says.
-  const shown = await until(
-    current,
-    () => authorizeLinks(current).length > 0,
-    LINK_TIMEOUT_MS
-  );
+  const shown = await until(current, () => authorizeLinks(current).length > 0);
   const links = authorizeLinks(current);
   let failure: string | undefined;
   if (shown === "quiet") {
@@ -487,18 +476,14 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
 
   const from = signIn.output.length;
   signIn.terminal.write(`${trimmed}\r`);
-  const exited = await until(
-    signIn,
-    () => signIn.child.exitCode !== null,
-    EXCHANGE_TIMEOUT_MS
-  );
+  const exited = await until(signIn, () => signIn.child.exitCode !== null);
   const { exitCode } = signIn.child;
   end(signIn);
   // The terminal echoed the code back: shown as what it was, never itself.
   const screen = `Open the sign-in link again for a new code. Its screen said:\n${lastLines(signIn, from).replaceAll(trimmed, "(the pasted code)")}`;
   if (exited === "quiet") {
     throw new Error(
-      `Claude Code on this machine didn't finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s, so the sign-in stopped. ${screen}`
+      `Claude Code on this machine said nothing for ${secondsOf(QUIET_MS)} s before it finished signing in, so the sign-in stopped. ${screen}`
     );
   }
   if (exitCode !== 0) {

@@ -48,20 +48,26 @@
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
+import { type Bounded, QUIET_MS } from "@cawco/core/bounded";
 import { makeLock } from "@cawco/core/keyed-lock";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { recordedPool } from "@cawco/core/object-pool";
-import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
+import {
+  lastOutput,
+  OUTPUT_TAIL_KEPT,
+  outputTail,
+} from "@cawco/core/output-tail";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import {
   workspaceDoorDir,
   workspaceReadOnlyDir,
 } from "@cawco/core/paths/workspace";
+import { type Ran, runLive } from "@cawco/core/run-captured";
 import {
   GIT_LOCALE,
   repositoryConfigProblem,
@@ -70,11 +76,10 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
-import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { gitDoorWords } from "@cawco/core/words/git-door";
-import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Effect } from "effect";
@@ -383,26 +388,6 @@ const pushOriginLfs = async (
   return pushLfs(ref, sources, made.value.env);
 };
 
-/**
- * How long a git or git-lfs the door runs on the host may say nothing
- * before it is stopped. Our choice: each runs with its progress forced on
- * ({@link runOnHost}), so a live transfer speaks every few hundred ms
- * (git-lfs throttles its meter to one line per 200 ms, tasklog/log.go
- * `DefaultLoggingThrottle`), and a stalled connection ends itself sooner
- * (git-lfs's `lfs.activitytimeout`: "the maximum time, in seconds, that the
- * HTTP client will wait for the next tcp read or write … Default: 30
- * seconds", git-lfs-config(5)). What stays silent past this is stopped
- * whatever it waits on. A credential helper's prompt with no one at the
- * screen is the one wait seen; the door now asks the helpers once, before it
- * answers git, under a limit of their own ({@link withHostLogin}), so a run
- * here asks none. On macOS, Apple's `git-credential-osxkeychain` first takes an
- * exclusive lock on its own binary (`open(argv[0], O_EXLOCK)`), so one
- * waiting for a keychain prompt holds every other keychain lookup on the
- * machine until it ends: on 2026-10-24 the git-door probe's push of an LFS
- * file waited 74 minutes on such a `store`.
- */
-const HOST_RUN_SILENCE_MS = 120_000;
-
 /** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran); `silent` when its silence stopped it. */
 interface HostRun {
   readonly code: number;
@@ -411,10 +396,9 @@ interface HostRun {
   readonly silent: boolean;
 }
 
-/** What a host run is given beyond its arguments: its stdin, and how long it may say nothing ({@link HOST_RUN_SILENCE_MS} when unsaid). */
+/** What a host run is given beyond its arguments: its stdin. */
 interface HostRunOptions {
   readonly input?: string;
-  readonly silenceMs?: number;
 }
 
 /**
@@ -422,113 +406,65 @@ interface HostRunOptions {
  * forced on (`--progress` for git's push and fetch, which "forces progress
  * status even if the standard error stream is not directed to a terminal",
  * git-push(1); `GIT_LFS_FORCE_PROGRESS`, which forces git-lfs's "even when
- * standard output stream is not a terminal", git-lfs-config(5)), in a
- * process group of its own. When it says nothing for
- * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (a credential
- * helper it waits on included, and with it any lock that helper holds), and
- * its last words say how long it was silent. The door's own runs.
+ * standard output stream is not a terminal", git-lfs-config(5)), so a live
+ * transfer speaks every few hundred ms (git-lfs throttles its meter to one
+ * line per 200 ms, tasklog/log.go `DefaultLoggingThrottle`). It runs while
+ * it lives (core run-captured.ts `runLive`): a line or CPU time spent is a
+ * sign of life, and one quiet for a spell is stopped with its whole group (a
+ * credential helper it waits on included, and with it any lock that helper
+ * holds: on macOS, Apple's `git-credential-osxkeychain` first takes an
+ * exclusive lock on its own binary, `open(argv[0], O_EXLOCK)`, so one
+ * waiting for a keychain prompt held every other keychain lookup on the
+ * machine; on 2026-10-24 the git-door probe's push of an LFS file waited 74
+ * minutes on such a `store`). Its last words say it went quiet. The door's
+ * own runs.
  */
-const runOnHost = (
+const runOnHost = async (
   ref: WorkspaceRef,
   args: readonly string[],
   env: Record<string, string>,
-  { input, silenceMs = HOST_RUN_SILENCE_MS }: HostRunOptions = {}
+  { input }: HostRunOptions = {}
 ): Promise<HostRun> => {
-  let out = "";
-  const err = newTail();
-  let silent = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   const run = inCopySync(ref.id, ref.path, safeGitArgv([...args]));
-  const [file = "git", ...rest] = run.argv;
-  /** The whole group stopped: the run's own, or its silence's, end. */
-  const stopGroup = (child: ChildProcess): void => {
-    const leader = spawnedPid(child);
-    if (leader !== undefined && child.exitCode === null) {
-      try {
-        signalGroup(leader, "SIGKILL");
-      } catch (error) {
-        console.warn(
-          `[hub-git] ${ref.id}: git ${args[0]} said nothing and could not be stopped: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  };
-  const ran = Effect.acquireUseRelease(
-    Effect.sync(() =>
-      spawn(file, rest, {
-        cwd: run.cwd,
-        env: {
-          ...env,
-          ...SAFE_GIT_ENV,
-          GIT_DIR: join(ref.path, ".git"),
-          GIT_LFS_FORCE_PROGRESS: "1",
-        },
-        detached: true,
-        stdio: ["pipe", "pipe", "pipe"],
-      })
-    ),
-    (child) =>
-      Effect.callback<number | null>((resume) => {
-        child.stdin.on("error", () => undefined);
-        child.stdin.end(input);
-        // Silence is timed by a timer each chunk sets again; its end is a
-        // kill, nothing awaited.
-        const heard = () => {
-          clearTimeout(timer);
-          timer = setTimeout(() => {
-            silent = true;
-            stopGroup(child);
-          }, silenceMs);
-        };
-        heard();
-        child.stdout.on("data", (chunk: Buffer) => {
-          out += chunk.toString();
-          heard();
-        });
-        child.stderr.on("data", (chunk: Buffer) => {
-          writeTail(err, chunk.toString(), OUTPUT_TAIL_KEPT);
-          heard();
-        });
-        child.on("error", (error) => {
-          writeTail(err, `\n${error.message}`, OUTPUT_TAIL_KEPT);
-        });
-        child.on("close", (code) => resume(Effect.succeed(code)));
-      }),
-    // Its timer cleared, and the group stopped if the run is let go before
-    // it closed.
-    (child) =>
-      Effect.sync(() => {
-        clearTimeout(timer);
-        stopGroup(child);
-      })
-  );
-  // The promise edge of one run on the host (this door's fetches and pushes).
-  return runPromise(
-    ran.pipe(
-      Effect.map((code): HostRun => {
-        // @limit external: git's own command words: `git lfs <command>` is two, every other `git <command>` one
-        const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
-        return {
-          code: silent ? 128 : (code ?? 128),
-          out,
-          err: silent
-            ? `${saidTail(err)}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
-            : saidTail(err),
-          silent,
-        };
-      })
-    )
-  );
+  // @limit external: git's own command words: `git lfs <command>` is two, every other `git <command>` one
+  const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
+  const ran = await runLive(run.argv, {
+    cwd: run.cwd,
+    env: {
+      ...env,
+      ...SAFE_GIT_ENV,
+      GIT_DIR: join(ref.path, ".git"),
+      GIT_LFS_FORCE_PROGRESS: "1",
+    },
+    ...(input === undefined ? {} : { input }),
+  }).catch((error: unknown): Bounded<Ran> => ({
+    kind: "answered",
+    value: {
+      code: 128,
+      signalCode: null,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    },
+  }));
+  switch (ran.kind) {
+    case "answered":
+      return {
+        code: ran.value.signalCode ? 128 : ran.value.code,
+        out: ran.value.stdout,
+        err: outputTail(ran.value.stderr),
+        silent: false,
+      };
+    case "unanswered":
+      return {
+        code: 128,
+        out: "",
+        err: `cawco: ${what} wrote nothing and did no work for ${secondsOf(QUIET_MS)} s, so it was stopped, with every process it had started.`,
+        silent: true,
+      };
+    default:
+      return unhandled("read", ran);
+  }
 };
-
-/**
- * How long the door waits on the host's credential helpers for a remote's
- * login ({@link withHostLogin}) before it refuses. Our choice: a helper that
- * has the login answers in well under a second (gh, a store, an unlocked
- * keychain); one still silent after this waits on a person (a keychain
- * prompt, an askpass window) nobody may be there to answer.
- */
-const CREDENTIAL_LIMIT_MS = 15_000;
 
 /** One `key=value` line of `git credential fill`'s answer (git-credential(1), "INPUT/OUTPUT FORMAT"). */
 const CREDENTIAL_LINE = /^([\w[\]]+)=(.*)$/u;
@@ -561,12 +497,11 @@ const authorizationOf = (answer: string): string | undefined => {
 /**
  * `env` for git and git-lfs against the http(s) remote at `url`, carrying
  * the host's login for it, asked of the host's credential helpers once,
- * before the door answers: `git credential fill` for the URL, with its own
- * limit ({@link CREDENTIAL_LIMIT_MS}). A helper silent past it is stopped
- * with all it started, and the door refuses at once in words naming the
- * credential helper and the host, so no push or fetch waits out the run's
- * own silence limit ({@link HOST_RUN_SILENCE_MS}) on a prompt nobody sees
- * (on 2026-10-24 a keychain `store` held a push 74 minutes).
+ * before the door answers: `git credential fill` for the URL, run while it
+ * lives ({@link runOnHost}). A helper that goes quiet (a prompt nobody
+ * sees) is stopped with all it started, and the door refuses at once in
+ * words naming the credential helper and the host, so no push or fetch
+ * waits on it (on 2026-10-24 a keychain `store` held a push 74 minutes).
  *
  * The login goes to git as an `Authorization` header for the repository's
  * own URL (`http.<url>.extraHeader`, matched on whole path segments), env-only
@@ -605,17 +540,14 @@ const withHostLogin = async (
     ref,
     ["credential", "fill"],
     { ...env, GIT_ASKPASS: "" },
-    {
-      input: `url=${url}\n\n`,
-      silenceMs: CREDENTIAL_LIMIT_MS,
-    }
+    { input: `url=${url}\n\n` }
   );
   if (asked.silent) {
     throw new Error(
       gitDoorWords.credentialSilent(
         withoutCredential(url),
         parsed.host,
-        CREDENTIAL_LIMIT_MS / 1000
+        secondsOf(QUIET_MS)
       )
     );
   }

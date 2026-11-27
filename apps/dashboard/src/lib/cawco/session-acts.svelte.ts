@@ -159,7 +159,6 @@ export async function renameSession(
     machineId,
     "renameSession",
     [info.sessionId, title, { dir: info.cwd || undefined }],
-    undefined,
     info.harness
   );
   answeredOr(machineId, renamed, "whether it was renamed is not known");

@@ -67,7 +67,6 @@ import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { folderStandsOn } from "./folder-stands";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { mergeSameRemote } from "./project-merge";
 import { scratchPlaceRefusal } from "./project-place-scratch";
 import { placesChanged } from "./project-placements";
@@ -219,8 +218,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     const answer = await ctx.machineCalls.readAgent(
       machineId,
       CONTROL_FOLDER_LOOK,
-      [folder],
-      READ_TIMEOUT_MS
+      [folder]
     );
     return answer.kind === "answered" && answer.value.ok
       ? answer.value.result

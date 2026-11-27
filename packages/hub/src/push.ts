@@ -73,8 +73,9 @@
 import type { ActionState } from "@cawco/core/actions";
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
+import { fetchHeard } from "@cawco/core/bounded";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import { harnessName } from "@cawco/core/harness/kinds";
@@ -147,7 +148,6 @@ const BURST_MS = 30_000;
 const COVER_KEPT_MS = DAY_MS;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
-const REQUEST_TIMEOUT_MS = 10_000;
 /** At most one background push per device in this window (Apple: "two or three per hour"). */
 const BACKGROUND_GAP_MS = 20 * 60_000;
 
@@ -809,18 +809,21 @@ const post = (
         expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
         ...made,
       });
-      return boundedRead(
-        REQUEST_TIMEOUT_MS,
+      return boundedWhileLive((alive) =>
         Effect.tryPromise(async (signal) => {
-          const response = await fetch(`${CAWRIER}/v1/push`, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${device.secret}`,
-              "content-type": "application/json",
+          const response = await fetchHeard(
+            `${CAWRIER}/v1/push`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${device.secret}`,
+                "content-type": "application/json",
+              },
+              body: sent,
+              signal,
             },
-            body: sent,
-            signal,
-          });
+            alive
+          );
           if (response.ok) {
             return { status: response.status, reason: null };
           }
@@ -856,18 +859,21 @@ const removeDevice = (
   if (!device) {
     return Effect.succeed(false);
   }
-  return boundedRead(
-    REQUEST_TIMEOUT_MS,
+  return boundedWhileLive((alive) =>
     Effect.tryPromise(async (signal) => {
-      const response = await fetch(`${CAWRIER}/v1/unenroll`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${device.secret}`,
-          "content-type": "application/json",
+      const response = await fetchHeard(
+        `${CAWRIER}/v1/unenroll`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${device.secret}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ pairingId }),
+          signal,
         },
-        body: JSON.stringify({ pairingId }),
-        signal,
-      });
+        alive
+      );
       if (response.status === 204) {
         return;
       }

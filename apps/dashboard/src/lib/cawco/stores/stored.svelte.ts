@@ -172,7 +172,6 @@ function readStoredInfo(where: StoredWhere, sessionId: string): void {
       machineId,
       "getSessionInfo",
       [sessionId, { dir: where.cwd || undefined }],
-      undefined,
       where.harness
     ).then((answer) => {
       if (answer.kind === "answered" && answer.value) {
@@ -223,7 +222,6 @@ function readStoredRun(source: ForkSource): Promise<StoredRun> {
       source.machineId,
       CONTROL_STORED_RUN,
       [source.sessionId, { dir: source.cwd || undefined }],
-      undefined,
       source.harness
     ).then((answer) => {
       const run = answeredOr(

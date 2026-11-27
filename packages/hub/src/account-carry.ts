@@ -29,8 +29,6 @@ import type { ClosureContext } from "./closure-context";
 import type { AccountLeave } from "./db/accounts";
 import { MOVE_ENDED_ORIGIN } from "./hub-words";
 import type { Kept } from "./limit-decision";
-import { SIGNIN_TIMEOUT_MS } from "./login-moves";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
@@ -46,7 +44,6 @@ type CarryOutcome =
 export type AccountCarryContext = Pick<
   ClosureContext,
   | "MOVE_TICK_MS"
-  | "SLEEP_TIMEOUT_MS"
   | "awayWords"
   | "db"
   | "keepCodexLeave"
@@ -71,9 +68,6 @@ export type AccountCarryContext = Pick<
   Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createAccountCarry = (ctx: AccountCarryContext) => {
-  /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
-  const CARRY_TIMEOUT_MS = 120_000;
-
   /**
    * `instanceId` is placed on an account: whatever left it on none
    * (`strandedStall`) is over.
@@ -438,8 +432,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     const answer = await ctx.machineCalls.callAgent(
       machineId,
       CONTROL_CARRY_SESSIONS,
-      [requests],
-      CARRY_TIMEOUT_MS
+      [requests]
     );
     // Unanswered or refused, every row stays where it is (moveRowsToAccount
     // `kept`), with why in the outcome's words.
@@ -522,7 +515,6 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
             machineId,
             CONTROL_GET_SESSION_INFO,
             [row.sessionId],
-            READ_TIMEOUT_MS,
             row.harness
           );
           // Unanswered or refused: the launch dir stays unread (nothing is
@@ -571,15 +563,11 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
           machineId,
           CONTROL_FORGET_ACCOUNT,
           [account.id, into],
-          SIGNIN_TIMEOUT_MS,
           "claude"
         )
-      : ctx.machineCalls.callAgent(
-          machineId,
-          CONTROL_FORGET_PROVIDER_ACCOUNT,
-          [account.id],
-          SIGNIN_TIMEOUT_MS
-        );
+      : ctx.machineCalls.callAgent(machineId, CONTROL_FORGET_PROVIDER_ACCOUNT, [
+          account.id,
+        ]);
 
   /**
    * {@link forgetOn} on each of `machineIds`, one at a time: the machines
@@ -751,8 +739,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       const answer = await ctx.machineCalls.callAgent(
         machineId,
         CONTROL_FORGET_CODEX_LOGIN,
-        [accountId],
-        SIGNIN_TIMEOUT_MS
+        [accountId]
       );
       if (answer.kind !== "answered" || !answer.value.ok) {
         continue;
@@ -817,7 +804,6 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
           machineId,
           CONTROL_SLEEP,
           [],
-          ctx.SLEEP_TIMEOUT_MS,
           undefined,
           row.id
         )

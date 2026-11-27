@@ -25,6 +25,7 @@
 
 import { createHash } from "node:crypto";
 import { TOOL_CALL_KEY_HEADER } from "@cawco/core/binary-updates";
+import { joinedBytes } from "@cawco/core/bounded";
 import { isRecord } from "@cawco/core/is-record";
 import {
   type CallToolResult,
@@ -123,18 +124,6 @@ const follow = async (
   );
 };
 
-const joined = (chunks: Uint8Array[]): Uint8Array => {
-  const whole = new Uint8Array(
-    chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
-  );
-  let at = 0;
-  for (const chunk of chunks) {
-    whole.set(chunk, at);
-    at += chunk.byteLength;
-  }
-  return whole;
-};
-
 const make = ({
   db,
   lifetime,
@@ -188,7 +177,7 @@ const make = ({
     try {
       db.answer(
         id,
-        { status: response.status, headers, body: joined(running.chunks) },
+        { status: response.status, headers, body: joinedBytes(running.chunks) },
         Date.now()
       );
     } finally {

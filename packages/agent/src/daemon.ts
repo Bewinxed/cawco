@@ -24,7 +24,7 @@ import {
   UNLOCK_KEYCHAIN,
 } from "@cawco/core/accounts/controls";
 import { AGENT_RESTARTING } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_HANDBACK,
   BROWSER_INJECT_ADVERT,
@@ -174,6 +174,7 @@ import {
   RELAY_START,
   RELAY_STOP,
 } from "@cawco/core/stream-relay";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import {
@@ -397,6 +398,7 @@ import {
 import { fromPromise, Rejected } from "./rejected";
 import { removalRefusal, removeFolder } from "./remove-folder";
 import { repoRoot } from "./repo-top";
+import { runningIds } from "./request-record";
 import { fenced } from "./restart";
 import {
   moveOpencodeAccountHomes,
@@ -853,6 +855,7 @@ const watchOpencodeReport = (
         payload: {
           at: Date.now(),
           instances: instances(),
+          working: runningIds(),
           ...(read ? { harnesses: [read] } : {}),
           ...(providers ? { providers } : {}),
         } satisfies HeartbeatPayload,
@@ -1327,16 +1330,6 @@ class HubLine {
   }
 }
 
-/**
- * How long a dial waits for the hub to answer its upgrade. A socket the far
- * end accepted but never answers (a hub whose loop is wedged, a middlebox
- * holding the connection, another process on the hub's port) fires neither
- * `open` nor `close`: without this the dial waits forever, silent after
- * "connecting", and never reaches the reconnect below. Our choice: a
- * healthy hub answers in milliseconds.
- */
-const OPEN_TIMEOUT_MS = 30_000;
-
 /** The hub's first frame on a connection: what its register proves this machine's key against. */
 interface Challenge {
   hubId: string;
@@ -1407,15 +1400,20 @@ const open = (url: string) =>
       ready();
       return Effect.sync(settle);
     });
-    return boundedRead(OPEN_TIMEOUT_MS, challenged).pipe(
+    // A dial the far end accepted but never answers (a hub whose loop is
+    // wedged, a middlebox holding the connection, another process on the
+    // hub's port) fires neither `open` nor `close`: a link that says nothing
+    // for the quiet spell is dead, from its first frame on, as it is after
+    // (two unanswered pings), and the reconnect below runs.
+    return boundedRead(QUIET_MS, challenged).pipe(
       Effect.map((read) => ({ socket, challenge: read })),
       Effect.catchTag("Unanswered", () =>
         Effect.fail(
           new ConnectionLost({
             url,
             reason: opened
-              ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
-              : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
+              ? `the hub sent no challenge within ${secondsOf(QUIET_MS)} s of the connection`
+              : `the hub did not answer the connection within ${secondsOf(QUIET_MS)} s`,
           })
         )
       ),
@@ -1654,6 +1652,7 @@ const reportServedCatalog = async (
     payload: {
       at: Date.now(),
       instances: supervisor.instanceIds,
+      working: runningIds(),
       resumableAt: Object.fromEntries(
         catalog.map((entry) => [entry.sessionId, entry.lastModified])
       ),
@@ -1933,6 +1932,7 @@ const attach = (
           payload: {
             at: Date.now(),
             instances: supervisor.instanceIds,
+            working: runningIds(),
             ...part,
           } satisfies HeartbeatPayload,
         });
@@ -2733,6 +2733,7 @@ const attach = (
           payload: {
             at: Date.now(),
             instances: supervisor.instanceIds,
+            working: runningIds(),
             custody: freshCustody,
             custodyComplete: true,
           } satisfies HeartbeatPayload,

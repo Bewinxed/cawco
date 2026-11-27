@@ -49,7 +49,6 @@ import {
 import { LIVE } from "./work-item-state";
 import type { Workspaces, WorkspacesDeps } from "./workspaces";
 import {
-  GIT_TIMEOUT_MS,
   isFolderOverlay,
   isHostFolder,
   landingKey,
@@ -601,7 +600,7 @@ export const createLandingRun = ({
     if (isFolderOverlay(workspace)) {
       return "";
     }
-    const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
+    const git = (cmd: string) => runIn(workspace, item)(cmd, undefined);
     const range = reportedRange(
       `origin/${workspace.base}`,
       landing.kind === "done" ? landing.landed : undefined
@@ -632,7 +631,7 @@ export const createLandingRun = ({
     (workspace: WorkspaceRow, item: WorkItemRow) =>
     (
       cmd: string,
-      timeoutMs: number,
+      timeoutMs: number | undefined,
       noWait = false,
       lands = false,
       moves?: string
@@ -657,7 +656,7 @@ export const createLandingRun = ({
   ): Promise<CheckoutHead | undefined> => {
     const read = await runIn(workspace, item)(
       "git rev-parse HEAD HEAD^{tree}",
-      GIT_TIMEOUT_MS,
+      undefined,
       false,
       true
     );
@@ -913,7 +912,7 @@ export const createLandingRun = ({
         ? taskTitle?.(item.projectId, item.taskId)
         : undefined) ?? item.title;
     const origin = (
-      await runIn(workspace, item)("git remote get-url origin", GIT_TIMEOUT_MS)
+      await runIn(workspace, item)("git remote get-url origin", undefined)
     ).stdout.trim();
     const outcome = await lifetime.run(
       Effect.result(
@@ -1035,7 +1034,7 @@ export const createLandingRun = ({
     const outputs = db.workItemOutputs(item.id);
     const result = { stdout: "" };
     for (const probe of outputsProbes(outputs)) {
-      const probed = await runIn(workspace, item)(probe, GIT_TIMEOUT_MS);
+      const probed = await runIn(workspace, item)(probe, undefined);
       if (probed.exitCode !== 0) {
         throw new Error(
           `the hub could not look for the item's outputs: ${failedWith(probed)}`
@@ -1089,7 +1088,7 @@ export const createLandingRun = ({
     }
     const listed = await runIn(workspace, item)(
       SCRATCH_OUTPUTS_LIST,
-      GIT_TIMEOUT_MS
+      undefined
     );
     if (listed.exitCode !== 0) {
       throw new Error(
@@ -1124,7 +1123,7 @@ export const createLandingRun = ({
       }
       const read = await runIn(workspace, item)(
         `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${shellQuote(one.path)}`,
-        GIT_TIMEOUT_MS
+        undefined
       );
       if (read.exitCode !== 0) {
         throw new Error(
@@ -1152,7 +1151,7 @@ export const createLandingRun = ({
   ): Promise<{ path: string; content: Uint8Array }[]> => {
     const listed = await runIn(workspace, item)(
       outputFilesCommand(output),
-      GIT_TIMEOUT_MS
+      undefined
     );
     if (listed.exitCode !== 0) {
       throw new Error(`${output} could not be listed: ${failedWith(listed)}`);
@@ -1161,7 +1160,7 @@ export const createLandingRun = ({
     for (const path of listed.stdout.split("\n").filter(Boolean)) {
       const read = await runIn(workspace, item)(
         `base64 < ${shellQuote(path)}`,
-        GIT_TIMEOUT_MS
+        undefined
       );
       if (read.exitCode !== 0) {
         throw new Error(`${path} could not be read: ${failedWith(read)}`);
@@ -1282,7 +1281,7 @@ export const createLandingRun = ({
       }
       const cherry = await runIn(workspace, item)(
         `git cherry ${target} ${from.commit}`,
-        GIT_TIMEOUT_MS
+        undefined
       );
       if (
         cherry.exitCode !== 0 ||

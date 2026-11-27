@@ -64,11 +64,6 @@ import type { AgentAsk, AgentCall, AwayProblem } from "./machine-answers";
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
 const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
 
-/** How long a viewer's session may take: its browser may be woken, its image built first. */
-const VIEWER_MS = 15 * 60_000;
-const LISTEN_MS = 30_000;
-const VIEWERS_MS = 30_000;
-
 /** What the routes' path is under, before the artifact's own part. */
 const BASE = "/ws/browser";
 
@@ -264,7 +259,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   const listenOn = async (machineId: string) => {
     const token = randomUUID();
     const listened = answered(
-      await deps.call(machineId, BROWSER_LISTEN, [{ token }], LISTEN_MS),
+      await deps.call(machineId, BROWSER_LISTEN, [{ token }]),
       machineId,
       deps.machineName(machineId),
       "be reached"
@@ -321,12 +316,9 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   /** A neko session of `place`'s browser for one viewer, or its machine's refusal. */
   const sessionOf = async (place: Place) =>
     answered(
-      await deps.call(
-        place.machineId,
-        BROWSER_VIEWER_TOKEN,
-        [{ key: place.key }],
-        VIEWER_MS
-      ),
+      await deps.call(place.machineId, BROWSER_VIEWER_TOKEN, [
+        { key: place.key },
+      ]),
       place.machineId,
       deps.machineName(place.machineId),
       "be viewed"
@@ -364,12 +356,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     deps.lifetime.fork(
       "browser viewers",
       deps
-        .ask(
-          place.machineId,
-          BROWSER_VIEWERS,
-          [{ key: place.key, count: now }],
-          VIEWERS_MS
-        )
+        .ask(place.machineId, BROWSER_VIEWERS, [{ key: place.key, count: now }])
         .pipe(
           Effect.flatMap((read) =>
             Effect.sync(() => {
