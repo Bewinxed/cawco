@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import { settingsViewWords as words } from "@cawco/core/words/settings-view";
   import AccountSwitch from "#lib/cawco/accounts/AccountSwitch.svelte";
   import { minuteClock } from "#lib/cawco/accounts/minute-clock.svelte.js";
@@ -53,16 +52,13 @@
     const account = record.accounts.find(
       (one) => one.id === record.account.chosen
     );
-    const claude =
-      account?.signedIn && account.provider === CLAUDE_PROVIDER
-        ? usageStore.claudeLimits[account.id]
-        : undefined;
-    const limit = claude
-      ? firstToStop(limitRows("Claude", claude, clock.now))
+    const held = account?.signedIn
+      ? usageStore.accountLimits[account.id]
+      : undefined;
+    const limit = held
+      ? firstToStop(limitRows("Claude", held, clock.now))
       : null;
-    return limit && claude
-      ? chipQuota(limit, claude.fetchedAt, clock.now)
-      : null;
+    return limit && held ? chipQuota(limit, held.fetchedAt, clock.now) : null;
   });
 
   const disabled = $derived(!record.hubReachable);

@@ -1026,7 +1026,7 @@ public enum Words {
             /// A provider's routing is a choice among its accounts: it is offered from this many.
             public static let routingFrom = 2
 
-            public static let limitedProviders: [String] = ["anthropic", "openai-codex", "opencode-go"]
+            public static let limitedProviders: [String] = ["anthropic", "openai-codex", "opencode-go", "antigravity"]
 
             public static let unlimitedStrategies: [String] = ["pinned", "fill-first"]
 

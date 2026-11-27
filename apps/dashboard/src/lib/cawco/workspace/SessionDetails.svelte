@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  import { accountProvidersOf, modelScope } from "@cawco/core/accounts";
+  import { accountProvidersOf, scopeBears } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import {
     EFFORT_NONE,
@@ -201,18 +201,17 @@
   const providerLimit = $derived.by(() => {
     if (traitsOf(harness).providerLimit === "account") {
       const accountId = row?.accountId;
-      const claude = accountId ? usageStore.claudeLimits[accountId] : undefined;
+      const held = accountId ? usageStore.accountLimits[accountId] : undefined;
       // The windows that bind the model it runs: every model's, and its
-      // family's own (core `modelScope`), never another family's week.
-      const scope = modelScope(model);
-      const binding = claude && {
-        ...claude,
-        windows: claude.windows.filter(
-          (one) => one.scopeLabel === null || one.scopeLabel === scope
+      // family's or model group's own (core `scopeBears`), never another's.
+      const binding = held && {
+        ...held,
+        windows: held.windows.filter((one) =>
+          scopeBears(one.scopeLabel, model ?? null)
         ),
       };
       const limit = firstToStop(limitRows("Claude", binding, limitNow));
-      return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
+      return limit && held ? { ...limit, seenAt: held.fetchedAt } : null;
     }
     if (
       traitsOf(harness).providerLimit === "go" &&
@@ -716,7 +715,7 @@
     if (!modelAccount) {
       return;
     }
-    const there = roomOf(usageStore.claudeLimits[modelAccount], id, limitNow);
+    const there = roomOf(usageStore.accountLimits[modelAccount], id, limitNow);
     return there?.kind === "limit"
       ? limitRowOf(modelKey(id), there, limitNow)
       : undefined;

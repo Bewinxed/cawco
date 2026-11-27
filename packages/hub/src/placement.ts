@@ -9,10 +9,10 @@ import {
   accountNameAmong,
   isChatgptPlan,
   keepsGoingOnExtraUsage,
-  modelScope,
   type PlacementExplain,
   type ProviderRouting,
   type StrategyChoice,
+  scopeBears,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
@@ -394,10 +394,11 @@ const SAID_ORDER: Record<string, number> = {
   monthly: 2,
 };
 
-/** What placement reads of each account's windows, for one model scope at one moment. */
+/** What placement reads of each account's windows, for one model at one moment. */
 class Usage {
   readonly #input: PlacementInput;
-  readonly #scope: string | null;
+  /** The session's model, as its windows and benches bear on it (core `scopeBears`). */
+  readonly #model: string | null;
   /**
    * Why a keep-going account's extra usage counts as room here, in words
    * {@link said} quotes; undefined: only plan room counts.
@@ -406,7 +407,7 @@ class Usage {
 
   constructor(input: PlacementInput, credits?: string) {
     this.#input = input;
-    this.#scope = modelScope(input.model);
+    this.#model = input.model ?? null;
     this.#credits = credits;
   }
 
@@ -423,7 +424,7 @@ class Usage {
     const reading = this.#input.readings.find((one) => one.accountId === id);
     return bearing(
       reading?.windows ?? [],
-      this.#scope,
+      this.#model,
       this.#input.now,
       reading?.windowKinds ?? null
     );
@@ -563,7 +564,7 @@ class Usage {
       (one) =>
         one.accountId === id &&
         one.until > this.#input.now &&
-        (one.scope === null || one.scope === this.#scope)
+        scopeBears(one.scope, this.#model)
     );
   }
 
@@ -659,7 +660,7 @@ class Usage {
         (one) =>
           one.accountId === account.id &&
           one.until > now &&
-          (one.scope === null || one.scope === this.#scope)
+          scopeBears(one.scope, this.#model)
       )
       .map((one) => one.until);
     const resets = this.#bearing(account.id).flatMap((window) => {
@@ -1441,7 +1442,7 @@ export const accountRows = (
 ): AccountRow[] => {
   const input = ofProvider(asked);
   const usage = new Usage(input);
-  const scope = modelScope(input.model);
+  const model = input.model ?? null;
   const { signedIn, allowed } = eligible(input);
   const listed = (list: string[] | null | undefined, id: string) =>
     !list || list.includes(id);
@@ -1453,7 +1454,7 @@ export const accountRows = (
           (one) =>
             one.accountId === account.id &&
             one.until > input.now &&
-            (one.scope === null || one.scope === scope)
+            scopeBears(one.scope, model)
         )
         .map((one) => one.until);
       let notAllowedBy: AccountRow["notAllowedBy"] = null;

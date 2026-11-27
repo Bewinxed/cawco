@@ -26,6 +26,9 @@ export const usageState = $state<{
    */
   usageLimits: Record<string, ClaudeLimits>;
 
+  /** Each Antigravity account's own limits, by account id, from the same frame. */
+  agyLimits: Record<string, ClaudeLimits>;
+
   /** Each machine's OpenCode Go windows, from the same frame; absent on a machine with no Go key. */
   openCodeGoLimits: Record<string, OpenCodeGoLimits>;
 
@@ -42,6 +45,7 @@ export const usageState = $state<{
   spendFailed: boolean;
 }>({
   usageLimits: {},
+  agyLimits: {},
   openCodeGoLimits: {},
   usageLimitsRead: false,
   spend: null,
@@ -50,18 +54,25 @@ export const usageState = $state<{
 
 /** Replaces both limits maps with the hub's word — a full snapshot, not a patch. */
 export function adoptUsageLimits(
-  readings: Pick<UsageLimitsResponse, "claude" | "openCodeGo">
+  readings: Pick<UsageLimitsResponse, "antigravity" | "claude" | "openCodeGo">
 ): void {
   const claude: Record<string, ClaudeLimits> = {};
+  const agy: Record<string, ClaudeLimits> = {};
   const openCodeGo: Record<string, OpenCodeGoLimits> = {};
   for (const one of readings.claude) {
     claude[one.accountId] = one.limits;
+  }
+  for (const one of readings.antigravity ?? []) {
+    agy[one.accountId] = one.limits;
   }
   for (const machine of readings.openCodeGo) {
     openCodeGo[machine.machineId] = machine.plan;
   }
   if (!equal(usageState.usageLimits, claude)) {
     usageState.usageLimits = claude;
+  }
+  if (!equal(usageState.agyLimits, agy)) {
+    usageState.agyLimits = agy;
   }
   if (!equal(usageState.openCodeGoLimits, openCodeGo)) {
     usageState.openCodeGoLimits = openCodeGo;
@@ -110,6 +121,13 @@ export const usageStore = {
   /** Every Claude account's own limits, by account id. */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
     return usageState.usageLimits;
+  },
+  /**
+   * Every account's own limits whose limits are its own, by account id:
+   * Claude's and Antigravity's. What a session's or a pick's limit reads.
+   */
+  get accountLimits(): Readonly<Record<string, ClaudeLimits>> {
+    return { ...usageState.usageLimits, ...usageState.agyLimits };
   },
   /** Every machine's OpenCode Go windows, by machineId. */
   get openCodeGoLimits(): Readonly<Record<string, OpenCodeGoLimits>> {

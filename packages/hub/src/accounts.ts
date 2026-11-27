@@ -20,6 +20,7 @@ import {
 } from "@cawco/core/accounts";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import { makeJoin } from "@cawco/core/effect/join";
+import { AGY_PROVIDER } from "@cawco/core/harness/agy-account";
 import { catalogHarnessOf } from "@cawco/core/model-names";
 import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -891,8 +892,8 @@ export const sessionLimitsReader = (
 
 /**
  * What the usage screens read (`/api/usage/limits`, and the `kind: 'usage'`
- * frame): each Claude account's own limits, by account; and each machine's
- * OpenCode Go plan, read with its own key.
+ * frame): each Claude account's and each Antigravity account's own limits,
+ * by account; and each machine's OpenCode Go plan, read with its own key.
  */
 export const usageLimits = (
   db: DbShape,
@@ -902,14 +903,17 @@ export const usageLimits = (
   const goByMachine = new Map(
     db.listUsageLimits().map((row) => [row.machineId, row.openCodeGo])
   );
-  return {
-    claude: db.accounts
-      .list()
-      .filter((account) => account.provider === CLAUDE_PROVIDER)
+  const accounts = db.accounts.list();
+  const limitsOfProvider = (provider: string) =>
+    accounts
+      .filter((account) => account.provider === provider)
       .map((account) => ({
         accountId: account.id,
         limits: view.limits(account.id, now),
-      })),
+      }));
+  return {
+    claude: limitsOfProvider(CLAUDE_PROVIDER),
+    antigravity: limitsOfProvider(AGY_PROVIDER),
     openCodeGo: db.machineFacts().flatMap((agent) => {
       const plan = goByMachine.get(agent.machineId);
       return plan

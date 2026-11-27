@@ -174,4 +174,21 @@ export const agyWords = {
   /** The line a session continued from agy's own history starts with. */
   ownSettings:
     "Uses Antigravity's own settings. Permission modes and fleet setup don't apply.",
+
+  // ── An account's usage windows (agent usage/agy.ts) ─────────────────────
+  /** What an account's windows of each of agy's model groups are scoped to, as a limit's label names it ("Week · Gemini"). */
+  groups: { gemini: "Gemini", thirdParty: "Claude and GPT" },
+  /** A machine whose connections go through a proxy: the read would reach Google around it, so it isn't made. */
+  usageBehindProxy:
+    "Usage isn't read on this machine: it connects through a proxy.",
+  /** The read needed a host it may not reach (agent usage/agy.ts `AGY_USAGE_HOSTS`). */
+  usageHostRefused: (hosts: string) => `Usage read needs ${hosts}.`,
+  /** The read ended without its windows, in agy's words when it said any. */
+  usageFailed: (said: string) =>
+    said ? `Usage read failed: ${said}` : "Usage read failed.",
+  /** agy gave the read no answer in time. */
+  usageUnanswered: (seconds: number) =>
+    `Usage read got no answer in ${seconds} s.`,
+  /** The read spent tokens, which it never has: its windows aren't taken. */
+  usageSpent: (tokens: number) => `Usage read spent ${tokens} tokens.`,
 } as const;

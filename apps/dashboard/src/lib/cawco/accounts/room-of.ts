@@ -4,10 +4,10 @@
  * asked for now, limit-checks.svelte.ts): what is left in the window that
  * runs out first, or, past the end of one, until when it is at its limit.
  * For a model, the windows that bind every model and those scoped to its
- * family (core `modelScope`, as the hub's `fullWindow` reads them). What a
+ * family or model group (core `scopeBears`, as the hub's `fullWindow` reads them). What a
  * picker row says of it is room.ts's.
  */
-import { modelScope } from "@cawco/core/accounts";
+import { scopeBears } from "@cawco/core/accounts";
 import type { ClaudeLimits } from "@cawco/core/usage/types";
 
 /** An account's room for a pick: what is left, or the limit it is at. */
@@ -27,11 +27,8 @@ export function roomOf(
   if (!reading || reading.windows.length === 0) {
     return null;
   }
-  const scope = model === null ? null : modelScope(model);
-  const binding = reading.windows.filter(
-    (window) =>
-      window.scopeLabel === null ||
-      (scope !== null && window.scopeLabel === scope)
+  const binding = reading.windows.filter((window) =>
+    scopeBears(window.scopeLabel, model)
   );
   const resets = binding.flatMap((window) => {
     const at = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;

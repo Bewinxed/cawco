@@ -554,6 +554,8 @@ interface PermissionSettledFrame {
 }
 
 interface UsageFrame {
+  /** Every Antigravity account's own limits; absent from an older hub. */
+  antigravity?: AccountLimits[];
   /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
   claude: AccountLimits[];
   kind: "usage";

@@ -66821,6 +66821,13 @@
       "UsageFrame": {
         "type": "object",
         "properties": {
+          "antigravity": {
+            "description": "Every Antigravity account's own limits; absent from an older hub.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "claude": {
             "description": "Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend.",
             "type": "array",
@@ -66852,9 +66859,15 @@
         ]
       },
       "UsageLimitsResponse": {
-        "description": "What `/api/usage/limits` returns: each Claude account's own limits, and\neach machine's OpenCode Go plan. Claude's limits are an account's, never a\nmachine's: a machine signed in to several accounts has no one reading.",
+        "description": "What `/api/usage/limits` returns: each Claude account's own limits, each\nAntigravity account's (read from agy's own `/usage`, agent usage/agy.ts),\nand each machine's OpenCode Go plan. An account's limits are its own,\nnever a machine's: a machine signed in to several accounts has no one\nreading. `antigravity` is absent from an older hub.",
         "type": "object",
         "properties": {
+          "antigravity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "claude": {
             "type": "array",
             "items": {

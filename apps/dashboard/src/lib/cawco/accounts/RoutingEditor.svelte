@@ -40,7 +40,7 @@
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { goto } from "$app/navigation";
   import AtLimitBlock from "./AtLimitBlock.svelte";
-  import { providerLimits, providerName, strategyLabel } from "./model.svelte";
+  import { providerAtLimit, providerName, strategyLabel } from "./model.svelte";
   import ProviderMark from "./ProviderMark.svelte";
   import StrategyPicker from "./StrategyPicker.svelte";
 
@@ -57,7 +57,7 @@
 
   const words = accountsWords.routingEditor;
   const title = $derived(words.title(providerName(provider)));
-  const limits = $derived(providerLimits(provider));
+  const atLimitStep = $derived(providerAtLimit(provider));
 
   type Kind = "yours" | "delegates";
   let tab = $state<Kind>("yours");
@@ -212,7 +212,7 @@
     </div>
   </section>
 
-  {#if limits}
+  {#if atLimitStep}
     <section
       data-slot="well"
       class="border-t border-border-hairline pt-space-5"

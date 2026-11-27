@@ -260,11 +260,14 @@ export interface MachineGoLimits {
 }
 
 /**
- * What `/api/usage/limits` returns: each Claude account's own limits, and
- * each machine's OpenCode Go plan. Claude's limits are an account's, never a
- * machine's: a machine signed in to several accounts has no one reading.
+ * What `/api/usage/limits` returns: each Claude account's own limits, each
+ * Antigravity account's (read from agy's own `/usage`, agent usage/agy.ts),
+ * and each machine's OpenCode Go plan. An account's limits are its own,
+ * never a machine's: a machine signed in to several accounts has no one
+ * reading. `antigravity` is absent from an older hub.
  */
 export interface UsageLimitsResponse {
+  antigravity?: AccountLimits[];
   claude: AccountLimits[];
   openCodeGo: MachineGoLimits[];
 }

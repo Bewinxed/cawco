@@ -1,7 +1,7 @@
 import {
+  AT_LIMIT_PROVIDERS,
   atProviderLimit,
   CLAUDE_PROVIDER,
-  LIMITED_PROVIDERS,
 } from "@cawco/core/accounts";
 import {
   ATTACHMENTS_HOME,
@@ -1638,7 +1638,7 @@ export const createSends = (ctx: SendsContext) => {
         (neutral.is_error &&
           !!provider &&
           provider !== CLAUDE_PROVIDER &&
-          LIMITED_PROVIDERS.includes(provider) &&
+          AT_LIMIT_PROVIDERS.includes(provider) &&
           neutral.atLimit === true);
     }
     return refused && ctx.atLimit.manages(instanceId);

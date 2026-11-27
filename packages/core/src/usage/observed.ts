@@ -154,11 +154,12 @@ const refusalOf = (
 
 /**
  * The windows the account held at their limit before the event, still
- * before their reset, that bear on `scope`'s requests (core usage/windows.ts
- * `bearing`): every window over all models, and `scope`'s own.
+ * before their reset, that bear on its model's requests (core usage/windows.ts
+ * `bearing`): every window over all models, and `scope`'s own (the model's
+ * family, core `modelScope`).
  */
 const heldSpent = (session: ObservedSession, scope: string | null): Spent[] =>
-  bearing(session.held, scope, session.now, null).flatMap((one) => {
+  bearing(session.held, session.model, session.now, null).flatMap((one) => {
     const resets = windowResetAt(one);
     return one.percent >= 100 && resets !== null
       ? [
@@ -220,7 +221,7 @@ const ownWeekResets = (
   if (!(session && scope)) {
     return credits;
   }
-  const open = bearing(session.held, scope, session.now, null);
+  const open = bearing(session.held, session.model, session.now, null);
   const short = open.every(
     (one) => one.scopeLabel !== null || one.percent < 100
   );

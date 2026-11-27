@@ -1,3 +1,4 @@
+import { scopeBears } from "../accounts";
 import { DAY_MS, HOUR_MS } from "../time";
 import { accountsWords } from "../words/accounts";
 import type { LimitWindow } from "./types";
@@ -141,10 +142,11 @@ export const freshWindows = <W extends Freshable>(
 };
 
 /**
- * The windows of an account that bear on a session of model scope `scope`
- * (core `modelScope`) at `now`: every window over all models, whatever its
- * kind (a session window, a week, a month, a provider's rolling one), and the
- * windows of that model alone. `undefined` reads the account as a whole,
+ * The windows of an account that bear on a session of `model` at `now`
+ * (core `scopeBears`): every window over all models, whatever its kind (a
+ * session window, a week, a month, a provider's rolling one), and the
+ * windows scoped to that model's family or group. `null` is a session of no
+ * model, which only the windows over all models bear on; `undefined` reads the account as a whole,
  * every model's windows with it. The account's window set `kinds` makes a
  * lapsed window it names a fresh one ({@link freshWindows}); `null` reads
  * windows already freshened (a forecast's), or an account whose set no
@@ -153,19 +155,19 @@ export const freshWindows = <W extends Freshable>(
  */
 export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
   windows: readonly W[],
-  scope: string | null | undefined,
+  model: string | null | undefined,
   now: number,
   kinds: null
 ): W[];
 export function bearing<W extends Freshable>(
   windows: readonly W[],
-  scope: string | null | undefined,
+  model: string | null | undefined,
   now: number,
   kinds: readonly string[] | null
 ): W[];
 export function bearing<W extends Freshable>(
   windows: readonly W[],
-  scope: string | null | undefined,
+  model: string | null | undefined,
   now: number,
   kinds: readonly string[] | null
 ): W[] {
@@ -174,9 +176,7 @@ export function bearing<W extends Freshable>(
     const reset = windowResetAt(window);
     return (
       (reset === null || reset > now) &&
-      (scope === undefined ||
-        window.scopeLabel === null ||
-        window.scopeLabel === scope)
+      (model === undefined || scopeBears(window.scopeLabel, model))
     );
   });
 }

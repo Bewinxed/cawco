@@ -120,7 +120,7 @@
     machineOnline,
     nameOf,
     nextHue,
-    providerLimits,
+    providerAtLimit,
     routingLine,
     signinState,
   } from "./model.svelte";
@@ -194,7 +194,8 @@
   const provider = $derived(choice?.provider ?? null);
   /** ChatGPT: its sessions run on one plan (core `isChatgptPlan`), and none moves at its limit. */
   const onePlan = $derived(provider !== null && isChatgptPlan({ provider }));
-  const limits = $derived(provider !== null && providerLimits(provider));
+  /** Whether its routing has an At the limit step: CawCo carries its sessions at a limit (core `AT_LIMIT_PROVIDERS`). */
+  const atLimitStep = $derived(provider !== null && providerAtLimit(provider));
   /** A second account of its provider: not one whose sign-in joined the first. */
   const full = $derived.by(
     () => existing !== null && existing.id !== accountId
@@ -209,7 +210,7 @@
       ? ([
           "yourSessions",
           "delegates",
-          ...(limits ? (["atLimit"] as const) : []),
+          ...(atLimitStep ? (["atLimit"] as const) : []),
           "done",
         ] as const)
       : []),
@@ -612,7 +613,7 @@
           hue,
         });
       }
-      const lastRouting: Step = limits ? "atLimit" : "delegates";
+      const lastRouting: Step = atLimitStep ? "atLimit" : "delegates";
       if (at === lastRouting && full && provider) {
         await putRouting(provider, {
           yours: $state.snapshot(yours),
@@ -819,7 +820,7 @@
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
                   <p data-slot="lead" class="text-pretty text-ink-muted">
-                    {limits && atLimit.move && !onePlan
+                    {atLimitStep && atLimit.move && !onePlan
                       ? words.withMoves(line)
                       : line}
                   </p>

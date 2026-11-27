@@ -24,6 +24,30 @@ import { agyWords } from "../words/agy";
 /** The account provider an Antigravity account is of. */
 export const AGY_PROVIDER = "antigravity";
 
+/**
+ * agy's model groups, by the ids its `/usage` gives their windows
+ * (`gemini-5h`, `gemini-weekly`, `3p-5h`, `3p-weekly`; agy 1.5.18, the
+ * project's `assets/49917009/usage.json`): "Within each group, models share a
+ * weekly limit and a 5-hour limit". `scope` is the scope label the group's
+ * windows carry (core usage/types.ts `LimitWindow.scopeLabel`), and `holds`
+ * whether one of agy's model ids is in the group. The groups' own lists say
+ * which: Google's models, every id `gemini-…` (the Orchestrators are
+ * `gemini-pro-orchestrator…`), are `gemini`; the third-party ones agy lists
+ * beside them (`claude-…`, `gpt-oss-…`) are `3p`.
+ */
+export const AGY_MODEL_GROUPS = [
+  {
+    id: "gemini",
+    scope: agyWords.groups.gemini,
+    holds: (model: string): boolean => model.startsWith("gemini-"),
+  },
+  {
+    id: "3p",
+    scope: agyWords.groups.thirdParty,
+    holds: (model: string): boolean => !model.startsWith("gemini-"),
+  },
+] as const;
+
 /** agy's ACP sign-in methods, by their ids. */
 export const AGY_METHODS = [
   "oauth-personal",

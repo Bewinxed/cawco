@@ -15,7 +15,7 @@
    * `picked` is null; `note` says, in place of an account's room, what keeps
    * it from taking a session (signed out everywhere).
    */
-  import { type Account, CLAUDE_PROVIDER } from "@cawco/core/accounts";
+  import type { Account } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import PickList from "../pick/PickList.svelte";
@@ -69,10 +69,11 @@
   {/if}
   {#each accounts as account (account.id)}
     {@const key = `account:${account.id}`}
-    {@const room =
-      account.provider === CLAUDE_PROVIDER
-        ? roomOf(usageStore.claudeLimits[account.id], null, clock.now)
-        : null}
+    {@const room = roomOf(
+      usageStore.accountLimits[account.id],
+      null,
+      clock.now
+    )}
     {@const limit = limitRowOf(key, room, clock.now)}
     {@const said = note?.(account.id) ?? null}
     <PickRow

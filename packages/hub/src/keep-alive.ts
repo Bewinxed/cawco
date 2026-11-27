@@ -1,4 +1,3 @@
-import { modelScope } from "@cawco/core/accounts";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type KeepAlive, OVER_STATUSES } from "@cawco/core/protocol";
@@ -271,7 +270,7 @@ export const keepAliveState = (
   // Paused while the window that binds the session (core `headroom` over
   // its bearing windows, whichever the account has) is critical.
   const binds = headroom(
-    bearing(usage?.windows ?? [], modelScope(row.model), now, null),
+    bearing(usage?.windows ?? [], row.model, now, null),
     now
   )?.window;
   if (binds?.severity === "critical") {

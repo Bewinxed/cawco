@@ -5,8 +5,8 @@ import {
   type AccountReading,
   accountNameAmong,
   type MovePrice,
-  modelScope,
   type RebalanceNotice,
+  scopeBears,
 } from "@cawco/core/accounts";
 import { COMPACT_NAMED_HARNESSES } from "@cawco/core/harness/traits";
 import type { StallOffer } from "@cawco/core/protocol";
@@ -199,12 +199,7 @@ export const fullWindow = (
   now: number
 ): LimitWindow | undefined =>
   spentWindow(
-    bearing(
-      reading?.windows ?? [],
-      modelScope(model ?? undefined),
-      now,
-      reading?.windowKinds ?? null
-    ),
+    bearing(reading?.windows ?? [], model, now, reading?.windowKinds ?? null),
     now
   );
 
@@ -220,13 +215,12 @@ export const refusedUntil = (
   model: string | null,
   now: number
 ): number | null => {
-  const scope = modelScope(model ?? undefined);
   const benched = bench
     .filter(
       (one) =>
         one.accountId === accountId &&
         one.until > now &&
-        (one.scope === null || one.scope === scope)
+        scopeBears(one.scope, model)
     )
     .map((one) => one.until);
   const full = fullWindow(reading, model, now);

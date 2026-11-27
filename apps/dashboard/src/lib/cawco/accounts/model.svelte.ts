@@ -13,6 +13,7 @@ import {
   type AccountCredit,
   type AccountProvider,
   type AccountSignin,
+  AT_LIMIT_PROVIDERS,
   accountNameAmong,
   CLAUDE_PROVIDER,
   isChatgptPlan,
@@ -103,9 +104,13 @@ function providerHarnesses(provider: AccountProvider): HarnessKind[] {
   ];
 }
 
-/** Whether CawCo reads the provider's limits: reserves and at-limit moves apply. */
+/** Whether CawCo reads the provider's limits: its accounts' reserves and every strategy apply. */
 export const providerLimits = (provider: AccountProvider): boolean =>
   LIMITED_PROVIDERS.includes(provider);
+
+/** Whether CawCo carries the provider's sessions at a limit (core `AT_LIMIT_PROVIDERS`): its routing has an At the limit step. */
+export const providerAtLimit = (provider: AccountProvider): boolean =>
+  AT_LIMIT_PROVIDERS.includes(provider);
 
 /** "Claude Code", "OpenCode and pi": the harnesses that use a provider's accounts. */
 export const harnessWords = (provider: AccountProvider): string =>

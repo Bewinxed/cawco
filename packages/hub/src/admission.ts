@@ -1,4 +1,4 @@
-import { accountNameAmong, modelScope } from "@cawco/core/accounts";
+import { accountNameAmong } from "@cawco/core/accounts";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import { shortId } from "@cawco/core/short-id";
 import type { LimitWindow } from "@cawco/core/usage/types";
@@ -88,22 +88,22 @@ export const usdWords = (usd: number | null): string =>
   usd === null ? "an unpriced amount" : `$${usd.toFixed(2)}`;
 
 /**
- * The windows of `accountId`'s reading that bear on a session of model
- * scope `scope` at `now` (core `bearing`, a lapsed one its window set names
+ * The windows of `accountId`'s reading that bear on a session of `model`
+ * at `now` (core `bearing`, a lapsed one its window set names
  * read fresh), and the reset each was reported with while it is still open:
  * a fresh window's is null, as nothing has opened it yet.
  */
 const bearingWindows = (
   db: DbShape,
   accountId: string,
-  scope: string | null,
+  model: string | null,
   now: number
 ) => {
   const reading = db.accounts
     .readings()
     .find((one) => one.accountId === accountId);
   const held = reading?.windows ?? [];
-  const windows = bearing(held, scope, now, reading?.windowKinds ?? null);
+  const windows = bearing(held, model, now, reading?.windowKinds ?? null);
   const reported = new Map(
     held
       .filter((one) => windowOpen(one, now))
@@ -173,12 +173,7 @@ const make = (db: DbShape) => {
         release(id, "as the session is over");
         continue;
       }
-      const { windows } = bearingWindows(
-        db,
-        charge.accountId,
-        modelScope(row.model),
-        now
-      );
+      const { windows } = bearingWindows(db, charge.accountId, row.model, now);
       const open = new Map(windows.map((one) => [windowKey(one), one]));
       // A window period is its reset minute (core `resetMinute`): a reset
       // reported a second apart is the same window, not a new one.
@@ -260,12 +255,7 @@ const make = (db: DbShape) => {
     const pendingUsd = standing.some((one) => one.usd === null)
       ? null
       : standing.reduce((sum, one) => sum + (one.usd ?? 0), 0);
-    const { reading, windows } = bearingWindows(
-      db,
-      accountId,
-      modelScope(model),
-      now
-    );
+    const { reading, windows } = bearingWindows(db, accountId, model, now);
     return {
       pendingMoves: standing.length,
       windows: windows.map((window) => {
@@ -338,7 +328,7 @@ const make = (db: DbShape) => {
       const { windows, reported } = bearingWindows(
         db,
         accountId,
-        modelScope(session.model),
+        session.model,
         now
       );
       charges.set(session.id, {

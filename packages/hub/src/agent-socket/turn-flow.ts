@@ -1,8 +1,8 @@
 /** The frames inside a turn and its end: asks, pulses, naming, retries, the end, and what observes it. */
 
 import {
+  AT_LIMIT_PROVIDERS,
   CLAUDE_PROVIDER,
-  LIMITED_PROVIDERS,
   modelNotEnabled,
   outOfCredit,
 } from "@cawco/core/accounts";
@@ -515,12 +515,13 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
         const provider = limited?.accountId
           ? ctx.db.accounts.get(limited.accountId)?.provider
           : undefined;
-        // Only a provider whose limits CawCo reads: its reset is
-        // known, so the session waits for it or moves.
+        // Only a provider whose sessions CawCo carries at a limit
+        // (core `AT_LIMIT_PROVIDERS`): its reset is known, so the session
+        // waits for it or moves.
         if (
           provider &&
           provider !== CLAUDE_PROVIDER &&
-          LIMITED_PROVIDERS.includes(provider)
+          AT_LIMIT_PROVIDERS.includes(provider)
         ) {
           ctx.limitRefused.add(message.instanceId);
         }

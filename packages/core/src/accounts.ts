@@ -26,6 +26,7 @@ import {
 import { everyOf } from "./every-of";
 import {
   AGY_METHODS,
+  AGY_MODEL_GROUPS,
   AGY_PROVIDER,
   type AgyAccountRecord,
   type AgyMethod,
@@ -119,16 +120,30 @@ type SigninKind = "paste-code" | "device-code" | "api-key";
  * The providers whose limits CawCo reads: Claude's from Anthropic's
  * `api/oauth/usage` (usage/anthropic.ts) and, between those reads, its
  * sessions' `rate_limit_event`s; ChatGPT's from `wham/usage` (usage/chatgpt.ts),
- * OpenCode Go's from `zen/go/v1/usage` (usage/opencode-go.ts). Every other
- * provider exposes none CawCo can read (Copilot included: neither pi-ai's
- * github-copilot.js nor OpenCode's copilot.ts reads a quota), so it has no
- * windows, no dials and no at-limit moves; placement still works.
+ * OpenCode Go's from `zen/go/v1/usage` (usage/opencode-go.ts), Antigravity's
+ * from agy's own `/usage` (agent usage/agy.ts). Every other provider exposes
+ * none CawCo can read (Copilot included: neither pi-ai's github-copilot.js
+ * nor OpenCode's copilot.ts reads a quota), so it has no windows, no dials
+ * and no at-limit moves; placement still works.
  */
 export const LIMITED_PROVIDERS: readonly AccountProvider[] = [
   CLAUDE_PROVIDER,
   "openai-codex",
   "opencode-go",
+  AGY_PROVIDER,
 ];
+
+/**
+ * The limit-reading providers whose sessions CawCo carries at a limit: one
+ * that hits it waits on its reset there or moves to another account, and a
+ * rebalance moves sessions between their accounts. Antigravity's are left
+ * where they run: no account move ever takes one (tsk-340, after Google's
+ * FAQ: "automating account rotation, is not supported under consumer
+ * plans"), and a turn at its limit says when it resets (agent
+ * harnesses/agy-outcome.ts).
+ */
+export const AT_LIMIT_PROVIDERS: readonly AccountProvider[] =
+  LIMITED_PROVIDERS.filter((provider) => provider !== AGY_PROVIDER);
 
 /**
  * Whether an account is a ChatGPT plan: pi-ai's `openai-codex` signed in
@@ -268,15 +283,15 @@ export const providerChoices = (
     ];
   });
   // Antigravity: a row per sign-in method of agy's ACP, each its own
-  // account's for good (tsk-340). Its limits are not read: agy carries no
-  // quota a client can read without its telemetry (item 5's evidence).
+  // account's for good (tsk-340). A Google sign-in's plan limits are read
+  // (agent usage/agy.ts); a key or a Google Cloud project has none.
   const agy = AGY_METHODS.map((method): ProviderChoice => ({
     provider: AGY_PROVIDER,
     kind: agyMethodKind(method),
     name: accountsWords.agyMethods[method],
     signin: agyMethodKind(method) === "oauth" ? "paste-code" : "api-key",
     harnesses: harnessesTaking(AGY_PROVIDER),
-    limits: false,
+    limits: agyMethodKind(method) === "oauth",
     agy: method,
   }));
   return [...claude, ...agy, ...rest];
@@ -1461,6 +1476,28 @@ export const modelScope = (model: string | null | undefined): string | null => {
   return family
     ? family.charAt(0).toUpperCase() + family.slice(1).toLowerCase()
     : null;
+};
+
+/**
+ * Whether a window or a bench scoped `scope` bears on a session of `model`:
+ * one over every model (`null`) always; one of agy's model groups' when the
+ * model is in the group (core harness/agy-account.ts `AGY_MODEL_GROUPS`);
+ * any other when it is the model's family ({@link modelScope}). A session of
+ * no model (`null`) bears only the windows over every model. The groups'
+ * scopes are no family's, so one rule reads every provider's windows.
+ */
+export const scopeBears = (
+  scope: string | null,
+  model: string | null
+): boolean => {
+  if (scope === null) {
+    return true;
+  }
+  if (model === null) {
+    return false;
+  }
+  const group = AGY_MODEL_GROUPS.find((one) => one.scope === scope);
+  return group ? group.holds(model) : scope === modelScope(model);
 };
 
 /** What an account is called: its nickname, else the email it is signed in as. */

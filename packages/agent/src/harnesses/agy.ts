@@ -45,6 +45,7 @@ import {
   type TranscriptSpan,
 } from "../harness";
 import { probeStarted } from "../probe-count";
+import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { resolveBin, toolGate } from "../tools";
 import {
@@ -219,7 +220,7 @@ class AgyHarness implements Harness<"agy"> {
     const fleet = await sessionFleetDenials();
     return await spawnAgy(
       spec,
-      ctx,
+      withAccountReads(spec, ctx),
       agyDenials([...new Set([...fleet, ...(spec.denyTools ?? [])])])
     );
   }
@@ -227,7 +228,8 @@ class AgyHarness implements Harness<"agy"> {
   readonly custody: KeeperCustody = {
     kind: "keeper",
     ...keeperCustody("agy", agyKeepers),
-    adopt: (spec, ctx, options) => adoptAgy(spec, ctx, options),
+    adopt: (spec, ctx, options) =>
+      adoptAgy(spec, withAccountReads(spec, ctx), options),
     turnRunning: async (instanceId) => (await agySnapshot(instanceId)).busy,
   };
 
@@ -237,7 +239,7 @@ class AgyHarness implements Harness<"agy"> {
   ): Promise<HarnessSession | undefined> {
     const proc = await liveChild(this.custody, "agy", spec.instanceId);
     return proc
-      ? await adoptAgy(spec, ctx, {
+      ? await adoptAgy(spec, withAccountReads(spec, ctx), {
           head: proc.head,
           afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
         })

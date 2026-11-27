@@ -2,10 +2,10 @@ import {
   type Account,
   type AccountMove,
   type AccountProvider,
+  AT_LIMIT_PROVIDERS,
   accountNameAmong,
   isChatgptPlan,
   keepsGoingOnExtraUsage,
-  LIMITED_PROVIDERS,
   namedAccount,
   type RebalanceNotice,
 } from "@cawco/core/accounts";
@@ -242,12 +242,13 @@ export interface RebalancerDeps {
 }
 
 /**
- * Whether `provider`'s accounts are balanced: CawCo reads their limits, and
- * a move between two of them is not one ChatGPT plan swapped for another
+ * Whether `provider`'s accounts are balanced: CawCo carries its sessions at
+ * a limit (core `AT_LIMIT_PROVIDERS`, which no Antigravity move is), and a
+ * move between two of them is not one ChatGPT plan swapped for another
  * (core `isChatgptPlan`), which is all a ChatGPT move could make.
  */
 const balances = (provider: AccountProvider): boolean =>
-  LIMITED_PROVIDERS.includes(provider) && !isChatgptPlan({ provider });
+  AT_LIMIT_PROVIDERS.includes(provider) && !isChatgptPlan({ provider });
 
 export const createRebalancer = (deps: RebalancerDeps) => {
   const { db, lifetime, ports, acting } = deps;

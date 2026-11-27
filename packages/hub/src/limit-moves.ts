@@ -1,11 +1,11 @@
 import type { Account, AccountMark, AccountMove } from "@cawco/core/accounts";
 import {
+  AT_LIMIT_PROVIDERS,
   accountNameAmong,
   accountProvidersOf,
   CLAUDE_PROVIDER,
   DEFAULT_COMPACTION,
   isChatgptPlan,
-  LIMITED_PROVIDERS,
   namedAccount,
 } from "@cawco/core/accounts";
 import { CODEX } from "@cawco/core/harness/codex";
@@ -1556,7 +1556,8 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * The account a waking `row` may be moved off: a Claude conversation the
-   * hub carries, on a limited provider's account, not a fork, owing no move,
+   * hub carries, on the account of a provider CawCo carries sessions of at
+   * a limit (core `AT_LIMIT_PROVIDERS`), not a fork, owing no move,
    * held by no limit, and not one {@link keptAtWake} keeps. Undefined when
    * it stays.
    */
@@ -1564,7 +1565,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
     return from &&
       traitsOf(row.harness).accountDir &&
-      LIMITED_PROVIDERS.includes(from.provider) &&
+      AT_LIMIT_PROVIDERS.includes(from.provider) &&
       row.forkedFrom === null &&
       !ctx.owedMoves.has(row.id) &&
       !ctx.db.atLimit.hold(row.id) &&

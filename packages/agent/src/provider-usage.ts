@@ -2,7 +2,9 @@
  * Each account's windows on this machine, read wherever the provider exposes
  * them, with the account's one credential: Claude's `api/oauth/usage`
  * (agent usage/anthropic.ts), ChatGPT's `wham/usage` (usage/chatgpt.ts),
- * OpenCode Go's `zen/go/v1/usage` (usage/opencode-go.ts). Every 5 minutes
+ * OpenCode Go's `zen/go/v1/usage` (usage/opencode-go.ts), and an Antigravity
+ * Google sign-in's through agy's own `/usage` in its home (usage/agy.ts),
+ * where agy holds the sign-in and CawCo never reads it. Every 5 minutes
  * while the account is signed in here, shortly after each turn a session
  * runs on it (at most once a minute), and when the hub asks for one account
  * now ({@link readAccountUsage}). Every other provider exposes none: no
@@ -22,7 +24,9 @@ import { Cause, Clock, Duration, Effect, Fiber } from "effect";
 import type { AgentPorts } from "./agent-ports";
 import { runFork, runPromise, thrownOf } from "./daemon-runtime";
 import type { HarnessContext } from "./harness";
+import { agyAccountIds } from "./harnesses/agy-store-files";
 import { freshened, readHeld } from "./provider-accounts";
+import { agyUsage } from "./usage/agy";
 import { anthropicUsage } from "./usage/anthropic";
 import { chatgptClaims, chatgptUsage } from "./usage/chatgpt";
 import { openCodeGoLimits } from "./usage/opencode-go";
@@ -74,6 +78,9 @@ const readWindows = Effect.fn("readWindows")(function* (
 ) {
   if (accountIds().includes(accountId)) {
     return yield* anthropicUsage(accountId);
+  }
+  if (agyAccountIds().includes(accountId)) {
+    return yield* agyUsage(accountId);
   }
   const held = readHeld(accountId);
   if (!(held && METERED.has(held.provider))) {
@@ -185,7 +192,13 @@ export const dueProviderAccounts = Effect.fn("dueProviderAccounts")(function* (
   ports: Pick<AgentPorts, "borrowAsk">
 ) {
   const now = yield* Clock.currentTimeMillis;
-  const due = [...accountIds(), ...credentialAccountIds()].filter(
+  const due = [
+    ...new Set([
+      ...accountIds(),
+      ...credentialAccountIds(),
+      ...agyAccountIds(),
+    ]),
+  ].filter(
     (accountId) =>
       now - (attempted.get(accountId) ?? 0) >= PROVIDER_READ_INTERVAL_MS
   );
