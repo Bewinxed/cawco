@@ -197,7 +197,10 @@ export interface NeutralSessionInfo {
    * `entrypoint` on every record of a transcript: the terminal, the desktop
    * app and the VS Code extension are a person's; `sdk-ts`, `sdk-py`,
    * `sdk-cli` (`claude -p`) and every other are a program's (agent
-   * claude.ts `startedBy`). Absent where nothing recorded says: a Claude
+   * claude.ts `startedBy`). Antigravity records each conversation's
+   * interaction mode: one run interactively in agy's own home is a
+   * person's, and `agy -p` and every conversation CawCo ran are a
+   * program's (agent agy-store.ts). Absent where nothing recorded says: a Claude
    * transcript from before the field, and every OpenCode and pi session
    * (OpenCode's database holds the same fields for a typed session and
    * for `opencode run`; pi's session header names its folder and its

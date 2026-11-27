@@ -9,7 +9,8 @@
  *   dir of its own: the conversations CawCo ran;
  * - agy's own default home (`agyOwnHome`), its store `antigravity-cli`:
  *   the conversations the person started in agy's terminal (tsk-340
- *   story 14), read and never written. Its SQLite files are opened
+ *   story 14), and those a program ran there with `agy -p`, told apart by
+ *   the interaction mode agy records of each; read and never written. Its SQLite files are opened
  *   `immutable`, which writes nothing beside them, not even a lock.
  *
  * A conversation is one `brain/<id>/` whose transcript agy wrote. Its folder
@@ -48,10 +49,13 @@ import {
   summariesFile,
 } from "./agy-store-files";
 import { lastPromptAt } from "./last-prompt";
+import { VARINT, wireField } from "./proto-wire";
 
 /** What a store's summaries table says of one conversation. */
 interface Summary {
   readonly cwd: string | undefined;
+  /** agy ran it interactively: in its terminal, or over ACP ({@link interactiveIn}). */
+  readonly interactive: boolean;
   readonly title: string | undefined;
 }
 
@@ -74,6 +78,33 @@ const folderOf = (uris: string | null): string | undefined => {
     return fileURLToPath(first);
   } catch {
     return undefined;
+  }
+};
+
+/** `raw_summary`'s field holding the trajectory's own metadata. */
+const RAW_TRAJECTORY = 17;
+/** That metadata's `interaction_mode` (`exa.cortex_pb.InteractionMode`). */
+const INTERACTION_MODE = 25;
+/** `INTERACTION_MODE_INTERACTIVE`; `agy -p` writes `INTERACTION_MODE_NON_INTERACTIVE` (2). */
+const INTERACTIVE = 1;
+
+/**
+ * Whether the conversation whose summary is `raw` ran interactively, as agy
+ * records it: `raw_summary` field 17, field 25, `interaction_mode`. agy
+ * 1.5.18 writes 1 for its terminal and for ACP and 2 for print mode
+ * (`agy -p`), the one field that tells them apart (the project's
+ * `assets/163bcb48/`, 2026-11-27). False when it is absent or unreadable.
+ */
+const interactiveIn = (raw: Uint8Array | null): boolean => {
+  if (!raw) {
+    return false;
+  }
+  try {
+    const trajectory = wireField(raw, RAW_TRAJECTORY)?.body;
+    const mode = trajectory && wireField(trajectory, INTERACTION_MODE);
+    return mode?.wire === VARINT && mode.value === INTERACTIVE;
+  } catch {
+    return false;
   }
 };
 
@@ -101,17 +132,19 @@ const summariesOf = (store: AgyStore): Map<string, Summary> => {
             .query<
               {
                 id: string;
+                raw: Uint8Array | null;
                 title: string | null;
                 uris: string | null;
               },
               []
             >(
-              "SELECT conversation_id AS id, title, workspace_uris AS uris FROM conversation_summaries"
+              "SELECT conversation_id AS id, title, workspace_uris AS uris, raw_summary AS raw FROM conversation_summaries"
             )
             .all();
           for (const row of rows) {
             read.set(row.id, {
               cwd: folderOf(row.uris),
+              interactive: interactiveIn(row.raw),
               title: row.title?.trim() || undefined,
             });
           }
@@ -183,8 +216,9 @@ const infoOf = async (
     harness: "agy",
     lastModified: file.mtimeMs,
     fileSize: file.size,
-    // The person's own, from agy's terminal; CawCo's, which a program ran.
-    startedBy: store.accountId ? "program" : "person",
+    // The person's own only when agy's own home holds it and agy ran it
+    // interactively: an account's home is CawCo's, and `agy -p` a program's.
+    startedBy: !store.accountId && summary?.interactive ? "person" : "program",
     ...(createdAt === undefined ? {} : { createdAt }),
     ...(wroteAt === undefined ? {} : { wroteAt }),
     ...(cwd ? { cwd } : {}),

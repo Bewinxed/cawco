@@ -29,6 +29,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { Option, Schema } from "effect";
 import { agyCarryFile } from "./agy-carry";
 import { allAgyNotes, removeAgyNote } from "./agy-notes";
+import { LENGTH_DELIMITED, wireField, wireFields } from "./proto-wire";
 
 /** One agy home's store of conversations. */
 export interface AgyStore {
@@ -115,28 +116,6 @@ const readDeleted = async (home: string): Promise<string[]> => [
   ),
 ];
 
-/** Reads one protobuf varint of `bytes` at `at`: its value and where the next field begins. */
-const varint = (bytes: Uint8Array, at: number): [number, number] => {
-  let value = 0;
-  let shift = 0;
-  let next = at;
-  for (;;) {
-    const byte = bytes[next];
-    if (byte === undefined) {
-      throw new Error("a varint runs past the end");
-    }
-    next += 1;
-    value += (byte % 128) * 2 ** shift;
-    shift += 7;
-    if (byte < 128) {
-      return [value, next];
-    }
-  }
-};
-
-/** Wire type 2: a length-delimited field. */
-const LENGTH_DELIMITED = 2;
-
 /**
  * agy's `jetbox_summaries_proto.pb` without the entries of `ids`: the file
  * is a repeated field 1, each a map entry whose own field 1 is the
@@ -149,30 +128,22 @@ const withoutEntries = (
 ): Uint8Array | undefined => {
   const kept: Uint8Array[] = [];
   let dropped = 0;
-  let at = 0;
-  while (at < bytes.length) {
-    const start = at;
-    const [key, afterKey] = varint(bytes, at);
-    if (key % 8 !== LENGTH_DELIMITED) {
+  for (const one of wireFields(bytes)) {
+    if (one.wire !== LENGTH_DELIMITED) {
       throw new Error(
         "jetbox_summaries_proto.pb holds a field CawCo can't read"
       );
     }
-    const [size, body] = varint(bytes, afterKey);
-    at = body + size;
-    const entry = bytes.subarray(body, at);
-    let named: string | undefined;
-    if (Math.floor(key / 8) === 1 && entry.length > 0) {
-      const [inner, afterInner] = varint(entry, 0);
-      if (Math.floor(inner / 8) === 1 && inner % 8 === LENGTH_DELIMITED) {
-        const [length, text] = varint(entry, afterInner);
-        named = new TextDecoder().decode(entry.subarray(text, text + length));
-      }
-    }
+    const key =
+      one.field === 1 && one.body ? wireField(one.body, 1) : undefined;
+    const named =
+      key?.wire === LENGTH_DELIMITED && key.body
+        ? new TextDecoder().decode(key.body)
+        : undefined;
     if (named !== undefined && ids.has(named)) {
       dropped += 1;
     } else {
-      kept.push(bytes.subarray(start, at));
+      kept.push(bytes.subarray(one.start, one.end));
     }
   }
   return dropped > 0 ? Buffer.concat(kept) : undefined;
