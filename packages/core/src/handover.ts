@@ -23,6 +23,7 @@
  */
 import { backoffWait } from "./backoff";
 import { UPDATE_TRIAL_MS } from "./binary-updates";
+import { QUIET_MS } from "./bounded";
 
 /**
  * THE RECONNECTING WINDOW: how long a machine whose agent is away reads as on
@@ -36,17 +37,6 @@ import { UPDATE_TRIAL_MS } from "./binary-updates";
  * before this.
  */
 export const RECONNECTING_MS = 60_000;
-
-/**
- * How long custody waits on its keepers before it says so in the agent's
- * log, and how long a launch waits for the hub's answer to its ask for its
- * credential before it is refused (agent daemon.ts): nearly four times the
- * 23 s obelisk's Claude reattach of 138 rows took (2026-10-01). Custody it
- * ends nothing: a session whose keeper has not answered is not known to be
- * held by nobody, so it is neither started afresh nor let go until that
- * keeper answers or ends.
- */
-export const CUSTODY_BOUND_MS = 90_000;
 
 /**
  * How soon a keeper that is there and could not be read (an error other than
@@ -116,10 +106,20 @@ interface CustodyUnit {
   words: Record<string, KeeperWord & { again?: number }>;
 }
 
+/**
+ * Custody says it waits on its keepers in the agent's log once they have
+ * been quiet for the fleet's quiet spell (bounded.ts `QUIET_MS`): no keeper
+ * has given a word since custody began or since the last one did. It ends
+ * nothing: a session whose keeper has not answered is not known to be held
+ * by nobody, so it is neither started afresh nor let go until that keeper
+ * answers or ends.
+ */
 interface Custody {
   complete: boolean;
   epoch: number;
-  /** Whether the wait past {@link CUSTODY_BOUND_MS} has been said. */
+  /** When a keeper last gave its word in this custody, or when it began. */
+  heardAt: number;
+  /** Whether the wait on quiet keepers has been said. */
   saidWaiting: boolean;
   since: number;
   units: Record<string, CustodyUnit>;
@@ -446,6 +446,7 @@ const beginCustody = (
   const custody: Custody = {
     epoch: event.epoch,
     since: event.now,
+    heardAt: event.now,
     saidWaiting: false,
     complete: false,
     units: Object.fromEntries(
@@ -481,7 +482,7 @@ const beginCustody = (
       ...decided.commands,
       ...(decided.custody.complete
         ? []
-        : [{ kind: "wake" as const, at: event.now + CUSTODY_BOUND_MS }]),
+        : [{ kind: "wake" as const, at: event.now + QUIET_MS }]),
     ],
   };
 };
@@ -514,6 +515,7 @@ const keeperWordStep = (
   }
   const next: Custody = {
     ...custody,
+    heardAt: event.now,
     units: {
       ...custody.units,
       [event.unit]: {
@@ -526,7 +528,13 @@ const keeperWordStep = (
   const decided = decideCustody(next);
   return {
     state: { ...state, custody: decided.custody },
-    commands: [...commands, ...decided.commands],
+    commands: [
+      ...commands,
+      ...decided.commands,
+      ...(decided.custody.complete
+        ? []
+        : [{ kind: "wake" as const, at: event.now + QUIET_MS }]),
+    ],
   };
 };
 
@@ -701,12 +709,12 @@ const custodyTick = (state: HandoverState, now: number): Stepped => {
   const sayWaiting =
     !custody.saidWaiting &&
     rows.length > 0 &&
-    now >= custody.since + CUSTODY_BOUND_MS;
+    now >= custody.heardAt + QUIET_MS;
   if (sayWaiting) {
     commands.push({
       kind: "say",
       level: "warn",
-      words: `custody: ${rows.length} session(s) still wait on their keepers' word past ${CUSTODY_BOUND_MS / 1000} s, neither started afresh nor let go until each keeper answers or ends: ${rows.join(", ")}; waiting on ${[...waiting].join(", ")}`,
+      words: `custody: ${rows.length} session(s) still wait on their keepers' word, none heard for ${QUIET_MS / 1000} s, neither started afresh nor let go until each keeper answers or ends: ${rows.join(", ")}; waiting on ${[...waiting].join(", ")}`,
     });
   }
   return {

@@ -15,7 +15,6 @@
  * broken server holds its own sessions, never the machine. One that never
  * reached it is `unreachable`, and leaves activity unknown.
  */
-import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
@@ -25,6 +24,7 @@ import {
   errorText,
   notAnswered,
   type OpencodeClient,
+  readOpencode,
   unreachable,
 } from "./opencode-client";
 
@@ -35,7 +35,6 @@ import {
  */
 type ActivityState = "busy" | "failed" | "idle" | "unobserved";
 
-const READ_TIMEOUT_MS = 10_000;
 const ACTIVE_INTERVAL_MS = 5000;
 const IDLE_INTERVAL_MS = 30_000;
 
@@ -56,8 +55,9 @@ type Reading = { read: number; sampledAt: number } & (
 
 /**
  * A session's activity as one read says it: `unanswered` is a read the
- * server did not answer within {@link READ_TIMEOUT_MS}, which decides
- * nothing, as `unreachable` does not.
+ * server took and then went quiet on for the fleet's quiet spell (core
+ * bounded.ts `QUIET_MS`), which decides nothing, as `unreachable` (a server
+ * gone refuses the connection) does not.
  */
 export type CustodyObservation = {
   generation: string;
@@ -156,7 +156,11 @@ export class OpencodeActivity {
     return this.#sessions.get(id)?.state ?? "unobserved";
   }
 
-  /** One read of the server, shared by every caller while it is in flight. */
+  /**
+   * One read of the server, shared by every caller while it is in flight: a
+   * poll due while the last read is still out joins it, and is answered by
+   * it. Waited on while the answer's bytes arrive.
+   */
   #read(client: OpencodeClient): Promise<Reading> {
     if (this.#pending) {
       return this.#pending;
@@ -165,8 +169,8 @@ export class OpencodeActivity {
     const read = this.#issued;
     this.#pending = (async (): Promise<Reading> => {
       try {
-        const active = await readWithin(READ_TIMEOUT_MS, (signal) =>
-          client.session.active({ signal })
+        const active = await readOpencode((options) =>
+          client.session.active(options)
         );
         switch (active.kind) {
           case "answered":

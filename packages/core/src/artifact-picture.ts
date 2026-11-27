@@ -61,19 +61,12 @@ export const PICTURE_LIMITS = {
   // @limit external: Claude 4.7 and later models take images up to a 2,576 px long edge and downscale larger ones (https://platform.claude.com/docs/en/build-with-claude/vision)
   maxHeight: 2576,
   /**
-   * The page's load, through its preview origin: a sleeping server is woken
-   * by it and waited on first (agent preview.ts `staged`, within core
-   * `STAGE_READY_MS`, 60 s), then the page loads and is waited on until
-   * it is ready: one bound for both. Our call.
-   */
-  loadMs: 75_000,
-  /**
    * How long a page stands ready before its picture: content painted and
    * nothing of its own in flight, since its last paint, its last request
    * and the hello that places its pins (agent artifact-picture.ts
-   * `watchReadiness`), within `loadMs`, as Files waits on a page.
+   * `watchReadiness`), as Files waits on a page. Its load and its readiness
+   * are waited on while the page shows life (agent artifact-picture.ts
+   * `drawPage`), and the picture itself too.
    */
   settleMs: 1000,
-  /** The picture itself, once the page settled. Our call. */
-  shotMs: 15_000,
 } as const;

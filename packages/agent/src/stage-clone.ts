@@ -112,7 +112,7 @@ import { closeBoundary } from "./boundary/stop";
 import { poolSourceOf } from "./clone";
 import { runFork, runPromise, runSync } from "./daemon-runtime";
 import { expandHome } from "./fs";
-import { gitUntil } from "./git/run";
+import { gitLive } from "./git/run";
 import { REMADE_IN_COPY } from "./layer";
 import { formatFlag, poolGitEnv, standingPool } from "./object-pool";
 import { asThrown, fromPromise } from "./rejected";
@@ -428,7 +428,7 @@ const STAGE_REF = "refs/remotes/origin/stage";
  * 84 MB for cockpit.
  */
 const atHead = async (clone: WorkspaceRef): Promise<void> => {
-  const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
+  const git = gitLive();
   const pool = await recordedPool(clone.id);
   const tips = pool
     ? new Set(
@@ -480,11 +480,8 @@ interface Lending {
  * `origin` (a pool is one origin's), a workspace's clone cut before pools
  * borrows none, or the pool holds nothing yet.
  */
-const lendingPool = async (
-  repo: string,
-  deadline: number
-): Promise<Lending | undefined> => {
-  const git = gitUntil(deadline);
+const lendingPool = async (repo: string): Promise<Lending | undefined> => {
+  const git = gitLive();
   const format = await git(repo, "rev-parse", "--show-object-format");
   const holder = await cloneHolding(repo);
   if (holder) {
@@ -500,8 +497,7 @@ const lendingPool = async (
   const source = await poolSourceOf(repo, git, false);
   const lends = await standingPool(
     source,
-    gitUntil(deadline, poolGitEnv(hostEnvironment())),
-    deadline
+    gitLive(poolGitEnv(hostEnvironment()))
   );
   return lends ? { format: source.format, pool: source.pool } : undefined;
 };
@@ -670,15 +666,14 @@ const cut = (
     place,
     { create: { path: boundary.path }, is: "a clone of its checkout" },
     async () => {
-      const deadline = Date.now() + STAGE_CLONE_GIT_MS;
-      const git = gitUntil(deadline);
+      const git = gitLive();
       const { head } = await statusOf(repo);
       if (head === "(initial)" || !head) {
         throw new Error(
           `${repo} has no commit yet, and a sheet's stage runs in a clone cut from its HEAD: commit, then call again.`
         );
       }
-      const lending = await lendingPool(repo, deadline);
+      const lending = await lendingPool(repo);
       if (lending) {
         // Before anything borrows: its boundary's read grant, host git's check
         // of its alternates file and the pools' reclaim read the pool here.
@@ -729,7 +724,7 @@ const cut = (
  * a read that did not finish).
  */
 const checkoutOf = async (folder: string): Promise<string | undefined> => {
-  const top = await repoTop(folder, Date.now() + STAGE_CLONE_GIT_MS);
+  const top = await repoTop(folder);
   return top === undefined ? undefined : await realpath(top);
 };
 

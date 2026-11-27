@@ -24,7 +24,7 @@ import {
  * puts a finished delegate's session to sleep at once and lands its work
  * right after, each of its commands a use; a handoff that soon after finds
  * the boundary still up. Past that, a closed one costs its next command one
- * sandbox start (seconds; `WORKSPACE_BOUNDARY_START_TIMEOUT_MS` at most),
+ * sandbox start (seconds, waited on while its host writes or works),
  * while an idle one holds its srt host, bwrap, socat relays, an inotify
  * instance, its judge and their memory for as long as the workspace lasts:
  * 55 of 76 on obelisk had no live work item (2026-10-15).

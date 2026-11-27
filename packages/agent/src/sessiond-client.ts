@@ -33,7 +33,10 @@ import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { type Bounded, Gone } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { boundedRead, Gone as EndedFirst } from "@cawco/core/effect/bounded";
+import {
+  boundedWhileLive,
+  Gone as EndedFirst,
+} from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { answers } from "@cawco/core/keepers";
 import { LineSplitter } from "@cawco/core/lines";
@@ -41,6 +44,7 @@ import { PacedWriter } from "@cawco/core/paced-write";
 // The protocol lives in its own module on purpose: `sessiond.ts` reaches for
 // `node:os`, and the dashboard's browser bundle must not import it.
 import type { SessionLimits } from "@cawco/core/protocol";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import { standalone } from "@cawco/core/runtime";
 import {
   type ProcSpec,
@@ -55,6 +59,7 @@ import {
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
 import { SessiondServerMessageSchema } from "@cawco/core/stored-shapes";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { notAliveReason } from "@cawco/core/words/sessiond";
 import { Deferred, Effect, Exit, Schema } from "effect";
@@ -104,35 +109,24 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
   }).length;
 
 /**
- * How long a probe of the endpoint ({@link SessiondClient.connect}'s default)
- * may take before the agent reads the endpoint as not answering. Our choice:
- * a unix socket on the same machine answers in microseconds, and the ad-hoc
- * path needs a bound before it decides to spawn a replacement. What a
- * session's custody is decided by waits on the keeper's own word instead
- * ({@link keeperEnded}), and a reading of what every keeper holds gives each
- * {@link KEEPER_WELCOME_MS}.
- */
-const DIAL_TIMEOUT_MS = 2000;
-
-/**
- * How long a keeper's welcome is waited on before the keeper is read as not
- * answering: by the watchdog's dials (keeper-watchdog.ts), and by every
- * reading of what the keepers hold (keepers.ts `withKeepers`). The keeper
- * writes its welcome in the same turn of its loop as the accept, so a healthy
- * one answers in microseconds, and a keeper that is merely loaded (a GC
- * pause, a machine in swap) answers inside ten seconds.
+ * A keeper's welcome is its loop turning: it writes it in the same turn of
+ * its loop as the accept, so a healthy one answers in microseconds, and one
+ * merely loaded (a GC pause, a machine in swap) answers within seconds. A
+ * dial waits on it under the fleet's quiet spell (core bounded.ts
+ * `readWhileLive`, `QUIET_MS`), its connect's refusal is nobody there, and
+ * nothing else is its life: its CPU time would be, but a loop that spins
+ * writes no welcome either, and the watchdog (keeper-watchdog.ts) must tell
+ * that one from a keeper that turns. The keeper's pid is not known from its
+ * endpoint either.
  *
- * THE BOUND IS KEPT BY A TIMER IN THIS PROCESS'S LOOP, AND THAT LOOP STALLS
- * TOO. Under Bun (1.4.3) a timer that came due while the loop was busy runs
- * before the socket's data is read, so a welcome that arrived at once is not
- * seen: the dial is "no welcome within" however long the stall ran. With two
- * seconds, an agent whose loop stalled through them read a retiring keeper as
- * not answering 67 times in one log (the Mac, 2026-10-19, "no welcome within
- * 2077 ms" to 3375 ms, the keeper idle in `kevent64`), and each of those
- * readings of what the keepers hold was not known: the register's custody,
- * the heartbeat's, and the updater's look at which retiring keeper to remove.
+ * THE QUIET SPELL IS KEPT BY A TIMER IN THIS PROCESS'S LOOP, AND THAT LOOP
+ * STALLS TOO. Under Bun (1.4.3) a timer that came due while the loop was
+ * busy runs before the socket's data is read, so a welcome that arrived at
+ * once is not seen: core bounded.ts gives a held loop its catch-up for it.
+ * With two seconds, an agent whose loop stalled through them read a
+ * retiring keeper as not answering 67 times in one log (the Mac, 2026-10-19,
+ * "no welcome within 2077 ms" to 3375 ms, the keeper idle in `kevent64`).
  */
-export const KEEPER_WELCOME_MS = 10_000;
 
 /**
  * The keeper's connection ended before it answered: the keeper ended (the
@@ -142,14 +136,6 @@ export const KEEPER_WELCOME_MS = 10_000;
  */
 const keeperEnded = (what: string): Gone =>
   new Gone(`[sessiond] the keeper's connection ended before ${what}`);
-
-/**
- * How long the ad-hoc path waits for a freshly spawned sessiond to bind before
- * giving up. Our choice: a `bun` cold start plus a `listen()` is well under a
- * second on this fleet; 10 s is generous enough that a loaded machine still
- * wins, short enough that a broken install fails inside one spawn.
- */
-const ADHOC_START_TIMEOUT_MS = 10_000;
 
 /**
  * Is this process owned by a service manager?
@@ -215,13 +201,12 @@ export interface KeeperDial {
 const WELCOME_LINE = /"type"\s*:\s*"welcome"/u;
 
 /**
- * One dial of the keeper, waiting `timeoutMs` for its welcome: what it
- * answered ({@link KeeperDial}), or unanswered; `accepted` says how far an
- * unanswered dial got (its connect completed, or did not).
+ * One dial of the keeper, its welcome waited on for the fleet's quiet spell
+ * (above): what it answered ({@link KeeperDial}), or unanswered; `accepted`
+ * says how far an unanswered dial got (its connect completed, or did not).
  */
 export const dialKeeper = Effect.fnUntraced(function* (
-  endpoint: string,
-  timeoutMs: number
+  endpoint: string
 ): Effect.fn.Return<{ dial: Bounded<KeeperDial>; accepted: boolean }> {
   let accepted = false;
   const welcome = Effect.callback<KeeperDial>((resume) => {
@@ -254,10 +239,11 @@ export const dialKeeper = Effect.fnUntraced(function* (
       )
     );
     socket.connect(endpoint);
-    // Let go at the deadline: the dial ends with it.
+    // Let go once quiet: the dial ends with it.
     return Effect.sync(() => socket.destroy());
   });
-  const dial = yield* boundedRead(timeoutMs, welcome).pipe(
+  // The welcome is the answer and the only sign of life (above).
+  const dial = yield* boundedWhileLive(() => welcome).pipe(
     Effect.match({
       onSuccess: (value): Bounded<KeeperDial> => ({
         kind: "answered",
@@ -315,7 +301,7 @@ export const ensureSessiond = async (
   endpoint: string = sessiondEndpoint(),
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> => {
-  const there = await answers(endpoint, DIAL_TIMEOUT_MS);
+  const there = await answers(endpoint);
   switch (there.kind) {
     case "answered":
       if (there.value) {
@@ -327,7 +313,7 @@ export const ensureSessiond = async (
       // keeper there that is not turning is the watchdog's, never replaced
       // by a second one here.
       throw new Error(
-        `[sessiond] ${endpoint} did not complete a connect within ${DIAL_TIMEOUT_MS} ms; no keeper was started in its place`
+        `[sessiond] ${endpoint} did not complete a connect within ${secondsOf(there.after)} s; no keeper was started in its place`
       );
     default:
       unhandled("read", there);
@@ -344,30 +330,58 @@ export const ensureSessiond = async (
   });
   child.unref();
 
-  // Asked at once and again 50 ms after each answer, until it is bound or
-  // ADHOC_START_TIMEOUT_MS has passed.
+  // Asked at once and again 50 ms after each answer, until it is bound: for
+  // as long as the keeper starting works (its CPU time, core bounded.ts
+  // `boundedWhileLive`), and no longer than it runs.
   const bound = await runPromise(
-    lookUntil(
-      {
-        every: 50,
-        deadlineMs: ADHOC_START_TIMEOUT_MS,
-        until: (listening: boolean) => listening,
-      },
-      fromPromise(async () => {
-        const asked = await answers(endpoint, 250);
-        switch (asked.kind) {
-          case "answered":
-            return asked.value;
-          case "unanswered":
-            // Not bound yet as far as this one try saw: the next try asks again.
-            return false;
-          default:
-            return unhandled("read", asked);
-        }
-      })
+    boundedWhileLive((alive) =>
+      Effect.raceFirst(
+        lookUntil(
+          {
+            every: 50,
+            until: (listening: boolean) => listening,
+          },
+          fromPromise(async () => {
+            const asked = await answers(endpoint);
+            switch (asked.kind) {
+              case "answered":
+                return asked.value;
+              case "unanswered":
+                // Not bound yet as far as this one try saw: the next try asks again.
+                return false;
+              default:
+                return unhandled("read", asked);
+            }
+          })
+        ),
+        Effect.callback<never, EndedFirst>((resume, signal) => {
+          if (child.pid !== undefined) {
+            watchTreeCpu(child.pid, alive, signal);
+          }
+          const ended = (): void =>
+            resume(
+              Effect.fail(
+                new EndedFirst({ what: `${command} exited before it bound` })
+              )
+            );
+          if (child.exitCode !== null || child.signalCode !== null) {
+            ended();
+            return;
+          }
+          child.once("exit", ended);
+          child.once("error", ended);
+          return Effect.sync(() => {
+            child.off("exit", ended);
+            child.off("error", ended);
+          });
+        })
+      )
+    ).pipe(
+      Effect.map((looked) => looked.kind === "found"),
+      Effect.catchTag("Unanswered", () => Effect.succeed(false))
     )
   );
-  if (bound.kind === "found") {
+  if (bound) {
     return;
   }
   throw new Error(
@@ -592,22 +606,21 @@ export class SessiondClient {
   }
 
   /**
-   * A connection to the keeper at `endpoint`, its welcome given `timeoutMs`:
-   * answered with the connection; unanswered "timeout" when no welcome came
-   * in time, "dead" when the connection ended first ({@link Gone}). A
-   * refused dial (an errno) is thrown: an answered no. {@link dial} waits on
-   * the keeper's own word instead, which a wedged keeper reaches once the
+   * A connection to the keeper at `endpoint`, its welcome waited on for the
+   * fleet's quiet spell ({@link dialKeeper}'s note): answered with the
+   * connection; unanswered "timeout" when the keeper said nothing for it,
+   * "dead" when the connection ended first ({@link Gone}). A refused dial
+   * (an errno) is thrown: an answered no, nobody there. {@link dial} waits
+   * on the keeper's own word alone, which a wedged keeper reaches once the
    * watchdog ends it (keeper-watchdog.ts).
    */
   static connect(
-    endpoint: string = sessiondEndpoint(),
-    timeoutMs: number = DIAL_TIMEOUT_MS
+    endpoint: string = sessiondEndpoint()
   ): Promise<Bounded<SessiondClient>> {
-    // The promise edge of a dial within its deadline: the keeper's end is
-    // "dead", a refusal rejects.
+    // The promise edge of a dial while the keeper may still answer: its end
+    // is "dead", a refusal rejects.
     return runPromise(
-      boundedRead(
-        timeoutMs,
+      boundedWhileLive(() =>
         SessiondClient.dial(endpoint).pipe(
           Effect.mapError((error) =>
             error instanceof Gone

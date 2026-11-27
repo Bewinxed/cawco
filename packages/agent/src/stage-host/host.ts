@@ -54,6 +54,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { json as streamJson } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
+import { QUIET_MS } from "@cawco/core/bounded";
 import {
   linkedFolder as linkedFolderFrom,
   linkedRebundle,
@@ -1544,14 +1545,15 @@ const reports = new Map<
 
 /**
  * The states files a page said it is drawing (its sweep had not reached
- * them, or a read of them was under way), each with when it last said so:
- * a report answers them as drawing until that page posts their section, or
- * for {@link DRAWING_HELD_MS} after it last said so (a page closed mid-read
- * says nothing more).
+ * them, or a read of them was under way), each with when it last said so
+ * (`performance.now()`): a report answers them as drawing until that page
+ * posts their section, or for the fleet's quiet spell (core bounded.ts
+ * `QUIET_MS`) after its last post that named them. Every post a page makes
+ * names all it still draws, and it posts again as each section ends, so a
+ * page that draws is heard; one closed mid-read says nothing more. Its
+ * posts come over HTTP, so no socket of its own says it closed.
  */
 const drawingSaid = new Map<string, number>();
-/** How long a page's word that it is drawing a section holds. Ours: past a section's read held aside by the person's acts, which posts again as each section ends. */
-const DRAWING_HELD_MS = 20_000;
 
 /** What a post says of its page's drawing: each section it posts is drawn, each file it names under `drawing` is being drawn now. */
 function keepDrawing(
@@ -1565,7 +1567,7 @@ function keepDrawing(
   }
   for (const file of drawing) {
     if (typeof file === "string" && storyFile(file)) {
-      drawingSaid.set(file, Date.now());
+      drawingSaid.set(file, performance.now());
     }
   }
 }
@@ -1591,7 +1593,7 @@ async function keepReport(body: unknown): Promise<void> {
     }
     const content = await contentOf(drawn.file);
     if (content.changedAt > (report.readFrom[drawn.file] ?? 0)) {
-      drawingSaid.set(drawn.file, Date.now());
+      drawingSaid.set(drawn.file, performance.now());
       continue;
     }
     reports.set(drawn.file, {
@@ -1794,13 +1796,12 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   };
 }
 
-/** The report's `drawing`: those of `files` a page said it is drawing, within {@link DRAWING_HELD_MS}. */
+/** The report's `drawing`: those of `files` a page said it is drawing, its last post that named them within the quiet spell ({@link drawingSaid}). */
 function drawingOf(files: string[]): Pick<RenderReport, "drawing"> {
-  const now = Date.now();
+  const now = performance.now();
   const drawing = files.filter(
     (file) =>
-      now - (drawingSaid.get(file) ?? Number.NEGATIVE_INFINITY) <
-      DRAWING_HELD_MS
+      now - (drawingSaid.get(file) ?? Number.NEGATIVE_INFINITY) < QUIET_MS
   );
   return drawing.length > 0 ? { drawing } : {};
 }

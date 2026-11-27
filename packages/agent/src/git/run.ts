@@ -5,9 +5,9 @@
  */
 
 import { join } from "node:path";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { QUIET_MS } from "@cawco/core/bounded";
 import { recordedPool } from "@cawco/core/object-pool";
-import { runCaptured } from "@cawco/core/run-captured";
+import { runLive } from "@cawco/core/run-captured";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
@@ -15,9 +15,9 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
-import { Effect, Schema } from "effect";
-import { runPromise } from "../daemon-runtime";
+import { secondsOf } from "@cawco/core/time";
+import { gitWaitWords } from "@cawco/core/words/git-waits";
+import { Schema } from "effect";
 import { cloneHolding } from "../workspace-records";
 import { withoutCredential } from "./hub-credential";
 
@@ -62,7 +62,7 @@ const git = async (dir: string, ...args: string[]): Promise<string> => {
   return run.text().trim();
 };
 
-/** Workspace creation supplies its aggregate git deadline through this runner. */
+/** A git runner: the host's own, or a workspace creation's ({@link gitLive}). */
 type GitRunner = typeof git;
 
 const SYMREF_HEAD = /^ref: refs\/heads\/(\S+)\tHEAD$/mu;
@@ -113,13 +113,13 @@ export const fetchDefaultBranch = async (
 
 export type Git = (root: string, ...args: string[]) => Promise<string>;
 
-/** A git run by {@link gitUntil} that exited non-zero: its status, which some commands answer by (`ls-remote --exit-code`'s 2 for no matching ref). */
+/** A git run by {@link gitLive} that exited non-zero: its status, which some commands answer by (`ls-remote --exit-code`'s 2 for no matching ref). */
 export class GitExited extends Schema.TaggedError<GitExited>()("GitExited", {
   message: Schema.String,
   exitCode: Schema.Number,
 }) {}
 
-/** A git run by {@link gitUntil} that did not end in its exit: a signal ended it, or it did not start. */
+/** A git run by {@link gitLive} that did not end in its exit: a signal ended it, it did not start, or it went quiet. */
 class GitDidNotRun extends Schema.TaggedError<GitDidNotRun>()("GitDidNotRun", {
   message: Schema.String,
 }) {}
@@ -135,63 +135,80 @@ export interface CopyRunner {
   run: CopyRun;
 }
 
+/** git's own stall rule for a transfer: one that moves under a byte a second for the quiet spell is let go by git itself ({@link gitLive}). */
+const STALL_FLAGS = [
+  "-c",
+  "http.lowSpeedLimit=1",
+  "-c",
+  `http.lowSpeedTime=${QUIET_MS / 1000}`,
+];
+
+/** The subcommands that reach a remote, run with `--progress` so their transfer is heard as it moves. */
+const TRANSFERS = new Set(["clone", "fetch", "pull", "push"]);
+
 /**
- * git on this host as `safe-git.ts` says, its stdout trimmed, within the
- * create's one `deadline`; `env` in place of the host's (the hub's
+ * git on this host as `safe-git.ts` says, its stdout trimmed, for as long
+ * as it writes or works (core run-captured.ts `runLive`: each chunk it
+ * writes, and its CPU time, are its signs of life); a transfer with
+ * `--progress`, so it is heard as it moves, and under git's own stall rule
+ * ({@link STALL_FLAGS}). `env` in place of the host's (the hub's
  * credential, env-only); in a workspace's copy as `access` reaches it
  * (../workspace.ts `accessOf`) when given; `input` its stdin. git's stderr,
  * credential taken out, is the error.
  */
-export const gitUntil =
+export const gitLive =
   (
-    deadline: number,
     env: Record<string, string> = hostEnvironment(),
     access?: CopyRunner,
     input?: string
   ): Git =>
   async (root, ...args) => {
-    const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      throw new Error(late);
-    }
+    const [command, ...rest] = args;
+    const heard =
+      command !== undefined && TRANSFERS.has(command)
+        ? [...STALL_FLAGS, command, "--progress", ...rest]
+        : args;
     const run = access
-      ? access.run(root, safeGitArgv(args))
-      : { argv: safeGitArgv(args), cwd: root };
-    const ran = Effect.gen(function* () {
-      const { code, signalCode, stdout, stderr } = yield* Effect.tryPromise({
-        try: (signal) =>
-          runCaptured(run.argv, {
-            cwd: run.cwd,
-            env: { ...env, ...SAFE_GIT_ENV },
-            ...(input === undefined ? {} : { input }),
-            signal,
-            killSignal: "SIGKILL",
-          }),
-        catch: (cause) =>
-          new GitDidNotRun({
-            message: cause instanceof Error ? cause.message : String(cause),
-          }),
+      ? access.run(root, safeGitArgv(heard))
+      : { argv: safeGitArgv(heard), cwd: root };
+    const ran = await runLive(run.argv, {
+      cwd: run.cwd,
+      env: { ...env, ...SAFE_GIT_ENV },
+      ...(input === undefined ? {} : { input }),
+      keep: "whole",
+    }).catch((cause: unknown) => {
+      throw new GitDidNotRun({
+        message: cause instanceof Error ? cause.message : String(cause),
       });
-      if (signalCode) {
-        return yield* new GitDidNotRun({
-          message: `git ${args[0]} was ended by ${signalCode}`,
-        });
-      }
-      if (code !== 0) {
-        return yield* new GitExited({
-          message: `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`,
-          exitCode: code,
-        });
-      }
-      return stdout.trim();
     });
-    // The promise edge of the run, inside the create's one deadline.
-    return await runPromise(
-      boundedRead(remaining, ran).pipe(
-        Effect.catchTag("Unanswered", () =>
-          Effect.fail(new GitDidNotRun({ message: late }))
-        )
-      )
-    );
+    if (ran.kind === "unanswered") {
+      throw new GitDidNotRun({
+        message: gitWaitWords.gitQuiet(String(command), secondsOf(ran.after)),
+      });
+    }
+    const { code, signalCode, stdout, stderr } = ran.value;
+    if (signalCode) {
+      throw new GitDidNotRun({
+        message: `git ${command} was ended by ${signalCode}`,
+      });
+    }
+    if (code !== 0) {
+      throw new GitExited({
+        message: `git ${command} failed: ${withoutCredential(lastProgress(stderr).trim())}`,
+        exitCode: code,
+      });
+    }
+    return stdout.trim();
   };
+
+/** What git wrote on stderr with its progress lines (each a `\r`-ended rewrite) left out: what it said of its failure. */
+const lastProgress = (stderr: string): string =>
+  stderr
+    .split("\n")
+    .map((line) => line.slice(line.lastIndexOf("\r") + 1))
+    .filter((line) => !PROGRESS_LINE.test(line))
+    .join("\n");
+
+/** A progress line git writes with `--progress`: `Receiving objects:  45% (450/1000)`, `remote: Counting objects: …`. */
+const PROGRESS_LINE =
+  /^(remote: )?(Enumerating|Counting|Compressing|Receiving|Resolving|Writing|Updating|Total|Filtering|Unpacking)\b/u;

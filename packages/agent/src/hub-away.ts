@@ -22,9 +22,8 @@ import { runPromise } from "./daemon-runtime";
 
 /**
  * How long a request waits for the hub through its being away, from its
- * first try. Ours: the bound the launch's ask for its credential already has
- * (core handover.ts `CUSTODY_BOUND_MS`, 90 s), three times the 30.5 s hub
- * outage measured on 2026-10-09.
+ * first try. Ours: 90 s, three times the 30.5 s hub outage measured on
+ * 2026-10-09.
  */
 export const HUB_AWAY_BOUND_MS = 90_000;
 

@@ -252,11 +252,6 @@ export interface PlacePush {
   root: string;
 }
 
-/** Total git budget for cutting a workspace, including its remote fetch and checkout. */
-export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
-/** How long a new boundary may take to announce readiness. */
-export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
-
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
   /** The repository's default branch, which the copy starts from and lands on; empty for a folder. */

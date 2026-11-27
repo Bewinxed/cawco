@@ -14,9 +14,16 @@
  * as a `ClientError` with reason `Transport`.
  */
 
-import type { Bounded } from "@cawco/core/bounded";
+import {
+  type Bounded,
+  Gone as GoneThrown,
+  heardStream,
+  readWhileLive,
+} from "@cawco/core/bounded";
 import {
   boundedRead,
+  boundedWhileLive,
+  Gone,
   Unanswered as UnansweredRead,
 } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
@@ -25,6 +32,7 @@ import type { SlashCommand } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
+import { pluginNotLoadedSentence } from "@cawco/core/words/opencode-waits";
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client";
 import { Effect, Schedule } from "effect";
 import { asThrown, fromPromise } from "../rejected";
@@ -97,16 +105,111 @@ export const SEND_NOW_METADATA = "cawcoSendNow";
 const basicAuth = (password: string): string =>
   `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
 
-/** A client for one server; `fetch` lets the harness see a connection fail. */
+/**
+ * Each read in flight's `alive` ({@link readOpencode}), by the signal it hands
+ * the client: the client passes a request's signal to its fetch as it was
+ * given, so {@link heardFetch} finds the read a response belongs to.
+ */
+const hearers = new WeakMap<AbortSignal, () => void>();
+
+/**
+ * The fetch every OpenCode client sends with: a response to a read made
+ * through {@link readOpencode} tells that read of its head and of each chunk
+ * of its body as it is read, its signs of life.
+ */
+export const heardFetch = Object.assign(
+  async (
+    input: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const signal = input instanceof Request ? input.signal : init?.signal;
+    const alive = signal ? hearers.get(signal) : undefined;
+    const response = await fetch(input, init);
+    if (!alive) {
+      return response;
+    }
+    alive();
+    return heardStream(response, alive);
+  },
+  { preconnect: fetch.preconnect }
+);
+
+/**
+ * One read of an OpenCode server, waited on while its answer's bytes arrive
+ * (core bounded.ts `readWhileLive`): `read` is handed the signal its client
+ * call takes, and every byte of the answer to that call is a sign of life.
+ * A server that took the request and went quiet is let go one quiet spell
+ * after its last byte; one that is gone refuses the connection, which is
+ * `read`'s own error. `signal` is its caller's.
+ */
+export const readOpencode = <T>(
+  read: (options: { signal: AbortSignal }) => Promise<T>,
+  signal?: AbortSignal
+): Promise<Bounded<T>> => readOpencodeWhile(undefined, read, signal);
+
+/**
+ * {@link readOpencode}, the server's own signs of life (`life`) heard as
+ * well, and its exit answering `unanswered` "dead".
+ */
+export const readOpencodeWhile = <T>(
+  life: ServerLife | undefined,
+  read: (options: { signal: AbortSignal }) => Promise<T>,
+  signal?: AbortSignal
+): Promise<Bounded<T>> =>
+  readWhileLive(
+    (within, alive) => {
+      hearers.set(within, alive);
+      const listening = new AbortController();
+      const reads = [read({ signal: within })];
+      if (life) {
+        // The server's exit, heard as the read waits: the read is Gone.
+        reads.push(
+          Effect.runPromise(
+            Effect.callback<never, GoneThrown>((resume, until) => {
+              life(
+                {
+                  alive,
+                  gone: () =>
+                    resume(
+                      Effect.fail(new GoneThrown("OpenCode's server exited"))
+                    ),
+                },
+                until
+              );
+            }),
+            { signal: listening.signal }
+          )
+        );
+      }
+      return Promise.race(reads).finally(() => {
+        listening.abort();
+        hearers.delete(within);
+      });
+    },
+    signal ? { signal } : {}
+  );
+
+/** A client for one server; `fetch` lets the harness see a connection fail, and is {@link heardFetch} when none is given. */
 export const opencodeClient = (
   address: ServerAddress,
-  fetchImpl?: typeof fetch
+  fetchImpl: typeof fetch = heardFetch
 ): OpencodeClient =>
   OpenCode.make({
     baseUrl: address.url,
     headers: { authorization: basicAuth(address.password) },
-    ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    fetch: fetchImpl,
   });
+
+/**
+ * A server's own signs of life as a wait on it hears them, until `signal`
+ * aborts: `alive` at each, `gone` once it has exited. The wait on CawCo's
+ * plugin hears the lines it writes; a wait that asks it nothing on a loop
+ * hears its CPU time too.
+ */
+export type ServerLife = (
+  hear: { alive: () => void; gone: () => void },
+  signal: AbortSignal
+) => void;
 
 /** A query's `location`, as every location-scoped read takes it. */
 export const at = (directory: string): { location: { directory: string } } => ({
@@ -122,12 +225,13 @@ export const at = (directory: string): { location: { directory: string } } => ({
  */
 export const opencodeSlashCommands = async (
   client: OpencodeClient,
-  directory: string
+  directory: string,
+  life: ServerLife
 ): Promise<SlashCommand[]> => {
   // Commands and skills come from plugins, which a location just booted has
   // not loaded yet: their lists answer with what is loaded so far
   // (OpenCode 2.2.7, anomalyco/opencode#62796).
-  await assertPluginLoaded(client, directory);
+  await assertPluginLoaded(client, directory, life);
   const [commands, skills] = await Promise.all([
     client.command.list(at(directory)),
     client.skill.list(at(directory)),
@@ -226,72 +330,101 @@ export const errorText = (thrown: unknown): string => {
 };
 
 /**
- * How long a location's plugins may take to load after it boots. 2.0.28
- * answers a location's first `GET /api/plugin` as soon as its built-in
- * services are up, before a configured plugin has loaded (observed: the
- * list without CawCo's plugin, then `loading plugin` in the server's log,
- * then the plugin active ~0.2 s later). Ours: a cold machine's import of the
- * plugin module, with margin.
- */
-const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
-
-/**
  * The gate, failing closed: a location whose plugin list does not carry
- * CawCo's plugin, active, takes no session. The list is read until the
- * plugin is there (a location just booted lists it a moment later): one
- * that failed to load refuses at once, and one still not there at
- * {@link PLUGIN_LOAD_TIMEOUT_MS} refuses then. A v1 plugin is not loaded at
- * all by 2.0 ("Plugin must export a default definition with an id and an
- * effect or setup function", a warning only), so without this every guard
- * the plugin carries (the workspace judge, the credential stamp, the bounded
- * shell) would be gone while sessions ran on. The whole wait is one read
- * given `timeoutMs`: a list that hangs is let go at that deadline too.
+ * CawCo's plugin, active, takes no session. 2.0.28 answers a location's
+ * first `GET /api/plugin` as soon as its built-in services are up, before a
+ * configured plugin has loaded (observed: the list without CawCo's plugin,
+ * then `loading plugin` in the server's log, then the plugin active ~0.2 s
+ * later), so the list is read until the plugin is there: one that failed
+ * to load refuses at once, and one still not there once the server has
+ * shown no life for a quiet spell refuses then. Its life is each line it
+ * writes (`life`) and each look whose list differs from the one before;
+ * not its CPU time, which every look here spends. A v1 plugin is not
+ * loaded at all by 2.0 ("Plugin must export a default definition with an
+ * id and an effect or setup function", a warning only), so without this
+ * every guard the plugin carries (the workspace judge, the credential
+ * stamp, the bounded shell) would be gone while sessions ran on.
  */
 export const assertPluginLoaded = (
   client: OpencodeClient,
   directory: string,
-  signal?: AbortSignal,
-  timeoutMs = PLUGIN_LOAD_TIMEOUT_MS
+  life: ServerLife,
+  signal?: AbortSignal
 ): Promise<void> =>
   // The promise edge of pluginLoaded.
-  runAbortable(pluginLoaded(client, directory, timeoutMs), signal);
+  runAbortable(pluginLoaded(client, directory, life), signal);
 
 /** How long a location's plugin list is let rest between two reads while CawCo's plugin is not in it yet. Ours: its load takes ~0.2 s. */
 const PLUGIN_LOOK_MS = 250;
 
-/** {@link assertPluginLoaded}: the list read until CawCo's plugin is in it, the whole wait one bounded read. */
+/** {@link assertPluginLoaded}: the list read until CawCo's plugin is in it, waited on while the server shows life. */
 const pluginLoaded = Effect.fnUntraced(function* (
   client: OpencodeClient,
   directory: string,
-  timeoutMs: number
+  life: ServerLife
 ) {
-  const look = fromPromise((within) =>
-    client.plugin.list(at(directory), { signal: within })
-  ).pipe(
-    Effect.flatMap((listed) => {
-      const ours = listed.data.find((plugin) => plugin.id === CAWCO_PLUGIN_ID);
-      if (ours?.state.status === "active") {
-        return Effect.succeed(true);
-      }
-      if (ours) {
-        return Effect.fail(
-          new Error(
-            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${ours.state.error}`
-          )
+  const lookWhile = (alive: () => void) => {
+    let last: string | undefined;
+    return fromPromise((within) =>
+      client.plugin.list(at(directory), { signal: within })
+    ).pipe(
+      Effect.tap((listed) =>
+        Effect.sync(() => {
+          const said = JSON.stringify(listed.data);
+          if (last !== undefined && said !== last) {
+            alive();
+          }
+          last = said;
+        })
+      )
+    );
+  };
+  const listening = (alive: () => void) =>
+    Effect.callback<never, Gone>((resume, signal) => {
+      life(
+        {
+          alive,
+          gone: () =>
+            resume(Effect.fail(new Gone({ what: "OpenCode's server exited" }))),
+        },
+        signal
+      );
+    });
+  const looked = (alive: () => void) =>
+    lookWhile(alive).pipe(
+      Effect.flatMap((listed) => {
+        const ours = listed.data.find(
+          (plugin) => plugin.id === CAWCO_PLUGIN_ID
         );
-      }
-      return Effect.succeed(undefined);
-    })
-  );
-  yield* boundedRead(
-    timeoutMs,
-    lookUntil({ every: PLUGIN_LOOK_MS }, look)
+        if (ours?.state.status === "active") {
+          return Effect.succeed(true);
+        }
+        if (ours) {
+          return Effect.fail(
+            new Error(
+              `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${ours.state.error}`
+            )
+          );
+        }
+        return Effect.succeed(undefined);
+      })
+    );
+  yield* boundedWhileLive((alive) =>
+    Effect.raceFirst(
+      lookUntil({ every: PLUGIN_LOOK_MS }, looked(alive)),
+      listening(alive)
+    )
   ).pipe(
     Effect.catch((error) =>
       Effect.fail(
         error instanceof UnansweredRead
           ? new Error(
-              `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
+              pluginNotLoadedSentence(
+                directory,
+                CAWCO_PLUGIN_ID,
+                secondsOf(error.after),
+                error.reason === "dead"
+              )
             )
           : error
       )

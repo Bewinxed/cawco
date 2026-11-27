@@ -11,7 +11,7 @@ import {
   lfsPins,
   urlOrigin,
 } from "./lfs";
-import { gitUntil } from "./run";
+import { gitLive } from "./run";
 
 /**
  * The hub's git remote as this machine reaches it: a project's repositories'
@@ -113,10 +113,9 @@ const remoteRefs = (listed: string): Map<string, string> =>
  */
 export const hubRepoOf = async (
   repoRoot: string,
-  projectId: string,
-  deadline: number
+  projectId: string
 ): Promise<HubRepoKey> => {
-  const plain = gitUntil(deadline);
+  const plain = gitLive();
   const main: HubRepoKey = { projectId };
   const root = await plain(
     repoRoot,
@@ -130,7 +129,7 @@ export const hubRepoOf = async (
   }
   const own: HubRepoKey = { projectId, root };
   const url = hubRepo(main);
-  const hubGit = gitUntil(deadline, hubGitEnv(url));
+  const hubGit = gitLive(hubGitEnv(url));
   const listed = remoteRefs(
     await hubGit(repoRoot, "ls-remote", url, "HEAD", MAIN_CLAIM)
   );
@@ -147,12 +146,12 @@ export const hubRepoOf = async (
     );
     return holds ? main : own;
   }
-  const mine = await gitUntil(
-    deadline,
-    hostEnvironment(),
-    undefined,
-    `${root}\n`
-  )(repoRoot, "hash-object", "-w", "--stdin");
+  const mine = await gitLive(hostEnvironment(), undefined, `${root}\n`)(
+    repoRoot,
+    "hash-object",
+    "-w",
+    "--stdin"
+  );
   let claimed = listed.get(MAIN_CLAIM);
   if (!claimed) {
     // `--no-verify`: the repository's own pre-push hooks are for its own pushes.

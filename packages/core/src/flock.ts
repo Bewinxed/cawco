@@ -70,6 +70,19 @@ const LOCK_POLL_MS = 100;
 export const lockBy = async (fd: number, deadline: number): Promise<boolean> =>
   until(() => tryLock(fd), { deadline, every: LOCK_POLL_MS });
 
+/**
+ * Takes `fd`'s file's lock once whoever holds it lets it go, however long
+ * that takes: for a lock whose holder lets it go when its work ends, or the
+ * kernel does as its process ends. Looked at every {@link LOCK_POLL_MS}, as
+ * {@link lockBy}.
+ */
+export const lockWhenFree = async (fd: number): Promise<void> => {
+  await until(() => tryLock(fd), {
+    deadline: Number.POSITIVE_INFINITY,
+    every: LOCK_POLL_MS,
+  });
+};
+
 /** Lets `fd`'s lock go and closes it. */
 export const unlock = (fd: number): void => {
   loadLibc().flock(fd, LOCK_UN);

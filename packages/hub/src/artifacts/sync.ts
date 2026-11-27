@@ -257,8 +257,8 @@ const noteClaims = (
  * taken off, the holder among them too, and the claims left (another
  * screen's, or the next one a screen writes) elect a holder again
  * ({@link holdClaims}). A holder that left never answers: kept, the agent's
- * write waited out `convertMs` and was refused while another screen stood
- * joined.
+ * write waited until the doc went quiet and was refused while another
+ * screen stood joined.
  */
 const releaseClaims = (
   docs: ArtifactDocs,

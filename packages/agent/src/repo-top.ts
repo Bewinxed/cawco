@@ -26,15 +26,13 @@
  */
 import { lstat, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
-import { type Ran, runCaptured } from "@cawco/core/run-captured";
+import { type Ran, runLive } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import {
-  CONTROL_REPO_ROOT,
-  WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core/workspace/controls";
+import { gitWaitWords } from "@cawco/core/words/git-waits";
+import { CONTROL_REPO_ROOT } from "@cawco/core/workspace/controls";
 
 /**
  * git's exit for a folder in no repository: `die()` (usage.c) exits 128, and
@@ -68,30 +66,19 @@ const gitAbove = async (root: string): Promise<string | undefined> => {
   }
 };
 
-/** One read by git in `path`, as safe-git.ts says, run to its end within what is left of `deadline`. */
-const gitRead = async (
-  path: string,
-  args: readonly string[],
-  deadline: number
-): Promise<Ran> => {
-  const late = `git ${args[0]} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) {
-    throw new Error(late);
-  }
-  const ran = await readWithin(remaining, (signal) =>
-    runCaptured(safeGitArgv(args), {
-      cwd: path,
-      env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-      signal,
-      killSignal: "SIGKILL",
-    })
-  );
+/** One read by git in `path`, as safe-git.ts says, run to its end while it writes or works (core run-captured.ts `runLive`). */
+const gitRead = async (path: string, args: readonly string[]): Promise<Ran> => {
+  const ran = await runLive(safeGitArgv(args), {
+    cwd: path,
+    env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+  });
   switch (ran.kind) {
     case "answered":
       return ran.value;
     case "unanswered":
-      throw new Error(late);
+      throw new Error(
+        gitWaitWords.gitQuiet(String(args[0]), secondsOf(ran.after))
+      );
     default:
       unhandled("read", ran);
   }
@@ -112,14 +99,11 @@ const FILE_ORIGIN = "file:";
  * it is in no repository. Throws, naming the cause, for a folder in a
  * repository git does not read as a checkout: one whose config says it is
  * bare, the repository's own directory, a `.git` git will not read; and
- * when git cannot tell (it did not run, or not within `deadline`).
+ * when git cannot tell (it did not run, or went quiet).
  */
-export const repoTop = async (
-  path: string,
-  deadline: number
-): Promise<string | undefined> => {
+export const repoTop = async (path: string): Promise<string | undefined> => {
   const read = (args: readonly string[]): Promise<Ran> =>
-    gitRead(path, args, deadline).catch((error: Error) => {
+    gitRead(path, args).catch((error: Error) => {
       throw new Error(
         `CawCo couldn't tell whether ${path} is in a git repository: ${error.message}`,
         { cause: error }
@@ -187,5 +171,5 @@ export const repoRoot = async (folder: string): Promise<string | null> => {
   if (!info?.isDirectory()) {
     throw new Error(`${folder} is not a folder on this machine.`);
   }
-  return (await repoTop(folder, Date.now() + WORKSPACE_GIT_TIMEOUT_MS)) ?? null;
+  return (await repoTop(folder)) ?? null;
 };

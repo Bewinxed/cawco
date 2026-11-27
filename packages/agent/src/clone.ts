@@ -68,10 +68,9 @@ export const prepareClone = async (
   dir: string,
   run: Git,
   inPool: Git,
-  known: string | undefined,
-  deadline: number
+  known: string | undefined
 ): Promise<string> => {
-  const { base, tip } = await readyPool(source, inPool, known, deadline);
+  const { base, tip } = await readyPool(source, inPool, known);
   try {
     await makeFolder(dirname(dir));
     await run(

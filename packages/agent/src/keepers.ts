@@ -18,11 +18,7 @@ import type { SessiondProcInfo } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
 import { Cache, Duration, Effect, Exit, Option } from "effect";
 import { runFork, runPromise, runSync } from "./daemon-runtime";
-import {
-  ensureSessiond,
-  KEEPER_WELCOME_MS,
-  SessiondClient,
-} from "./sessiond-client";
+import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
@@ -383,8 +379,8 @@ export interface UnansweredKeeper {
  * A fresh connection to every keeper there, the current one first, for one
  * reading, each keeper's word its own; each connection is closed once `use`
  * has finished. An endpoint nothing answers on is a keeper that is gone, and
- * is left out. One that is there and gives no welcome within
- * {@link KEEPER_WELCOME_MS}, ends before it, or refuses the dial for another
+ * is left out. One that is there and gives no welcome for the fleet's quiet
+ * spell (sessiond-client.ts `dialKeeper`), ends before it, or refuses the dial for another
  * reason is `unanswered`, with why: never a keeper read as holding nothing.
  * For what decides each keeper by its own reading (the updater's tending of
  * the retiring keepers); a reading that needs the whole machine is
@@ -402,7 +398,7 @@ export async function withEachKeeper<T>(
       try {
         return {
           ...one,
-          read: await SessiondClient.connect(one.endpoint, KEEPER_WELCOME_MS),
+          read: await SessiondClient.connect(one.endpoint),
         };
       } catch (error) {
         return { ...one, refused: error };

@@ -200,7 +200,7 @@ const awaitGone = async (gone: Fiber.Fiber<unknown>): Promise<void> => {
  * alive while it works. Stops when `signal` aborts.
  */
 export const watchTreeCpu = (
-  leader: Pid,
+  leader: number,
   alive: () => void,
   signal: AbortSignal
 ): void => {

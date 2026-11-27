@@ -31,6 +31,10 @@ declare global {
     __cawcoPainted?: boolean | undefined;
     /** Its own fetches and XHRs in flight. */
     __cawcoPending?: number | undefined;
+    /** How many words the page has said to its host, as the stand-in heard them: each one a sign of its life. */
+    __cawcoSaid?: number | undefined;
+    /** Whether the page's doc has synced with the hub (its `cawco:sync`, `synced`): it has joined its artifact. */
+    __cawcoSynced?: boolean | undefined;
   }
 }
 
@@ -63,6 +67,9 @@ interface PageCanvas extends Partial<StageMeasuring> {
  * view (the skeleton in its well) and no picture in its view still loading.
  * A frame's painted content is its words as well.
  */
+/** When the page last painted or ended a request of its own, as its readiness watch counts it (agent artifact-picture.ts `watchReadiness`). */
+export const changedAtNow = (): number | undefined => window.__cawcoChangedAt;
+
 export const documentReady = ({
   framed,
   settle,
@@ -105,6 +112,12 @@ export const hiddenLength = (selector: string): number => {
 export const heardOfHost = () => ({
   down: window.__cawcoDown,
   locked: window.__cawcoLocked === true,
+});
+
+/** Whether the page has joined its artifact's doc, and how many words it has said to its host ({@link hearHost}). */
+export const joinedNow = () => ({
+  said: window.__cawcoSaid ?? 0,
+  synced: window.__cawcoSynced === true,
 });
 
 /** The quiet counts from now. */
@@ -152,17 +165,25 @@ export const sweepNow = () => {
 };
 
 /** The stage's own page reads `files` again for the report; false where the page holds no reader. */
+/** The text of the element `id` names, as the page holds it now (the stage's plans, core `CANVAS_PLAN_ID`): null when it has none; no wait for it to appear. */
+export const textNow = (id: string): string | null =>
+  document.getElementById(id)?.textContent ?? null;
+
 export const readAgainNow = (files: string[]): boolean => {
   const read = window.__cawcoCanvas?.readAgain;
   read?.(files);
   return !!read;
 };
 
-/** The page's host hears what the page says to it: its lock turned it away (`locked` names that message), or the proxy served its down page. */
+/** The page's host hears what the page says to it: its lock turned it away (`locked` names that message), the proxy served its down page, or its doc's link to the hub stands synced; each word counted. */
 export const hearHost = (locked: string): void => {
   window.__cawcoHeard = (data) => {
     if (typeof data !== "object" || data === null || !("type" in data)) {
       return;
+    }
+    window.__cawcoSaid = (window.__cawcoSaid ?? 0) + 1;
+    if (data.type === "cawco:sync" && "state" in data) {
+      window.__cawcoSynced = data.state === "synced";
     }
     if (data.type === locked) {
       window.__cawcoLocked = true;

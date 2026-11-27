@@ -50,7 +50,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { lockBy, openLockFile, tryLock, unlock } from "@cawco/core/flock";
+import { lockWhenFree, openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
@@ -72,7 +72,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
-import { fetchDefaultBranch, type Git, gitUntil } from "./git/run";
+import { fetchDefaultBranch, type Git, gitLive } from "./git/run";
 import { configEnv } from "./git-credential";
 
 /**
@@ -109,9 +109,6 @@ const MANY_PACKS = 30;
 /** How old a pool's newest pack is before a pool no record names goes ({@link reclaimPools}). */
 const RECLAIM_AFTER_MS = 14 * DAY_MS;
 
-/** How long a conversion's git may take ({@link borrowFromPool}): a repack of a clone's own history, then a connectivity check. */
-const CONVERT_GIT_MS = 600_000;
-
 /** The pool a clone is cut to borrow from, and what makes it ({@link readyPool}). */
 export interface PoolSource {
   /** The source's object format (`git rev-parse --show-object-format`). */
@@ -130,22 +127,19 @@ export const formatFlag = (format: string): string[] =>
 
 /**
  * `work` holding pool `pool`'s lock (`flock(2)` on `<pool>.lock` beside
- * it), once whoever holds it lets it go, by `deadline`: one fetch, repack or
- * removal at a time per pool, by every process on this computer.
+ * it), once whoever holds it lets it go: one fetch, repack or removal at a
+ * time per pool, by every process on this computer. The kernel lets a
+ * holder's lock go as its process ends, and a holder's git runs only while
+ * it writes or works (git/run.ts `gitLive`), so the wait ends.
  */
 const withPool = async <T>(
   pool: string,
-  deadline: number,
   work: () => Promise<T>
 ): Promise<T> => {
   await makeFolder(objectPoolsDir());
   const fd = openLockFile(`${pool}.lock`, true);
   try {
-    if (!(await lockBy(fd, deadline))) {
-      throw new Error(
-        `the object pool ${pool} was still being fetched into by another cut when this one's time ran out`
-      );
-    }
+    await lockWhenFree(fd);
     return await work();
   } finally {
     unlock(fd);
@@ -163,10 +157,9 @@ const withPool = async <T>(
 export const readyPool = (
   source: PoolSource,
   run: Git,
-  known: string | undefined,
-  deadline: number
+  known: string | undefined
 ): Promise<{ base: string; tip: string }> =>
-  withPool(source.pool, deadline, async () => {
+  withPool(source.pool, async () => {
     if (!(await lstat(source.pool).catch(() => undefined))) {
       await makePool(source, run);
     }
@@ -192,12 +185,8 @@ export const readyPool = (
  * nothing to lend until a workspace's cut fetches into it. `run` is git in
  * the pool, with {@link poolGitEnv}.
  */
-export const standingPool = (
-  source: PoolSource,
-  run: Git,
-  deadline: number
-): Promise<boolean> =>
-  withPool(source.pool, deadline, async () => {
+export const standingPool = (source: PoolSource, run: Git): Promise<boolean> =>
+  withPool(source.pool, async () => {
     if (!(await lstat(source.pool).catch(() => undefined))) {
       await makePool(source, run);
     }
@@ -572,10 +561,7 @@ const convert = async (
     await keepBorrowing(ref, store, record.pool, idle);
     return;
   }
-  const git = gitUntil(
-    Date.now() + CONVERT_GIT_MS,
-    poolGitEnv(hostEnvironment())
-  );
+  const git = gitLive(poolGitEnv(hostEnvironment()));
   const pool = poolAt(
     await git(ref.path, "rev-parse", "--show-object-format"),
     origin

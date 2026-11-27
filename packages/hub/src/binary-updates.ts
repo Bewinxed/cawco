@@ -58,7 +58,7 @@ import { downloadWords } from "@cawco/core/words/downloads";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
-import { FENCE_CAP_MS, fenceHub, hubRestartReadiness } from "./restart-holds";
+import { fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;
@@ -467,7 +467,8 @@ export function createBinaryUpdates(options: Options) {
     )
     // The hub's own machine, before its update restarts this hub: what the
     // restart would cut (the tool calls held open here, from every machine),
-    // and the fence that refuses new ones until it happens. `ms: 0` lowers it.
+    // and the fence that refuses new ones until it happens, held up by the
+    // machine's beats (restart-holds.ts `fenceHub`).
     .get("/api/binary-updates/hub-readiness", hidden, () =>
       hubRestartReadiness()
     )
@@ -475,9 +476,15 @@ export function createBinaryUpdates(options: Options) {
       "/api/binary-updates/hub-fence",
       {
         ...hidden,
-        body: t.Object({ ms: t.Number({ minimum: 0, maximum: FENCE_CAP_MS }) }),
+        body: t.Object({
+          fence: t.Union([
+            t.Literal("raise"),
+            t.Literal("renew"),
+            t.Literal("lower"),
+          ]),
+        }),
       },
-      ({ body }) => fenceHub(body.ms)
+      ({ body }) => fenceHub(body.fence)
     )
     // What every machine considers: the channel's newest, and the database's
     // schema, so none installs a build older than the hub's data. `release`

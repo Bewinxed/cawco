@@ -36,7 +36,7 @@ import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
 import type { BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { readWithin } from "@cawco/core/bounded";
 import {
   ANY_TYPE,
   deniedToolsOn,
@@ -144,7 +144,9 @@ import {
   notAnswered,
   type OpencodeClient,
   opencodeSlashCommands,
+  readOpencode,
   SEND_NOW_METADATA,
+  type ServerLife,
   sessionIdOf,
 } from "./opencode-client";
 import {
@@ -163,9 +165,6 @@ import {
 } from "./opencode-transcript";
 import { listedSkillFiles } from "./skill-files";
 
-/** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
-const RECOVERY_TIMEOUT_MS = 10_000;
-
 /** A session's pending gates read back: three reads, from 250 ms apart. */
 const GATE_SNAPSHOTS: BackoffPolicy = {
   firstMs: 250,
@@ -174,20 +173,14 @@ const GATE_SNAPSHOTS: BackoffPolicy = {
 };
 
 /**
- * One OpenCode read given {@link RECOVERY_TIMEOUT_MS} to answer: `read` gets
- * the `{ signal }` a client call takes, and `signal` (a session's lifetime,
- * a caller's own) lets go of it sooner. A few calls that share the time go
- * in one `read`. Answers `unanswered` when the time ran out (Law A).
+ * One OpenCode read, waited on while its answer's bytes arrive
+ * (opencode-client.ts `readOpencode`): `read` gets the `{ signal }` a client
+ * call takes, and `signal` (a session's lifetime, a caller's own) lets go of
+ * it sooner. Recovery cancels the actual HTTP operation, never races an
+ * abandoned promise. A few calls go in one `read`, each answer's bytes a
+ * sign of life. Answers `unanswered` once the server went quiet (Law A).
  */
-export const askOpencode = <T>(
-  read: (options: { signal: AbortSignal }) => Promise<T>,
-  signal?: AbortSignal
-): Promise<Bounded<T>> =>
-  readWithin(
-    RECOVERY_TIMEOUT_MS,
-    (within) => read({ signal: within }),
-    signal ? { signal } : {}
-  );
+export const askOpencode = readOpencode;
 
 /**
  * How long a turn may wait on the provider with no server event at all before
@@ -958,6 +951,8 @@ export interface OpencodeSessionOptions {
    * which a server being retired does not hold.
    */
   isConfigGateHeld: (joinsTurn?: boolean) => boolean;
+  /** The signs of life of the server `client` answers on, as a wait on it hears them. */
+  lifeOf: (client: OpencodeClient) => ServerLife;
   /** The delegate types it may start (core `MayStart`); absent, any. */
   mayStart?: MayStart;
   model: string | undefined;
@@ -1108,6 +1103,7 @@ export class OpencodeSession implements HarnessSession {
   readonly #onRelease: () => void;
   readonly #isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
+  readonly #lifeOf: (client: OpencodeClient) => ServerLife;
   readonly #serverPid: () => number | undefined;
   readonly #prepareDispatch: () => Promise<void>;
   readonly #lifetime = new AbortController();
@@ -1240,6 +1236,7 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease = options.onRelease;
     this.#isConfigGateHeld = options.isConfigGateHeld;
     this.#readActivity = options.readActivity;
+    this.#lifeOf = options.lifeOf;
     this.#serverPid = options.serverPid;
     /** A start that cannot take work fails the session with why; the send that met it fails with it. */
     const takesNoWork = (error: unknown): never => {
@@ -3668,7 +3665,11 @@ export class OpencodeSession implements HarnessSession {
 
   /** The slash commands and skills OpenCode offers at this session's directory. */
   supportedCommands(): Promise<SlashCommand[]> {
-    return opencodeSlashCommands(this.#client, this.#directory);
+    return opencodeSlashCommands(
+      this.#client,
+      this.#directory,
+      this.#lifeOf(this.#client)
+    );
   }
 
   /** An MCP change refused while a config reload replaces the server it would reach: the two must not race. */
@@ -3742,7 +3743,11 @@ export class OpencodeSession implements HarnessSession {
       this.#commands = null;
       return {
         skills: (
-          await opencodeSlashCommands(this.#client, this.#directory)
+          await opencodeSlashCommands(
+            this.#client,
+            this.#directory,
+            this.#lifeOf(this.#client)
+          )
         ).filter((command) => command.kind === "skill"),
       };
     },

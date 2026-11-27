@@ -30,6 +30,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Gone } from "@cawco/core/effect/bounded";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { Effect, Schema, type Scope } from "effect";
 import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
@@ -83,8 +84,11 @@ export class LockUnread extends Schema.TaggedError<LockUnread>()("LockUnread", {
  * refusal is {@link LockUnread} with its OSStatus. macOS only.
  */
 export const keychainLockState = Effect.fn("keychainLockState")(function* (
-  path: string
+  path: string,
+  alive: () => void
 ): Effect.fn.Return<boolean, Gone | LockUnread, Scope.Scope> {
+  const working = new AbortController();
+  yield* Effect.addFinalizer(() => Effect.sync(() => working.abort()));
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
@@ -111,6 +115,8 @@ export const keychainLockState = Effect.fn("keychainLockState")(function* (
         }
       })
   );
+  // Its CPU time is its sign of life (core run-captured.ts `watchTreeCpu`).
+  watchTreeCpu(child.pid, alive, working.signal);
   const [out, err] = yield* Effect.promise(() =>
     Promise.all([
       new Response(child.stdout).text(),
@@ -135,11 +141,15 @@ export const keychainLockState = Effect.fn("keychainLockState")(function* (
 }, Effect.scoped);
 
 /**
- * The promise edge of {@link keychainLockState}. `signal` ends the read:
- * the child is ended with it, and the read rejects.
+ * The promise edge of {@link keychainLockState}, waited on by its caller
+ * alone (no wait on its life hears it). `signal` ends the read: the child
+ * is ended with it, and the read rejects.
  */
 export const keychainLocked = (
   path: string,
   signal?: AbortSignal
 ): Promise<boolean> =>
-  runPromise(keychainLockState(path), signal ? { signal } : undefined);
+  runPromise(
+    keychainLockState(path, () => undefined),
+    signal ? { signal } : undefined
+  );

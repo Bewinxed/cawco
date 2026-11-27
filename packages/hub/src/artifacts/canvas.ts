@@ -8,14 +8,15 @@
  * canvas host page, its socket marked `?screen=1`) sees it and claims it,
  * the first claim the hub hears wins (sync.ts `holdClaims`), and the holder
  * converts, writes the elements (`by: "agent"`) and writes the result on
- * the request. The tool waits {@link CANVAS_LIMITS.convertMs} for it. A
+ * the request. The tool waits for it while the canvas's doc is heard from
+ * (a screen claiming it, converting it, writing it), and lets it go once
+ * the doc has been quiet for the fleet's quiet spell. A
  * canvas no screen shows is drawn by the hub machine's own headless screen
  * (service `draw`): the published Excalidraw does not load outside a browser
  * (`window is not defined` as its module loads), and Mermaid renders SVG.
  */
 
 import {
-  CANVAS_LIMITS,
   type CanvasEntry,
   type CanvasRequestKind,
   type CanvasRequestPayload,
@@ -24,11 +25,11 @@ import {
   NO_SCREEN,
 } from "@cawco/core/canvas";
 import { docMeta, setMeta } from "@cawco/core/doc-meta";
-import { boundedRead } from "@cawco/core/effect/bounded";
-import { lookUntil } from "@cawco/core/effect/poll";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import { secondsOf } from "@cawco/core/time";
+import { canvasWaitWords } from "@cawco/core/words/canvas-waits";
 import { injectOverlay } from "@cawco/preview/proxy";
-import { DateTime, Deferred, Duration, Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
@@ -134,17 +135,6 @@ export const canvasEntries = (
       return a.pos > b.pos ? 1 : -1;
     });
 
-/** Waits until a screen has joined the canvas, at most `ms`; whether one has. */
-export const screenJoined = (
-  docs: ArtifactDocs,
-  artifactId: string,
-  ms: number
-): Effect.Effect<boolean> =>
-  lookUntil(
-    { every: 100, deadlineMs: ms, until: (joined: boolean) => joined },
-    Effect.sync(() => docs.screens(artifactId) > 0)
-  ).pipe(Effect.map((looked) => looked.kind === "found"));
-
 /**
  * The agent's write changed the scene now (`meta.wroteAt`): the
  * picture is owed until a screen posts one after it. Stamped by the hub's
@@ -208,9 +198,11 @@ const heardOn = Effect.fnUntraced(function* <A>(
 
 /**
  * Waits for the picture owed after the agent's last write, from whichever
- * screen draws it (a person's, or the hub machine's headless one), until
- * `screenHoldMs` after that write: the hold the headless screen keeps for
- * the same picture. Whether the picture shows the write once it returns.
+ * screen draws it (a person's, or the hub machine's headless one), while
+ * the canvas's doc is heard from (core effect/bounded.ts
+ * `boundedWhileLive`: each change to it a sign of life), as the headless
+ * screen is held on for the same picture (kinds/canvas.ts). Whether the
+ * picture shows the write once it returns.
  */
 export const pictureOfWrite = Effect.fnUntraced(function* (
   docs: ArtifactDocs,
@@ -219,23 +211,20 @@ export const pictureOfWrite = Effect.fnUntraced(function* (
   if (pictureShowsWrite(docs, artifactId)) {
     return true;
   }
-  const meta = docMeta(docs.doc(artifactId));
-  const wroteAt = meta.get("wroteAt");
+  const doc = docs.doc(artifactId);
+  const meta = docMeta(doc);
   // No write: the picture shows it ({@link pictureShowsWrite}).
-  if (!wroteAt) {
+  if (!meta.get("wroteAt")) {
     return true;
   }
-  const held = DateTime.add(DateTime.makeUnsafe(wroteAt), {
-    milliseconds: CANVAS_LIMITS.screenHoldMs,
-  });
-  const left = Duration.toMillis(DateTime.distance(yield* DateTime.now, held));
-  if (left <= 0) {
-    return false;
-  }
-  return yield* boundedRead(
-    left,
-    heardOn(meta, () =>
-      pictureShowsWrite(docs, artifactId) ? true : undefined
+  return yield* boundedWhileLive((alive) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => doc.on("update", alive)),
+      () =>
+        heardOn(meta, () =>
+          pictureShowsWrite(docs, artifactId) ? true : undefined
+        ),
+      () => Effect.sync(() => doc.off("update", alive))
     )
   ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(false)));
 });
@@ -249,8 +238,10 @@ export const unconverted = (why: string) =>
 
 /**
  * Hands the agent's write to a screen and waits for it: the ids it wrote.
- * Refused with {@link NO_SCREEN} when the screen it was handed to has left,
- * when none takes it in time, or with the screen's own word when it could
+ * Waited on while the canvas's doc is heard from (core effect/bounded.ts
+ * `boundedWhileLive`: each change to it a sign of life). Refused with
+ * {@link NO_SCREEN} when the screen it was handed to has left, when none is
+ * heard for the quiet spell, or with the screen's own word when it could
  * not convert. The request leaves the doc however the wait ends.
  */
 export const convertOnScreen = Effect.fnUntraced(function* (
@@ -277,12 +268,16 @@ export const convertOnScreen = Effect.fnUntraced(function* (
     request.set("at", new Date().toISOString());
     requests.set(id, request);
   });
-  return yield* boundedRead(
-    CANVAS_LIMITS.convertMs,
-    heardOn(request, () => {
-      const value = REQUEST_RESULT.safeParse(request.get("result"));
-      return value.success ? value.data : undefined;
-    })
+  return yield* boundedWhileLive((alive) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => doc.on("update", alive)),
+      () =>
+        heardOn(request, () => {
+          const value = REQUEST_RESULT.safeParse(request.get("result"));
+          return value.success ? value.data : undefined;
+        }),
+      () => Effect.sync(() => doc.off("update", alive))
+    )
   ).pipe(
     Effect.map((result) =>
       "error" in result ? unconverted(result.error) : result.ids
@@ -291,7 +286,7 @@ export const convertOnScreen = Effect.fnUntraced(function* (
       Effect.succeed(
         problem(504, {
           code: "artifact-canvas-undrawn",
-          detail: `The canvas wasn't changed: no screen drew it within ${secondsOf(unanswered.after)} s. Try again.`,
+          detail: canvasWaitWords.undrawn(secondsOf(unanswered.after)),
         })
       )
     ),

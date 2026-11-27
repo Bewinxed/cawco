@@ -63,7 +63,7 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
-import { readWithin } from "@cawco/core/bounded";
+import { BEAT_MS, readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
@@ -203,8 +203,6 @@ const RETIRED_FIELDS = z.object({
   keeperOwed: z.unknown().optional(),
   unseen: z.unknown().optional(),
 });
-/** The lease of the fence an install raises: the helper restarts the services well within it. */
-const INSTALL_FENCE_MS = 10 * 60_000;
 /** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
 const COMMANDS_KEPT = 20;
 /**
@@ -229,11 +227,6 @@ const DRAIN_POLL_MS = 1000;
  * others.
  */
 const DRAIN_MS = timerMs(UPDATE_DRAIN_MS);
-/**
- * How long the drain's fence outlives the drain, for the helper to be
- * launched in: the time a process takes to start, which no clock shortens.
- */
-const DRAIN_GRACE_MS = 15_000;
 /** The updater's name for its fence on this agent ({@link raiseFence}). */
 const FENCE = "update";
 
@@ -313,13 +306,20 @@ async function readHubProtocol(hub: string): Promise<{
   return { protocol: health.build?.protocol, trial: health.trial === true };
 }
 
-/** The hub's fence, for `ms` from now; 0 lowers it. */
-async function fenceHub(hub: string, ms: number): Promise<void> {
+/**
+ * The hub's fence (hub restart-holds.ts): `raise` puts it up, `renew` raises
+ * it again only while it stands (a beat that reaches the hub restarted under
+ * it puts up nothing), `lower` takes it down.
+ */
+async function fenceHub(
+  hub: string,
+  fence: "raise" | "renew" | "lower"
+): Promise<void> {
   await askHub(
     "its fence",
     5000,
     hub,
-    (client) => client.api["binary-updates"]["hub-fence"].post({ ms }),
+    (client) => client.api["binary-updates"]["hub-fence"].post({ fence }),
     (answer) => {
       if (answer.error) {
         throw new Error(`The hub did not take its fence: ${answer.status}`);
@@ -618,14 +618,6 @@ class UpdateInterrupted extends Schema.TaggedError<UpdateInterrupted>()(
  */
 const MIN_AWAKE_MS = 5 * MINUTE_MS;
 
-/**
- * How often the install's fence is raised again while the pins go on
- * (`#replace`): an install may take longer than the fence's lease
- * ({@link INSTALL_FENCE_MS}), and nothing may start on a harness between
- * its install and the swap.
- */
-const FENCE_RENEW_MS = 60_000;
-
 /** What an interrupted attempt says: what slept, and what comes of it. */
 const interruptedWords = (version: string, event: PowerEvent): string =>
   `the update to ${version} was interrupted: this machine ${event === "sleep" ? "went to sleep" : "slept"} during it. Nothing failed, and it is tried again once the machine has been awake ${MIN_AWAKE_MS / MINUTE_MS} min since it woke`;
@@ -764,11 +756,16 @@ export class BinaryUpdater {
   /** This agent's one prune as it started, once begun ({@link #pruneAtStart}). */
   #startPrune: Promise<void> | undefined;
   /**
-   * The fence this updater raised, while it stands: on this agent, and on the
-   * hub when its restart is part of the update (the hub's url then). Lowered
-   * on every way out but the restart it was raised for.
+   * The fence this updater holds, while it stands: on this agent, and on the
+   * hub when its restart is part of the update (the hub's url then), raised
+   * again on each beat (`beat`) so it stands however long the drain, the
+   * install and the helper's restart take, and falls one quiet spell after
+   * this agent is gone. Lowered on every way out but the restart it was
+   * raised for.
    */
-  #fence: { hub: string | undefined } | undefined;
+  #fence:
+    | { readonly beat: Fiber.Fiber<unknown>; hub: string | undefined }
+    | undefined;
   /**
    * The helper this agent handed an install to, until it takes the lock or
    * the install says otherwise: when, its job, and the command that asked
@@ -2171,7 +2168,7 @@ export class BinaryUpdater {
    * Replaces this machine's services once {@link #drain} allows. The fence
    * stays up until the helper restarts them, and comes down if the helper
    * cannot be started, or gives up before restarting anything ({@link #watch});
-   * its lease ends it in any case. Under it the build's pinned harnesses go on
+   * it falls one quiet spell after this agent is gone in any case. Under it the build's pinned harnesses go on
    * first ({@link putOnPins}); every way out before the helper takes over
    * puts them back ({@link putBackPins}). A sleep heard from the drain to
    * the launch (power.ts) is one such way out, and no failure
@@ -2200,27 +2197,6 @@ export class BinaryUpdater {
     }
   }
 
-  /**
-   * `work` with the install's fence raised again every
-   * {@link FENCE_RENEW_MS} while it runs, so its lease outlasts an install
-   * however long that takes.
-   */
-  async #underFence<T>(
-    hub: string | undefined,
-    work: () => Promise<T>
-  ): Promise<T> {
-    const renew = everyFixed(FENCE_RENEW_MS, async () => {
-      if (this.#fence) {
-        await this.#raiseFence(hub, INSTALL_FENCE_MS);
-      }
-    });
-    try {
-      return await work();
-    } finally {
-      runFork(Fiber.interrupt(renew));
-    }
-  }
-
   /** {@link #replace} under its watch for a sleep (`interrupted`). */
   async #replaceAwake(
     hub: string | undefined,
@@ -2233,12 +2209,12 @@ export class BinaryUpdater {
       return;
     }
     try {
-      await this.#raiseFence(hub, INSTALL_FENCE_MS);
+      await this.#raiseFence(hub);
       interrupted.throwIfAborted();
-      await this.#underFence(hub, () => putOnPins(version, interrupted));
+      await putOnPins(version, interrupted);
       // The pins went on and the machine slept since: the swap waits for it to be awake.
       interrupted.throwIfAborted();
-      await this.#raiseFence(hub, INSTALL_FENCE_MS);
+      await this.#raiseFence(hub);
       const installing: Partial<BinaryUpdateState> = {
         phase: "installing",
         heldChildren: undefined,
@@ -2328,7 +2304,7 @@ export class BinaryUpdater {
     }
     this.#outlasted.clear();
     try {
-      await this.#raiseFence(hub, DRAIN_MS + DRAIN_GRACE_MS);
+      await this.#raiseFence(hub);
       // Never written: an agent that dies mid-drain comes back `ready`, not
       // `installing` with no helper.
       await this.#tellHubUnwritten({ phase: "installing" });
@@ -2403,21 +2379,41 @@ export class BinaryUpdater {
     }
   }
 
-  async #raiseFence(hub: string | undefined, ms: number): Promise<void> {
-    raiseFence(FENCE, ms);
-    this.#fence = { hub };
+  /** Raises this updater's fence, here and on `hub`, and holds it up on each beat until it is lowered. */
+  async #raiseFence(hub: string | undefined): Promise<void> {
+    raiseFence(FENCE);
+    if (this.#fence) {
+      this.#fence.hub = hub;
+    } else {
+      this.#fence = { beat: everyFixed(BEAT_MS, () => this.#holdFence()), hub };
+    }
     if (hub) {
-      await fenceHub(hub, ms);
+      await fenceHub(hub, "raise");
     }
   }
 
-  /** Never throws: it runs on the way out of a failure. A hub fence it cannot lower lapses with its lease. */
+  /** One beat of the fence held up: raised again here, and renewed on the hub, which may be restarting under it. */
+  async #holdFence(): Promise<void> {
+    const held = this.#fence;
+    if (!held) {
+      return;
+    }
+    raiseFence(FENCE);
+    if (held.hub) {
+      await fenceHub(held.hub, "renew").catch(() => undefined);
+    }
+  }
+
+  /** Never throws: it runs on the way out of a failure. A hub fence it cannot lower falls one quiet spell after its last raise. */
   async #lowerFence(): Promise<void> {
     const raised = this.#fence;
     this.#fence = undefined;
+    if (raised) {
+      Effect.runFork(Fiber.interrupt(raised.beat));
+    }
     lowerFence(FENCE);
     if (raised?.hub) {
-      await fenceHub(raised.hub, 0).catch(() => undefined);
+      await fenceHub(raised.hub, "lower").catch(() => undefined);
     }
   }
 

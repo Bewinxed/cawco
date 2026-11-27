@@ -10,8 +10,10 @@
  * is held here while it is in flight ({@link holdRestart}); the supervisor
  * adds what only it can see ({@link SupervisorHolds}).
  *
- * The fence is named per owner and lapses on its own: whoever raises it says
- * for how long, so a restart that never comes cannot leave it up.
+ * The fence is named per owner and stands while its owner holds it: the
+ * owner raises it again each beat (core bounded.ts `BEAT_MS`), and it falls
+ * one quiet spell (`QUIET_MS`) after the last raise, so a restart that never
+ * comes, or an owner that died, cannot leave it up.
  */
 import {
   mergeHolds,
@@ -19,6 +21,7 @@ import {
   type RestartHoldReason,
   type RestartReadiness,
 } from "@cawco/core/binary-updates";
+import { QUIET_MS } from "@cawco/core/bounded";
 
 const holds = new Map<symbol, { id: string; reason: RestartHoldReason }>();
 
@@ -44,12 +47,26 @@ export async function withRestartHold<T>(
   }
 }
 
-/** Each owner's fence, until when. */
+/** Each owner's fence, when it was last raised (`performance.now()`: awake time). */
 const fences = new Map<string, number>();
 
-/** Raises `owner`'s fence for `ms` from now, replacing what it had. */
-export function raiseFence(owner: string, ms: number): void {
-  fences.set(owner, Date.now() + ms);
+/** Raises `owner`'s fence, or raises it again: it stands {@link QUIET_MS} from now. */
+export function raiseFence(owner: string): void {
+  fences.set(owner, performance.now());
+}
+
+/**
+ * Raises `owner`'s fence again only while it still stands: a holder's next
+ * beat never puts up a fence on an agent that restarted under it.
+ */
+export function renewFence(owner: string): boolean {
+  const raised = fences.get(owner);
+  if (raised === undefined || performance.now() - raised >= QUIET_MS) {
+    fences.delete(owner);
+    return false;
+  }
+  fences.set(owner, performance.now());
+  return true;
 }
 
 export function lowerFence(owner: string): void {
@@ -58,9 +75,9 @@ export function lowerFence(owner: string): void {
 
 /** Whether any owner's fence stands: new work a restart would cut is refused. */
 export function fenced(): boolean {
-  const now = Date.now();
-  for (const [owner, until] of fences) {
-    if (until <= now) {
+  const now = performance.now();
+  for (const [owner, raised] of fences) {
+    if (now - raised >= QUIET_MS) {
       fences.delete(owner);
     }
   }

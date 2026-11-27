@@ -1,6 +1,7 @@
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import { fetchHeard } from "@cawco/core/bounded";
-import { boundedWhileLive } from "@cawco/core/effect/bounded";
+import { boundedWhileLive, type Unanswered } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
 import { Clock, Effect, Result, Schema } from "effect";
@@ -116,35 +117,49 @@ class GoReadFailed extends Schema.TaggedError<GoReadFailed>()("GoReadFailed", {
   cause: Schema.Defect(),
 }) {}
 
-/** The usage endpoint's answer to `key`, within its quiet spell (core bounded.ts `fetchHeard`): its windows, or the HTTP status it refused with. */
+/** The usage reads in flight, by key: a read due while the last is still out joins it (core effect/join.ts). */
+const goReads = makeJoin<
+  string,
+  { ok: true; windows: LimitWindow[] } | { ok: false; status: number },
+  GoReadFailed | Unanswered
+>();
+
+/**
+ * The usage endpoint's answer to `key`, waited on while its bytes arrive
+ * (core bounded.ts `fetchHeard`): its windows, or the HTTP status it
+ * refused with. A read due while the last for `key` is still out joins it.
+ */
 const readGo = Effect.fn("readGo")((key: string) =>
-  boundedWhileLive((alive) =>
-    Effect.tryPromise({
-      try: async (signal) => {
-        const res = await fetchHeard(
-          usageUrl(),
-          {
-            headers: { Authorization: `Bearer ${key}` },
-            redirect: "error",
-            signal,
-          },
-          alive
-        );
-        if (!res.ok) {
-          await res.body?.cancel();
-          return { ok: false as const, status: res.status };
-        }
-        return {
-          ok: true as const,
-          windows: windowsOf(GoUsageResponse.parse(await res.json())),
-        };
-      },
-      catch: (cause) =>
-        new GoReadFailed({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    })
+  goReads.run(
+    key,
+    boundedWhileLive((alive) =>
+      Effect.tryPromise({
+        try: async (signal) => {
+          const res = await fetchHeard(
+            usageUrl(),
+            {
+              headers: { Authorization: `Bearer ${key}` },
+              redirect: "error",
+              signal,
+            },
+            alive
+          );
+          if (!res.ok) {
+            await res.body?.cancel();
+            return { ok: false as const, status: res.status };
+          }
+          return {
+            ok: true as const,
+            windows: windowsOf(GoUsageResponse.parse(await res.json())),
+          };
+        },
+        catch: (cause) =>
+          new GoReadFailed({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      })
+    )
   )
 );
 

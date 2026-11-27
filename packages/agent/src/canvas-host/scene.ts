@@ -1537,7 +1537,7 @@ const fromMermaid = async (
  * makes: a binding made again (its replica's doc replaced, replica.ts) still
  * answers what the page holds. Keyed by the doc's clientID, a page bound
  * again held a request under an id no binding of it answered, until the
- * hub refused the write `convertMs` on. A number, as the hub reads a claim
+ * hub let the write go once its doc went quiet. A number, as the hub reads a claim
  * (sync.ts `SCREEN_REQUEST_KEY`).
  */
 const PAGE_CLAIM = String(crypto.getRandomValues(new Uint32Array(1))[0]);

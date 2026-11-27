@@ -38,7 +38,7 @@ import {
 import { Socket } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "./binary-installation";
-import { type Bounded, readWithin } from "./bounded";
+import { type Bounded, readWhileLive } from "./bounded";
 import { sessiondEndpoint } from "./sessiond";
 import { unhandled } from "./unhandled";
 
@@ -100,14 +100,12 @@ export const keeperService = (keeper: KeeperName): string =>
 /**
  * Whether something accepts a connection on `path`: answered true when one
  * did, answered false when the connect was refused (nothing listens, no
- * file), unanswered when it did not complete within `timeoutMs`.
+ * file), unanswered when it did not complete for the fleet's quiet spell
+ * (bounded.ts `readWhileLive`): a connect that is neither taken nor refused
+ * shows no life (a listener whose backlog is full, its loop held).
  */
-export const answers = (
-  path: string,
-  timeoutMs = 2000
-): Promise<Bounded<boolean>> =>
-  readWithin(
-    timeoutMs,
+export const answers = (path: string): Promise<Bounded<boolean>> =>
+  readWhileLive(
     (signal) =>
       new Promise<boolean>((resolve) => {
         // Constructed unconnected, listeners first, THEN dialled: an `ENOENT`

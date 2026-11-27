@@ -14,13 +14,12 @@
 import type { ControlArgs } from "@cawco/core/control-table";
 import { hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { shortSha } from "@cawco/core/short-id";
-import {
-  type CONTROL_PLACE_PUSH,
-  type PlacePush,
-  WORKSPACE_GIT_TIMEOUT_MS,
+import type {
+  CONTROL_PLACE_PUSH,
+  PlacePush,
 } from "@cawco/core/workspace/controls";
 import { hubGitEnv, hubRepo, hubRepoOf, isHubRemote } from "./git/hub-remote";
-import { gitUntil } from "./git/run";
+import { gitLive } from "./git/run";
 import { useHubCredentialHelper } from "./git-credential";
 import { publishCheck } from "./place-repo";
 
@@ -31,8 +30,7 @@ const TREE_SIZE = /^\S+ blob \S+\s+(\d+)\t/u;
 export const placePush = async (
   ...[asked, projectId, dryRun]: ControlArgs<typeof CONTROL_PLACE_PUSH>
 ): Promise<PlacePush> => {
-  const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
-  const git = gitUntil(deadline);
+  const git = gitLive();
   const root = await git(asked, "rev-parse", "--show-toplevel").catch(
     (error: Error) => {
       throw new Error(
@@ -61,7 +59,7 @@ export const placePush = async (
     });
   // A publish takes the whole history, so every commit HEAD reaches is read
   // by the credential scan: a key a later commit took out is still in it.
-  const { leftOut, refused } = await publishCheck(root, deadline);
+  const { leftOut, refused } = await publishCheck(root);
   if (refused.length > 0) {
     throw new Error(
       `CawCo does not publish ${root}: its commits hold what reads as a credential: ${refused
@@ -91,9 +89,7 @@ export const placePush = async (
     const named = origin ? hubRepoOfUrl(origin) : undefined;
     return { ...read, pushed: false, ...(named ? { hub: named } : {}) };
   }
-  const hub = origin
-    ? hubRepoOfUrl(origin)
-    : await hubRepoOf(root, projectId, deadline);
+  const hub = origin ? hubRepoOfUrl(origin) : await hubRepoOf(root, projectId);
   if (!hub) {
     throw new Error(
       `${root}'s origin ${origin} names none of the hub's repositories, so CawCo does not publish it.`
@@ -107,7 +103,7 @@ export const placePush = async (
     );
   }
   useHubCredentialHelper(root);
-  await gitUntil(deadline, hubGitEnv(remote))(
+  await gitLive(hubGitEnv(remote))(
     root,
     "push",
     "--quiet",

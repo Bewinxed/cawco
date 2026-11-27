@@ -37,6 +37,7 @@ import {
   USER_LAYER_LEFT_DIRS,
   userLayerPath,
 } from "@cawco/core/paths/claude";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
 import { shortId } from "@cawco/core/short-id";
@@ -236,7 +237,9 @@ export const authStatus = Effect.fn("authStatus")(function* (
       why: authStatusNotRun(dir, executable.refused),
     } satisfies AuthStatus;
   }
-  return yield* boundedWhileLive(() => statusOfDir(executable, env, dir)).pipe(
+  return yield* boundedWhileLive((alive) =>
+    statusOfDir(executable, env, dir, alive)
+  ).pipe(
     Effect.catchTag("Unanswered", (none) =>
       Effect.succeed<AuthStatus>({
         kind: "unread",
@@ -266,13 +269,14 @@ class AuthStatusFailed extends Schema.TaggedError<AuthStatusFailed>()(
 const statusOfDir = Effect.fn("statusOfDir")(function* (
   executable: string,
   env: Record<string, string | undefined>,
-  dir: string
+  dir: string,
+  alive: () => void
 ): Effect.fn.Return<
   AuthStatus,
   Gone | LockUnread | KeychainLookFailed | AuthStatusFailed,
   Scope.Scope
 > {
-  if (yield* lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR))) {
+  if (yield* lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR), alive)) {
     return {
       kind: "locked",
       why: `\`claude auth status\` was not run for ${dir}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it. Its sign-in was not read.`,
@@ -290,7 +294,8 @@ const statusOfDir = Effect.fn("statusOfDir")(function* (
       new AuthStatusFailed({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
-      })
+      }),
+    alive
   );
   const [output] = yield* Effect.promise(() =>
     Promise.all([new Response(child.stdout).text(), child.exited])
@@ -334,15 +339,29 @@ const statusOfDir = Effect.fn("statusOfDir")(function* (
  */
 export const heldChild = <C extends Subprocess, E>(
   spawn: () => C,
-  failed: (cause: unknown) => E
+  failed: (cause: unknown) => E,
+  alive?: () => void
 ): Effect.Effect<C, E, Scope.Scope> =>
-  Effect.acquireRelease(Effect.try({ try: spawn, catch: failed }), (child) =>
-    Effect.sync(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill();
-      }
-    })
-  );
+  Effect.acquireRelease(
+    Effect.try({ try: spawn, catch: failed }).pipe(
+      Effect.map((child) => {
+        // Its process tree's CPU time is its sign of life (core
+        // run-captured.ts `watchTreeCpu`), told to `alive` until it is let go.
+        const working = new AbortController();
+        if (alive) {
+          watchTreeCpu(child.pid, alive, working.signal);
+        }
+        return { child, working };
+      })
+    ),
+    ({ child, working }) =>
+      Effect.sync(() => {
+        working.abort();
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill();
+        }
+      })
+  ).pipe(Effect.map(({ child }) => child));
 
 /** A dir signed in through `claude auth login --console` reports a method other than claude.ai. */
 export const kindOf = (
@@ -528,7 +547,8 @@ class KeychainLookFailed extends Schema.TaggedError<KeychainLookFailed>()(
  * The look is held for the read it is part of, and ended with it.
  */
 const keychainHolds = Effect.fn("keychainHolds")(function* (
-  service: string
+  service: string,
+  alive: () => void
 ): Effect.fn.Return<boolean, Gone | KeychainLookFailed, Scope.Scope> {
   const child = yield* heldChild(
     () =>
@@ -552,7 +572,8 @@ const keychainHolds = Effect.fn("keychainHolds")(function* (
       new KeychainLookFailed({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
-      })
+      }),
+    alive
   );
   yield* Effect.promise(() => child.exited);
   if (child.signalCode !== null) {
@@ -574,7 +595,9 @@ const lockReads = makeJoin<"login", boolean, Gone | LockUnread>();
 
 const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
   "login",
-  boundedWhileLive(() => keychainLockState(loginKeychainPath())).pipe(
+  boundedWhileLive((alive) =>
+    keychainLockState(loginKeychainPath(), alive)
+  ).pipe(
     // The account read waiting on it ends unanswered with it.
     Effect.catchTag("Unanswered", ({ reason, after }) =>
       Effect.fail(
@@ -597,11 +620,14 @@ const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
  * a keychain that holds one. Both looks run in processes of their own, off
  * the agent's JS thread, inside the deadline of the read they are part of.
  */
-const lockedAway = Effect.fn("lockedAway")(function* (service: string) {
+const lockedAway = Effect.fn("lockedAway")(function* (
+  service: string,
+  alive: () => void
+) {
   if (platform() !== "darwin") {
     return false;
   }
-  return (yield* keychainHolds(service)) && (yield* loginLocked);
+  return (yield* keychainHolds(service, alive)) && (yield* loginLocked);
 });
 
 /**
@@ -677,8 +703,8 @@ export const startable = Effect.fn("startable")(function* (
   account: string,
   done: string
 ) {
-  const away = yield* boundedWhileLive(() =>
-    lockedAway(keychainService(account))
+  const away = yield* boundedWhileLive((alive) =>
+    lockedAway(keychainService(account), alive)
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }: Unanswered) =>
       Effect.fail(

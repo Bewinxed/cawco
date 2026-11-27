@@ -63,11 +63,7 @@ import {
   KeeperKept,
   keeperJob,
 } from "./service-manager/keeper-job";
-import {
-  dialKeeper,
-  KEEPER_WELCOME_MS,
-  serviceManaged,
-} from "./sessiond-client";
+import { dialKeeper, serviceManaged } from "./sessiond-client";
 
 /**
  * How often the keeper is dialled. Ours: a dial is one local socket open,
@@ -79,7 +75,8 @@ const KEEPER_PROBE_MS = 60_000;
 /**
  * Dials in a row without a welcome, from the same live keeper, before it is
  * called wedged: five, a minute apart, so at least four minutes in which the
- * keeper never once had ten seconds to write one line. Restarting a keeper
+ * keeper never once wrote one line in a dial's quiet spell (sessiond-client.ts
+ * `dialKeeper`). Restarting a keeper
  * ends every session it holds, so the bar is certainty, not suspicion: the
  * "no welcome" stalls the Mac logged that cleared by themselves (14:52–14:53,
  * 15:50–15:51 on 8 Oct) each lasted under two minutes, and none of them would
@@ -338,7 +335,7 @@ class KeeperWatchdog {
   }
 
   /** One dial of every keeper, and the recovery of each whose dial is the {@link KEEPER_WEDGED_DIALS}th silent one in a row. */
-  async probe(welcomeMs = KEEPER_WELCOME_MS): Promise<void> {
+  async probe(): Promise<void> {
     const found = await keeperEndpoints();
     for (const endpoint of this.#streaks.keys()) {
       if (!found.some((keeper) => keeper.endpoint === endpoint)) {
@@ -350,10 +347,10 @@ class KeeperWatchdog {
         .filter((endpoint) => !found.some((one) => one.endpoint === endpoint))
         .map((endpoint) => this.#notKept(endpoint))
     );
-    await Promise.all(found.map((keeper) => this.#probeOne(keeper, welcomeMs)));
+    await Promise.all(found.map((keeper) => this.#probeOne(keeper)));
   }
 
-  async #probeOne(found: FoundKeeper, welcomeMs: number): Promise<void> {
+  async #probeOne(found: FoundKeeper): Promise<void> {
     const job = keeperJob(found.keeper);
     const pid = await job?.pid();
     // Not running is the service manager's to start, not a wedge.
@@ -364,7 +361,7 @@ class KeeperWatchdog {
     }
     // The promise edge of dialKeeper.
     const { dial, accepted } = await runPromise(
-      dialKeeper(found.endpoint, welcomeMs)
+      dialKeeper(found.endpoint)
     );
     let detail: string;
     switch (dial.kind) {
@@ -476,13 +473,13 @@ class KeeperWatchdog {
           deadlineMs: KEEPER_BACK_MS,
           until: (welcomed: boolean) => welcomed,
         },
-        dialKeeper(machineEndpoint(), 2000).pipe(
+        dialKeeper(machineEndpoint()).pipe(
           Effect.map(({ dial }) => {
             switch (dial.kind) {
               case "answered":
                 return dial.value.welcomed;
               case "unanswered":
-                // No welcome within this try's 2 s: the next try asks again.
+                // No welcome while this try waited: the next try asks again.
                 return false;
               default:
                 return unhandled("read", dial);

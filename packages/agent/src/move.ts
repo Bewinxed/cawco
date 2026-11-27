@@ -49,7 +49,6 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { shortId } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
 import { Effect, Fiber, Schema } from "effect";
 import type { AgentPorts } from "./agent-ports";
@@ -1016,10 +1015,7 @@ const snapshotRepo = async (
 ): Promise<HubRepoKey> => {
   const origin = await maybe(path, ["remote", "get-url", "origin"]);
   const named = origin ? hubRepoOfUrl(origin) : undefined;
-  return (
-    named ??
-    (await hubRepoOf(path, projectId, Date.now() + WORKSPACE_GIT_TIMEOUT_MS))
-  );
+  return named ?? (await hubRepoOf(path, projectId));
 };
 
 /** The hub repository a move's commit is on; a move from an outside remote with no snapshot has none. */

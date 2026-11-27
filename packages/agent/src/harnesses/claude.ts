@@ -71,7 +71,12 @@ import {
 } from "@cawco/core/attachments";
 import type { BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  type Bounded,
+  Gone,
+  readWhileLive,
+  readWithin,
+} from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { PROJECT_SKILLS, projectClaudeRelative } from "@cawco/core/claude-dirs";
 import {
@@ -94,7 +99,6 @@ import {
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
-import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
 import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   INSPECT_CONFIG,
@@ -143,6 +147,7 @@ import { fleetMemoriesDir } from "@cawco/core/paths/fleet";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import type {
   EndedTask,
   FleetMcpChange,
@@ -1409,15 +1414,13 @@ class Turn {
     this.#ended = Deferred.makeUnsafe<void>();
   }
 
-  /** The end of the turn in flight, given `ms`: `unanswered` while it still runs after them. */
-  settle(ms: number): Effect.Effect<void, Unanswered> {
+  /** The end of the turn in flight: at once when none is. */
+  settled(): Promise<void> {
     return this.busy
-      ? boundedRead(ms, Deferred.await(this.#ended))
-      : Effect.void;
+      ? Effect.runPromise(Deferred.await(this.#ended))
+      : Promise.resolve();
   }
 }
-
-const SETTLE_TIMEOUT_MS = 5000;
 
 /** How soon a launch reads its CawCo slot again while it is still connecting. */
 const CONNECTING_LOOK_MS = 250;
@@ -3292,6 +3295,43 @@ class ClaudeSession implements HarnessSession {
   /** The effort reads not yet answered ({@link #readEffort}). Each settles: its failure is said, never thrown. */
   readonly #effortReads = new Set<Promise<void>>();
 
+  /** Who hears each SDK message the CLI sends, as it comes ({@link #whileLive}). */
+  readonly #hearers = new Set<() => void>();
+
+  /**
+   * `wait` for as long as the CLI shows life (core bounded.ts
+   * `readWhileLive`): each SDK message it sends, and each beat its process
+   * (as its keeper lists it) or anything it started spends CPU time. Its
+   * stream's end, the CLI gone, answers `unanswered` "dead".
+   */
+  #whileLive<T>(wait: () => Promise<T>): Promise<Bounded<T>> {
+    return readWhileLive(async (_signal, alive) => {
+      const watching = new AbortController();
+      this.#hearers.add(alive);
+      try {
+        const pid = await this.processId();
+        if (pid !== undefined) {
+          watchTreeCpu(pid, alive, watching.signal);
+        }
+        // The stream's end, however it ended (its own error is the pump's
+        // to say): the CLI is gone.
+        const gone = this.#pump.then(
+          () => Promise.reject(new Gone("the CLI's stream ended")),
+          (error: unknown) =>
+            Promise.reject(
+              new Gone(
+                `the CLI's stream ended: ${error instanceof Error ? error.message : String(error)}`
+              )
+            )
+        );
+        return await Promise.race([wait(), gone]);
+      } finally {
+        watching.abort();
+        this.#hearers.delete(alive);
+      }
+    });
+  }
+
   async #readEffortNow(): Promise<void> {
     try {
       // A function of the `Query` at runtime that its type does not
@@ -3325,6 +3365,9 @@ class ClaudeSession implements HarnessSession {
   ): Promise<void> {
     try {
       for await (const message of handle) {
+        for (const hear of this.#hearers) {
+          hear();
+        }
         if (
           message.type === "system" &&
           message.subtype === "status" &&
@@ -5150,34 +5193,21 @@ class ClaudeSession implements HarnessSession {
     this.#permissions.clear();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
-    // The promise edge of the wait for the interrupted turn's end.
-    await runPromise(
-      this.#turn
-        .settle(SETTLE_TIMEOUT_MS)
-        .pipe(
-          Effect.catchTag("Unanswered", (unanswered) =>
-            Effect.logWarning(
-              `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
-            )
-          )
-        )
-    );
+    // The interrupted turn's end, waited on while the CLI shows life.
+    const ended = await this.#whileLive(() => this.#turn.settled());
+    if (ended.kind === "unanswered") {
+      console.warn(
+        `[claude] ${this.instanceId}: its turn did not end ${ended.after} ms after the interrupt (${ended.reason === "dead" ? "the CLI exited" : "the CLI went quiet"}); the stop closes it`
+      );
+    }
     // The interrupted turn's end read the effort: it lands while the query
-    // is open. A CLI that answers nothing within the turn's own wait gets
-    // the close, and the read says it failed.
-    const read = await readWithin(SETTLE_TIMEOUT_MS, () =>
-      Promise.all(this.#effortReads)
-    );
-    switch (read.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        console.warn(
-          `[claude] ${this.instanceId}: its effort read was still unanswered ${read.after} ms into the stop; the stop closes it`
-        );
-        break;
-      default:
-        unhandled("read", read);
+    // is open. A CLI that goes quiet or exits first gets the close, and the
+    // read says it failed.
+    const read = await this.#whileLive(() => Promise.all(this.#effortReads));
+    if (read.kind === "unanswered") {
+      console.warn(
+        `[claude] ${this.instanceId}: its effort read was still unanswered ${read.after} ms into the stop (${read.reason === "dead" ? "the CLI exited" : "the CLI went quiet"}); the stop closes it`
+      );
     }
     this.#input.end();
     this.#handle.close();

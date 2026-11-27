@@ -2706,11 +2706,6 @@ public enum Words {
 
     public enum Updates {
         // packages/core/src/words/updates.ts `updatesWords`
-        /// The agent's restart route asked for a fence longer than `minutes` (agent mcp-oauth.ts): refused, never shortened.
-        public static func fenceTooLong(minutes: Int) -> String {
-            "A restart fence stands at most \(minutes) minutes; ask for no more."
-        }
-
         /// The update policy reset, refused by the hub: what came of it (`hubRefusal`).
         public static let policyNotResetThen = "so the update policy was not reset. Try again."
 

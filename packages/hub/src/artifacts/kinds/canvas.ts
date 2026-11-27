@@ -1,5 +1,5 @@
+import { BEAT_MS, QUIET_MS } from "@cawco/core/bounded";
 import {
-  CANVAS_LIMITS,
   type CanvasEntry,
   canvasOutline,
   excalidrawFile,
@@ -10,6 +10,7 @@ import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import { canvasWaitWords } from "@cawco/core/words/canvas-waits";
 import { ElysiaStatus, problem } from "elysia";
 import { type ArtifactRow, isSessionArtifact } from "../../db/artifacts";
 import {
@@ -19,7 +20,6 @@ import {
   deleteElements,
   pictureOfWrite,
   pictureShowsWrite,
-  screenJoined,
   stampWrote,
   unconverted,
 } from "../canvas";
@@ -170,8 +170,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    * has open), by artifact: opened by the first write that finds no screen
    * joined, kept while any write on it runs (`writing`), and
    * let go once a picture has followed the last of them (the page posts one
-   * after a quiet 2 s), or `screenHoldMs` after it. `joined` answers once its
-   * page has joined the canvas's doc; `settle` stops a let-go that waits.
+   * after a quiet 2 s), held on each beat until then while the canvas's doc
+   * is heard from, and let go once it has been quiet for the fleet's quiet
+   * spell (core bounded.ts `QUIET_MS`). `joined` answers once its page has
+   * joined the canvas's doc; `settle` stops a let-go that waits.
    */
   const headless = new Map<
     string,
@@ -181,7 +183,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       writing: number;
     }
   >();
-  /** The hub machine's screen opened on canvas `row`, once its page joined the doc; the refusal of its open, or of a page that didn't join in time. */
+  /** The hub machine's screen opened on canvas `row`: its machine answers the open once its page joined the doc (agent canvas-screen.ts); the refusal of its open, or of a page that answered and stands unjoined. */
   const joinedScreen = async (row: ArtifactRow) => {
     // A canvas is always its session's: only a project's page outlives one.
     if (!isSessionArtifact(row)) {
@@ -194,17 +196,13 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     if (one instanceof ElysiaStatus) {
       return one;
     }
-    if (
-      await ctx.deps.lifetime.run(
-        screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)
-      )
-    ) {
+    if (docs.screens(row.id) > 0) {
       return one;
     }
     one.release();
     return problem(504, {
       code: "artifact-canvas-screen-unjoined",
-      detail: `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`,
+      detail: canvasWaitWords.screenUnjoined(row.name),
     });
   };
   /**
@@ -260,7 +258,13 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       () => undefined
     );
   };
-  /** A write on the headless screen done: the last one lets it go once a picture follows it, or `screenHoldMs` on. */
+  /**
+   * A write on the headless screen done: the last one holds the screen on
+   * each beat (agent canvas-screen.ts closes one not held for the quiet
+   * spell) while the picture it owes is still to come and the canvas's doc
+   * is heard from, and lets it go once the picture is posted or the doc has
+   * been quiet for the quiet spell.
+   */
   const wroteHeadless = (id: string) => {
     const screen = headless.get(id);
     if (!screen) {
@@ -270,20 +274,36 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     if (screen.writing > 0) {
       return;
     }
-    const meta = docMeta(docs.doc(id));
+    const doc = docs.doc(id);
+    const meta = docMeta(doc);
+    let heardAt = performance.now();
+    const heard = () => {
+      heardAt = performance.now();
+    };
     const pictured = (event: MapChange) => {
       if (event.keysChanged.has("pictureAt")) {
         letGoHeadless(id);
       }
     };
-    const timer = ctx.deps.lifetime.after(
-      "canvas screen let go",
-      CANVAS_LIMITS.screenHoldMs,
-      () => letGoHeadless(id)
-    );
+    const beat = ctx.deps.lifetime.every("canvas screen held", BEAT_MS, () => {
+      if (performance.now() - heardAt >= QUIET_MS) {
+        letGoHeadless(id);
+        return;
+      }
+      screen.joined.then(
+        (one) => {
+          if (!(one instanceof ElysiaStatus)) {
+            one.hold();
+          }
+        },
+        () => undefined
+      );
+    });
+    doc.on("update", heard);
     meta.observe(pictured);
     screen.settle = () => {
-      ctx.deps.lifetime.cancel(timer);
+      ctx.deps.lifetime.cancel(beat);
+      doc.off("update", heard);
       meta.unobserve(pictured);
       screen.settle = undefined;
     };

@@ -6,17 +6,20 @@
 import { constants } from "node:fs";
 import { lstat, open as openFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { QUIET_MS } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileLive } from "@cawco/core/effect/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceClaudeTmpDir,
   workspacePolicyFile,
   workspaceTmpDir,
 } from "@cawco/core/paths/workspace";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { Pid } from "@cawco/core/signal";
-import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/workspace/controls";
+import { secondsOf } from "@cawco/core/time";
+import { gitWaitWords } from "@cawco/core/words/git-waits";
 import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { Deferred, Effect, Schema } from "effect";
@@ -99,48 +102,64 @@ export const readied = (
 ): Effect.Effect<number, Unstarted> => {
   const said: string[] = [];
   const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
-  const heard = Effect.gen(function* () {
-    const outcome = yield* Deferred.make<number, Unstarted>();
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        client.subscribe(
-          procId,
-          {
-            line: (event) => {
-              const text = event.data.trim();
-              if (text === line) {
-                Deferred.doneUnsafe(outcome, Effect.succeed(event.seq));
-              } else if (text) {
-                said.push(text);
-              }
+  const heard = (alive: () => void) =>
+    Effect.gen(function* () {
+      const outcome = yield* Deferred.make<number, Unstarted>();
+      // Its process tree's CPU time is a sign of life too: a host that starts
+      // its sandbox works before it writes its line.
+      const pid = (yield* fromPromise(() =>
+        client.list().catch(() => undefined)
+      ))?.procs.find((proc) => proc.procId === procId && proc.alive)?.pid;
+      const working = new AbortController();
+      if (pid !== undefined) {
+        watchTreeCpu(pid, alive, working.signal);
+      }
+      yield* Effect.addFinalizer(() => Effect.sync(() => working.abort()));
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          client.subscribe(
+            procId,
+            {
+              line: (event) => {
+                alive();
+                const text = event.data.trim();
+                if (text === line) {
+                  Deferred.doneUnsafe(outcome, Effect.succeed(event.seq));
+                } else if (text) {
+                  said.push(text);
+                }
+              },
+              exit: (code, signal, _pid, stderr) => {
+                const reason = stderrReason(stderr);
+                if (reason && !said.includes(reason)) {
+                  said.push(reason);
+                }
+                Deferred.doneUnsafe(
+                  outcome,
+                  Effect.fail(
+                    new Unstarted({
+                      message: `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`,
+                    })
+                  )
+                );
+              },
             },
-            exit: (code, signal, _pid, stderr) => {
-              const reason = stderrReason(stderr);
-              if (reason && !said.includes(reason)) {
-                said.push(reason);
-              }
-              Deferred.doneUnsafe(
-                outcome,
-                Effect.fail(
-                  new Unstarted({
-                    message: `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`,
-                  })
-                )
-              );
-            },
-          },
-          0
-        )
-      ),
-      (stop) => Effect.sync(stop)
-    );
-    return yield* Deferred.await(outcome);
-  }).pipe(Effect.scoped);
-  return boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard).pipe(
-    Effect.catchTag("Unanswered", () =>
+            0
+          )
+        ),
+        (stop) => Effect.sync(stop)
+      );
+      return yield* Deferred.await(outcome);
+    }).pipe(Effect.scoped);
+  return boundedWhileLive(heard).pipe(
+    Effect.catchTag("Unanswered", (unanswered) =>
       Effect.fail(
         new Unstarted({
-          message: `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`,
+          message: gitWaitWords.startQuiet(
+            what,
+            secondsOf(unanswered.after),
+            words()
+          ),
         })
       )
     )
@@ -155,7 +174,7 @@ export const ready = (
   what: string
 ): Promise<number> => runPromise(readied(client, procId, line, what));
 
-/** A process that did not say it was ready: it exited first, or said nothing in time. Its words name it and what it said. */
+/** A process that did not say it was ready: it exited first, or went quiet. Its words name it and what it said. */
 export class Unstarted extends Schema.TaggedError<Unstarted>()("Unstarted", {
   message: Schema.String,
 }) {}
@@ -233,6 +252,15 @@ const FORGE_TOKEN_ENV = [
 ];
 
 /**
+ * How long an executor waits for a boundary started again, in tenths of a
+ * second: the fleet's one quiet spell (core bounded.ts `QUIET_MS`), as the
+ * executor hears nothing of the start it waits on but the new executor or
+ * sandbox it makes; the mount check's wait also ends at once when its host
+ * exits.
+ */
+const RESTART_WAIT_TENTHS = QUIET_MS / 100;
+
+/**
  * An executor whose boundary ended unasked waits for the one the agent
  * starts again (ensure.ts `restartUnasked`), which writes this executor anew (a
  * new file, so a new inode at `$0`: `ls -di`, the same on Linux and macOS),
@@ -240,7 +268,7 @@ const FORGE_TOKEN_ENV = [
  */
 const restartWait = `  rm -f "$mark"
   self=$(ls -di "$0" 2>/dev/null)
-  for _ in $(seq ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100}); do
+  for _ in $(seq ${RESTART_WAIT_TENTHS}); do
     sleep 0.1
     now=$(ls -di "$0" 2>/dev/null)
     if [ -n "$now" ] && [ "$now" != "$self" ]; then PATH=$caller_path exec "$0" "$@"; fi
@@ -249,9 +277,6 @@ const restartWait = `  rm -f "$mark"
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
-
-/** How long an executor waits for the srt host to start a sandbox again, in tenths of a second. */
-const RESTART_WAIT_TENTHS = WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100;
 
 /**
  * Linux: srt protects every clone-side deny path (`cloneDenies`: the clone's

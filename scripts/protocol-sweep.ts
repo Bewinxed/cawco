@@ -31,8 +31,8 @@
  * broken by `step` or any mutant the laws let through.
  */
 import { UPDATE_TRIAL_MS } from "../packages/core/src/binary-updates";
+import { QUIET_MS } from "../packages/core/src/bounded";
 import {
-  CUSTODY_BOUND_MS,
   type HandoverCommand,
   type HandoverEvent,
   type HandoverState,
@@ -890,7 +890,7 @@ const raceSlowKeepers = (
   return result;
 };
 
-/** main before this change (daemon.ts `sessiondUnit`): at the custody bound, every row not yet decided went to `startUnheld`. */
+/** main before this change (daemon.ts `sessiondUnit`): once custody's keepers were quiet for its spell, every row not yet decided went to `startUnheld`. */
 const spawnUndecided = (
   _state: HandoverState,
   event: HandoverEvent,
@@ -901,7 +901,7 @@ const spawnUndecided = (
     event.kind !== "tick" ||
     !custody ||
     custody.complete ||
-    event.now < custody.since + CUSTODY_BOUND_MS
+    event.now < custody.heardAt + QUIET_MS
   ) {
     return stepped;
   }

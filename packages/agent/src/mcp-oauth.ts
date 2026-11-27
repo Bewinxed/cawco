@@ -26,9 +26,13 @@ import {
   holdRestart,
   lowerFence,
   raiseFence,
+  renewFence,
   restartReadiness,
   type SupervisorHolds,
 } from "./restart";
+
+/** The fence `cawco service restart agent` holds on this agent ({@link restartRoute}). */
+const RESTART_FENCE = "service-restart";
 
 const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/u;
 const TOOL_READ_PATH = /^\/api\/(?:instances|delegation\/tools)$/u;
@@ -351,13 +355,14 @@ function notStarted(body: ArrayBuffer | undefined): Response {
   );
 }
 
-/** The most a restart fence may stand without being raised again; a longer ask is refused, not shortened. */
-const RESTART_FENCE_MAX_MS = 5 * 60_000;
-
 /**
  * `cawco service restart agent` asks here, on this machine, what a restart
- * would cut, and raises its own fence for the moment between its last look
- * and the restart. Never from a page: a browser sends `Origin`.
+ * would cut, and holds its own fence for the moment between its last look
+ * and the restart: `raise` puts it up, `renew` raises it again on each of
+ * the verb's beats (only while it still stands, so a beat that reaches the
+ * agent that restarted puts up nothing), `lower` takes it down. Unrenewed,
+ * it falls one quiet spell after its last raise (restart.ts). Never from a
+ * page: a browser sends `Origin`.
  */
 async function restartRoute(
   request: Request,
@@ -367,19 +372,13 @@ async function restartRoute(
     return new Response("Not from a browser.", { status: 403 });
   }
   if (request.method === "POST") {
-    const ms = fieldOf(await request.json().catch(() => undefined), "ms");
-    if (typeof ms === "number" && ms > RESTART_FENCE_MAX_MS) {
-      return Response.json(
-        {
-          error: updatesWords.fenceTooLong(RESTART_FENCE_MAX_MS / 60_000),
-        },
-        { status: 400 }
-      );
-    }
-    if (typeof ms === "number" && ms > 0) {
-      raiseFence("service-restart", ms);
+    const fence = fieldOf(await request.json().catch(() => undefined), "fence");
+    if (fence === "raise") {
+      raiseFence(RESTART_FENCE);
+    } else if (fence === "renew") {
+      renewFence(RESTART_FENCE);
     } else {
-      lowerFence("service-restart");
+      lowerFence(RESTART_FENCE);
     }
   }
   return Response.json({

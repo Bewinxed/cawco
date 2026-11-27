@@ -68,6 +68,7 @@
 
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { DelegateType } from "@cawco/core/delegate-types";
+import { makeJoin } from "@cawco/core/effect/join";
 import { FLEET_PROJECT_ID, isFleetProject } from "@cawco/core/fleet-project";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
@@ -974,8 +975,16 @@ export const createRoutines = ({
     if (command !== routine.approvedCommand) {
       return { kind: "skip", why: checkWords.unapproved };
     }
+    // A check still running on a machine from an earlier slot is joined,
+    // never started again beside itself: it names no limit of its own (it
+    // runs while it writes or works on its machine, and the hub waits while
+    // that machine's beat names it).
     const answers = await Promise.all(
-      (routine.checkOn ?? []).map((machine) => checkOn(machine, command))
+      (routine.checkOn ?? []).map((machine) =>
+        checksRunning.runPromise(`${routine.id}\0${machine}\0${command}`, () =>
+          checkOn(machine, command)
+        )
+      )
     );
     keepAnswers(routine, run, answers);
     const failed = answers.flatMap((one) =>
@@ -996,6 +1005,9 @@ export const createRoutines = ({
       ? { kind: "skip", why: checkWords.paused(paused.join("; ")) }
       : { kind: "quiet" };
   };
+
+  /** Each routine's check running on a machine, by routine, machine and command: one at a time each. */
+  const checksRunning = makeJoin<string, MachineAnswer>();
 
   /** The check run once on `machine`, as its `check_on` names it: on its host, as the agent's user. */
   const checkOn = async (

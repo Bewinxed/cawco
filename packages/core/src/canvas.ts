@@ -64,8 +64,6 @@ export type CanvasRequestResult = { ids: string[] } | { error: string };
 
 /** Our bounds on a canvas, each the brief's number or our own call where marked. */
 export const CANVAS_LIMITS = {
-  /** How long the tool waits for a screen to convert. */
-  convertMs: 10_000,
   /** Pixels in a canvas's picture. */
   // @limit external: iOS Safari draws no canvas past 16,777,216 pixels, 4096 by 4096, the smallest of the browsers' limits (measured per browser at https://github.com/jhildenbiddle/canvas-size#test-results)
   picturePixels: 4096 * 4096,
@@ -78,12 +76,6 @@ export const CANVAS_LIMITS = {
   imageBytes: 4 * 1024 * 1024,
   /** Bytes of one picture. Our call. */
   pictureBytes: 32 * 1024 * 1024,
-  /**
-   * How long the hub machine's headless screen stays on a canvas after its
-   * last write, waiting for the picture that follows a quiet 2 s; the daemon
-   * closes one the hub has not held on for twice this. Our call.
-   */
-  screenHoldMs: 15_000,
 } as const;
 
 /**

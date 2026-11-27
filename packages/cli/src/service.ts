@@ -38,6 +38,7 @@ import {
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import {
+  BEAT_MS,
   type Bounded,
   Gone,
   heardBody,
@@ -63,6 +64,7 @@ import {
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
+import { serviceStatusWords } from "@cawco/core/words/service-status";
 import {
   dataOf,
   type HubAnswer,
@@ -1197,22 +1199,23 @@ const agentGateway = (): string => `http://127.0.0.1:${mcpGatewayPort()}`;
 
 /**
  * What restarting the agent would cut now, in words, or why that is unknown:
- * the agent did not answer, or answered without saying. With `fenceMs` the
- * agent first raises its fence for that long (0 lowers it), so the answer
- * holds until the restart: nothing new that a restart would cut starts behind
- * it.
+ * the agent did not answer, or answered without saying. With `fence` the
+ * agent first moves its fence (agent mcp-oauth.ts `restartRoute`): `raise`
+ * puts it up, so the answer holds until the restart and nothing new that a
+ * restart would cut starts behind it; `renew` raises it again while it
+ * stands; `lower` takes it down.
  */
-const agentCut = async (fenceMs?: number): Promise<Cut> => {
-  const url = `${agentGateway()}${fenceMs === undefined ? "/restart" : "/restart/fence"}`;
+const agentCut = async (fence?: "raise" | "renew" | "lower"): Promise<Cut> => {
+  const url = `${agentGateway()}${fence === undefined ? "/restart" : "/restart/fence"}`;
   const answer = await probe(
     url,
     jsonBody<RestartReadiness>(),
-    fenceMs === undefined
+    fence === undefined
       ? {}
       : {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ms: fenceMs }),
+          body: JSON.stringify({ fence }),
         }
   );
   switch (answer.kind) {
@@ -1304,11 +1307,18 @@ const restartDecision = ({
 const IDLE_POLL_MS = 2000;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 /**
- * How long the agent's fence stands for the restart this verb is about to
- * make: past the service manager's stop and start, and it lapses by itself
- * should the restart never come.
+ * The agent's fence held up for the restart this verb is about to make: raised
+ * again each beat until the service manager's stop and start are done (the
+ * answer stops it), so it stands however long they take and falls one quiet
+ * spell after this verb is gone should the restart never come.
  */
-const RESTART_FENCE_MS = 60_000;
+const holdAgentFence = (): (() => void) => {
+  const beat = setInterval(() => {
+    agentCut("renew").catch(() => undefined);
+  }, BEAT_MS);
+  beat.unref();
+  return () => clearInterval(beat);
+};
 
 /**
  * One line that rewrites itself, so a five-minute wait leaves one line behind
@@ -1337,11 +1347,11 @@ const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond", "agent"];
  * work is the answer, a refusal or more waiting.
  */
 const fencedLook = async (whenIdle: boolean): Promise<boolean> => {
-  const behind = await agentCut(RESTART_FENCE_MS);
+  const behind = await agentCut("raise");
   if (!("unknown" in behind) && behind.length === 0) {
     return true;
   }
-  await agentCut(0);
+  await agentCut("lower");
   const again = restartDecision({
     cut: behind,
     whenIdle,
@@ -1454,11 +1464,28 @@ const launchAgentStatus = async (
   }
   note(`state    ${state}`);
   note(`mode     ${await modeLine(spec, launchAgentPath(spec.name))}`);
-  const live = await spec.probe();
+  const live = await asking(spec.probe);
   if (live) {
     note(`live     ${live}`);
   }
   note(`logs     ${launchdLog(spec.name)}`);
+};
+
+/**
+ * `read` (a service's probe) run while a terminal says the verb waits on it: the line goes once
+ * the answer is in, which the next `note` prints. The answer is waited on
+ * while its bytes arrive ({@link probe}), however long that takes.
+ */
+const asking = async <T>(read: () => Promise<T>): Promise<T> => {
+  if (!process.stdout.isTTY) {
+    return await read();
+  }
+  process.stdout.write(serviceStatusWords.asking);
+  try {
+    return await read();
+  } finally {
+    process.stdout.write("\r\u001b[2K");
+  }
 };
 
 const systemdStatus = async (
@@ -1494,7 +1521,7 @@ const systemdStatus = async (
     );
   }
   note(`mode     ${await modeLine(spec, systemdPath(spec.name))}`);
-  const live = await spec.probe();
+  const live = await asking(spec.probe);
   if (live) {
     note(`live     ${live}`);
   }
@@ -1963,6 +1990,7 @@ export const service = async (
         // Asked per service and not up front, so the services asked nothing
         // are already back up by the time the daemon's question is answered.
         const fenced = await clearToRestart(spec, { whenIdle, force }, note);
+        const release = fenced ? holdAgentFence() : undefined;
         try {
           await (mac
             ? restartLaunchAgent(spec, note)
@@ -1970,9 +1998,11 @@ export const service = async (
         } catch (error) {
           // The restart did not happen: the agent takes new work again now, not when its fence lapses.
           if (fenced) {
-            await agentCut(0);
+            await agentCut("lower");
           }
           throw error;
+        } finally {
+          release?.();
         }
       }
       return;

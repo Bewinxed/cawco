@@ -11,6 +11,7 @@ import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
+import { boundedWhileLive, Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeLock } from "@cawco/core/keyed-lock";
@@ -1979,21 +1980,22 @@ const copyStamp = async (
 };
 
 /**
- * How far apart two looks at a copy that moved are ({@link lookAtCopies}),
- * and how long they go on at most. A copy found moved can be mid-install:
+ * How far apart two looks at a copy that moved are ({@link lookAtCopies}).
+ * A copy found moved can be mid-install:
  * `npm install -g` moves the old package aside before it puts the new one
  * on (32 s for OpenCode in the host run of 2026-11-14), so one look then
  * finds the copy gone, and the next minute's look was the first to find it
  * back: the hub said "missing" for 55 s after a hand install landed. So a
  * change is told only once two looks {@link COPY_SETTLE_MS} apart agree on
  * it, and the looks go on at that pace while a copy that was there is gone
- * or a copy is still moving, for {@link COPY_SETTLE_MOST_MS} at most: a copy
- * that comes back is told within two looks (2–4 s) of its last write, plus
- * the second the report waits and its probe. Our call: a stat of each copy
- * every 2 s costs nothing, and the bound covers the slowest npm install seen.
+ * or a copy is still moving: while each look finds the copies moved since
+ * the one before, and for the fleet's quiet spell (core bounded.ts
+ * `QUIET_MS`) after the last that did. A copy that comes back is told
+ * within two looks (2–4 s) of its last write, plus the second the report
+ * waits and its probe. Our call: a stat of each copy every 2 s costs
+ * nothing.
  */
 const COPY_SETTLE_MS = 2000;
-const COPY_SETTLE_MOST_MS = 3 * 60_000;
 
 /** Each probed tool's copy as it stands now ({@link copyStamp}), by tool id; a tool an install of this agent's is putting on is passed over: its end tells. */
 const copiesNow = async (): Promise<Map<string, string>> => {
@@ -2039,9 +2041,9 @@ const probedNow = (): Map<string, string> =>
  * and {@link onToolsMoved} is told each time two looks in a row agree on
  * copies other than those last told (the tools are probed again and the
  * hub hears whose each copy is now), until two agree with every copy that
- * was there before the move (`wasThere`) there again, or
- * {@link COPY_SETTLE_MOST_MS} has gone by, when what the last look found is
- * told. One run at a time: a move found while one runs adds its copies to
+ * was there before the move (`wasThere`) there again, or the copies have
+ * stood unmoved for the fleet's quiet spell, when what the last look found
+ * is told. One run at a time: a move found while one runs adds its copies to
  * it. So a copy gone for the half minute of an install is never held gone
  * for the minute after it is back, whatever probe saw it gone (host run
  * 49045442: a probe outside the looks left OpenCode "missing" 47–49 s).
@@ -2059,17 +2061,19 @@ const settleCopies = (wasThere: Iterable<string>): void => {
 /**
  * The looks {@link settleCopies} runs: one now, then one every
  * {@link COPY_SETTLE_MS} until two agree with every copy that was there
- * before the move there again, or {@link COPY_SETTLE_MOST_MS} has gone by.
+ * before the move there again, waited on while a look finds them moved
+ * (core effect/bounded.ts `boundedWhileLive`).
  */
 const settleLooks = async (): Promise<void> => {
   let told = probedNow();
   let last = await copiesNow();
-  /** One look after the first, against the one before it: whether the looks are done. */
-  const lookAgain = async (): Promise<boolean> => {
+  /** One look after the first, against the one before it: whether the looks are done; a look that found the copies moved is `alive`. */
+  const lookAgain = async (alive: () => void): Promise<boolean> => {
     const look = await copiesNow();
     const agreed = sameCopies(look, last);
     last = look;
     if (!agreed) {
+      alive();
       return false;
     }
     if (!sameCopies(look, told)) {
@@ -2088,21 +2092,26 @@ const settleLooks = async (): Promise<void> => {
     }
     return [...thereBeforeMove].every((id) => look.get(id) !== "missing");
   };
-  const looked = await runPromise(
+  const stood = await runPromise(
     Effect.sleep(COPY_SETTLE_MS).pipe(
       Effect.andThen(
-        lookUntil(
-          {
-            every: COPY_SETTLE_MS,
-            deadlineMs: COPY_SETTLE_MOST_MS - COPY_SETTLE_MS,
-            until: (done: boolean) => done,
-          },
-          fromPromise(lookAgain)
+        boundedWhileLive((alive) =>
+          lookUntil(
+            {
+              every: COPY_SETTLE_MS,
+              until: (done: boolean) => done,
+            },
+            fromPromise(() => lookAgain(alive))
+          )
         )
+      ),
+      Effect.as(true),
+      Effect.catch((error) =>
+        error instanceof Unanswered ? Effect.succeed(false) : Effect.fail(error)
       )
     )
   );
-  if (looked.kind === "deadline" && !sameCopies(last, told)) {
+  if (!(stood || sameCopies(last, told))) {
     toolsMoved();
   }
 };

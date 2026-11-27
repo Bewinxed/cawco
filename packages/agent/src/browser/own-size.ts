@@ -29,7 +29,8 @@
  * moved one px wider and back. One window is settled whole before the next is
  * touched: each step waits for the window's page to take it, and after the
  * move every page in the window is read. A window with a page still off its
- * width is moved again, up to {@link MOVES_MOST} moves. Only a page no move
+ * width is moved again while moving brings pages to their width
+ * ({@link settleWindow}). Only a page no move
  * brought to its window's width is loaded again by GET (never a reload,
  * which would post a form again), the one way left that sets it right.
  */
@@ -69,8 +70,6 @@ interface Page {
 const SETTLE_MS = 1000;
 /** How often a page's width is read while it settles. */
 const SETTLE_STEP_MS = 25;
-/** How many times a window is moved off its bounds and back before a page still off its width is loaded again. Our call. */
-const MOVES_MOST = 3;
 
 /** What {@link restoreWindows} did, by page URL: for the run that drives it to tell a heal from a second move from a load. */
 export interface Restored {
@@ -183,8 +182,11 @@ const moveOnce = async (
 
 /**
  * One window settled whole: moved until every page in it stands at its
- * width, up to {@link MOVES_MOST} moves. Answers the moves it took, and the
- * pages still off after the last.
+ * width, for as long as moving heals: after the move through the other
+ * window state and the first width step (each sizes a view the other
+ * cannot, {@link moveOnce}), it moves again while the last move brought a
+ * page to its width, and stops at the first that brought none. Answers the
+ * moves it took, and the pages still off after the last.
  */
 const settleWindow = async (
   link: CdpLink,
@@ -194,7 +196,7 @@ const settleWindow = async (
   const [lead] = pages;
   let off = pages;
   let moves = 0;
-  while (lead && off.length > 0 && moves < MOVES_MOST) {
+  while (lead && off.length > 0) {
     moves += 1;
     await moveOnce(link, lead.targetId, window, moves);
     const still: Page[] = [];
@@ -203,7 +205,11 @@ const settleWindow = async (
         still.push(page);
       }
     }
+    const healed = still.length < off.length;
     off = still;
+    if (!healed && moves > 1) {
+      break;
+    }
   }
   return { moves, off };
 };

@@ -28,26 +28,27 @@
 import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { readWhileLive } from "@cawco/core/bounded";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shortSha } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
+import { gitWaitWords } from "@cawco/core/words/git-waits";
 import {
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLargeFile,
   type PlaceLeftOut,
   type PlaceRepo,
-  WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { namedAndMore } from "@cawco/providers/names";
 import type { Subprocess } from "bun";
-import { Effect, Schema } from "effect";
-import { runPromise } from "./daemon-runtime";
-import { fromPromise } from "./rejected";
+import { Schema } from "effect";
 import { repoTop } from "./repo-top";
 import { credentialIn } from "./secret-text";
 
@@ -85,49 +86,61 @@ const ignoreBlock = (leftOut: readonly PlaceLeftOut[]): string =>
         .map((each) => ignoreLine(each.path))
         .join("\n")}\n`;
 
-/** git that did not finish within the place's time for it: its words say which. */
+/** git that went quiet before it finished: its words say which. */
 class GitLate extends Schema.TaggedError<GitLate>()("GitLate", {
   message: Schema.String,
 }) {}
 
 /**
- * `work` within what is left of `deadline`, named `what` in the error a
- * late or failed run throws: let go at the deadline, its signal aborted.
+ * `work`, one git run of `command`, for as long as git writes or works (core bounded.ts
+ * `readWhileLive`, its run spawned by {@link spawnGit}): named in the
+ * error a quiet or failed run throws; let go once quiet, its signal
+ * aborted.
  */
-const within = <T>(
-  deadline: number,
-  what: string,
-  work: (signal: AbortSignal) => Promise<T>
+const whileLive = async <T>(
+  command: string,
+  work: (signal: AbortSignal, alive: () => void) => Promise<T>
 ): Promise<T> => {
-  const remaining = deadline - Date.now();
-  // The promise edge of one git run (this file's place steps).
-  return runPromise(
-    remaining <= 0
-      ? Effect.fail(
-          new GitLate({
-            message: `git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`,
-          })
-        )
-      : boundedRead(remaining, fromPromise(work)).pipe(
-          Effect.catchTag("Unanswered", () =>
-            Effect.fail(
-              new GitLate({
-                message: `${what} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`,
-              })
-            )
-          )
-        )
-  );
+  const ran = await readWhileLive(work);
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      throw new GitLate({
+        message: gitWaitWords.gitQuiet(command, secondsOf(ran.after)),
+      });
+    default:
+      return unhandled("read", ran);
+  }
 };
 
-/** git as `safe-git.ts` says, in `cwd`, its pathspecs read literally (a file named `*` is that file). */
+/** `stream` with each chunk told to `alive` as it is read. */
+const heardStream = (
+  stream: ReadableStream<Uint8Array>,
+  alive: () => void
+): ReadableStream<Uint8Array> =>
+  stream.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, into) {
+        alive();
+        into.enqueue(chunk);
+      },
+    })
+  );
+
+/**
+ * git as `safe-git.ts` says, in `cwd`, its pathspecs read literally (a file
+ * named `*` is that file): each chunk it writes, and each beat its process
+ * tree spends CPU time, told to `alive` ({@link whileLive}).
+ */
 const spawnGit = (
   cwd: string,
   args: readonly string[],
   signal: AbortSignal,
+  alive: () => void,
   stdin: "ignore" | Blob = "ignore"
-) =>
-  Bun.spawn(safeGitArgv([...args]), {
+) => {
+  const child = Bun.spawn(safeGitArgv([...args]), {
     cwd,
     env: {
       ...hostEnvironment(),
@@ -140,6 +153,18 @@ const spawnGit = (
     signal,
     killSignal: "SIGKILL",
   });
+  const working = new AbortController();
+  watchTreeCpu(child.pid, alive, working.signal);
+  child.exited.finally(() => working.abort()).catch(() => undefined);
+  return {
+    exited: child.exited,
+    get signalCode() {
+      return child.signalCode;
+    },
+    stdout: heardStream(child.stdout, alive),
+    stderr: heardStream(child.stderr, alive),
+  };
+};
 
 /** Throws git's own words when it did not end well. */
 const failed = (
@@ -164,10 +189,10 @@ const failed = (
  * and pathspecs literal unless `literal` is false. git's stderr is the error.
  */
 const gitIn =
-  (deadline: number) =>
+  () =>
   (cwd: string, ...args: string[]): Promise<string> =>
-    within(deadline, `git ${args[0]}`, async (signal) => {
-      const child = spawnGit(cwd, args, signal);
+    whileLive(String(args[0]), async (signal, alive) => {
+      const child = spawnGit(cwd, args, signal, alive);
       const [stdout, stderr, code] = await Promise.all([
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
@@ -421,15 +446,15 @@ class BatchReader {
 const eachBlob = (
   root: string,
   oids: readonly string[],
-  deadline: number,
   each: (oid: string, found: string | undefined) => void
 ): Promise<void> =>
-  within(deadline, "git cat-file", async (signal) => {
+  whileLive("cat-file", async (signal, alive) => {
     const args = ["cat-file", "--batch"];
     const child = spawnGit(
       root,
       args,
       signal,
+      alive,
       new Blob([oids.map((one) => `${one}\n`).join("")])
     );
     const stderr = new Response(child.stderr).text();
@@ -445,11 +470,7 @@ const eachBlob = (
  * what a publish takes is the whole history, so a key a later commit took
  * out is still in it.
  */
-const historyHits = async (
-  root: string,
-  git: Git,
-  deadline: number
-): Promise<PlaceLeftOut[]> => {
+const historyHits = async (root: string, git: Git): Promise<PlaceLeftOut[]> => {
   const [tree, objects] = await Promise.all([
     git(root, "ls-tree", "-r", "-z", "HEAD"),
     git(root, "rev-list", "--objects", "HEAD"),
@@ -471,7 +492,7 @@ const historyHits = async (
     }
   }
   const hits = new Map<string, PlaceLeftOut>();
-  await eachBlob(root, [...pathOf.keys()], deadline, (oid, found) => {
+  await eachBlob(root, [...pathOf.keys()], (oid, found) => {
     const path = pathOf.get(oid) ?? oid;
     if (found && (inHead.has(oid) || !hits.has(path))) {
       hits.set(path, {
@@ -493,12 +514,11 @@ const historyHits = async (
  * takes.
  */
 export const publishCheck = async (
-  root: string,
-  deadline: number
+  root: string
 ): Promise<{ leftOut: PlaceLeftOut[]; refused: PlaceLeftOut[] }> => {
-  const git = gitIn(deadline);
+  const git = gitIn();
   const { leftOut } = await judge(root, await untracked(root, git));
-  return { leftOut, refused: await historyHits(root, git, deadline) };
+  return { leftOut, refused: await historyHits(root, git) };
 };
 
 /** What a first commit would take, read without writing in the place. */
@@ -735,10 +755,9 @@ const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
       `${root} is not a folder on this machine, so CawCo can't make it a git repository.`
     );
   }
-  const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
   // A `.git` git cannot read is someone's, and a failed run would take it
   // back with its own: the reading refuses it, and the place is left alone.
-  const top = await repoTop(root, deadline);
+  const top = await repoTop(root);
   if (top !== undefined) {
     return { state: "checkout", root: top };
   }
@@ -746,7 +765,7 @@ const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
   if (refused) {
     throw new Error(refused);
   }
-  const git = gitIn(deadline);
+  const git = gitIn();
   const plan = await planOf(root, git).catch((error: Error) => {
     throw new Error(
       `CawCo couldn't read ${root} to make it a git repository: ${error.message}`,

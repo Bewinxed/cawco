@@ -31,9 +31,12 @@ import {
   type PictureAsk,
   type PictureCut,
 } from "@cawco/core/artifact-picture";
+import { type Bounded, Gone, readWhileLive } from "@cawco/core/bounded";
 import { PREVIEW_DOWNS } from "@cawco/core/preview/protocol";
 import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
+import { pictureWaitWords } from "@cawco/core/words/picture-waits";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
+import { Effect } from "effect";
 import type { Frame, Page } from "playwright-core";
 import {
   greet,
@@ -42,6 +45,7 @@ import {
   launchChromium,
 } from "./chromium";
 import {
+  changedAtNow,
   documentHeight,
   documentReady,
   heardOfHost,
@@ -103,10 +107,6 @@ const downWords = (
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} s`;
 
-/** Whether `error` is Playwright's timeout. */
-const timedOut = (error: unknown) =>
-  error instanceof Error && error.name === "TimeoutError";
-
 /** How often the page and its frames are read for readiness. Our call. */
 const READY_POLL_MS = 100;
 
@@ -146,31 +146,19 @@ const frameReady = async (frame: Frame, page: Page): Promise<boolean> => {
   }
 };
 
-/**
- * Waits up to `within` ms for `page` to be ready ({@link documentReady}). A
- * page that never says so (one that paints only a canvas, or keeps a request
- * open) is drawn as it stands at the bound.
- */
-const ready = (page: Page, within: number): Promise<void> =>
-  page
-    .waitForFunction(
-      documentReady,
-      { framed: false, settle: PICTURE_LIMITS.settleMs },
-      { polling: READY_POLL_MS, timeout: within }
-    )
-    .then(
-      () => undefined,
-      (error: unknown) => {
-        if (!timedOut(error)) {
-          throw error;
-        }
-      }
-    );
+/** Waits for `page` to be ready ({@link documentReady}), inside a wait on its life ({@link whileLive}). */
+const ready = async (page: Page): Promise<void> => {
+  await page.waitForFunction(
+    documentReady,
+    { framed: false, settle: PICTURE_LIMITS.settleMs },
+    { polling: READY_POLL_MS, timeout: 0 }
+  );
+};
 
-/** {@link ready}, then every frame the picture shows, within one bound of `until`. */
-const framesReady = async (page: Page, until: number): Promise<void> => {
-  await ready(page, Math.max(0, until - Date.now()));
-  while (Date.now() < until) {
+/** {@link ready}, then every frame the picture shows, until `signal` lets go. */
+const framesReady = async (page: Page, signal: AbortSignal): Promise<void> => {
+  await ready(page);
+  while (!signal.aborted) {
     const frames = await Promise.all(
       page.frames().map((frame) => frameReady(frame, page))
     );
@@ -180,6 +168,70 @@ const framesReady = async (page: Page, until: number): Promise<void> => {
     await page.waitForTimeout(READY_POLL_MS);
   }
 };
+
+/** `hear` told of `page`'s events that are its signs of life: each request it finishes or fails, each answer, each navigation and load of its frames. Answers its own let-go. */
+const hearPage = (page: Page, hear: () => void): (() => void) => {
+  page.on("requestfinished", hear);
+  page.on("requestfailed", hear);
+  page.on("response", hear);
+  page.on("framenavigated", hear);
+  page.on("domcontentloaded", hear);
+  page.on("load", hear);
+  return () => {
+    page.off("requestfinished", hear);
+    page.off("requestfailed", hear);
+    page.off("response", hear);
+    page.off("framenavigated", hear);
+    page.off("domcontentloaded", hear);
+    page.off("load", hear);
+  };
+};
+
+/**
+ * `work` for as long as `page` shows life (core bounded.ts
+ * `readWhileLive`): each of its events {@link hearPage} hears, and each paint or
+ * request end its readiness watch counts (`__cawcoChangedAt`, read each
+ * {@link READY_POLL_MS}). Its browser's end answers `unanswered` "dead".
+ */
+const whileLive = <T>(
+  page: Page,
+  work: (signal: AbortSignal) => Promise<T>
+): Promise<Bounded<T>> =>
+  readWhileLive((signal, alive) => {
+    const unhear = hearPage(page, () => alive());
+    let changedAt: number | undefined;
+    const looking = setInterval(() => {
+      page
+        .evaluate(changedAtNow)
+        .then((at) => {
+          if (at !== changedAt) {
+            changedAt = at;
+            alive();
+          }
+        })
+        .catch(() => undefined);
+    }, READY_POLL_MS);
+    const browser = page.context().browser();
+    const done = new AbortController();
+    // The browser's end, heard as the work waits: the work is Gone.
+    const closed = Effect.runPromise(
+      Effect.callback<never, Gone>((resume) => {
+        const gone = (): void =>
+          resume(
+            Effect.fail(new Gone("the browser drawing the picture closed"))
+          );
+        browser?.once("disconnected", gone);
+        return Effect.sync(() => browser?.off("disconnected", gone));
+      }),
+      { signal: done.signal }
+    );
+    closed.catch(() => undefined);
+    return Promise.race([work(signal), closed]).finally(() => {
+      done.abort();
+      clearInterval(looking);
+      unhear();
+    });
+  });
 
 /**
  * A decision page's whole length: it is the window's height and scrolls
@@ -230,8 +282,6 @@ export async function drawPage(
       `A picture's width is a whole number of px from ${PICTURE_LIMITS.minWidth} to ${PICTURE_LIMITS.maxWidth}.`
     );
   }
-  // The load and the page's readiness share one bound.
-  const deadline = Date.now() + PICTURE_LIMITS.loadMs;
   const browser = await launchChromium(
     `${name} wasn't drawn: the machine drawing it has no Chromium browser to draw it with. Install Google Chrome or Chromium there (the machine's capability report names the command), then call again.`
   );
@@ -245,15 +295,24 @@ export async function drawPage(
     // A page turned away at its origin's lock, or a down page in its stead,
     // says so to its host; the panel draws its own words for either.
     await page.addInitScript(hearHost, PREVIEW_LOCKED_MESSAGE);
-    await page
-      .goto(url, { timeout: PICTURE_LIMITS.loadMs, waitUntil: "load" })
-      .catch((error: unknown) => {
-        throw new Error(
-          timedOut(error)
-            ? `${name} wasn't drawn: its page didn't load within ${seconds(PICTURE_LIMITS.loadMs)}, its server's wake included.`
-            : `${name} wasn't drawn: its page didn't load (${error instanceof Error ? error.message : String(error)}).`
-        );
-      });
+    // Its load wakes a sleeping server and waits for it (preview.ts
+    // `staged`), then loads the page: waited on while the page shows life.
+    const loaded = await whileLive(page, () =>
+      page.goto(url, { timeout: 0, waitUntil: "load" })
+    ).catch((error: unknown) => {
+      throw new Error(
+        `${name} wasn't drawn: its page didn't load (${error instanceof Error ? error.message : String(error)}).`
+      );
+    });
+    if (loaded.kind === "unanswered") {
+      throw new Error(
+        pictureWaitWords.notLoaded(
+          name,
+          seconds(loaded.after),
+          loaded.reason === "dead"
+        )
+      );
+    }
     const heard = await page.evaluate(heardOfHost);
     if (heard.locked) {
       throw new Error(
@@ -268,21 +327,34 @@ export async function drawPage(
       // The hello places the person's pins: the quiet counts from it too.
       await page.evaluate(markChanged);
     }
-    await ready(page, Math.max(0, deadline - Date.now()));
+    // A page that never says it is ready (one that paints only a canvas,
+    // or keeps a request open) is drawn as it stands once it goes quiet.
+    await whileLive(page, () => ready(page));
     const scrolled = await openToLength(page, width);
-    await framesReady(page, deadline);
+    await whileLive(page, (signal) => framesReady(page, signal));
     const tall = await page.evaluate(documentHeight);
     const whole = Math.max(tall, scrolled, PICTURE_VIEW.height);
     const height = Math.min(whole, PICTURE_LIMITS.maxHeight);
     await holdTimeAnimations(page);
-    const png = await page.screenshot({
-      fullPage: true,
-      clip: { x: 0, y: 0, width, height },
-      caret: "hide",
-      timeout: PICTURE_LIMITS.shotMs,
-    });
+    const shot = await whileLive(page, () =>
+      page.screenshot({
+        fullPage: true,
+        clip: { x: 0, y: 0, width, height },
+        caret: "hide",
+        timeout: 0,
+      })
+    );
+    if (shot.kind === "unanswered") {
+      throw new Error(
+        pictureWaitWords.notShot(
+          name,
+          seconds(shot.after),
+          shot.reason === "dead"
+        )
+      );
+    }
     return {
-      png: png.toString("base64"),
+      png: shot.value.toString("base64"),
       ...(whole > height ? { cut: { drawn: height, of: whole } } : {}),
     };
   } finally {

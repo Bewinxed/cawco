@@ -30,6 +30,7 @@ import { providersOpenedBy } from "@cawco/core/accounts";
 import { type BackoffPolicy, backoffWait } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import {
+  BEAT_MS,
   type Bounded,
   fetchHeard,
   readWhileLive,
@@ -41,6 +42,7 @@ import { detach } from "@cawco/core/detach";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import {
   boundedRead,
+  boundedWhileLive,
   Unanswered as UnansweredRead,
 } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
@@ -97,6 +99,7 @@ import {
 } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
@@ -121,6 +124,10 @@ import {
   opencodeMoveUnconfirmedSentence,
   opencodeSignInFaultWords,
 } from "@cawco/core/words/harness-lines";
+import {
+  configNotAppliedSentence,
+  serverNotAnnouncedSentence,
+} from "@cawco/core/words/opencode-waits";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
   IntegrationListOutput,
@@ -230,6 +237,7 @@ import {
   at,
   CAWCO_MCP_SERVER,
   errorText,
+  heardFetch,
   type McpNotConnected,
   notAnswered,
   notFound,
@@ -239,6 +247,7 @@ import {
   opencodeBinary,
   opencodeClient,
   opencodeSlashCommands,
+  type ServerLife,
   sessionIdOf,
   unreachable,
   waitForMcp,
@@ -267,6 +276,7 @@ import {
   type ServerIdentity,
   type ServerLaunch,
   type ServerStart,
+  serverLife,
 } from "./opencode-server";
 import {
   askOpencode,
@@ -573,20 +583,6 @@ const cawcoMcp = () => ({
   timeout: { execution: LONG_CALL_WALL_MS },
 });
 
-/**
- * How long the announce line may take to reach the keeper's ring. Ours: the
- * child boots through the keeper, on a cold machine maybe, and a false
- * timeout here starts a second server.
- */
-const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
-
-/**
- * How long a fleet report waits for the machine's server to run the config
- * just written: a candidate's announce ({@link SERVER_ANNOUNCE_TIMEOUT_MS}),
- * its plugin's load (30 s, `PLUGIN_LOAD_TIMEOUT_MS`) and its verification.
- * Ours, with margin.
- */
-const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
 /** How long a fleet report's wait lets the config rest between two looks. Ours. */
 const CONFIG_LOOK_MS = 250;
 
@@ -789,7 +785,6 @@ interface OpencodeServerAttach {
   sessiond: SessiondClient;
   signal?: AbortSignal;
   spec: ProcSpec;
-  timeoutMs?: number;
 }
 
 /** Each keeper connection's server attaches in flight, by procId. */
@@ -818,83 +813,97 @@ const attachOpencodeServer = (
   );
 };
 
-/** {@link attachOpencodeServer}: the server spawned unless it runs, and its announce read from its replay. */
+/**
+ * {@link attachOpencodeServer}: the server spawned unless it runs, and its
+ * announce read from its replay, waited on while the child writes or works
+ * (core effect/bounded.ts `boundedWhileLive`): each line it writes to the
+ * keeper's ring, and each beat its process tree spends CPU time. The child
+ * boots through the keeper, on a cold machine maybe, and a wait let go while
+ * it still worked would start a second server; its exit ends the wait.
+ */
 const serverAnnounced = Effect.fnUntraced(function* (
   options: OpencodeServerAttach
 ) {
   const { procId } = options;
-  const timeoutMs = options.timeoutMs ?? SERVER_ANNOUNCE_TIMEOUT_MS;
   const client = options.sessiond;
   // Fresh, not the connect-time welcome: this client is long-lived.
-  const held = (yield* fromPromise(() => client.list())).procs.find(
-    (proc) => proc.procId === procId
-  );
+  const listed = () =>
+    fromPromise(() => client.list()).pipe(
+      Effect.map((list) => list.procs.find((proc) => proc.procId === procId))
+    );
+  const held = yield* listed();
   if (!held?.alive) {
     yield* fromPromise(() => client.spawnProc(procId, options.spec));
   }
-  const announced = Effect.callback<string, Error>((resume) => {
-    let settled = false;
-    let stop: (() => void) | undefined;
-    const settle = (answer: Effect.Effect<string, Error>): void => {
-      if (settled) {
-        return;
+  const pid = held?.alive ? held.pid : (yield* listed())?.pid;
+  const announced = (alive: () => void) =>
+    Effect.callback<string, Error>((resume, signal) => {
+      if (pid !== undefined) {
+        watchTreeCpu(pid, alive, signal);
       }
-      settled = true;
-      stop?.();
-      resume(answer);
-    };
-    // From seq 0: the announce line is printed once, at boot, and a returning
-    // agent reads it out of the replay ring long after it was written.
-    stop = client.subscribe(
-      procId,
-      {
-        line: (event) => {
-          const url = parseServerAnnouncement(event.data);
-          if (url) {
-            settle(Effect.succeed(url));
-          }
-        },
-        exit: (exitCode, _signal, pid) => {
-          if (settled) {
-            return;
-          }
-          // A server that never announced serves nobody: its end is read here.
-          client.release(procId, pid);
-          settle(
-            Effect.fail(
-              new Error(
-                `[opencode] serve exited (code ${exitCode}) before announcing a port`
+      let settled = false;
+      let stop: (() => void) | undefined;
+      const settle = (answer: Effect.Effect<string, Error>): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        stop?.();
+        resume(answer);
+      };
+      // From seq 0: the announce line is printed once, at boot, and a returning
+      // agent reads it out of the replay ring long after it was written.
+      stop = client.subscribe(
+        procId,
+        {
+          line: (event) => {
+            alive();
+            const url = parseServerAnnouncement(event.data);
+            if (url) {
+              settle(Effect.succeed(url));
+            }
+          },
+          exit: (exitCode, _signal, exited) => {
+            if (settled) {
+              return;
+            }
+            // A server that never announced serves nobody: its end is read here.
+            client.release(procId, exited);
+            settle(
+              Effect.fail(
+                new Error(
+                  `[opencode] serve exited (code ${exitCode}) before announcing a port`
+                )
               )
-            )
-          );
-        },
-        // The ring outran the announce line: the URL is unrecoverable from here.
-        reset: (nextSeq) =>
-          settle(
-            Effect.fail(
-              new Error(
-                `[opencode] ${procId}'s replay window lost the port announcement (resumes at ${nextSeq})`
+            );
+          },
+          // The ring outran the announce line: the URL is unrecoverable from here.
+          reset: (nextSeq) =>
+            settle(
+              Effect.fail(
+                new Error(
+                  `[opencode] ${procId}'s replay window lost the port announcement (resumes at ${nextSeq})`
+                )
               )
-            )
-          ),
-      },
-      0
-    );
-    // A replay that settled it while subscribing leaves its listener here.
-    if (settled) {
-      stop();
-    }
-    return Effect.sync(() => {
-      settled = true;
-      stop?.();
+            ),
+        },
+        0
+      );
+      // A replay that settled it while subscribing leaves its listener here.
+      if (settled) {
+        stop();
+      }
+      return Effect.sync(() => {
+        settled = true;
+        stop?.();
+      });
     });
-  });
-  return yield* boundedRead(timeoutMs, announced).pipe(
+  return yield* boundedWhileLive(announced).pipe(
     Effect.catch((error) =>
       Effect.fail(
         error instanceof UnansweredRead
           ? new Error(
-              `[opencode] no "server listening" line from ${procId} within ${timeoutMs}ms`
+              serverNotAnnouncedSentence(procId, secondsOf(error.after))
             )
           : error
       )
@@ -1909,12 +1918,13 @@ const PRIVATE_READ_MS = 30_000;
  */
 const serverFacts = async (
   client: OpencodeClient,
-  directory: string
+  directory: string,
+  life: ServerLife
 ): Promise<Omit<OpencodeServerFacts, "inputs">> => {
   const [models, listed] = await Promise.all([
     opencodeCatalog(client, directory),
     askOpencode(async (options) => {
-      await assertPluginLoaded(client, directory, options.signal);
+      await assertPluginLoaded(client, directory, life, options.signal);
       return await client.integration.list(at(directory), options);
     }).then((answer) => answerOf(answer, "its integrations")),
   ]);
@@ -1934,7 +1944,7 @@ const serverFacts = async (
 const privateServerRead = async <T>(
   launch: ServerLaunch,
   directory: string,
-  read: (client: OpencodeClient) => Promise<T>
+  read: (client: OpencodeClient, life: ServerLife) => Promise<T>
 ): Promise<T> => {
   const command = `opencode ${launch.spec.args.join(" ")}`;
   const answered = await readWithin(PRIVATE_READ_MS, async (signal) => {
@@ -1951,26 +1961,49 @@ const privateServerRead = async <T>(
       stderr: "ignore",
       signal,
     });
+    // Each wait on it hears what it writes after its announce, and its exit.
+    const hearing = new Set<() => void>();
+    const life: ServerLife = ({ alive, gone }, until) => {
+      hearing.add(alive);
+      server.exited.then(gone, gone);
+      until.addEventListener("abort", () => hearing.delete(alive), {
+        once: true,
+      });
+    };
     try {
       let url: string | undefined;
       let buffered = "";
-      for await (const chunk of server.stdout.pipeThrough(
-        new TextDecoderStream()
-      )) {
-        buffered += chunk;
+      const said = server.stdout
+        .pipeThrough(new TextDecoderStream())
+        [Symbol.asyncIterator]();
+      for (let chunk = await said.next(); !chunk.done;) {
+        buffered += chunk.value;
         const lines = buffered.split("\n");
         buffered = lines.pop() ?? "";
         url = lines.map(parseServerAnnouncement).find(Boolean);
         if (url) {
           break;
         }
+        chunk = await said.next();
       }
       if (!url) {
         throw new Error(
           `\`${command}\` exited ${await server.exited} without saying where it listens`
         );
       }
-      return await read(opencodeClient({ url, password }));
+      // The rest of what it writes, each chunk a sign of life to its waits.
+      detach(
+        (async () => {
+          for (let chunk = await said.next(); !chunk.done;) {
+            for (const alive of hearing) {
+              alive();
+            }
+            chunk = await said.next();
+          }
+        })().catch(() => undefined),
+        "privateServerLines"
+      );
+      return await read(opencodeClient({ url, password }), life);
     } finally {
       server.kill();
       await server.exited;
@@ -3208,6 +3241,37 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   /**
+   * The lines `client`'s generation writes to its keeper's ring, and its
+   * exit, as a wait on it hears them (opencode-server.ts `serverLife`); none
+   * for a client no recorded generation answers on.
+   */
+  #lifeOf(client: OpencodeClient): ServerLife {
+    const identity = this.#generations().find(
+      (generation) => this.#generationClients.get(generation.procId) === client
+    );
+    return (hear, signal) => {
+      if (!identity) {
+        return;
+      }
+      this.#keepers
+        .byEpoch(identity.epoch)
+        .then((keeper) => {
+          if (!keeper) {
+            hear.gone();
+            return;
+          }
+          serverLife(
+            keeper,
+            identity.procId,
+            identity.pid,
+            false
+          )(hear, signal);
+        })
+        .catch(() => undefined);
+    };
+  }
+
+  /**
    * The session handed to the active generation of its own server, once it
    * is at rest there. A config change makes a new generation of the same
    * server, on the same database: the session is already there.
@@ -3260,6 +3324,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       await assertPluginLoaded(
         client,
         session.directory,
+        this.#lifeOf(client),
         this.#lifetimeSignal()
       );
       const unconnected = await waitForMcp(
@@ -3979,7 +4044,12 @@ class OpencodeHarness implements Harness<"opencode"> {
       this.#oauthIntegrations = oauthIntegrationsOf(
         answerOf(
           await askOpencode(async (options) => {
-            await assertPluginLoaded(client, quiet, options.signal);
+            await assertPluginLoaded(
+              client,
+              quiet,
+              this.#lifeOf(client),
+              options.signal
+            );
             return await client.integration.list(at(quiet), options);
           }),
           "its integrations"
@@ -4078,7 +4148,12 @@ class OpencodeHarness implements Harness<"opencode"> {
       // Its integrations are its plugins': read once they are loaded there
       // (`serverFacts`).
       askOpencode(async (options) => {
-        await assertPluginLoaded(client, quiet, options.signal);
+        await assertPluginLoaded(
+          client,
+          quiet,
+          this.#lifeOf(client),
+          options.signal
+        );
         return await Promise.all([
           client.integration.list(at(quiet), options),
           client.model.list(at(quiet), options),
@@ -4274,7 +4349,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       init?: RequestInit
     ): Promise<Response> => {
       try {
-        return await fetch(input, init);
+        return await heardFetch(input, init);
       } catch (error) {
         const signal = input instanceof Request ? input.signal : init?.signal;
         if (!signal?.aborted && slot.client === client) {
@@ -4734,14 +4809,14 @@ class OpencodeHarness implements Harness<"opencode"> {
     const quiet = await quietDir();
     let read: Omit<OpencodeServerFacts, "inputs">;
     if (client) {
-      read = await serverFacts(client, quiet);
+      read = await serverFacts(client, quiet, this.#lifeOf(client));
     } else {
       const kept = await this.#keptFacts();
       if (kept && kept.inputs === (await startInputs(launch))) {
         return kept;
       }
-      read = await privateServerRead(launch, quiet, (one) =>
-        serverFacts(one, quiet)
+      read = await privateServerRead(launch, quiet, (one, life) =>
+        serverFacts(one, quiet, life)
       );
     }
     const facts: OpencodeServerFacts = {
@@ -6356,7 +6431,12 @@ class OpencodeHarness implements Harness<"opencode"> {
       ? Promise.resolve([])
       : (async () => {
           // Each wait has its own deadline, which says what it waited for.
-          await assertPluginLoaded(client, ctx.cwd, this.#lifetimeSignal());
+          await assertPluginLoaded(
+            client,
+            ctx.cwd,
+            this.#lifeOf(client),
+            this.#lifetimeSignal()
+          );
           return await waitForMcp(client, ctx.cwd, this.#lifetimeSignal());
         })();
     ready.catch(() => undefined);
@@ -6598,6 +6678,7 @@ class OpencodeHarness implements Harness<"opencode"> {
             slot.owner.active?.procId),
       readActivity: () =>
         this.#sessionBusy(sessionId, this.#sessionOwners.get(ctx.instanceId)),
+      lifeOf: (serving) => this.#lifeOf(serving),
       serverPid: () =>
         (this.#sessionOwners.get(ctx.instanceId) ?? identity).pid,
       prepareDispatch: () => this.#prepareDispatch(session),
@@ -6923,7 +7004,9 @@ class OpencodeHarness implements Harness<"opencode"> {
     // and skills are read from the folder and the machine's config, which
     // every server here shares.
     [CONTROL_FOLDER_COMMANDS]: async (cwd) =>
-      opencodeSlashCommands(await this.#ensure(), cwd),
+      this.#ensure().then((client) =>
+        opencodeSlashCommands(client, cwd, this.#lifeOf(client))
+      ),
   };
 
   /**
@@ -7121,11 +7204,14 @@ class OpencodeHarness implements Harness<"opencode"> {
    * and until it publishes, the server answering is the one on the old config:
    * read then, the report named what that server had (a fleet server "not
    * reported", or still connecting) and stayed so, as nothing reports again.
-   * 2.0's apply no longer waits for sessions to go idle, so the wait is
-   * bounded by a candidate's boot and verification. An agent that does not
-   * converge the config (not the machine's) has nothing to wait for. A
-   * caller here needs the config: an apply the watcher left for the next
-   * need ({@link #applyIfNeeded}) starts now.
+   * 2.0's apply no longer waits for sessions to go idle, so the wait lasts
+   * a candidate's announce, its plugin's load and its verification, each
+   * waited on while the candidate shows life: an apply in flight is this
+   * wait's life, and it ends. One that does not begin within the fleet's
+   * quiet spell (a retry not yet due, a fence) leaves the report pending.
+   * An agent that does not converge the config (not the machine's) has
+   * nothing to wait for. A caller here needs the config: an apply the
+   * watcher left for the next need ({@link #applyIfNeeded}) starts now.
    */
   async #configSettled(): Promise<FleetItemState | undefined> {
     // With no server running there is nothing to settle: the next one starts
@@ -7135,43 +7221,50 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     // One look: an apply still owed is started, one running is waited out,
     // and the state it left is the answer once it is applied or failed.
-    const look = Effect.gen({ self: this }, function* () {
-      if (this.#configState === "pending" && !this.#applyGate) {
-        this.#applyIfNeeded(true);
-      }
-      const gate = this.#applyGate;
-      if (gate) {
-        yield* gate.await;
-        return;
-      }
-      if (this.#configState === "applied") {
-        return { state: undefined };
-      }
-      if (this.#configState === "error") {
-        return {
-          state: {
-            state: "failed",
-            cause: "unknown",
-            detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
-          } satisfies FleetItemState,
-        };
-      }
-    });
-    // The promise edge of the wait, one bounded read.
+    const look = (alive: () => void) =>
+      Effect.gen({ self: this }, function* () {
+        if (this.#configState === "pending" && !this.#applyGate) {
+          this.#applyIfNeeded(true);
+        }
+        const gate = this.#applyGate;
+        if (gate) {
+          // Alive each beat while the apply runs, and once more as it ends.
+          yield* Effect.raceFirst(
+            gate.await,
+            Effect.forever(
+              Effect.sync(alive).pipe(Effect.andThen(Effect.sleep(BEAT_MS)))
+            )
+          );
+          alive();
+          return;
+        }
+        if (this.#configState === "applied") {
+          return { state: undefined };
+        }
+        if (this.#configState === "error") {
+          return {
+            state: {
+              state: "failed",
+              cause: "unknown",
+              detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
+            } satisfies FleetItemState,
+          };
+        }
+      });
+    // The promise edge of the wait, waited on while an apply runs.
     return await runPromise(
-      boundedRead(
-        CONFIG_SETTLE_TIMEOUT_MS,
-        lookUntil({ every: CONFIG_LOOK_MS }, look)
+      boundedWhileLive((alive) =>
+        lookUntil({ every: CONFIG_LOOK_MS }, look(alive))
       ).pipe(
         Effect.map((looked) =>
           looked.kind === "found" ? looked.value.state : undefined
         ),
         Effect.catch((error) =>
           error instanceof UnansweredRead
-            ? // Not settled in time is not failed: the report says it is pending.
+            ? // Not begun in time is not failed: the report says it is pending.
               Effect.succeed<FleetItemState>({
                 state: "pending",
-                detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
+                detail: configNotAppliedSentence(secondsOf(error.after)),
               })
             : Effect.fail(error)
         )

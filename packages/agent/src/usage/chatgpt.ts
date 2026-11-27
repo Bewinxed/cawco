@@ -1,5 +1,6 @@
 import { fetchHeard } from "@cawco/core/bounded";
 import { boundedWhileLive } from "@cawco/core/effect/bounded";
+import { makeJoin } from "@cawco/core/effect/join";
 import { secondsOf } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { Effect } from "effect";
@@ -122,66 +123,74 @@ export type ChatgptUsageRead =
   | { ok: true; plan: string | null; windows: LimitWindow[] }
   | { ok: false; status: number | null; error: string };
 
+/** The usage reads in flight, by ChatGPT account: a read due while the last is still out joins it (core effect/join.ts). */
+const usageReads = makeJoin<string, ChatgptUsageRead>();
+
 /**
- * Reads one sign-in's windows with its access token and ChatGPT account id.
- * Every way it fails is its answer (`ok: false`, a wire shape the hub
- * keeps), so it never fails itself.
+ * Reads one sign-in's windows with its access token and ChatGPT account id,
+ * waited on while its bytes arrive (core bounded.ts `fetchHeard`); a read
+ * due while the last for the account is still out joins it. Every way it
+ * fails is its answer (`ok: false`, a wire shape the hub keeps), so it
+ * never fails itself.
  */
 export const chatgptUsage = Effect.fn("chatgptUsage")(
   (
     accessToken: string,
     chatgptAccountId: string
   ): Effect.Effect<ChatgptUsageRead> =>
-    boundedWhileLive((alive) =>
-      fromPromise(async (signal): Promise<ChatgptUsageRead> => {
-        const response = await fetchHeard(
-          `${chatgptBaseUrl()}/wham/usage`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "ChatGPT-Account-Id": chatgptAccountId,
-              accept: "application/json",
+    usageReads.run(
+      chatgptAccountId,
+      boundedWhileLive((alive) =>
+        fromPromise(async (signal): Promise<ChatgptUsageRead> => {
+          const response = await fetchHeard(
+            `${chatgptBaseUrl()}/wham/usage`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "ChatGPT-Account-Id": chatgptAccountId,
+                accept: "application/json",
+              },
+              redirect: "error",
+              signal,
             },
-            redirect: "error",
-            signal,
-          },
-          alive
-        );
-        if (!response.ok) {
-          await response.body?.cancel();
+            alive
+          );
+          if (!response.ok) {
+            await response.body?.cancel();
+            return {
+              ok: false,
+              status: response.status,
+              error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+            };
+          }
+          const body = UsageRaw.parse(await response.json());
           return {
-            ok: false,
-            status: response.status,
-            error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+            ok: true,
+            plan: body.plan_type ?? null,
+            windows: chatgptWindows(body),
           };
-        }
-        const body = UsageRaw.parse(await response.json());
-        return {
-          ok: true,
-          plan: body.plan_type ?? null,
-          windows: chatgptWindows(body),
-        };
-      })
-    ).pipe(
-      Effect.catchTag("Unanswered", ({ after }) => {
-        // No reading: the caller keeps the last one it holds.
-        const error = `ChatGPT's usage endpoint did not answer within ${secondsOf(after)}s`;
-        return Effect.logWarning(
-          `[usage] ${error}; the last reading stands`
-        ).pipe(
-          Effect.as<ChatgptUsageRead>({
+        })
+      ).pipe(
+        Effect.catchTag("Unanswered", ({ after }) => {
+          // No reading: the caller keeps the last one it holds.
+          const error = `ChatGPT's usage endpoint did not answer within ${secondsOf(after)}s`;
+          return Effect.logWarning(
+            `[usage] ${error}; the last reading stands`
+          ).pipe(
+            Effect.as<ChatgptUsageRead>({
+              ok: false,
+              status: null,
+              error,
+            })
+          );
+        }),
+        Effect.catchTag("Rejected", ({ message }) =>
+          Effect.succeed<ChatgptUsageRead>({
             ok: false,
             status: null,
-            error,
+            error: `ChatGPT's usage endpoint could not be read: ${message}`,
           })
-        );
-      }),
-      Effect.catchTag("Rejected", ({ message }) =>
-        Effect.succeed<ChatgptUsageRead>({
-          ok: false,
-          status: null,
-          error: `ChatGPT's usage endpoint could not be read: ${message}`,
-        })
+        )
       )
     )
 );

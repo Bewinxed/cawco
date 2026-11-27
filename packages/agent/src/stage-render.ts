@@ -41,7 +41,7 @@
  * is the host's, and the browser dials it directly.
  */
 
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileLive, Unanswered } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
 import {
   CANVAS_PATH,
@@ -71,7 +71,7 @@ import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { runPromise } from "./daemon-runtime";
 import { findState, poseState, statePicture } from "./frame-picture";
-import { layoutNow, readAgainNow, sweepNow } from "./in-page/page";
+import { layoutNow, sweepNow, textNow } from "./in-page/page";
 import { fromPromise } from "./rejected";
 import { measureMove } from "./stage-measure";
 
@@ -79,8 +79,6 @@ import { measureMove } from "./stage-measure";
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
 /** The end of the limit kept for the answer once the sweep is read: the stage's report and the state's picture. Ours: a pose and a screenshot of one state, on a machine under load. */
 const ANSWER_MS = 10_000;
-/** How long the page has to say where its sweep stands, each time it is asked. Ours: a read of a few fields. */
-const SAID_WAIT_MS = 5000;
 /** How often the page's sweep is read while it draws. Ours. */
 const POLL_MS = 250;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
@@ -228,23 +226,32 @@ const pageUrl = (origin: string, ask: RenderAsk): string => {
 /** The page's sweep as last read: none before its runtime has booted (runtime.ts `CanvasState`). */
 type SweepRead = NonNullable<ReturnType<typeof sweepNow>>;
 
-/** The page's sweep now, within `ms`: null when the page has no canvas yet; `stopped` when it did not answer, or its read failed. */
-const sweepOf = (
-  page: Page,
-  ms: number
-): Effect.Effect<SweepRead | null | "stopped"> =>
-  boundedRead(
-    ms,
-    fromPromise(() => page.evaluate(sweepNow))
-  ).pipe(Effect.orElseSucceed(() => "stopped" as const));
+/**
+ * The page's sweep now: null when the page has no canvas yet; `stopped`
+ * when its read failed. Read inside a wait on the page's own reports
+ * ({@link sweepUntil}, {@link readKept}), which lets a page that stopped
+ * answering go.
+ */
+const sweepOf = (page: Page): Effect.Effect<SweepRead | null | "stopped"> =>
+  fromPromise(() => page.evaluate(sweepNow)).pipe(
+    Effect.orElseSucceed(() => "stopped" as const)
+  );
 
-/** Each states file's first story, by the plans the stage wrote into the page (core `CANVAS_PLAN_ID`); null when the plans could not be read. */
-async function firstStories(
+/**
+ * Each states file's first story, by the plans the stage wrote into the
+ * page (core `CANVAS_PLAN_ID`); null when the plans could not be read. Read
+ * inside a wait on the page's own reports, as {@link sweepOf} is.
+ */
+const firstStories = (
   page: Page
-): Promise<Record<string, string | null> | null> {
-  const said = await page
-    .textContent(`#${CANVAS_PLAN_ID}`, { timeout: SAID_WAIT_MS })
-    .catch(() => null);
+): Effect.Effect<Record<string, string | null> | null> =>
+  Effect.tryPromise(() => page.evaluate(textNow, CANVAS_PLAN_ID)).pipe(
+    Effect.map(storiesOf),
+    Effect.orElseSucceed(() => null)
+  );
+
+/** {@link firstStories} from the plans' text. */
+function storiesOf(said: string | null): Record<string, string | null> | null {
   if (said === null) {
     return null;
   }
@@ -264,30 +271,52 @@ async function firstStories(
 
 /**
  * The page's sweep, read every {@link POLL_MS} until it has drawn every
- * section it takes or `deadline` comes: its last answer either way, so a
- * page that stops answering still says how far it got; null when it never
- * said (its runtime never ran).
+ * section it takes or `deadline` comes, waited on while the page reports
+ * (core effect/bounded.ts `boundedWhileLive`: each read that differs from
+ * the one before is a sign of life): its last answer either way, so a page
+ * that stops answering still says how far it got; null when it never said
+ * (its runtime never ran). Its plans' first stories are read in the same
+ * wait.
  */
 const sweepUntil = Effect.fnUntraced(function* (page: Page, deadline: number) {
   let last: SweepRead | null = null;
-  if (Date.now() >= deadline) {
-    return last;
-  }
-  const look = Effect.suspend(() =>
-    sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, deadline - Date.now())))
-  ).pipe(
-    Effect.map((now) => {
-      if (now !== "stopped") {
-        last = now;
-      }
-      return last?.swept && last.reports > 0 ? last : undefined;
+  const unread: Record<string, string | null> | null = null;
+  let said = "";
+  const look = (alive: () => void) =>
+    Effect.suspend(() => sweepOf(page)).pipe(
+      Effect.map((now) => {
+        if (now !== "stopped") {
+          const text = JSON.stringify(now);
+          if (text !== said) {
+            said = text;
+            alive();
+          }
+          last = now;
+        }
+        return last?.swept && last.reports > 0 ? last : undefined;
+      })
+    );
+  return yield* boundedWhileLive((alive) =>
+    Effect.gen(function* () {
+      const looked =
+        Date.now() >= deadline
+          ? undefined
+          : yield* lookUntil(
+              {
+                every: Duration.millis(POLL_MS),
+                deadlineMs: deadline - Date.now(),
+              },
+              look(alive)
+            );
+      const swept = looked?.kind === "found" ? looked.value : last;
+      return { swept, firsts: yield* firstStories(page) };
     })
+  ).pipe(
+    Effect.orElseSucceed(() => ({
+      swept: last,
+      firsts: unread,
+    }))
   );
-  const looked = yield* lookUntil(
-    { every: Duration.millis(POLL_MS), deadlineMs: deadline - Date.now() },
-    look
-  );
-  return looked.kind === "found" ? looked.value : last;
 });
 
 /** `ask.measure`'s move measured on the page a read opened to measure it (stage-measure.ts), from `ask.state`'s story: refused without one, naming `first`, the first story of the canvas's first states file. */
@@ -567,6 +596,17 @@ async function readKept(
   let report = await stageReport(pages.origin, files);
   let said: SweepRead | null = null;
   let looks = 0;
+  /** The report and the sweep as the last look read them: a look that reads them otherwise is the page's sign of life. */
+  let lastRead = "";
+  /** The wait's sign of life, once the wait below has begun. */
+  let alive: () => void = () => undefined;
+  const heardMove = (): void => {
+    const read = JSON.stringify([report, said]);
+    if (read !== lastRead) {
+      lastRead = read;
+      alive();
+    }
+  };
   // One look: the report read again (after the first), done once it owes nothing or the limit came; else the page's sweep read, and each owed file it is not reading asked of it again.
   const look = fromPromise(async (): Promise<boolean> => {
     if (looks > 0) {
@@ -580,12 +620,11 @@ async function readKept(
     if (kept.closed) {
       throw new Error(words.readerGone);
     }
-    const now = await runPromise(
-      sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, until - Date.now())))
-    );
+    const now = await runPromise(sweepOf(page));
     if (now !== "stopped") {
       said = now;
     }
+    heardMove();
     const reading = new Set(said?.swept ? said.drawing : files);
     const idle = owed.filter((file) => {
       if (reading.has(file)) {
@@ -610,14 +649,29 @@ async function readKept(
     }
     return false;
   });
-  await runPromise(
-    lookUntil(
-      {
-        every: Duration.millis(POLL_MS),
-        deadlineMs: Math.max(0, until - Date.now()),
-        until: (done: boolean) => done,
-      },
-      look
+  // Waited on while the page reports or the stage's report moves: one that
+  // stopped answering is let go, and the report says how far it got.
+  const firsts = await runPromise(
+    boundedWhileLive((heard) => {
+      alive = heard;
+      return lookUntil(
+        {
+          every: Duration.millis(POLL_MS),
+          deadlineMs: Math.max(0, until - Date.now()),
+          until: (done: boolean) => done,
+        },
+        look
+      ).pipe(
+        Effect.andThen(() =>
+          readerOwed(report).length === 0
+            ? Effect.succeed(null)
+            : firstStories(page)
+        )
+      );
+    }).pipe(
+      Effect.catch((error) =>
+        error instanceof Unanswered ? Effect.succeed(null) : Effect.fail(error)
+      )
     )
   );
   if (kept.closed) {
@@ -627,7 +681,6 @@ async function readKept(
   if (owed.size === 0) {
     return { report, undrawn: [] };
   }
-  const firsts = await firstStories(page);
   return {
     report,
     undrawn: files
@@ -673,7 +726,9 @@ async function drawAsked(
       .catch((error: unknown) => {
         throw timedOut(error) ? new Error(words.notLoaded(seconds)) : error;
       });
-    const swept = await runPromise(sweepUntil(page, deadline - ANSWER_MS));
+    const { swept, firsts } = await runPromise(
+      sweepUntil(page, deadline - ANSWER_MS)
+    );
     const { state } = ask;
     const done = !!swept?.swept && swept.reports > 0;
     // A state's picture needs its section drawn: with none, the read says where it stood and what to do instead.
@@ -686,7 +741,6 @@ async function drawAsked(
       await page.waitForTimeout(SETTLE_MS);
     }
     const drawn = new Set(swept?.drawn ?? []);
-    const firsts = await firstStories(page);
     const unread = firsts ? {} : ({ plansUnread: true } as const);
     const undrawn: SectionUndrawn[] = ask.files
       .filter((file) => !drawn.has(file))

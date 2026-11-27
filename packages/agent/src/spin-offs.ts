@@ -16,7 +16,6 @@ import type { SpinOffHeld } from "@cawco/core/session/controls";
 import { CONTROL_SPIN_OFF_HELD } from "@cawco/core/session/controls";
 import { shortId } from "@cawco/core/short-id";
 import { holdingWords } from "@cawco/core/words/workspace-holding";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { hashText } from "./fleet";
 import type { FrameSink } from "./frame-sink";
@@ -221,7 +220,7 @@ export class SpinOffs {
       this.#recordWorktree(instanceId, processGeneration, recorded);
       return recorded.dir;
     }
-    const root = await repoTop(baseCwd, Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
+    const root = await repoTop(baseCwd);
     if (root === undefined) {
       return baseCwd;
     }

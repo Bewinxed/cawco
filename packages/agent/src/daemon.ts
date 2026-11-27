@@ -55,7 +55,7 @@ import {
   CONTROL_GH_TOKEN,
 } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedRead, boundedWhileLive } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
 import type {
   DaemonFrame,
@@ -77,7 +77,6 @@ import {
 import { keepFoldersPrivate } from "@cawco/core/folders";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import {
-  CUSTODY_BOUND_MS,
   type HandoverCommand,
   type HandoverEvent,
   type HandoverState,
@@ -571,9 +570,10 @@ const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
  * The launches this agent has asked its hub what to run on ({@link
  * LaunchGrant}), until each is answered. They outlive a connection: one asked
  * while the hub is away, or whose answer went with a dropped connection, is
- * asked again on the next connection once it has registered. One not
- * answered within {@link CUSTODY_BOUND_MS} of its first ask keeps waiting,
- * and says so once: the hub answers every grant, a refusal with its reason.
+ * asked again on the next connection once it has registered. It waits on
+ * the hub however long that takes, and says so once a quiet spell
+ * ({@link awaitGrant}) passes unanswered: the hub answers every grant, a
+ * refusal with its reason.
  */
 class LaunchAsks {
   readonly #machineId: string;
@@ -653,18 +653,19 @@ class LaunchAsks {
 
 /**
  * The hub's grant for a launch, however long it takes: the hub answers
- * every grant, a refusal with its reason (987bb9cc0), so a launch it has
- * not answered within {@link CUSTODY_BOUND_MS} keeps waiting, said once,
- * never refused for the wait.
+ * every grant, a refusal with its reason (987bb9cc0), and the ask goes again
+ * on each connection the agent registers, so the wait is on the hub's link.
+ * A launch it has not answered for the fleet's quiet spell (core bounded.ts
+ * `QUIET_MS`) keeps waiting, said once, never refused for the wait.
  */
 const awaitGrant = (
   instanceId: string,
   granted: Effect.Effect<LaunchGrant>
 ): Effect.Effect<LaunchGrant> =>
-  boundedRead(CUSTODY_BOUND_MS, granted).pipe(
-    Effect.catchTag("Unanswered", () =>
+  boundedWhileLive(() => granted).pipe(
+    Effect.catchTag("Unanswered", (unanswered) =>
       Effect.logInfo(
-        `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
+        `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${secondsOf(unanswered.after)} s; still waiting for the hub's credential`
       ).pipe(Effect.andThen(granted))
     )
   );
@@ -2543,7 +2544,7 @@ const attach = (
      * ended, starts afresh; each is let go ({@link release}) as it is decided.
      * A session whose keeper has not answered is neither: it waits for that
      * keeper's word or its end, asked again while it could not be read, and
-     * past {@link CUSTODY_BOUND_MS} the wait is said, never ended (an
+     * once its keepers are quiet for a spell the wait is said, never ended (an
      * unanswered keeper never reads as holding nothing: 2026-10-16, the
      * keeper of the build before answered past 2 s and its sessions were
      * started afresh). Custody is complete once every session is decided. An

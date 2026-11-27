@@ -30,7 +30,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import type { ControlArgs } from "@cawco/core/control-table";
-import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+import { lockWhenFree, openDirLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
@@ -91,7 +91,6 @@ import {
   type CONTROL_WORKSPACE_CREATE,
   CutCommitGone,
   holdsNothing,
-  WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import {
@@ -136,7 +135,7 @@ import {
   type CopyRunner,
   type Git,
   GitExited,
-  gitUntil,
+  gitLive,
   hostGit,
 } from "./git/run";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
@@ -229,7 +228,6 @@ const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
  * repository left a workspace cut after it with pointers).
  */
 const lfsCheckout = async ({
-  deadline,
   declared,
   hub,
   path,
@@ -237,7 +235,6 @@ const lfsCheckout = async ({
   projectId,
   start,
 }: {
-  deadline: number;
   declared: DeclaredLfs | undefined;
   hub: string | undefined;
   path: string;
@@ -257,7 +254,7 @@ const lfsCheckout = async ({
     ? { GIT_LFS_SKIP_SMUDGE: "1" }
     : {};
   if (hub) {
-    return gitUntil(deadline, {
+    return gitLive({
       ...hubGitEnv(hub, LFS_FILTERS, declared),
       ...skip,
     });
@@ -268,7 +265,7 @@ const lfsCheckout = async ({
   } else if (urlOrigin(origin)?.startsWith("http")) {
     pins = lfsPins(own, await hostSigns(own));
   }
-  return gitUntil(deadline, {
+  return gitLive({
     ...hostEnvironment(),
     ...configEnv(pins),
     ...skip,
@@ -349,23 +346,21 @@ const sourcing = makeKeyedLock<string>();
  * on one computer are: link-under-load lane 2, 2026-10-20) is waited for on
  * the lock of the repository's git directory ({@link holdingSource}).
  */
-const inSource = <T>(
-  repo: string,
-  deadline: number,
-  work: () => Promise<T>
-): Promise<T> => sourcing.run(repo, () => holdingSource(repo, deadline, work));
+const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> =>
+  sourcing.run(repo, () => holdingSource(repo, work));
 
 /**
  * `work` holding the lock of source repository `repo`'s git directory
  * (`flock(2)` on the directory itself, so nothing is written into it), once
- * any other process holding it lets it go, by the create's `deadline`.
+ * any other process holding it lets it go: the kernel lets a holder's lock
+ * go as its process ends, and a holder's git runs only while it writes or
+ * works (git/run.ts `gitLive`), so the wait ends.
  */
 const holdingSource = async <T>(
   repo: string,
-  deadline: number,
   work: () => Promise<T>
 ): Promise<T> => {
-  const gitDir = await gitUntil(deadline)(
+  const gitDir = await gitLive()(
     repo,
     "rev-parse",
     "--path-format=absolute",
@@ -373,11 +368,7 @@ const holdingSource = async <T>(
   );
   const fd = openDirLock(gitDir);
   try {
-    if (!(await lockBy(fd, deadline))) {
-      throw new Error(
-        `${repo} was still being readied for a workspace by another process on this computer when this create's ${WORKSPACE_GIT_TIMEOUT_MS / 1000} s ran out.`
-      );
-    }
+    await lockWhenFree(fd);
     return await work();
   } finally {
     unlock(fd);
@@ -399,11 +390,10 @@ const readySource = (
   repoRoot: string,
   projectId: string | undefined,
   fromClone: boolean,
-  deadline: number,
   declared: () => Promise<DeclaredLfs | undefined>
 ): Promise<{ hub: string | undefined; known: string | undefined }> =>
-  inSource(repoRoot, deadline, async () => {
-    const plain = gitUntil(deadline);
+  inSource(repoRoot, async () => {
+    const plain = gitLive();
     // A workspace starts from origin's default branch and lands there.
     let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(
       () => undefined
@@ -414,7 +404,7 @@ const readySource = (
           `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
         );
       }
-      origin = hubRepo(await hubRepoOf(repoRoot, projectId, deadline));
+      origin = hubRepo(await hubRepoOf(repoRoot, projectId));
       await plain(repoRoot, "remote", "add", "origin", origin);
       console.info(
         `[workspace] ${repoRoot} had no origin: ${origin}, the hub's remote of it in project ${projectId}, is its origin now`
@@ -426,8 +416,8 @@ const readySource = (
       useHubCredentialHelper(repoRoot);
     }
     const known = hub
-      ? await hubBase(gitUntil(deadline, hubGitEnv(hub)), repoRoot, async () =>
-          gitUntil(deadline, hubGitEnv(hub, [], await declared()))
+      ? await hubBase(gitLive(hubGitEnv(hub)), repoRoot, async () =>
+          gitLive(hubGitEnv(hub, [], await declared()))
         )
       : undefined;
     return { hub, known };
@@ -880,7 +870,6 @@ export const createWorkspace = async (
 ): Promise<WorkspaceCheckout> => {
   // What this machine lacks first, before the folder is read at all.
   refuseShortOfWorkspace();
-  const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
   const cut = at ?? undefined;
   const asked: CreateAsked = {
     account: account ?? null,
@@ -889,9 +878,9 @@ export const createWorkspace = async (
     projectId: projectId || undefined,
   };
   await unfinishedCleared;
-  const found = await kindAt(dir, deadline);
+  const found = await kindAt(dir);
   return found.kind === "repo"
-    ? await cutClone(id, found.folder, deadline, cut, asked)
+    ? await cutClone(id, found.folder, cut, asked)
     : await makeFolderLayer(id, found.folder, cut, asked);
 };
 
@@ -907,20 +896,19 @@ const realFolder = (path: string): Promise<string> =>
  * level is what is cloned; a folder git finds in no repository is a folder,
  * itself at its real path. Refused for a path that is no folder, and for a
  * folder in a repository git does not read as a checkout (its config says
- * bare, its `.git` unreadable) or that git could not answer for in time:
+ * bare, its `.git` unreadable) or that git could not answer for (it went quiet):
  * none of those is a plain folder, whose workspace is a view of the live
  * folder itself.
  */
 const kindAt = async (
-  dir: string,
-  deadline: number
+  dir: string
 ): Promise<{ folder: string; kind: WorkspaceKind }> => {
   const real = await realFolder(dir);
   const info = await stat(real).catch(() => undefined);
   if (!info?.isDirectory()) {
     throw new Error(`${dir} is not a folder, so it cannot have a workspace`);
   }
-  const top = await repoTop(real, deadline);
+  const top = await repoTop(real);
   return top ? { kind: "repo", folder: top } : { kind: "folder", folder: real };
 };
 
@@ -946,11 +934,10 @@ const kindAt = async (
 const cutClone = async (
   id: string,
   repoRoot: string,
-  deadline: number,
   cut: WorkspaceCut | undefined,
   { account, first, placeRows, projectId }: CreateAsked
 ): Promise<WorkspaceCheckout> => {
-  const plain = gitUntil(deadline);
+  const plain = gitLive();
   // A workspace cut from another workspace's clone: that clone's config is
   // the other workspace's to write. A place is a person's own repo,
   // whose config is theirs.
@@ -976,11 +963,10 @@ const cutClone = async (
     repoRoot,
     projectId,
     Boolean(source),
-    deadline,
     declared
   );
   const remoteEnv = hub ? hubGitEnv(hub) : hostEnvironment();
-  const authed = hub ? gitUntil(deadline, remoteEnv) : plain;
+  const authed = hub ? gitLive(remoteEnv) : plain;
   const id8 = shortId(id);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
   const branch = `ws/${id8}`;
@@ -1011,9 +997,8 @@ const cutClone = async (
       pooled,
       path,
       plain,
-      gitUntil(deadline, poolGitEnv(remoteEnv)),
-      known,
-      deadline
+      gitLive(poolGitEnv(remoteEnv)),
+      known
     );
     // The origin it was cut from, as this host read it from the source: the
     // one URL an archive refreshes the base from ({@link refreshBase}).
@@ -1034,7 +1019,6 @@ const cutClone = async (
     const start = startOf(cut, carried, base);
     const checkout = (await marksLfs(authed, path, start))
       ? await lfsCheckout({
-          deadline,
           declared: await declared(),
           hub,
           path,
@@ -1251,7 +1235,7 @@ const applyCarried = async (
     const applied = await runHubCommand(
       workspace.path,
       `${SAFE_GIT_SHELL}git apply --whitespace=nowarn "$TMPDIR"/${name}`,
-      WORKSPACE_GIT_TIMEOUT_MS,
+      undefined,
       workspace
     );
     if (applied.exitCode === 0) {
@@ -1401,7 +1385,7 @@ const insideGit =
     const result: CommandResult = await runHubCommand(
       workspace.path,
       `${SAFE_GIT_SHELL}${cmd}`,
-      WORKSPACE_GIT_TIMEOUT_MS,
+      undefined,
       workspace
     );
     if (result.exitCode !== 0) {
@@ -1612,8 +1596,7 @@ const refreshBase = async (
     return;
   }
   await closedCloneGit(workspace, access);
-  const git = gitUntil(
-    Date.now() + WORKSPACE_GIT_TIMEOUT_MS,
+  const git = gitLive(
     isHubRemote(origin) ? hubGitEnv(origin) : hostEnvironment(),
     access
   );

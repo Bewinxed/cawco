@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { fetchHeard, readWhileLive } from "@cawco/core/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
@@ -18,6 +18,7 @@ import {
   processArgs,
   processStartMs,
 } from "@cawco/core/process-identity";
+import { watchTreeCpu } from "@cawco/core/run-captured";
 import {
   type ProcSpec,
   sessiondEndpoint,
@@ -37,11 +38,43 @@ import { runFork, runPromise } from "../daemon-runtime";
 import { launchGateForm } from "../gate-form";
 import { readJson } from "../json-file";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
-import { fromPromise, type Rejected } from "../rejected";
+import type { Rejected } from "../rejected";
 import type { SessiondClient } from "../sessiond-client";
 import { OpencodeServerRecordSchema } from "../stored-shapes";
 
-const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
+
+import { readOpencodeWhile, type ServerLife } from "./opencode-client";
+import { } from "./opencode-effect";
+
+
+/**
+ * Generation `procId`'s signs of life as its keeper hears them: each line
+ * it writes to the keeper's ring, from now, and with `cpu` each beat its
+ * process tree (from `pid`) spends CPU time; `gone` once the keeper says it
+ * exited or holds it no more. A wait that asks the server something on a
+ * loop takes no `cpu`: its own asking spends the server's.
+ */
+export const serverLife =
+  (
+    keeper: SessiondClient,
+    procId: string,
+    pid: number | undefined,
+    cpu: boolean
+  ): ServerLife =>
+  ({ alive, gone }, signal) => {
+    if (signal.aborted) {
+      return;
+    }
+    const stop = keeper.subscribe(procId, {
+      line: () => alive(),
+      exit: () => gone(),
+      gone: () => gone(),
+    });
+    if (cpu && pid !== undefined) {
+      watchTreeCpu(pid, alive, signal);
+    }
+    signal.addEventListener("abort", stop, { once: true });
+  };
 
 /**
  * The environment variable an OpenCode 2.0 server takes its password from
@@ -105,9 +138,6 @@ export type V1Activity =
 /** The `x-next-cursor` of a 1.x session inventory page. */
 const NEXT_CURSOR = "x-next-cursor";
 
-/** How long one read of a 1.x server may take. Ours: it boots each directory it reads, which can take a while on a cold one. */
-const V1_READ_TIMEOUT_MS = 60_000;
-
 /**
  * What an OpenCode 1.x server runs, by its own API (1.18.34): a turn there is
  * a directory's (`GET /session/status?directory=`, a session not `idle` is
@@ -117,7 +147,10 @@ const V1_READ_TIMEOUT_MS = 60_000;
  * `x-next-cursor`): a turn updates its session as it starts. Reading only
  * those keeps the read from booting every directory the database ever saw.
  * An answer that is no answer (401, an error) is `refused`; a request that
- * never reached it is `unreachable`; none within {@link V1_READ_TIMEOUT_MS}
+ * never reached it is `unreachable`. It boots each directory it reads, which
+ * can take a while on a cold one, so the read is waited on while the server
+ * shows life: each byte of its answers, and each beat it spends CPU time
+ * (core bounded.ts `readWhileLive`); one quiet for the fleet's quiet spell
  * is `unanswered`.
  */
 export const readV1Activity = async (
@@ -132,11 +165,12 @@ export const readV1Activity = async (
         authorization: `Basic ${Buffer.from(`opencode:${identity.password}`).toString("base64")}`,
       }
     : {};
-  const read = await readWithin(
-    V1_READ_TIMEOUT_MS,
-    async (signal): Promise<V1Activity> => {
-      const get = async (path: string): Promise<Response> =>
-        await fetch(new URL(path, identity.url), { headers, signal });
+  const read = await readWhileLive(
+    async (signal, alive): Promise<V1Activity> => {
+      const get = (path: string): Promise<Response> =>
+        fetchHeard(new URL(path, identity.url), { headers, signal }, alive);
+      const working = new AbortController();
+      watchTreeCpu(identity.pid, alive, working.signal);
       try {
         const directories = await v1Directories(get, born);
         if (typeof directories === "string") {
@@ -166,6 +200,8 @@ export const readV1Activity = async (
           kind: "unreachable",
           reason: error instanceof Error ? error.message : String(error),
         };
+      } finally {
+        working.abort();
       }
     }
   );
@@ -267,28 +303,13 @@ const startRefused = (error: unknown, whose: string): Error => {
 };
 
 /**
- * A start that did not answer within its time: no refusal, so nothing holds
- * the next start back.
+ * A start whose server went quiet before it answered: no refusal, so
+ * nothing holds the next start back.
  */
 const startUnanswered = (what: string, after: number, whose: string): Error =>
   new Error(
     `${whose} did not answer ${what} within ${secondsOf(after)} s. Its next start is tried at the next OpenCode session or message.`
   );
-
-/** The server a start launched, or {@link startUnanswered} when it did not answer in time. */
-const startedServer = (
-  launched: Bounded<ServerIdentity>,
-  whose: string
-): ServerIdentity => {
-  switch (launched.kind) {
-    case "answered":
-      return launched.value;
-    case "unanswered":
-      throw startUnanswered("its start", launched.after, whose);
-    default:
-      unhandled("read", launched);
-  }
-};
 
 /** What a keeper's record file says of the servers it keeps: the one current, and the ones retired that may still run. */
 export interface OpencodeServerRecord {
@@ -304,7 +325,7 @@ type Attach = (
   client: SessiondClient,
   procId: string,
   spec: ProcSpec,
-  signal: AbortSignal
+  signal?: AbortSignal
 ) => Promise<string>;
 
 /** OS start identity plus sessiond epoch/procId/pid prevents signalling a reused PID. */
@@ -727,7 +748,7 @@ export class OpencodeServerOwner {
    */
   async #launch(
     launch: ServerLaunch,
-    signal: AbortSignal
+    signal?: AbortSignal
   ): Promise<ServerIdentity> {
     const client = await this.#sessiond();
     let kind = this.account === undefined ? "" : `account-${this.account}-`;
@@ -736,7 +757,7 @@ export class OpencodeServerOwner {
     }
     const procId = `${OPENCODE_SERVER_PROC_ID}-${kind}${crypto.randomUUID()}`;
     const password = randomBytes(24).toString("base64url");
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     try {
       // A view's server is entered into the view as it starts (`#enter`).
       const url = await this.#attach(
@@ -757,7 +778,7 @@ export class OpencodeServerOwner {
         ...(await identify(client, procId, url, password)),
         launch: launchOf(launch),
       };
-      signal.throwIfAborted();
+      signal?.throwIfAborted();
       return identity;
     } catch (error) {
       // A timed-out announcement may leave a real candidate. Capture it for
@@ -839,11 +860,11 @@ export class OpencodeServerOwner {
       if (!start.attempt && this.#refused?.inputs === start.inputs) {
         throw this.#refused.error;
       }
-      let launched: Bounded<ServerIdentity>;
+      // Its announce is waited on while the new server writes or works
+      // (opencode.ts `serverAnnounced`), and its exit ends the wait.
+      let identity: ServerIdentity;
       try {
-        launched = await readWithin(SERVER_CUTOVER_TIMEOUT_MS, (signal) =>
-          this.#launch(launch, signal)
-        );
+        identity = await this.#launch(launch);
       } catch (error) {
         this.#refused = {
           error: startRefused(error, this.#words.whose),
@@ -851,7 +872,6 @@ export class OpencodeServerOwner {
         };
         throw this.#refused.error;
       }
-      const identity = startedServer(launched, this.#words.whose);
       this.#refused = null;
       const current = await this.#load();
       this.#record = {
@@ -888,14 +908,10 @@ export class OpencodeServerOwner {
       }
       const record = await this.#load();
       const old = record.active;
-      // One time for the whole cutover: the launch and the candidate's verification share it.
-      const started = performance.now();
-      const left = () =>
-        Math.max(0, SERVER_CUTOVER_TIMEOUT_MS - (performance.now() - started));
-      const launched = await readWithin(left(), (signal) =>
-        this.#launch(launch, signal)
-      );
-      const candidate = startedServer(launched, this.#words.whose);
+      // The candidate's announce is waited on while it writes or works
+      // (opencode.ts `serverAnnounced`); its verification while it writes,
+      // works or answers, and its exit ends either.
+      const candidate = await this.#launch(launch);
       this.#candidateProcId = candidate.procId;
       try {
         // An unselected candidate is durable cleanup work if the agent crashes.
@@ -905,8 +921,12 @@ export class OpencodeServerOwner {
           retired: [...preparing.retired, candidate],
         };
         await this.#save();
-        const verified = await readWithin(left(), (signal) =>
-          verify(candidate, signal)
+        const keeper = await this.#keeperOf(candidate.epoch);
+        const verified = await readOpencodeWhile(
+          keeper
+            ? serverLife(keeper, candidate.procId, candidate.pid, true)
+            : undefined,
+          ({ signal }) => verify(candidate, signal)
         );
         switch (verified.kind) {
           case "answered":
@@ -914,7 +934,7 @@ export class OpencodeServerOwner {
           case "unanswered":
             throw startUnanswered(
               "its verification",
-              SERVER_CUTOVER_TIMEOUT_MS,
+              verified.after,
               this.#words.whose
             );
           default:
