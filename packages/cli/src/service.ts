@@ -48,6 +48,7 @@ import {
   unxml,
 } from "@cawco/core/launchd";
 import { recordLimitReading, timed } from "@cawco/core/limit-readings";
+import { loopbackBeside } from "@cawco/core/loopback-binds";
 import { unknownMigrations } from "@cawco/core/migration-state";
 import { hubDbPath, previewServerSocket } from "@cawco/core/paths/hub";
 import {
@@ -308,28 +309,20 @@ const dashboardAddress = (): { host: string; port: string } => ({
 });
 
 /**
- * The loopback addresses a listener on `host` already answers: the IPv4
- * wildcard takes 127.0.0.1 and a loopback address itself; `::` is left to
- * name each, since an IPv6 wildcard takes IPv4 only where the system maps it.
- */
-const coveredLoopback = (host: string): string[] => {
-  if (host === "0.0.0.0") {
-    return ["127.0.0.1"];
-  }
-  return host === "127.0.0.1" || host === "::1" ? [host] : [];
-};
-
-/**
  * The dashboard's sockets, on its one port (core `localDashboardPort`,
  * 3455): where the network reaches it (required, its own unit,
  * `cawco-dashboard.socket`; installedDashboardHost reads it back), and each
  * loopback address that one does not already answer
- * ({@link coveredLoopback}), so `http://localhost:3455` is the dashboard
+ * (core loopback-binds.ts `loopbackBeside`), so `http://localhost:3455` is the dashboard
  * here by either family as it is on every computer whose agent carries it
  * (agent hub-loopback.ts). On the hub's computer the agent carries nothing,
  * so these are the only listeners on the port. Under the default HOST
  * (0.0.0.0) that is `::1` alone, where this computer has an IPv6 loopback
- * ({@link hasIpv6Loopback}); none is a unit of none.
+ * (core loopback-binds.ts); none is a unit of none. A container or host
+ * with no `::1` gets no `[::1]` listen: one address the loopback socket
+ * cannot open fails it whole. Every update writes the sockets again
+ * (`refreshServices`), so one that gains `::1` listens there from its next
+ * update.
  *
  * The loopback is a unit of its own, `cawco-dashboard-local.socket`, wanted
  * and not required: systemd fails a whole socket unit on one address it
@@ -343,10 +336,10 @@ const coveredLoopback = (host: string): string[] => {
  */
 const dashboardSockets = (): SocketSpec[] => {
   const network = dashboardAddress();
-  const covered = coveredLoopback(network.host);
-  const loopback = ["127.0.0.1", ...(hasIpv6Loopback() ? ["::1"] : [])]
-    .filter((host) => !covered.includes(host))
-    .map((host) => ({ host, port: network.port }));
+  const loopback = loopbackBeside(network.host).map((host) => ({
+    host,
+    port: network.port,
+  }));
   return [
     {
       unit: "dashboard",
@@ -365,27 +358,6 @@ const dashboardSockets = (): SocketSpec[] => {
           },
         ]),
   ];
-};
-
-/**
- * Whether this computer can listen on `::1` now. A container or host with no
- * IPv6 loopback (`::1` absent, or no IPv6 at all) gets no `[::1]` listen:
- * one address the loopback socket cannot open fails it whole. Every update
- * writes the sockets again (`refreshServices`), so one that gains `::1`
- * listens there from its next update.
- */
-const hasIpv6Loopback = (): boolean => {
-  try {
-    Bun.serve({
-      hostname: "::1",
-      port: 0,
-      fetch: () => new Response(null),
-    }).stop(true);
-    return true;
-  } catch {
-    // EADDRNOTAVAIL (no `::1`) or EAFNOSUPPORT (no IPv6): none here.
-    return false;
-  }
 };
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
