@@ -30,6 +30,8 @@ interface Pipe {
   client: Socket<Door>;
   /** The client's side is gone: the upstream ends once it has taken what was queued. */
   clientDone: boolean;
+  /** Said to the TLS listener's holder once both sides are gone ({@link DoorTarget.piped}). */
+  ended: () => void;
   toClient: Uint8Array[];
   toUpstream: Uint8Array[];
   upstream?: Socket<Pipe>;
@@ -110,11 +112,26 @@ const answer = (status: string, headers: string[] = []): string =>
     "",
   ].join("\r\n");
 
-/** The connection's pipe to the TLS listener at `port` on loopback, with `first` its first bytes. */
-const pipeTo = (client: Socket<Door>, port: number, first: Uint8Array) => {
+/** Whether both sides of `pipe` are gone: said once, as it ends. */
+const settle = (pipe: Pipe): void => {
+  if (pipe.clientDone && pipe.upstreamDone) {
+    pipe.ended();
+  }
+};
+
+/** The connection's pipe to the TLS listener `to` names on loopback, with `first` its first bytes. */
+const pipeTo = (client: Socket<Door>, to: DoorTarget, first: Uint8Array) => {
+  let said = false;
+  const ended = to.piped();
   const pipe: Pipe = {
     client,
     clientDone: false,
+    ended: () => {
+      if (!said) {
+        said = true;
+        ended();
+      }
+    },
     toClient: [],
     toUpstream: [first.slice()],
     upstreamDone: false,
@@ -125,7 +142,7 @@ const pipeTo = (client: Socket<Door>, port: number, first: Uint8Array) => {
   client.pause();
   Bun.connect<Pipe>({
     hostname: LOOPBACK,
-    port,
+    port: to.tlsPort,
     data: pipe,
     socket: {
       open(upstream) {
@@ -161,10 +178,12 @@ const pipeTo = (client: Socket<Door>, port: number, first: Uint8Array) => {
         if (pipe.toClient.length === 0) {
           client.end();
         }
+        settle(pipe);
       },
       connectError() {
         pipe.upstreamDone = true;
         client.end();
+        settle(pipe);
       },
       error() {
         // Its close follows.
@@ -207,26 +226,33 @@ export interface TailnetDoor {
   stop: (closeActiveConnections?: boolean) => Promise<void>;
 }
 
+/** Where a door sends a connection: the port's TLS listener on loopback now, and the tailnet name plain http is redirected to. */
+export interface DoorTarget {
+  name: string;
+  /** A connection is piped to {@link tlsPort}: what it returns is called once that pipe has ended on both sides. */
+  piped: () => () => void;
+  tlsPort: number;
+}
+
 /**
  * The door on `hostname:port` (a tailnet address, beside the port's
  * wildcard plain listener, both SO_REUSEPORT: Linux gives a connection to
- * the address-bound one): TLS on to `tlsPort` on loopback, plain http
- * redirected to `https://<name>:<port>`. Throws as `Bun.listen` does,
+ * the address-bound one): TLS on to the TLS listener `target` names as
+ * the connection says what it is, plain http redirected to
+ * `https://<name>:<port>`. Read per connection, so a certificate's renewal
+ * replaces the TLS listener behind a door that never closes; null (the
+ * port's HTTPS going) ends the connection. Throws as `Bun.listen` does,
  * EADDRINUSE when the port can't be shared.
  */
 export const openTailnetDoor = ({
   hostname,
-  name,
   port,
-  tlsPort,
+  target,
 }: {
   hostname: string;
-  name: string;
   port: number;
-  tlsPort: number;
+  target: () => DoorTarget | null;
 }): TailnetDoor => {
-  const location = (target: string): string =>
-    `https://${name}:${port}${target}`;
   // Bun.listen takes `reusePort` as Bun.serve does (measured: two listeners
   // on one address and port beside a wildcard one); its type doesn't name it.
   const options: TCPSocketListenOptions<Door> & { reusePort: boolean } = {
@@ -247,14 +273,19 @@ export const openTailnetDoor = ({
           }
           return;
         }
+        const to = target();
+        if (!to) {
+          client.end();
+          return;
+        }
         if (at.stage === "sniff" && chunk[0] === TLS_HANDSHAKE) {
-          pipeTo(client, tlsPort, chunk);
+          pipeTo(client, to, chunk);
           return;
         }
         readPlain(
           client,
           `${at.stage === "plain" ? at.head : ""}${chunk.toString("latin1")}`,
-          location
+          (path) => `https://${to.name}:${port}${path}`
         );
       },
       drain(client) {
@@ -277,6 +308,7 @@ export const openTailnetDoor = ({
         if (at.pipe.toUpstream.length === 0) {
           at.pipe.upstream?.end();
         }
+        settle(at.pipe);
       },
       timeout(client) {
         // A connection that never said what it was, or a head never finished.

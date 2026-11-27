@@ -1,8 +1,10 @@
 /**
  * Every preview origin's listener, held by the preview server: one on each
- * port the hub's port rows give an origin (db/previews.ts), each with its
- * TLS twin while the tailnet serves HTTPS (tailnet-doors.ts), and host mode's
- * one on the range's first port, which routes each request by its Host. The
+ * port the hub's port rows give an origin (db/previews.ts), on the bind
+ * address and each loopback address it doesn't answer (core
+ * loopback-binds.ts, as the dashboard's port), each with its TLS twin
+ * while the tailnet serves HTTPS (tailnet-doors.ts), and host mode's one on
+ * the range's first port, which routes each request by its Host. The
  * rows and the mode are the hub's: it writes them and says so (`ports`), and
  * the listeners are made to stand as they say (`stand`),
  * each bind refused said back to the hub, which moves that origin.
@@ -13,6 +15,7 @@
  * origin the rows give it takes it at once.
  */
 import { errnoCode } from "@cawco/core/absent";
+import { loopbackBeside } from "@cawco/core/loopback-binds";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import {
   causeOf,
@@ -35,7 +38,19 @@ import type { ListenerSocket } from "./serve";
 /** How long a port an origin let go stays held for its stale addresses: a session's pass ticket's life, the longest an `artifact_browse` url can still be entered. */
 const VACANT_HOLD_MS = SESSION_PASS_MS;
 
-/** A listener: the plain one and its TLS twin, stopped together with their connections. */
+/**
+ * The addresses each listener binds: the hub's bind address and each
+ * loopback address it doesn't answer, so a dashboard opened at
+ * `http://localhost:3455` reaches `http://localhost:<port>` by either
+ * family, as it reaches the dashboard. Read once, at the first listener.
+ */
+let bindHosts: string[] | undefined;
+const hostsToBind = (): string[] => {
+  bindHosts ??= [BIND_HOST, ...loopbackBeside(BIND_HOST)];
+  return bindHosts;
+};
+
+/** A listener: the plain ones and their TLS twin, stopped together with their connections. */
 interface Held {
   port: number;
   stop: () => Promise<void>;
@@ -99,7 +114,7 @@ export const createListeners = (env: ListenersEnv) => {
   /**
    * A listener on `port`, each request's origin from `route`, behind
    * `lock`, and its TLS twin on the tailnet addresses while those serve
-   * HTTPS. The plain one binds with `reusePort`, which Linux needs on both
+   * HTTPS. The plain ones bind with `reusePort`, which Linux needs on both
    * sockets to let a door on an address stand beside the wildcard listener.
    */
   const listen = (
@@ -133,14 +148,26 @@ export const createListeners = (env: ListenersEnv) => {
       previewFailed(HOP, null, why);
       return new Response(why, { status: 502 });
     };
-    const plain = Bun.serve<ListenerSocket>({
-      hostname: BIND_HOST,
-      port,
-      reusePort: true,
-      websocket: previewWebSocket,
-      error,
-      fetch,
-    });
+    const plain: Server<ListenerSocket>[] = [];
+    try {
+      for (const hostname of hostsToBind()) {
+        plain.push(
+          Bun.serve<ListenerSocket>({
+            hostname,
+            port,
+            reusePort: true,
+            websocket: previewWebSocket,
+            error,
+            fetch,
+          })
+        );
+      }
+    } catch (thrown) {
+      for (const one of plain) {
+        one.stop(true);
+      }
+      throw thrown;
+    }
     const secure = env.doors.beside(port, (at) =>
       Bun.serve<ListenerSocket>({
         ...at,
@@ -152,32 +179,35 @@ export const createListeners = (env: ListenersEnv) => {
     );
     return {
       port,
-      stop: (): Promise<void> => {
+      stop: async (): Promise<void> => {
         secure.close();
-        return plain.stop(true);
+        await Promise.all(plain.map((one) => one.stop(true)));
       },
     };
   };
 
   /**
-   * Whether no socket holds `port` now: a bind without `reusePort`, closed
-   * at once. A listener binds with `reusePort` (its tailnet twin needs it),
-   * and such a bind succeeds silently on a port another process holds the
-   * same way, the kernel then splitting connections between the two.
+   * Whether no socket holds `port` now on any address a listener binds: a
+   * bind without `reusePort` on each, closed at once. A listener binds with
+   * `reusePort` (its tailnet twin needs it), and such a bind succeeds
+   * silently on a port another process holds the same way, the kernel then
+   * splitting connections between the two.
    */
   const unheld = (port: number): true | { held: boolean; why: string } => {
-    try {
-      Bun.serve({
-        hostname: BIND_HOST,
-        port,
-        fetch: () => new Response(null),
-      }).stop(true);
-      return true;
-    } catch (thrown) {
-      return errnoCode(thrown) === "EADDRINUSE"
-        ? { held: true, why: "another program holds it" }
-        : { held: false, why: causeOf(thrown) };
+    for (const hostname of hostsToBind()) {
+      try {
+        Bun.serve({
+          hostname,
+          port,
+          fetch: () => new Response(null),
+        }).stop(true);
+      } catch (thrown) {
+        return errnoCode(thrown) === "EADDRINUSE"
+          ? { held: true, why: "another program holds it" }
+          : { held: false, why: causeOf(thrown) };
+      }
     }
+    return true;
   };
 
   /** Port `port` let go by the server, for an origin to bind: stopped as it is let go. */
