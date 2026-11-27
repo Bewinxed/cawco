@@ -449,17 +449,17 @@ let footRoom = 0;
 /** The room the host keeps under the page's foot, px ({@link keepFoot}): what its chrome floats over the page's foot. */
 let keptRoom = 0;
 
+/** What hears the page's root and body change size while a layer holds a mark ({@link sizeHolding}); null while none does. */
+let pageResized: ResizeObserver | null = null;
+/** A frame is asked for that sizes the layers to the page again. */
+let resizedFrame = 0;
+/** The body {@link pageResized} watches: a page that puts a new body in place is watched again. */
+let watchedBody: HTMLElement | null = null;
+
 /**
  * The overlay's layers at the page's origin, each holding a mark as big as
  * the page's scroll, and each holding none folded away. `layer`, about to
- * be drawn, says whether it `holds` a mark. The scroll is read with every
- * layer folded away first: a layer stands in the scroll it measures, so
- * read as it is, one sized for a taller layout (the page before it reflowed
- * wider) would hold the page at that height for good. While no layer holds
- * a mark nothing is read: reading the scroll lays the whole page out there
- * and then, before the browser would (a page of 300 sections: 50 ms of its
- * style and layout as it opened, preview-bound 12), for nothing to draw.
- * Each runs past the page's foot by the room {@link insetFoot} keeps there.
+ * be drawn, says whether it `holds` a mark ({@link sizeHolding}).
  */
 export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
   if (holds) {
@@ -467,6 +467,28 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
   } else {
     holding.delete(layer);
   }
+  sizeHolding();
+};
+
+/**
+ * Each layer that holds a mark sized to the page's scroll, and past it by
+ * the room {@link insetFoot} or {@link keepFoot} keeps there; every other
+ * folded away. The scroll is read with every layer folded away first: a
+ * layer stands in the scroll it measures, so read as it is, one sized for a
+ * taller layout would hold the page at that height for good. While no
+ * layer holds a mark nothing is read: reading the scroll lays the whole
+ * page out there and then, before the browser would (a page of 300
+ * sections: 50 ms of its style and layout as it opened, preview-bound 12),
+ * for nothing to draw.
+ *
+ * The page's size is watched while a layer holds ({@link pageResized}), and
+ * the layers sized again as it changes: sized only as a mark was drawn, a
+ * layer kept the height the page had then. A board laid out 17,728px tall
+ * while its sheets loaded, then 982px once its own `h-dvh` held it, kept
+ * the stage's page 17,728px tall, and the browser's scroll stood far below
+ * the drawing.
+ */
+const sizeHolding = () => {
   const layers = document.querySelectorAll<SVGSVGElement>(
     "svg[data-cawco-ink], svg[data-cawco-pins]"
   );
@@ -475,8 +497,11 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
     one.setAttribute("height", "0");
   }
   if (holding.size === 0) {
+    pageResized?.disconnect();
+    pageResized = null;
     return;
   }
+  watchPageSize();
   const root = document.documentElement;
   const width = String(
     Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0)
@@ -489,6 +514,34 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
     one.setAttribute("width", width);
     one.setAttribute("height", height);
   }
+};
+
+/**
+ * The page's root and body watched for their size. The layers stand at the
+ * root's origin, positioned, so sizing them changes neither box and no
+ * delivery follows its own write. Sized in the next frame, as changes.ts
+ * draws: written inside the delivery, the layout it forces is one the
+ * delivery had already passed.
+ */
+const watchPageSize = () => {
+  const { body } = document;
+  if (pageResized && (!body || watchedBody === body)) {
+    return;
+  }
+  pageResized?.disconnect();
+  pageResized = new ResizeObserver(() => {
+    if (!resizedFrame) {
+      resizedFrame = requestAnimationFrame(() => {
+        resizedFrame = 0;
+        sizeHolding();
+      });
+    }
+  });
+  pageResized.observe(document.documentElement);
+  if (body) {
+    pageResized.observe(body);
+  }
+  watchedBody = body;
 };
 
 /**

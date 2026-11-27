@@ -8,6 +8,7 @@
 
 import type { LayoutRead } from "@cawco/core/layout-guides";
 import type { LimitReading } from "@cawco/core/limit-readings";
+import type { ViewScreen } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
   type CanvasGraph,
@@ -226,6 +227,8 @@ export interface View {
   motion: "on" | "reduce";
   /** `page`: drawn in the page's own scheme. */
   scheme: Scheme | "both" | "page";
+  /** What its viewport lengths answer: the screen each width names, or the page's own window (core page-wire.ts `ViewScreen`). */
+  screen: ViewScreen;
   /** Null: each story at its own form (or its content's width). */
   widths: number[] | null;
 }

@@ -52,6 +52,7 @@
    */
   import type { MadeView } from "@cawco/core/comments/made-view";
   import { detach } from "@cawco/core/detach";
+  import type { ViewScreen } from "@cawco/core/page-wire";
   import {
     type CanvasSpec,
     GRAPH_WIDTHS,
@@ -646,12 +647,15 @@
   const SCALED_UNDER = 0.995;
   /** The stage's own width, px: what Adapt draws at. */
   let stageAcross = $state(0);
-  const width = $derived.by(() => {
-    if (widthPick !== "adapt" && !content) {
-      return widthPick;
-    }
-    return stageAcross > 0 ? stageAcross : null;
-  });
+  /** A device's width he picked; null under Adapt and for content, which draw at the stage's own. */
+  const device = $derived(widthPick !== "adapt" && !content ? widthPick : null);
+  const width = $derived(device ?? (stageAcross > 0 ? stageAcross : null));
+  /**
+   * The screen the drawing's viewport lengths answer: a device's picked
+   * (its `screenHeight`), else the stage's own, Adapt fitting the panel's
+   * height as it fits its width.
+   */
+  const screen = $derived<ViewScreen>(device === null ? "window" : "device");
   let scheme = $state<"light" | "dark">(
     typeof document !== "undefined" &&
       document.documentElement.classList.contains("dark")
@@ -799,6 +803,7 @@
   $effect(() => {
     const view = {
       scheme: content ? theme.resolved : scheme,
+      screen,
       width,
       motion: reduce ? "reduce" : "on",
       fit: !actual,
