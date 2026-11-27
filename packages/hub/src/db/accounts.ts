@@ -25,6 +25,7 @@ import type {
   AgyMethod,
 } from "@cawco/core/harness/agy-account";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
+import type { BuildInfo } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {
@@ -76,6 +77,9 @@ type AccountPatch = Partial<
 >;
 
 type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
+
+/** The agent build that read a catalog: its version and, when it named one, its commit (core `BuildInfo`). */
+export type CatalogReader = Pick<BuildInfo, "version" | "commit">;
 
 /** A credential moving out of a machine's own store into an account (`login_moves`). */
 export interface LoginMove {
@@ -129,6 +133,8 @@ export interface AccountsDb {
     identity: AccountIdentity,
     except?: string
   ) => Account | undefined;
+  /** The agent build that read the account's catalog; undefined when it has none or none was kept with it. */
+  readonly catalogReader: (accountId: string) => CatalogReader | undefined;
   readonly catalogs: () => AccountCatalog[];
   /**
    * Ends the account's model-access marks: one model's (a turn on it
@@ -200,10 +206,11 @@ export interface AccountsDb {
   /** The credentials moving now. */
   readonly moves: () => LoginMove[];
   readonly patch: (id: string, patch: AccountPatch) => Account | undefined;
-  /** The account's models as its Claude Code just answered; learned efforts stay. */
+  /** The account's models as its harness just answered a probe by the agent build `readBy`; learned efforts stay. */
   readonly putCatalog: (
     accountId: string,
     models: ModelInfo[],
+    readBy: CatalogReader | undefined,
     at?: number
   ) => void;
   /** The effort `model` ran at on the account when a session asked for none. */
@@ -609,17 +616,36 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       return row ? toAccount(row) : undefined;
     },
     catalogs,
-    putCatalog: (accountId, models, at = Date.now()) => {
+    putCatalog: (accountId, models, readBy, at = Date.now()) => {
       if (!get(accountId)) {
         return;
       }
+      const row = {
+        models,
+        readAt: new Date(at),
+        readByVersion: readBy?.version ?? null,
+        readByCommit: readBy?.commit ?? null,
+      };
       db.insert(accountCatalogs)
-        .values({ accountId, models, readAt: new Date(at) })
-        .onConflictDoUpdate({
-          target: accountCatalogs.accountId,
-          set: { models, readAt: new Date(at) },
-        })
+        .values({ accountId, ...row })
+        .onConflictDoUpdate({ target: accountCatalogs.accountId, set: row })
         .run();
+    },
+    catalogReader: (accountId) => {
+      const row = db
+        .select({
+          version: accountCatalogs.readByVersion,
+          commit: accountCatalogs.readByCommit,
+        })
+        .from(accountCatalogs)
+        .where(eq(accountCatalogs.accountId, accountId))
+        .get();
+      if (!row?.version) {
+        return;
+      }
+      return row.commit
+        ? { version: row.version, commit: row.commit }
+        : { version: row.version };
     },
     putDefaultEffort: (accountId, model, effort) => {
       const catalog = db

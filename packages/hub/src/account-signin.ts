@@ -772,7 +772,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       if (result.probe.identity && !account.identity) {
         ctx.db.accounts.setIdentity(account.id, result.probe.identity);
       }
-      keepProbe(ctx.db, account.id, result.probe);
+      keepProbe(ctx.db, machineId, account.id, result.probe);
     }
     // Signed in here through CawCo: no longer the login that was moved.
     keepSignin(account.id, machineId, result.state);

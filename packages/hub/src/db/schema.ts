@@ -3450,8 +3450,8 @@ export const accountWindows = sqliteTable(
 );
 
 /**
- * Each account's model catalog, as its Claude Code answered a probe's
- * initialize (hub accounts.ts `refreshCatalog`), and the effort each model ran at when a
+ * Each account's model catalog, as its harness answered a probe
+ * (hub accounts.ts `refreshCatalog`), the agent build that read it, and the effort each model ran at when a
  * session asked for none. Kept so a picker has the account's models with
  * nothing running, across agent and hub restarts.
  */
@@ -3461,6 +3461,14 @@ export const accountCatalogs = sqliteTable("account_catalogs", {
     .references(() => accounts.id, { onDelete: "cascade" }),
   models: storedJson(z.array(ModelInfoSchema))("models").notNull(),
   readAt: timestamp("read_at").notNull(),
+  /**
+   * The agent build that read it, as its machine registered (core
+   * `BuildInfo`): a machine on a newer build reads it again at once (hub
+   * accounts.ts `readByOlder`). Null for one read before builds were kept,
+   * or on a machine that named none.
+   */
+  readByVersion: text("read_by_version"),
+  readByCommit: text("read_by_commit"),
 });
 
 /** The effort a model ran at on an account when a session asked for none, one row per model; kept as the catalog is read again. */

@@ -37,6 +37,7 @@ import { freshWindows, sameReset, windowKey } from "@cawco/core/usage/windows";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { z } from "zod";
 import type { DbShape } from "./db";
+import type { CatalogReader } from "./db/accounts";
 import { keptAs } from "./stored-json";
 
 /**
@@ -69,9 +70,48 @@ export const keepReading = (
 /** A catalog as Claude Code's model list gives it. */
 const MODELS = z.array(ModelInfoSchema);
 
+/** The agent build `machineId` registered with, as a catalog's reader; undefined when it named none. */
+const readerOn = (
+  db: DbShape,
+  machineId: string
+): CatalogReader | undefined => {
+  const build = db.machineFactsOf(machineId)?.build;
+  if (!build) {
+    return;
+  }
+  return build.commit
+    ? { version: build.version, commit: build.commit }
+    : { version: build.version };
+};
+
 /**
- * Keeps what a probe read of an account: its models, as its catalog
- * (replacing the one before, rows and all), and its plan. The models are
+ * Whether `now`, the build a machine runs, is newer than `held`, the build
+ * that read the account's catalog: then what its probe reads may have
+ * changed (efc89f7b9b taught Antigravity's to read every model's context
+ * window), so the catalog is read again at once. A catalog with no reader
+ * kept was read before readers were, by an older build. Release versions
+ * order by semver (`0.1.13-nightly.8786+efc89f7b9b`); two of one version
+ * (a checkout's package version, which every commit shares) are told apart
+ * by commit. A machine that named no build says nothing of it.
+ */
+const readByOlder = (
+  held: CatalogReader | undefined,
+  now: CatalogReader | undefined
+): boolean => {
+  if (!now) {
+    return false;
+  }
+  if (!held) {
+    return true;
+  }
+  const order = Bun.semver.order(now.version, held.version);
+  return order > 0 || (order === 0 && now.commit !== held.commit);
+};
+
+/**
+ * Keeps what a probe on `machineId` read of an account: its models, as its
+ * catalog (replacing the one before, rows and all), with the agent build
+ * that read it, and its plan. The models are
  * Claude Code's own list, taken into CawCo's type here (hub stored-json.ts
  * `keptAs`): a field its release adds is left out and said, and an effort
  * level it adds is kept as the string it is (`ModelInfo` holds the list's
@@ -80,6 +120,7 @@ const MODELS = z.array(ModelInfoSchema);
  */
 export const keepProbe = (
   db: DbShape,
+  machineId: string,
   accountId: string,
   probe: AccountProbe,
   at = Date.now()
@@ -88,6 +129,7 @@ export const keepProbe = (
     db.accounts.putCatalog(
       accountId,
       keptAs(MODELS, probe.models, "the account's model list"),
+      readerOn(db, machineId),
       at
     );
   }
@@ -231,15 +273,16 @@ const probeCatalog = async (
     ? held !== null && sameIdentity(read.identity, held)
     : account.provider !== CLAUDE_PROVIDER;
   if (answersAsAccount) {
-    keepProbe(db, account.id, read);
+    keepProbe(db, machineId, account.id, read);
   }
   return "read";
 };
 
 /**
  * The account's catalog, read through a probe of its dir on `machineId`
- * when the hub has none, or (`stale`) when it has one older than
- * {@link CATALOG_FRESH_MS}. A probe names no model, so its list is the
+ * when the hub has none, when the one it has was read by an older agent
+ * build than `machineId` runs now ({@link readByOlder}), or (`stale`) when it
+ * has one older than {@link CATALOG_FRESH_MS}. A probe names no model, so its list is the
  * account's own; a session's initialize lists models around the session's
  * model (core `SessionAccountRead`) and is never kept as one. A stale one
  * whose last probe failed is not probed again until {@link probeRetryDelay}
@@ -257,12 +300,14 @@ export const refreshCatalog = (
     .catalogs()
     .find((one) => one.accountId === account.id);
   const now = Date.now();
-  if (
+  const current =
     held &&
-    (when === "missing" ||
-      now - held.readAt < CATALOG_FRESH_MS ||
-      now < (probeFailures.get(account.id)?.until ?? 0))
-  ) {
+    !readByOlder(
+      db.accounts.catalogReader(account.id),
+      readerOn(db, machineId)
+    ) &&
+    (when === "missing" || now - held.readAt < CATALOG_FRESH_MS);
+  if (held && (current || now < (probeFailures.get(account.id)?.until ?? 0))) {
     return Promise.resolve("held");
   }
   // The promise edge of the account's one probe: this module's callers are
@@ -415,7 +460,9 @@ export const reconcileAccounts = async (
     }
     // An account whose models are each account's own (core
     // `catalogHarnessOf`: Claude's, Antigravity's) has them read once it is
-    // signed in. Claude's sessions read theirs again once stale
+    // signed in, and again on the first report after its machine moves to
+    // a newer build ({@link readByOlder}), as each new connection's first
+    // report is taken. Claude's sessions read theirs again once stale
     // (agent-socket account-readings.ts); an Antigravity account's are read
     // again here, on its machine's next report past the hour.
     if (state === "signed-in" && catalogHarnessOf(account.provider)) {
