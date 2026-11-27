@@ -57,13 +57,19 @@ import {
 /**
  * The page's readiness, watched from before its own scripts run: its
  * largest-contentful-paint entries (the platform's word that content
- * painted, W3C Largest Contentful Paint), and its own fetches and XHRs in
- * flight (a load function's data). What the overlay paints, inside
- * `cawco-overlay`, and its requests to `/__cawco/` (its doc's sync) are
- * the hub's, never the page's. Ready: content painted, nothing in flight,
- * and neither for {@link PICTURE_LIMITS}'s `settleMs`.
+ * painted, W3C Largest Contentful Paint), its long tasks (its main thread's
+ * own work, W3C Long Tasks), and its own fetches and XHRs in flight (a load
+ * function's data). Ready ends on the page's own quiet, as Chrome reads a
+ * page's network as almost idle (blink IdlenessDetector): content painted,
+ * no more than `PICTURE_LIMITS.inFlightMost` requests in flight, and no
+ * paint, no long task and no more in flight than that for `settleMs`. A
+ * request that ends is no change of the page's: a page that polls every
+ * half second, or holds a stream open, still reads ready. What the overlay
+ * paints, inside `cawco-overlay`, and its requests to `/__cawco/` (its
+ * doc's sync) are the hub's, never the page's.
  */
 const watchReadiness = `(() => {
+  const most = ${PICTURE_LIMITS.inFlightMost};
   window.__cawcoPainted = false;
   window.__cawcoPending = 0;
   window.__cawcoChangedAt = performance.now();
@@ -74,9 +80,10 @@ const watchReadiness = `(() => {
       if (!ours(entry.element)) { window.__cawcoPainted = true; changed(); }
     }
   }).observe({ type: "largest-contentful-paint", buffered: true });
+  new PerformanceObserver(() => changed()).observe({ type: "longtask", buffered: true });
   const counted = (url) => !String(url instanceof Request ? url.url : url).includes("/__cawco/");
-  const begun = () => { window.__cawcoPending += 1; };
-  const ended = () => { window.__cawcoPending = Math.max(0, window.__cawcoPending - 1); changed(); };
+  const begun = () => { window.__cawcoPending += 1; if (window.__cawcoPending > most) changed(); };
+  const ended = () => { if (window.__cawcoPending > most) changed(); window.__cawcoPending = Math.max(0, window.__cawcoPending - 1); };
   const fetched = window.fetch;
   window.fetch = function (...args) {
     if (!counted(args[0])) return fetched.apply(this, args);
@@ -138,6 +145,7 @@ const frameReady = async (frame: Frame, page: Page): Promise<boolean> => {
       !(await shownInPicture(frame, page)) ||
       (await frame.evaluate(documentReady, {
         framed: true,
+        inFlight: PICTURE_LIMITS.inFlightMost,
         settle: PICTURE_LIMITS.settleMs,
       }))
     );
@@ -150,7 +158,11 @@ const frameReady = async (frame: Frame, page: Page): Promise<boolean> => {
 const ready = async (page: Page): Promise<void> => {
   await page.waitForFunction(
     documentReady,
-    { framed: false, settle: PICTURE_LIMITS.settleMs },
+    {
+      framed: false,
+      inFlight: PICTURE_LIMITS.inFlightMost,
+      settle: PICTURE_LIMITS.settleMs,
+    },
     { polling: READY_POLL_MS, timeout: 0 }
   );
 };
@@ -191,47 +203,52 @@ const hearPage = (page: Page, hear: () => void): (() => void) => {
  * `work` for as long as `page` shows life (core bounded.ts
  * `readWhileLive`): each of its events {@link hearPage} hears, and each paint or
  * request end its readiness watch counts (`__cawcoChangedAt`, read each
- * {@link READY_POLL_MS}). Its browser's end answers `unanswered` "dead".
+ * {@link READY_POLL_MS}). Its browser's end answers `unanswered` "dead";
+ * `asker`, the picture's caller's, ends it at once.
  */
 const whileLive = <T>(
   page: Page,
+  asker: AbortSignal,
   work: (signal: AbortSignal) => Promise<T>
 ): Promise<Bounded<T>> =>
-  readWhileLive((signal, alive) => {
-    const unhear = hearPage(page, () => alive());
-    let changedAt: number | undefined;
-    const looking = setInterval(() => {
-      page
-        .evaluate(changedAtNow)
-        .then((at) => {
-          if (at !== changedAt) {
-            changedAt = at;
-            alive();
-          }
-        })
-        .catch(() => undefined);
-    }, READY_POLL_MS);
-    const browser = page.context().browser();
-    const done = new AbortController();
-    // The browser's end, heard as the work waits: the work is Gone.
-    const closed = Effect.runPromise(
-      Effect.callback<never, Gone>((resume) => {
-        const gone = (): void =>
-          resume(
-            Effect.fail(new Gone("the browser drawing the picture closed"))
-          );
-        browser?.once("disconnected", gone);
-        return Effect.sync(() => browser?.off("disconnected", gone));
-      }),
-      { signal: done.signal }
-    );
-    closed.catch(() => undefined);
-    return Promise.race([work(signal), closed]).finally(() => {
-      done.abort();
-      clearInterval(looking);
-      unhear();
-    });
-  });
+  readWhileLive(
+    (signal, alive) => {
+      const unhear = hearPage(page, () => alive());
+      let changedAt: number | undefined;
+      const looking = setInterval(() => {
+        page
+          .evaluate(changedAtNow)
+          .then((at) => {
+            if (at !== changedAt) {
+              changedAt = at;
+              alive();
+            }
+          })
+          .catch(() => undefined);
+      }, READY_POLL_MS);
+      const browser = page.context().browser();
+      const done = new AbortController();
+      // The browser's end, heard as the work waits: the work is Gone.
+      const closed = Effect.runPromise(
+        Effect.callback<never, Gone>((resume) => {
+          const gone = (): void =>
+            resume(
+              Effect.fail(new Gone("the browser drawing the picture closed"))
+            );
+          browser?.once("disconnected", gone);
+          return Effect.sync(() => browser?.off("disconnected", gone));
+        }),
+        { signal: done.signal }
+      );
+      closed.catch(() => undefined);
+      return Promise.race([work(signal), closed]).finally(() => {
+        done.abort();
+        clearInterval(looking);
+        unhear();
+      });
+    },
+    { signal: asker }
+  );
 
 /**
  * A decision page's whole length: it is the window's height and scrolls
@@ -253,11 +270,12 @@ const openToLength = async (page: Page, width: number): Promise<number> => {
   return view + hidden;
 };
 
-/** The picture of `ask.url`, base64 PNG, its overlay greeted as the pane greets it. Throws in words a tool answers when it can't be drawn. */
+/** The picture of `ask.url`, base64 PNG, its overlay greeted as the pane greets it; let go once `signal`, its asker's, aborts. Throws in words a tool answers when it can't be drawn. */
 export function drawArtifact(
-  ask: PictureAsk
+  ask: PictureAsk,
+  signal: AbortSignal
 ): Promise<{ png: string; cut?: PictureCut }> {
-  return drawPage(ask.url, ask.width, ask.artifact.name, ask);
+  return drawPage(ask.url, ask.width, ask.artifact.name, signal, ask);
 }
 
 /**
@@ -265,12 +283,14 @@ export function drawArtifact(
  * `hello`, a page served with the overlay, greeted as the pane greets it
  * so it draws the person's pins ({@link drawArtifact}); without, a page as
  * its server answers it (stage.ts `drawServed`). `name` names it in the
- * words a tool answers when it can't be drawn.
+ * words a tool answers when it can't be drawn. `signal` is its asker's: its
+ * abort lets every wait go at once, and the browser is closed.
  */
 export async function drawPage(
   url: string,
   width: number,
   name: string,
+  signal: AbortSignal,
   hello?: HelloArtifact
 ): Promise<{ png: string; cut?: PictureCut }> {
   if (
@@ -297,7 +317,7 @@ export async function drawPage(
     await page.addInitScript(hearHost, PREVIEW_LOCKED_MESSAGE);
     // Its load wakes a sleeping server and waits for it (preview.ts
     // `staged`), then loads the page: waited on while the page shows life.
-    const loaded = await whileLive(page, () =>
+    const loaded = await whileLive(page, signal, () =>
       page.goto(url, { timeout: 0, waitUntil: "load" })
     ).catch((error: unknown) => {
       throw new Error(
@@ -329,14 +349,14 @@ export async function drawPage(
     }
     // A page that never says it is ready (one that paints only a canvas,
     // or keeps a request open) is drawn as it stands once it goes quiet.
-    await whileLive(page, () => ready(page));
+    await whileLive(page, signal, () => ready(page));
     const scrolled = await openToLength(page, width);
-    await whileLive(page, (signal) => framesReady(page, signal));
+    await whileLive(page, signal, (live) => framesReady(page, live));
     const tall = await page.evaluate(documentHeight);
     const whole = Math.max(tall, scrolled, PICTURE_VIEW.height);
     const height = Math.min(whole, PICTURE_LIMITS.maxHeight);
     await holdTimeAnimations(page);
-    const shot = await whileLive(page, () =>
+    const shot = await whileLive(page, signal, () =>
       page.screenshot({
         fullPage: true,
         clip: { x: 0, y: 0, width, height },

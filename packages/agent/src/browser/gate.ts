@@ -66,7 +66,7 @@ import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { boundedWhileLive, Gone } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
@@ -186,13 +186,6 @@ const OWN_PAGE =
 
 /** The ids the gate gives its own calls on a connection: far above any agent's. */
 const GATE_IDS = 2_000_000_000;
-
-/**
- * How long a page's first load, or an agent's navigation of it, waits for
- * the page to carry its owner's mark ({@link Gate.marked}): the watch
- * attaches to a new tab's page within milliseconds.
- */
-const MARK_WAIT_MS = 3000;
 
 /** The page a new target opens on, before the gate takes it to the one asked for. */
 const BLANK = "about:blank";
@@ -511,6 +504,15 @@ export class Gate {
   readonly #windows = new Map<number, string>();
   /** Each page's session on the watch, by the page's target id. */
   readonly #pageSessions = new Map<string, string>();
+  /**
+   * The waits on each page ({@link marked}), by the page's target id: each
+   * told of every CDP message its session on the watch carries, and of the
+   * session's end (its target closed or detached).
+   */
+  readonly #pageHeard = new Map<
+    string,
+    Set<{ readonly alive: () => void; readonly gone: () => void }>
+  >();
   /**
    * Each page marked with its owner (or being), done as the call that
    * marks it landed or failed, and the script that marks its documents
@@ -1011,17 +1013,67 @@ export class Gate {
   }
 
   /**
-   * Whether page `page` carries its owner's mark ({@link #mark}) within `ms`:
-   * a load waits for it, never past that, and does not go without it.
+   * Whether page `page` carries its owner's mark ({@link #mark}): a load
+   * waits for it while the page's session on the watch speaks (core
+   * `boundedWhileLive`: each CDP message it carries), and does not go
+   * without it. Its target closing or detaching first, or a quiet spell
+   * with nothing on its session, answers no.
    */
-  marked(page: string, ms = MARK_WAIT_MS): Promise<boolean> {
+  marked(page: string): Promise<boolean> {
     // The promise edge of the wait for a page's mark.
     return runPromise(
-      boundedRead(ms, this.#markOf(page)).pipe(
+      boundedWhileLive((alive) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const ended = Deferred.makeUnsafe<never, Gone>();
+            const hearer = {
+              alive,
+              gone: () =>
+                Deferred.doneUnsafe(
+                  ended,
+                  Effect.fail(new Gone({ what: `page ${page}` }))
+                ),
+            };
+            const heard = this.#pageHeard.get(page) ?? new Set();
+            heard.add(hearer);
+            this.#pageHeard.set(page, heard);
+            return { ended, hearer };
+          }),
+          ({ ended }) =>
+            Effect.raceFirst(this.#markOf(page), Deferred.await(ended)),
+          ({ hearer }) =>
+            Effect.sync(() => {
+              const heard = this.#pageHeard.get(page);
+              heard?.delete(hearer);
+              if (heard?.size === 0) {
+                this.#pageHeard.delete(page);
+              }
+            })
+        )
+      ).pipe(
         Effect.as(true),
         Effect.catchTag("Unanswered", () => Effect.succeed(false))
       )
     );
+  }
+
+  /** A CDP message on the watch's session `session`: the waits on its page hear it. */
+  #pageSpoke(session: string): void {
+    for (const [page, held] of this.#pageSessions) {
+      if (held === session) {
+        for (const hearer of this.#pageHeard.get(page) ?? []) {
+          hearer.alive();
+        }
+        return;
+      }
+    }
+  }
+
+  /** Page `page`'s session on the watch ended: every wait on it ends. */
+  #pageEnded(page: string): void {
+    for (const hearer of [...(this.#pageHeard.get(page) ?? [])]) {
+      hearer.gone();
+    }
   }
 
   /** Page `page`'s mark landing: the one under way, else the next one. */
@@ -1127,7 +1179,9 @@ export class Gate {
     this.#tabPage.delete(targetId);
     this.#pageSessions.delete(targetId);
     this.#marks.delete(targetId);
-    this.#markWaited(targetId);
+    // A page gone carries no mark: what waited for it ends, `Gone`.
+    this.#pageEnded(targetId);
+    this.#markWaits.delete(targetId);
     if (this.#owners.targets[targetId]) {
       delete this.#owners.targets[targetId];
       delete this.#owners.addresses[targetId];
@@ -1190,6 +1244,9 @@ export class Gate {
       watch.wire = wire;
       socket.onmessage = (event) => {
         const message = parse(said(event.data));
+        if (message?.sessionId) {
+          this.#pageSpoke(message.sessionId);
+        }
         if (message && !answered(wire, message)) {
           this.#watched(message, wire, tabsAttached);
         }
@@ -1201,6 +1258,9 @@ export class Gate {
           this.#tabSessions.clear();
           // A mark lives on the watch's session of its page: gone with it,
           // and put on again as the next watch attaches.
+          for (const page of this.#pageSessions.keys()) {
+            this.#pageEnded(page);
+          }
           this.#pageSessions.clear();
           this.#marks.clear();
           // Its connections still open: watched again, so each new tab is
@@ -1257,6 +1317,11 @@ export class Gate {
         const session = text(params.sessionId);
         if (session) {
           this.#tabSessions.delete(session);
+          for (const [page, held] of this.#pageSessions) {
+            if (held === session) {
+              this.#pageEnded(page);
+            }
+          }
         }
         return;
       }

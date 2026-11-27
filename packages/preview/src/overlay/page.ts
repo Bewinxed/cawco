@@ -3,6 +3,7 @@
  * decides; a same-origin frame inside stands down and is reached from here).
  */
 
+import { readWhileLive } from "@cawco/core/bounded";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
   ANCHOR_IDENTITIES,
@@ -2686,63 +2687,70 @@ function describe(el: Element): PinnedElement {
  */
 const THUMB_AREA = 200_000;
 
-/**
- * How long a thumbnail waits for a page that has drawn nothing but its
- * ground to draw something: an app behind a port is still starting when the
- * overlay, in its head, says ready. Our call, inside the 15 s Files gives an
- * unseen page (files/page-thumbs.ts `PAGE_MS`).
- */
-const THUMB_WAIT_MS = 10_000;
 /** After the page changes, how long it settles before it is drawn again: the pane's own wait (PreviewPane `CAPTURE_AFTER_MS`). */
 const THUMB_SETTLE_MS = 1000;
 
-/** Resolves true at the page's next change outside the overlay, false once `ms` pass with none. */
-function pageChanges(ms: number): Promise<boolean> {
-  return new Promise((done) => {
+/**
+ * The viewport's picture once the page has drawn something of its own: a
+ * crop of its bare ground is none (picture.ts), so it is drawn again each
+ * time the page changes and settles. An app behind a port is still
+ * starting when the overlay, in its head, says ready, so the wait lasts
+ * while the page shows life (core bounded.ts `readWhileLive`): each
+ * mutation record outside the overlay, each resource it finishes
+ * (`PerformanceObserver`). A page that stood a quiet spell with only its
+ * ground is drawn as it stands. Null when it never drew, or when a part's
+ * failure was heard (`failedYet`).
+ */
+async function pageDrawn(
+  heard: (message: string) => void,
+  failedYet: () => boolean
+): Promise<string | null> {
+  const draw = () =>
+    cropPicture(
+      { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
+      heard,
+      { area: THUMB_AREA, thumbnail: true }
+    );
+  const read = await readWhileLive(async (signal, alive) => {
     const ours = document.querySelector("cawco-overlay");
+    // The next change waited on, told at each sign of the page's life.
+    let changed: (() => void) | undefined;
+    const moved = () => {
+      alive();
+      changed?.();
+    };
     const seen = new MutationObserver((records) => {
       if (records.some((record) => !ours?.contains(record.target))) {
-        finish(true);
+        moved();
       }
     });
-    const bound = setTimeout(() => finish(false), ms);
-    function finish(changed: boolean) {
-      clearTimeout(bound);
-      seen.disconnect();
-      done(changed);
-    }
     seen.observe(document.documentElement, {
       attributes: true,
       characterData: true,
       childList: true,
       subtree: true,
     });
-  });
-}
-
-/**
- * The viewport's picture once the page has drawn something of its own: a
- * crop of its bare ground is none (picture.ts), so it is drawn again each
- * time the page changes and settles, until {@link THUMB_WAIT_MS} pass. Null
- * when it never drew, or when a part's failure was heard (`failedYet`).
- */
-async function pageDrawn(
-  heard: (message: string) => void,
-  failedYet: () => boolean
-): Promise<string | null> {
-  const until = performance.now() + THUMB_WAIT_MS;
-  for (;;) {
-    const png = await cropPicture(
-      { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
-      heard,
-      { area: THUMB_AREA, thumbnail: true }
-    );
-    const left = until - performance.now();
-    if (png || failedYet() || left <= 0 || !(await pageChanges(left))) {
-      return png;
+    const loads = new PerformanceObserver(moved);
+    loads.observe({ type: "resource" });
+    try {
+      for (;;) {
+        const png = await draw();
+        if (png || failedYet() || signal.aborted) {
+          return png;
+        }
+        await new Promise<void>((next) => {
+          changed = next;
+          signal.addEventListener("abort", () => next(), { once: true });
+        });
+        changed = undefined;
+        await new Promise((settle) => setTimeout(settle, THUMB_SETTLE_MS));
+      }
+    } finally {
+      seen.disconnect();
+      loads.disconnect();
     }
-    await new Promise((settle) => setTimeout(settle, THUMB_SETTLE_MS));
-  }
+  });
+  return read.kind === "answered" ? read.value : await draw();
 }
 
 /**

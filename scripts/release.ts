@@ -46,12 +46,16 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
+import { QUIET_MS, readWhileLive } from "../packages/core/src/bounded";
+import { LOOK_MS } from "../packages/core/src/effect/poll";
+import { watchTreeCpu } from "../packages/core/src/run-captured";
 import { shortSha } from "../packages/core/src/short-id";
 import {
   listedPid,
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
+import { secondsOf } from "../packages/core/src/time";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
@@ -471,15 +475,8 @@ const signalGroupOf = async (
     signalPid(listedPid(member), sig);
   }
 };
-/**
- * How long a stopped command has to end before its group is killed: the
- * container tests' own cleanup (smoke-test.sh `finish`, e2e-test.sh
- * `rig_done`) removes every rig's containers through its podman instance and
- * then its vfs storage, which takes tens of seconds; a group killed while it
- * did left its containers, pasta and aardvark-dns running (obelisk,
- * 2026-10-15, at 5 s). A command with nothing to clean ends at once.
- */
-const STOP_GRACE_MS = 180_000;
+/** Aborted by the person's second interrupt: every group still ending is killed at once. */
+const killNow = new AbortController();
 /** Whether the group `group` names has ended, leader and members. */
 const groupEnded = async (group: Proc): Promise<boolean> =>
   !(await startedOf(group.pid)) && (await groupMembers(group.pid)).length === 0;
@@ -498,15 +495,30 @@ async function endGroup(group: Proc | undefined): Promise<void> {
     return;
   }
   await signalGroupOf(group, "SIGTERM");
-  const deadline = performance.now() + STOP_GRACE_MS;
-  while (performance.now() < deadline) {
-    if (await groupEnded(group)) {
-      return;
-    }
-    await Bun.sleep(250);
+  // The container tests' own cleanup (smoke-test.sh `finish`, e2e-test.sh
+  // `rig_done`) removes every rig's containers through its podman instance
+  // and then its vfs storage, which takes tens of seconds; a group killed
+  // while it did left its containers, pasta and aardvark-dns running
+  // (obelisk, 2026-10-15, at 5 s). So a stopped group is waited on while it
+  // works (core bounded.ts `readWhileLive`: its tree spending CPU time or
+  // starting a process, run-captured.ts `watchTreeCpu`), and killed once it
+  // has gone a quiet spell with none, or at the person's second interrupt.
+  const ended = await readWhileLive(
+    async (signal, working) => {
+      watchTreeCpu(group.pid, working, signal);
+      while (!(signal.aborted || (await groupEnded(group)))) {
+        await Bun.sleep(LOOK_MS);
+      }
+    },
+    { signal: killNow.signal }
+  ).catch(() => undefined);
+  if (ended?.kind === "answered") {
+    return;
   }
   console.error(
-    `[release] command group ${group.pid} still running ${STOP_GRACE_MS / 1000}s after SIGTERM: killed`
+    ended
+      ? `[release] command group ${group.pid} did nothing for ${secondsOf(QUIET_MS)} s after SIGTERM: killed`
+      : `[release] command group ${group.pid} killed at a second interrupt`
   );
   await signalGroupOf(group, "SIGKILL");
 }
@@ -915,6 +927,10 @@ process.on("SIGTERM", () => {
   stopped ??= stop("SIGTERM");
 });
 process.on("SIGINT", () => {
+  // A second interrupt while the run stops kills what is still ending.
+  if (stopped) {
+    killNow.abort();
+  }
   stopped ??= stop("SIGINT");
 });
 acquiring = acquire();

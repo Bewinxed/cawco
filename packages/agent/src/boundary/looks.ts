@@ -12,6 +12,7 @@ import {
 } from "@cawco/core/paths/workspace";
 import { commandLines } from "@cawco/core/process-identity";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { until } from "@cawco/core/until";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
@@ -454,7 +455,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
 };
 
 /**
- * Closes every boundary nothing has held for holding.ts `QUIET_CLOSE_MS`
+ * Closes every boundary nothing has held for a quiet spell (holding.ts `recentlyHeld`)
  * ({@link liveWhy}), one listing of the keepers and one of the machine's
  * processes for all of them. Nothing closes until the hub has said which work
  * items are live.
@@ -486,7 +487,7 @@ const sweepQuiet = async (): Promise<void> => {
     if (!(recentlyHeld(id) || isStarting(id))) {
       await closeQuietly(
         id,
-        `it has been quiet for ${Math.round((now - since) / 60_000)} min`
+        `it has been quiet for ${secondsOf(now - since)} s`
       );
     }
   }

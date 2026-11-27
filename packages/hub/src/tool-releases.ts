@@ -35,7 +35,7 @@
  * `failures`).
  */
 
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { fetchLive, QUIET_MS } from "@cawco/core/bounded";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
@@ -50,26 +50,31 @@ import type { HubLifetimeShape } from "./lifetime";
  */
 const RELEASE_READ_MS = 30 * MINUTE_MS;
 
-/** How long one read of a release URL may take before it is let go. */
-const RELEASE_WAIT_MS = 20_000;
-
 /** What a release URL said when last read: the newest release, or why it said none. */
 export type ReleaseRead =
   { at: number; version: string } | { at: number; failed: string };
 
-/** Reads one release URL, within {@link RELEASE_WAIT_MS}; a read that failed says why. */
-const readRelease = (
-  url: string,
-  fetcher: typeof fetch = fetch
-): Effect.Effect<ReleaseRead> =>
-  boundedRead(
-    RELEASE_WAIT_MS,
-    Effect.tryPromise(async (signal) => {
-      const response = await fetcher(url, { signal });
-      return { status: response.status, body: await response.text() };
-    })
-  ).pipe(
-    Effect.map(({ status, body }): ReleaseRead => {
+/** Reads one release URL while its bytes arrive (core `fetchLive`); a read that failed says why. */
+const readRelease = (url: string): Effect.Effect<ReleaseRead> =>
+  Effect.tryPromise(async () => {
+    const read = await fetchLive(url);
+    if (read.kind === "unanswered") {
+      return read;
+    }
+    return {
+      kind: "answered" as const,
+      status: read.value.status,
+      body: await read.value.text(),
+    };
+  }).pipe(
+    Effect.map((read): ReleaseRead => {
+      if (read.kind === "unanswered") {
+        return {
+          at: Date.now(),
+          failed: `it went silent for ${secondsOf(QUIET_MS)} s`,
+        };
+      }
+      const { status, body } = read;
       const version = status === 200 ? versionSaid(body) : undefined;
       if (!version) {
         return {
@@ -82,12 +87,6 @@ const readRelease = (
       }
       return { at: Date.now(), version };
     }),
-    Effect.catchTag("Unanswered", ({ after }) =>
-      Effect.succeed<ReleaseRead>({
-        at: Date.now(),
-        failed: `no answer within ${secondsOf(after)} s`,
-      })
-    ),
     Effect.catch(({ cause }) =>
       Effect.succeed<ReleaseRead>({
         at: Date.now(),
@@ -138,7 +137,6 @@ export const keptReleases = (fleet: {
 
 /** What {@link ToolReleases} reads with and tells. */
 export interface ToolReleasesDeps {
-  fetcher?: typeof fetch;
   lifetime: Pick<HubLifetimeShape, "fork">;
   /** The catalog's name for a tool id, for the log. */
   name: (toolId: string) => string;
@@ -189,7 +187,7 @@ export class ToolReleases {
     return Effect.forEach(
       Object.entries(this.#deps.urls),
       ([toolId, url]) =>
-        readRelease(url, this.#deps.fetcher).pipe(
+        readRelease(url).pipe(
           Effect.map((read) => this.#took(toolId, url, read))
         ),
       { concurrency: "unbounded", discard: true }

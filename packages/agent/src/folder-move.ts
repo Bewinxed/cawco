@@ -28,6 +28,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
+import { LOOK_MS } from "@cawco/core/effect/poll";
 import type {
   FolderMoveBlock,
   FolderMoveCopied,
@@ -70,8 +71,6 @@ import { machineFloor, within } from "./remove-folder";
 import { removeTree } from "./remove-tree";
 import { TreeEntrySchema } from "./stored-shapes";
 
-/** How often the removal says how far it is. */
-const SAY_EVERY_MS = 250;
 /** How long a read walks a folder before it answers with what it counted. */
 const READ_WALK_MS = 15_000;
 
@@ -825,7 +824,7 @@ export const folderMoveRemove = async (
   let removed = 0;
   let saidAt = 0;
   for (const entry of [...list].reverse()) {
-    if (Date.now() - saidAt > SAY_EVERY_MS) {
+    if (Date.now() - saidAt > LOOK_MS) {
       saidAt = Date.now();
       progress({
         kind: "folder_move_progress",

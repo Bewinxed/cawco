@@ -96,9 +96,20 @@ export const stageRenderWords = {
   andMore: (more: number, what: string) => `and ${more} more ${what}`,
   /** A frame whose body held more elements than a reading walks (agent canvas measure.ts `ELEMENTS_READ`): its parts, its look and its states' deltas are of the first `read` only. */
   elementsRead: (read: number, of: number) => `${read} of ${of} elements read`,
-  /** A read of the stage that waited while it compiled, until nothing on it compiled for `quiet` seconds (agent stage.ts `READ_QUIET_MS`): what it was to do, and how long it waited in all. */
+  /** A read of the stage that waited while it showed life, until it went `quiet` seconds with no answer, no output and no CPU time spent (agent stage.ts `askStage`): what it was to do, and how long it waited in all. */
   stoppedMoving: (what: string, quiet: number, waited: number) =>
-    `The stage did not ${what}: it compiled nothing for ${quiet} s, after ${Math.round(waited)} s of waiting. Its errors, if any, stand in the canvas's stage state; read the canvas again to retry.`,
+    `The stage did not ${what}: it went quiet for ${quiet} s, after ${Math.round(waited)} s of waiting. Its errors, if any, stand in the canvas's stage state; read the canvas again to retry.`,
+  /** A sheet's host that went quiet for `quiet` seconds without answering its health (agent stage.ts `looked`): the crash it is started again for. */
+  healthQuiet: (path: string, quiet: number) =>
+    `it went quiet for ${quiet} s without answering ${path}`,
+  /** A warm-up's canvas page whose stage ended before it answered (agent stage.ts `walkedAsEmbed`). */
+  warmEnded: "its stage ended before its canvas page answered",
+  /** A warm-up's canvas page that went quiet for `quiet` seconds without answering. */
+  warmQuiet: (quiet: number) =>
+    `its canvas page went quiet for ${quiet} s without answering`,
+  /** A read of the stage whose process ended before it answered (agent stage.ts `askStage`): what it was to do. */
+  endedAsked: (what: string) =>
+    `The stage did not ${what}: it ended before it answered. Read the canvas again to start it.`,
   /**
    * A read of the stage whose request got no answer at all, its connection
    * refused or cut (agent stage.ts `askStage`): what it was to do, the

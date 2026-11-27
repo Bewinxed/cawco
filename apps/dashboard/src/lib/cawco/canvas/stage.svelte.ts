@@ -18,8 +18,11 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
+import { Gone, QUIET_MS, readWhileLive } from "@cawco/core/bounded";
 import type { FrameSays } from "@cawco/core/page-wire";
 import { previewRoute } from "@cawco/core/preview/routes";
+import { secondsOf } from "@cawco/core/time";
+import { canvasWaitWords } from "@cawco/core/words/canvas-waits";
 import { on } from "svelte/events";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
@@ -46,8 +49,6 @@ export interface SlotActions {
 
 /** How long placement keeps reading after the page last moved, ms. */
 const TAIL = 500;
-/** How long the page has to draw the picture a send carries, ms. */
-const PICTURE_WAIT = 5000;
 /**
  * How long a lost link stands before what is drawn on the page is refused,
  * ms: the page's own (preview overlay/artifact.ts `LOST_REFUSES_MS`).
@@ -120,6 +121,8 @@ export class Stage {
   readonly holders = new Set<symbol>();
   /** The page's answer to an asked picture. */
   pictured: (() => void) | null = null;
+  /** The waits on the page, told of each message it posts and of its disconnecting ({@link picture}). */
+  readonly #hearers = new Set<{ alive: () => void; gone: () => void }>();
   /** The resize handles' handlers: the composer's while it stands there. */
   grab: {
     down: (
@@ -344,6 +347,26 @@ export class Stage {
     return this.entry ?? "";
   }
 
+  /** The page posted a message: every wait on it hears it. */
+  heard(): void {
+    for (const hearer of this.#hearers) {
+      hearer.alive();
+    }
+  }
+
+  /** The page is no longer connected: every wait on it ends. */
+  #disconnected(): void {
+    this.connected = false;
+    for (const hearer of [...this.#hearers]) {
+      hearer.gone();
+    }
+  }
+
+  /** The stage is let go of: what waits on its page ends. */
+  dropped(): void {
+    this.#disconnected();
+  }
+
   /** To the page, on its own origin alone. */
   post(message: FrameSays): void {
     if (this.origin) {
@@ -353,7 +376,7 @@ export class Stage {
 
   /** Tells the page which artifact it is, where its doc is, the dashboard's theme, and where it stands. */
   hello(): void {
-    this.connected = false;
+    this.#disconnected();
     // The page tells its link again once it hears this (overlay.ts); its
     // count it tells as its scene binds, which may precede the hello.
     this.link = "connecting";
@@ -460,25 +483,49 @@ export class Stage {
     );
   }
 
-  /** The page draws its picture now and posts it (cawco:picture); resolves once it has. */
-  picture(): Promise<void> {
+  /**
+   * The page draws its picture now and posts it (cawco:picture); resolves
+   * once it has. Waited on while the page posts (core bounded.ts
+   * `readWhileLive`: each message it posts a sign of its life), and ended
+   * when it disconnects.
+   */
+  async picture(): Promise<void> {
     if (!this.connected) {
-      return Promise.reject(
-        new Error("the canvas page isn't connected to the hub")
+      throw new Error("the canvas page isn't connected to the hub");
+    }
+    const drawn = await readWhileLive(
+      (_signal, alive) =>
+        new Promise<void>((done, fail) => {
+          const hearer = {
+            alive,
+            gone: () => {
+              end();
+              fail(new Gone("the canvas page"));
+            },
+          };
+          const end = () => {
+            this.#hearers.delete(hearer);
+            if (this.pictured === settled) {
+              this.pictured = null;
+            }
+          };
+          const settled = () => {
+            end();
+            done();
+          };
+          this.#hearers.add(hearer);
+          this.pictured = settled;
+          this.post({ type: "cawco:picture" });
+        })
+    );
+    if (drawn.kind === "unanswered") {
+      this.pictured = null;
+      throw new Error(
+        drawn.reason === "dead"
+          ? canvasWaitWords.pictureGone
+          : canvasWaitWords.pictureQuiet(secondsOf(QUIET_MS))
       );
     }
-    return new Promise((done, fail) => {
-      const timer = setTimeout(() => {
-        this.pictured = null;
-        fail(new Error("the canvas didn't draw its picture within 5 s"));
-      }, PICTURE_WAIT);
-      this.pictured = () => {
-        clearTimeout(timer);
-        this.pictured = null;
-        done();
-      };
-      this.post({ type: "cawco:picture" });
-    });
   }
 }
 
@@ -510,6 +557,7 @@ export function letGo(holder: symbol, id: string): void {
   }
   stage.holders.delete(holder);
   if (stage.holders.size === 0) {
+    stage.dropped();
     stages.delete(id);
   }
 }

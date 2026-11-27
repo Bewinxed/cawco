@@ -106,7 +106,8 @@ export const delegationRoutes = (
             undefined,
             typeof input.callKey === "string" && input.callKey
               ? input.callKey
-              : undefined
+              : undefined,
+            request.signal
           )
         );
       }

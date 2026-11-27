@@ -227,10 +227,11 @@ const DESCRIPTION =
 
 export interface FindToolDeps {
   find: Find;
-  /** A conversation's turns from its machine's transcript index (`transcriptTurns`), or why its machine gave none. */
+  /** A conversation's turns from its machine's transcript index (`transcriptTurns`), or why its machine gave none; let go on the machine once `signal`, its asker's, aborts. */
   indexedTurns: (
     machineId: string,
-    query: TranscriptTurnsQuery
+    query: TranscriptTurnsQuery,
+    signal: AbortSignal
   ) => Promise<TranscriptTurns | { error: string }>;
   /** A session the hub holds, by id. */
   instance: (id: string) => InstanceRow | undefined;
@@ -884,6 +885,7 @@ export const createFindTool = (deps: FindToolDeps) => {
    * agent reads them ({@link told}).
    */
   const conversationTurns = async (
+    signal: AbortSignal,
     conversation: Conversation,
     centre: { at?: number; docId?: string },
     side: number,
@@ -893,12 +895,16 @@ export const createFindTool = (deps: FindToolDeps) => {
     if (conversation.sessions.length === 0) {
       return { why: `session ${conversation.id} has said nothing yet` };
     }
-    const read = await deps.indexedTurns(conversation.machineId, {
-      sessions: conversation.sessions,
-      side,
-      ...(centre.docId ? { docId: centre.docId } : {}),
-      ...(centre.at ? { at: centre.at } : {}),
-    });
+    const read = await deps.indexedTurns(
+      conversation.machineId,
+      {
+        sessions: conversation.sessions,
+        side,
+        ...(centre.docId ? { docId: centre.docId } : {}),
+        ...(centre.at ? { at: centre.at } : {}),
+      },
+      signal
+    );
     return await told(fromIndex(read, conversation.id), chars, before);
   };
 
@@ -928,7 +934,7 @@ export const createFindTool = (deps: FindToolDeps) => {
    * session it never started (`<machine id>:<harness session id>`, as find
    * names one); undefined for anything else.
    */
-  const targetOf = (id: string) => {
+  const targetOf = (id: string, signal: AbortSignal) => {
     const row = deps.instance(id);
     if (row) {
       const machine = machineName(row.machineId);
@@ -943,6 +949,7 @@ export const createFindTool = (deps: FindToolDeps) => {
         },
         read: (centre: Centre, side: number, chars: number) =>
           conversationTurns(
+            signal,
             { id, machineId: row.machineId, sessions: deps.sessionIds(id) },
             centre,
             side,
@@ -964,6 +971,7 @@ export const createFindTool = (deps: FindToolDeps) => {
       },
       read: (centre: Centre, side: number, chars: number) =>
         conversationTurns(
+          signal,
           { id, machineId, sessions: [sessionId] },
           centre,
           side,
@@ -995,14 +1003,18 @@ export const createFindTool = (deps: FindToolDeps) => {
    * turns. What has the mark and is no ref (its part before the mark names
    * nothing) is a handle, `cockpit#5a167bde` or a mention chip, read whole.
    */
-  const around = async (ref: string, format: "concise" | "detailed") => {
+  const around = async (
+    ref: string,
+    format: "concise" | "detailed",
+    signal: AbortSignal
+  ) => {
     const { side, chars } = AROUND[format];
     const mark = ref.indexOf(REF_MARK);
     const head = wholeId((mark < 0 ? ref : ref.slice(0, mark)).trim());
-    const asRef = mark >= 0 && targetOf(head) !== undefined;
+    const asRef = mark >= 0 && targetOf(head, signal) !== undefined;
     const id = mark < 0 || asRef ? head : wholeId(ref.trim());
     const centre: Centre = asRef ? centreOf(ref.slice(mark + 1)) : {};
-    const target = targetOf(id);
+    const target = targetOf(id, signal);
     if (!target) {
       return problem(404, {
         code: "find-around-no-session",
@@ -1084,11 +1096,16 @@ export const createFindTool = (deps: FindToolDeps) => {
   };
 
   /** A detailed hit's turn either side of its best moment, when its machine's index answers; with `before`, only those said by then. */
-  const neighboursOf = async (result: FindResult, before?: number) => {
+  const neighboursOf = async (
+    signal: AbortSignal,
+    result: FindResult,
+    before?: number
+  ) => {
     const [best] = momentsOf(result);
     let read: TurnsRead | NoTurns | undefined;
     if (best && result.kind === "conversation") {
       read = await conversationTurns(
+        signal,
         conversationOf(result),
         { docId: best.docId, ...(best.at ? { at: best.at } : {}) },
         1,
@@ -1100,9 +1117,13 @@ export const createFindTool = (deps: FindToolDeps) => {
   };
 
   /** A detailed page's hits with their neighbouring turns. */
-  const withNeighbours = async (results: FindResult[], before?: number) => {
+  const withNeighbours = async (
+    signal: AbortSignal,
+    results: FindResult[],
+    before?: number
+  ) => {
     const turns = await Promise.all(
-      results.map((result) => neighboursOf(result, before))
+      results.map((result) => neighboursOf(signal, result, before))
     );
     return results.map((result, index) => {
       const beside = turns[index];
@@ -1125,7 +1146,11 @@ export const createFindTool = (deps: FindToolDeps) => {
       : { ...scope, offset };
   };
 
-  const search = async (actor: InstanceRow, input: FindInput) => {
+  const search = async (
+    actor: InstanceRow,
+    input: FindInput,
+    signal: AbortSignal
+  ) => {
     const asked = checked(input);
     if (asked instanceof ElysiaStatus) {
       return asked;
@@ -1133,9 +1158,9 @@ export const createFindTool = (deps: FindToolDeps) => {
     const { query, limit } = asked;
     const { by } = input;
     if (!query && by !== undefined) {
-      return await listed(actor, { ...input, by }, limit);
+      return await listed(actor, { ...input, by }, limit, signal);
     }
-    return await searched(actor, input, query, limit);
+    return await searched(actor, input, query, limit, signal);
   };
 
   /** A search with words: one page of the engine's ranking, read for secrets. */
@@ -1143,7 +1168,8 @@ export const createFindTool = (deps: FindToolDeps) => {
     actor: InstanceRow,
     input: FindInput,
     query: string,
-    limit: number
+    limit: number,
+    signal: AbortSignal
   ) => {
     const paged = pagedScope(actor, input);
     if (paged instanceof ElysiaStatus) {
@@ -1153,6 +1179,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const page = await deps.find.find({
       q: query,
       caller: `the find tool of session ${actor.id}`,
+      signal,
       limit,
       // One call, not a keystroke: each machine waited for as long as it
       // works on the search.
@@ -1178,7 +1205,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     );
     const hits = bounded(
       input.response_format === "detailed"
-        ? await withNeighbours(results, where.before)
+        ? await withNeighbours(signal, results, where.before)
         : results.map(hitOf)
     );
     const end = offset + hits.length;
@@ -1204,7 +1231,8 @@ export const createFindTool = (deps: FindToolDeps) => {
   const listed = async (
     actor: InstanceRow,
     input: FindInput & { by: By },
-    limit: number
+    limit: number,
+    signal: AbortSignal
   ) => {
     const scope = scopeOf(actor, input);
     if (scope instanceof ElysiaStatus) {
@@ -1224,6 +1252,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const { atLimit, results, coverage } = await deps.find.listing({
       author: AUTHOR[input.by],
       caller: `the find tool of session ${actor.id}`,
+      signal,
       asker: "call",
       transcripts: true,
       context: true,
@@ -1250,7 +1279,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     );
     const hits = bounded(
       input.response_format === "detailed"
-        ? await withNeighbours(shown, where.before)
+        ? await withNeighbours(signal, shown, where.before)
         : shown.map(hitOf)
     );
     const last = page[hits.length - 1];
@@ -1271,17 +1300,22 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** One `find` call, its input parsed: a search, or `around` a hit; `format` the form asked. */
+  /** One `find` call, its input parsed: a search, or `around` a hit; `format` the form asked; `signal` its asker's, which lets its machine reads go. */
   const call = async (
     actor: InstanceRow,
     asked: z.infer<typeof SCHEMA>,
-    format: "concise" | "detailed"
+    format: "concise" | "detailed",
+    signal: AbortSignal
   ) => {
     const input: FindInput = { ...asked, response_format: format };
     if (input.around?.trim()) {
-      return await around(input.around, input.response_format ?? "concise");
+      return await around(
+        input.around,
+        input.response_format ?? "concise",
+        signal
+      );
     }
-    return await search(actor, input);
+    return await search(actor, input, signal);
   };
 
   return { call };

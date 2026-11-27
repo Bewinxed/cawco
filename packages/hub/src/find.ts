@@ -36,9 +36,10 @@ import type { LiveFacts } from "./views/wire";
 export type FindRequest = Omit<EngineRequest, "requestId"> & {
   /**
    * Aborts once the asker no longer waits (the person typed on, closed
-   * Find): the machines are told to stop the search (core `CONTROL_ABANDON`).
+   * Find; an agent's find call cut): the machines are told to stop the
+   * search (core `CONTROL_ABANDON`).
    */
-  signal?: AbortSignal;
+  signal: AbortSignal;
 };
 
 /** The offset a cursor this hub gave starts at; 0 for none; or the refusal of one it did not give. */
@@ -82,7 +83,7 @@ export const createFind = (deps: FindDeps) => {
     async find(request: FindRequest) {
       const { signal, ...asked } = request;
       // Its asker gone (a newer keystroke) before the log is taken: no work.
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       deps.settle();
       const page = await views.withRequest(signal, (requestId) =>
         views.find({ live: deps.live(), request: { ...asked, requestId } })
@@ -101,7 +102,7 @@ export const createFind = (deps: FindDeps) => {
     }> {
       const { signal, ...asked } = request;
       // Its asker gone (a newer keystroke) before the log is taken: no work.
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       deps.settle();
       return views.withRequest(signal, (requestId) =>
         views.listing({ live: deps.live(), request: { ...asked, requestId } })

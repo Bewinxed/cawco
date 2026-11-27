@@ -1555,6 +1555,8 @@ export const createLandingRun = ({
       landingWaits.get(itemId) ?? null,
     landingWait,
     landingRuns,
+    /** The items whose landing this hub process runs now ({@link landingStops}). */
+    landingItems: (): string[] => [...landingStops.keys()],
     stopLanding,
     settleLanding,
     runIn,

@@ -1072,20 +1072,6 @@ const envelopeOf = (
 /** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
 const LEAKS_KEPT = 4096;
 
-/**
- * How long a `starting` row is given before a heartbeat that does not list it
- * counts as evidence that the spawn never landed.
- *
- * Ours: three beats at the daemon's 15s `HEARTBEAT_INTERVAL` (`packages/agent/
- * src/daemon.ts`). The race it covers is real and one-sided — the hub writes
- * `starting` the instant it forwards a spawn, and the beat already in flight
- * from that machine cannot possibly know about it — so the grace only has to
- * outlast the round trip plus a harness launch. It applies to `starting` alone:
- * a row that was confirmed `running` and then went unlisted is not racing
- * anything.
- */
-const HEARTBEAT_SETTLE_GRACE_MS = 45_000;
-
 /** Statuses whose session's parked asks survive a hub start: a process may hold them, or a move's approval waits on its `moving` row. */
 const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
   "running",
@@ -5901,7 +5887,7 @@ export const createServer = (
     }
     const commandAnswered = streams.settleCommand(requestId, frame);
     const requester = registry.takeRequester(requestId);
-    machineCalls.forwardAnswered(requestId);
+    machineCalls.sentAnswered(requestId);
     if (requester) {
       sendToClient(requester, {
         ...message,
@@ -6560,31 +6546,32 @@ export const createServer = (
     if (requestId) {
       outgoing = { ...outgoing, requestId };
       if (remember) {
-        // Answered whatever happens: the machine's answer as it comes, or,
-        // once its beats stop naming it, that none came.
         registry.rememberRequester(requestId, dashboard);
-        machineCalls.watchForwarded(envelope.machineId, requestId, (missed) => {
-          const asker = registry.takeRequester(requestId);
-          if (asker) {
-            sendToClient(asker, {
-              verb: "frames",
-              machineId: envelope.machineId,
-              requestId,
-              payload: {
-                kind: "control_result",
-                requestId,
-                ok: false,
-                error: unansweredError(
-                  envelope.machineId,
-                  missed,
-                  envelope.verb
-                ).message,
-                lapsed: { after: missed.after, reason: missed.reason },
-              },
-            });
-          }
-        });
       }
+      // Answered whatever happens: the machine's answer as it comes, or,
+      // once its beats stop naming it, that none came, to the socket that
+      // asked or the stream command that waits on it (stream.ts
+      // `settleCommand`).
+      machineCalls.watchSent(envelope.machineId, requestId, (missed) => {
+        const frame: ControlResult = {
+          kind: "control_result",
+          requestId,
+          ok: false,
+          error: unansweredError(envelope.machineId, missed, envelope.verb)
+            .message,
+          lapsed: { after: missed.after, reason: missed.reason },
+        };
+        streams.settleCommand(requestId, frame);
+        const asker = registry.takeRequester(requestId);
+        if (asker) {
+          sendToClient(asker, {
+            verb: "frames",
+            machineId: envelope.machineId,
+            requestId,
+            payload: frame,
+          });
+        }
+      });
     }
     sendToMachine(agent, outgoing);
     return true;
@@ -9435,7 +9422,7 @@ export const createServer = (
           machineId,
           CONTROL_SEARCH_TRANSCRIPTS,
           [query, options],
-          { caller, ...(signal ? { signal } : {}) }
+          { caller, signal }
         );
         if (answer === null) {
           return { error: "its asker asked something newer first" };
@@ -11133,12 +11120,12 @@ export const createServer = (
         id: project.id,
         name: project.name,
       })),
-    indexedTurns: async (machineId, query) => {
+    indexedTurns: async (machineId, query, signal) => {
       const answer = await readStoppable(
         machineId,
         CONTROL_TRANSCRIPT_TURNS,
         [query],
-        { caller: "an agent's find, reading a hit's turns" }
+        { caller: "an agent's find, reading a hit's turns", signal }
       );
       if (answer === null) {
         return { error: "its asker let it go" };
@@ -11209,8 +11196,15 @@ export const createServer = (
       }
       return attachmentsOfPages(read.pages);
     },
+    // An input is read as the hub's own work for the item it is handed
+    // to, which lasts as long as the hub does.
     find: async (actor, input) => {
-      const turns = await findTool.call(actor, input, "detailed");
+      const turns = await findTool.call(
+        actor,
+        input,
+        "detailed",
+        lifetime.signal
+      );
       return turns instanceof ElysiaStatus
         ? { why: turns.response.detail }
         : { turns };
@@ -11277,7 +11271,8 @@ export const createServer = (
   const hubTools = createHubTools({
     ...buildCalls,
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
-    find: (actor, input, format) => findTool.call(actor, input, format),
+    find: (actor, input, format, signal) =>
+      findTool.call(actor, input, format, signal),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
     designWrite: (actor, files, why, toolUseId) =>
       designSystem.write(actor, files, why, toolUseId),
@@ -12915,22 +12910,15 @@ export const createServer = (
         custody,
         attached: agentFrame.instances,
       });
-      settleLaunchesOn(
-        machineId,
-        agentFrame.instances,
-        custody,
-        HEARTBEAT_SETTLE_GRACE_MS
-      );
+      settleLaunchesOn(machineId, agentFrame.instances, custody, "beat");
     }
-    return db.reconcileHeartbeat(
-      machineId,
-      agentFrame.instances,
-      [
-        ...heldProcesses(machineCustody.get(machineId)),
-        ...launchingOn(machineId),
-      ],
-      HEARTBEAT_SETTLE_GRACE_MS
-    );
+    // A `starting` row is its start's to settle: one on its way, or kept
+    // at the hub for its machine, is there.
+    return db.reconcileHeartbeat(machineId, agentFrame.instances, [
+      ...heldProcesses(machineCustody.get(machineId)),
+      ...launchingOn(machineId),
+      ...db.owedSpawns(machineId).map((owed) => owed.id),
+    ]);
   };
 
   /**
@@ -13200,8 +13188,14 @@ export const createServer = (
           // of what it kept to send again.
           delivered: streams.deliveredFor(beatIds),
           keepAwake: keptWarm(machineId, beatIds),
-          // Each keeps its boundary up there, whatever else holds it.
-          liveWorkspaces: db.liveWorkspacesOn(machineId),
+          // Each keeps its boundary up there, whatever else holds it: a
+          // live item's, or one whose landing runs. Said on each beat, so
+          // a boundary the hub stops naming closes a quiet spell after
+          // (agent boundary/holding.ts `recentlyHeld`).
+          liveWorkspaces: db.liveWorkspacesOn(
+            machineId,
+            workItems.landingItems()
+          ),
           sessionLimits: db.sessionLimits(),
           // Its loopback carries over https while this hub serves it.
           ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),

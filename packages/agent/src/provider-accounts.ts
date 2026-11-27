@@ -33,8 +33,12 @@ import {
   providersOpenedBy,
   sameIdentity,
 } from "@cawco/core/accounts";
-import type { Bounded } from "@cawco/core/bounded";
-import { boundedRead } from "@cawco/core/effect/bounded";
+import { type Bounded, QUIET_MS } from "@cawco/core/bounded";
+import {
+  boundedRead,
+  boundedWhileLive,
+  Gone,
+} from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeFolder } from "@cawco/core/folders";
 import { descriptorOf } from "@cawco/core/harness/kinds";
@@ -55,6 +59,7 @@ import { keyTail } from "@cawco/core/short-id";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { lendWaitWords } from "@cawco/core/words/lend-waits";
 import { GITHUB_API_VERSION_HEADER } from "@cawco/providers/github/client";
 import type {
   AuthOperationOptions,
@@ -80,6 +85,7 @@ import { removeAccountDir } from "./accounts";
 import type { AgentPorts, OpencodeOwnCredential } from "./agent-ports";
 import { runFork, runPromise, runSync } from "./daemon-runtime";
 import { fromPromise, type Rejected } from "./rejected";
+import { hearHub } from "./hub-heard";
 import { storeRead } from "./stores/client";
 import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
@@ -370,7 +376,7 @@ export class LendRefused extends Schema.TaggedError<LendRefused>()(
   { account: Schema.String, message: Schema.String }
 ) {}
 
-/** A lender's fresh access token the hub brought no word of within {@link LEND_WAIT_MS}. */
+/** A lender's fresh access token the hub brought no word of: the hub went quiet a spell, or its link dropped, while it was asked. */
 export class LendUnanswered extends Schema.TaggedError<LendUnanswered>()(
   "LendUnanswered",
   { account: Schema.String, message: Schema.String }
@@ -733,9 +739,6 @@ const borrowedCredential = (
   [LENDER]: lender,
 });
 
-/** How long the hub gets to bring a lender's fresh access token. */
-const LEND_WAIT_MS = 60_000;
-
 /** Asks waiting on the hub's answer, by request id: settled by {@link accountLent}. */
 const lendWaits = new Map<
   string,
@@ -777,8 +780,10 @@ const askLender = (
 
 /**
  * A borrowed sign-in near its expiry: a fresh access token asked of its
- * lender through the hub, written into the account's store when it comes,
- * within {@link LEND_WAIT_MS}.
+ * lender through the hub, written into the account's store when it comes.
+ * Waited on while the hub is heard (hub-heard.ts, core `boundedWhileLive`):
+ * the hub answers every ask it forwards, so its word comes; the link's
+ * drop ends the wait.
  */
 const borrowFresh = (
   accountId: string,
@@ -794,12 +799,36 @@ const borrowFresh = (
     }
     return asking.run(
       accountId,
-      boundedRead(LEND_WAIT_MS, askLender(accountId, lender, ports)).pipe(
-        Effect.catchTag("Unanswered", () =>
+      boundedWhileLive((alive) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const dropped = Deferred.makeUnsafe<never, Gone>();
+            const stop = hearHub({
+              alive,
+              gone: () =>
+                Deferred.doneUnsafe(
+                  dropped,
+                  Effect.fail(new Gone({ what: "the hub's link" }))
+                ),
+            });
+            return { dropped, stop };
+          }),
+          ({ dropped }) =>
+            Effect.raceFirst(
+              askLender(accountId, lender, ports),
+              Deferred.await(dropped)
+            ),
+          ({ stop }) => Effect.sync(stop)
+        )
+      ).pipe(
+        Effect.catchTag("Unanswered", ({ reason }) =>
           Effect.fail(
             new LendUnanswered({
               account: accountId,
-              message: `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`,
+              message:
+                reason === "dead"
+                  ? lendWaitWords.dropped(accountId)
+                  : lendWaitWords.quiet(accountId, secondsOf(QUIET_MS)),
             })
           )
         ),

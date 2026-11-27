@@ -2065,7 +2065,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...ctx.forkedFromOf(payload),
     });
     // Bound in the step that starts the wait: a launch that may run on no account goes nowhere.
-    const bound = ctx.bounded(payload);
+    const bound = ctx.bounded({ ...payload, requestId });
     if (bound instanceof ElysiaStatus) {
       return bound;
     }
@@ -2074,7 +2074,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
         verb: "spawn",
         machineId,
         instanceId: payload.instanceId,
-        payload: { ...bound, requestId },
+        payload: bound,
       } satisfies HubEnvelope<"spawn">)
     );
     return startedOrThrown(reply, machineId, payload.harness);

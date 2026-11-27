@@ -62,11 +62,20 @@ export const PICTURE_LIMITS = {
   maxHeight: 2576,
   /**
    * How long a page stands ready before its picture: content painted and
-   * nothing of its own in flight, since its last paint, its last request
-   * and the hello that places its pins (agent artifact-picture.ts
+   * no more than {@link PICTURE_LIMITS.inFlightMost} of its own requests in
+   * flight, since its last paint, its last long task, its last time over
+   * that, and the hello that places its pins (agent artifact-picture.ts
    * `watchReadiness`), as Files waits on a page. Its load and its readiness
    * are waited on while the page shows life (agent artifact-picture.ts
    * `drawPage`), and the picture itself too.
    */
   settleMs: 1000,
+  /**
+   * The requests a page may hold in flight and still stand ready: Chrome's
+   * own network almost-idle, so a page that polls, or holds a long poll or
+   * a stream open, reads ready once its own paints and its main thread go
+   * quiet (agent artifact-picture.ts `watchReadiness`).
+   */
+  // @limit external: Chromium's network almost-idle is "no more than 2 network connections active in 0.5 seconds" (blink IdlenessDetector kNetworkQuietMaximumConnections = 2, https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/core/loader/idleness_detector.h), Puppeteer's networkidle2
+  inFlightMost: 2,
 } as const;

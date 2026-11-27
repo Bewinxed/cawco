@@ -100,6 +100,31 @@ const boundaryPids = async (
   return answering(inBoundaries(seen), membershipName(id));
 };
 
+/** Those of `pids` that carry stage `key`'s mark (`CAWCO_STAGE_SERVER=<key>`, stage.ts `start`). */
+const markedBy = async (
+  key: string,
+  pids: readonly number[]
+): Promise<number[]> => {
+  const mark = `${CAWCO_ENV.stageServer}=${key}`;
+  const each = await Promise.all(
+    pids.map(async (pid) =>
+      ((await processArgs(pid))?.env ?? []).includes(mark) ? [pid] : []
+    )
+  );
+  return each.flat();
+};
+
+/**
+ * The processes of stage `key`, in workspace `boundary`'s boundaries: its
+ * server and all it started, which carry its mark. One read of the process
+ * table.
+ */
+export const stagePids = async (
+  boundary: string,
+  key: string
+): Promise<number[]> =>
+  markedBy(key, await boundaryPids(boundary, await processLineage()));
+
 /**
  * Measures each of `live` as it runs, one read of the process table for
  * all: the sum of {@link proportionalBytes} (Linux PSS, the Mac's physical
@@ -125,14 +150,9 @@ export const measure = async (live: readonly LivePreview[]): Promise<void> => {
   );
   await Promise.all(
     live.map(async (one) => {
-      const mark = `${CAWCO_ENV.stageServer}=${one.key}`;
-      const pids = byBoundary.get(one.boundary) ?? [];
+      const pids = await markedBy(one.key, byBoundary.get(one.boundary) ?? []);
       const each = await Promise.all(
-        pids.map(async (pid) =>
-          ((await processArgs(pid))?.env ?? []).includes(mark)
-            ? ((await proportionalBytes(pid)) ?? 0)
-            : 0
-        )
+        pids.map(async (pid) => (await proportionalBytes(pid)) ?? 0)
       );
       const bytes = each.reduce((sum, part) => sum + part, 0);
       if (bytes > 0) {

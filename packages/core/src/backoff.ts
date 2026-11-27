@@ -26,6 +26,10 @@
  * lint error (scripts/lint/retry-through-backoff.grit).
  */
 
+/** The one first wait of a retry: a policy with no reason of its own to wait otherwise starts here. */
+// @limit external: gRPC waits 1 second before its first retry (INITIAL_BACKOFF = 1 second, https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md); the daemon's hub link and the dashboard's socket already start there
+export const RETRY_FIRST_MS = 1000;
+
 /** When a {@link BackoffPolicy} stops. */
 type GiveUp =
   /** After this many failures in a row. */

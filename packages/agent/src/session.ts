@@ -9,7 +9,6 @@
 
 import { hostname } from "node:os";
 import { isGone } from "@cawco/core/absent";
-import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import {
@@ -187,7 +186,6 @@ import {
   Semaphore,
 } from "effect";
 import type { AgentPorts } from "./agent-ports";
-import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
 import { boundaryFor } from "./boundary/control";
 import { hookArmed } from "./boundary/ensure";
@@ -1211,13 +1209,6 @@ export class SessionSupervisor {
     },
     [CANVAS_SCREEN_CLOSE]: {
       call: (options) => closeCanvasScreen(options),
-    },
-    // A preview or a page drawn as the panel draws it, for artifact_read's png (artifact-picture.ts).
-    [ARTIFACT_PICTURE]: {
-      call: (options) =>
-        fenced()
-          ? Promise.reject(new Error(AGENT_RESTARTING))
-          : drawArtifact(options),
     },
     [AGENT_BUSY]: { call: () => this.busyNow() },
     [CONTROL_ABANDON]: {

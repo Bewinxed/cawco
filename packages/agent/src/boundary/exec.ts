@@ -252,23 +252,16 @@ const FORGE_TOKEN_ENV = [
 ];
 
 /**
- * How long an executor waits for a boundary started again, in tenths of a
- * second: the fleet's one quiet spell (core bounded.ts `QUIET_MS`), as the
- * executor hears nothing of the start it waits on but the new executor or
- * sandbox it makes; the mount check's wait also ends at once when its host
- * exits.
- */
-const RESTART_WAIT_TENTHS = QUIET_MS / 100;
-
-/**
  * An executor whose boundary ended unasked waits for the one the agent
  * starts again (ensure.ts `restartUnasked`), which writes this executor anew (a
  * new file, so a new inode at `$0`: `ls -di`, the same on Linux and macOS),
- * then runs through it.
+ * then runs through it. It hears nothing of that start but the new
+ * executor, so it looks each tenth of a second for the fleet's one quiet
+ * spell (core bounded.ts `QUIET_MS`).
  */
 const restartWait = `  rm -f "$mark"
   self=$(ls -di "$0" 2>/dev/null)
-  for _ in $(seq ${RESTART_WAIT_TENTHS}); do
+  for _ in $(seq ${QUIET_MS / 100}); do
     sleep 0.1
     now=$(ls -di "$0" 2>/dev/null)
     if [ -n "$now" ] && [ "$now" != "$self" ]; then PATH=$caller_path exec "$0" "$@"; fi
@@ -288,7 +281,9 @@ const stoppedLine = (id: string): string =>
  * look before every command: the running sandbox's mount table must still
  * hold every bind its host guards ({@link guardedOf}). When it does not, it
  * asks the host to start a new sandbox (SIGUSR1), and runs the command
- * through that one (REPORT.md §5d). CawCo never writes a live copy's
+ * through that one (REPORT.md §5d), waiting for as long as its host lives:
+ * the host runs a sandbox or exits ({@link followTaker}), and
+ * its own start was waited on while it wrote or worked. CawCo never writes a live copy's
  * config: it writes it only before the boundary starts (workspace.ts
  * `ownGitConfig`).
  */
@@ -297,10 +292,9 @@ const mountCheck = (id: string, gen: string, pid: string): string =>
 read -r outer inner _ < "$place" 2>/dev/null
 if ! awk 'FILENAME == ARGV[1] { want[$0] = 1; next } ($5 in want) { delete want[$5] } END { for (p in want) exit 1 }' ${shellQuote(guardedOf(id, gen))} "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
   kill -USR1 ${pid} 2>/dev/null
-  for _ in $(seq ${RESTART_WAIT_TENTHS}); do
+  while kill -0 ${pid} 2>/dev/null; do
     read -r now _ < "$place" 2>/dev/null
     if [ -n "$now" ] && [ "$now" != "\${outer:-}" ]; then PATH=$caller_path exec "$0" "$@"; fi
-    kill -0 ${pid} 2>/dev/null || break
     sleep 0.1
   done
   echo ${shellQuote(stoppedLine(id))} >&2

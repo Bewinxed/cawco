@@ -156,12 +156,13 @@ const make = ({
    */
   const namedAt = new Map<string, number>();
   /**
-   * The requests a dashboard asked that the hub forwarded (server.ts
-   * `forward`), by id: what the machine's beat names for them is heard
-   * too, and one not named for a quiet spell is answered unanswered to its
-   * dashboard ({@link watchForwarded}). Each is done at its answer.
+   * The requests the hub sent that no call parks an answer for, by id: a
+   * dashboard's request the hub forwarded (server.ts `forward`), a
+   * launch's start (launches.ts `launchGoes`). What the machine's beat
+   * names for them is heard too, and one not named for a quiet spell is
+   * lapsed ({@link watchSent}). Each is done at its answer.
    */
-  const forwarded = new Map<string, Deferred.Deferred<void>>();
+  const watched = new Map<string, Deferred.Deferred<void>>();
   /**
    * A beat of `machineId` named `ids` running: each the hub waits on is
    * named now. Heard as the beat is read off the socket (server.ts
@@ -170,7 +171,7 @@ const make = ({
   const beatNamed = (ids: readonly string[]): void => {
     const now = Date.now();
     for (const id of ids) {
-      if (waiting.has(id) || forwarded.has(id)) {
+      if (waiting.has(id) || watched.has(id)) {
         namedAt.set(id, now);
       }
     }
@@ -528,9 +529,11 @@ const make = ({
    * {@link readAgent} for a read the machine stops once the hub stops
    * waiting for it (core `CONTROL_ABANDON`, agent session.ts
    * `declareRead`): when its machine's beats stop naming it for a quiet
-   * spell, or `ask.signal` aborts (its asker typed on, its request ended),
-   * the machine is told under the read's own request id, and stops it where
-   * it runs. A read let go for its quiet is logged with who asked, so a
+   * spell, or `ask.signal` aborts (its asker typed on, its request ended,
+   * its tool call was cut), the machine is told under the read's own
+   * request id, and stops it where it runs. Every read names its asker's
+   * signal: a read nobody can let go runs on the machine after its asker
+   * is gone. A read let go for its quiet is logged with who asked, so a
    * late answer's line (`lateAnswer`, by the same id) is read back to its
    * caller. Answers `null` when its asker let it go.
    */
@@ -538,7 +541,7 @@ const make = ({
     machineId: string,
     method: K,
     args: ControlArgs<K>,
-    ask: { caller: string; signal?: AbortSignal | undefined }
+    ask: { caller: string; signal: AbortSignal }
   ): Promise<Bounded<ControlAnswer<K>> | null> => {
     if (
       !registry.agent(machineId) &&
@@ -546,7 +549,7 @@ const make = ({
     ) {
       return { kind: "unanswered", reason: "dead", after: 0 };
     }
-    if (ask.signal?.aborted) {
+    if (ask.signal.aborted) {
       return null;
     }
     const requestId = crypto.randomUUID();
@@ -586,7 +589,7 @@ const make = ({
         }
         return frame;
       },
-      ask.signal ? whenLetGo(ask.signal) : undefined
+      whenLetGo(ask.signal)
     );
     return await lifetime.run(
       read.pipe(
@@ -847,22 +850,23 @@ const make = ({
     );
 
   /**
-   * A request a dashboard asked that the hub forwarded to `machineId`
-   * (server.ts `forward`): watched while the machine's beats name it, and,
+   * A request the hub sent `machineId` with no call parked on its answer
+   * ({@link watched}): watched while the machine's beats name it, and,
    * once none has for a quiet spell or the machine is gone, `lapse` is told
-   * so its dashboard is answered that no answer came. Its answer, routed as
-   * it always was, ends the watch ({@link forwardAnswered}); so does its
-   * dashboard's leaving, which `lapse` finds.
+   * that no answer came (a dashboard is answered so, a launch is over).
+   * Its answer, routed as it always was, ends the watch
+   * ({@link sentAnswered}); so does its asker's leaving, which `lapse`
+   * finds.
    */
-  const watchForwarded = (
+  const watchSent = (
     machineId: string,
     requestId: string,
     lapse: (missed: Extract<Bounded<unknown>, { kind: "unanswered" }>) => void
   ): void => {
     const answered = Deferred.makeUnsafe<void>();
-    forwarded.set(requestId, answered);
+    watched.set(requestId, answered);
     lifetime.fork(
-      "a forwarded request's watch",
+      "a sent request's watch",
       boundedWhileMoving(
         QUIET_MS,
         () => namedAt.get(requestId) ?? 0,
@@ -879,21 +883,29 @@ const make = ({
         ),
         Effect.ensuring(
           Effect.sync(() => {
-            forwarded.delete(requestId);
-            namedAt.delete(requestId);
+            if (watched.get(requestId) === answered) {
+              watched.delete(requestId);
+              namedAt.delete(requestId);
+            }
           })
         )
       )
     );
   };
 
-  /** A forwarded request's answer came: its watch ends ({@link watchForwarded}). */
-  const forwardAnswered = (requestId: string): void => {
-    const answered = forwarded.get(requestId);
-    if (answered) {
-      Deferred.doneUnsafe(answered, Effect.void);
+  /** A watched request's answer came: its watch ends ({@link watchSent}). Whether one was watched. */
+  const sentAnswered = (requestId: string): boolean => {
+    const answered = watched.get(requestId);
+    if (!answered) {
+      return false;
     }
+    Deferred.doneUnsafe(answered, Effect.void);
+    return true;
   };
+
+  /** Whether the hub still waits on `requestId`'s answer: a call parked on it, or a watch ({@link watchSent}). */
+  const waitsOn = (requestId: string): boolean =>
+    waiting.has(requestId) || watched.has(requestId);
 
   return {
     waiting,
@@ -921,8 +933,9 @@ const make = ({
     awaitFs,
     awaitStart,
     beatNamed,
-    watchForwarded,
-    forwardAnswered,
+    watchSent,
+    sentAnswered,
+    waitsOn,
   };
 };
 

@@ -236,7 +236,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
  *
  * A workspace nothing holds ({@link liveWhy}) moves nothing: its boundaries
  * and judges are closed where they run ({@link closeQuietly}), once nothing
- * has ensured it for holding.ts `QUIET_CLOSE_MS` (none has, after the agent's
+ * has held it for a quiet spell (holding.ts `recentlyHeld`; none has, after the agent's
  * restart), and its next command starts them on the current keeper. Until the hub has said which
  * work items are live, none of the retiring keeper's is moved or closed.
  *

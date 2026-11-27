@@ -183,5 +183,5 @@ export const harnessRefusedWords = {
    * clears it by itself.
    */
   claudeVersionUnsaid: (seconds: number, floor: string) =>
-    `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${seconds} s), and CawCo runs only ${floor} or newer. CawCo is still waiting for its answer, and as it answers reads the sign-ins here and can start Claude sessions. Nothing was started or signed in.`,
+    `Claude Code on this machine didn't say its version: \`claude --version\` went quiet and was stopped after ${seconds} s. CawCo runs only ${floor} or newer, and asks again at the next start. Nothing was started or signed in.`,
 };

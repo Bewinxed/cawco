@@ -23,6 +23,7 @@ import {
   CONTROL_SET_PROVIDER_KEY,
   UNLOCK_KEYCHAIN,
 } from "@cawco/core/accounts/controls";
+import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { AGENT_RESTARTING } from "@cawco/core/binary-updates";
 import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
 import {
@@ -229,6 +230,7 @@ import { type Activity, desktopReadable, watchActivity } from "./activity";
 import { AgentLayer } from "./agent-layer";
 import type { AgentPorts } from "./agent-ports";
 import { recordAgentState } from "./agent-state";
+import { drawArtifact } from "./artifact-picture";
 import { unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
@@ -270,7 +272,6 @@ import {
   shieldBrowser,
 } from "./browser/shield";
 import { buildInfo } from "./build";
-import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
 import {
   commandLane,
@@ -335,6 +336,7 @@ import { ghAccounts, ghAccountToken, ghRepo, ghRepos } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
 import { cancelCommand, runFollowedCommand } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
+import { hubDropped, hubHeard } from "./hub-heard";
 import { carryHub, followHub } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
@@ -1890,6 +1892,7 @@ const attach = (
       "close",
       () => {
         launchAsks.disconnected(askHub);
+        hubDropped();
         // Frames wait in the outbox for the next register.
         supervisor.linkDown();
         supervisor.resetStopSequence();
@@ -2334,21 +2337,6 @@ const attach = (
         Schedule.spaced(Duration.millis(COPY_LOOK_MS))
       )
     );
-    // A `claude --version` that ran past a read's wait answers: Claude's
-    // report goes now, by the same re-read, so the hub reads Claude as
-    // answered when the gate does (claude-version.ts `claudeToStart`), not
-    // at the next minute's re-read.
-    // Once Claude's first report went: the machine's whole announce can
-    // still be waiting on another harness's, and a report not sent yet
-    // carries the answer itself.
-    const stopVersionWatch = onVersionAnswered(() => {
-      if (
-        reportedHarnesses.some((one) => one.harness === harness("claude")?.kind)
-      ) {
-        readPart("Claude's report", sendClaudeIfMoved).catch(() => undefined);
-      }
-    });
-    yield* Effect.addFinalizer(() => Effect.sync(stopVersionWatch));
 
     // A spawn also checks pi's sign-in, and any OpenCode call can find its
     // server refusing to start or starting again, or a turn find one of the
@@ -3089,10 +3077,12 @@ const attach = (
     }
     socket.addEventListener("message", (event) => {
       lastHeard = Date.now();
+      hubHeard();
       line.receive(String(event.data));
     });
     socket.addEventListener("pong", () => {
       lastHeard = Date.now();
+      hubHeard();
     });
 
     // THE LINK'S DEADLINE. A socket on a network that went away (Wi-Fi, a
@@ -3800,11 +3790,19 @@ const startDaemon = (rediscover = false) =>
     );
     // The pins whose files the hub has yet to move in, as this machine registers and on each sweep: every other one let go.
     supervisor.declareControl(STAGE_PINS, keepPins);
-    // A served preview's page as its author has it, drawn on its workspace's own server.
-    supervisor.declareControl(STAGE_PICTURE, (ref, ask) =>
+    // A served preview's page as its author has it, drawn on its workspace's
+    // own server; let go where it runs once the hub lets it go.
+    supervisor.declareRead(STAGE_PICTURE, (signal, ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : drawServed(ports, ref, ask)
+        : drawServed(ports, ref, ask, signal)
+    );
+    // A preview or a page drawn as the panel draws it, for artifact_read's
+    // png (artifact-picture.ts); let go where it runs once the hub lets it go.
+    supervisor.declareRead(ARTIFACT_PICTURE, (signal, options) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : drawArtifact(options, signal)
     );
     // A design folder's tree whose artifact is gone, let go.
     supervisor.declareControl(STAGE_UNPIN, unpin);

@@ -4,6 +4,7 @@
  */
 
 import { join } from "node:path";
+import { QUIET_MS } from "@cawco/core/bounded";
 import { commandLines } from "@cawco/core/process-identity";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type { HeldProc } from "../keepers";
@@ -17,19 +18,6 @@ import {
   stateDir,
   withClose,
 } from "./state";
-
-/**
- * How long a workspace's boundary runs on with nothing holding it
- * ({@link liveWhy}) before it closes (looks.ts `closeQuietly`). Our call: the hub
- * puts a finished delegate's session to sleep at once and lands its work
- * right after, each of its commands a use; a handoff that soon after finds
- * the boundary still up. Past that, a closed one costs its next command one
- * sandbox start (seconds, waited on while its host writes or works),
- * while an idle one holds its srt host, bwrap, socat relays, an inotify
- * instance, its judge and their memory for as long as the workspace lasts:
- * 55 of 76 on obelisk had no live work item (2026-10-15).
- */
-const QUIET_CLOSE_MS = 10 * 60_000;
 
 /**
  * When each workspace's boundary was last ensured or seen held
@@ -240,6 +228,14 @@ export const liveWhy = async (
   }
 };
 
-/** Whether workspace `id`'s boundary was ensured or seen held within {@link QUIET_CLOSE_MS}. */
+/**
+ * Whether workspace `id`'s boundary was ensured or seen held within the
+ * fleet's one quiet spell (core bounded.ts `QUIET_MS`): what holds a
+ * boundary is said again each beat (the hub names a live or landing item's
+ * workspace in its answer to each, `HeartbeatAckPayload.liveWorkspaces`),
+ * so one nothing has held for a quiet spell closes (looks.ts
+ * `closeQuietly`). A closed one costs its next command one sandbox start,
+ * waited on while its host writes or works.
+ */
 export const recentlyHeld = (id: string): boolean =>
-  Date.now() - (liveAt.get(id) ?? 0) < QUIET_CLOSE_MS;
+  Date.now() - (liveAt.get(id) ?? 0) < QUIET_MS;

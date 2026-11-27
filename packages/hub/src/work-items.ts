@@ -5114,6 +5114,8 @@ export const createWorkItems = ({
     /** While the item's landing waits (a shared machine slot, a pause, its turn to land): what its status says, and since when. */
     landingWaitOf: (itemId: string): { words: string; since: number } | null =>
       landingRun.landingWaitOf(itemId),
+    /** The items whose landing this hub process runs now. */
+    landingItems: (): string[] => landingRun.landingItems(),
 
     /**
      * The hub's own work: a routine's run (routines.ts, work-item-state.ts `routineParent`),

@@ -746,8 +746,8 @@ export interface ClosureContext {
     {
       readonly machineId: string;
       readonly generation: string;
-      readonly at: number;
       readonly replaces: boolean;
+      readonly requestId: string | undefined;
     }
   >;
   launchInFlight: (instanceId: string) => boolean;

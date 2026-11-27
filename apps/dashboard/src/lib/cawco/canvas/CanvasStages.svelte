@@ -53,6 +53,8 @@
       return;
     }
     const actions = stage.at ? stage.actions[stage.at] : undefined;
+    // Anything the page posts is a sign of its life to what waits on it.
+    stage.heard();
     // What the canvas's own page says (core page-wire `PageSays`).
     const said = pageSaid(event.data);
     if (said?.type === "cawco:pictured") {

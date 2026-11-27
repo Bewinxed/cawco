@@ -173,15 +173,22 @@ const projectNamed = (
   return found.id;
 };
 
-/** The hub's own session tools, bound to the calling session (none for a listing). */
+/** The hub's own session tools, bound to the calling session and the call's signal, which aborts once its asker lets it go (none for a listing). */
 export const createHubTools =
   (deps: HubToolsDeps) =>
-  (actor: InstanceRow | undefined, toolUseId?: string) => {
+  (actor: InstanceRow | undefined, toolUseId?: string, cut?: AbortSignal) => {
     const me = (): InstanceRow => {
       if (!actor) {
         throw new Error("Discovery cannot execute tools");
       }
       return actor;
+    };
+    /** The call's signal: every call has one; a listing runs none. */
+    const called = (): AbortSignal => {
+      if (!cut) {
+        throw new Error("Discovery cannot execute tools");
+      }
+      return cut;
     };
     return [
       UPDATE_MACHINES_DEFINITION.run(async (input) => {
@@ -207,7 +214,9 @@ export const createHubTools =
       DESIGN_VERDICT_DEFINITION.run((verdict) =>
         deps.designVerdict(me(), verdict)
       ),
-      findToolDefinition((input, format) => deps.find(me(), input, format)),
+      findToolDefinition((input, format) =>
+        deps.find(me(), input, format, called())
+      ),
       CALLS_BY_ROLE_DEFINITION.run(({ project, days, role }) => {
         const projectId =
           project === undefined

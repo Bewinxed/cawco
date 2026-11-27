@@ -193,22 +193,19 @@ const awaitGone = async (gone: Fiber.Fiber<unknown>): Promise<void> => {
 };
 
 /**
- * Calls `alive` each beat that `leader`'s group or a process it started
- * has spent CPU time since the beat before, or a process is there that was
- * not then: a worker silent by nature (`git status` on a large tree, a
- * repack, an upload, an install a child runs in a group of its own) is
- * alive while it works. Stops when `signal` aborts.
+ * Calls `alive` each beat that a process `times` names (pid to CPU time
+ * used) has spent CPU time since the beat before, or a process is there
+ * that was not then: work silent by nature is alive while it works. Looks
+ * once now, then each `BEAT_MS`; stops when `signal` aborts.
  */
-export const watchTreeCpu = (
-  leader: number,
+export const watchCpu = (
+  times: () => Promise<ReadonlyMap<number, number>>,
   alive: () => void,
   signal: AbortSignal
 ): void => {
-  let last = new Map<number, number>();
+  let last: ReadonlyMap<number, number> = new Map();
   const look = async (): Promise<void> => {
-    const now = await treeCpuTimes(leader).catch(
-      () => new Map<number, number>()
-    );
+    const now = await times().catch(() => new Map<number, number>());
     for (const [pid, used] of now) {
       const before = last.get(pid);
       if (before === undefined || used > before) {
@@ -225,6 +222,19 @@ export const watchTreeCpu = (
   look().catch(() => undefined);
   signal.addEventListener("abort", () => clearInterval(beat), { once: true });
 };
+
+/**
+ * Calls `alive` each beat that `leader`'s group or a process it started
+ * has spent CPU time since the beat before, or a process is there that was
+ * not then ({@link watchCpu}): a worker silent by nature (`git status` on a
+ * large tree, a repack, an upload, an install a child runs in a group of
+ * its own) is alive while it works. Stops when `signal` aborts.
+ */
+export const watchTreeCpu = (
+  leader: number,
+  alive: () => void,
+  signal: AbortSignal
+): void => watchCpu(() => treeCpuTimes(leader), alive, signal);
 
 /** The environment variable a run's stdin text rides to the shell that pipes it in ({@link runLive}). */
 const INPUT_VARIABLE = "CAWCO_RUN_INPUT";

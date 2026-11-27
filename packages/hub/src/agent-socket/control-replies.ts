@@ -120,6 +120,11 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
     // answer and nobody else's news.
     if (body.kind === "control_result" && message.requestId) {
       ctx.lifecycle.answered(message.requestId, body.ok);
+      // A request the hub watches (a forwarded one, a launch's start) is
+      // answered: its watch ends, and its reply is routed, never unrouted.
+      if (ctx.machineCalls.sentAnswered(message.requestId)) {
+        run.hubReply = true;
+      }
       const answering = ctx.machineCalls.waiting.get(message.requestId);
       if (answering) {
         ctx.machineCalls.waiting.delete(message.requestId);
@@ -217,9 +222,6 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       message.requestId && body.kind === "control_result"
         ? ctx.registry.takeRequester(message.requestId)
         : undefined;
-    if (message.requestId && body.kind === "control_result") {
-      ctx.machineCalls.forwardAnswered(message.requestId);
-    }
     if (body.kind === "control_result" && requester) {
       ctx.sendToClient(requester, { ...message, payload: body });
     }

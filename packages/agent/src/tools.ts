@@ -10,7 +10,7 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
-import { type Bounded, QUIET_MS, readWithin } from "@cawco/core/bounded";
+import { type Bounded, QUIET_MS } from "@cawco/core/bounded";
 import { boundedWhileLive, Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
@@ -18,11 +18,10 @@ import { makeLock } from "@cawco/core/keyed-lock";
 import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
 import { ownIdentity } from "@cawco/core/process-identity";
-import { type Ran, runCaptured, runLive } from "@cawco/core/run-captured";
+import { type Ran, runLive } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { identifiedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import type {
   ToolCopy,
@@ -340,28 +339,20 @@ interface Found {
   path: string;
 }
 
-/** How long a package manager is given to say whether it holds a file. */
-const HOLDS_WAIT_MS = 5000;
-
 /**
- * Asks a program: `argv` run in the tools' environment (core
- * `runCaptured`), given `ms` to finish and killed when they run out. None
- * when it couldn't start or didn't finish in time.
+ * Asks a program: `argv` run in the tools' environment while it lives
+ * (core `runLive`: while it writes or spends CPU time). None when it
+ * couldn't start or went quiet a spell.
  */
-const askProgram = async (
-  argv: string[],
-  ms: number
-): Promise<Ran | undefined> => {
-  const read = await readWithin(ms, (signal) =>
-    runCaptured(argv, { env: toolEnv(), signal })
-  ).catch(() => undefined);
+const askProgram = async (argv: string[]): Promise<Ran | undefined> => {
+  const read = await runLive(argv, { env: toolEnv() }).catch(() => undefined);
   return read?.kind === "answered" ? read.value : undefined;
 };
 
 /**
  * Whether the package manager a method runs (`needs`) says it holds `file`:
- * `<needs> <holds…> <file>` exits 0 and names the package, within
- * {@link HOLDS_WAIT_MS} (core `ToolInstallMethod.holds`). As Claude Code asks
+ * `<needs> <holds…> <file>` exits 0 and names the package (core
+ * `ToolInstallMethod.holds`), asked while it lives. As Claude Code asks
  * apk: `execFileNoThrow(n,[...a,this.sources.execPath()],{timeout:5000`, then
  * `if(r.code===0&&r.stdout)` (2.1.311's `ownsExecutable`). A machine without
  * the manager holds nothing of its.
@@ -374,17 +365,9 @@ const asksHold = async (
   if (!(manager && method.holds)) {
     return false;
   }
-  const ran = await askProgram([manager, ...method.holds, file], HOLDS_WAIT_MS);
+  const ran = await askProgram([manager, ...method.holds, file]);
   return ran?.code === 0 && ran.stdout.trim() !== "";
 };
-
-/**
- * How long a method's need is given to answer its probe (core `needProbe`)
- * before it is taken as running: brew starts Ruby for it, and a host under
- * load answers late. A need that can't run says so at once (a shebang that
- * finds no interpreter exits 127 within milliseconds).
- */
-const NEED_WAIT_MS = 15_000;
 
 /** A need's binary as it stands: its real path, mtime and size. A binary replaced or updated is a new one. */
 const binStamp = async (bin: string): Promise<string | undefined> => {
@@ -420,12 +403,13 @@ export const onNeedsAnswered = (listener: () => void): (() => void) => {
 
 /**
  * Asks `bin` its probe (core `needProbe`): why it can't run, none when it
- * runs. It can't run when it does not start (`runCaptured` throws: no
+ * runs. It can't run when it does not start (`runLive` throws: no
  * interpreter the kernel can load) or exits other than 0 (an `npm` whose
  * `#!/usr/bin/env node` finds no `node`: niftybot.art, "/usr/bin/env: 'node':
- * No such file or directory"). One that started and has not answered within
- * {@link NEED_WAIT_MS} runs: the probe asks whether it can run, and a slow
- * host answers late, not never.
+ * No such file or directory"). The probe runs while it lives (core
+ * `runLive`: brew starts Ruby for it, and a host under load answers late);
+ * one that started and went quiet a spell without answering runs: the
+ * probe asks whether it can run, and a slow host answers late, not never.
  */
 const askNeed = async (
   need: string,
@@ -433,21 +417,7 @@ const askNeed = async (
 ): Promise<string | undefined> => {
   let ran: Bounded<Ran>;
   try {
-    // Tethered (core tether.ts `spawnRead`): ended at the bound, and with
-    // the agent however it ends, never left running past it.
-    ran = await readWithin(NEED_WAIT_MS, async (signal) => {
-      const child = spawnRead([bin, ...needProbe(need)], {
-        env: toolEnv(),
-        stderr: "pipe",
-        signal,
-      });
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]).finally(() => untether(child.stdin));
-      return { code, signalCode: child.signalCode, stdout, stderr };
-    });
+    ran = await runLive([bin, ...needProbe(need)], { env: toolEnv() });
   } catch (error) {
     return toolWords.needBroken(
       bin,
@@ -1365,9 +1335,6 @@ const methodFor = async (
     : { unmet };
 };
 
-/** How long one read of a tool's settings is given, its own process's start included. */
-const SETTINGS_READ_MS = 30_000;
-
 /** A read of a tool's settings that gave none to decide on: the last line it said, when it said one. */
 interface SettingsUnread {
   unread: string | undefined;
@@ -1408,7 +1375,7 @@ const settingsAnswer = (
  *   claude-settings.ts), the Agent SDK's `resolveSettings` in a process of
  *   its own for each read, so the machine's policy is read as it stands
  *   at each update, not as it stood when the agent started.
- * Each read is given {@link SETTINGS_READ_MS}.
+ * Each read runs while it lives (core `runLive`).
  */
 const SETTINGS_ENGINES: Record<
   ToolUpdateSwitches["engine"],
@@ -1416,10 +1383,7 @@ const SETTINGS_ENGINES: Record<
 > = {
   "claude-code": async (variables) =>
     settingsAnswer(
-      await askProgram(
-        [...cawcoCommand("claude-settings"), ...variables],
-        SETTINGS_READ_MS
-      )
+      await askProgram([...cawcoCommand("claude-settings"), ...variables])
     ),
 };
 

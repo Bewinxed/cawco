@@ -72,9 +72,12 @@ export const changedAtNow = (): number | undefined => window.__cawcoChangedAt;
 
 export const documentReady = ({
   framed,
+  inFlight,
   settle,
 }: {
   framed: boolean;
+  /** The requests it may hold in flight and stand ready (core `PICTURE_LIMITS.inFlightMost`). */
+  inFlight: number;
   settle: number;
 }): boolean => {
   const inView = (one: Element): boolean => {
@@ -97,7 +100,7 @@ export const documentReady = ({
     painted &&
     document.readyState === "complete" &&
     document.fonts.status === "loaded" &&
-    window.__cawcoPending === 0 &&
+    (window.__cawcoPending ?? 0) <= inFlight &&
     performance.now() - (window.__cawcoChangedAt ?? 0) >= settle
   );
 };

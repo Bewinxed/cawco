@@ -37,6 +37,7 @@
  * a doc the hub says is gone ({@link ARTIFACT_GONE}) is let go at once.
  */
 
+import { readWhileHeard } from "./bounded";
 import { DAY_MS } from "./time";
 
 /** The hub's close code for an artifact removed while a doc is joined (hub artifacts/sync.ts). */
@@ -103,20 +104,16 @@ const OPEN_WITHIN_MS = 10_000;
  */
 const SILENT_MS = 25_000;
 
-/** How often {@link watchSilence} reads the time since the last message, ms. Our call. */
-const SILENCE_READ_MS = 1000;
-
 /** What {@link reopenStalled} and {@link watchSilence} read of a y-websocket `WebsocketProvider`. */
 export interface LinkProvider {
   connect: () => void;
   disconnect: () => void;
   off: (name: "status", listener: (event: { status: string }) => void) => void;
   on: (name: "status", listener: (event: { status: string }) => void) => void;
+  /** Its socket, a new one each attempt (y-websocket's own `ws`): a `WebSocket` where a page runs it. */
   ws: unknown;
   wsconnected: boolean;
   wsconnecting: boolean;
-  /** When the open socket last heard a message, or opened (`Date.now()`, y-websocket's own). */
-  wsLastMessageReceived: number;
 }
 
 /**
@@ -136,6 +133,19 @@ export interface StallWatch {
   stop: () => void;
 }
 
+/** A socket {@link watchSilence} hears each message of: a `WebSocket`'s own listeners. */
+interface Heard {
+  addEventListener: (type: "message", listener: () => void) => void;
+  removeEventListener: (type: "message", listener: () => void) => void;
+}
+const isHeard = (ws: unknown): ws is Heard =>
+  typeof ws === "object" &&
+  ws !== null &&
+  "addEventListener" in ws &&
+  typeof ws.addEventListener === "function" &&
+  "removeEventListener" in ws &&
+  typeof ws.removeEventListener === "function";
+
 /**
  * Says `provider`'s open socket lost once it has heard nothing for
  * {@link SILENT_MS}, and closes it and opens another through the library's
@@ -145,9 +155,12 @@ export interface StallWatch {
  * runs before the close, whose `connection-close` the caller tells apart
  * by `reopening()`.
  *
- * A hidden tab's timers run once a minute (Chromium's intensive wake-up
- * throttling), so the watch says nothing while the tab is hidden, and its
- * silence counts from the later of the last message and the tab's showing:
+ * Each open socket is one spell of {@link readWhileHeard}, told `heard()`
+ * at each message it carries: its clock is the page's awake time, with its
+ * catch-up for a page that was held, so nothing reads the time on a
+ * cadence. A hidden tab's timers run once a minute (Chromium's intensive
+ * wake-up throttling), so a spell that runs out while the tab is hidden
+ * says nothing and begins again, and the tab's showing counts as heard:
  * there y-websocket's own check stands, as before. `page` says whether the
  * page is shown.
  */
@@ -157,32 +170,95 @@ export function watchSilence(
   page: ShownDocument
 ): StallWatch {
   let reopening = false;
-  let shownAt = Date.now();
+  const stopped = new AbortController();
+  /** The open socket's spell, told of each message and of the tab's showing. */
+  let hear: (() => void) | undefined;
+  /** The open socket's spell ends at the socket's close. */
+  let closed: (() => void) | undefined;
   const shown = () => {
     if (page.visibilityState === "visible") {
-      shownAt = Date.now();
+      hear?.();
     }
   };
-  page.addEventListener("visibilitychange", shown);
-  const timer = setInterval(() => {
-    if (
-      !provider.wsconnected ||
-      page.visibilityState === "hidden" ||
-      Date.now() - Math.max(provider.wsLastMessageReceived, shownAt) <=
-        SILENT_MS
-    ) {
-      return;
+  const status = (event: { status: string }) => {
+    if (event.status === "connected") {
+      // A spell already under way is ended first: it heard the old socket.
+      closed?.();
+      spell();
+    } else {
+      closed?.();
     }
-    silent();
-    reopening = true;
-    provider.disconnect();
-    reopening = false;
-    provider.connect();
-  }, SILENCE_READ_MS);
+  };
+  /** One open socket's spell: from its open until it goes silent or closes. */
+  const spell = () => {
+    const socket = isHeard(provider.ws) ? provider.ws : undefined;
+    let heardHere: (() => void) | undefined;
+    const onMessage = () => heardHere?.();
+    socket?.addEventListener("message", onMessage);
+    /** This spell is over: its socket and the tab's showing no longer tell it. */
+    const over = () => {
+      socket?.removeEventListener("message", onMessage);
+      if (hear === heardHere) {
+        hear = undefined;
+      }
+    };
+    readWhileHeard(
+      SILENT_MS,
+      (signal, heard) =>
+        new Promise<void>((done) => {
+          heardHere = heard;
+          hear = heard;
+          const end = () => {
+            if (closed === end) {
+              closed = undefined;
+            }
+            done();
+          };
+          closed = end;
+          signal.addEventListener("abort", end, { once: true });
+        }),
+      { signal: stopped.signal }
+    ).then(
+      (spelled) => {
+        over();
+        if (
+          spelled.kind === "answered" ||
+          stopped.signal.aborted ||
+          !provider.wsconnected
+        ) {
+          return;
+        }
+        if (page.visibilityState === "hidden") {
+          spell();
+          return;
+        }
+        silent();
+        reopening = true;
+        provider.disconnect();
+        reopening = false;
+        provider.connect();
+      },
+      // Its stop's own abort ends a spell, and is no failure.
+      (error: unknown) => {
+        over();
+        if (!stopped.signal.aborted) {
+          console.warn(
+            `[doc-link] a socket's silence watch failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    );
+  };
+  page.addEventListener("visibilitychange", shown);
+  provider.on("status", status);
+  if (provider.wsconnected) {
+    spell();
+  }
   return {
     reopening: () => reopening,
     stop: () => {
-      clearInterval(timer);
+      stopped.abort();
+      provider.off("status", status);
       page.removeEventListener("visibilitychange", shown);
     },
   };

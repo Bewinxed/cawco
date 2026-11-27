@@ -445,8 +445,11 @@ export interface WorkRowsDb {
   readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
-  /** The ids of a machine's workspaces with a clone and a live work item (starting or running). */
-  readonly liveWorkspacesOn: (machineId: string) => string[];
+  /** The ids of a machine's workspaces with a clone and a live work item (starting or running), or one of `landing`'s items (the items whose landing runs now). */
+  readonly liveWorkspacesOn: (
+    machineId: string,
+    landing: readonly string[]
+  ) => string[];
   /** Stamps a task's attempt as sent back unmet (work_items `unmetAt`): Jev did not show its acceptance criteria met. */
   readonly markAttemptUnmet: (itemId: string) => void;
   /**
@@ -1127,7 +1130,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           )
         )
         .all(),
-    liveWorkspacesOn: (machineId) =>
+    liveWorkspacesOn: (machineId, landing) =>
       db
         .selectDistinct({ id: workspaces.id })
         .from(workItems)
@@ -1136,7 +1139,10 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           and(
             eq(workspaces.machineId, machineId),
             eq(workspaces.host, false),
-            inArray(workItems.state, ["starting", "running"])
+            or(
+              inArray(workItems.state, ["starting", "running"]),
+              inArray(workItems.id, [...landing])
+            )
           )
         )
         .all()

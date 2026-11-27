@@ -23,7 +23,7 @@
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
  * `ready` with its port once it serves, `errors` with every section's
  * problem standing (a states file that isn't written, a compile error)
- * whenever that changes, `moved` as it compiles ({@link moved}), `beat`
+ * whenever that changes, `beat`
  * every {@link BEAT_MS}, and `fatal`
  * with why it could not start (the daemon leaves such a stage in error, never
  * starting it again on its own). Vite's own words go to stderr (its logger at
@@ -360,24 +360,6 @@ const say = (word: string, rest: object = {}) => {
 };
 // Nobody reads the stage's words any more: its daemon is gone, and so is it.
 process.stdout.on("error", () => process.exit(0));
-
-/**
- * How often, at most, the stage says it `moved`: each module Vite finishes
- * compiling is a move, and the daemon waits on a read for as long as moves
- * come (agent stage.ts `READ_QUIET_MS`, 15 s). Ours: one word a second is
- * finer than that wait reads, and a cold screen's 1,264 modules say 20-odd
- * words, not 1,264 lines.
- */
-const MOVED_EVERY_MS = 1000;
-let movedSaid = 0;
-/** The stage moved: a module compiled. Said at most once each {@link MOVED_EVERY_MS}. */
-const moved = () => {
-  const now = Date.now();
-  if (now - movedSaid >= MOVED_EVERY_MS) {
-    movedSaid = now;
-    say("moved");
-  }
-};
 
 /** `value` of the environment variable `name`; the stage's `fatal` word, and its end, where it names none. */
 const environed = <T>(value: T | undefined, name: string): T => {
@@ -4222,11 +4204,10 @@ function cawcoStage() {
       }
       return reloaded.length > 0 ? [...modules, ...reloaded] : undefined;
     },
-    // A good compile of a module clears the error it had, and is a move the daemon's reads wait on ({@link moved}); the sections it broke, and nothing else breaks now, are drawn again ({@link SECTION_MENDED}).
+    // A good compile of a module clears the error it had; the sections it broke, and nothing else breaks now, are drawn again ({@link SECTION_MENDED}).
     transform: {
       order: "post" as const,
       handler(_code: string, id: string) {
-        moved();
         const key = errorKeyOf(id);
         const was = stageErrors.get(key);
         if (stageErrors.delete(key)) {

@@ -80,7 +80,7 @@
  * command would find nothing of what it left running. Every boundary and judge
  * process is found and stopped on whichever keeper holds it. A boundary runs
  * only while something holds it (holding.ts `liveWhy`); one nothing has held for
- * holding.ts `QUIET_CLOSE_MS` closes with its judge, its clone and state left as
+ * a quiet spell (holding.ts `recentlyHeld`) closes with its judge, its clone and state left as
  * they are, and its next command starts it again (looks.ts `closeQuietly`). A
  * machine that
  * cannot hold a boundary refuses the work: a work item never runs without

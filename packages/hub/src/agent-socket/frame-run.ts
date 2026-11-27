@@ -19,7 +19,7 @@ export type FrameAnswer = "stop" | "continue";
 export interface FrameRun {
   /** What the hub reads off the frame whatever its kind (core `frameReads`). */
   agentFrame: FrameReads;
-  /** Whether an install or a fleet sync is waiting on this control's reply. */
+  /** Whether an install, a fleet sync or a watch of the hub's (machine-calls.ts `watchSent`) is waiting on this control's reply. */
   hubReply: boolean;
   /** A continuation's summariser: an internal worker only its continuation talks to. */
   internal: boolean;

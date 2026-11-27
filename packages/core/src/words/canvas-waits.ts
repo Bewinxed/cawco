@@ -11,6 +11,11 @@ export const canvasWaitWords = {
   /** The hub's machine answered the open, yet no screen of the canvas stands joined. */
   screenUnjoined: (name: string) =>
     `The canvas ${name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas.`,
+  /** The dashboard's canvas page went quiet before it posted the picture it was asked for (dashboard canvas/stage.svelte.ts `picture`). */
+  pictureQuiet: (quietFor: number) =>
+    `the canvas page went quiet for ${quietFor} s before it drew its picture`,
+  /** The dashboard's canvas page disconnected before it posted the picture it was asked for. */
+  pictureGone: "the canvas page disconnected before it drew its picture",
   /** No screen drew the write, and none was heard while it waited. */
   undrawn: (quietFor: number) =>
     `The canvas wasn't changed: no screen drew it, and none was heard for ${quietFor} s. Try again.`,

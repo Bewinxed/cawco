@@ -971,10 +971,10 @@ export interface InstancesDb {
     /**
      * What is there or on its way: the processes sessiond still holds,
      * attached yet or not, and the sessions whose launch to the machine is in
-     * flight (launches.ts `launches`).
+     * flight (launches.ts `launches`) or kept at the hub for the machine
+     * ({@link oweSpawn}).
      */
-    heldIds: string[],
-    graceMs: number
+    heldIds: string[]
   ) => { promoted: string[]; settled: StoredInstanceRow[] };
   /**
    * Marks every running instance on the machine that `liveIds` does not name as
@@ -2784,8 +2784,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     },
     // Every 15 seconds, the machine says what it is actually carrying. This is
     // the only place `running` is minted from evidence rather than intent.
-    reconcileHeartbeat: (machineId, liveIds, heldIds, graceMs) => {
-      const now = new Date();
+    reconcileHeartbeat: (machineId, liveIds, heldIds) => {
       // Attached or still being attached, the process is there: only a row
       // with neither has gone.
       const alive = [...new Set([...liveIds, ...heldIds])];
@@ -2818,15 +2817,10 @@ export const instancesDb = (core: DbCore): InstancesDb => {
       // The beat's silence, which is the half that was missing. A row claiming a
       // process the machine neither lists nor holds has no process; the only
       // question left is whether the conversation outlived it.
-      const gone = claimingProcesses(machineId, ["running", "starting"], alive)
-        // Only `starting` gets grace, measured from when the spawn was issued,
-        // not the session's last activity. Without an issue-time there is no grace.
-        .filter(
-          (row) =>
-            row.status === "running" ||
-            row.spawnedAt === null ||
-            now.getTime() - row.spawnedAt.getTime() >= graceMs
-        );
+      // A `starting` row whose start is on its way or kept is in `heldIds`:
+      // its start settles it (launches.ts `launchGoes`), never a beat that
+      // was read before it arrived.
+      const gone = claimingProcesses(machineId, ["running", "starting"], alive);
 
       // `updatedAt` deliberately absent: the hub concluding that a process
       // vanished is not the session doing anything. One that never named a

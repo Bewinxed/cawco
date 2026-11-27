@@ -1,4 +1,4 @@
-import type { BackoffPolicy } from "@cawco/core/backoff";
+import { type BackoffPolicy, RETRY_FIRST_MS } from "@cawco/core/backoff";
 import { readWithin } from "@cawco/core/bounded";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { quote } from "@cawco/providers/quote";
@@ -46,9 +46,9 @@ class HubAway extends Schema.TaggedError<HubAway>()("HubAway", {
   away: Schema.String,
 }) {}
 
-/** The waits between tries: from 0.5 s, doubling to 5 s; the end is the bound's ({@link throughHubAway}). */
+/** The waits between tries: from the house's first wait, doubling to 5 s; the end is the bound's ({@link throughHubAway}). */
 const HUB_AWAY_WAITS: BackoffPolicy = {
-  firstMs: 500,
+  firstMs: RETRY_FIRST_MS,
   mostMs: 5000,
   giveUp: { never: "it ends at its bound, which a held process moves out" },
 };

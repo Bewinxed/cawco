@@ -6,6 +6,7 @@
 import { readdir, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { BEAT_MS } from "@cawco/core/bounded";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import {
   commandLine as commandLineOf,
@@ -486,5 +487,5 @@ export const WORK_GRACE_MS = STOP_TIMEOUT_MS;
 /** How long work.ts `endSessionWork` waits for its SIGKILL to land before it says what is left. */
 export const KILL_WAIT_MS = 2000;
 
-/** How often the boundaries are looked at for quiet ones. Ours: a minute against holding.ts `QUIET_CLOSE_MS`. */
-export const QUIET_SWEEP_MS = 60_000;
+/** How often the boundaries are looked at for quiet ones: each beat (core bounded.ts `BEAT_MS`), so one closes inside a beat of its quiet spell's end (holding.ts `recentlyHeld`). */
+export const QUIET_SWEEP_MS = BEAT_MS;

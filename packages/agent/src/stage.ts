@@ -67,7 +67,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PictureCut } from "@cawco/core/artifact-picture";
 import type { BackoffPolicy } from "@cawco/core/backoff";
-import type { Bounded } from "@cawco/core/bounded";
+import { type Bounded, fetchHeard, QUIET_MS } from "@cawco/core/bounded";
 import { BROWSER_PORTS } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import {
@@ -76,7 +76,8 @@ import {
 } from "@cawco/core/effect/backoff-schedule";
 import {
   boundedRead,
-  boundedWhileMoving,
+  boundedWhileLive,
+  Gone,
   Unanswered,
 } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
@@ -86,6 +87,8 @@ import { makeFolder } from "@cawco/core/folders";
 import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
+import { cpuTimeUsed } from "@cawco/core/process-identity";
+import { watchCpu } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { shortId } from "@cawco/core/short-id";
@@ -135,6 +138,7 @@ import {
   SheetWrittenSchema,
   StageErrorSchema,
 } from "@cawco/core/stored-shapes";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   cutShort,
@@ -187,6 +191,7 @@ import {
   MAX_LIVE,
   marginOf,
   measure,
+  stagePids,
 } from "./preview-room";
 import { fromPromise } from "./rejected";
 import {
@@ -271,11 +276,8 @@ const stagePort = (hash: number): number => {
   return port;
 };
 
-/** How long a health look waits for its answer. Ours. */
-const HEALTH_WAIT_MS = 5000;
-/** How often a starting preview server's port is asked whether it answers yet, and how long each ask waits. Ours. */
+/** How often a starting preview server's port is asked whether it answers yet. Ours. */
 const SERVE_POLL_MS = 250;
-const SERVE_ASK_MS = 2000;
 /** How often a preview server's wrapper tells the daemon it is there ({@link serveScript}), in seconds. Ours. */
 const SERVE_BEAT_S = 5;
 /** How long a start waits for a server its last daemon left to let go of the port: past its beat. Ours. */
@@ -391,6 +393,8 @@ interface Stage {
   /** Where it runs from the clone's root: a sheet's toolchain root, a server's `cwd`. */
   readonly dir: string;
   errors: StageError[];
+  /** The reads of it in flight, each told of each chunk its process writes: a sign of its life ({@link askStage}). */
+  readonly hearers: Set<() => void>;
   readonly key: string;
   /** The last request, viewer, agent read or warm-up: its idle time counts from here. */
   lastUse: number;
@@ -410,8 +414,6 @@ interface Stage {
    */
   lookedAt: number;
   message?: string;
-  /** When it last said it moved (`moved`, a module compiled; or it began to serve), `Date.now()`: a read waits on it while it moves ({@link READ_QUIET_MS}). */
-  movedAt: number;
   readonly port: number;
   /** Where its changes are told. */
   readonly ports: StagePorts;
@@ -838,8 +840,8 @@ type StagePlace = Omit<
   | "status"
   | "errors"
   | "lastUse"
+  | "hearers"
   | "lookedAt"
-  | "movedAt"
   | "restartsOn"
   | "slept"
   | "startedAt"
@@ -858,8 +860,8 @@ function newStage(found: StagePlace): Stage {
     status: "starting",
     errors: [],
     lastUse: Date.now(),
+    hearers: new Set(),
     lookedAt: Date.now(),
-    movedAt: 0,
     restartsOn: [],
     slept: false,
     startedAt: 0,
@@ -1018,17 +1020,46 @@ class StageUnanswered extends Schema.TaggedError<StageUnanswered>()(
 }
 
 /**
+ * Calls `alive` each beat a process of `stage`'s own spent CPU time (core
+ * `watchCpu`): its executor, and the server it runs in its boundary with
+ * all it started (preview-room.ts `stagePids`). A compiling toolchain, a
+ * docgen walking every component, is alive while it works.
+ */
+const watchStage = (
+  stage: Stage,
+  alive: () => void,
+  signal: AbortSignal
+): void =>
+  watchCpu(
+    async () => {
+      const executor = stage.child ? spawnedPid(stage.child) : undefined;
+      const pids = [
+        ...(executor === undefined ? [] : [executor]),
+        ...(await stagePids(stage.boundary.id, stage.key)),
+      ];
+      return new Map(
+        await Promise.all(
+          pids.map(async (pid) => [pid, (await cpuTimeUsed(pid)) ?? 0] as const)
+        )
+      );
+    },
+    alive,
+    signal
+  );
+
+/**
  * A request to the stage itself, next to it: through the bridge into its
  * boundary's network, or the host's loopback on macOS. `take` reads its
  * answer; a request that got none, or whose answer was cut, fails with
- * {@link StageUnanswered}, `what` naming what it was to do; no answer
- * within its bound fails with {@link Unanswered}.
+ * {@link StageUnanswered}, `what` naming what it was to do. It waits for as
+ * long as the stage shows life (core `boundedWhileLive`): each chunk of its
+ * answer, each chunk its process writes, each beat its processes spent CPU
+ * time ({@link watchStage}). One quiet for the fleet's quiet spell fails
+ * with {@link Unanswered} "timeout"; its process's exit, "dead".
  */
 const askStage = Effect.fnUntraced(function* <T>(
   stage: Stage,
   path: string,
-  /** A fixed time to answer, or `"moving"`: for as long as the stage moves ({@link READ_QUIET_MS}). */
-  bound: number | "moving",
   what: string,
   take: (response: Response, cut: (error: unknown) => never) => Promise<T>,
   body?: object
@@ -1042,50 +1073,61 @@ const askStage = Effect.fnUntraced(function* <T>(
     reached === "host"
       ? stageRenderWords.loopback(stage.port)
       : stageRenderWords.bridged(stage.port, shortId(stage.boundary.id));
-  const asked = fromPromise(async (signal) => {
-    // An abort is the read's own deadline, which its bound answers.
-    const cut = (error: unknown): never => {
-      throw signal.aborted
-        ? error
-        : new StageUnanswered({ what, at, words: causeOf(error) });
-    };
-    const response = await fetch(
-      reached === "host"
-        ? `http://127.0.0.1:${stage.port}${path}`
-        : `http://localhost:${stage.port}${path}`,
-      {
-        signal,
-        ...(body
-          ? {
-              method: "POST",
-              body: JSON.stringify(body),
-              headers: { "content-type": "application/json" },
-            }
-          : {}),
-        ...(reached === "host" ? {} : { unix: reached }),
-      }
-    ).catch(cut);
-    return take(response, cut);
+  // Its process's exit ends the read, `Gone`; a stage with none yet has no exit to hear.
+  const exited = Effect.callback<never, Gone>((resume) => {
+    const { child } = stage;
+    if (!child) {
+      return;
+    }
+    const exit = () =>
+      resume(Effect.fail(new Gone({ what: `the stage at ${at}` })));
+    if (child.exitCode !== null || child.signalCode !== null) {
+      exit();
+      return;
+    }
+    child.once("exit", exit);
+    return Effect.sync(() => child.off("exit", exit));
   });
-  return yield* bound === "moving"
-    ? boundedWhileMoving(READ_QUIET_MS, () => stage.movedAt, asked)
-    : boundedRead(bound, asked);
+  return yield* boundedWhileLive((alive) =>
+    Effect.raceFirst(
+      attempt(async (signal) => {
+        // An abort is the read's own let-go, which its bound answers.
+        const cut = (error: unknown): never => {
+          throw signal.aborted
+            ? error
+            : new StageUnanswered({ what, at, words: causeOf(error) });
+        };
+        const watching = new AbortController();
+        stage.hearers.add(alive);
+        watchStage(stage, alive, watching.signal);
+        try {
+          const response = await fetchHeard(
+            reached === "host"
+              ? `http://127.0.0.1:${stage.port}${path}`
+              : `http://localhost:${stage.port}${path}`,
+            {
+              signal,
+              ...(body
+                ? {
+                    method: "POST",
+                    body: JSON.stringify(body),
+                    headers: { "content-type": "application/json" },
+                  }
+                : {}),
+              ...(reached === "host" ? {} : { unix: reached }),
+            },
+            alive
+          ).catch(cut);
+          return await take(response, cut);
+        } finally {
+          watching.abort();
+          stage.hearers.delete(alive);
+        }
+      }),
+      exited
+    )
+  );
 });
-
-/**
- * How long a sheet's read or write waits on a stage that has stopped
- * moving: it waits for as long as the stage says it compiles (host.ts
- * `moved`), and gives up only after this long with no module compiled. A
- * cold screen's 1,264 modules took 22.5 s on obelisk (2026-11-19, the
- * project page), past the 15 s a read once had in all; between two of its
- * moves the stage ran at most 5.8 s still (its report read cold beside the
- * panel's page, a component's first docgen, a dependency pre-bundle). Ours:
- * that spell, with room for a machine under load.
- */
-const READ_QUIET_MS = 15_000;
-
-/** How long the design map may take on its stage: it reads every component's docgen, none of which says it moved. Ours: four of a sheet's quiet spells. */
-const MAP_WAIT_MS = READ_QUIET_MS * 4;
 
 /** The refusal in words a stage's failed answer carries (`{ error }`); none when it carries none. */
 const refusalIn = (answer: unknown): string | undefined =>
@@ -1095,12 +1137,11 @@ const refusalIn = (answer: unknown): string | undefined =>
 
 /**
  * The stage's JSON answer to `path`, a refusal in its own words, or that it
- * did not answer within its bound.
+ * went quiet or ended before it answered ({@link askStage}).
  */
 const answerOf = <T>(
   stage: Stage,
   path: string,
-  bound: number | "moving",
   what: string,
   shape: z.ZodType<T>,
   body?: object
@@ -1108,7 +1149,6 @@ const answerOf = <T>(
   askStage(
     stage,
     path,
-    bound,
     what,
     async (response, cut) => {
       // Its body cut part-way is no answer; a body that is no JSON is the stage's own.
@@ -1126,13 +1166,13 @@ const answerOf = <T>(
     Effect.catchTag("Unanswered", (read) =>
       Effect.fail(
         new Error(
-          bound === "moving"
-            ? stageRenderWords.stoppedMoving(
+          read.reason === "dead"
+            ? stageRenderWords.endedAsked(what)
+            : stageRenderWords.stoppedMoving(
                 what,
-                READ_QUIET_MS / 1000,
-                read.after / 1000
+                secondsOf(QUIET_MS),
+                secondsOf(read.after)
               )
-            : `The stage did not ${what} within ${bound / 1000} s.`
         )
       )
     )
@@ -1142,11 +1182,10 @@ const answerOf = <T>(
 const answered = <T>(
   stage: Stage,
   path: string,
-  bound: number | "moving",
   what: string,
   shape: z.ZodType<T>,
   body?: object
-): Promise<T> => runPromise(answerOf(stage, path, bound, what, shape, body));
+): Promise<T> => runPromise(answerOf(stage, path, what, shape, body));
 
 /** Writes the host into the toolchain root when it is not there as this build has it, git-excluded. */
 async function writeHost(stage: Stage): Promise<void> {
@@ -1286,7 +1325,7 @@ const accepts = (port: number): Promise<boolean> =>
  * `listeners`), or, where boundaries share the host's network (macOS), the
  * port accepts a connection. No request reaches the app: asking it for `/`
  * had the dashboard's dev server render its home page at every look, and a
- * look that waited past {@link HEALTH_WAIT_MS} on a busy server killed a
+ * look that waited a fixed time on a busy server killed a
  * working one as a crash. False when no boundary of its workspace runs.
  */
 async function listens(stage: Stage): Promise<boolean> {
@@ -1305,29 +1344,19 @@ async function listens(stage: Stage): Promise<boolean> {
 
 /**
  * Whether the stage serves: a sheet's host answers {@link HEALTH_PATH} with
- * 200; a preview's server listens on its port ({@link listens}), however
- * long its pages take. Answered false when nothing listens or the host
- * answered otherwise; unanswered when nothing answered within `waitMs`.
+ * 200, waited on while it shows life ({@link askStage}); a preview's server
+ * listens on its port ({@link listens}: its network's own tables, or a
+ * connect the kernel answers at once), however long its pages take.
+ * Answered false when nothing listens or the host answered otherwise;
+ * unanswered when the host went quiet a spell or ended.
  */
-const healthy = (
-  stage: Stage,
-  waitMs: number
-): Effect.Effect<Bounded<boolean>> =>
+const healthy = (stage: Stage): Effect.Effect<Bounded<boolean>> =>
   (stage.runs.kind === "serve"
-    ? boundedRead(
-        waitMs,
-        fromPromise(() => listens(stage))
-      )
-    : askStage(
-        stage,
-        HEALTH_PATH,
-        waitMs,
-        "answer its health",
-        async (response) => {
-          await response.body?.cancel();
-          return response.ok;
-        }
-      )
+    ? attempt(() => listens(stage))
+    : askStage(stage, HEALTH_PATH, "answer its health", async (response) => {
+        await response.body?.cancel();
+        return response.ok;
+      })
   ).pipe(
     Effect.map((value): Bounded<boolean> => ({ kind: "answered", value })),
     Effect.catch((error) =>
@@ -1366,13 +1395,12 @@ function looked(stage: Stage, look: Bounded<boolean>): void {
       }
       break;
     case "unanswered":
-      // A sheet's host silent for a whole look is the crash it watches for,
-      // said as silence. A server's look asks no request of it, so a look
-      // that ran out is this machine's slowness: the next look asks again.
+      // A sheet's host that went quiet a spell, no answer, no output and no
+      // CPU time spent, is the crash it watches for, said as silence.
       if (stage.runs.kind === "sheet") {
         crashed(
           stage,
-          `it did not answer ${HEALTH_PATH} within ${HEALTH_WAIT_MS / 1000} s`
+          stageRenderWords.healthQuiet(HEALTH_PATH, secondsOf(QUIET_MS))
         );
       }
       break;
@@ -1406,7 +1434,7 @@ const healthLook = Effect.fnUntraced(function* (stage: Stage) {
     }
     return;
   }
-  looked(stage, yield* healthy(stage, HEALTH_WAIT_MS));
+  looked(stage, yield* healthy(stage));
 });
 
 /**
@@ -1540,7 +1568,6 @@ const up = Effect.fnUntraced(function* (stage: Stage, life: Scope.Scope) {
   stage.status = "live";
   stage.message = undefined;
   stage.lastUse = Date.now();
-  stage.movedAt = Date.now();
   yield* Effect.forkIn(watch(stage), life);
   yield* Scope.provide(mirrorWhileLive(stage), life);
   tell(stage);
@@ -1555,9 +1582,6 @@ const heard = (stage: Stage, word: HostWord): boolean => {
   if (word.cawco === "errors") {
     stage.errors = word.errors ?? [];
     tell(stage);
-  }
-  if (word.cawco === "moved") {
-    stage.movedAt = Date.now();
   }
   return false;
 };
@@ -1588,7 +1612,7 @@ const portLetGo = (stage: Stage, waitMs: number): Effect.Effect<boolean> =>
       until: (look: Bounded<boolean>) =>
         look.kind === "answered" && !look.value,
     },
-    healthy(stage, SERVE_ASK_MS)
+    healthy(stage)
   ).pipe(Effect.map((poll) => poll.kind === "found"));
 
 /** The stage in `error` with why, started again only when someone asks for it ({@link wake}); the hub told. */
@@ -1625,7 +1649,7 @@ const servesBy = (stage: Stage): Effect.Effect<void> =>
       every: Duration.millis(SERVE_POLL_MS),
       until: (look: Bounded<boolean>) => look.kind === "answered" && look.value,
     },
-    healthy(stage, SERVE_ASK_MS)
+    healthy(stage)
   ).pipe(Effect.asVoid);
 
 /** Whether a stage holds, or is about to hold, its memory: live, or on its way there. */
@@ -1872,8 +1896,16 @@ const hearing = (
             `it ended (${ended ?? `status ${code}`})`);
         Deferred.doneUnsafe(said.ended, Effect.succeed(why));
       };
+      // Each chunk it writes is a sign of its life to the reads of it in flight.
+      const heardFrom = () => {
+        for (const hear of stage.hearers) {
+          hear();
+        }
+      };
       child.stderr?.on("data", keep);
       child.stdout?.on("data", out);
+      child.stderr?.on("data", heardFrom);
+      child.stdout?.on("data", heardFrom);
       child.on("error", failed);
       child.on("exit", exited);
       return {
@@ -1881,6 +1913,8 @@ const hearing = (
         off: () => {
           child.stderr?.off("data", keep);
           child.stdout?.off("data", out);
+          child.stderr?.off("data", heardFrom);
+          child.stdout?.off("data", heardFrom);
           child.off("error", failed);
           child.off("exit", exited);
         },
@@ -2018,7 +2052,6 @@ export async function ensureStage(
     answered(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
-      "moving",
       `read ${rel}'s stories`,
       SheetReadSchema
     ),
@@ -2026,7 +2059,6 @@ export async function ensureStage(
     answered(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
-      "moving",
       "read what a browser drew",
       ReportAnswerSchema
     ),
@@ -2070,7 +2102,6 @@ async function pagesLooked(
   const { errors } = await answered(
     stage,
     `${PAGES_PATH}?${new URLSearchParams(asked)}`,
-    "moving",
     "compile the design's pages",
     PagesLookedSchema
   );
@@ -2153,7 +2184,6 @@ async function sheetWeight(
   const { weight } = await answered(
     stage,
     `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
-    "moving",
     `read what ${rel} loads`,
     z.object({ weight: SheetWeightSchema.nullable() })
   );
@@ -2189,7 +2219,6 @@ export async function writeSheet(
     answered(
       stage,
       WRITE_PATH,
-      "moving",
       `write ${files.join(", ")}`,
       SheetWrittenSchema,
       { ...write, files }
@@ -2262,7 +2291,9 @@ export async function renderStage(
 export async function drawServed(
   ports: StagePorts,
   workspace: WorkspaceRef,
-  ask: ServedPicture
+  ask: ServedPicture,
+  /** Its asker's: the hub's let-go stops the picture where it is drawn. */
+  signal: AbortSignal
 ): Promise<{ png: string; cut?: PictureCut }> {
   await ensureServed(ports, workspace, ask.serve, "its author's read");
   const stage = stages.get(serveKey(workspace.id, ask.serve.port));
@@ -2282,16 +2313,14 @@ export async function drawServed(
     return await drawPage(
       `http://127.0.0.1:${listener ? listener.port : stage.port}${ask.path}`,
       ask.width,
-      ask.name
+      ask.name,
+      signal
     );
   } finally {
     release();
     listener?.stop(true);
   }
 }
-
-/** How long a warm-up's ask for one canvas's Preview page may take, its graph's cold walk inside it. Ours: caw-panel's 839-module graph answered 1.5 s in, cold. */
-const WARM_WAIT_MS = 60_000;
 
 /** Each canvas's Preview page asked of its stage and not answered yet, by stage and address: a warm-up of it asked meanwhile joins the one walk. */
 const warming = makeJoin<string, void, Error>();
@@ -2310,26 +2339,22 @@ const walkedAsEmbed = (
   const path = `${canvasPath(files, {})}&by=embed`;
   return warming.run(
     `${stage.key} ${path}`,
-    askStage(
-      stage,
-      path,
-      WARM_WAIT_MS,
-      "serve its canvas page",
-      async (response, cut) => {
-        try {
-          await response.text();
-        } catch (error) {
-          cut(error);
-        }
-        if (!response.ok) {
-          throw new Error(`its canvas page answered ${response.status}`);
-        }
+    askStage(stage, path, "serve its canvas page", async (response, cut) => {
+      try {
+        await response.text();
+      } catch (error) {
+        cut(error);
       }
-    ).pipe(
-      Effect.catchTag("Unanswered", () =>
+      if (!response.ok) {
+        throw new Error(`its canvas page answered ${response.status}`);
+      }
+    }).pipe(
+      Effect.catchTag("Unanswered", (read) =>
         Effect.fail(
           new Error(
-            `its canvas page did not answer within ${WARM_WAIT_MS / 1000} s`
+            read.reason === "dead"
+              ? stageRenderWords.warmEnded
+              : stageRenderWords.warmQuiet(secondsOf(QUIET_MS))
           )
         )
       )
@@ -2443,7 +2468,6 @@ export async function stageComponents(
   const map = await answered(
     stage,
     `${COMPONENTS_PATH}?${query}`,
-    MAP_WAIT_MS,
     "map its components",
     DesignMapSchema
   );
@@ -2716,7 +2740,7 @@ export async function sourceEnded(source: PreviewSource): Promise<boolean> {
     return false;
   }
   if (stage.status === "live") {
-    const look = await runPromise(healthy(stage, HEALTH_WAIT_MS));
+    const look = await runPromise(healthy(stage));
     // One that serves keeps its restarts' count: only a whole look's time
     // live starts it afresh.
     if (stage.status === "live" && !(look.kind === "answered" && look.value)) {

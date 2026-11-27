@@ -3,7 +3,6 @@ import { isRecord } from "@cawco/core/is-record";
 import type { Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import type { AskCard } from "./ask-presentation";
-import { HubLifetime, type HubLifetimeShape } from "./lifetime";
 import {
   type ClientFrame,
   type ClientSocket,
@@ -141,22 +140,24 @@ const usableOrigin = (origin: string | undefined): string | undefined => {
 /** How many dashboard origins the hub keeps: a person's few addresses, and no more for a client that sends many. Our choice. */
 const KEPT_DASHBOARD_ORIGINS = 16;
 
-/** A control whose reply never came stops being routable after this. */
-const REQUESTER_TTL_MS = 5 * 60_000;
-const SWEEP_INTERVAL_MS = 60_000;
-
 export class Registry extends Context.Service<Registry, RegistryShape>()(
   "Registry"
 ) {}
 
-const make = (lifetime: HubLifetimeShape): RegistryShape => {
+const make = (): RegistryShape => {
   const agents = new Map<string, MachineSocket>();
   const addresses = new Map<string, string>();
   /** One entry per dashboard socket. A session's own frames reach it through `stream.ts`. */
   const dashboards = new Map<string, ClientSocket>();
   /** The dashboard sockets whose page was built for an older wire, by id. */
   const older = new Set<string>();
-  const requesters = new Map<string, { socket: ClientSocket; at: number }>();
+  /**
+   * The dashboard that asked each control the hub forwarded, by request id
+   * (server.ts `forward`). An entry goes with its answer: the machine's, or
+   * that none came once the machine's beats stop naming it
+   * (machine-calls.ts `watchSent`); or with its dashboard's socket.
+   */
+  const requesters = new Map<string, ClientSocket>();
   /**
    * Every origin a dashboard reached this hub from, newest first, each once.
    * Kept rather than derived because the hub has no other way to learn them —
@@ -174,15 +175,6 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
    * http page connected since.
    */
   let lastSecureDashboardOrigin: string | undefined;
-
-  lifetime.every("registry requesters swept", SWEEP_INTERVAL_MS, () => {
-    const cutoff = Date.now() - REQUESTER_TTL_MS;
-    for (const [requestId, entry] of requesters) {
-      if (entry.at < cutoff) {
-        requesters.delete(requestId);
-      }
-    }
-  });
 
   const leftListeners: ((machineId: string, socketId: string) => void)[] = [];
   const presenceListeners: ((machineId: string) => void)[] = [];
@@ -238,8 +230,8 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     dropDashboard: (socket) => {
       dashboards.delete(socket.id);
       older.delete(socket.id);
-      for (const [requestId, entry] of requesters) {
-        if (entry.socket.id === socket.id) {
+      for (const [requestId, asker] of requesters) {
+        if (asker.id === socket.id) {
           requesters.delete(requestId);
         }
       }
@@ -276,18 +268,14 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     dashboardOrigins: () => dashboardOrigins,
     secureDashboardOrigin: () => lastSecureDashboardOrigin,
     rememberRequester: (requestId, socket) => {
-      requesters.set(requestId, { socket, at: Date.now() });
+      requesters.set(requestId, socket);
     },
     takeRequester: (requestId) => {
-      const entry = requesters.get(requestId);
+      const asker = requesters.get(requestId);
       requesters.delete(requestId);
-      return entry?.socket;
+      return asker;
     },
   };
 };
 
-export const RegistryLayer = Layer.effect(Registry)(
-  Effect.gen(function* () {
-    return make(yield* HubLifetime);
-  })
-);
+export const RegistryLayer = Layer.effect(Registry)(Effect.sync(make));

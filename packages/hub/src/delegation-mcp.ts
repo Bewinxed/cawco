@@ -572,7 +572,11 @@ export function createDelegationMcp(options: {
    * (hub-tools.ts): installing a build, which asks the person when the hub
    * requires paired devices, and writing its project's design system.
    */
-  hubTools?: (actor: InstanceRow | undefined, toolUseId?: string) => HubTool[];
+  hubTools?: (
+    actor: InstanceRow | undefined,
+    toolUseId?: string,
+    cut?: AbortSignal
+  ) => HubTool[];
   /** `browser_ask` (browser-tools.ts): the session asks the person to take over its browser. */
   browserTools?: (
     actor: InstanceRow | undefined,
@@ -1124,7 +1128,8 @@ export function createDelegationMcp(options: {
     (
       | ((
           caller: InstanceRow | undefined,
-          callId?: string
+          callId?: string,
+          cut?: AbortSignal
         ) => (
           | ProjectTool
           | HubTool
@@ -1156,12 +1161,12 @@ export function createDelegationMcp(options: {
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    authorization?: string,
-    toolUseId?: string,
+    authorization: string | undefined,
+    toolUseId: string | undefined,
     /** The harness's key for the call (call-keys.ts): a delegate, handoff or page call runs once per key. */
-    callKey?: string,
-    /** Aborts when the harness cuts the call (call-cuts.ts): what it started is stopped. */
-    cut?: AbortSignal
+    callKey: string | undefined,
+    /** Aborts when its asker lets the call go (the harness cut it, call-cuts.ts; its REST request ended): what it started is stopped, what it reads let go. */
+    cut: AbortSignal
   ): Promise<CallToolResult> => {
     // The one door every call's answer passes: a refusal of a CawCo tool
     // ends with the line naming usability_feedback while feedback is on. A
@@ -1202,7 +1207,7 @@ export function createDelegationMcp(options: {
     name: string,
     input: Record<string, unknown>,
     toolUseId: string | undefined,
-    cut: AbortSignal | undefined
+    cut: AbortSignal
   ): Promise<CallToolResult | undefined> => {
     if (adminNames.has(name)) {
       return await administer(actor, name, input, toolUseId);
@@ -1219,7 +1224,7 @@ export function createDelegationMcp(options: {
     if (options.tasks && TASK_TOOLS.has(name)) {
       return await taskCall(actor, name, input, cut, toolUseId);
     }
-    return await groupCall(actor, name, input, toolUseId);
+    return await groupCall(actor, name, input, toolUseId, cut);
   };
 
   /** A tool of one of the {@link groups} (caw.ts, fleet-watch.ts, routines.ts, event-routes.ts, actions.ts, relay.ts, memory.ts, hub-tools.ts and the asks), bound to the caller. */
@@ -1227,11 +1232,13 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    toolUseId: string | undefined
+    toolUseId: string | undefined,
+    cut: AbortSignal
   ): Promise<CallToolResult | undefined> => {
     const group = groups.find(([names]) => names.has(name))?.[1]?.(
       actor,
-      toolUseId
+      toolUseId,
+      cut
     );
     if (!group) {
       return undefined;
@@ -1247,10 +1254,10 @@ export function createDelegationMcp(options: {
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    authorization?: string,
-    toolUseId?: string,
-    callId?: string,
-    cut?: AbortSignal
+    authorization: string | undefined,
+    toolUseId: string | undefined,
+    callId: string | undefined,
+    cut: AbortSignal
   ): Promise<CallToolResult> => {
     // The session whose call this is, once its credential is read: what it
     // is answered passes usability feedback's `heard`, which keeps a

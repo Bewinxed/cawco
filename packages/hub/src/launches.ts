@@ -133,8 +133,10 @@ export const createLaunches = (ctx: LaunchesContext) => {
    * one session's envelopes in order. It settles when its process installs
    * its credential ({@link launchSettled} from the ack), when the machine
    * says the session is up for a launch that replaces nothing, when it fails,
-   * sleeps or stops, when its machine's socket closes, and when its machine
-   * names it nowhere any more ({@link settleLaunchesOn}). A start kept while
+   * sleeps or stops, when its machine's socket closes, when its machine
+   * stops naming its start's request (machine-calls.ts `watchSent`), and
+   * when its machine names it nowhere once the hub no longer waits on its
+   * start ({@link settleLaunchesOn}). A start kept while
    * its machine installs an update is in flight from when it is kept
    * (`db.owesSpawn`), and minted when it goes (`flushOwedStarts`).
    */
@@ -143,9 +145,10 @@ export const createLaunches = (ctx: LaunchesContext) => {
     {
       readonly machineId: string;
       readonly generation: string;
-      readonly at: number;
       /** It replaces a process the machine may still be running: only its own ack says it is up. */
       readonly replaces: boolean;
+      /** The request its start went under, watched while its machine names it; none for a launch its machine asked a grant for that the hub had not sent ({@link grantLaunch}). */
+      readonly requestId: string | undefined;
     }
   >();
   const launchInFlight = (instanceId: string): boolean =>
@@ -186,19 +189,22 @@ export const createLaunches = (ctx: LaunchesContext) => {
   };
   /**
    * A machine's own word on what it carries, at each register and each
-   * heartbeat with a custody reading: a launch to it that it now names
-   * nowhere (not running, not held, not on its way) is gone, dropped there
-   * or with an agent that restarted, once `graceMs` has passed since it was
-   * sent (a beat may have been read before the launch arrived; a register
-   * is read after every launch to its last connection); one it lists
-   * running that replaces nothing is up. Its socket closing alone settles
-   * nothing: an agent that only reconnected still has its launches.
+   * heartbeat with a custody reading: one it lists running that replaces
+   * nothing is up; a launch to it that it names nowhere (not running, not
+   * held, not on its way) is gone, dropped there or with an agent that
+   * restarted. At a beat, a launch whose start the hub still waits on
+   * (machine-calls.ts `waitsOn`: the beat may have been read before the
+   * start arrived) changes nothing: its start is its own to settle, by its
+   * answer or by its machine no longer naming it ({@link launchGoes}). A
+   * register is read after every launch to its last connection, so there
+   * one named nowhere is gone. Its socket closing alone settles nothing:
+   * an agent that only reconnected still has its launches.
    */
   const settleLaunchesOn = (
     machineId: string,
     live: readonly string[],
     custody: SessionCustody,
-    graceMs: number
+    heard: "register" | "beat"
   ): void => {
     if (custody.state !== "available") {
       return;
@@ -215,7 +221,12 @@ export const createLaunches = (ctx: LaunchesContext) => {
       }
       if (running.has(instanceId) && !launch.replaces) {
         launchStarted(instanceId, "its machine runs it");
-      } else if (!named.has(instanceId) && Date.now() - launch.at >= graceMs) {
+      } else if (
+        !named.has(instanceId) &&
+        (heard === "register" ||
+          launch.requestId === undefined ||
+          !ctx.machineCalls.waitsOn(launch.requestId))
+      ) {
         launchSettled(instanceId, "its machine no longer has it");
       }
     }
@@ -230,11 +241,27 @@ export const createLaunches = (ctx: LaunchesContext) => {
     payload: SpawnPayload,
     stored: ReturnType<typeof ctx.db.getInstancesByIds>[number]
   ): void => {
+    const generation = ctx.processGeneration(stored);
+    const { requestId } = payload;
     launches.set(payload.instanceId, {
       machineId: stored.machineId,
-      generation: ctx.processGeneration(stored),
-      at: Date.now(),
+      generation,
       replaces: payload.relaunch === true,
+      requestId,
+    });
+    if (requestId === undefined) {
+      return;
+    }
+    // Its start is waited on while its machine's beats name it: one they
+    // stop naming for a quiet spell never landed, and the launch is over.
+    ctx.machineCalls.watchSent(stored.machineId, requestId, () => {
+      if (launches.get(payload.instanceId)?.requestId === requestId) {
+        launchSettled(
+          payload.instanceId,
+          "its machine stopped naming its start",
+          generation
+        );
+      }
     });
   };
   /**
@@ -611,8 +638,18 @@ export const createLaunches = (ctx: LaunchesContext) => {
     return place ? { place } : {};
   };
 
+  /**
+   * `payload` under a request id: every launch goes under one, which its
+   * machine names while it starts it and answers once the session is in
+   * place ({@link launchGoes}); a reattach keeps what it was given.
+   */
+  const underRequest = (payload: SpawnPayload): SpawnPayload =>
+    payload.reattachOnly || payload.requestId
+      ? payload
+      : { ...payload, requestId: crypto.randomUUID() };
+
   const bounded = (given: SpawnPayload, knownRow?: InstanceRow) => {
-    const payload = withHeldPicks(given);
+    const payload = withHeldPicks(underRequest(given));
     const {
       scratchWorktree: _callerWorktree,
       account: _pick,

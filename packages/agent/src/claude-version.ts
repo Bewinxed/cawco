@@ -1,16 +1,15 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { FleetItemState } from "@cawco/core/fleet";
 import { claudeVersionPath } from "@cawco/core/paths/cawco";
+import { runLive } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
-import type { Subprocess } from "bun";
 import { Schema } from "effect";
 import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 
@@ -27,9 +26,11 @@ export const INITIALIZE_SAYS_VERSION_FROM = "2.1.299";
  * THE VERSION READ. A binary's version is a fact about the file, so it is
  * read once per file (its real path, mtime and size: a `claude update`
  * points the symlink at a new build, an npm update rewrites the file), by one
- * `claude --version` that runs until it answers, and kept on disk with the
- * file it was read from ({@link claudeVersionPath}). A caller waits for it
- * {@link VERSION_WAIT_MS}; the wait ends there, the read does not.
+ * `claude --version` run while it lives (core `runLive`: while it writes or
+ * spends CPU time), and kept on disk with the file it was read from
+ * ({@link claudeVersionPath}). Its callers wait for that read and name no
+ * time of their own: a `--version` that works for 30 s answers in 30 s, and
+ * one that went quiet a spell answers unanswered.
  *
  * Why, from the nightly of d0ca43009 (stage 2): the gate ({@link
  * claudeToStart}) took the capabilities probe's read, killed at 5 s and
@@ -41,41 +42,15 @@ export const INITIALIZE_SAYS_VERSION_FROM = "2.1.299";
  */
 
 /**
- * How long a caller waits for the machine's Claude Code to say its version
- * ({@link claudeHostVersion}). Our choice, because: every start and each
- * minute's read of the account dirs waits on it, and five seconds is what
- * they waited before. A read still running past it is answered `unanswered`,
- * and the next caller finds its answer.
- */
-const VERSION_WAIT_MS = 5000;
-
-/**
  * The version read of one binary: the file it is (`<real path>:<mtime>:<size>`),
- * the version its `claude --version` says, and that process while it runs
+ * the version its `claude --version` says, and the way to end that run
  * (none for a version kept on disk).
  */
 interface VersionRead {
   binary: string;
-  child: Subprocess | undefined;
-  version: Promise<string | undefined>;
-  /** A caller's wait ran out before it answered: its answer is news ({@link onVersionAnswered}). */
-  waitedOut?: true;
+  end: AbortController | undefined;
+  version: Promise<Bounded<string | undefined>>;
 }
-
-/** What hears a version read answer after a caller stopped waiting for it ({@link onVersionAnswered}). */
-const answeredListeners = new Set<() => void>();
-
-/**
- * Listens for a version read that a caller stopped waiting for
- * ({@link VERSION_WAIT_MS}) finally answering, a version or none: what that
- * caller said of the machine's Claude Code ("hasn't said its version yet")
- * is out of date from then, and the gate ({@link claudeToStart}) already
- * reads the answer. Answers the way to stop.
- */
-export const onVersionAnswered = (listener: () => void): (() => void) => {
-  answeredListeners.add(listener);
-  return () => answeredListeners.delete(listener);
-};
 
 /** The read of the binary `claude` resolved to last; the one kept on disk until the first call. */
 let read: VersionRead | undefined;
@@ -98,54 +73,40 @@ const keptRead = async (): Promise<VersionRead | undefined> => {
   known = kept.version;
   return {
     binary: kept.binary,
-    version: Promise.resolve(kept.version),
-    child: undefined,
+    version: Promise.resolve({ kind: "answered", value: kept.version }),
+    end: undefined,
   };
 };
 
-/** Tells every {@link onVersionAnswered} listener. */
-const tellAnswered = (): void => {
-  for (const listener of answeredListeners) {
-    listener();
-  }
-};
-
 /**
- * Starts `path --version` and reads it to its end. One that cannot even be
- * run says no version. It outlives a caller's wait on purpose (its late
- * answer is news, {@link onVersionAnswered}), never the agent: it runs
- * tethered (core tether.ts `spawnRead`) off Windows, so an agent that ends however it
- * ends, mid-read, ends it too, where a plain spawn was left running,
- * reparented.
+ * Runs `path --version` while it lives (core `runLive`) and reads what it
+ * says. One that cannot even be run, or that a newer binary's read ended,
+ * says no version; one that went quiet a spell answers unanswered. Its
+ * whole process group goes with it, and with the agent.
  */
 const readVersion = (path: string, binary: string): VersionRead => {
-  let child: Subprocess<"pipe", "pipe", "ignore"> | undefined;
-  let version: Promise<string | undefined>;
-  try {
-    const spawned = spawnRead([path, "--version"], {
-      env: hostEnvironment(),
-      stderr: "ignore",
-    });
-    child = spawned;
-    version = Promise.all([new Response(spawned.stdout).text(), spawned.exited])
-      .then(([said, code]) => (code === 0 ? versionSaid(said) : undefined))
-      .catch(() => undefined)
-      .finally(() => untether(spawned.stdin));
-  } catch {
-    version = Promise.resolve(undefined);
-  }
-  const reading: VersionRead = { binary, version, child };
+  const end = new AbortController();
+  const version = runLive([path, "--version"], {
+    env: hostEnvironment(),
+    signal: end.signal,
+  }).then(
+    (ran): Bounded<string | undefined> =>
+      ran.kind === "answered"
+        ? {
+            kind: "answered",
+            value:
+              ran.value.code === 0 ? versionSaid(ran.value.stdout) : undefined,
+          }
+        : ran,
+    (): Bounded<string | undefined> => ({ kind: "answered", value: undefined })
+  );
+  const reading: VersionRead = { binary, version, end };
   detach(
-    version.then(async (answered) => {
-      // Still the binary's read, and a caller said it gave no answer: its
-      // answer goes out now, read afresh by the listeners.
-      const news = reading.waitedOut === true && read === reading;
+    version.then(async (said) => {
+      const answered = said.kind === "answered" ? said.value : undefined;
       // None is not kept, so the next call asks again.
       if (!answered && read === reading) {
         read = undefined;
-      }
-      if (news) {
-        tellAnswered();
       }
       if (!answered) {
         return;
@@ -174,10 +135,10 @@ const readVersion = (path: string, binary: string): VersionRead => {
 
 /**
  * The machine's Claude Code version, as its `claude --version` says it
- * (`x.y.z`), waited for {@link VERSION_WAIT_MS} (THE VERSION READ above).
- * Answered with no version when Claude Code is not installed or did not say;
- * unanswered while its read is still running. A new binary's read ends the
- * one before it if that one is still running.
+ * (`x.y.z`), once its read answers (THE VERSION READ above). Answered with
+ * no version when Claude Code is not installed or did not say; unanswered
+ * when its read went quiet a spell. A new binary's read ends the one before
+ * it if that one is still running.
  *
  * THE VERSION-CHANGE DETECTION: each read that answers a version other than
  * the last says so in the agent's log; the sessions on the old one find out
@@ -208,18 +169,10 @@ export const claudeHostVersion = async (): Promise<
     read = await loaded;
   }
   if (read?.binary !== binary) {
-    if (read?.child && read.child.exitCode === null) {
-      read.child.kill();
-    }
+    read?.end?.abort();
     read = readVersion(path, binary);
   }
-  // The read is shared and outlives this wait, so the wait's end is not passed on to it.
-  const reading = read;
-  const said = await readWithin(VERSION_WAIT_MS, () => reading.version);
-  if (said.kind === "unanswered") {
-    reading.waitedOut = true;
-  }
-  return said;
+  return await read.version;
 };
 
 /**

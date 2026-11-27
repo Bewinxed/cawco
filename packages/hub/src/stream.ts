@@ -66,12 +66,7 @@ import {
   sendToClient,
 } from "./wire-socket";
 
-/**
- * A control whose `control_result` never came stops being an ack anybody is
- * waiting for. Mirrors the registry's requester TTL, and for the same reason:
- * a map keyed by request id must not be a place ids go to accumulate.
- */
-const COMMAND_TTL_MS = 5 * 60_000;
+/** How often the replay windows are looked at for one quiet past {@link RING_IDLE_MS}. */
 const SWEEP_INTERVAL_MS = 60_000;
 
 /**
@@ -145,7 +140,7 @@ export interface StreamPorts {
   readonly followed: (sessionId: string) => void;
   /** Whether a daemon for this machine is connected right now. */
   readonly isMachineConnected: (machineId: string) => boolean;
-  /** Runs the TTL sweep until the hub closes. */
+  /** Runs the replay windows' sweep until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** A command refused because its machine is not connected, as the person reads it: the machine by its name, never its id. */
   readonly machineAwayWords: (machineId: string) => string;
@@ -175,9 +170,14 @@ export interface StreamPorts {
   ) => Promise<"withdrawn" | "started">;
 }
 
-/** A command dispatched toward a daemon, waiting for the reply that confirms it. */
+/**
+ * A command dispatched toward a daemon, waiting for the reply that confirms
+ * it. It goes when the hub answers it: the machine's `control_result`, that
+ * none came once the machine's beats stop naming it (server.ts `forward`,
+ * machine-calls.ts `watchSent`), or the close of the socket that sent
+ * it ({@link createStreamHub}'s `dropSocket`).
+ */
 interface AwaitedCommand {
-  readonly at: number;
   readonly commandId: string;
   readonly socketId: string;
 }
@@ -221,19 +221,12 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   const delivered = new Map<string, DeliveryMark>();
 
   /**
-   * Drops what nothing is waiting for any more: commands whose reply never
-   * came, and the replay windows of sessions that have gone quiet. Takes `now`
-   * so the schedule is the interval's business and the rule is testable.
-   * Returns how many rings it emptied.
+   * Drops what nothing is waiting for any more: the replay windows of
+   * sessions that have gone quiet. Takes `now` so the schedule is the
+   * interval's business and the rule is testable. Returns how many rings it
+   * emptied.
    */
   const sweepStale = (now = Date.now()): number => {
-    const staleCommand = now - COMMAND_TTL_MS;
-    for (const [requestId, command] of awaiting) {
-      if (command.at < staleCommand) {
-        awaiting.delete(requestId);
-      }
-    }
-
     const idleRing = now - RING_IDLE_MS;
     let emptied = 0;
     for (const ring of rings.values()) {
@@ -626,7 +619,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // Registered BEFORE dispatch: the daemon is free to answer inside the same
     // tick, and an ack that arrives before anyone is waiting for it is an ack
     // that never arrives.
-    awaiting.set(requestId, { commandId, socketId: socket.id, at: Date.now() });
+    awaiting.set(requestId, { commandId, socketId: socket.id });
     const relayed = ports.relayControl(
       {
         verb: "control",

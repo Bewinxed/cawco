@@ -37,7 +37,7 @@ const RESTART_MS = 1000;
 export interface HubAnswers {
   askMachine: (
     arg: HubOps["askMachine"]["arg"],
-    signal: AbortSignal | undefined
+    signal: AbortSignal
   ) => Promise<HubOps["askMachine"]["answer"]>;
   blockPages: (
     arg: HubOps["blockPages"]["arg"]
@@ -106,9 +106,10 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
       case "askMachine":
         return {
           op: "askMachine",
+          // A request no longer running has no asker left to wait.
           value: await deps.hub.askMachine(
             asked.arg,
-            signals.get(asked.arg.requestId)
+            signals.get(asked.arg.requestId) ?? AbortSignal.abort()
           ),
         };
       case "blockPages":
@@ -238,14 +239,12 @@ export const createViewsThread = (deps: ViewsThreadDeps) => {
      * to `signal`: the machines it asks for are told to stop once it aborts.
      */
     withRequest: async <Answer>(
-      signal: AbortSignal | undefined,
+      signal: AbortSignal,
       run: (requestId: number) => Promise<Answer>
     ): Promise<Answer> => {
       nextRequest += 1;
       const requestId = nextRequest;
-      if (signal) {
-        signals.set(requestId, signal);
-      }
+      signals.set(requestId, signal);
       try {
         return await run(requestId);
       } finally {

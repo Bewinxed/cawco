@@ -332,7 +332,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
       message.machineId,
       agentFrame.instances,
       registrationCustody,
-      0
+      "register"
     );
     const settled = ctx.db.settleInstances(
       message.machineId,

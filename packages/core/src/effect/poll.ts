@@ -16,6 +16,13 @@ import { Clock, Duration, Effect, Schedule } from "effect";
  * there. A look's failure ends the poll with it.
  */
 
+/**
+ * The one cadence anything is looked at, or said for someone who looks:
+ * a poll that names no `every` looks this often.
+ */
+// @limit external: "0.1 second is about the limit for having the user feel that the system is reacting instantaneously" (Nielsen, https://www.nngroup.com/articles/response-times-3-important-limits/)
+export const LOOK_MS = 100;
+
 /** What a poll found: the answer, or that the deadline passed first. * @public The house Effect kit, ahead of its users: the wave-2 slices of the
  * backend's move to Effect import it.
  */
@@ -36,8 +43,8 @@ export type Looked<A, Last = A> =
 interface Every {
   /** The deadline, in milliseconds from the first look; none looks until found. */
   readonly deadlineMs?: number;
-  /** The wait between one look's end and the next look. */
-  readonly every: Duration.Input;
+  /** The wait between one look's end and the next look; {@link LOOK_MS} when left out. */
+  readonly every?: Duration.Input;
 }
 
 interface LookUntil {
@@ -69,7 +76,7 @@ export const lookUntil: LookUntil = <A, E, R>(
         ? Number.POSITIVE_INFINITY
         : deadlineMs - (at - started);
     const spacing: Schedule.Schedule<number, A> = Schedule.spaced(
-      options.every
+      options.every ?? LOOK_MS
     );
     const last = yield* look.pipe(
       Effect.repeat(

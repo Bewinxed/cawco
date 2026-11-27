@@ -32,6 +32,7 @@ import {
 } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
+import { LOOK_MS } from "@cawco/core/effect/poll";
 import type { FolderMoveBlock, FolderWalk } from "@cawco/core/folder-move";
 import { makeFolder } from "@cawco/core/folders";
 import { runCaptured } from "@cawco/core/run-captured";
@@ -134,8 +135,6 @@ type FrameKind = (typeof FRAME)[keyof typeof FRAME];
 /** The most one data frame holds. */
 const CHUNK = 1024 * 1024;
 const HEADER = 5;
-/** How often a side says how far it is. */
-const SAY_EVERY_MS = 250;
 /** A mode's permission bits, set-id and sticky bits with them: below the file type's. */
 const MODE_BITS = 0o1_0000;
 
@@ -779,7 +778,7 @@ class TreeWriter {
   }
 
   #say(force = false): void {
-    if (force || Date.now() - this.#saidAt > SAY_EVERY_MS) {
+    if (force || Date.now() - this.#saidAt > LOOK_MS) {
       this.#saidAt = Date.now();
       this.#progress({
         phase: "copy",
@@ -983,7 +982,7 @@ const checkTree = async (
       }
       files += 1;
       bytes += now.size;
-      if (Date.now() - saidAt > SAY_EVERY_MS) {
+      if (Date.now() - saidAt > LOOK_MS) {
         saidAt = Date.now();
         say();
       }
