@@ -88,14 +88,14 @@ function placeOf(place: TranscriptPlace): FindPlace {
  * when it answered: an agent from before the read was added says it has no
  * such function (core `unknownControlWords`), which is told apart from a
  * machine that did not answer, since waiting brings nothing and an update
- * does. `null`: the asker let the read go.
+ * does.
  */
 export function placesHeard(
-  answer: Bounded<ControlAnswer<typeof CONTROL_TRANSCRIPT_PLACES>> | null
+  answer: Bounded<ControlAnswer<typeof CONTROL_TRANSCRIPT_PLACES>>
 ):
   | { heard: "answered"; places: TranscriptPlaces }
   | { heard: Exclude<PlacesHeard, "answered"> } {
-  if (answer?.kind !== "answered") {
+  if (answer.kind !== "answered") {
     return { heard: "silent" };
   }
   const { value } = answer;

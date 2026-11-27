@@ -1090,7 +1090,7 @@ const askStage = Effect.fnUntraced(function* <T>(
   });
   return yield* boundedWhileLive((alive) =>
     Effect.raceFirst(
-      attempt(async (signal) => {
+      fromPromise(async (signal) => {
         // An abort is the read's own let-go, which its bound answers.
         const cut = (error: unknown): never => {
           throw signal.aborted
@@ -1352,7 +1352,7 @@ async function listens(stage: Stage): Promise<boolean> {
  */
 const healthy = (stage: Stage): Effect.Effect<Bounded<boolean>> =>
   (stage.runs.kind === "serve"
-    ? attempt(() => listens(stage))
+    ? fromPromise(() => listens(stage))
     : askStage(stage, HEALTH_PATH, "answer its health", async (response) => {
         await response.body?.cancel();
         return response.ok;
@@ -2245,7 +2245,9 @@ export async function writeSheet(
 export async function renderStage(
   ports: StagePorts,
   workspace: WorkspaceRef,
-  ask: RenderAsk
+  ask: RenderAsk,
+  /** Its asker's: aborts once the hub lets the render go, which answers what it drew by then. */
+  signal: AbortSignal
 ): Promise<Rendered> {
   const tree = await treeOf(workspace, ports);
   const stories = ask.files.map((file) => storyPath(tree, file));
@@ -2270,10 +2272,13 @@ export async function renderStage(
   used(stage, "a render");
   const release = viewing(stage);
   try {
-    return await renderCanvas(stage.key, reached, stage.port, {
-      ...ask,
-      files,
-    });
+    return await renderCanvas(
+      stage.key,
+      reached,
+      stage.port,
+      { ...ask, files },
+      signal
+    );
   } finally {
     release();
   }

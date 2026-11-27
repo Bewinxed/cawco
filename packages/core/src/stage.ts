@@ -353,14 +353,6 @@ export interface RenderAsk {
 }
 
 /**
- * How long a daemon's render of a canvas may take, Chromium's launch to its
- * answer, past the stage's own start. A sweep that runs past it answers
- * what it drew by then ({@link StageRendered} `undrawn`). Ours: a screen's
- * first load transforms its modules.
- */
-export const STAGE_RENDER_MS = 90_000;
-
-/**
  * Which page a canvas page is, by its `by` query: a person's panel (the
  * default), the stage's render (the stage's one drawing), a decision page's
  * Preview or the map's live card (each its column of drawings).

@@ -242,7 +242,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   const pictureOf = async (
     instance: InstanceRow,
     row: ArtifactRow,
-    { link, width }: { link?: string; width: number }
+    { link, width }: { link?: string; width: number },
+    /** Its asker's: the draw is let go where it runs once it aborts. */
+    signal: AbortSignal
   ) => {
     const machineId = await ctx.ownMachineId;
     if (!ctx.registry.agent(machineId)) {
@@ -256,7 +258,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return entered;
     }
     const { address, path, entry } = entered;
-    const asked = await ctx.machineCalls.callAgent(
+    const asked = await ctx.machineCalls.readStoppable(
       machineId,
       ARTIFACT_PICTURE,
       [
@@ -270,7 +272,8 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
           artifact: { id: row.id, kind: row.kind, name: row.name },
           sync: `/__cawco/artifact/${row.id}`,
         },
-      ]
+      ],
+      { caller: "an artifact's picture", signal }
     );
     switch (asked.kind) {
       case "unanswered":

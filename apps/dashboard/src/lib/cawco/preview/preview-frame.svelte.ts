@@ -578,6 +578,9 @@ export class PreviewFrame {
     if (key !== this.frameKey && key === this.standing) {
       this.standing = null;
     }
+    if (key === this.frameKey) {
+      this.#taking();
+    }
   }
 
   /**
@@ -624,6 +627,7 @@ export class PreviewFrame {
   loadedFrame(key: string) {
     this.loadedKey = key;
     this.silentKey = null;
+    this.#taking();
     setTimeout(() => {
       if (
         key === this.frameKey &&
@@ -643,15 +647,42 @@ export class PreviewFrame {
     }, PAGE_SILENT_MS);
   }
 
-  #tellHub() {
+  /**
+   * The hub's show waits on this frame while it takes the page in: told as
+   * the current frame mounts and at each of its load events, until its
+   * word on the revision is said ({@link #tellHub}). A word unheard is let
+   * be: the next load says it again, and the show's own quiet ends it.
+   */
+  #taking() {
+    const told = this.#toTell();
+    if (!told) {
+      return;
+    }
+    const { id, revision } = told;
+    artifactShown(this.#deps.instanceId(), id, {
+      revision,
+      taking: true,
+    }).catch(() => undefined);
+  }
+
+  /** The artifact and the open frame's revision the hub is owed a word on, while this tab is seen and has not said it; none otherwise. */
+  #toTell(): { id: string; revision: string } | undefined {
     const revision =
       this.#deps.paneSubject.preview?.state === "open"
         ? this.#deps.paneSubject.preview.revision
         : undefined;
     const id = this.#deps.paneSubject.artifact?.id;
-    if (!(revision && id && pageVisible.current) || this.saidFor === revision) {
+    return revision && id && pageVisible.current && this.saidFor !== revision
+      ? { id, revision }
+      : undefined;
+  }
+
+  #tellHub() {
+    const told = this.#toTell();
+    if (!told) {
       return;
     }
+    const { id, revision } = told;
     const current = this.loadedKey === this.frameKey;
     let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
     if (this.hubDown) {

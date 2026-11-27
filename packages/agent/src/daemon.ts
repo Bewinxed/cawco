@@ -3806,11 +3806,13 @@ const startDaemon = (rediscover = false) =>
     );
     // A design folder's tree whose artifact is gone, let go.
     supervisor.declareControl(STAGE_UNPIN, unpin);
-    // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
-    supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
+    // A canvas drawn by the daemon's own Chromium when no panel has drawn it
+    // (stage-render.ts); let go where it runs once the hub lets it go, which
+    // answers what it drew by then.
+    supervisor.declareRead(STAGE_RENDER, (signal, ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : renderStage(ports, ref, ask)
+        : renderStage(ports, ref, ask, signal)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.declareControl(STAGE_COMPONENTS, (ref, query) =>

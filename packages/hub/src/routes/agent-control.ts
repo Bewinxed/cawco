@@ -2,6 +2,7 @@
  * What a machine is asked to do: whether it is busy, updating it, and reading its folder's configuration and commands.
  */
 
+import type { Bounded } from "@cawco/core/bounded";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import { maskInspection } from "@cawco/core/fleet-secrets";
 import { traitsOf } from "@cawco/core/harness/traits";
@@ -12,7 +13,11 @@ import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
-import { awayProblem, silentProblem } from "../machine-answers";
+import {
+  awayProblem,
+  type CallAnswer,
+  silentProblem,
+} from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
@@ -70,25 +75,39 @@ export const agentControlRoutes = (
   >
 ) => {
   const { db, machineName } = ctx;
-  const { readAgent } = ctx.machineCalls;
+  const { readStoppable } = ctx.machineCalls;
   const update = agentUpdate(ctx);
+  /** A read's result, or what the route answers: its machine silent or away, or its refusal as `code`, in the machine's words or `detail`. */
+  const resultOr = <T, const Code extends string>(
+    machineId: string,
+    answer: Bounded<CallAnswer<T>>,
+    code: Code,
+    detail: string
+  ) => {
+    switch (answer.kind) {
+      case "unanswered":
+        return unansweredProblem(ctx, machineId, answer);
+      case "answered":
+        return answer.value.ok
+          ? answer.value.result
+          : problem(502, { code, detail: answer.value.error ?? detail });
+      default:
+        throw unreachable(answer);
+    }
+  };
   return (
     new Elysia()
-      .get("/api/agents/:machineId/busy", async ({ params }) => {
-        const answer = await readAgent(params.machineId, AGENT_BUSY, []);
-        switch (answer.kind) {
-          case "unanswered":
-            return unansweredProblem(ctx, params.machineId, answer);
-          case "answered":
-            return answer.value.ok
-              ? answer.value.result
-              : problem(502, {
-                  code: "busy-probe-failed",
-                  detail: answer.value.error ?? "the busy probe failed",
-                });
-          default:
-            throw unreachable(answer);
-        }
+      .get("/api/agents/:machineId/busy", async ({ params, request }) => {
+        const answer = await readStoppable(params.machineId, AGENT_BUSY, [], {
+          caller: "a machine's busy probe",
+          signal: request.signal,
+        });
+        return resultOr(
+          params.machineId,
+          answer,
+          "busy-probe-failed",
+          "the busy probe failed"
+        );
       })
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
@@ -103,10 +122,13 @@ export const agentControlRoutes = (
       .post(
         "/api/agents/:machineId/inspect",
         { body: t.Object({ cwd: t.Optional(t.String()) }) },
-        async ({ params, body }) => {
-          const answer = await readAgent(params.machineId, INSPECT_CONFIG, [
-            body.cwd,
-          ]);
+        async ({ params, body, request }) => {
+          const answer = await readStoppable(
+            params.machineId,
+            INSPECT_CONFIG,
+            [body.cwd],
+            { caller: "a machine's inspection", signal: request.signal }
+          );
           switch (answer.kind) {
             case "unanswered":
               return unansweredProblem(ctx, params.machineId, answer);
@@ -141,31 +163,26 @@ export const agentControlRoutes = (
             model: t.Optional(t.String()),
           }),
         },
-        async ({ params, query }) => {
+        async ({ params, query, request }) => {
           const account = traitsOf(query.harness).accountDir
             ? (query.account ?? machineAccount(db, params.machineId))
             : undefined;
-          const answer = await readAgent(
+          const answer = await readStoppable(
             params.machineId,
             CONTROL_FOLDER_COMMANDS,
             [query.cwd, account, query.model],
-            query.harness
+            {
+              caller: "a folder's commands",
+              harness: query.harness,
+              signal: request.signal,
+            }
           );
-          switch (answer.kind) {
-            case "unanswered":
-              return unansweredProblem(ctx, params.machineId, answer);
-            case "answered":
-              return answer.value.ok
-                ? answer.value.result
-                : problem(502, {
-                    code: "config-not-written",
-                    detail:
-                      answer.value.error ??
-                      `${machineName(params.machineId)} could not list the commands of ${query.cwd}`,
-                  });
-            default:
-              throw unreachable(answer);
-          }
+          return resultOr(
+            params.machineId,
+            answer,
+            "config-not-written",
+            `${machineName(params.machineId)} could not list the commands of ${query.cwd}`
+          );
         }
       )
   );

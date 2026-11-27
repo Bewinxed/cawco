@@ -298,7 +298,7 @@ export const accountRoutes = ({
     // model at its limit asks before it goes (dashboard limit-checks). The
     // reading is the account's at once, and every screen hears it. `unread`
     // says why none was read, in words; a stored limit is never refused on.
-    .post("/api/accounts/:id/usage-read", async ({ params }) => {
+    .post("/api/accounts/:id/usage-read", async ({ params, request }) => {
       const account = accountOf(params.id);
       if (!account) {
         return problem(404, {
@@ -306,7 +306,7 @@ export const accountRoutes = ({
           detail: `There is no account ${params.id}.`,
         });
       }
-      return await readAccountUsageNow(account.id);
+      return await readAccountUsageNow(account.id, request.signal);
     })
     // What removing the account does with the sessions on it, for its
     // confirm to say: how many move to another account, how many have

@@ -27,11 +27,14 @@
  * it stands the drawing at the state, grows the window, holds the page's
  * animations, which a kept reader's page must not.
  *
- * A read has one limit, {@link RENDER_WAIT_MS}, and answers within it
- * however large the canvas: a read of one state draws that state's section
- * alone (core `sweptFiles`); a read the limit cuts short answers the
- * stage's report with the sections it did not draw, where it stood in each
- * and the state read that draws each alone (core `StageRendered`).
+ * A read waits on its page while the page shows life ({@link pageLive}:
+ * each request it finishes or fails, each load, each move of its sweep or
+ * the stage's report), however large the canvas, and its page closing ends
+ * it: a read of one state draws that state's section alone (core
+ * `sweptFiles`). A read its asker lets go (the hub's abandon) or whose page
+ * went quiet answers the stage's report with the sections it did not draw,
+ * where it stood in each and the state read that draws each alone (core
+ * `StageRendered`).
  *
  * A stage listens inside its boundary; the daemon reaches it through the
  * preview bridge's unix socket on Linux (`reachWorkspace`), which no browser
@@ -41,7 +44,7 @@
  * is the host's, and the browser dials it directly.
  */
 
-import { boundedWhileLive, Unanswered } from "@cawco/core/effect/bounded";
+import { type Bounded, Gone, readWhileLive } from "@cawco/core/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
 import {
   CANVAS_PATH,
@@ -55,7 +58,6 @@ import {
   readerOwed,
   type SectionPlan,
   type SectionUndrawn,
-  STAGE_RENDER_MS,
   type StageRendered,
   screenHeight,
   sectionPlansOf,
@@ -67,18 +69,20 @@ import { stageRenderWords as words } from "@cawco/core/words/stage-render";
 import type { Socket, TCPSocketListener } from "bun";
 import { Duration, Effect } from "effect";
 import type { Browser, BrowserContext, Page } from "playwright-core";
+import { hearPage } from "./artifact-picture";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { runPromise } from "./daemon-runtime";
-import { findState, poseState, statePicture } from "./frame-picture";
-import { layoutNow, sweepNow, textNow } from "./in-page/page";
+import {
+  findState,
+  poseState,
+  statePicture,
+  untilLetGo,
+} from "./frame-picture";
+import { layoutNow, readAgainNow, sweepNow, textNow } from "./in-page/page";
 import { fromPromise } from "./rejected";
 import { measureMove } from "./stage-measure";
 
-/** How long a render may take, Chromium's launch to its answer: one limit, which every wait of the render shares (the hub waits this long on it). */
-const RENDER_WAIT_MS = STAGE_RENDER_MS;
-/** The end of the limit kept for the answer once the sweep is read: the stage's report and the state's picture. Ours: a pose and a screenshot of one state, on a machine under load. */
-const ANSWER_MS = 10_000;
 /** How often the page's sweep is read while it draws. Ours. */
 const POLL_MS = 250;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
@@ -193,9 +197,52 @@ export function listenerFor(unix: string): Promise<TCPSocketListener<Pipe>> {
   );
 }
 
-/** Whether Playwright gave up on a wait at its timeout (its `TimeoutError`). */
-const timedOut = (error: unknown): boolean =>
-  error instanceof Error && error.name === "TimeoutError";
+/**
+ * `work` for as long as `page` shows life (core bounded.ts
+ * `readWhileLive`): each of its events artifact-picture.ts `hearPage`
+ * hears (a request finished or failed, an answer, a navigation, a load),
+ * and each `alive()` the work says of its own (its sweep or the stage's
+ * report moving). Its page's close answers `unanswered` "dead"; `asker`
+ * aborting (the hub let the read go) rejects with its reason, which the
+ * read's caller answers as far as it got. `work` is handed the wait's own
+ * signal, which aborts as the wait is let go.
+ */
+const pageLive = <T>(
+  page: Page,
+  asker: AbortSignal,
+  work: (signal: AbortSignal, alive: () => void) => Promise<T>
+): Promise<Bounded<T>> =>
+  readWhileLive(
+    (signal, alive) => {
+      const unhear = hearPage(page, alive);
+      const done = new AbortController();
+      // The page's close, heard as the work waits: the work is Gone.
+      const gone = runPromise(
+        Effect.callback<never, Gone>((resume) => {
+          const closed = (): void =>
+            resume(Effect.fail(new Gone("the render's page closed")));
+          page.once("close", closed);
+          return Effect.sync(() => page.off("close", closed));
+        }),
+        { signal: done.signal }
+      );
+      gone.catch(() => undefined);
+      return Promise.race([work(signal, alive), gone]).finally(() => {
+        done.abort();
+        unhear();
+      });
+    },
+    { signal: asker }
+  );
+
+/** `work`'s outcome, or `null` once `asker` let it go: what was drawn by then is the read's answer. */
+const unlessLetGo = <T>(asker: AbortSignal, work: Promise<T>) =>
+  work.catch((error: unknown) => {
+    if (asker.aborted) {
+      return null;
+    }
+    throw error;
+  });
 
 /** The refusal a machine with no Chromium answers a read with. */
 const NO_CHROMIUM =
@@ -245,7 +292,7 @@ const sweepOf = (page: Page): Effect.Effect<SweepRead | null | "stopped"> =>
 const firstStories = (
   page: Page
 ): Effect.Effect<Record<string, string | null> | null> =>
-  Effect.tryPromise(() => page.evaluate(textNow, CANVAS_PLAN_ID)).pipe(
+  fromPromise(() => page.evaluate(textNow, CANVAS_PLAN_ID)).pipe(
     Effect.map(storiesOf),
     Effect.orElseSucceed(() => null)
   );
@@ -271,16 +318,14 @@ function storiesOf(said: string | null): Record<string, string | null> | null {
 
 /**
  * The page's sweep, read every {@link POLL_MS} until it has drawn every
- * section it takes or `deadline` comes, waited on while the page reports
- * (core effect/bounded.ts `boundedWhileLive`: each read that differs from
- * the one before is a sign of life): its last answer either way, so a page
- * that stops answering still says how far it got; null when it never said
- * (its runtime never ran). Its plans' first stories are read in the same
- * wait.
+ * section it takes, waited on while the page shows life ({@link pageLive};
+ * each read that differs from the one before is a sign of life too): its
+ * last answer however it ends, so a page that went quiet or a read its
+ * asker let go still says how far it got; null when it never said (its
+ * runtime never ran). Its plans' first stories are read after.
  */
-const sweepUntil = Effect.fnUntraced(function* (page: Page, deadline: number) {
+async function sweepUntil(page: Page, asker: AbortSignal) {
   let last: SweepRead | null = null;
-  const unread: Record<string, string | null> | null = null;
   let said = "";
   const look = (alive: () => void) =>
     Effect.suspend(() => sweepOf(page)).pipe(
@@ -296,28 +341,20 @@ const sweepUntil = Effect.fnUntraced(function* (page: Page, deadline: number) {
         return last?.swept && last.reports > 0 ? last : undefined;
       })
     );
-  return yield* boundedWhileLive((alive) =>
-    Effect.gen(function* () {
-      const looked =
-        Date.now() >= deadline
-          ? undefined
-          : yield* lookUntil(
-              {
-                every: Duration.millis(POLL_MS),
-                deadlineMs: deadline - Date.now(),
-              },
-              look(alive)
-            );
-      const swept = looked?.kind === "found" ? looked.value : last;
-      return { swept, firsts: yield* firstStories(page) };
-    })
-  ).pipe(
-    Effect.orElseSucceed(() => ({
-      swept: last,
-      firsts: unread,
-    }))
+  const looked = await unlessLetGo(
+    asker,
+    pageLive(page, asker, (signal, alive) =>
+      runPromise(lookUntil({ every: Duration.millis(POLL_MS) }, look(alive)), {
+        signal,
+      })
+    )
   );
-});
+  const swept: SweepRead | null =
+    looked?.kind === "answered" && looked.value.kind === "found"
+      ? looked.value.value
+      : last;
+  return { swept, firsts: await runPromise(firstStories(page)) };
+}
 
 /** `ask.measure`'s move measured on the page a read opened to measure it (stage-measure.ts), from `ask.state`'s story: refused without one, naming `first`, the first story of the canvas's first states file. */
 async function measured(
@@ -326,7 +363,7 @@ async function measured(
   ask: RenderAsk,
   at: {
     firsts: Record<string, string | null> | null;
-    until: number;
+    signal: AbortSignal;
     window: [number, number];
   }
 ): Promise<MeasureRead> {
@@ -340,7 +377,7 @@ async function measured(
     key: await findState(page, ask.state.story),
     scheme: ask.state.scheme ?? "light",
     window: at.window,
-    until: at.until,
+    signal: at.signal,
   });
 }
 
@@ -504,8 +541,7 @@ export function idleReaders(key: string, idleMs: number): void {
 async function keptReader(
   pages: StagePages,
   files: string[],
-  sandbox: boolean,
-  deadline: number
+  sandbox: boolean
 ): Promise<KeptReader> {
   const key = files.join("\n");
   const had = pages.readers.get(key);
@@ -523,7 +559,6 @@ async function keptReader(
     await closeContext(context);
     throw error;
   });
-  const seconds = RENDER_WAIT_MS / 1000;
   const kept: KeptReader = {
     closed: false,
     context,
@@ -532,16 +567,16 @@ async function keptReader(
     readAt: Date.now(),
     loaded: Promise.resolve(),
   };
-  // A page that did not load is closed and forgotten: the next read opens another.
+  // A page that did not load is closed and forgotten: the next read opens
+  // another. Its load has no time of its own: the read waiting on it lets
+  // it go once the page goes quiet ({@link loadedLive}).
   kept.loaded = page
-    .goto(pageUrl(pages.origin, { files }), {
-      timeout: Math.max(1, deadline - Date.now()),
-    })
+    .goto(pageUrl(pages.origin, { files }), { timeout: 0 })
     .then(
       () => undefined,
       (error: unknown) => {
         closeReader(pages, key, kept);
-        throw timedOut(error) ? new Error(words.notLoaded(seconds)) : error;
+        throw error;
       }
     );
   pages.readers.set(key, kept);
@@ -569,26 +604,48 @@ async function stageReport(
 }
 
 /**
+ * The kept reader's page loaded, waited on while it shows life
+ * ({@link pageLive}): one that went quiet first is closed, the next read
+ * opening another; one closed under it fails as gone.
+ */
+async function loadedLive(
+  pages: StagePages,
+  kept: KeptReader,
+  asker: AbortSignal
+): Promise<void> {
+  const loaded = await pageLive(kept.page, asker, () => kept.loaded).catch(
+    (error: unknown) => {
+      throw kept.closed ? new Error(words.readerGone) : error;
+    }
+  );
+  if (loaded.kind === "unanswered") {
+    closeReader(pages, kept.files.join("\n"), kept);
+    throw new Error(
+      loaded.reason === "dead" ? words.readerGone : words.notLoaded
+    );
+  }
+}
+
+/**
  * The report of `files` once their kept reader has read them as they
  * stand: the stage's report, read every {@link POLL_MS}, until it owes no
- * read of them (core `readerOwed`) or the read's limit comes. A file it
- * owes that the page is not reading (a change reached the file and no
- * module of the page, or its load failed) is asked of the page again, once
- * for each content of it. Fails when the page closes under it.
+ * read of them (core `readerOwed`), waited on while the page shows life
+ * ({@link pageLive}); a page gone quiet, or a read its asker let go,
+ * answers as far as it got. A file it owes that the page is not reading (a
+ * change reached the file and no module of the page, or its load failed)
+ * is asked of the page again, once for each content of it. Fails when the
+ * page closes under it.
  */
 async function readKept(
   pages: StagePages,
   files: string[],
   sandbox: boolean,
-  deadline: number
+  asker: AbortSignal
 ): Promise<Rendered> {
-  const kept = await keptReader(pages, files, sandbox, deadline);
+  const kept = await keptReader(pages, files, sandbox);
   kept.readAt = Date.now();
-  await kept.loaded.catch((error: unknown) => {
-    throw kept.closed ? new Error(words.readerGone) : error;
-  });
+  await loadedLive(pages, kept, asker);
   const { page } = kept;
-  const until = deadline - ANSWER_MS;
   /** The content of each file last asked to be read again, by its hash. */
   const asked = new Map<string, string>();
   /** When each owed file was first seen with the page reading none of it, by its file. */
@@ -607,14 +664,14 @@ async function readKept(
       alive();
     }
   };
-  // One look: the report read again (after the first), done once it owes nothing or the limit came; else the page's sweep read, and each owed file it is not reading asked of it again.
+  // One look: the report read again (after the first), done once it owes nothing; else the page's sweep read, and each owed file it is not reading asked of it again.
   const look = fromPromise(async (): Promise<boolean> => {
     if (looks > 0) {
       report = await stageReport(pages.origin, files);
     }
     looks += 1;
     const owed = readerOwed(report);
-    if (owed.length === 0 || Date.now() >= until) {
+    if (owed.length === 0) {
       return true;
     }
     if (kept.closed) {
@@ -649,31 +706,28 @@ async function readKept(
     }
     return false;
   });
-  // Waited on while the page reports or the stage's report moves: one that
-  // stopped answering is let go, and the report says how far it got.
-  const firsts = await runPromise(
-    boundedWhileLive((heard) => {
+  // Waited on while the page shows life or the stage's report moves: one
+  // that went quiet, or a read its asker let go, says how far it got.
+  const waited = await unlessLetGo(
+    asker,
+    pageLive(page, asker, (signal, heard) => {
       alive = heard;
-      return lookUntil(
-        {
-          every: Duration.millis(POLL_MS),
-          deadlineMs: Math.max(0, until - Date.now()),
-          until: (done: boolean) => done,
-        },
-        look
-      ).pipe(
-        Effect.andThen(() =>
-          readerOwed(report).length === 0
-            ? Effect.succeed(null)
-            : firstStories(page)
-        )
+      return runPromise(
+        lookUntil(
+          { every: Duration.millis(POLL_MS), until: (done: boolean) => done },
+          look
+        ).pipe(
+          Effect.andThen(() =>
+            readerOwed(report).length === 0
+              ? Effect.succeed(null)
+              : firstStories(page)
+          )
+        ),
+        { signal }
       );
-    }).pipe(
-      Effect.catch((error) =>
-        error instanceof Unanswered ? Effect.succeed(null) : Effect.fail(error)
-      )
-    )
+    })
   );
+  const firsts = waited?.kind === "answered" ? waited.value : null;
   if (kept.closed) {
     throw new Error(words.readerGone);
   }
@@ -695,6 +749,38 @@ async function readKept(
   };
 }
 
+/** `page` loaded at `url`, waited on while it shows life ({@link pageLive}); one gone quiet first, or closed, fails in words. */
+async function gotoLive(
+  page: Page,
+  url: string,
+  asker: AbortSignal
+): Promise<void> {
+  const loaded = await pageLive(page, asker, (signal) =>
+    untilLetGo(signal, page.goto(url, { timeout: 0 }))
+  );
+  if (loaded.kind === "unanswered") {
+    throw new Error(
+      loaded.reason === "dead" ? words.readerGone : words.notLoaded
+    );
+  }
+}
+
+/** State `key` posed for its picture (frame-picture.ts `poseState`), waited on while its page shows life; one gone quiet first, or closed, fails in words. */
+async function posedLive(
+  page: Page,
+  key: string,
+  asker: AbortSignal
+): Promise<void> {
+  const posed = await pageLive(page, asker, (signal) =>
+    poseState(page, key, signal)
+  );
+  if (posed.kind === "unanswered") {
+    throw new Error(
+      posed.reason === "dead" ? words.readerGone : words.unsettled(key)
+    );
+  }
+}
+
 /**
  * A state's picture, the stage's in view, or a measured move: drawn on a
  * page of its own in the shared browser at the state's scheme and width,
@@ -705,9 +791,8 @@ async function drawAsked(
   pages: StagePages,
   ask: RenderAsk,
   sandbox: boolean,
-  deadline: number
+  asker: AbortSignal
 ): Promise<Rendered> {
-  const left = () => Math.max(1, deadline - Date.now());
   const opened = browserFor(ask.state?.width);
   const context = await openContext(
     {
@@ -720,22 +805,13 @@ async function drawAsked(
   );
   try {
     const page = await context.newPage();
-    const seconds = RENDER_WAIT_MS / 1000;
-    await page
-      .goto(pageUrl(pages.origin, ask), { timeout: left() })
-      .catch((error: unknown) => {
-        throw timedOut(error) ? new Error(words.notLoaded(seconds)) : error;
-      });
-    const { swept, firsts } = await runPromise(
-      sweepUntil(page, deadline - ANSWER_MS)
-    );
+    await gotoLive(page, pageUrl(pages.origin, ask), asker);
+    const { swept, firsts } = await sweepUntil(page, asker);
     const { state } = ask;
     const done = !!swept?.swept && swept.reports > 0;
     // A state's picture needs its section drawn: with none, the read says where it stood and what to do instead.
     if (state && !done) {
-      throw new Error(
-        words.stateUndrawn(state.story, seconds, swept?.sweepAt ?? null)
-      );
+      throw new Error(words.stateUndrawn(state.story, swept?.sweepAt ?? null));
     }
     if (done) {
       await page.waitForTimeout(SETTLE_MS);
@@ -763,8 +839,8 @@ async function drawAsked(
         ...unread,
         measured: await measured(browser, page, ask, {
           firsts,
-          // The read's own deadline: a measurement answers with no picture, its report already read.
-          until: deadline,
+          // Its asker's: a measurement let go answers the repeats it ran, its report already read.
+          signal: asker,
           window: [opened.viewport.width, opened.viewport.height],
         }),
       };
@@ -778,7 +854,7 @@ async function drawAsked(
       };
     }
     const key = await findState(page, state.story, state.interaction);
-    await poseState(page, key, deadline);
+    await posedLive(page, key, asker);
     // The guides laid over the state as it stands posed, so the picture shows what the read says.
     const layout = ask.layout ? await page.evaluate(layoutNow, key) : null;
     if (ask.layout && !layout) {
@@ -810,16 +886,17 @@ export async function renderCanvas(
   reached: string,
   port: number,
   ask: RenderAsk,
+  /** Its asker's: aborts once the hub lets the read go, which answers what it drew by then. */
+  signal: AbortSignal,
   /** Chromium's own sandbox: the daemon's rule ({@link chromiumSandboxed}) unless the caller knows its own. */
   sandbox = chromiumSandboxed()
 ): Promise<Rendered> {
-  const deadline = Date.now() + RENDER_WAIT_MS;
   const pages = await pagesOf(key, reached, port);
   pages.using += 1;
   try {
     return ask.state || ask.png || ask.measure
-      ? await drawAsked(pages, ask, sandbox, deadline)
-      : await readKept(pages, ask.files, sandbox, deadline);
+      ? await drawAsked(pages, ask, sandbox, signal)
+      : await readKept(pages, ask.files, sandbox, signal);
   } finally {
     pages.using -= 1;
     letGoIfIdle(key, pages);

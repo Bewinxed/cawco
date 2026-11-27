@@ -108,7 +108,7 @@ export const fleetMcpCalls = (
     maskedMcp,
     sharedProblem,
   } = ctx;
-  const { readAgent } = ctx.machineCalls;
+  const { readStoppable } = ctx.machineCalls;
   /**
    * The unmanaged MCP server `name` a machine has, config and keys as it
    * holds them: what an adoption takes into the fleet. Read here and kept
@@ -117,9 +117,13 @@ export const fleetMcpCalls = (
   const machineMcpConfig = async (
     machineId: string,
     name: string,
-    cwd: string | undefined
+    cwd: string | undefined,
+    signal: AbortSignal
   ) => {
-    const asked = await readAgent(machineId, INSPECT_CONFIG, [cwd]);
+    const asked = await readStoppable(machineId, INSPECT_CONFIG, [cwd], {
+      caller: "an MCP server's adoption",
+      signal,
+    });
     if (asked.kind === "unanswered") {
       return unansweredProblem(ctx, machineId, asked);
     }
@@ -161,10 +165,15 @@ export const fleetMcpCalls = (
   };
   return {
     /** A put, an adoption from a machine when `fromMachine` names one. */
-    put: async (name: string, body: Static<typeof mcpBody>) => {
+    put: async (
+      name: string,
+      body: Static<typeof mcpBody>,
+      /** Its asker's: a read off a machine is let go once it aborts. */
+      signal: AbortSignal
+    ) => {
       const held = db.getMcpServer(name)?.config;
       const read = body.fromMachine
-        ? await machineMcpConfig(body.fromMachine, name, body.cwd)
+        ? await machineMcpConfig(body.fromMachine, name, body.cwd, signal)
         : { config: body.config };
       if (read instanceof ElysiaStatus) {
         return read;
@@ -246,8 +255,11 @@ export const fleetMcpRoutes = (ctx: Parameters<typeof fleetMcpCalls>[0]) => {
   const calls = fleetMcpCalls(ctx);
   return (
     new Elysia()
-      .put("/api/fleet/mcp/:name", { body: mcpBody }, ({ params, body }) =>
-        calls.put(params.name, body)
+      .put(
+        "/api/fleet/mcp/:name",
+        { body: mcpBody },
+        ({ params, body, request }) =>
+          calls.put(params.name, body, request.signal)
       )
       // Into the trash with its sign-in, off every machine at once.
       .delete("/api/fleet/mcp/:name", ({ params }) => calls.remove(params.name))

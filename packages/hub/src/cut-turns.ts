@@ -199,10 +199,12 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     row: InstanceRow,
     taskId: string
   ): Promise<Pick<EndedTask, "output" | "outputUnread">> => {
+    // Read as the hub tells a cut task's end: the hub holds the read.
     const answer = await ctx.machineCalls.readSessionProcess(
       row,
       "getTaskOutput",
-      [taskId]
+      [taskId],
+      { caller: "a cut task's output", signal: ctx.lifetime.signal }
     );
     switch (answer.kind) {
       case "unanswered":

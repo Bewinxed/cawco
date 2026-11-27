@@ -12,8 +12,6 @@ import { isBlocked, type WorkItemRow } from "./db/project-work";
  * - `blocked`: its delegate type, machine or account is missing
  *   (`blocked`).
  * - `waiting`: it declared a wait (`waitUntil`, wait_item).
- * - `waitResuming`: a hub restart resumes its declared wait
- *   (`waitResumeBy`).
  * - `landing`: its landing runs (`landingSince`, any
  *   phase but `completing`).
  * - `completing`: its submission waits on its own delegates (`landingSince`
@@ -40,7 +38,6 @@ const HOLD_ORDER = [
   "paused",
   "custody",
   "waiting",
-  "waitResuming",
   "verifying",
   "landing",
   "completing",
@@ -84,7 +81,6 @@ type HoldColumns = Pick<
   | "landingPhase"
   | "landingSince"
   | "stoppingAt"
-  | "waitResumeBy"
   | "waitUntil"
 >;
 
@@ -97,7 +93,6 @@ const ROW_HOLDS: Record<
   stopping: (item) => item.stoppingAt !== null,
   blocked: isBlocked,
   waiting: (item) => !!item.waitUntil,
-  waitResuming: (item) => !!item.waitResumeBy,
   landing: (item) => !!item.landingSince && item.landingPhase !== "completing",
   completing: (item) =>
     !!item.landingSince && item.landingPhase === "completing",

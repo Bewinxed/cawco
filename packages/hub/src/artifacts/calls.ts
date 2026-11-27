@@ -170,7 +170,9 @@ export const readAsked = async (
     story?: string;
     verify?: boolean;
     width?: number;
-  }
+  },
+  /** Its asker's: what the read draws on a machine is let go once it aborts. */
+  signal: AbortSignal
 ) => {
   const state = query.state ? stateOf(query.state) : undefined;
   if (state instanceof ElysiaStatus) {
@@ -180,17 +182,24 @@ export const readAsked = async (
   if (measure instanceof ElysiaStatus) {
     return measure;
   }
-  return await artifacts.read(instanceId, id, query.since, query.png === true, {
-    ...(measure ? { measure } : {}),
-    ...(query.detail ? { detail: query.detail } : {}),
-    ...(query.story ? { story: query.story } : {}),
-    ...(state ?? {}),
-    ...(query.save ? { save: query.save } : {}),
-    ...(query.render ? { render: true } : {}),
-    ...(query.layout ? { layout: true } : {}),
-    ...(query.verify ? { verify: true } : {}),
-    ...(query.width === undefined ? {} : { width: query.width }),
-  });
+  return await artifacts.read(
+    instanceId,
+    id,
+    query.since,
+    query.png === true,
+    {
+      ...(measure ? { measure } : {}),
+      ...(query.detail ? { detail: query.detail } : {}),
+      ...(query.story ? { story: query.story } : {}),
+      ...(state ?? {}),
+      ...(query.save ? { save: query.save } : {}),
+      ...(query.render ? { render: true } : {}),
+      ...(query.layout ? { layout: true } : {}),
+      ...(query.verify ? { verify: true } : {}),
+      ...(query.width === undefined ? {} : { width: query.width }),
+    },
+    signal
+  );
 };
 
 /** A create, as `POST /api/instances/:id/artifacts` answers it. */
@@ -311,7 +320,12 @@ export const updateComponent = async (
  * call is held to the route's bounds whichever door it comes by. A call that
  * does not fit is refused as the route refused it, with the tool's shape.
  */
-export const artifactTools = (artifacts: Artifacts, instanceId: string) => {
+export const artifactTools = (
+  artifacts: Artifacts,
+  instanceId: string,
+  /** Its call's: aborts once its asker lets it go, and what it reads of a machine is let go with it. */
+  signal: AbortSignal
+) => {
   /** `asked` as `schema` takes it, or the refusal with `shape`. */
   const shaped = <S extends TSchema>(
     schema: S,
@@ -343,7 +357,7 @@ export const artifactTools = (artifacts: Artifacts, instanceId: string) => {
       });
       return fits instanceof ElysiaStatus
         ? fits
-        : await readAsked(artifacts, instanceId, id, query);
+        : await readAsked(artifacts, instanceId, id, query, signal);
     },
     update: async (id: string, change: unknown) => {
       const body = shaped(updateBody, SHAPES.update, change);

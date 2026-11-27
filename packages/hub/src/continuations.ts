@@ -149,6 +149,12 @@ export type ContinuationsContext = Pick<
   Pick<ReturnType<typeof createSpawns>, "spawnFromHub">;
 
 export const createContinuations = (ctx: ContinuationsContext) => {
+  /**
+   * A continuation's reads of its source's machine are the hub's own: its
+   * job outlives the call that asked for it, so the hub holds each read and
+   * lets it go as it closes.
+   */
+  const held = ctx.lifetime.signal;
   const readContinuationOf = async (
     where: SessionLocation,
     askers: string[]
@@ -157,11 +163,15 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       dir: where.cwd || undefined,
       askers,
     };
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       where.machineId,
       CONTROL_READ_CONTINUATION,
       [where.sessionId, options],
-      where.harness
+      {
+        caller: "a continuation's source",
+        harness: where.harness,
+        signal: held,
+      }
     );
     switch (answer.kind) {
       case "unanswered":
@@ -225,13 +235,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         throw unreachable(located);
     }
     const where = located.at;
-    const since = await ctx.sessionStartOf(where);
+    const since = await ctx.sessionStartOf(where, held);
     const [read, git] = await Promise.all([
       // What it was asked: the person's words, and a delegate's parent's
       // brief and hand-offs, so a delegate's continuation knows its work.
       // A parent that was itself continued wrote some under a former id.
       readContinuationOf(where, ctx.askersOf(row)),
-      ctx.gitChangesOf(where, since),
+      ctx.gitChangesOf(where, since, held),
     ]);
     const { extracted } = read;
     // Named by what the person first asked in words — not the compaction
@@ -261,7 +271,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       source,
       extracted,
       prompt,
-      liveContextTokens: await ctx.contextTokensOf(row, read.scopeChars),
+      liveContextTokens: await ctx.contextTokensOf(row, read.scopeChars, held),
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
       openingTokens: asksOnly
         ? estimateTokens(asksOpening(source, extracted.asks, note).length)
@@ -321,6 +331,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
           prepared.source.machineId,
           harness,
           model,
+          held,
           account
         ),
         prepared.summariseInputTokens + SUMMARISER_OUTPUT_RESERVE_TOKENS
@@ -335,6 +346,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         machineId ?? prepared.source.machineId,
         harness,
         model,
+        held,
         account
       ),
       prepared.openingTokens + TARGET_HEADROOM_TOKENS
@@ -1123,7 +1135,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         mode
       );
     }
-    const answered = await ctx.storedAnswer(current, false);
+    const answered = await ctx.storedAnswer(current, false, held);
     ctx.retireSession(current);
     if (answered) {
       return answered;

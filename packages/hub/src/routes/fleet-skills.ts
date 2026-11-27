@@ -74,7 +74,12 @@ export const fleetSkillCalls = (
     skillRow,
   } = ctx;
   return {
-    put: async (name: string, body: Static<typeof skillBody>) => {
+    put: async (
+      name: string,
+      body: Static<typeof skillBody>,
+      /** Its asker's: a read off a machine is let go once it aborts. */
+      signal: AbortSignal
+    ) => {
       if (!SKILL_NAME.test(name)) {
         return problem(400, {
           code: "not-usable-skill-name",
@@ -87,10 +92,12 @@ export const fleetSkillCalls = (
       }
 
       if (body.fromMachine) {
-        const read = await skillFilesOff(ctx, body.fromMachine, [
-          name,
-          body.cwd,
-        ]);
+        const read = await skillFilesOff(
+          ctx,
+          body.fromMachine,
+          [name, body.cwd],
+          signal
+        );
         if (read instanceof ElysiaStatus) {
           return read;
         }
@@ -197,11 +204,14 @@ export const fleetSkillRoutes = (
     fleetSyncs,
     skillRow,
   } = ctx;
-  const { readAgent } = ctx.machineCalls;
+  const { readStoppable } = ctx.machineCalls;
   return (
     new Elysia()
-      .put("/api/fleet/skills/:name", { body: skillBody }, ({ params, body }) =>
-        calls.put(params.name, body)
+      .put(
+        "/api/fleet/skills/:name",
+        { body: skillBody },
+        ({ params, body, request }) =>
+          calls.put(params.name, body, request.signal)
       )
       .patch(
         "/api/fleet/skills/:name",
@@ -218,7 +228,7 @@ export const fleetSkillRoutes = (
       })
       // The same source, fetched again — for a skill whose repo has moved on.
       // Answers at once, the row marked `fetching`, as the PUT does.
-      .post("/api/fleet/skills/:name/refresh", async ({ params }) => {
+      .post("/api/fleet/skills/:name/refresh", async ({ params, request }) => {
         const stored = db
           .listSkills()
           .find((entry) => entry.name === params.name);
@@ -233,7 +243,12 @@ export const fleetSkillRoutes = (
         // "the same source, again" reads from.
         if (stored.source.startsWith("machine:")) {
           const machineId = stored.source.slice("machine:".length);
-          const read = await skillFilesOff(ctx, machineId, [stored.name]);
+          const read = await skillFilesOff(
+            ctx,
+            machineId,
+            [stored.name],
+            request.signal
+          );
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -323,7 +338,7 @@ export const fleetSkillRoutes = (
       .post(
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ params, body }) => {
+        async ({ params, body, request }) => {
           const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
@@ -339,9 +354,12 @@ export const fleetSkillRoutes = (
             });
           }
 
-          const asked = await readAgent(body.machineId, READ_SKILL_FILES, [
-            params.name,
-          ]);
+          const asked = await readStoppable(
+            body.machineId,
+            READ_SKILL_FILES,
+            [params.name],
+            { caller: "a skill's push", signal: request.signal }
+          );
           switch (asked.kind) {
             case "unanswered": {
               return unansweredProblem(ctx, body.machineId, asked);

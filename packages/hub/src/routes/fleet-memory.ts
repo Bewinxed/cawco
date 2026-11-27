@@ -260,8 +260,12 @@ export const fleetMemoryRoutes = (
       .post(
         "/api/fleet/memory/peek",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ body }) => {
-          const read = await readMachineMemory(ctx, body.machineId);
+        async ({ body, request }) => {
+          const read = await readMachineMemory(
+            ctx,
+            body.machineId,
+            request.signal
+          );
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -287,8 +291,12 @@ export const fleetMemoryRoutes = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and merges every field of an adopted memory doc in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body }) => {
-          const read = await readMachineMemory(ctx, body.machineId);
+        async ({ body, request }) => {
+          const read = await readMachineMemory(
+            ctx,
+            body.machineId,
+            request.signal
+          );
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -367,7 +375,7 @@ export const fleetMemoryRoutes = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body }) => {
+        async ({ body, request }) => {
           const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
@@ -380,7 +388,11 @@ export const fleetMemoryRoutes = (
             });
           }
 
-          const read = await readMachineMemory(ctx, body.machineId);
+          const read = await readMachineMemory(
+            ctx,
+            body.machineId,
+            request.signal
+          );
           if (read instanceof ElysiaStatus) {
             return read;
           }

@@ -13,7 +13,7 @@ export const instanceDeleteRoutes = ({
   inCustody,
   machineCustody,
   moves,
-  machineCalls: { readAgent },
+  machineCalls: { readStoppable },
 }: Pick<
   HubContext,
   | "db"
@@ -34,7 +34,7 @@ export const instanceDeleteRoutes = ({
     // transcript is there is its machine's to say: the row's key only says
     // one was named once.
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one refusal-checked removal covers live custody, transcript presence, and the persisted end decision
-    .delete("/api/instances/:id", async ({ params }) => {
+    .delete("/api/instances/:id", async ({ params, request }) => {
       const [row] = db.getInstancesByIds([params.id]);
       if (!row) {
         return problem(404, {
@@ -65,11 +65,15 @@ export const instanceDeleteRoutes = ({
         });
       }
       if (row.sessionId) {
-        const stored = await readAgent(
+        const stored = await readStoppable(
           row.machineId,
           CONTROL_GET_SESSION_INFO,
           [row.sessionId, row.cwd || undefined],
-          row.harness
+          {
+            caller: "a Remove's transcript check",
+            harness: row.harness,
+            signal: request.signal,
+          }
         );
         switch (stored.kind) {
           case "unanswered":

@@ -151,11 +151,16 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     const provider = ctx.db.accounts.get(account)?.provider;
     const harness =
       (provider ? catalogHarnessOf(provider) : undefined) ?? "claude";
-    const answer = await ctx.machineCalls.readAgent(
+    // The hub's own probe: the hub holds the read.
+    const answer = await ctx.machineCalls.readStoppable(
       machineId,
       CONTROL_PROBE_ACCOUNT,
       [account],
-      harness
+      {
+        caller: "an account's probe",
+        harness,
+        signal: ctx.lifetime.signal,
+      }
     );
     // Unanswered or refused, the account keeps what the hub last knew of it
     // (accounts.ts `refreshCatalog` writes nothing and tries again).
@@ -223,11 +228,16 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
       ctx.db,
       accountId,
       async (machineId, account) => {
-        const answer = await ctx.machineCalls.readAgent(
+        // The hub's own check: the hub holds the read.
+        const answer = await ctx.machineCalls.readStoppable(
           machineId,
           CONTROL_CHECK_ACCOUNT,
           [account],
-          "claude"
+          {
+            caller: "an account's refusal check",
+            harness: "claude",
+            signal: ctx.lifetime.signal,
+          }
         );
         switch (answer.kind) {
           case "unanswered":
@@ -487,7 +497,9 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
    * refuses, a setup-token's). Nothing is guessed in its place.
    */
   const readAccountUsageNow = async (
-    accountId: string
+    accountId: string,
+    /** Its asker's: each machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<
     | { kind: "read"; machineId: string; reading: ProviderAccountReading }
     | { kind: "unread"; why: string }
@@ -508,10 +520,11 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
     const named = ctx.accountWords(accountId);
     const whys: string[] = [];
     for (const machineId of machines) {
-      const answer = await ctx.machineCalls.readAgent(
+      const answer = await ctx.machineCalls.readStoppable(
         machineId,
         CONTROL_READ_ACCOUNT_USAGE,
-        [accountId]
+        [accountId],
+        { caller: "an account's usage read now", signal }
       );
       const machine = ctx.machineName(machineId);
       if (answer.kind === "unanswered") {

@@ -72,6 +72,10 @@ export const workspaceRoutes = (
         },
         async ({ params, body, request, server }) => {
           const caller = hubAuth.callerOf(request, addressOf(server, request));
+          // Its sessions' stops are waited on while their machines hold
+          // them (server.ts `stopHeard`): the HTTP idle timer must not cut
+          // that wait short.
+          server?.timeout(request, 0);
           const archived = await workItems.archive(params.id, {
             discard: body?.discard === true,
             anyway: body?.anyway === true && caller.kind === "owner",

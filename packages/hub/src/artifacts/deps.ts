@@ -377,7 +377,9 @@ export interface ArtifactServiceDeps {
   picture: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    drawn: { link?: string; width: number }
+    drawn: { link?: string; width: number },
+    /** Its asker's: the draw is let go where it runs once it aborts. */
+    signal: AbortSignal
   ) => Promise<
     | { png: string; cut?: PictureCut }
     | OriginRefused
@@ -505,7 +507,9 @@ export interface ArtifactServiceDeps {
    */
   servedPicture: (
     at: StageAt,
-    ask: ServedPicture
+    ask: ServedPicture,
+    /** Its asker's: the draw is let go where it runs once it aborts. */
+    signal: AbortSignal
   ) => Promise<PictureTaken | StageRefused>;
   /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
   setUp: (projectId: string) => boolean;
@@ -558,10 +562,11 @@ export interface ArtifactServiceDeps {
    * (preview.ts `waitingStages`).
    */
   stageLive: (key: string, port: number) => boolean;
-  /** A canvas read by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what its page drew and what it did not. */
+  /** A canvas read by its workspace's daemon in the machine's Chromium (agent stage-render.ts): what its page drew and what it did not, waited on while its page shows life and let go where it runs once `signal`, its asker's, aborts. */
   stageRender: (
     at: StageAt,
-    ask: { files: string[]; png?: boolean; state?: StateAsk }
+    ask: { files: string[]; png?: boolean; state?: StateAsk },
+    signal: AbortSignal
   ) => Promise<StageRendered | StageRefused>;
   /**
    * A write to a sheet's story file in its workspace, made by its stage
@@ -604,6 +609,8 @@ export interface ArtifactServiceDeps {
   tree: (instance: InstanceRow) => Set<string>;
   /** Why the hub knows artifact `row` can't be shown now (preview-unavailable.ts); null while nothing stands in the way. */
   unavailable: (row: ArtifactRow | undefined) => PreviewUnavailable | null;
+  /** `then` once the last dashboard (or app) following the session's stream lets it go; the returned call stops listening. */
+  unfollowed: (instanceId: string, then: () => void) => () => void;
   /**
    * A design graph drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every

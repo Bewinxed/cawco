@@ -175,7 +175,9 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
             .map((checkout) =>
               ctx.learnCheckout({ ...checkout, machineId: message.machineId })
             )
-        ).then(() => ctx.projectLocate.resumeHeld(message.machineId))
+        ).then(() =>
+          ctx.projectLocate.resumeHeld(message.machineId, ctx.lifetime.signal)
+        )
       ).pipe(
         Effect.catch(({ cause }) =>
           Effect.sync(() =>

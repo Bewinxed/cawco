@@ -124,7 +124,8 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         crypto.randomUUID()
       );
       await ctx.lifetime.run(Deferred.await(answered));
-      const text = await storedAnswer(id, true);
+      // The hub's own worker: the hub holds the read.
+      const text = await storedAnswer(id, true, ctx.lifetime.signal);
       if (!text) {
         throw new Error(
           "the summariser's turn ended without a finished answer in its transcript"
@@ -145,12 +146,17 @@ export const createContextReads = (ctx: ContextReadsContext) => {
    */
   const storedAnswer = async (
     id: string,
-    ended: boolean
+    ended: boolean,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<string | undefined> => {
     const located = await ctx.locateSession(id);
     switch (located.kind) {
       case "found":
-        return finishedAnswer(await readMessages(located.at, false), ended);
+        return finishedAnswer(
+          await readMessages(located.at, false, signal),
+          ended
+        );
       case "nowhere":
         return undefined;
       case "away":
@@ -216,6 +222,8 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     machineId: string,
     harness: HarnessKind,
     model: string | undefined,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal,
     account?: string | null
   ): Promise<number | undefined> => {
     if (traitsOf(harness).contextWindow === "hub") {
@@ -236,11 +244,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     if (traitsOf(harness).modelCatalog === "account") {
       return accountWindowOf(machineId, harness, model, account);
     }
-    const asked = await ctx.machineCalls.readAgent(
+    const asked = await ctx.machineCalls.readStoppable(
       machineId,
       CONTROL_MODEL_CATALOG,
       [],
-      harness
+      { caller: `a ${harness} context window`, harness, signal }
     );
     switch (asked.kind) {
       case "unanswered":
@@ -276,7 +284,9 @@ export const createContextReads = (ctx: ContextReadsContext) => {
    * kept on the row. A reason when it never reported one.
    */
   const reportedContextOf = async (
-    row: KeepAliveRow
+    row: KeepAliveRow,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<
     { tokens: number; readAt: number } | { reason: string } | Unanswered
   > => {
@@ -297,11 +307,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         reason: `no stored ${harnessName(row.harness)} conversation`,
       };
     }
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       row.machineId,
       CONTROL_READ_SESSION_CONTEXT,
       [row.sessionId, row.cwd],
-      row.harness
+      { caller: "a session's stored context", harness: row.harness, signal }
     );
     switch (answer.kind) {
       case "unanswered":
@@ -344,15 +354,17 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   const contextTokensOf = async (
     row: KeepAliveRow | undefined,
     /** The characters a model reads of its live scope (core `scopeChars`). */
-    scopeChars: number
+    scopeChars: number,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<number> => {
     if (!row) {
       return estimateTokens(scopeChars);
     }
     if (row.status === "running" && ctx.registry.agent(row.machineId)) {
-      return await liveContextTokensOf(row);
+      return await liveContextTokensOf(row, signal);
     }
-    const reported = await reportedContextOf(row);
+    const reported = await reportedContextOf(row, signal);
     if ("kind" in reported) {
       throw ctx.unansweredError(
         row.machineId,
@@ -364,11 +376,15 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   };
 
   /** How many tokens a running session holds right now, as its harness reads it. */
-  const liveContextTokensOf = async (row: InstanceRow): Promise<number> => {
+  const liveContextTokensOf = async (
+    row: InstanceRow,
+    signal: AbortSignal
+  ): Promise<number> => {
     const answer = await ctx.machineCalls.readSessionProcess(
       row,
       CONTROL_CONTEXT_USAGE,
-      []
+      [],
+      { caller: "a running session's context", signal }
     );
     switch (answer.kind) {
       case "unanswered":
@@ -396,12 +412,15 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   };
 
   /** When the session started, as its own harness records it. */
-  const sessionStartOf = async (where: SessionLocation): Promise<string> => {
-    const answer = await ctx.machineCalls.readAgent(
+  const sessionStartOf = async (
+    where: SessionLocation,
+    signal: AbortSignal
+  ): Promise<string> => {
+    const answer = await ctx.machineCalls.readStoppable(
       where.machineId,
       CONTROL_GET_SESSION_INFO,
       [where.sessionId, where.cwd || undefined],
-      where.harness
+      { caller: "a session's start", harness: where.harness, signal }
     );
     switch (answer.kind) {
       case "unanswered":
@@ -438,12 +457,14 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   /** What git says changed in the session's directory since it started. */
   const gitChangesOf = async (
     where: SessionLocation,
-    since: string
+    since: string,
+    signal: AbortSignal
   ): Promise<GitChanges> => {
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       where.machineId,
       CONTROL_GIT_CHANGES,
-      [where.cwd, since]
+      [where.cwd, since],
+      { caller: "a session's git changes", signal }
     );
     switch (answer.kind) {
       case "unanswered":
@@ -470,16 +491,17 @@ export const createContextReads = (ctx: ContextReadsContext) => {
   /** One read of a session's stored messages through its own machine. */
   const readMessages = async (
     where: SessionLocation,
-    whole: boolean
+    whole: boolean,
+    signal: AbortSignal
   ): Promise<SessionMessage[]> => {
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       where.machineId,
       CONTROL_GET_SESSION_MESSAGES,
       [
         where.sessionId,
         { dir: where.cwd || undefined, ...(whole ? { whole } : {}) },
       ],
-      where.harness
+      { caller: "a session's stored messages", harness: where.harness, signal }
     );
     switch (answer.kind) {
       case "unanswered":

@@ -74,8 +74,11 @@ export const instanceTitleRoutes = ({
         { body: t.Object({ accountId: t.String() }) },
         ({ params, body }) => handMove(params.id, body.accountId)
       )
-      .post("/api/instances/:id/context-size", hidden, ({ params }) =>
-        contextSizeCalls({ db, reportedContextOf }).contextSize(params.id)
+      .post("/api/instances/:id/context-size", hidden, ({ params, request }) =>
+        contextSizeCalls({ db, reportedContextOf }).contextSize(
+          params.id,
+          request.signal
+        )
       )
       // Recent's stored transcripts, as the hub keeps them (stored-recent.ts).
       .get("/api/stored", () => storedRecent.now())
@@ -144,7 +147,7 @@ export const instanceTitleRoutes = ({
             ),
           }),
         },
-        async ({ body }) => {
+        async ({ body, request }) => {
           const asked = new Map<
             string,
             {
@@ -232,7 +235,8 @@ export const instanceTitleRoutes = ({
                 const window = await storedWindow(
                   { machineId, sessionKey, cwd: cwd ?? "", harness },
                   // @limit measured: a page; the next page's cursor rides the answer. 40 is the rows one page returns
-                  { start, limit: TITLE_WINDOW }
+                  { start, limit: TITLE_WINDOW },
+                  request.signal
                 );
                 if ("fault" in window) {
                   return { id: ask.id, title: null };

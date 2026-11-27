@@ -161,6 +161,12 @@ export const workWords = {
     `Held ${link}, ${label}: ${why}, so the hub holds its start and starts it once that is over. It is `,
   heldStartListed: (why: string) =>
     `start held: ${why}; it starts once that is over`,
+  /** A delegate's word that its declared wait is over, `reason` the wait's own. */
+  waitOver: (reason: string | null) =>
+    `Your wait is over: ${reason}. Continue, then call finish_item.`,
+  /** Its parent's word that the delegate told its wait was over did not resume: its machine stopped holding that word with no turn begun. */
+  didNotResume: (title: string) =>
+    `${title}: the delegate did not resume after being told its wait was over.`,
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
     "Its report arrives once it calls finish_item and the hub has landed its work: its commits are the evidence, its report the loose ends you pick up.",

@@ -1,4 +1,4 @@
-import { readWithin } from "@cawco/core/bounded";
+import { fetchLive, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import type { PreviewFrame } from "@cawco/core/frames";
 import type {
@@ -184,16 +184,16 @@ const PING_RELAY_MS = 5000;
  * page when it has nothing to draw (core `errorPageResponse`) and serves
  * as the page when it is HTML, its why said here the same way (core
  * `errorWhy`). A
- * page with no answer within `waitMs` is a server still making it (a first
- * compile, a build holding its event loop), and no failure: a served server
+ * page that sends nothing for a quiet spell (core bounded.ts `fetchLive`)
+ * is a server still making it (a first compile, a build holding its event
+ * loop), and no failure: a served server
  * is up once its port listens, however long its pages take (agent stage.ts
  * `listens`). The listener's own ping then says whether the way to the server
  * stands, so `machine` is said only of a listener that answers neither.
  */
 export async function loadedOnce(
   at: Upstream,
-  path: string | undefined,
-  waitMs: number
+  path: string | undefined
 ): Promise<PreviewUnloaded | null> {
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
   const failed: PreviewStop = { kind: "failed" };
@@ -202,17 +202,14 @@ export async function loadedOnce(
     return down && { failure: down.down, why: down.why, stop: failed };
   };
   try {
-    const page = await readWithin(waitMs, async (signal) => {
-      const answer = await fetch(`http://${address}:${at.port}${path ?? "/"}`, {
-        // A pane's load: a sleeping stage or served server wakes for it.
-        headers: { [RELAY_HEADER]: at.token, "sec-fetch-mode": "navigate" },
-        redirect: "manual",
-        signal,
-      });
-      return { status: answer.status, body: await answer.text() };
+    const page = await fetchLive(`http://${address}:${at.port}${path ?? "/"}`, {
+      // A pane's load: a sleeping stage or served server wakes for it.
+      headers: { [RELAY_HEADER]: at.token, "sec-fetch-mode": "navigate" },
+      redirect: "manual",
     });
     if (page.kind === "answered") {
-      const { status, body } = page.value;
+      const { status } = page.value;
+      const body = await page.value.text();
       // An HTML error page the listener served as the page (a render that
       // throws answers 500 with its own): no page to hand up all the same.
       return (

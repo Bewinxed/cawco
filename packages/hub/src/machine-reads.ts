@@ -117,12 +117,15 @@ export const unansweredProblem = (
 export const skillFilesOff = async (
   ctx: MachineReadsContext,
   machineId: string,
-  args: ControlArgs<typeof READ_SKILL_FILES>
+  args: ControlArgs<typeof READ_SKILL_FILES>,
+  /** Its route's request: the machine's read is let go once it ends. */
+  signal: AbortSignal
 ) => {
-  const asked = await ctx.machineCalls.readAgent(
+  const asked = await ctx.machineCalls.readStoppable(
     machineId,
     READ_SKILL_FILES,
-    args
+    args,
+    { caller: "a skill's files", signal }
   );
   switch (asked.kind) {
     case "unanswered":
@@ -147,7 +150,9 @@ export const skillFilesOff = async (
 /** A fleet hook and the copy of its script `machineId` holds, or what the route answers when either is missing. */
 export const hookCopyOff = async (
   ctx: MachineReadsContext,
-  body: { id: string; machineId: string }
+  body: { id: string; machineId: string },
+  /** Its route's request: the machine's read is let go once it ends. */
+  signal: AbortSignal
 ) => {
   const current = ctx.db.getFleetHook(body.id);
   if (!current) {
@@ -156,7 +161,12 @@ export const hookCopyOff = async (
       detail: `the fleet keeps no hook ${body.id}`,
     });
   }
-  const read = await readMachineHookScript(ctx, body.machineId, body.id);
+  const read = await readMachineHookScript(
+    ctx,
+    body.machineId,
+    body.id,
+    signal
+  );
   if (read instanceof ElysiaStatus) {
     return read;
   }
@@ -183,9 +193,13 @@ const readOffMachine = async <K extends ControlName>(
   machineId: string,
   method: K,
   args: ControlArgs<K>,
-  failed: string
+  failed: string,
+  signal: AbortSignal
 ) => {
-  const answer = await ctx.machineCalls.readAgent(machineId, method, args);
+  const answer = await ctx.machineCalls.readStoppable(machineId, method, args, {
+    caller: failed,
+    signal,
+  });
   switch (answer.kind) {
     case "unanswered":
       return unansweredProblem(ctx, machineId, answer);
@@ -203,14 +217,16 @@ const readOffMachine = async <K extends ControlName>(
 
 export const readMachineMemory = (
   ctx: MachineReadsContext,
-  machineId: string
+  machineId: string,
+  signal: AbortSignal
 ) =>
   readOffMachine(
     ctx,
     machineId,
     READ_MEMORY_FILE,
     [],
-    "the machine could not read its memory"
+    "the machine could not read its memory",
+    signal
   );
 
 /**
@@ -220,12 +236,14 @@ export const readMachineMemory = (
 export const readMachineHookScript = (
   ctx: MachineReadsContext,
   machineId: string,
-  id: string
+  id: string,
+  signal: AbortSignal
 ) =>
   readOffMachine(
     ctx,
     machineId,
     READ_HOOK_SCRIPT,
     [id],
-    "the machine could not read the hook's script"
+    "the machine could not read the hook's script",
+    signal
   );

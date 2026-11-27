@@ -213,12 +213,14 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
   /** What machine `machineId` can tell of `asked`; undefined when it did not say. */
   const look = async (
     machineId: string,
-    folder: { path: string; placeId: string; was: string }
+    folder: { path: string; placeId: string; was: string },
+    signal: AbortSignal
   ): Promise<FolderLook | undefined> => {
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       machineId,
       CONTROL_FOLDER_LOOK,
-      [folder]
+      [folder],
+      { caller: "Locate folder's look", signal }
     );
     return answer.kind === "answered" && answer.value.ok
       ? answer.value.result
@@ -226,8 +228,8 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
   };
 
   /** Whether a folder stands at `path` on `machineId`; undefined when it did not say. */
-  const stands = (machineId: string, path: string) =>
-    folderStandsOn(ctx.machineCalls.readAgent, machineId, path);
+  const stands = (machineId: string, path: string, signal: AbortSignal) =>
+    folderStandsOn(ctx.machineCalls.readStoppable, machineId, path, signal);
 
   /** How many of the project's sessions have a conversation from the checkout's folder, or a folder inside it. */
   const conversationsIn = (project: ProjectRow, place: PlaceRow): number =>
@@ -241,13 +243,13 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
       ).length;
 
   /** What the checkout's machine can tell of `path`; an agent that predates the look still says whether a folder stands. */
-  const lookAt = async (place: PlaceRow, path: string) =>
-    (await look(place.machineId, {
-      path,
-      placeId: place.id,
-      was: place.path,
-    })) ?? {
-      stands: await stands(place.machineId, path),
+  const lookAt = async (place: PlaceRow, path: string, signal: AbortSignal) =>
+    (await look(
+      place.machineId,
+      { path, placeId: place.id, was: place.path },
+      signal
+    )) ?? {
+      stands: await stands(place.machineId, path, signal),
       sameFolder: null,
       placed: false,
     };
@@ -286,7 +288,13 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
   };
 
   /** What pointing `placeId` at `raw` would do, read from its machine; the refusal. */
-  const plan = async (projectId: string, placeId: string, raw: string) => {
+  const plan = async (
+    projectId: string,
+    placeId: string,
+    raw: string,
+    /** Its asker's: each read of the checkout's machine is let go once it aborts. */
+    signal: AbortSignal
+  ) => {
     const found = asked(projectId, placeId, raw);
     if (found instanceof ElysiaStatus) {
       return found;
@@ -325,14 +333,14 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     if (!ctx.online(place.machineId)) {
       return away();
     }
-    const there = await lookAt(place, path);
+    const there = await lookAt(place, path, signal);
     if (there.stands === undefined) {
       return away();
     }
     if (!there.stands) {
       return blocked(locateBlocks.nothing(path, machine));
     }
-    const oldStands = await stands(place.machineId, place.path);
+    const oldStands = await stands(place.machineId, place.path, signal);
     const running = ctx.projectStops
       .running(project.id)
       .filter(
@@ -423,8 +431,13 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
   };
 
   /** What pointing checkout `placeId` of `projectId` at `raw` would do. */
-  const preview = async (projectId: string, placeId: string, raw: string) => {
-    const planned = await plan(projectId, placeId, raw);
+  const preview = async (
+    projectId: string,
+    placeId: string,
+    raw: string,
+    signal: AbortSignal
+  ) => {
+    const planned = await plan(projectId, placeId, raw, signal);
     return planned instanceof ElysiaStatus ? planned : findPlanOf(planned);
   };
 
@@ -438,9 +451,10 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     projectId: string,
     placeId: string,
     raw: string,
-    joins: string | undefined
+    joins: string | undefined,
+    signal: AbortSignal
   ) => {
-    const planned = await plan(projectId, placeId, raw);
+    const planned = await plan(projectId, placeId, raw, signal);
     if (planned instanceof ElysiaStatus) {
       return planned;
     }
@@ -481,7 +495,8 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
     machineId: string,
     project: ProjectRow,
     place: PlaceRow,
-    to: string
+    to: string,
+    signal: AbortSignal
   ): Promise<void> => {
     const letGo = (why: string) => {
       ctx.db.holdLocate(place.id, null);
@@ -490,7 +505,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
         `${project.name} (${project.id}): the change held for checkout ${place.id}, to ${to}, is let go: ${why}`
       );
     };
-    const planned = await plan(project.id, place.id, to);
+    const planned = await plan(project.id, place.id, to, signal);
     if (planned instanceof ElysiaStatus) {
       letGo(JSON.stringify(planned.response));
       return;
@@ -521,7 +536,11 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
    * it reads stands in the way, would make two projects one (nobody was
    * asked), or it is still away.
    */
-  const resumeHeld = async (machineId: string): Promise<void> => {
+  const resumeHeld = async (
+    machineId: string,
+    /** Its asker's (the hub's, as the machine registers): each read is let go once it aborts. */
+    signal: AbortSignal
+  ): Promise<void> => {
     const held = ctx.db
       .listProjects()
       .flatMap((project) =>
@@ -531,7 +550,7 @@ export const createProjectLocate = (ctx: ProjectLocateContext) => {
       );
     for (const { project, place } of held) {
       if (place.locateTo) {
-        await resumeOne(machineId, project, place, place.locateTo);
+        await resumeOne(machineId, project, place, place.locateTo, signal);
       }
     }
   };

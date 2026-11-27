@@ -182,7 +182,7 @@ const framesReady = async (page: Page, signal: AbortSignal): Promise<void> => {
 };
 
 /** `hear` told of `page`'s events that are its signs of life: each request it finishes or fails, each answer, each navigation and load of its frames. Answers its own let-go. */
-const hearPage = (page: Page, hear: () => void): (() => void) => {
+export const hearPage = (page: Page, hear: () => void): (() => void) => {
   page.on("requestfinished", hear);
   page.on("requestfailed", hear);
   page.on("response", hear);

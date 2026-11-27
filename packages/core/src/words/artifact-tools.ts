@@ -222,6 +222,9 @@ export const artifactToolWords = {
   /** A preview's server, and the port nothing listens on. */
   serverOnPort: (port: number | string, where: string) =>
     `The server on port ${port} ${where}`,
+  /** A view follows the session and none said it put the artifact on screen while its frame took it in (artifacts service `shownBy`). */
+  notPutOnScreen:
+    "A dashboard is showing this session, but none put the artifact on screen. It stays in the session's panel.",
   notListening: (subject: string) =>
     `${subject} did not answer: nothing is listening on that port.`,
   /**

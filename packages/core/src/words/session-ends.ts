@@ -27,3 +27,15 @@ const FINAL_STOP = /\.$/u;
 /** What a session's transcript and its model are told of a server that did not connect ({@link MCP_NOT_CONNECTED}). */
 export const mcpNotConnectedLine = (name: string, why: string): string =>
   `${name} didn't connect: ${why.trim().replace(FINAL_STOP, "")}. This session runs without its tools.`;
+
+/**
+ * A stop the hub sent and waited on while its machine held it, whose end
+ * was not confirmed: `why` is the machine's silence (hub machine-words.ts
+ * `silentWords`) or {@link STOP_ANSWERED_UNENDED}.
+ */
+export const stopUnconfirmed = (session: string, why: string): string =>
+  `Session ${session} was told to stop and ${why}; the stop stays stored.`;
+
+/** The machine answered a stop without its end being confirmed ({@link stopUnconfirmed}). */
+export const STOP_ANSWERED_UNENDED =
+  "its machine answered without confirming its end";

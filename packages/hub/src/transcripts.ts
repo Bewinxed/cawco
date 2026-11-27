@@ -141,12 +141,14 @@ export interface TranscriptPorts {
   /** The session's newest stored window and the records of its sends, cut after `at` when given. */
   readonly readHistory: (
     instanceId: string,
-    at?: string
+    at: string | undefined,
+    signal: AbortSignal
   ) => Promise<HistoryRead>;
   /** The window of the session's stored transcript `cursor` names, and the records of its sends. */
   readonly readOlder: (
     instanceId: string,
-    cursor: HistoryCursor
+    cursor: HistoryCursor,
+    signal: AbortSignal
   ) => Promise<OlderRead>;
   /** Tells the session's followers their stream cannot go on from what they hold: each reads the newest page again (`stream.reset`). */
   readonly reset: (instanceId: string) => void;
@@ -401,66 +403,69 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     at?: string
   ): Promise<HistoryRead> => {
     const began = Date.now();
-    const loading = ports.readHistory(instanceId, at).then(
-      (read) => {
-        const readIn = Date.now() - began;
-        if (entries.get(instanceId) !== entry) {
-          return read;
-        }
-        entry.loading = null;
-        if ("fault" in read) {
-          emit(
-            instanceId,
-            folded(instanceId, entry, () => replayHeld(instanceId, entry))
-          );
-          return read;
-        }
-        entry.where = read.where;
-        entry.build = ports.build(read.where.machineId);
-        // A law broken building it leaves no half-built transcript: the read
-        // fails by the law's name, and the next frame or page reads again.
-        const building = Date.now();
-        try {
-          ports.laws.raise(() => {
-            const { events, placed, front } = entry.builder.merge(
-              read.entries,
-              read.records,
-              read.lines,
-              at !== undefined,
-              read.older === null
+    // One read every dashboard of the session joins: the hub holds it.
+    const loading = ports
+      .readHistory(instanceId, at, ports.lifetime.signal)
+      .then(
+        (read) => {
+          const readIn = Date.now() - began;
+          if (entries.get(instanceId) !== entry) {
+            return read;
+          }
+          entry.loading = null;
+          if ("fault" in read) {
+            emit(
+              instanceId,
+              folded(instanceId, entry, () => replayHeld(instanceId, entry))
             );
-            // The first read, or one that now opens the transcript (a rewind
-            // to before what was held), says where the older windows are.
-            if (front) {
-              entry.older = read.older;
-            }
-            entry.reads += 1;
-            for (const line of placed) {
-              ports.anchor(instanceId, line.id, line.after);
-            }
-            emit(instanceId, [...events, ...replayHeld(instanceId, entry)]);
-          });
-        } catch (error) {
-          entries.delete(instanceId);
+            return read;
+          }
+          entry.where = read.where;
+          entry.build = ports.build(read.where.machineId);
+          // A law broken building it leaves no half-built transcript: the read
+          // fails by the law's name, and the next frame or page reads again.
+          const building = Date.now();
+          try {
+            ports.laws.raise(() => {
+              const { events, placed, front } = entry.builder.merge(
+                read.entries,
+                read.records,
+                read.lines,
+                at !== undefined,
+                read.older === null
+              );
+              // The first read, or one that now opens the transcript (a rewind
+              // to before what was held), says where the older windows are.
+              if (front) {
+                entry.older = read.older;
+              }
+              entry.reads += 1;
+              for (const line of placed) {
+                ports.anchor(instanceId, line.id, line.after);
+              }
+              emit(instanceId, [...events, ...replayHeld(instanceId, entry)]);
+            });
+          } catch (error) {
+            entries.delete(instanceId);
+            throw error;
+          }
+          const builtIn = Date.now() - building;
+          if (readIn + builtIn >= SLOW_LOAD_MS) {
+            console.info(
+              `[transcripts] ${shortId(instanceId)}: ${read.entries.length} stored entries read in ${readIn} ms, built in ${builtIn} ms`
+            );
+          }
+          return read;
+        },
+        // A read that threw is a read that failed: no transcript is left
+        // holding frames behind a promise that will never resolve.
+        (error: unknown) => {
+          if (entries.get(instanceId) === entry) {
+            entries.delete(instanceId);
+          }
           throw error;
         }
-        const builtIn = Date.now() - building;
-        if (readIn + builtIn >= SLOW_LOAD_MS) {
-          console.info(
-            `[transcripts] ${shortId(instanceId)}: ${read.entries.length} stored entries read in ${readIn} ms, built in ${builtIn} ms`
-          );
-        }
-        return read;
-      },
-      // A read that threw is a read that failed: no transcript is left
-      // holding frames behind a promise that will never resolve.
-      (error: unknown) => {
-        if (entries.get(instanceId) === entry) {
-          entries.delete(instanceId);
-        }
-        throw error;
-      }
-    );
+      );
     entry.loading = loading;
     return loading;
   };
@@ -554,7 +559,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     }
     const { reads } = entry;
     const loading = ports
-      .readOlder(instanceId, cursor)
+      .readOlder(instanceId, cursor, ports.lifetime.signal)
       .then((read) => {
         if (
           "fault" in read ||

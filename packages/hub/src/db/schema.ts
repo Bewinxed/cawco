@@ -2075,8 +2075,6 @@ export const workItems = sqliteTable(
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
-    /** Deadline plus grace while awaiting the harness's next turn read. */
-    waitResumeBy: timestamp("wait_resume_by"),
     /**
      * When an interrupt stopped its turn, or the sweep found its session
      * asleep past its limit, while that holds it: nothing the hub sends on

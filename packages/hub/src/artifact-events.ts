@@ -692,10 +692,12 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     folder: string | undefined
   ) => {
     const app = posix.resolve(instance.cwd, folder ?? ".");
-    const asked = await ctx.machineCalls.readAgent(
+    // Asked as an artifact is made, whose call has no signal here: the hub holds the read.
+    const asked = await ctx.machineCalls.readStoppable(
       instance.machineId,
       CONTROL_REPO_ROOT,
-      [app]
+      [app],
+      { caller: "a design folder's place", signal: ctx.lifetime.signal }
     );
     switch (asked.kind) {
       case "unanswered":
@@ -864,7 +866,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   const onStage = async <K extends ControlName>(
     stageAt: StageAt,
     method: K,
-    args: (workspace: WorkspaceRef) => ControlArgs<K>
+    args: (workspace: WorkspaceRef) => ControlArgs<K>,
+    /** A read the stage stops once its asker lets it go (machine-calls.ts `readStoppable`); none for a call that changes the stage. */
+    read?: { caller: string; signal: AbortSignal }
   ) => {
     const revived = await stageRevived(stageAt);
     if (revived instanceof ElysiaStatus) {
@@ -891,11 +895,14 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     // stage-install.ts); a place's runs in a clone of its checkout, cut on
     // its first use (agent stage-clone.ts): its call waits for that too. A
     // design folder's installs as a clone's does.
-    const asked = await ctx.machineCalls.callAgent(
-      machineId,
-      method,
-      args(workspace)
-    );
+    const asked = read
+      ? await ctx.machineCalls.readStoppable(
+          machineId,
+          method,
+          args(workspace),
+          read
+        )
+      : await ctx.machineCalls.callAgent(machineId, method, args(workspace));
     switch (asked.kind) {
       case "unanswered":
         return asked.reason === "dead"

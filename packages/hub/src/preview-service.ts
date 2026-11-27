@@ -47,8 +47,6 @@ export interface PreviewServiceDeps {
   row: (id: string) => ArtifactRow | undefined;
   /** The artifact whose row points at origin `origin` now. */
   rowAt: (origin: string) => ArtifactRow | undefined;
-  /** How long a hand-up's check waits for its page (artifacts service `SHOWN_WAIT_MS`). */
-  shownWaitMs: number;
 }
 
 /** One start of a machine's listener for an origin: the key it is for, and its answer once the machine gives it. */
@@ -369,11 +367,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
           stop: reached.stop,
         };
       }
-      return await loadedOnce(
-        reached.upstream,
-        row.source.path,
-        deps.shownWaitMs
-      );
+      return await loadedOnce(reached.upstream, row.source.path);
     },
 
     /**

@@ -49,9 +49,9 @@ export const stageRenderWords = {
         return at.step satisfies never;
     }
   },
-  /** The head of a render answer's sections its sweep took and did not draw, `seconds` its limit. */
-  undrawnHead: (seconds: number) =>
-    `Sections this read ran out of its ${seconds} s before drawing (the report above has each as its last draw left it):`,
+  /** The head of a render answer's sections its sweep took and did not draw: its page went quiet, or its read was let go, first. */
+  undrawnHead:
+    "Sections this read stopped before drawing, its page gone quiet or the read let go (the report above has each as its last draw left it):",
   /** One section the sweep took and did not draw, and the read that draws it. */
   undrawn: (one: SectionUndrawn, plansRead: boolean) =>
     `- ${one.file}: ${one.at ? `it was still ${stageRenderWords.step(one.at)}` : "not begun"}${plansRead ? `; ${readAlone(one.first)}` : ""}.`,
@@ -69,11 +69,14 @@ export const stageRenderWords = {
   storyInSeveral: (story: string, files: readonly string[]) =>
     `${story} is a story of ${files.length} states files on this design graph. Name the one to read with its file in state.story: ${files.map((file) => `{ story: "${file}:${story}" }`).join(" or ")}.`,
   /**
-   * A state read whose own section did not draw within the limit: where it
-   * stood, and what to do, as its section alone needs longer than a read has.
+   * A state read whose own section did not finish drawing before its page
+   * went quiet or the read was let go: where it stood, and what to do.
    */
-  stateUndrawn: (state: string, seconds: number, at: SweepAt | null) =>
-    `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the design graph, with its own moves), then read the state again.`,
+  stateUndrawn: (state: string, at: SweepAt | null) =>
+    `State ${state}'s section did not finish drawing${at ? `: its page went quiet while it was still ${stageRenderWords.step(at)} in ${at.file}` : ": its page went quiet before it began it"}. Read the design graph without render to see its stage's errors, or split its states file in two (each a section of the design graph, with its own moves), then read the state again.`,
+  /** A posed state whose fonts or animations were still going as its page went quiet (agent frame-picture.ts `poseState`). */
+  unsettled: (state: string) =>
+    `State ${state} did not settle: its fonts or animations are still going.`,
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
   /** States files the stage's own page has not read as they stand and is not reading: the read's reader did not reach them. */
   unopened: (files: readonly string[]) =>
@@ -125,7 +128,7 @@ export const stageRenderWords = {
   /** The daemon's kept page of a canvas closed under a read (its stage slept or started again, or its browser ended): the next read opens another. */
   readerGone:
     "The daemon's page reading this canvas closed while it read (its stage slept or started again, or its browser ended). Read again: the next read opens a new one.",
-  /** The page itself never loaded. */
-  notLoaded: (seconds: number) =>
-    `The stage's page did not load within ${seconds} s: its stage is up but did not serve it. Read the design graph without render to see its stage's state and errors.`,
+  /** The page itself never loaded: it went quiet first. */
+  notLoaded:
+    "The stage's page did not load: its stage is up but stopped serving it. Read the design graph without render to see its stage's state and errors.",
 };

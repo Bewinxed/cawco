@@ -221,6 +221,7 @@ export type SpawnsContext = Pick<
   | "accountStartRefusal"
   | "accountWords"
   | "awaitingFirstTurn"
+  | "lifetime"
   | "awayError"
   | "db"
   | "forgetPending"
@@ -372,11 +373,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
       // rather than their sum.
       const answers = await Promise.all(
         kinds.map(async (harness) => {
-          const answer = await ctx.machineCalls.readAgent(
+          // A location kept for every asker after it: the hub holds the read.
+          const answer = await ctx.machineCalls.readStoppable(
             agent.machineId,
             CONTROL_GET_SESSION_INFO,
             [id],
-            harness
+            {
+              caller: "where a conversation lives",
+              harness,
+              signal: ctx.lifetime.signal,
+            }
           );
           switch (answer.kind) {
             case "unanswered":

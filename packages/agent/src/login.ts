@@ -47,12 +47,7 @@ import {
   removeAccountDir,
 } from "./accounts";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import {
-  runFork,
-  runPromise,
-  runSyncExit,
-  thrownOf,
-} from "./daemon-runtime";
+import { runFork, runPromise, runSyncExit, thrownOf } from "./daemon-runtime";
 import { fromPromise } from "./rejected";
 
 /**

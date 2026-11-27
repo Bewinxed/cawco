@@ -453,12 +453,14 @@ export interface ClosureContext {
   contact: ReturnType<typeof createMachineContact>;
   contextTokensOf: (
     row: KeepAliveRow | undefined,
-    scopeChars: number
+    scopeChars: number,
+    signal: AbortSignal
   ) => Promise<number>;
   contextWindowOf: (
     machineId: string,
     harness: HarnessKind,
     model: string | undefined,
+    signal: AbortSignal,
     account?: string | null
   ) => Promise<number | undefined>;
   continuationJob: SessionCallsDeps["continuationJob"];
@@ -553,7 +555,11 @@ export interface ClosureContext {
   ) => boolean;
   /** A parent's forward of the ask its delegate routed to it, to the person (ask-routing.ts `forward`). */
   forwardRouted: (parent: InstanceRow, requestId: string) => string;
-  gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
+  gitChangesOf: (
+    where: SessionLocation,
+    since: string,
+    signal: AbortSignal
+  ) => Promise<GitChanges>;
   handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
   harnessConfigDelete: (
@@ -591,7 +597,8 @@ export interface ClosureContext {
   homeCredentialOf: (
     machineId: string,
     store: HomeStore,
-    storeProvider: string | undefined
+    storeProvider: string | undefined,
+    signal: AbortSignal
   ) => Promise<
     | HomeCredentialFound
     | AwayProblem
@@ -1205,7 +1212,10 @@ export interface ClosureContext {
   sessionAsleep: (instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: WorkItemCallsDeps["sessionName"];
-  sessionStartOf: (where: SessionLocation) => Promise<string>;
+  sessionStartOf: (
+    where: SessionLocation,
+    signal: AbortSignal
+  ) => Promise<string>;
   sessionWorkspace: SessionCallsDeps["sessionWorkspace"];
   settledContinuation: SessionCallsDeps["settledContinuation"];
   settleMode: (
@@ -1352,12 +1362,17 @@ export interface ClosureContext {
     }
   >;
   stopProjectBrowsers: (projectId: string) => Promise<string | undefined>;
-  storedAnswer: (id: string, ended: boolean) => Promise<string | undefined>;
+  storedAnswer: (
+    id: string,
+    ended: boolean,
+    signal: AbortSignal
+  ) => Promise<string | undefined>;
   /** Recent's stored transcripts, kept off each machine's catalog (stored-recent.ts). */
   storedRecent: ReturnType<typeof createStoredRecent>;
   storedWindow: (
     where: TranscriptWhere,
-    window: WindowAsk
+    window: WindowAsk,
+    signal: AbortSignal
   ) => Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>>;
   streamRelay: ReturnType<typeof createStreamRelay>;
   streams: StreamHubShape;

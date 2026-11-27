@@ -446,8 +446,13 @@ export const projectRoutes = ({
     .post(
       "/api/projects/:id/places/:placeId/locate/preview",
       { body: t.Object({ path: t.String() }) },
-      ({ params, body }) =>
-        projectLocate.preview(params.id, params.placeId, body.path)
+      ({ params, body, request }) =>
+        projectLocate.preview(
+          params.id,
+          params.placeId,
+          body.path,
+          request.signal
+        )
     )
     // Locate folder: the checkout pointed there, or held while its machine is
     // away. `joins` is the person's yes to the project the preview named as
@@ -457,8 +462,14 @@ export const projectRoutes = ({
       {
         body: t.Object({ path: t.String(), joins: t.Optional(t.String()) }),
       },
-      ({ params, body }) =>
-        projectLocate.locate(params.id, params.placeId, body.path, body.joins)
+      ({ params, body, request }) =>
+        projectLocate.locate(
+          params.id,
+          params.placeId,
+          body.path,
+          body.joins,
+          request.signal
+        )
     )
     // Locate folder held for a computer that is away, called off: the folder
     // stays as it was.

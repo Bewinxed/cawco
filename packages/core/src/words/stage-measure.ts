@@ -115,9 +115,9 @@ export const measureWords = {
   /** Chromium's compositing is off on this machine. */
   compositingOff:
     "This machine's browser has its compositing switched off (ACCELERATED_ANIMATIONS_DISABLED on every animation), so it can't say which animations run on the compositor. That is a fault of the machine, not of the component: measure on another machine.",
-  /** The render's deadline came before the traced plays were done. */
-  tooLong: (seconds: number) =>
-    `The move's scan and traced plays did not finish within the render's ${seconds} s. Measure a shorter move, or split its play into stories of its own.`,
+  /** The render was let go before the traced plays were done. */
+  tooLong:
+    "The move's scan and traced plays did not finish before the read was let go. Measure a shorter move, or split its play into stories of its own.",
 
   /* --- Faults ---------------------------------------------------------- */
 

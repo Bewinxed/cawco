@@ -254,7 +254,11 @@ import {
   type RelaunchFor,
   relaunchWords,
 } from "@cawco/core/words/relaunch";
-import { CONVERSATION_GONE } from "@cawco/core/words/session-ends";
+import {
+  CONVERSATION_GONE,
+  STOP_ANSWERED_UNENDED,
+  stopUnconfirmed,
+} from "@cawco/core/words/session-ends";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { triggerWords } from "@cawco/core/words/triggers";
 import { updatesWords } from "@cawco/core/words/updates";
@@ -311,11 +315,7 @@ import { createArtifactLane } from "./artifacts/lane";
 import { artifactPictures, artifactSend } from "./artifacts/page-posts";
 import { PageStores } from "./artifacts/page-stores";
 import { artifactRoutes } from "./artifacts/routes";
-import {
-  type Artifacts,
-  createArtifacts,
-  SHOWN_WAIT_MS,
-} from "./artifacts/service";
+import { type Artifacts, createArtifacts } from "./artifacts/service";
 import {
   artifactPicture,
   artifactSocket,
@@ -1259,7 +1259,6 @@ export const createServer = (
   const machineCalls = Context.get(services, MachineCalls);
   const board = Context.get(services, Board);
   const {
-    asRead,
     awaitReply,
     askMachine,
     bindFolderInstall,
@@ -1268,15 +1267,31 @@ export const createServer = (
     locations,
     logUnroutedReply,
     processEvent,
-    readAgent,
-    readSkillFolder,
     readStoppable,
+    skillFolderReader,
     sendAnswerable,
     sendToMachine,
     waiting,
     waitingForProcess,
     waitingMachines,
   } = machineCalls;
+  /**
+   * A read the hub itself waits on, for no asker of its own (its own
+   * reading of a machine, a step of its own work): let go as the hub closes
+   * (machine-calls.ts `readStoppable`).
+   */
+  const hubRead = <K extends ControlName>(
+    machineId: string,
+    method: K,
+    args: ControlArgs<K>,
+    caller: string,
+    harness?: HarnessKind
+  ) =>
+    readStoppable(machineId, method, args, {
+      caller,
+      signal: lifetime.signal,
+      ...(harness ? { harness } : {}),
+    });
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
     reconnectingFor: () => (machineId: string) =>
@@ -2690,7 +2705,8 @@ export const createServer = (
         pending.resolve(id, "answered", { answer: outcome.answer });
       }
     },
-    bind: (actor, name, input) => bindFolderInstall(actor, name, input),
+    bind: (actor, name, input) =>
+      bindFolderInstall(actor, name, input, lifetime.signal),
     stale: async ({ asked }) => {
       if (asked.kind !== "approve") {
         return;
@@ -2709,7 +2725,7 @@ export const createServer = (
         const { hash } = await readCheckedFolder(
           folder.machine,
           folder.path,
-          readSkillFolder
+          skillFolderReader(lifetime.signal)
         );
         return hash === asked.input.contentHash ? undefined : FOLDER_CHANGED;
       } catch (error) {
@@ -2721,7 +2737,7 @@ export const createServer = (
         name,
         input,
         () => db.fleetConfig().marketplaces,
-        readSkillFolder
+        skillFolderReader(lifetime.signal)
       ),
     // The hub runs an approved ask itself, as the session that asked.
     run: async (name, input, asker) => {
@@ -3075,7 +3091,12 @@ export const createServer = (
     writes: writeDoor,
     online: () => onlineMachines(),
     ghHosts: async (machineId) => {
-      const answer = await readAgent(machineId, CONTROL_GH_ACCOUNTS, []);
+      const answer = await hubRead(
+        machineId,
+        CONTROL_GH_ACCOUNTS,
+        [],
+        "the hub's read of a machine's gh"
+      );
       return answer.kind === "answered" &&
         answer.value.ok &&
         Array.isArray(answer.value.result)
@@ -3661,10 +3682,11 @@ export const createServer = (
     if (!asksPiDefault(payload)) {
       return;
     }
-    const answer = await readAgent(
+    const answer = await hubRead(
       machineId,
       CONTROL_PI_DEFAULT_MODEL,
       [payload.cwd],
+      "a start's pi default model",
       "pi"
     );
     switch (answer.kind) {
@@ -4998,6 +5020,7 @@ export const createServer = (
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
+    unfollowed: (instanceId, then) => streams.unfollowed(instanceId, then),
     listing: (instance) => browsers.listed(instance),
     // The same open, its list without what went: no pane reloads.
     relist: (instanceId) => {
@@ -5011,7 +5034,8 @@ export const createServer = (
       }
     },
     browse: (instance, row) => browseAt(instance, row),
-    picture: (instance, row, drawn) => pictureOf(instance, row, drawn),
+    picture: (instance, row, drawn, signal) =>
+      pictureOf(instance, row, drawn, signal),
     keepPicture: (instance, path, png) => keepPicture(instance, path, png),
     // A Linux workspace dials out through srt, which refuses the owner's own
     // network and its machine's own addresses (core boundary-reach.ts),
@@ -5097,8 +5121,11 @@ export const createServer = (
       workspaceOf: (row) => workItems.workspaceOf(row),
     }),
     // A design graph drawn by its workspace's daemon in the machine's own Chromium.
-    stageRender: async (at, ask) => {
-      const staged = await onStage(at, STAGE_RENDER, (ref) => [ref, ask]);
+    stageRender: async (at, ask, signal) => {
+      const staged = await onStage(at, STAGE_RENDER, (ref) => [ref, ask], {
+        caller: "a design graph's render",
+        signal,
+      });
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     stageWrite: async (at, write) => {
@@ -5106,8 +5133,11 @@ export const createServer = (
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A served preview's page as its author has it, drawn on its workspace's own server.
-    servedPicture: async (at, ask) => {
-      const staged = await onStage(at, STAGE_PICTURE, (ref) => [ref, ask]);
+    servedPicture: async (at, ask, signal) => {
+      const staged = await onStage(at, STAGE_PICTURE, (ref) => [ref, ask], {
+        caller: "a served preview's picture",
+        signal,
+      });
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
@@ -5625,7 +5655,6 @@ export const createServer = (
     release: (key) => previewListeners.release(key),
     row: (id) => db.artifacts.get(id),
     rowAt: (origin) => db.artifacts.byOrigin(origin),
-    shownWaitMs: SHOWN_WAIT_MS,
   });
   /**
    * Why the hub knows an artifact's preview can't be shown now, from its
@@ -6026,10 +6055,11 @@ export const createServer = (
     machineId: string;
     sessionId: string;
   }) =>
-    readAgent(
+    hubRead(
       row.machineId,
       CONTROL_GET_SESSION_INFO,
       [row.sessionId, row.cwd],
+      "a transcript's lookup",
       row.harness
     );
   /**
@@ -6351,25 +6381,41 @@ export const createServer = (
   // Connect existing folder: another folder of a project's, two projects
   // made one only with the person's yes (project-connect.ts).
   const projectConnect = createProjectConnect(ctx);
-  const waitForEnd = (instanceId: string, waitMs = QUIET_MS): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const deadline = Date.now() + waitMs;
-      const observe = () => {
-        const row = db.ownedInstance(instanceId);
-        if (!row || row.endConfirmedAt) {
-          resolve();
-        } else if (Date.now() >= deadline) {
-          reject(
-            new Error(
-              `Session ${instanceId} was told to stop and its machine has not confirmed it within ${Math.round(waitMs / 1000)}s; the stop stays stored.`
-            )
-          );
-        } else {
-          lifetime.after("stop observed", 100, observe);
-        }
-      };
-      observe();
-    });
+  /**
+   * The stop sent under `requestId` for `instanceId`, waited on while its
+   * machine holds it (agent request-record.ts `holdNamed`, named on every
+   * beat): done once its machine answered with the session's end
+   * confirmed. Its machine not connected, its beats no longer naming the
+   * stop, or its answer with the end unconfirmed rejects in words; the stop
+   * stays stored either way, delivered again at each reconcile.
+   */
+  const stopHeard = async (
+    instanceId: string,
+    machineId: string,
+    requestId: string
+  ): Promise<void> => {
+    const ended = () => {
+      const row = db.ownedInstance(instanceId);
+      return !row || !!row.endConfirmedAt;
+    };
+    const away =
+      !registry.agent(machineId) &&
+      machinePresence(machineId).kind !== "reconnecting";
+    const heard: Bounded<void> = away
+      ? { kind: "unanswered", reason: "dead", after: 0 }
+      : await machineCalls.untilAnswered(machineId, requestId);
+    if (ended()) {
+      return;
+    }
+    throw new Error(
+      stopUnconfirmed(
+        instanceId,
+        heard.kind === "unanswered"
+          ? silentWords(machineId, heard)
+          : STOP_ANSWERED_UNENDED
+      )
+    );
+  };
 
   /** A stored Stop survives reconnects; its caller still gets a bounded receipt. */
   const stopFromDashboard = (
@@ -8334,7 +8380,7 @@ export const createServer = (
       method === CONTROL_INPUTS_ADMIT ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_REPO_ROOT
-        ? await readAgent(machineId, method, args)
+        ? await hubRead(machineId, method, args, `the hub's ${method}`)
         : await callAgent(machineId, method, args);
     switch (answer.kind) {
       case "unanswered":
@@ -8510,8 +8556,8 @@ export const createServer = (
     // A session already ended, or stopped with no process on its machine's
     // last custody reading, has nothing to confirm its stop: its stop is
     // stored and the end returns at once. A session with a process is
-    // stopped and waited on, for `waitMs` at most.
-    end: async (instanceId, waitMs) => {
+    // stopped and waited on while its machine holds the stop.
+    end: async (instanceId) => {
       const row = db.ownedInstance(instanceId);
       if (!row || (row.endIntent && row.endConfirmedAt)) {
         return;
@@ -8523,8 +8569,9 @@ export const createServer = (
         oweStop(instanceId, ITEM_OVER);
         return;
       }
-      endSession(instanceId, "stop", ITEM_OVER);
-      await waitForEnd(instanceId, waitMs);
+      const requestId = crypto.randomUUID();
+      endSession(instanceId, "stop", ITEM_OVER, requestId);
+      await stopHeard(instanceId, row.machineId, requestId);
     },
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
     // boot sweep below ends items before the dispatcher exists.
@@ -8620,6 +8667,8 @@ export const createServer = (
       );
       return issued instanceof ElysiaStatus ? issued : undefined;
     },
+    // A send's answer, waited on while its machine holds it: its read.
+    untilRead: (machineId, uuid) => machineCalls.untilAnswered(machineId, uuid),
     // A send's record: what became of the words.
     send: (envelope) => {
       const sent = deliverSend(envelope);
@@ -9329,6 +9378,8 @@ export const createServer = (
         row.machineId,
         row.harness,
         row.model ?? undefined,
+        // The hub's own reading: the hub holds the read.
+        lifetime.signal,
         row.accountId
       ).catch(() => undefined);
       const cap = window
@@ -9423,7 +9474,12 @@ export const createServer = (
           CONTROL_SEARCH_TRANSCRIPTS,
           [query, options],
           { caller, signal }
-        );
+        ).catch((error: unknown) => {
+          if (signal.aborted) {
+            return null;
+          }
+          throw error;
+        });
         if (answer === null) {
           return { error: "its asker asked something newer first" };
         }
@@ -9448,7 +9504,12 @@ export const createServer = (
         return result;
       },
       listStored: async (machineId): Promise<Listed> => {
-        const answer = await readAgent(machineId, CONTROL_LIST_SESSIONS, [{}]);
+        const answer = await hubRead(
+          machineId,
+          CONTROL_LIST_SESSIONS,
+          [{}],
+          "Recent's stored list"
+        );
         switch (answer.kind) {
           case "unanswered":
             return { error: searchMiss(answer) };
@@ -10413,6 +10474,8 @@ export const createServer = (
         row.machineId,
         row.harness,
         row.model ?? undefined,
+        // The hub's own reading: the hub holds the read.
+        lifetime.signal,
         row.accountId
       ).then(
         (found) => ({ window: found ?? null }),
@@ -10673,7 +10736,12 @@ export const createServer = (
         const asked = await Promise.all(
           onlineMachines().map(async (machineId) => ({
             machineId,
-            answer: await readAgent(machineId, CONTROL_GH_ACCOUNTS, []),
+            answer: await hubRead(
+              machineId,
+              CONTROL_GH_ACCOUNTS,
+              [],
+              "the gh accounts of the fleet"
+            ),
           }))
         );
         return {
@@ -10694,10 +10762,12 @@ export const createServer = (
         };
       },
       token: async (machineId, host, login) => {
-        const answer = await readAgent(machineId, CONTROL_GH_TOKEN, [
-          host,
-          login,
-        ]);
+        const answer = await hubRead(
+          machineId,
+          CONTROL_GH_TOKEN,
+          [host, login],
+          "a gh account's token"
+        );
         if (answer.kind === "unanswered") {
           return {
             kind: "away",
@@ -11126,7 +11196,12 @@ export const createServer = (
         CONTROL_TRANSCRIPT_TURNS,
         [query],
         { caller: "an agent's find, reading a hit's turns", signal }
-      );
+      ).catch((error: unknown) => {
+        if (signal.aborted) {
+          return null;
+        }
+        throw error;
+      });
       if (answer === null) {
         return { error: "its asker let it go" };
       }
@@ -11496,7 +11571,7 @@ export const createServer = (
     askPerson: (actor, name, input, toolUseId) =>
       hubAsks.ask(actor, name, input, toolUseId),
     bindAdminInput: (actor, name, input) =>
-      bindFolderInstall(actor, name, input),
+      bindFolderInstall(actor, name, input, lifetime.signal),
     personOwed: (actor) => db.personUnanswered(actor.id) === "read",
     sendToUser: (actor, message) => {
       db.noteAnswered(actor.id, new Date());
@@ -11778,7 +11853,12 @@ export const createServer = (
     if (!registry.agent(row.machineId)) {
       return false;
     }
-    const answer = await readAgent(row.machineId, AGENT_BUSY, []);
+    const answer = await hubRead(
+      row.machineId,
+      AGENT_BUSY,
+      [],
+      "whether a session is idle"
+    );
     // Not idle on its machine's word: nothing is put in now, and its caller
     // asks again at its next turn (R/WAIT).
     switch (answer.kind) {
@@ -13096,7 +13176,7 @@ export const createServer = (
     const { homeStores } = agentFrame;
     if (homeStores !== undefined && homeStamps.get(machineId) !== homeStores) {
       homeStamps.set(machineId, homeStores);
-      adoptHomeCredentials(machineId).catch(console.error);
+      adoptHomeCredentials(machineId, lifetime.signal).catch(console.error);
     }
     lendToWaiting(machineId);
     const { codexAccounts, providerAccounts, providers } = agentFrame;

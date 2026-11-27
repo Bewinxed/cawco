@@ -186,7 +186,7 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
         const body = shaped(skillBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : skills.put(name, body);
+          : skills.put(name, body, deps.lifetime.signal);
       },
       setEnabled: skills.setEnabled,
       remove: skills.remove,
@@ -199,7 +199,7 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
           : within(deps.lifetime, "put an MCP server", () =>
-              mcp.put(name, body)
+              mcp.put(name, body, deps.lifetime.signal)
             );
       },
       remove: mcp.remove,

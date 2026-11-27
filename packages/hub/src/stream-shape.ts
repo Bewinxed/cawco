@@ -113,4 +113,6 @@ export interface StreamHubShape {
    * it emptied. Exposed so the RULE can be tested without waiting on a clock.
    */
   readonly sweepStale: (now?: number) => number;
+  /** `then` once the last socket following `sessionId` lets it go (unsubscribed or closed); the returned call stops listening. */
+  readonly unfollowed: (sessionId: string, then: () => void) => () => void;
 }

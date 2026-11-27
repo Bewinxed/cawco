@@ -9,7 +9,6 @@ import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { shortId } from "@cawco/core/short-id";
 import { mcpGateWords } from "@cawco/core/words/mcp-gate";
-import { updatesWords } from "@cawco/core/words/updates";
 import { Effect, Layer } from "effect";
 import type { BrowserPorts } from "./browser/browsers";
 import { DaemonLinks } from "./daemon-links";

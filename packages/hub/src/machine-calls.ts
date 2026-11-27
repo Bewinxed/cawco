@@ -390,33 +390,6 @@ const make = ({
       ? { kind: "unanswered", reason: "dead", after: 0 }
       : answer;
 
-  /** Asks a session's process `method` directly and reads its answer ({@link asRead}). The promise edge of {@link replyTo}. */
-  const readSessionProcess = <K extends ControlName>(
-    row: { id: string; machineId: string },
-    method: K,
-    args: ControlArgs<K>
-  ): Promise<Bounded<ControlAnswer<K>>> => {
-    const requestId = crypto.randomUUID();
-    return lifetime.run(
-      replyTo(row.machineId, method, requestId, () => {
-        const agent = registry.agent(row.machineId);
-        return agent
-          ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
-          : undefined;
-      }).pipe(Effect.map(asRead))
-    );
-  };
-
-  /** {@link callAgent} for a method that only reads: its answer {@link asRead}. */
-  const readAgent = async <K extends ControlName>(
-    machineId: string,
-    method: K,
-    args: ControlArgs<K>,
-    harness?: HarnessKind,
-    instanceId?: string
-  ): Promise<Bounded<ControlAnswer<K>>> =>
-    asRead(await callAgent(machineId, method, args, harness, instanceId));
-
   /**
    * The machine a skill folder's source names by its host (skills.ts
    * `bindSkillSource`): its machineId, its hostname, or that hostname as the
@@ -473,7 +446,9 @@ const make = ({
   const bindFolderInstall = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    /** Its asker's: the folder's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<Record<string, unknown>> => {
     if (
       name !== "admin_skills_write" ||
@@ -495,7 +470,7 @@ const make = ({
     const { hash } = await readCheckedFolder(
       folder.machine,
       folder.path,
-      readSkillFolder
+      skillFolderReader(signal)
     );
     return { ...input, source, contentHash: hash };
   };
@@ -503,66 +478,125 @@ const make = ({
   /**
    * A skill folder's files, read off the machine `host` names through its
    * agent (agent fleet.ts `readSkillFolder`, which keeps the read inside the
-   * folder). Throws the
-   * machine's own sentence when it will not.
+   * folder). Throws the machine's own sentence when it will not. Each read is
+   * let go once `signal`, its asker's, aborts.
    */
-  const readSkillFolder: SkillFolderReader = async (host, path) => {
-    const machineId = skillFolderMachine(host);
-    const asked = await readAgent(machineId, READ_SKILL_FOLDER, [path]);
-    switch (asked.kind) {
-      case "unanswered":
-        throw unansweredError(machineId, asked, `reading ${path}`);
-      case "answered":
-        break;
-      default:
-        throw unreachable(asked);
-    }
-    if (!asked.value.ok) {
-      throw new Error(
-        asked.value.error ?? `${machineName(machineId)} could not read ${path}`
-      );
-    }
-    return asked.value.result;
-  };
+  const skillFolderReader =
+    (signal: AbortSignal): SkillFolderReader =>
+    async (host, path) => {
+      const machineId = skillFolderMachine(host);
+      const asked = await readStoppable(machineId, READ_SKILL_FOLDER, [path], {
+        caller: "a skill folder",
+        signal,
+      });
+      switch (asked.kind) {
+        case "unanswered":
+          throw unansweredError(machineId, asked, `reading ${path}`);
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      if (!asked.value.ok) {
+        throw new Error(
+          asked.value.error ??
+            `${machineName(machineId)} could not read ${path}`
+        );
+      }
+      return asked.value.result;
+    };
 
   /**
-   * {@link readAgent} for a read the machine stops once the hub stops
-   * waiting for it (core `CONTROL_ABANDON`, agent session.ts
-   * `declareRead`): when its machine's beats stop naming it for a quiet
-   * spell, or `ask.signal` aborts (its asker typed on, its request ended,
-   * its tool call was cut), the machine is told under the read's own
-   * request id, and stops it where it runs. Every read names its asker's
-   * signal: a read nobody can let go runs on the machine after its asker
-   * is gone. A read let go for its quiet is logged with who asked, so a
-   * late answer's line (`lateAnswer`, by the same id) is read back to its
-   * caller. Answers `null` when its asker let it go.
+   * THE ONE READ OF A MACHINE: `method` asked of `machineId` (of its session
+   * `ask.instanceId`'s harness when named), its answer {@link asRead}, waited
+   * on while its machine's beats name it, and stopped where it runs once
+   * the hub stops waiting for it (core `CONTROL_ABANDON`, agent session.ts
+   * `declareRead`): when its beats stop naming it for a quiet spell, or
+   * `ask.signal` aborts (its asker typed on, its request ended, its tool
+   * call was cut, the hub closed), the machine is told under the read's own
+   * request id. Every read names its asker's signal: a read nobody can let
+   * go runs on the machine after its asker is gone. A read let go for its
+   * quiet is logged with who asked, so a late answer's line (`lateAnswer`,
+   * by the same id) is read back to its caller. Rejects with the signal's
+   * reason once its asker let it go, as a fetch does.
    */
   const readStoppable = async <K extends ControlName>(
     machineId: string,
     method: K,
     args: ControlArgs<K>,
+    ask: {
+      caller: string;
+      harness?: HarnessKind;
+      instanceId?: string;
+      signal: AbortSignal;
+    }
+  ): Promise<Bounded<ControlAnswer<K>>> => {
+    const requestId = crypto.randomUUID();
+    return await readLetGo(machineId, method, requestId, ask, () => {
+      const agent = registry.agent(machineId);
+      const frame = {
+        verb: "control",
+        machineId,
+        ...(ask.instanceId && { instanceId: ask.instanceId }),
+        payload: {
+          requestId,
+          method,
+          args,
+          ...(ask.harness && { harness: ask.harness }),
+          ...(ask.instanceId && { instanceId: ask.instanceId }),
+        } satisfies ControlPayload,
+      } satisfies HubEnvelope<"control">;
+      if (agent) {
+        sendToMachine(agent, frame);
+      }
+      return frame;
+    });
+  };
+
+  /**
+   * {@link readStoppable} of session `row`'s own process: `method` asked of
+   * it directly (session-word.ts `sessionControl`), let go as every read is.
+   */
+  const readSessionProcess = async <K extends ControlName>(
+    row: { id: string; machineId: string },
+    method: K,
+    args: ControlArgs<K>,
     ask: { caller: string; signal: AbortSignal }
-  ): Promise<Bounded<ControlAnswer<K>> | null> => {
+  ): Promise<Bounded<ControlAnswer<K>>> => {
+    const requestId = crypto.randomUUID();
+    return await readLetGo(row.machineId, method, requestId, ask, () => {
+      const agent = registry.agent(row.machineId);
+      return agent
+        ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
+        : undefined;
+    });
+  };
+
+  /** The wait under {@link readStoppable} and {@link readSessionProcess}: `send` sends the read under `requestId`, and the rest is theirs. */
+  const readLetGo = async <K extends ControlName>(
+    machineId: string,
+    method: K,
+    requestId: string,
+    ask: { caller: string; signal: AbortSignal },
+    send: () => HubEnvelope | undefined
+  ): Promise<Bounded<ControlAnswer<K>>> => {
+    ask.signal.throwIfAborted();
     if (
       !registry.agent(machineId) &&
       machinePresence(machineId).kind !== "reconnecting"
     ) {
       return { kind: "unanswered", reason: "dead", after: 0 };
     }
-    if (ask.signal.aborted) {
-      return null;
-    }
-    const requestId = crypto.randomUUID();
     /** The machine is told the read was let go (core `CONTROL_ABANDON`), and the hub does not wait for it to hear. */
     const stop = () =>
       lifetime.fork(
         "a let-go read",
         askMachine(machineId, CONTROL_ABANDON, [requestId]).pipe(
-          Effect.tap((answer) =>
-            answer.kind === "unanswered"
+          Effect.tap((told) =>
+            told.kind === "unanswered"
               ? Effect.sync(() =>
                   console.warn(
-                    `[find] ${silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
+                    `[hub] ${silentWords(machineId, told)}, so it did not hear that ${method} (request ${requestId}) was let go`
                   )
                 )
               : Effect.void
@@ -573,29 +607,14 @@ const make = ({
       machineId,
       method,
       requestId,
-      () => {
-        const agent = registry.agent(machineId);
-        const frame = {
-          verb: "control",
-          machineId,
-          payload: {
-            requestId,
-            method,
-            args,
-          } satisfies ControlPayload,
-        } satisfies HubEnvelope<"control">;
-        if (agent) {
-          sendToMachine(agent, frame);
-        }
-        return frame;
-      },
+      send,
       whenLetGo(ask.signal)
     );
-    return await lifetime.run(
+    const answer = await lifetime.run(
       read.pipe(
         Effect.map((reply) => {
-          const answer = asRead(reply);
-          if (answer.kind === "unanswered" && answer.reason === "timeout") {
+          const answered = asRead(reply);
+          if (answered.kind === "unanswered" && answered.reason === "timeout") {
             console.warn(
               machineReadWords.quietLine(
                 machineName(machineId),
@@ -606,7 +625,7 @@ const make = ({
             );
             stop();
           }
-          return answer;
+          return answered;
         }),
         Effect.catchTag("LetGo", () =>
           Effect.sync(() => {
@@ -616,6 +635,10 @@ const make = ({
         )
       )
     );
+    if (answer === null) {
+      throw ask.signal.reason;
+    }
+    return answer;
   };
 
   /**
@@ -851,47 +874,70 @@ const make = ({
 
   /**
    * A request the hub sent `machineId` with no call parked on its answer
-   * ({@link watched}): watched while the machine's beats name it, and,
-   * once none has for a quiet spell or the machine is gone, `lapse` is told
-   * that no answer came (a dashboard is answered so, a launch is over).
-   * Its answer, routed as it always was, ends the watch
-   * ({@link sentAnswered}); so does its asker's leaving, which `lapse`
-   * finds.
+   * ({@link watched}), watched from now while the machine's beats name it:
+   * answered once its answer comes ({@link sentAnswered}), unanswered once
+   * no beat has named it for a quiet spell ("timeout"), or "dead" when the
+   * machine is gone by then. Watched as it is called, so an answer that
+   * comes before the watch is run still ends it.
+   */
+  const sentHeard = (
+    machineId: string,
+    requestId: string
+  ): Effect.Effect<Bounded<void>> => {
+    const answered = Deferred.makeUnsafe<void>();
+    watched.set(requestId, answered);
+    return boundedWhileMoving(
+      QUIET_MS,
+      () => namedAt.get(requestId) ?? 0,
+      Deferred.await(answered)
+    ).pipe(
+      Effect.map((): Bounded<void> => ({ kind: "answered", value: undefined })),
+      Effect.catchTag("Unanswered", ({ after, reason }) =>
+        Effect.succeed<Bounded<void>>({
+          kind: "unanswered",
+          after,
+          reason: registry.agent(machineId) ? reason : "dead",
+        })
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (watched.get(requestId) === answered) {
+            watched.delete(requestId);
+            namedAt.delete(requestId);
+          }
+        })
+      )
+    );
+  };
+
+  /**
+   * {@link sentHeard} run beside its caller: once no answer came, `lapse` is
+   * told so (a dashboard is answered so, a launch is over). Its answer,
+   * routed as it always was, ends the watch; so does its asker's leaving,
+   * which `lapse` finds.
    */
   const watchSent = (
     machineId: string,
     requestId: string,
     lapse: (missed: Extract<Bounded<unknown>, { kind: "unanswered" }>) => void
   ): void => {
-    const answered = Deferred.makeUnsafe<void>();
-    watched.set(requestId, answered);
     lifetime.fork(
       "a sent request's watch",
-      boundedWhileMoving(
-        QUIET_MS,
-        () => namedAt.get(requestId) ?? 0,
-        Deferred.await(answered)
-      ).pipe(
-        Effect.catchTag("Unanswered", ({ after, reason }) =>
-          Effect.sync(() =>
-            lapse({
-              kind: "unanswered",
-              after,
-              reason: registry.agent(machineId) ? reason : "dead",
-            })
-          )
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            if (watched.get(requestId) === answered) {
-              watched.delete(requestId);
-              namedAt.delete(requestId);
-            }
-          })
+      sentHeard(machineId, requestId).pipe(
+        Effect.tap((heard) =>
+          heard.kind === "unanswered"
+            ? Effect.sync(() => lapse(heard))
+            : Effect.void
         )
       )
     );
   };
+
+  /** The promise edge of {@link sentHeard}: a stop's or a send's caller waits on it while its machine holds it. */
+  const untilAnswered = (
+    machineId: string,
+    requestId: string
+  ): Promise<Bounded<void>> => lifetime.run(sentHeard(machineId, requestId));
 
   /** A watched request's answer came: its watch ends ({@link watchSent}). Whether one was watched. */
   const sentAnswered = (requestId: string): boolean => {
@@ -925,15 +971,15 @@ const make = ({
     callAgent,
     asRead,
     readSessionProcess,
-    readAgent,
     bindFolderInstall,
-    readSkillFolder,
+    skillFolderReader,
     readStoppable,
     awaitReply,
     awaitFs,
     awaitStart,
     beatNamed,
     watchSent,
+    untilAnswered,
     sentAnswered,
     waitsOn,
   };

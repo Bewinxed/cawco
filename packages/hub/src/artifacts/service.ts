@@ -84,7 +84,11 @@ import {
   type SentBy,
   setMeta,
 } from "@cawco/core/doc-meta";
-import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
+import {
+  boundedWhileLive,
+  Gone,
+  type Unanswered,
+} from "@cawco/core/effect/bounded";
 import {
   excerptOf,
   field,
@@ -250,6 +254,7 @@ import {
   type SheetChange,
   type Shown,
   type ShownAck,
+  type ShownTaking,
   type ShowStep,
 } from "./shapes";
 import { routeOf } from "./sync";
@@ -528,15 +533,12 @@ const pageOf = (rows: ArtifactRow[], cursor: string | undefined) => {
   };
   return listed;
 };
-/** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
-export const SHOWN_WAIT_MS = 10_000;
-
 /** No view follows the session, so none could show the artifact. DESIGN.md's error formula. */
 const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
-/** A view follows the session and none said it put the artifact on screen in time. */
-const NOT_PUT_ON_SCREEN = `A dashboard is showing this session, but none put the artifact on screen within ${SHOWN_WAIT_MS / 1000} s. It stays in the session's panel.`;
+/** A view follows the session and none said it put the artifact on screen while it waited. */
+const NOT_PUT_ON_SCREEN = artifactToolWords.notPutOnScreen;
 
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
@@ -2023,37 +2025,60 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /*
    * A view's word that it has an artifact on screen. Each show publishes a
    * fresh revision and waits for a view to say it loaded that revision; a
-   * word that came before the wait began (a fast page) is kept here for it.
+   * word that came before the wait began (a fast page) is kept here for it,
+   * by artifact, until a show of its revision takes it or a show of a newer
+   * revision of that artifact begins.
    */
   const heard = new Map<string, ShownAck>();
-  const waiting = new Map<string, (ack: ShownAck) => void>();
+  /** Each show waiting, by artifact and revision: its view's words go to it. */
+  const waiting = new Map<
+    string,
+    { alive: () => void; answer: (ack: ShownAck) => void }
+  >();
   const shownKey = (id: string, revision: string) => `${id}:${revision}`;
 
   /**
-   * The first view's word on `revision` of artifact `id`, within
-   * {@link SHOWN_WAIT_MS}; failing with `Unanswered` when none came. A
-   * word heard already is taken as it starts, before anything else runs.
+   * The first view's word on `revision` of artifact `id`, waited on while a
+   * view that follows `panel`'s session takes it in (each `taking` word,
+   * `taking`, is its sign of life) and let go a quiet
+   * spell after the last, failing with `Unanswered`; "dead" when no view
+   * follows `panel` or once the last lets it go. A word heard already is
+   * taken as it starts, before anything else runs.
    */
   const shownBy = Effect.fnUntraced(function* (
     id: string,
-    revision: string
+    revision: string,
+    panel: string
   ): Effect.fn.Return<ShownAck, Unanswered> {
-    const key = shownKey(id, revision);
-    const early = heard.get(key);
-    if (early) {
-      heard.delete(key);
+    const early = heard.get(id);
+    heard.delete(id);
+    if (early?.revision === revision) {
       return early;
     }
-    return yield* boundedRead(
-      SHOWN_WAIT_MS,
-      Effect.callback<ShownAck>((resume) => {
-        const waiter = (ack: ShownAck) => {
-          waiting.delete(key);
-          resume(Effect.succeed(ack));
+    const key = shownKey(id, revision);
+    return yield* boundedWhileLive<ShownAck, never, never>((alive) =>
+      Effect.callback<ShownAck, Gone>((resume) => {
+        const waiter = {
+          alive,
+          answer: (ack: ShownAck) => {
+            waiting.delete(key);
+            resume(Effect.succeed(ack));
+          },
         };
+        const gone = () =>
+          resume(
+            Effect.fail(new Gone({ what: "the last view of its session" }))
+          );
+        // No view follows the session: none can put it on screen.
+        if (!deps.followed(panel)) {
+          gone();
+          return;
+        }
         waiting.set(key, waiter);
+        const stop = deps.unfollowed(panel, gone);
         // Let go unanswered: a later show's wait on the key stays.
         return Effect.sync(() => {
+          stop();
           if (waiting.get(key) === waiter) {
             waiting.delete(key);
           }
@@ -2171,7 +2196,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       row,
       panel,
       () =>
-        deps.lifetime.run(Effect.option(shownBy(row.id, published.revision))),
+        deps.lifetime.run(
+          Effect.option(shownBy(row.id, published.revision, panel ?? ""))
+        ),
       Option.isSome
     );
     if (Option.isNone(shown)) {
@@ -2874,7 +2901,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     since: number | undefined,
     drawn: boolean,
-    { link, ...ask }: PictureAsk
+    { link, ...ask }: PictureAsk,
+    signal: AbortSignal
   ) => {
     const ownersRead = readsForOwner(instance, row);
     const now = newestVersion(row);
@@ -2882,16 +2910,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return heldAnswer(await canvasNow(row, now, since, drawn, ownersRead));
     }
     if (row.kind !== "component") {
-      return await pageReadOf(instance, row, now, since, ownersRead, {
-        drawn,
-        link,
-        width: ask.width,
-      });
+      return await pageReadOf(
+        instance,
+        row,
+        now,
+        since,
+        ownersRead,
+        { drawn, link, width: ask.width },
+        signal
+      );
     }
-    return await sheetReadOf(instance, row, since, ownersRead, {
-      ...ask,
-      png: drawn,
-    });
+    return await sheetReadOf(
+      instance,
+      row,
+      since,
+      ownersRead,
+      { ...ask, png: drawn },
+      signal
+    );
   };
 
   /**
@@ -2905,7 +2941,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     instance: InstanceRow,
     row: ArtifactRow,
     width: number,
-    link: string | undefined
+    link: string | undefined,
+    /** Its asker's: the picture's draw is let go once it aborts. */
+    signal: AbortSignal
   ) => {
     const served = servedOf(row);
     if (
@@ -2924,13 +2962,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
               : placeAtLink(row.source.path ?? "/", link),
           serve: { ...row.source.serve, port: row.source.port },
           width,
-        }
+        },
+        signal
       );
     }
-    return deps.picture(instance, row, {
-      width,
-      ...(link === undefined ? {} : { link }),
-    });
+    return deps.picture(
+      instance,
+      row,
+      { width, ...(link === undefined ? {} : { link }) },
+      signal
+    );
   };
 
   /** A page's or a preview's read ({@link pageNow}), its picture drawn first when `drawn`, which the read then says it shows. */
@@ -2944,10 +2985,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       drawn,
       link,
       width,
-    }: { drawn: boolean; link: string | undefined; width: number | undefined }
+    }: { drawn: boolean; link: string | undefined; width: number | undefined },
+    signal: AbortSignal
   ) => {
     const picture = drawn
-      ? await pictureFor(instance, now, width ?? PICTURE_VIEW.width, link)
+      ? await pictureFor(
+          instance,
+          now,
+          width ?? PICTURE_VIEW.width,
+          link,
+          signal
+        )
       : undefined;
     return picture instanceof ElysiaStatus
       ? picture
@@ -2976,7 +3024,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     since: number | undefined,
     ownersRead: boolean,
-    ask: Omit<PictureAsk, "link"> & { png: boolean }
+    ask: Omit<PictureAsk, "link"> & { png: boolean },
+    signal: AbortSignal
   ) => {
     if (ask.render || ask.state || ask.story || ask.verify) {
       return problem(400, {
@@ -2984,10 +3033,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         detail: artifactToolWords.designFolderRead(row.name),
       });
     }
-    const answer = await readSheet(row, since, ownersRead, {
-      ...ask,
-      png: false,
-    });
+    const answer = await readSheet(
+      row,
+      since,
+      ownersRead,
+      { ...ask, png: false },
+      signal
+    );
     if (answer instanceof ElysiaStatus || !ask.png) {
       return answer;
     }
@@ -2995,7 +3047,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instance,
       newestVersion(row),
       ask.width ?? PICTURE_VIEW.width,
-      undefined
+      undefined,
+      signal
     );
     if (picture instanceof ElysiaStatus) {
       return picture;
@@ -3013,12 +3066,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     since: number | undefined,
     ownersRead: boolean,
-    ask: Omit<PictureAsk, "link"> & { png: boolean }
+    ask: Omit<PictureAsk, "link"> & { png: boolean },
+    signal: AbortSignal
   ) => {
     if (designOf(row)) {
-      return await designReadOf(instance, row, since, ownersRead, ask);
+      return await designReadOf(instance, row, since, ownersRead, ask, signal);
     }
-    const answer = await readSheet(row, since, ownersRead, ask);
+    const answer = await readSheet(row, since, ownersRead, ask, signal);
     if (answer instanceof ElysiaStatus || !ask.verify) {
       return answer;
     }
@@ -4180,10 +4234,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return kept;
     }
     const sheet = sheetOf(row);
-    const sheetRead = await readSheet(row, undefined, false, {
-      render: true,
-      png: true,
-    });
+    // Drawn as it is handed up, by the hub itself: the hub holds the draw.
+    const sheetRead = await readSheet(
+      row,
+      undefined,
+      false,
+      { render: true, png: true },
+      deps.lifetime.signal
+    );
     if (sheetRead instanceof ElysiaStatus) {
       return sheetRead;
     }
@@ -5739,10 +5797,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      */
     read: async (
       instanceId: string,
-      id?: string,
-      since?: number,
-      png = false,
-      ask: PictureAsk = {}
+      id: string | undefined,
+      since: number | undefined,
+      png: boolean,
+      ask: PictureAsk,
+      /** Its asker's: what the read draws on a machine is let go once it aborts. */
+      signal: AbortSignal
     ) => {
       const instance = sessionOf(instanceId);
       if (instance instanceof ElysiaStatus) {
@@ -5763,7 +5823,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (unfit) {
         return unfit;
       }
-      const answered = await readOf(instance, row, since, drawn, ask);
+      const answered = await readOf(instance, row, since, drawn, ask, signal);
       if (answered instanceof ElysiaStatus) {
         return answered;
       }
@@ -6570,17 +6630,33 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         deps.looked(row.id);
         deps.needsMoved();
       }
-      const key = shownKey(row.id, ack.revision);
-      const waiter = waiting.get(key);
+      const waiter = waiting.get(shownKey(row.id, ack.revision));
       if (waiter) {
-        waiter(ack);
-      } else if (!heard.has(key)) {
-        heard.set(key, ack);
-        // Kept as long as a show could still come to wait for it.
-        deps.lifetime.after("artifact shown ack forgotten", SHOWN_WAIT_MS, () =>
-          heard.delete(key)
-        );
+        waiter.answer(ack);
+      } else if (heard.get(row.id)?.revision !== ack.revision) {
+        // Kept for a show that starts waiting on it: the first word on a
+        // revision, until a show takes it or a newer revision is shown.
+        heard.set(row.id, ack);
       }
+      const said: { heard: true } = { heard: true };
+      return said;
+    },
+
+    /**
+     * A view's word that its frame takes the artifact in at `revision`
+     * still (mounted, or at a load event): the show waiting on that
+     * revision waits on, its quiet counted from now.
+     */
+    taking: (instanceId: string, id: string, word: ShownTaking) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const row = viewable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
+      waiting.get(shownKey(row.id, word.revision))?.alive();
       const said: { heard: true } = { heard: true };
       return said;
     },

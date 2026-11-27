@@ -13,12 +13,7 @@ import { pinStandsOn } from "@cawco/core/comments/deliver";
 import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import { artifactLink } from "@cawco/core/references";
 import { shortId, shortSha } from "@cawco/core/short-id";
-import {
-  type CanvasSpec,
-  type DesignMap,
-  type PageError,
-  STAGE_RENDER_MS,
-} from "@cawco/core/stage";
+import type { CanvasSpec, DesignMap, PageError } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
   decidedByLine,
@@ -305,7 +300,7 @@ const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
     ...(render.unopened ? [render.unopened] : []),
     ...(asked.length > 0
       ? [
-          stageRenderWords.undrawnHead(STAGE_RENDER_MS / 1000),
+          stageRenderWords.undrawnHead,
           ...(render.plansUnread ? [stageRenderWords.plansUnread] : []),
           ...asked.map((one) =>
             stageRenderWords.undrawn(one, !render.plansUnread)

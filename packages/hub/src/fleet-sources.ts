@@ -766,7 +766,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         resolveSkill(
           source,
           ctx.db.heldSkillNames(name),
-          ctx.machineCalls.readSkillFolder
+          ctx.machineCalls.skillFolderReader(ctx.lifetime.signal)
         )
       ),
       Effect.map((resolved) => landSkill(name, source, resolved)),
@@ -1158,7 +1158,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
         resolveSkill(
           row.source,
           ctx.db.heldSkillNames(row.name),
-          ctx.machineCalls.readSkillFolder
+          ctx.machineCalls.skillFolderReader(ctx.lifetime.signal)
         )
       );
       if (ctx.lifetime.closed()) {
@@ -1334,7 +1334,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       read = await readCheckedFolder(
         folder.machine,
         folder.path,
-        ctx.machineCalls.readSkillFolder
+        ctx.machineCalls.skillFolderReader(ctx.lifetime.signal)
       );
     } catch (error) {
       return problem(400, {

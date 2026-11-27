@@ -18,9 +18,11 @@
  */
 import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { Schema } from "effect";
 import type { Page } from "playwright-core";
 import { holdTimeAnimations } from "./chromium";
+import { runPromise } from "./daemon-runtime";
 import {
   pictureNow,
   poseNow,
@@ -28,6 +30,7 @@ import {
   settledNow,
   stateNamedNow,
 } from "./in-page/page";
+import { fromPromise } from "./rejected";
 
 /** Why a state's picture can't be taken as it is, in words a tool answers. */
 class FramePictureRefusal extends Schema.TaggedError<FramePictureRefusal>()(
@@ -64,15 +67,15 @@ export async function findState(
  * which mounts it and answers the room the window lacks to hold it whole at
  * its own size; the window grown by that, and the state posed again in the
  * room; then settled: its fonts loaded, every finite animation in it
- * landed. All before `deadline` (epoch ms): the render's one limit, which
- * every wait of its draw shares.
+ * landed. Each wait lasts until it holds or `signal` aborts (its waiter
+ * let it go: the page went quiet, or the read's asker left).
  */
 export async function poseState(
   page: Page,
   key: string,
-  deadline: number
+  /** Aborts once its waiter lets it go (stage-render.ts `pageLive`): each wait here ends with it. */
+  signal: AbortSignal
 ): Promise<void> {
-  const left = () => Math.max(1, deadline - Date.now());
   const lacks = await page.evaluate(poseNow, key);
   if (!lacks) {
     throw new FramePictureRefusal({
@@ -87,19 +90,35 @@ export async function poseState(
     };
     await page.setViewportSize(grown);
     // The stage lays the drawing out in the window as it stands: it has its room first.
-    await page.waitForFunction(roomHeld, key, { timeout: left() }).catch(() => {
+    await untilLetGo(
+      signal,
+      page.waitForFunction(roomHeld, key, { timeout: 0 })
+    ).catch(() => {
       throw new FramePictureRefusal({
         message: `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`,
       });
     });
     await page.evaluate(poseNow, key);
   }
-  await page.waitForFunction(settledNow, key, { timeout: left() }).catch(() => {
+  await untilLetGo(
+    signal,
+    page.waitForFunction(settledNow, key, { timeout: 0 })
+  ).catch(() => {
     throw new FramePictureRefusal({
-      message: `State ${key} did not settle within the render's time: its fonts or animations are still going.`,
+      message: stageRenderWords.unsettled(key),
     });
   });
 }
+
+/** Playwright's wait `wait` (given no timeout), rejected with `signal`'s reason once it aborts: a wait inside a liveness wait ends with it. */
+export const untilLetGo = <T>(
+  signal: AbortSignal,
+  wait: Promise<T>
+): Promise<T> =>
+  runPromise(
+    fromPromise(() => wait),
+    { signal }
+  );
 
 /** Lengths that differ by less than this are one length: layout's float noise, never a zoom. */
 const SAME = 0.05;

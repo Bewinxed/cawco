@@ -148,13 +148,15 @@ export async function removeArtifact(
 /**
  * This tab's word to the hub that its pane has artifact `id` on screen at the
  * open frame's `revision`, or why it could not load it: the agent's
- * artifact_create and artifact_show answer from it.
+ * artifact_create and artifact_show answer from it. `taking`: its frame is
+ * taking the page in still (mounted, or at a load event), which keeps the
+ * show waiting for the word that ends it.
  */
 export async function artifactShown(
   instanceId: string,
   id: string,
   word: { revision: string } & (
-    { ok: true } | { ok: false; error: ShownFailure }
+    { taking: true } | { ok: true } | { ok: false; error: ShownFailure }
   )
 ): Promise<void> {
   await hubDone(

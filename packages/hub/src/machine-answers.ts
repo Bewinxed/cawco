@@ -189,6 +189,19 @@ export type AgentCall = <K extends ControlName>(
   instanceId?: string
 ) => Promise<Bounded<ControlAnswer<K>>>;
 
+/** A read of a machine let go with its asker (machine-calls.ts `readStoppable`). */
+export type MachineRead = <K extends ControlName>(
+  machineId: string,
+  method: K,
+  args: ControlArgs<K>,
+  ask: {
+    caller: string;
+    harness?: HarnessKind;
+    instanceId?: string;
+    signal: AbortSignal;
+  }
+) => Promise<Bounded<ControlAnswer<K>>>;
+
 /**
  * A machine-scoped call that answers control `method`'s reply, parsed as
  * its type, or throws its cause (server.ts `callMachine`).

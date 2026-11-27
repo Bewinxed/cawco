@@ -202,6 +202,17 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   const rings = new Map<string, SessionRing>();
   /** sessionId -> the socket ids following it, so fan-out never scans the fleet. */
   const followers = new Map<string, Set<string>>();
+  /** Who hears that a session's last follower let it go, by session ({@link unfollow}). */
+  const unfollowers = new Map<string, Set<() => void>>();
+  /** `sessionId`'s last follower let it go: each who listens hears it once. */
+  const unfollow = (sessionId: string): void => {
+    followers.delete(sessionId);
+    const hear = unfollowers.get(sessionId);
+    unfollowers.delete(sessionId);
+    for (const then of hear ?? []) {
+      then();
+    }
+  };
   /** socketId -> everything known about that dashboard, handle included. ONE copy. */
   const sockets = new Map<string, Follower>();
   const awaiting = new Map<string, AwaitedCommand>();
@@ -268,7 +279,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         const perSession = followers.get(sessionId);
         perSession?.delete(socketId);
         if (perSession && perSession.size === 0) {
-          followers.delete(sessionId);
+          unfollow(sessionId);
         }
       }
       sockets.delete(socketId);
@@ -722,7 +733,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     const perSession = followers.get(sessionId);
     perSession?.delete(socket.id);
     if (perSession?.size === 0) {
-      followers.delete(sessionId);
+      unfollow(sessionId);
     }
   };
 
@@ -929,6 +940,17 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       }
     },
     followerCount: (sessionId) => followers.get(sessionId)?.size ?? 0,
+    unfollowed: (sessionId, then) => {
+      const hear = unfollowers.get(sessionId) ?? new Set();
+      hear.add(then);
+      unfollowers.set(sessionId, hear);
+      return () => {
+        hear.delete(then);
+        if (hear.size === 0 && unfollowers.get(sessionId) === hear) {
+          unfollowers.delete(sessionId);
+        }
+      };
+    },
     forget: (sessionId) => {
       rings.get(sessionId)?.forget();
       resetFollowers(sessionId);

@@ -540,6 +540,9 @@ export const createSends = (ctx: SendsContext) => {
       !isKeepAlive(moved.body)
     ) {
       ctx.leadRuns?.sendLeft(moved);
+      // A wait on it while its machine holds it is answered
+      // (machine-calls.ts `untilAnswered`, by its uuid).
+      ctx.machineCalls.sentAnswered(moved.uuid);
       const settles = sendSettles.get(moved.uuid);
       if (settles) {
         Deferred.doneUnsafe(settles, Exit.succeed(moved));
@@ -853,11 +856,16 @@ export const createSends = (ctx: SendsContext) => {
     for (;;) {
       const answer: Bounded<
         ControlAnswer<typeof CONTROL_READ_TRANSCRIPT_WINDOW>
-      > = await ctx.machineCalls.readAgent(
+      > = await ctx.machineCalls.readStoppable(
         row.machineId,
         CONTROL_READ_TRANSCRIPT_WINDOW,
         [row.sessionId, { dir: row.cwd || undefined, window: ask }],
-        row.harness
+        {
+          caller: "the hub's settle of a session's sends",
+          harness: row.harness,
+          // The hub's own settle: the hub holds the read.
+          signal: ctx.lifetime.signal,
+        }
       );
       if (answer.kind !== "answered") {
         return answer;

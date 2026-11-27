@@ -511,11 +511,16 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     for (let at = 0; at < rows.length; at += 8) {
       await Promise.all(
         rows.slice(at, at + 8).map(async (row) => {
-          const answer = await ctx.machineCalls.readAgent(
+          // Asked at register, by the hub itself: the hub holds the read.
+          const answer = await ctx.machineCalls.readStoppable(
             machineId,
             CONTROL_GET_SESSION_INFO,
             [row.sessionId],
-            row.harness
+            {
+              caller: "a session's launch dir",
+              harness: row.harness,
+              signal: ctx.lifetime.signal,
+            }
           );
           // Unanswered or refused: the launch dir stays unread (nothing is
           // written), and the machine is asked again at its next register.

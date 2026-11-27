@@ -16214,39 +16214,65 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "client": {
-                    "minLength": 1,
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "client": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "error": {
+                        "enum": [
+                          "closed",
+                          "crashed",
+                          "error",
+                          "gone",
+                          "hub",
+                          "machine",
+                          "page",
+                          "reach",
+                          "server",
+                          "workspace"
+                        ],
+                        "type": "string"
+                      },
+                      "ok": {
+                        "type": "boolean"
+                      },
+                      "revision": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "client",
+                      "ok",
+                      "revision"
+                    ]
                   },
-                  "error": {
-                    "enum": [
-                      "closed",
-                      "crashed",
-                      "error",
-                      "gone",
-                      "hub",
-                      "machine",
-                      "page",
-                      "reach",
-                      "server",
-                      "workspace"
-                    ],
-                    "type": "string"
-                  },
-                  "ok": {
-                    "type": "boolean"
-                  },
-                  "revision": {
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "client": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "taking": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "client",
+                      "revision",
+                      "taking"
+                    ]
                   }
-                },
-                "required": [
-                  "client",
-                  "ok",
-                  "revision"
                 ]
               }
             }

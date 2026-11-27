@@ -249,14 +249,62 @@ export const arrive = (
 };
 
 /**
- * The ids of the requests this machine runs now, arrived and not yet
- * answered: what every beat names, so the hub waits on each while it runs
- * (core protocol.ts `HeartbeatPayload.working`).
+ * WORK THE HUB WAITS ON THAT THIS RECORD NEVER ANSWERS: a stop, by its
+ * request id, and a send, by its message's uuid, each named on every beat
+ * while this machine holds it ({@link runningIds}). Kept in memory alone and
+ * never in {@link entries}, so neither is answered from here when it comes
+ * again: a stop the hub delivers again under its id after this agent
+ * restarted runs again (a stop is the same decision however often it
+ * comes, session-lifecycle.ts `reconcile`), and a send is its own once-only
+ * by its uuid (session.ts `#handedBefore`). How many arrivals of each id
+ * are held now.
  */
-export const runningIds = (): string[] =>
-  [...entries].flatMap(([id, entry]) =>
-    entry.state === "running" ? [id] : []
-  );
+const holding = new Map<string, number>();
+/** Who else names ids this machine holds: the supervisor's sends handed to a process and not yet read. */
+const holders: (() => Iterable<string>)[] = [];
+
+/**
+ * `id` (a stop's request id, a send's uuid) is held from now until the
+ * returned release: named on every beat between, so the hub waits on it
+ * while it is here. Its release is called once, as its turn ends.
+ */
+export const holdNamed = (id: string): (() => void) => {
+  holding.set(id, (holding.get(id) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    const left = (holding.get(id) ?? 1) - 1;
+    if (left > 0) {
+      holding.set(id, left);
+    } else {
+      holding.delete(id);
+    }
+  };
+};
+
+/** `held` names ids this machine holds on every beat too, read as each beat is sent. */
+export const nameHeld = (held: () => Iterable<string>): void => {
+  holders.push(held);
+};
+
+/**
+ * The ids of the requests this machine runs now, arrived and not yet
+ * answered, and of the stops and sends it holds ({@link holdNamed},
+ * {@link nameHeld}): what every beat names, so the hub waits on each while
+ * it is here (core protocol.ts `HeartbeatPayload.working`).
+ */
+export const runningIds = (): string[] => [
+  ...new Set([
+    ...[...entries].flatMap(([id, entry]) =>
+      entry.state === "running" ? [id] : []
+    ),
+    ...holding.keys(),
+    ...holders.flatMap((held) => [...held()]),
+  ]),
+];
 
 /** A request's answer, as it goes out: kept for the time it comes again. */
 export const keepAnswer = (frame: ControlResult): void => {

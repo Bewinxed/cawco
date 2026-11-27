@@ -153,12 +153,6 @@ const holdsWorkWords = (held: HeldWork): string => {
 };
 
 /**
- * How long archiving waits on a running session's machine to confirm its
- * stop: well inside the hub's 120 s HTTP idle timeout (index.ts).
- */
-const ARCHIVE_STOP_WAIT_MS = 30_000;
-
-/**
  * A failed settle tried again by the sweep (workspaces.ts `settleFailed`):
  * from the sweep's minute, doubling to an hour, thirty times in a row (about
  * a day); then only a settle someone asks for tries it, its session told
@@ -436,10 +430,10 @@ export interface WorkspacesDeps extends WorkspacesHub {
   readonly db: DbShape;
   /**
    * Store stop intent and wait for the machine's positive end confirmation,
-   * for `waitMs` at most. Returns at once for a session already ended or with
-   * no process on its machine.
+   * while its machine holds the stop. Returns at once for a session already
+   * ended or with no process on its machine.
    */
-  readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
+  readonly end: (instanceId: string) => Promise<void>;
   /** Whether this hub process runs item `itemId`'s landing now (landing-run.ts `landingRuns`). */
   readonly landingRuns: (itemId: string) => boolean;
   readonly leadFor: (item: WorkItemRow) => InstanceRow | undefined;
@@ -2029,12 +2023,12 @@ export const createWorkspaces = ({
       return blocked;
     }
     const skip = handedOver(workspace);
-    // Bounded well inside the HTTP call's own idle timeout: a machine that
-    // never confirms leaves the workspace active, and the answer says so.
+    // Waited on while each machine holds its stop: a machine that never
+    // confirms leaves the workspace active, and the answer says so.
     const stops = await Promise.allSettled(
       [
         ...new Set(db.workItemsIn(workspace.id).map((item) => item.instanceId)),
-      ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
+      ].map((instanceId) => end(instanceId))
     );
     const unconfirmed = stops.flatMap((stop) =>
       stop.status === "rejected"

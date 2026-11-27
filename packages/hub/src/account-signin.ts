@@ -344,8 +344,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   const homeCredentialOf = async (
     machineId: string,
     store: HomeStore,
-    storeProvider: string | undefined
+    storeProvider: string | undefined,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ) => {
+    const caller = "a credential's move";
     const machine = ctx.machineName(machineId);
     /** What the machine's stores hold, or why it did not say. */
     const said = <T>(asked: Bounded<CallAnswer<T>>) => {
@@ -371,11 +374,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     const traits = traitsOf(store);
     if (traits.homeLogin === "dir") {
       const read = said(
-        await ctx.machineCalls.readAgent(
+        await ctx.machineCalls.readStoppable(
           machineId,
           CONTROL_READ_HOME_LOGIN,
           [],
-          store
+          { caller, harness: store, signal }
         )
       );
       if (read instanceof ElysiaStatus) {
@@ -395,10 +398,11 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           });
     }
     const read = said(
-      await ctx.machineCalls.readAgent(
+      await ctx.machineCalls.readStoppable(
         machineId,
         CONTROL_READ_HOME_CREDENTIALS,
-        []
+        [],
+        { caller, signal }
       )
     );
     if (read instanceof ElysiaStatus) {
@@ -527,11 +531,16 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
    * there stays where it is. A move that fails leaves the original as it was
    * and is asked again when the stores next change or the machine reconnects.
    */
-  const adoptHomeCredentials = async (machineId: string): Promise<void> => {
-    const read = await ctx.machineCalls.readAgent(
+  const adoptHomeCredentials = async (
+    machineId: string,
+    /** Its asker's (the hub's, as the machine reports its stores): the machine's read is let go once it aborts. */
+    signal: AbortSignal
+  ): Promise<void> => {
+    const read = await ctx.machineCalls.readStoppable(
       machineId,
       CONTROL_READ_HOME_CREDENTIALS,
-      []
+      [],
+      { caller: "the hub's adoption of a machine's own credentials", signal }
     );
     switch (read.kind) {
       case "unanswered":

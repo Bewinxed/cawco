@@ -38,14 +38,11 @@ import { runFork, runPromise } from "../daemon-runtime";
 import { launchGateForm } from "../gate-form";
 import { readJson } from "../json-file";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
-import type { Rejected } from "../rejected";
+import { fromPromise, type Rejected } from "../rejected";
 import type { SessiondClient } from "../sessiond-client";
 import { OpencodeServerRecordSchema } from "../stored-shapes";
 
-
 import { readOpencodeWhile, type ServerLife } from "./opencode-client";
-import { } from "./opencode-effect";
-
 
 /**
  * Generation `procId`'s signs of life as its keeper hears them: each line

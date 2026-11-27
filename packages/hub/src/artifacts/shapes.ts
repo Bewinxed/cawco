@@ -581,7 +581,7 @@ export interface Created {
  * Whether a view the person is looking at has the artifact on screen: a
  * dashboard tab (or the app) showing the session heard the open frame,
  * mounted the pane and loaded the page, and said so ({@link Artifacts.shown})
- * within {@link SHOWN_WAIT_MS}; else why not, in one sentence.
+ * while its frame took the page in; else why not, in one sentence.
  */
 export type Opened =
   | { opened: true }
@@ -615,6 +615,19 @@ export interface Browsed {
   directions?: { name: string; url: string }[];
   expiresAt: string;
   url: string;
+}
+
+/**
+ * A view's word that its frame is taking the artifact in at `revision`
+ * still: mounted, or at a load event (`POST …/artifacts/:artifact/shown`
+ * with `taking`). A show waits on its view while these come.
+ */
+export interface ShownTaking {
+  /** Which view: a dashboard tab's id, or the app's. */
+  client: string;
+  /** The open frame's revision the view takes in. */
+  revision: string;
+  taking: true;
 }
 
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */

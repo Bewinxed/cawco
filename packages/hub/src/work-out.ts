@@ -71,7 +71,6 @@ export const workItemOut = (
     lastTurnAt: iso(item.lastTurnAt),
     stoppingAt: iso(item.stoppingAt),
     unmetAt: iso(item.unmetAt),
-    waitResumeBy: iso(item.waitResumeBy),
     waitUntil: iso(item.waitUntil),
   };
 };

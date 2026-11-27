@@ -18,18 +18,17 @@
  * as real input (`deliver`, canvas real-input.ts), so the read charges the
  * component and its libraries alone.
  *
- * The read has one bound, the render's deadline (stage-render.ts), the
- * one the hub waits on: the traced plays must end inside it, the
- * attribution plays run while they fit before it, and the
- * memory pass runs the repeats that fit before it, each as long as its
- * first took, and says `cut` when that is fewer than asked.
+ * The read runs until its render's asker lets it go (stage-render.ts, the
+ * hub's abandon): the traced plays must end before that, the attribution
+ * plays run unless it came, and the memory pass runs the repeats asked
+ * until it comes, and says `cut` when that is fewer than asked.
  *
  * What the numbers say becomes faults by core stage-measure.ts's rules; a
  * move that can't be measured is refused in the page's or this file's
  * words (core words/stage-measure.ts).
  */
 
-import { type Scheme, STAGE_RENDER_MS } from "@cawco/core/stage";
+import type { Scheme } from "@cawco/core/stage";
 import {
   COMPOSITING_OFF,
   EVERY_FRAME_SHARE,
@@ -109,8 +108,8 @@ export interface MeasureTask {
   ask: MeasureAsk;
   key: string;
   scheme: Scheme;
-  /** When the measurement must answer by (`Date.now()`): the render's deadline, the one the hub waits on. */
-  until: number;
+  /** Its render's asker's: aborts once the hub lets the read go, and the measurement answers the repeats it ran by then. */
+  signal: AbortSignal;
   window: [number, number];
 }
 
@@ -238,8 +237,7 @@ export async function measureMove(
   const speed = ask.speed ?? "slowed";
   const asked = ask.repeats ?? MEASURE_REPEATS;
   const move = moveOf(ask);
-  const tooLong = () =>
-    new Refused({ message: words.tooLong(STAGE_RENDER_MS / 1000) });
+  const tooLong = () => new Refused({ message: words.tooLong });
   const cdp = await page.context().newCDPSession(page);
   // The page's plays and presses arrive as real input, so the trace holds none of a script's stand-in for them (canvas real-input.ts).
   await page.exposeBinding(MEASURE_INPUT, (_source, step: MeasureInput) =>
@@ -253,15 +251,13 @@ export async function measureMove(
     const { length } = scan;
     const settledWait = length + QUIET_MS;
     const tracedPlay = () => repeat(page, key, move, "traced", settledWait);
-    const tracing = Date.now();
     // Chrome writes a compositor verdict only for an animation that begins inside the recording.
     const trace = await recorded(browser, page, TRACE_CATEGORIES, async () => {
       for (let at = 0; at < TRACED; at += 1) {
         await tracedPlay();
       }
     });
-    const tracedTook = Date.now() - tracing;
-    if (Date.now() > task.until) {
+    if (task.signal.aborted) {
       throw tooLong();
     }
     const read = await traceRead(trace, length);
@@ -269,8 +265,8 @@ export async function measureMove(
       throw tooLong();
     }
     const nonComposited = await namesOf(cdp, read.refused);
-    // The attribution plays run while both fit before the deadline (a traced play's time each, and as long again to record), else the read answers without them: the sampled one at the traced plays' speed, the tracked one at the machine's own, as the memory pass after it.
-    const attributing = Date.now() + tracedTook < task.until;
+    // The attribution plays run unless the read was let go, which answers without them: the sampled one at the traced plays' speed, the tracked one at the machine's own, as the memory pass after it.
+    const attributing = !task.signal.aborted;
     const work = attributing
       ? await sampledWork(
           browser,
@@ -300,21 +296,13 @@ export async function measureMove(
       }
       return await countersOf(cdp);
     };
-    // The memory pass's own first repeat makes what it makes once (its code paths at ten times the animations' speed): its count is the baseline, and its time what each repeat after it takes.
-    const first = Date.now();
+    // The memory pass's own first repeat makes what it makes once (its code paths at ten times the animations' speed): its count is the baseline.
     const readings = [await counted()];
-    const each = Date.now() - first;
-    const counting = Date.now();
     const objects: [number, number][] = [[0, await objectsOf(cdp)]];
-    const countTook = Date.now() - counting;
-    // The repeats that fit before the render's deadline, with the objects counted halfway and after the last.
-    const fits = Math.floor(
-      (task.until - Date.now() - 2 * countTook) / Math.max(1, each)
-    );
-    const planned = Math.max(0, Math.min(asked, fits));
-    const halfway = Math.floor(planned / 2);
-    for (let at = 0; at < planned; at += 1) {
-      if (Date.now() + each + countTook > task.until) {
+    // The repeats asked, until the read is let go, with the objects counted halfway and after the last.
+    const halfway = Math.floor(asked / 2);
+    for (let at = 0; at < asked; at += 1) {
+      if (task.signal.aborted) {
         break;
       }
       readings.push(await counted());

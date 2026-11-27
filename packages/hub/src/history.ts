@@ -386,14 +386,16 @@ export const createHistory = (ctx: HistoryContext) => {
    */
   const storedWindow = async (
     where: TranscriptWhere,
-    window: WindowAsk
+    window: WindowAsk,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
-    const answer = await ctx.machineCalls.readAgent(
+    const answer = await ctx.machineCalls.readStoppable(
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,
       [where.sessionKey, { dir: where.cwd || undefined, window }],
-      where.harness
+      { caller: "a transcript's window", harness: where.harness, signal }
     );
     // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".
     switch (answer.kind) {
@@ -456,7 +458,9 @@ export const createHistory = (ctx: HistoryContext) => {
    */
   const readHistory = async (
     instanceId: string,
-    at?: string
+    at: string | undefined,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<HistoryRead> => {
     const found = await historyWhere(instanceId);
     if ("fault" in found) {
@@ -470,7 +474,8 @@ export const createHistory = (ctx: HistoryContext) => {
     const current = await currentWindow(
       where,
       at,
-      "cut" in found ? found.cut : undefined
+      "cut" in found ? found.cut : undefined,
+      signal
     );
     if ("fault" in current) {
       return current;
@@ -522,7 +527,9 @@ export const createHistory = (ctx: HistoryContext) => {
    */
   const readOlder = async (
     instanceId: string,
-    cursor: HistoryCursor
+    cursor: HistoryCursor,
+    /** Its asker's: the machine's read is let go once it aborts. */
+    signal: AbortSignal
   ): Promise<OlderRead> => {
     const found = await conversationWhere(instanceId, cursor.conversation);
     if ("fault" in found) {
@@ -544,7 +551,8 @@ export const createHistory = (ctx: HistoryContext) => {
             before: cursor.before,
             /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
               HISTORY_WINDOW,
-          }
+          },
+      signal
     );
     if ("fault" in window) {
       return window;
@@ -660,7 +668,8 @@ export const createHistory = (ctx: HistoryContext) => {
   const currentWindow = async (
     where: TranscriptWhere,
     at: string | undefined,
-    forked: string | undefined
+    forked: string | undefined,
+    signal: AbortSignal
   ): Promise<TranscriptWindow | HistoryFault> => {
     if (!where.sessionKey) {
       return { entries: [], older: null, newer: null };
@@ -678,7 +687,8 @@ export const createHistory = (ctx: HistoryContext) => {
             end: "newest",
             /* @limit measured: a page; the next page's cursor rides the answer. 300 is the rows one page returns */ limit:
               HISTORY_WINDOW,
-          }
+          },
+      signal
     );
     if ("fault" in window) {
       return window;

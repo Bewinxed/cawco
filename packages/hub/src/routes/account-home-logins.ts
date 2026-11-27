@@ -29,7 +29,7 @@ export const accountHomeLoginRoutes = (
 ) => {
   const { awayWords, homeCredentialOf, moveResults, movingLogins, startMove } =
     ctx;
-  const { readAgent } = ctx.machineCalls;
+  const { readStoppable } = ctx.machineCalls;
   return (
     new Elysia()
       // What a machine's own stores hold that CawCo can move into accounts:
@@ -38,10 +38,19 @@ export const accountHomeLoginRoutes = (
       .get(
         "/api/accounts/home-credentials",
         { query: t.Object({ machineId: t.String() }) },
-        async ({ query }) => {
+        async ({ query, request }) => {
+          const caller = "a machine's own credentials";
+          const { signal } = request;
           const [claude, others] = await Promise.all([
-            readAgent(query.machineId, CONTROL_READ_HOME_LOGIN, [], "claude"),
-            readAgent(query.machineId, CONTROL_READ_HOME_CREDENTIALS, []),
+            readStoppable(query.machineId, CONTROL_READ_HOME_LOGIN, [], {
+              caller,
+              harness: "claude",
+              signal,
+            }),
+            readStoppable(query.machineId, CONTROL_READ_HOME_CREDENTIALS, [], {
+              caller,
+              signal,
+            }),
           ]);
           switch (others.kind) {
             case "unanswered":
@@ -104,9 +113,14 @@ export const accountHomeLoginRoutes = (
             provider: t.Optional(t.String()),
           }),
         },
-        async ({ body, status }) => {
+        async ({ body, status, request }) => {
           const { machineId, store } = body;
-          const found = await homeCredentialOf(machineId, store, body.provider);
+          const found = await homeCredentialOf(
+            machineId,
+            store,
+            body.provider,
+            request.signal
+          );
           if (found instanceof ElysiaStatus) {
             return found;
           }

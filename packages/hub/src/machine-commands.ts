@@ -298,10 +298,12 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     machineId: string;
     path: string;
   }): Promise<void> => {
+    // Read at each register, by the hub itself: the hub holds the read.
     const stands = await folderStandsOn(
-      ctx.machineCalls.readAgent,
+      ctx.machineCalls.readStoppable,
       place.machineId,
-      place.path
+      place.path,
+      ctx.lifetime.signal
     );
     if (stands !== undefined && ctx.db.setPlaceFolder(place.id, stands)) {
       ctx.projectsChanged();

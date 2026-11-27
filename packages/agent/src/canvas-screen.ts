@@ -25,8 +25,8 @@ import { Duration, Effect, Fiber, Layer } from "effect";
 import type { Browser } from "playwright-core";
 import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 import { runFork } from "./daemon-runtime";
-import { fromPromise } from "./rejected";
 import { hearHost, joinedNow } from "./in-page/page";
+import { fromPromise } from "./rejected";
 
 /** How often the page is read for its join while it joins. Ours: a read of two fields. */
 const JOIN_LOOK_MS = 100;
@@ -37,7 +37,7 @@ const held = new Map<string, { browser: Browser; guard: Fiber.Fiber<void> }>();
 /** The guard on `token`: it closes the page a quiet spell from now, unless the hub holds it on first ({@link unguard}). */
 const guardOf = (token: string): Fiber.Fiber<void> =>
   runFork(
-    Effect.sleep(Duration.millis(2 * CANVAS_LIMITS.screenHoldMs)).pipe(
+    Effect.sleep(Duration.millis(QUIET_MS)).pipe(
       Effect.andThen(fromPromise(() => closeCanvasScreen({ token }))),
       Effect.asVoid,
       Effect.catch((error) =>
@@ -45,10 +45,6 @@ const guardOf = (token: string): Fiber.Fiber<void> =>
           `[canvas] the page held for ${token} was not closed: ${error.message}`
         )
       )
-  Effect.runFork(
-    Effect.sleep(Duration.millis(QUIET_MS)).pipe(
-      Effect.andThen(Effect.promise(() => closeCanvasScreen({ token }))),
-      Effect.asVoid
     )
   );
 

@@ -41,6 +41,7 @@ import {
   AGENT_RESTARTED_MID_REQUEST,
   AGENT_RESTARTING,
 } from "@cawco/core/binary-updates";
+import type { Bounded } from "@cawco/core/bounded";
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import {
   type MayStart,
@@ -858,6 +859,14 @@ interface WorkItemDeps extends Pick<
    */
   readonly unblocked: (instanceId: string) => void;
   readonly untellYou: (instanceId: string) => void;
+  /**
+   * A send's answer waited on while its machine holds it (machine-calls.ts
+   * `untilAnswered`, by the send's uuid): answered once it is read.
+   */
+  readonly untilRead: (
+    machineId: string,
+    uuid: string
+  ) => Promise<Bounded<void>>;
   /** Where a project's work runs now (work-place.ts `workPlace`). */
   readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
@@ -1189,9 +1198,6 @@ const restsInWait = (tool: string): boolean => {
   );
 };
 
-/** A harness gets one minute after its declared deadline to start a turn. */
-const WAIT_RESUME_GRACE_MS = 60_000;
-
 /**
  * How soon a cut again its agent refused behind its restart's fence is asked
  * again if the agent's register has not asked it first: the minute the
@@ -1400,6 +1406,7 @@ export const createWorkItems = ({
   todos,
   types,
   untellYou,
+  untilRead,
   workPlace,
 }: WorkItemDeps) => {
   /**
@@ -1446,6 +1453,8 @@ export const createWorkItems = ({
    */
   const handInsHeld = new Map<string, { go: () => void; itemId: string }>();
   const waitTimers = new Map<string, HubTimer>();
+  /** The word that ended each item's wait, by its uuid, while the hub waits on it to start a turn ({@link resumeHeard}). */
+  const resuming = new Map<string, string>();
   /**
    * Waits whose declaring turn ended. From then on a tool call of the
    * session's own ends the wait ({@link restsInWait} says which are not);
@@ -1567,6 +1576,7 @@ export const createWorkItems = ({
       asked.landingSince === null ? { ...asked, landingPhase: null } : asked;
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
+      resuming.delete(id);
       woken.delete(id);
       const before = db.workItem(id);
       // Ended while its start was held: the inputs it was to be handed go
@@ -1579,7 +1589,6 @@ export const createWorkItems = ({
           ...change,
           waitUntil: null,
           waitReason: null,
-          waitResumeBy: null,
         })
       );
       if (after && before && LIVE.has(before.state)) {
@@ -1594,11 +1603,11 @@ export const createWorkItems = ({
   };
   const clearWait = (item: WorkItemRow): void => {
     disarmWait(item.id);
-    if (item.waitUntil || item.waitReason !== null || item.waitResumeBy) {
+    resuming.delete(item.id);
+    if (item.waitUntil || item.waitReason !== null) {
       update(item.id, {
         waitUntil: null,
         waitReason: null,
-        waitResumeBy: null,
       });
     }
   };
@@ -4734,11 +4743,11 @@ export const createWorkItems = ({
    * A turn under way at the deadline is never the session's own work (its
    * first call of its own ended the wait, {@link worked}): it is a word that
    * reached it, or the turn that declared the wait. That turn's end settles
-   * the wait ({@link waitingTurn}, `turnState` going idle), and a re-check
-   * stands meanwhile, so a turn whose end never comes holds no wait for
-   * ever. Otherwise the wait ends and the session is told so (`words`, else
-   * that its wait is over), with a minute to resume before its parent hears
-   * it did not.
+   * the wait ({@link waitingTurn}, `turnState` going idle), and fleet
+   * watch's `stallMinutes` is what says a turn that never ends. Otherwise
+   * the wait ends and the session is told so (`words`, else that its wait
+   * is over), and that word is waited on like any call to its machine
+   * ({@link resumeHeard}).
    */
   const endWait = (id: string, turnOver = false, words?: string): void => {
     const item = db.workItem(id);
@@ -4750,60 +4759,76 @@ export const createWorkItems = ({
     const live = !!row && LIVE.has(item.state);
     if (live && !turnOver && inTurn(row)) {
       lifetime.cancel(waitTimers.get(id));
-      waitTimers.set(
-        id,
-        lifetime.after("wait resume grace", WAIT_RESUME_GRACE_MS, () =>
-          endWait(id, false, words)
-        )
-      );
+      waitTimers.delete(id);
       return;
     }
     const reason = item.waitReason;
     clearWait(item);
     if (row && live) {
-      const resumeBy = new Date(Date.now() + WAIT_RESUME_GRACE_MS);
-      const resuming = update(id, { waitResumeBy: resumeBy });
-      if (!resuming) {
-        throw new Error(`Work item ${id} is gone; its wait can't resume.`);
-      }
-      armWait(resuming);
-      tell(
+      const word = sessionWord(
         row,
-        words ??
-          `Your wait is over: ${reason}. Continue, then call finish_item.`
+        words ?? workWords.waitOver(reason),
+        WAKE_ORIGIN
       );
+      const sent = send(word);
+      resumeHeard(item, row, word.payload.message.uuid, sent.state);
     }
+  };
+  /**
+   * The word that ended `item`'s wait (`uuid`), sent to `row`'s session,
+   * waited on as a call to its machine is: its answer is the turn it starts,
+   * the send read (sends.ts `changeSend`, machine-calls.ts `sentAnswered`).
+   * Unanswered (the machine not connected, or its beats no longer naming
+   * the send, agent session.ts `holdNamed`), or never accepted, its parent
+   * hears that it did not resume, unless the session is in a turn by then,
+   * the item is over, or another wait or word replaced this one.
+   */
+  const resumeHeard = (
+    item: WorkItemRow,
+    row: InstanceRow,
+    uuid: string,
+    state: string
+  ): void => {
+    resuming.set(item.id, uuid);
+    const missed = (): void => {
+      if (resuming.get(item.id) !== uuid) {
+        return;
+      }
+      resuming.delete(item.id);
+      const current = db.workItem(item.id);
+      const [now] = db.getInstancesByIds([item.instanceId]);
+      if (current && LIVE.has(current.state) && now && !inTurn(now)) {
+        report(now, workWords.didNotResume(item.title), false, true);
+      }
+    };
+    if (state === "read") {
+      resuming.delete(item.id);
+      return;
+    }
+    if (state !== "pending") {
+      missed();
+      return;
+    }
+    untilRead(row.machineId, uuid).then(
+      (answer) => {
+        // Left `pending` unread (failed, cancelled, replaced): no turn comes of it.
+        if (
+          answer.kind === "unanswered" ||
+          db.sendRecord(uuid)?.state !== "read"
+        ) {
+          missed();
+        } else if (resuming.get(item.id) === uuid) {
+          resuming.delete(item.id);
+        }
+      },
+      (error: unknown) =>
+        console.warn(
+          `[work-items] ${item.id}: its wait's end could not be heard: ${error instanceof Error ? error.message : String(error)}`
+        )
+    );
   };
   const armWait = (item: WorkItemRow): void => {
     disarmWait(item.id);
-    if (item.waitResumeBy && LIVE.has(item.state)) {
-      const missed = (): void => {
-        waitTimers.delete(item.id);
-        const current = db.workItem(item.id);
-        if (!(current?.waitResumeBy && LIVE.has(current.state))) {
-          return;
-        }
-        update(item.id, { waitResumeBy: null });
-        const [row] = db.getInstancesByIds([item.instanceId]);
-        if (row && !inTurn(row)) {
-          report(
-            row,
-            `${item.title}: the delegate did not resume within 60 seconds of being told its wait was over.`,
-            false,
-            true
-          );
-        }
-      };
-      waitTimers.set(
-        item.id,
-        lifetime.after(
-          "wait resume deadline",
-          Math.max(0, item.waitResumeBy.getTime() - Date.now()),
-          missed
-        )
-      );
-      return;
-    }
     if (!item.waitUntil) {
       return;
     }
@@ -5394,7 +5419,7 @@ export const createWorkItems = ({
      * The live idle/busy transition, even while turn-end rules are still
      * deciding. Idle after the declaring turn puts its wait at rest; busy
      * after the wait's time passed is the session resuming, which ends the
-     * resume grace and its missed-resume notice. Busy during the wait's time
+     * wait on the word that ended its wait ({@link resumeHeard}). Busy during the wait's time
      * ends nothing: the word that woke it is not work ({@link worked}).
      */
     turnState(instanceId: string, busy: boolean): void {
@@ -5406,7 +5431,7 @@ export const createWorkItems = ({
         if (item.waitUntil.getTime() <= Date.now()) {
           endWait(item.id, true);
         }
-      } else if (busy && item?.waitResumeBy) {
+      } else if (busy && item && resuming.has(item.id)) {
         clearWait(item);
       }
     },
@@ -5488,7 +5513,7 @@ export const createWorkItems = ({
     interrupted(instanceId: string, hold: boolean): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item?.waitUntil || item?.waitResumeBy) {
+      if (item?.waitUntil || (item && resuming.has(item.id))) {
         clearWait(item);
       }
       if (hold && item && LIVE.has(item.state) && !item.heldAt) {

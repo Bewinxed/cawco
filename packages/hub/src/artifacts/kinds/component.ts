@@ -497,7 +497,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       if (staged instanceof ElysiaStatus) {
         return staged;
       }
-      const drawn = await readerReport(row, at, sheet.files, staged.opened);
+      // A write's own render, whose call has no signal here: the hub holds it.
+      const drawn = await readerReport(
+        row,
+        at,
+        sheet.files,
+        staged.opened,
+        deps.lifetime.signal
+      );
       if (drawn instanceof ElysiaStatus) {
         return drawn;
       }
@@ -533,7 +540,9 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     row: ArtifactRow,
     at: StageAt,
     files: string[],
-    opened: StageOpened
+    opened: StageOpened,
+    /** Its asker's: the render is let go once it aborts. */
+    signal: AbortSignal
   ) => {
     const held = drawnHeld(row, opened.report);
     if (readerOwed(held).length === 0) {
@@ -543,7 +552,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       };
       return read;
     }
-    const read = await deps.stageRender(at, { files });
+    const read = await deps.stageRender(at, { files }, signal);
     if (read instanceof ElysiaStatus) {
       return read;
     }
@@ -762,11 +771,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
     }
     const owned = sheetOf(row);
+    // A create's own render, whose call has no signal here: the hub holds it.
     const drawn = await readerReport(
       row,
       { workspace },
       owned?.files ?? asked,
-      staged.opened
+      staged.opened,
+      deps.lifetime.signal
     );
     if (drawn instanceof ElysiaStatus) {
       return drawn;
@@ -1107,9 +1118,11 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
    */
   const readSheet = async (
     row: ArtifactRow,
-    since?: number,
-    ownersRead = true,
-    ask: ComponentReadAsk = {}
+    since: number | undefined,
+    ownersRead: boolean,
+    ask: ComponentReadAsk,
+    /** Its asker's: a render or a picture the read asks is let go once it aborts. */
+    signal: AbortSignal
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
   ) => {
     if (designOf(row)) {
@@ -1153,16 +1166,20 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         });
       }
       if (opened && (ask.render || ask.png || ask.layout || ask.measure)) {
-        const rendered = await deps.stageRender(at, {
-          files: sheet.files,
-          ...(ask.state ? { state: ask.state } : {}),
-          ...(ask.measure
-            ? { measure: ask.measure }
-            : {
-                ...(ask.png || ask.layout ? { png: true } : {}),
-                ...(ask.layout ? { layout: true } : {}),
-              }),
-        });
+        const rendered = await deps.stageRender(
+          at,
+          {
+            files: sheet.files,
+            ...(ask.state ? { state: ask.state } : {}),
+            ...(ask.measure
+              ? { measure: ask.measure }
+              : {
+                  ...(ask.png || ask.layout ? { png: true } : {}),
+                  ...(ask.layout ? { layout: true } : {}),
+                }),
+          },
+          signal
+        );
         if (rendered instanceof ElysiaStatus) {
           return rendered;
         }
@@ -1170,7 +1187,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         report = drawnHeld(row, rendered.report);
       } else if (opened) {
         // A plain read: the report as the reader drew it, the reader asked where it owes one.
-        const read = await readerReport(row, at, sheet.files, opened);
+        const read = await readerReport(row, at, sheet.files, opened, signal);
         if (read instanceof ElysiaStatus) {
           return read;
         }

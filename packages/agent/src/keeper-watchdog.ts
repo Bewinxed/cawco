@@ -360,9 +360,7 @@ class KeeperWatchdog {
       return;
     }
     // The promise edge of dialKeeper.
-    const { dial, accepted } = await runPromise(
-      dialKeeper(found.endpoint)
-    );
+    const { dial, accepted } = await runPromise(dialKeeper(found.endpoint));
     let detail: string;
     switch (dial.kind) {
       case "answered":

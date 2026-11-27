@@ -274,7 +274,6 @@ export type WorkItemChange = Partial<
       | "submission"
       | "waitUntil"
       | "waitReason"
-      | "waitResumeBy"
       | "waitCount"
       | "waitLastReason"
       | "waitLastUntil"
@@ -807,13 +806,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
       return [...owning.values()];
     },
     waitingWorkItems: () =>
-      db
-        .select()
-        .from(workItems)
-        .where(
-          or(isNotNull(workItems.waitUntil), isNotNull(workItems.waitResumeBy))
-        )
-        .all(),
+      db.select().from(workItems).where(isNotNull(workItems.waitUntil)).all(),
     workItemsIn: (workspaceId) =>
       db
         .select()

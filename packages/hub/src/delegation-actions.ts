@@ -798,6 +798,8 @@ export interface HandoffDeps {
     tool: string,
     paths: readonly string[]
   ) => string | undefined;
+  /** Aborts once its asker lets the call go (its harness cut it): what the call reads of a machine is let go with it. */
+  readonly signal: AbortSignal;
   /**
    * Starts a session now and holds until its machine says it is in place
    * (spawns.ts `spawnSession`); answers the folder it runs in as the hub
@@ -1392,7 +1394,7 @@ const measuredContext = (
 ): Effect.Effect<number | null> =>
   boundedRead(
     CONTEXT_SIZE_MS,
-    Effect.tryPromise(() => calls.contextSize(id))
+    Effect.tryPromise((signal) => calls.contextSize(id, signal))
   ).pipe(
     Effect.map((reported) =>
       reported instanceof ElysiaStatus || !(reported && "tokens" in reported)
@@ -1534,6 +1536,7 @@ export const handoffActions = ({
   work,
   calls,
   lifetime,
+  signal,
 }: HandoffDeps): HandoffActions => {
   /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
   const runningDelegate = (target: string) => {
@@ -1658,7 +1661,7 @@ export const handoffActions = ({
       );
     },
     forgePost: (ask) => calls.forgePost(instanceId, ask),
-    artifacts: calls.artifacts(instanceId),
+    artifacts: calls.artifacts(instanceId, signal),
     closeAsked: (ask, closing) => calls.closeAsked(instanceId, ask, closing),
     forwardAsked: (requestId) => calls.forwardAsked(instanceId, requestId),
     recordAsked: (ask, asked) => calls.recordAsked(instanceId, ask, asked),

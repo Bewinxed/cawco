@@ -258,7 +258,7 @@ import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { fromPromise } from "./rejected";
 import { removeTree } from "./remove-tree";
-import { arrive, keepAnswer } from "./request-record";
+import { arrive, holdNamed, keepAnswer, nameHeld } from "./request-record";
 import { fenced } from "./restart";
 import {
   beginEnding,
@@ -756,6 +756,17 @@ type SupervisorPorts = Pick<
   | "stageClone"
 >;
 
+/** The id every beat names `envelope` by while this machine holds it (request-record.ts `holdNamed`): a stop's request id, a send's uuid. */
+const beatNameOf = (envelope: MachineInbound): string | undefined => {
+  if (envelope.verb === "stop") {
+    return envelope.payload.requestId;
+  }
+  if (envelope.verb === "send") {
+    return envelope.payload.message.uuid;
+  }
+  return undefined;
+};
+
 /**
  * A session's MCP gate (mcp-gate.ts), which relays CawCo's server and each
  * remote fleet server with their headers and starts each fleet server with a
@@ -837,6 +848,11 @@ export class SessionSupervisor {
         running: (instanceId) => this.#live.sessions.get(instanceId),
       });
     const queues = this.#queues;
+    // Each send handed to a process and not yet read is named on every
+    // beat: the hub waits on it while the process holds it.
+    nameHeld(() =>
+      [...this.#handed.values()].flatMap((handed) => [...handed.keys()])
+    );
     gaugeTables("supervisor", {
       asleep: this.#asleep,
       handed: this.#handed,
@@ -1596,6 +1612,12 @@ export class SessionSupervisor {
       control?.method === CONTROL_RUN_COMMAND
         ? folderTurn(control.args, this.#queues.isBusy(key), this.#ports)
         : undefined;
+    // A stop and a send are named on every beat from their arrival to their
+    // turn's end (request-record.ts `holdNamed`), so the hub waits on each
+    // while it is here; a send handed and not yet read stays named after
+    // (`nameHeld`, {@link #handed}).
+    const named = beatNameOf(envelope);
+    const release = named === undefined ? undefined : holdNamed(named);
     // Its failure is said and its folder let go inside its own turn, before
     // the next envelope's begins.
     const turn = this.#queues.run(key, async () => {
@@ -1625,6 +1647,7 @@ export class SessionSupervisor {
         }
       } finally {
         folder?.end();
+        release?.();
       }
     });
     const queue =

@@ -108,7 +108,8 @@ export interface SessionCallsDeps {
   ) => Promise<PreparedContinuation | ContinuationUnfound>;
   readonly projectTypes: ProjectDelegateTypes;
   readonly reportedContextOf: (
-    row: KeepAliveRow
+    row: KeepAliveRow,
+    signal: AbortSignal
   ) => Promise<
     { tokens: number; readAt: number } | { reason: string } | Unanswered
   >;
@@ -168,7 +169,7 @@ export const contextSizeCalls = ({
    * A session's context size as its machine reports it, or the problem when
    * the hub has no such session: what the cold-session refusal of a send reads.
    */
-  contextSize: async (id: string) => {
+  contextSize: async (id: string, signal: AbortSignal) => {
     const [row] = db.getInstancesByIds([id]);
     if (!row) {
       return problem(404, {
@@ -176,7 +177,7 @@ export const contextSizeCalls = ({
         detail: "Session not found",
       });
     }
-    const reported = await reportedContextOf(row);
+    const reported = await reportedContextOf(row, signal);
     // The answer's own words for a machine that did not answer.
     return "kind" in reported
       ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
@@ -654,7 +655,8 @@ export const sessionCalls = (deps: SessionCallsDeps) => ({
   ...titleCalls(deps),
   ...machinePauseCalls(deps),
   /** The artifact tools of session `instanceId` (artifacts/calls.ts). */
-  artifacts: (instanceId: string) => artifactTools(deps.artifacts, instanceId),
+  artifacts: (instanceId: string, signal: AbortSignal) =>
+    artifactTools(deps.artifacts, instanceId, signal),
 });
 
 /** What a session's tools call directly. */

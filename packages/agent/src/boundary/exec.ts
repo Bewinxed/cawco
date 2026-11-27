@@ -107,7 +107,7 @@ export const readied = (
       const outcome = yield* Deferred.make<number, Unstarted>();
       // Its process tree's CPU time is a sign of life too: a host that starts
       // its sandbox works before it writes its line.
-      const pid = (yield* fromPromise(() =>
+      const pid = (yield* Effect.promise(() =>
         client.list().catch(() => undefined)
       ))?.procs.find((proc) => proc.procId === procId && proc.alive)?.pid;
       const working = new AbortController();

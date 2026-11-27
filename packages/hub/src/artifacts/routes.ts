@@ -194,8 +194,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           verify: t.Optional(t.BooleanString()),
         }),
       },
-      ({ params, query }) =>
-        readAsked(artifacts, params.id, params.artifact, query)
+      ({ params, query, request }) =>
+        readAsked(artifacts, params.id, params.artifact, query, request.signal)
     )
     .patch(
       "/api/instances/:id/artifacts/:artifact",
@@ -385,17 +385,28 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     // A view (a dashboard tab, the app) has the artifact on screen at the
     // open frame's revision, or could not load it: the waiting show answers.
+    // `taking`: its frame takes the page in still, and the show waits on.
     .post(
       "/api/instances/:id/artifacts/:artifact/shown",
       {
-        body: t.Object({
-          client: t.String({ minLength: 1 }),
-          revision: t.String({ minLength: 1 }),
-          ok: t.Boolean(),
-          error: t.Optional(t.UnionEnum(SHOWN_FAILURES)),
-        }),
+        body: t.Union([
+          t.Object({
+            client: t.String({ minLength: 1 }),
+            revision: t.String({ minLength: 1 }),
+            taking: t.Literal(true),
+          }),
+          t.Object({
+            client: t.String({ minLength: 1 }),
+            revision: t.String({ minLength: 1 }),
+            ok: t.Boolean(),
+            error: t.Optional(t.UnionEnum(SHOWN_FAILURES)),
+          }),
+        ]),
       },
-      ({ params, body }) => artifacts.shown(params.id, params.artifact, body)
+      ({ params, body }) =>
+        "taking" in body
+          ? artifacts.taking(params.id, params.artifact, body)
+          : artifacts.shown(params.id, params.artifact, body)
     )
     // The artifact's doc as a person's view reads it (the app's panel): its
     // picks and their send. No read of the session's, and it never wakes a stage.

@@ -1327,8 +1327,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     emitted: SessionEmitted[],
-    callId?: string,
-    cut?: AbortSignal
+    callId: string | undefined,
+    cut: AbortSignal
   ): HandoffDeps => {
     const tree = options.delegationTree;
     return {
@@ -1354,6 +1354,7 @@ export function createDelegationMcp(options: {
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),
       started: startedBy(actor, name, cut),
+      signal: cut,
       work: options.workItemCalls,
       calls: options.sessionCalls,
       lifetime: options.lifetime,
@@ -1365,8 +1366,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    callId?: string,
-    cut?: AbortSignal
+    callId: string | undefined,
+    cut: AbortSignal
   ): Promise<CallToolResult> => {
     const emitted: SessionEmitted[] = [];
     const deps = actionDeps(actor, name, emitted, callId, cut);
@@ -1885,7 +1886,10 @@ export function createDelegationMcp(options: {
    * delivery words answered, or the problem the tool would answer.
    */
   const handoffAs = (actor: InstanceRow, target: string, message: string) =>
-    handoffActions(actionDeps(actor, "handoff", [])).handoff(target, message);
+    // The hub's own word: the hub holds what it reads.
+    handoffActions(
+      actionDeps(actor, "handoff", [], undefined, options.lifetime.signal)
+    ).handoff(target, message);
 
   return {
     handle,
