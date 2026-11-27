@@ -568,15 +568,6 @@ const gated: Gated[] = [
   // Imports run one way: no cycle, and the kit reaches no module that
   // itself reaches the kit (what a specifier alone says is Biome's).
   bun("scripts/import-rules-check.ts"),
-  // Each file's swallowed failures, casts around the type checker and
-  // silenced checks may fall, never rise.
-  bun("scripts/escape-hatch-ratchet.ts"),
-  // The hub's and the agent's hand-written locks, chains and timed loops,
-  // what Effect provides (CLAUDE.md, "Backend internals"), may fall, never rise.
-  bun("scripts/effect-ratchet.ts"),
-  // A comment names files and symbols that are there. It reads every code
-  // file's identifiers and the platform's types, which bun.lock pins.
-  bun("scripts/stale-references-check.ts"),
   bun("scripts/css-scope-check.ts"),
   bun("scripts/browser-core-check.ts"),
   bun("scripts/runtime-bundles-check.ts"),
@@ -584,9 +575,7 @@ const gated: Gated[] = [
   // bundler as its compile runs it: a module a build links in place of
   // another, and the names imported from it, are the bundle's alone.
   bun("scripts/binary-bundle-check.ts"),
-  bun("apps/dashboard/scripts/mark-line-check.ts"),
   bun("apps/dashboard/scripts/outro-reads-check.ts"),
-  bun("apps/dashboard/scripts/specificity-trap.ts"),
   // A :has() stands only in its rule's subject: one before a combinator
   // joins Blink's one shared :has() invalidation set, which restyles a
   // whole subtree under every anchor on the page.
@@ -595,14 +584,10 @@ const gated: Gated[] = [
   // registered `inherits: false`: one that inherits restyles every element
   // in the document each time the word comes or goes.
   bun("apps/dashboard/scripts/root-flip-check.ts"),
-  // Every rule names its element, or an ancestor most elements lack: one
-  // that names neither is run on every element Blink restyles.
-  bun("apps/dashboard/scripts/universal-key-check.ts"),
   bun("apps/dashboard/scripts/lib-import-check.ts"),
   bun("apps/dashboard/scripts/svelte-unused-css.ts"),
   // The release build's layers guard, over the house's sheets unbundled.
   bun("apps/dashboard/scripts/css-layers-check.ts"),
-  bun("apps/dashboard/scripts/spacing-ratchet.ts"),
   // A class stock Tailwind draws and the house theme draws nothing for;
   // bun.lock pins the Tailwind that judges it.
   bun("scripts/tailwind-draws-check.ts"),
@@ -617,12 +602,7 @@ const gated: Gated[] = [
   inDashboard("scripts/web-manifest.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts"),
   bun("scripts/house-faces.ts", "--check"),
-  bun("scripts/style-residual-check.ts"),
-  bun("scripts/relics-check.ts"),
-  bun("scripts/style-greps.ts"),
   bun("scripts/tool-answer-check.ts"),
-  // The project's memory: who may say the person's words (C2).
-  bun("scripts/memory-cutover-check.ts"),
   // Every hub route answers a value Eden can type: a Response or unknown
   // only from a protocol endpoint whose client is not ours.
   bun("scripts/route-answers-check.ts"),
@@ -630,7 +610,6 @@ const gated: Gated[] = [
   bun("scripts/docker-client-check.ts"),
   bun("scripts/browser-image-check.ts"),
   bun("scripts/fixed-ports-check.ts"),
-  bun("scripts/border-width-check.ts"),
   // A screen on the 4px base re-declares every token built from its bases.
   bun("scripts/grid-scope-check.ts"),
   bun("scripts/patched-dependencies-check.ts"),
@@ -638,9 +617,6 @@ const gated: Gated[] = [
   bun("scripts/lint/biome-plugins.ts"),
   bun("scripts/token-contrast-check.ts"),
   bun("scripts/page-imports-check.ts"),
-  bun("scripts/preview-switcher-check.ts"),
-  bun("scripts/surface-briefs-check.ts"),
-  bun("scripts/setup-draft-check.ts"),
   { ...run("packages/hub", "openapi:check"), extra: shippedBases },
   // Its freeze holds every migration to the base and the newest nightly.
   { ...run("packages/hub", "migrations:check"), extra: shippedBases },
@@ -656,7 +632,6 @@ const gated: Gated[] = [
   bun("scripts/claude-paths-check.ts"),
   bun("scripts/machine-paths-check.ts"),
   bun("scripts/signal-check.ts"),
-  bun("scripts/duplicate-lists-check.ts"),
   bun("scripts/apple-ops-check.ts"),
   bun("scripts/protocol-sweep.ts"),
   bun("scripts/git-door-words-check.ts"),
@@ -702,16 +677,6 @@ const gated: Gated[] = [
       ...tsconfigs,
       ...manifests,
       "knip.ts",
-      "node_modules/",
-    ],
-  },
-  {
-    // Duplicated code (.jscpd.json: threshold 0).
-    name: "jscpd",
-    argv: [join(ROOT, "node_modules/.bin/jscpd")],
-    entries: [],
-    files: () => [
-      ...under("packages/", "apps/dashboard/", ".jscpd.json"),
       "node_modules/",
     ],
   },

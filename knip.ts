@@ -132,8 +132,6 @@ export default {
         // scripts/check.ts
         "scripts/grid-scope-check.ts",
         // scripts/check.ts
-        "scripts/memory-cutover-check.ts",
-        // scripts/check.ts, beside spacing-ratchet.ts
         "scripts/tailwind-draws-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).
         "scripts/lib/tool-call.fixtures.ts",
@@ -144,19 +142,7 @@ export default {
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/import-rules-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
-        "scripts/escape-hatch-ratchet.ts",
-        // scripts/check.ts, beside escape-hatch-ratchet.ts
-        "scripts/effect-ratchet.ts",
-        // scripts/check.ts, beside css-scope-check.ts
-        "scripts/stale-references-check.ts",
-        // scripts/check.ts, beside css-scope-check.ts
         "scripts/browser-core-check.ts",
-        // scripts/check.ts
-        "scripts/style-residual-check.ts",
-        // scripts/check.ts
-        "scripts/relics-check.ts",
-        // scripts/check.ts
-        "scripts/style-greps.ts",
         // scripts/check.ts
         "scripts/tool-answer-check.ts",
         "scripts/route-answers-check.ts",
@@ -169,17 +155,9 @@ export default {
         // scripts/check.ts
         "scripts/fixed-ports-check.ts",
         // scripts/check.ts
-        "scripts/border-width-check.ts",
-        // scripts/check.ts
         "scripts/patched-dependencies-check.ts",
         // scripts/check.ts
-        "scripts/surface-briefs-check.ts",
-        // scripts/check.ts
-        "scripts/setup-draft-check.ts",
-        // scripts/check.ts
         "scripts/page-imports-check.ts",
-        // scripts/check.ts
-        "scripts/preview-switcher-check.ts",
         // scripts/check.ts
         "scripts/resolution-check.ts",
         // scripts/check.ts
@@ -285,21 +263,15 @@ export default {
         // `$app/env` in the address preview build, an alias Knip does not follow: scripts/address-preview.vite.ts-43.
         "src/lib/cawco/address/flow/kit-env.ts",
         // scripts/check.ts
-        "scripts/specificity-trap.ts",
-        // scripts/check.ts
         "scripts/lib-import-check.ts",
         // scripts/check.ts
         "scripts/svelte-unused-css.ts",
-        // scripts/check.ts
-        "scripts/spacing-ratchet.ts",
         // scripts/check.ts
         "scripts/css-layers-check.ts",
         // scripts/check.ts
         "scripts/has-subject-check.ts",
         // scripts/check.ts
         "scripts/root-flip-check.ts",
-        // scripts/check.ts
-        "scripts/universal-key-check.ts",
         // scripts/check.ts
         "scripts/role-order.ts",
       ],

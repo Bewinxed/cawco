@@ -42,8 +42,6 @@ export function parseScript(text) {
   });
 }
 
-export { parseSvelte };
-
 /** Reports `message` at `[start, end)` of the file's own text. */
 export function reportAt(context, start, end, message) {
   context.report({
@@ -95,9 +93,6 @@ const SCOPES = new Set([
   "CatchClause",
   "ClassBody",
 ]);
-
-/** The names a binding pattern declares. */
-export const patternNamesOf = (pattern) => patternNames(pattern);
 
 function patternNames(pattern, out = []) {
   if (!pattern) {
@@ -324,9 +319,6 @@ export function modelOf(fileName) {
   models.set(fileName, model);
   return model;
 }
-
-/** Every node under `node`, with its parent and the key it stands under. */
-export const walkNodes = (node, visit) => walk(node, visit);
 
 /** Every node of the file, with its parent. */
 export function eachNode(model, visit) {

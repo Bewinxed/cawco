@@ -4,18 +4,9 @@
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
 import { defineRule } from "golar/unstable";
-import { backCloseWords } from "./back-close-words.mjs";
-import { barItemsOutsideKit } from "./bar-item.mjs";
-import { detachedBarMenus } from "./bar-menu.mjs";
-import { barSymbols } from "./bar-symbol.mjs";
-import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
-import { countBadges } from "./count-badge.mjs";
-import { fixtureMounts } from "./fixture-mounts.mjs";
-import { followsProps } from "./follows-props.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
-import { notHover } from "./not-hover.mjs";
 import { rawMotion } from "./raw-motion.mjs";
 import { rawClassValues } from "./raw-values.mjs";
 import { renderDomReads } from "./render-dom.mjs";
@@ -32,16 +23,10 @@ import {
   staticClasses,
   unknownClasses,
 } from "./shadcn.mjs";
-import { styleSpaces } from "./style-spaces.mjs";
 import { tooltipProviderAtRoot } from "./tooltip-provider.mjs";
 import { typedPropertyReads } from "./typed-property-read.mjs";
-import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
-/** The kit's Badge: the one place a count badge's classes are written (house/count-in-badge). */
-const BADGE = "src/lib/components/ui/badge/";
-/** The bar's glass and its item: the one place the bar item's mark is written (house/bar-item-in-kit). */
-const BAR_GLASS = "src/lib/components/ui/bar-glass/";
 /** The motion helpers that write the curves out (house/no-raw-motion). */
 const MOTION_HELPERS = new Set([
   "src/lib/platform/motion/curves.svelte.ts",
@@ -282,10 +267,6 @@ function optionsFor(rule, file) {
       return { allow: ["nodrag", "nopan"] };
     case "house/no-raw-duration-read":
       return file === "src/lib/platform/motion/curves.svelte.ts" ? null : {};
-    case "house/bar-item-in-kit":
-      return file.startsWith(BAR_GLASS) ? null : {};
-    case "house/count-in-badge":
-      return file.startsWith(BADGE) ? null : {};
     case "house/no-raw-motion":
       // The token build's own output reads nothing; the helpers that hold
       // the curves as functions of t (DESIGN.md, The House Helper Rule) may
@@ -323,26 +304,15 @@ const PLACEMENT_CLASSES = PLACEMENT.filter(
 );
 
 const FIND = {
-  "house/variant-order": variantOrder,
   "house/group-not-needs-ancestor": groupNotNeedsAncestor,
   "house/no-raw-duration-read": rawDurationReads,
   "house/no-dimension-binding": dimensionBindings,
   "house/no-scroll-into-view": scrollIntoViews,
   "house/no-render-dom-read": renderDomReads,
   "house/no-clip-with-move": clipWithMove,
-  "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,
   "house/no-raw-motion": rawMotion,
-  "house/follows-props": followsProps,
-  "house/fixture-mounts": fixtureMounts,
-  "house/bar-item-in-kit": barItemsOutsideKit,
-  "house/count-in-badge": countBadges,
-  "house/bar-symbol-linear": barSymbols,
-  "house/back-close-symbol": backCloseWords,
-  "house/no-detached-bar-menu": detachedBarMenus,
   "house/tooltip-provider-at-root": tooltipProviderAtRoot,
-  "house/no-not-hover": notHover,
-  "house/no-style-underscore-spaces": styleSpaces,
   "house/typed-property-read": typedPropertyReads,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,

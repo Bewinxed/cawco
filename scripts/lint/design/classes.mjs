@@ -110,7 +110,7 @@ export function moduleFile(specifier, from) {
 }
 
 /** The `.svelte` file a specifier names, in this repo, or null. */
-export function svelteFile(specifier, from) {
+function svelteFile(specifier, from) {
   if (!SVELTE_FILE.test(specifier)) {
     return null;
   }
@@ -476,13 +476,6 @@ export function readerFor(model, { follow = true } = {}) {
   };
 }
 
-/** Whether two entries stand on branches that never hold together. */
-export function separated(a, b) {
-  return Object.keys(a.tags).some(
-    (k) => k in b.tags && a.tags[k] !== b.tags[k]
-  );
-}
-
 /* -------------------------------------------------------------- markup */
 
 const TAGS = new Set([
@@ -537,7 +530,7 @@ function readAttributeValue(value, read) {
 }
 
 /** The tag name, `Table.Cell` for a member. */
-export const tagName = (tag) => tag?.name ?? "";
+const tagName = (tag) => tag?.name ?? "";
 
 /** A file's imports, by local name. */
 const IMPORT_KINDS = { default: "default", "*": "namespace" };
@@ -592,7 +585,7 @@ function barrelComponents(file) {
 }
 
 /** The component file a tag name (`Button`, `Table.Cell`) stands for. */
-export function componentFile(name, imports, from) {
+function componentFile(name, imports, from) {
   const [first, member] = name.split(".");
   const binding = imports.get(first);
   if (!binding) {

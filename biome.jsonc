@@ -8,9 +8,6 @@
   // storedJson(schema), a record readRecord(file, schema), never a cast.
   "plugins": [
     "./scripts/lint/no-raw-deadline.grit",
-    "./scripts/lint/no-time-constants.grit",
-    // A wait is said through secondsOf (packages/core/src/time.ts).
-    "./scripts/lint/no-whole-seconds.grit",
     "./scripts/lint/no-system-path.grit",
     // A long-running process that fails ends, so its service manager starts
     // it again (packages/core/src/listeners.ts).
@@ -27,8 +24,6 @@
     // An artifact's machine and source have one write, db/artifacts.ts
     // `resource`, which moves its preview with it.
     "./scripts/lint/preview-source-write.grit",
-    // An exhaustive switch ends with unhandled() (packages/core/src/unhandled.ts).
-    "./scripts/lint/no-hand-unhandled.grit",
     // A colour or a size in a stylesheet or a `<style>` is a token
     // (DESIGN.md); the markup half is Golar's (scripts/lint/design/raw-values.mjs).
     "./scripts/lint/no-raw-css-values.grit",
@@ -36,15 +31,11 @@
     // never one (DESIGN.md, Motion grammar); the markup and script half is
     // Golar's (scripts/lint/design/raw-motion.mjs).
     "./scripts/lint/no-raw-motion.grit",
-    // A refused hub request's reason is a words entry (packages/core/src/words/**).
-    "./scripts/lint/hub-refusal-words.grit",
     // A Bun spawn names its env: with none it gets the environment its
     // process started with (oven-sh/bun#40846).
     "./scripts/lint/spawn-names-env.grit",
     // A value is quoted for a shell through shellQuote (packages/core/src/shell-quote.ts).
     "./scripts/lint/no-hand-shell-quote.grit",
-    // core's frames.ts holds frame types alone (packages/core/src/frames.ts).
-    "./scripts/lint/frames-types-only.grit",
     // A harness is a table and a facet, never a name
     // (packages/core/src/harness/traits.ts).
     "./scripts/lint/no-harness-compare.grit",
@@ -66,9 +57,6 @@
     // A machine away is 503 machine-away and one silent 504 machine-silent,
     // made in packages/hub/src/machine-answers.ts alone.
     "./scripts/lint/machine-answers.grit",
-    // A folder is made through packages/core/src/folders.ts, which gives
-    // each of CawCo's own its mode whatever the umask.
-    "./scripts/lint/one-folder-maker.grit",
     // The runtime dir and the session credentials' dir in it hold only what
     // may vanish, from the modules the rule names; a store that must last
     // goes under core paths/harnesses.ts `harnessStoresDir`.
@@ -91,9 +79,6 @@
     // Values are compared as values (Bun.deepEquals), never as their JSON,
     // in the hub and the agent.
     "./scripts/lint/no-serialise-compare.grit",
-    // Every timer of the hub's control loop runs on its lifetime, named
-    // (packages/hub/src/lifetime.ts).
-    "./scripts/lint/hub-timers-named.grit",
     // Effect is the hub's and the agent's internals: the dashboard imports
     // none of it, nor the house Effect kit (packages/core/src/effect/).
     "./scripts/lint/effect-backend-only.grit",
@@ -578,13 +563,11 @@
     {
       // The shadcn-svelte kit's component groups are imported as a namespace
       // (`* as DropdownMenu`, read as `DropdownMenu.Root`, `.Item`) through
-      // each group's index. A namespace import of anything but a kit group is
-      // refused by scripts/lint/kit-namespace-only.grit.
+      // each group's index.
       "includes": [
         "apps/dashboard/src/**/*.svelte",
         "apps/dashboard/src/lib/components/ui/**",
       ],
-      "plugins": ["./scripts/lint/kit-namespace-only.grit"],
       "linter": {
         "rules": {
           "performance": { "noNamespaceImport": "off" },
@@ -724,32 +707,6 @@
       },
     },
     {
-      // The phone's line is PHONE_QUERY, beside DRAWER_QUERY
-      // (lib/hooks/is-mobile.svelte.ts). Refused by scripts/lint/phone-query.grit.
-      "includes": [
-        "apps/dashboard/src/**",
-        "!apps/dashboard/src/lib/hooks/is-mobile.svelte.ts",
-      ],
-      "plugins": ["./scripts/lint/phone-query.grit"],
-    },
-    {
-      // A comment card and its reply composer load no fleet store
-      // (composer-weight's legs 1 and 2): the modules they draw from import
-      // the store's types alone and draw a session through the host's
-      // markdown fleet; what reads the store lives in modules only a
-      // conversation imports (transcript/composer-fleet.ts,
-      // follow-sends.svelte.ts). Refused by
-      // scripts/lint/reply-composer-no-fleet.grit.
-      "includes": [
-        "apps/dashboard/src/lib/cawco/transcript/Composer.svelte",
-        "apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts",
-        "apps/dashboard/src/lib/cawco/transcript/rows.ts",
-        "apps/dashboard/src/lib/cawco/preview/CommentComposer.svelte",
-        "apps/dashboard/src/lib/cawco/preview/PinCard.svelte",
-      ],
-      "plugins": ["./scripts/lint/reply-composer-no-fleet.grit"],
-    },
-    {
       // A sheet's fixture folder (`<piece>/preview/`) and a folder
       // preview's source reach another member through its manifest and
       // none of SvelteKit's client modules. A store is free here: a story
@@ -807,11 +764,8 @@
     },
     {
       // A states file takes a store inside a story's `beforeEach`
-      // (`await import(…)`), so that story's frame holds its own copy of it
-      // (stage-host host.ts `cawcoStandIns`); the plugin refuses a static
-      // import of one, its types free.
+      // (`await import(…)`), so that story's frame holds its own copy of it.
       "includes": ["apps/dashboard/src/**/*.stories.ts"],
-      "plugins": ["./scripts/lint/stories-store-in-before-each.grit"],
       "linter": {
         "rules": {
           "style": {

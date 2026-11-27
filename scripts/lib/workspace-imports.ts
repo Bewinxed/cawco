@@ -46,7 +46,7 @@ const readJson = <T>(path: string): T =>
   JSON.parse(readFileSync(join(ROOT, path), "utf8")) as T;
 
 /** Each workspace package by name, the root's (`cawco`, folder `.`) among them. */
-export const packages: ReadonlyMap<string, Manifest> = (() => {
+const packages: ReadonlyMap<string, Manifest> = (() => {
   const root = readJson<Omit<Manifest, "dir"> & { workspaces: string[] }>(
     "package.json"
   );
