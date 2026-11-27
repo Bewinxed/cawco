@@ -316,24 +316,30 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return misplaced;
     }
     if (prepared.prompt) {
-      const { harness, model } = summarizerAsked(
+      const { harness, model, account } = summarizerAsked(
         request,
         prepared.source.instanceId
       );
       const refusal = contextFitRefusal(
-        await ctx.contextWindowOf(prepared.source.machineId, harness, model),
+        await ctx.contextWindowOf(
+          prepared.source.machineId,
+          harness,
+          model,
+          account
+        ),
         prepared.summariseInputTokens + SUMMARISER_OUTPUT_RESERVE_TOKENS
       );
       if (refusal) {
         return `Summarise with ${model ?? "the default model"}: ${refusal}`;
       }
     }
-    const { harness, model, machineId } = request.target;
+    const { harness, model, machineId, account } = request.target;
     const refusal = contextFitRefusal(
       await ctx.contextWindowOf(
         machineId ?? prepared.source.machineId,
         harness,
-        model
+        model,
+        account
       ),
       prepared.openingTokens + TARGET_HEADROOM_TOKENS
     );

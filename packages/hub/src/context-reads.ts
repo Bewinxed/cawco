@@ -6,6 +6,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { harnessName } from "@cawco/core/harness/kinds";
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { catalogHarnessOf } from "@cawco/core/model-names";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { GitChanges } from "@cawco/core/session/controls";
 import {
@@ -167,14 +168,56 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     `${machines.map((one) => ctx.machineName(one)).join(", ")} did not answer whether ${machines.length === 1 ? "it holds" : "they hold"} session ${id}, so where it is is not known yet`;
 
   /**
+   * `model`'s window in the catalogs the hub keeps of `account`, or of every
+   * account of `harness` signed in on `machineId` when none is named: the one
+   * window they state, undefined when none states one or two differ.
+   */
+  const accountWindowOf = (
+    machineId: string,
+    harness: HarnessKind,
+    model: string,
+    account: string | null | undefined
+  ): number | undefined => {
+    const accounts = account
+      ? new Set([account])
+      : new Set(
+          ctx.db.accounts
+            .signins()
+            .filter(
+              (signin) =>
+                signin.machineId === machineId &&
+                signin.state === "signed-in" &&
+                catalogHarnessOf(
+                  ctx.db.accounts.get(signin.accountId)?.provider ?? ""
+                ) === harness
+            )
+            .map((signin) => signin.accountId)
+        );
+    const windows = new Set(
+      ctx.db.accounts
+        .catalogs()
+        .filter((catalog) => accounts.has(catalog.accountId))
+        .flatMap((catalog) => catalog.models)
+        .filter((row) => row.value === model)
+        .flatMap((row) => (row.contextWindow ? [row.contextWindow] : []))
+    );
+    const [only] = windows;
+    return windows.size === 1 ? only : undefined;
+  };
+
+  /**
    * A model's context window as the fleet knows it: claude's from the turns
-   * the hub has seen (its catalog has none), every other harness's from the
+   * the hub has seen (its catalog has none), a harness whose models are each
+   * account's (descriptor `modelCatalog: "account"`) from the catalog the
+   * hub keeps of `account`, or of every account of its signed in on
+   * `machineId` when none is named, and every other harness's from the
    * machine's own model catalog. Undefined is unknown — never a guess.
    */
   const contextWindowOf = async (
     machineId: string,
     harness: HarnessKind,
-    model: string | undefined
+    model: string | undefined,
+    account?: string | null
   ): Promise<number | undefined> => {
     if (traitsOf(harness).contextWindow === "hub") {
       // No model named: Claude Code's own default, which the machine's
@@ -190,6 +233,9 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     }
     if (!model) {
       return undefined;
+    }
+    if (traitsOf(harness).modelCatalog === "account") {
+      return accountWindowOf(machineId, harness, model, account);
     }
     const asked = await ctx.machineCalls.readAgent(
       machineId,

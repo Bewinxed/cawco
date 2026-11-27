@@ -458,7 +458,8 @@ export interface ClosureContext {
   contextWindowOf: (
     machineId: string,
     harness: HarnessKind,
-    model: string | undefined
+    model: string | undefined,
+    account?: string | null
   ) => Promise<number | undefined>;
   continuationJob: SessionCallsDeps["continuationJob"];
   continuationNow: (instanceId: string) => string;

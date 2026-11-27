@@ -9451,7 +9451,8 @@ export const createServer = (
       const window = await contextWindowOf(
         row.machineId,
         row.harness,
-        row.model ?? undefined
+        row.model ?? undefined,
+        row.accountId
       ).catch(() => undefined);
       const cap = window
         ? Math.floor(window * STANDING_CONTEXT_SHARE)
@@ -10543,7 +10544,8 @@ export const createServer = (
       const window = await contextWindowOf(
         row.machineId,
         row.harness,
-        row.model ?? undefined
+        row.model ?? undefined,
+        row.accountId
       ).then(
         (found) => ({ window: found ?? null }),
         (error: unknown) => ({

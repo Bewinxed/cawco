@@ -291,7 +291,9 @@ export const AGY = {
   modelCatalog: "account",
   resolvesModelNames: false,
   unlistedModels: "none",
-  // agy's ACP names no model's window.
+  // Each model's window as agy states it on the account (ACP
+  // `usage_update.size`), read with the account's models and kept in its
+  // catalog (agent harnesses/agy-models.ts `windowsOf`).
   contextWindow: "catalog",
   pictureTypes: AGY_PICTURES,
 
