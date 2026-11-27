@@ -7,7 +7,6 @@
  */
 
 import type { LayoutRead } from "@cawco/core/layout-guides";
-import type { LimitReading } from "@cawco/core/limit-readings";
 import type { ViewScreen } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
@@ -402,8 +401,6 @@ declare global {
     __cawcoErrors?: { at: number; error: unknown }[];
     /** The count of the page's preloads (host.ts `serveCanvas`). */
     __cawcoGraph?: CanvasGraph;
-    /** The page's readings of the bounds waiting on data, taken (runtime.ts `bootPage`). */
-    __cawcoReadings?: () => LimitReading[];
     __cawcoSheetChosen?: string | null;
     /** Each section's sheet as last told the pane, by its file: the overlay tells a pane that says hello late every one. */
     __cawcoSheetsOnPage?: Record<string, SheetOnPage>;

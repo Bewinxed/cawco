@@ -11,7 +11,6 @@ import {
   waitingOnYou,
 } from "@cawco/core/activity";
 import type { HubEnvelope } from "@cawco/core/envelopes";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { PERMISSION_DENIED } from "@cawco/core/words/permission-lines";
 import { sessionActivity } from "../activity";
@@ -85,13 +84,11 @@ const hearAsk = (): number => {
 /** The asks heard settled, by request id, with when; the oldest go past a few hundred. */
 const askSettledHeard = new Map<string, number>();
 
-// @limit recording: dashboard.settled-asks-heard until 2026-12-03
 const SETTLED_HEARD_KEPT = 512;
 
 export const hearSettled = (requestId: string): void => {
   askSettledHeard.delete(requestId);
   askSettledHeard.set(requestId, hearAsk());
-  recordLimitReading("dashboard.settled-asks-heard", askSettledHeard.size);
   if (askSettledHeard.size > SETTLED_HEARD_KEPT) {
     const [oldest] = askSettledHeard.keys();
     askSettledHeard.delete(oldest);

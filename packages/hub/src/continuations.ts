@@ -20,7 +20,6 @@ import {
   COMPACTION_ORIGIN,
   CONTINUATION_ORIGIN,
 } from "@cawco/core/harness/kinds";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { doing } from "@cawco/core/loop-watch";
 import type { ContinuationJob, NamedSpawn } from "@cawco/core/protocol";
 import type { WorkInFlight } from "@cawco/core/session/controls";
@@ -64,7 +63,6 @@ import { unwatchedMode } from "./unwatched-mode";
  * five minutes lets a dashboard that was reconnecting when it settled still
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
-// @limit recording: hub.continuation-settled-read-age-ms until 2026-12-10
 const CONTINUATION_KEPT_MS = 5 * 60_000;
 
 /**
@@ -1613,13 +1611,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     ctx.lifetime.run(
       Effect.gen(function* () {
         let row = ctx.db.continuationRow(id);
-        if (row && SETTLED.has(row.stage)) {
-          // A reader that came after the job settled: how long after.
-          recordLimitReading(
-            "hub.continuation-settled-read-age-ms",
-            Date.now() - row.updatedAt.getTime()
-          );
-        }
         while (row && !SETTLED.has(row.stage)) {
           let settles = continuationWaiters.get(id);
           if (!settles) {

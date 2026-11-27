@@ -315,16 +315,6 @@ export interface SessiondLimit {
 }
 
 /**
- * sessiond → one attached agent, every few seconds while it took any: the
- * keeper's readings of the bounds still waiting on data (limit-readings.ts),
- * which the agent carries to the hub on its beat with its own.
- */
-export interface SessiondReadings {
-  readings: import("./limit-readings").LimitReading[];
-  type: "limit.readings";
-}
-
-/**
  * sessiond → agent, the lifecycle of a mutating command. Unknown message
  * types are answered, never fatal (design §5): sessiond replies `failed`
  * with `reason: 'unsupported: <type>'` and keeps the connection; the agent
@@ -377,7 +367,6 @@ export type SessiondServerMessage =
   | SessiondReset
   | SessiondExit
   | SessiondLimit
-  | SessiondReadings
   | SessiondAck
   | SessiondDraining;
 

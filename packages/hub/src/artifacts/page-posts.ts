@@ -13,7 +13,6 @@ import {
   SEND_WRITES_MAX,
   type SendBody,
 } from "@cawco/core/comments/model";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Predicate } from "effect";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -178,7 +177,6 @@ export const artifactSend =
     raw: string,
     route: string
   ) => {
-    recordLimitReading("hub.send-body-chars", raw.length);
     if (raw.length > SEND_BODY_MAX) {
       return problem(413, {
         code: "send-carries-most-pictures",

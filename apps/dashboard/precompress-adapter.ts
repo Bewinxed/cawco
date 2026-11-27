@@ -37,15 +37,8 @@ import {
 import { homedir } from "node:os";
 import { extname, join, relative } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
-import {
-  keepLimitReadings,
-  LimitReadingSchema,
-  recordLimitReading,
-  takeLimitReadings,
-} from "@cawco/core/limit-readings";
 import { DAY_MS } from "@cawco/core/time";
 import type { Adapter, Builder } from "@sveltejs/kit";
-import { z } from "zod";
 
 /**
  * Formats that carry their own compression: a second pass saves next to
@@ -71,7 +64,6 @@ const COMPRESSED = new Set([
   ".zst",
 ]);
 
-// @limit recording: build.precompress-reread-age-ms until 2026-12-10
 const MAX_AGE_DAYS = 30;
 
 const cache = join(
@@ -85,37 +77,6 @@ const brotli = (bytes: Buffer): Buffer =>
     params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
   });
 const gzip = (bytes: Buffer): Buffer => gzipSync(bytes, { level: 9 });
-
-/**
- * Where the build's readings of the bounds waiting on data wait for
- * publish-build.ts: `vite build` runs under Node, which loads nothing that
- * signs a request as this machine, and the publish that follows it under
- * Bun hands them to the hub (agent limit-readings-hand-on.ts).
- */
-const READINGS_FILE = join(cache, "limit-readings.json");
-
-/** This build's readings, added to any an earlier build left unhanded. */
-const keepBuildReadings = async (): Promise<void> => {
-  const readings = [...(await heldBuildReadings()), ...takeLimitReadings()];
-  if (readings.length > 0) {
-    await writeFile(READINGS_FILE, JSON.stringify(readings));
-  }
-};
-
-/** The readings builds left for publish-build.ts, unread ones dropped. */
-const heldBuildReadings = async () => {
-  const text = await readFile(READINGS_FILE, "utf8").catch(() => "[]");
-  const parsed = z
-    .array(LimitReadingSchema)
-    .safeParse(JSON.parse(text.trim() || "[]"));
-  return parsed.success ? parsed.data : [];
-};
-
-/** The builds' readings, held in this process for its hand-off and gone from the file. */
-export const takeBuildReadings = async (): Promise<void> => {
-  keepLimitReadings(await heldBuildReadings());
-  await rm(READINGS_FILE, { force: true });
-};
 
 /** Deletes kept files not read (modified: a read touches it) for {@link MAX_AGE_DAYS} days. */
 const prune = async (): Promise<void> => {
@@ -140,14 +101,6 @@ const compressed = async (
   const kept = join(cache, `${hash}.${kind}`);
   const found = await readFile(kept).catch(() => undefined);
   if (found) {
-    const read = await stat(kept).catch(() => undefined);
-    if (read) {
-      // A kept copy used again: how long since it was last read.
-      recordLimitReading(
-        "build.precompress-reread-age-ms",
-        Date.now() - read.mtimeMs
-      );
-    }
     const now = new Date();
     await utimes(kept, now, now).catch(() => undefined);
     return found;
@@ -197,7 +150,6 @@ const compressAll = async (directory: string): Promise<string[]> => {
       );
     })
   );
-  await keepBuildReadings();
   return files;
 };
 

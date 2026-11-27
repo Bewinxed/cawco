@@ -788,7 +788,6 @@ export interface StreamHeartbeat {
 export const HEARTBEAT_INTERVAL_MS = 20_000;
 
 /** How long after asking a client waits for anything at all before calling the socket dead. */
-// @limit recording: dashboard.heartbeat-heard-ms until 2026-12-10
 export const HEARTBEAT_DEADLINE_MS = 10_000;
 
 /**

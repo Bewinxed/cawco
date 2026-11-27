@@ -46,7 +46,6 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
-import { handOnAsMachine } from "../packages/agent/src/limit-readings-hand-on";
 import { shortSha } from "../packages/core/src/short-id";
 import {
   listedPid,
@@ -1056,6 +1055,4 @@ try {
   }
 } finally {
   await release();
-  // What the release read of the bounds waiting on data goes to this host's hub.
-  await handOnAsMachine();
 }

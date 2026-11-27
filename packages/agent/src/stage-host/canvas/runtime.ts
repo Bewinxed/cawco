@@ -118,11 +118,6 @@ import {
   windowDown,
 } from "./width";
 import "./window-events";
-import {
-  recordLimitReading,
-  takeLimitReadings,
-} from "@cawco/core/limit-readings";
-import { carryPageReadings } from "@cawco/core/limit-readings-page";
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
@@ -287,11 +282,6 @@ export function bootPage(
   options: BootOptions,
   readerOf: ((page: Page) => Reader) | null
 ): void {
-  // What the page reads of the bounds waiting on data: posted to its preview
-  // origin, and taken by the daemon's renderer from a page it drives
-  // (stage-render.ts `closeContext`).
-  window.__cawcoReadings = takeLimitReadings;
-  carryPageReadings();
   holdFocus();
   holdPageScroll();
   holdWhileAway();
@@ -323,11 +313,6 @@ export function bootPage(
 
   const heard = (error: unknown) => {
     pageErrors.push(pageError(error, root, base));
-    recordLimitReading(
-      "agent.stage-page-errors",
-      pageErrors.length + errorsDropped
-    );
-    // @limit recording: agent.stage-page-errors until 2026-12-03
     if (pageErrors.length > 20) {
       pageErrors.shift();
       errorsDropped += 1;

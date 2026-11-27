@@ -18,7 +18,6 @@ export const INSTALL_CODE_HEADER = "x-cawco-install-code";
 export const INSTALL_CODE_ENV = "CAWCO_INSTALL_CODE";
 
 /** How long the agent waits for the hub to list it (cli await-joined.ts `JOIN_TIMEOUT_MS`). */
-// @limit recording: install.list-wait-ms until 2026-12-26
 export const INSTALL_LIST_LIMIT_MS = 90_000;
 
 /**
@@ -29,7 +28,6 @@ export const INSTALL_LIST_LIMIT_MS = 90_000;
  * install on a fresh machine can run longer, and its item then lands on the
  * machine's row on its own.
  */
-// @limit recording: install.sync-wait-ms until 2026-12-26
 export const INSTALL_SYNC_LIMIT_MS = 60_000;
 
 /** How long the hub waits after a clean exit for the machine to come online (hub join.ts). */

@@ -95,7 +95,6 @@ import {
 import { detach } from "@cawco/core/detach";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   INSPECT_CONFIG,
@@ -129,7 +128,6 @@ import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import type { ClaudeHookHandler } from "@cawco/core/hooks";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import {
   accountConfigDir,
@@ -1419,7 +1417,6 @@ class Turn {
   }
 }
 
-// @limit recording: agent.claude-settle-ms until 2026-12-10
 const SETTLE_TIMEOUT_MS = 5000;
 
 /** How soon a launch reads its CawCo slot again while it is still connecting. */
@@ -1448,7 +1445,6 @@ const CREDENTIAL_REFUSED_WORDS =
   "CawCo stopped this session: the hub no longer knows the credential its Claude Code was started with, so its CawCo tools (reports, handoffs, finishing its work) could not reach the hub. Its conversation is kept. Send it a message to start it again on a fresh credential.";
 
 /** How long the CLI waits on the `Stop` hook this adapter registers, in seconds. */
-// @limit recording: agent.stop-hook-ms until 2026-12-03
 const STOP_HOOK_TIMEOUT_S = 5;
 
 /**
@@ -1456,14 +1452,12 @@ const STOP_HOOK_TIMEOUT_S = 5;
  * adapter registers ({@link ClaudeSession}'s `#openItemsAfterCompaction`),
  * in seconds: one read of the hub's records.
  */
-// @limit recording: agent.open-items-hook-ms until 2026-12-03
 const OPEN_ITEMS_HOOK_TIMEOUT_S = 15;
 
 /** How long the hook waits on the hub's read: the CLI's limit less 3 s, so its answer is in before the CLI stops waiting ({@link OPEN_ITEMS_HOOK_TIMEOUT_S}). */
 const OPEN_ITEMS_READ_MS = (OPEN_ITEMS_HOOK_TIMEOUT_S - 3) * 1000;
 
 /** How long the CLI waits on the `PreToolUse` hook on CronCreate ({@link refuseDurableSchedule}), in seconds: it answers from the call alone. */
-// @limit recording: agent.schedule-hook-ms until 2026-12-03
 const SCHEDULE_HOOK_TIMEOUT_S = 5;
 
 /** What a session that hands its schedules to its parent hears when it asks for a durable CronCreate. */
@@ -1506,12 +1500,7 @@ const scheduleHooks = (toParent: boolean) =>
           {
             matcher: "CronCreate",
             timeout: SCHEDULE_HOOK_TIMEOUT_S,
-            hooks: [
-              (input: HookInput) =>
-                timed(refuseDurableSchedule(input), (ms) =>
-                  recordLimitReading("agent.schedule-hook-ms", ms)
-                ),
-            ],
+            hooks: [refuseDurableSchedule],
           },
         ],
       }
@@ -3019,9 +3008,7 @@ class ClaudeSession implements HarnessSession {
               hooks: [
                 // biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
                 async (stopping: unknown) => {
-                  const began = Date.now();
                   this.#wakeupsKnown(scheduledWakeups(stopping));
-                  recordLimitReading("agent.stop-hook-ms", Date.now() - began);
                   return {};
                 },
               ],
@@ -3029,10 +3016,7 @@ class ClaudeSession implements HarnessSession {
           ],
           ...compactionHooks(
             clean,
-            async () =>
-              await timed(this.#openItemsAfterCompaction(), (ms) =>
-                recordLimitReading("agent.open-items-hook-ms", ms)
-              )
+            async () => await this.#openItemsAfterCompaction()
           ),
           ...scheduleHooks(schedulesToParent),
         },
@@ -5168,22 +5152,21 @@ class ClaudeSession implements HarnessSession {
     await this.#handle.interrupt().catch(() => {});
     // The promise edge of the wait for the interrupted turn's end.
     await runPromise(
-      timedEffect(this.#turn.settle(SETTLE_TIMEOUT_MS), (ms) =>
-        recordLimitReading("agent.claude-settle-ms", ms)
-      ).pipe(
-        Effect.catchTag("Unanswered", (unanswered) =>
-          Effect.logWarning(
-            `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
+      this.#turn
+        .settle(SETTLE_TIMEOUT_MS)
+        .pipe(
+          Effect.catchTag("Unanswered", (unanswered) =>
+            Effect.logWarning(
+              `[claude] ${this.instanceId}: its turn still ran ${unanswered.after} ms after the interrupt; the stop closes it`
+            )
           )
         )
-      )
     );
     // The interrupted turn's end read the effort: it lands while the query
     // is open. A CLI that answers nothing within the turn's own wait gets
     // the close, and the read says it failed.
-    const read = await timed(
-      readWithin(SETTLE_TIMEOUT_MS, () => Promise.all(this.#effortReads)),
-      (ms) => recordLimitReading("agent.claude-settle-ms", ms)
+    const read = await readWithin(SETTLE_TIMEOUT_MS, () =>
+      Promise.all(this.#effortReads)
     );
     switch (read.kind) {
       case "answered":

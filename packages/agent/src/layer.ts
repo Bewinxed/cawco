@@ -78,7 +78,6 @@ import { cloneDenies } from "@cawco/core/clone-denies";
 import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolder } from "@cawco/core/folders";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { copiedFolderSync } from "@cawco/core/object-pool";
 import { claudeHome } from "@cawco/core/paths/claude";
 import { piAgentDir } from "@cawco/core/paths/harnesses";
@@ -1976,7 +1975,6 @@ const differsFromFolder = async (
 };
 
 /** The most of one version of a file a conflict shows as text. */
-// @limit recording: agent.conflict-version-bytes until 2026-12-10
 const VERSION_TEXT_LIMIT = 64 * 1024;
 
 /** One version of `path` as a conflict shows it: gone, a link, a folder, binary or too large, or its text. */
@@ -1991,7 +1989,6 @@ const versionOf = async (path: string | undefined): Promise<ChangeVersion> => {
   if (info.isDirectory()) {
     return { kind: "folder" };
   }
-  recordLimitReading("agent.conflict-version-bytes", info.size);
   if (info.size > VERSION_TEXT_LIMIT) {
     return { kind: "large", bytes: info.size };
   }

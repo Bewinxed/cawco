@@ -9,7 +9,7 @@ import type { HubContext } from "../hub-context";
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
-import { WAIT_ITEM_LIMIT, WAIT_ITEM_MAX_MINUTES } from "../work-item-state";
+import { WAIT_ITEM_LIMIT } from "../work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "../work-items";
 import { workItemOut } from "../work-out";
 import { harnessSchema } from "./harness-schema";
@@ -169,7 +169,6 @@ export const workItemRoutes = (
               instanceId: t.String({ minLength: 1 }),
               minutes: t.Integer({
                 minimum: 1,
-                maximum: WAIT_ITEM_MAX_MINUTES,
               }),
               reason: t.String({ minLength: 1 }),
             },

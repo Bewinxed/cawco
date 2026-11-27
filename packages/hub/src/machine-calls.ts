@@ -6,7 +6,6 @@ import { boundedRead } from "@cawco/core/effect/bounded";
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import { READ_SKILL_FOLDER } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { ControlPayload, InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
@@ -27,7 +26,7 @@ import {
   MACHINE_DISCONNECTED,
   parsedAs,
 } from "./machine-answers";
-import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { MachineWords } from "./machine-words";
 import { Registry, type RegistryShape } from "./registry";
 import { sessionControl } from "./session-word";
@@ -40,7 +39,6 @@ import { caughtUp, sendToMachine as writeToMachine } from "./wire-socket";
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
 const ABANDON_MS = 5000;
 /** Deduplicate recently orphaned replies without retaining every request forever. */
-// @limit recording: hub.unrouted-replies-held until 2026-12-03
 const UNROUTED_REPLY_LIMIT = 4096;
 
 /** `answer` read with `timeoutMs` to come: the kit's bounded read, as {@link Bounded}. */
@@ -203,7 +201,6 @@ const make = ({
     }
   ): void => {
     lapsed.set(requestId, call);
-    recordLimitReading("hub.unrouted-replies-held", lapsed.size);
     if (lapsed.size > UNROUTED_REPLY_LIMIT) {
       const oldest = lapsed.keys().next().value;
       if (oldest !== undefined) {
@@ -243,7 +240,6 @@ const make = ({
       return;
     }
     unroutedReplies.add(key);
-    recordLimitReading("hub.unrouted-replies-held", unroutedReplies.size);
     if (unroutedReplies.size > UNROUTED_REPLY_LIMIT) {
       const oldest = unroutedReplies.values().next().value;
       if (oldest !== undefined) {
@@ -480,7 +476,7 @@ const make = ({
   /**
    * A skill folder's files, read off the machine `host` names through its
    * agent (agent fleet.ts `readSkillFolder`, which keeps the read inside the
-   * folder and under core's `SKILL_FOLDER_LIMIT_BYTES`). Throws the
+   * folder). Throws the
    * machine's own sentence when it will not.
    */
   const readSkillFolder: SkillFolderReader = async (host, path) => {
@@ -622,13 +618,6 @@ const make = ({
     const reply = yield* (letGo ? Effect.raceFirst(read, letGo) : read).pipe(
       Effect.tapError(() => Effect.sync(forget))
     );
-    // How long a machine took to answer a read held to one of the shared
-    // read deadlines (machine-read-timeouts.ts).
-    if (timeoutMs === READ_TIMEOUT_MS) {
-      recordLimitReading("hub.machine-read-ms", Date.now() - sentAt);
-    } else if (timeoutMs === BUSY_TIMEOUT_MS) {
-      recordLimitReading("hub.machine-busy-read-ms", Date.now() - sentAt);
-    }
     if (reply.kind === "answered") {
       return reply;
     }
@@ -815,7 +804,6 @@ const make = ({
    * it registers (`RegisterAckPayload.revokedCredentials`).
    */
   /** How long a machine gets to drop credentials from its store: one small file written. */
-  // @limit recording: hub.forget-credentials-ms until 2026-12-26
   const FORGET_CREDENTIALS_TIMEOUT_MS = 30_000;
 
   /**
@@ -844,7 +832,6 @@ const make = ({
             return sent;
           }
         );
-        recordLimitReading("hub.spawn-start-ms", Date.now() - sentAt);
         while (
           reply.kind === "unanswered" &&
           db

@@ -63,7 +63,6 @@ import {
   metaWriter,
 } from "@cawco/core/doc-meta";
 import { inkProblem } from "@cawco/core/ink";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import {
   AbstractType,
@@ -596,14 +595,11 @@ const filesProblem = (change: Change): string | null => {
     return null;
   }
   const before = change.before.getMap("files");
-  const large = written(change, "files").some(([key, file]) => {
-    if (same(file, before.get(key))) {
-      return false;
-    }
-    const bytes = JSON.stringify(file).length;
-    recordLimitReading("hub.canvas-file-bytes", bytes);
-    return bytes > CANVAS_LIMITS.fileBytes;
-  });
+  const large = written(change, "files").some(
+    ([key, file]) =>
+      !same(file, before.get(key)) &&
+      JSON.stringify(file).length > CANVAS_LIMITS.fileBytes
+  );
   return large
     ? `A canvas's file is at most ${CANVAS_LIMITS.fileBytes / 1024 / 1024} MB.`
     : null;

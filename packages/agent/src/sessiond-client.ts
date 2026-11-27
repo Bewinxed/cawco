@@ -35,12 +35,7 @@ import { type Bounded, Gone } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { boundedRead, Gone as EndedFirst } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { answers } from "@cawco/core/keepers";
-import {
-  keepLimitReadings,
-  recordLimitReading,
-} from "@cawco/core/limit-readings";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 // The protocol lives in its own module on purpose: `sessiond.ts` reaches for
@@ -117,7 +112,6 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
  * ({@link keeperEnded}), and a reading of what every keeper holds gives each
  * {@link KEEPER_WELCOME_MS}.
  */
-// @limit recording: agent.sessiond-dial-ms until 2026-12-10
 const DIAL_TIMEOUT_MS = 2000;
 
 /**
@@ -155,7 +149,6 @@ const keeperEnded = (what: string): Gone =>
  * second on this fleet; 10 s is generous enough that a loaded machine still
  * wins, short enough that a broken install fails inside one spawn.
  */
-// @limit recording: agent.sessiond-adhoc-start-ms until 2026-12-10
 const ADHOC_START_TIMEOUT_MS = 10_000;
 
 /**
@@ -353,7 +346,6 @@ export const ensureSessiond = async (
 
   // Asked at once and again 50 ms after each answer, until it is bound or
   // ADHOC_START_TIMEOUT_MS has passed.
-  const began = Date.now();
   const bound = await runPromise(
     lookUntil(
       {
@@ -376,7 +368,6 @@ export const ensureSessiond = async (
     )
   );
   if (bound.kind === "found") {
-    recordLimitReading("agent.sessiond-adhoc-start-ms", Date.now() - began);
     return;
   }
   throw new Error(
@@ -455,7 +446,6 @@ export const keeperLimits = new EventEmitter<{ limit: [SessiondLimit] }>();
 
 /** The reports already passed on, by group, limit and count. Bounded: a report is said within seconds of its first hearing. */
 const heardLimits = new Set<string>();
-// @limit recording: agent.heard-limits-held until 2026-12-03
 const HEARD_LIMITS_KEPT = 512;
 
 const hearLimit = (message: SessiondLimit): void => {
@@ -467,7 +457,6 @@ const hearLimit = (message: SessiondLimit): void => {
     heardLimits.clear();
   }
   heardLimits.add(key);
-  recordLimitReading("agent.heard-limits-held", heardLimits.size);
   keeperLimits.emit("limit", message);
 };
 
@@ -617,22 +606,15 @@ export class SessiondClient {
     // The promise edge of a dial within its deadline: the keeper's end is
     // "dead", a refusal rejects.
     return runPromise(
-      timedEffect(
-        boundedRead(
-          timeoutMs,
-          SessiondClient.dial(endpoint).pipe(
-            Effect.mapError((error) =>
-              error instanceof Gone
-                ? new EndedFirst({ what: error.message })
-                : error
-            )
+      boundedRead(
+        timeoutMs,
+        SessiondClient.dial(endpoint).pipe(
+          Effect.mapError((error) =>
+            error instanceof Gone
+              ? new EndedFirst({ what: error.message })
+              : error
           )
-        ),
-        (ms) => {
-          if (timeoutMs === DIAL_TIMEOUT_MS) {
-            recordLimitReading("agent.sessiond-dial-ms", ms);
-          }
-        }
+        )
       ).pipe(
         Effect.map((client): Bounded<SessiondClient> => ({
           kind: "answered",
@@ -821,10 +803,6 @@ export class SessiondClient {
         return;
       case "proc.limit":
         hearLimit(message);
-        return;
-      case "limit.readings":
-        // The keeper's, carried on this daemon's beat with its own.
-        keepLimitReadings(message.readings);
         return;
       default:
         return;

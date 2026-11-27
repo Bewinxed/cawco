@@ -6,7 +6,6 @@
  * come in, and the rest of the pane works on shapes it knows.
  */
 
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { PageSays } from "@cawco/core/page-wire";
 import {
   isReferenceHref,
@@ -39,20 +38,12 @@ import {
 import { quote } from "@cawco/providers/quote";
 
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
-// @limit recording: dashboard.preview-png-chars until 2026-12-10
 const PNG_MAX = 4_000_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const PIN_ID = /^[0-9a-f-]{36}$/u;
 
-const text = (value: unknown, max: number): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  if (max === SHEET_BOUNDS.text) {
-    sheetSized("text", value.length);
-  }
-  return value.slice(0, max);
-};
+const text = (value: unknown, max: number): string | null =>
+  typeof value === "string" ? value.slice(0, max) : null;
 
 const finite = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -80,9 +71,6 @@ export function previewPngTooLong(value: unknown): boolean {
 
 /** A screenshot as the overlay sends it, or nothing. */
 function previewPng(value: unknown): string | null {
-  if (typeof value === "string") {
-    recordLimitReading("dashboard.preview-png-chars", value.length);
-  }
   return typeof value === "string" &&
     value.length > 0 &&
     value.length <= PNG_MAX &&
@@ -302,23 +290,14 @@ const KINDS: readonly PropKind[] = [
   "other",
 ];
 export const SHEET_BOUNDS = {
-  // @limit recording: dashboard.sheet-stories until 2026-12-10
   stories: 100,
-  // @limit recording: dashboard.sheet-components until 2026-12-10
   components: 20,
-  // @limit recording: dashboard.sheet-props until 2026-12-10
   props: 200,
-  // @limit recording: dashboard.sheet-options until 2026-12-10
   options: 100,
-  // @limit recording: dashboard.sheet-args until 2026-12-10
   args: 100,
-  // @limit recording: dashboard.sheet-tokens until 2026-12-10
   tokens: 2000,
-  // @limit recording: dashboard.sheet-tags until 2026-12-10
   tags: 20,
-  // @limit recording: dashboard.sheet-name-chars until 2026-12-10
   name: 200,
-  // @limit recording: dashboard.sheet-text-chars until 2026-12-10
   text: 1000,
 } as const;
 
@@ -334,41 +313,6 @@ let cuts: Map<string, SheetCut> = new Map();
 /** How many names of the sheet being read were over {@link SHEET_BOUNDS.name} (cut, or the entry dropped). */
 let longNames = 0;
 
-/** How long a sheet's list or text was before its {@link SHEET_BOUNDS} bound, recorded under that bound. */
-function sheetSized(what: string, size: number): void {
-  switch (what) {
-    case "stories":
-      recordLimitReading("dashboard.sheet-stories", size);
-      return;
-    case "components":
-      recordLimitReading("dashboard.sheet-components", size);
-      return;
-    case "props":
-      recordLimitReading("dashboard.sheet-props", size);
-      return;
-    case "options":
-      recordLimitReading("dashboard.sheet-options", size);
-      return;
-    case "args":
-      recordLimitReading("dashboard.sheet-args", size);
-      return;
-    case "tokens":
-      recordLimitReading("dashboard.sheet-tokens", size);
-      return;
-    case "tags":
-      recordLimitReading("dashboard.sheet-tags", size);
-      return;
-    case "name":
-      recordLimitReading("dashboard.sheet-name-chars", size);
-      return;
-    case "text":
-      recordLimitReading("dashboard.sheet-text-chars", size);
-      return;
-    default:
-      return;
-  }
-}
-
 function cutAt(what: string, kept: number, of: number) {
   const so_far = cuts.get(what);
   cuts.set(what, {
@@ -382,7 +326,6 @@ const list = (value: unknown, max: number, what: string): unknown[] => {
   if (!Array.isArray(value)) {
     return [];
   }
-  sheetSized(what, value.length);
   if (value.length > max) {
     cutAt(what, max, value.length);
   }
@@ -391,9 +334,6 @@ const list = (value: unknown, max: number, what: string): unknown[] => {
 
 /** A name, bounded: what is longer than {@link SHEET_BOUNDS.name} is cut (or its entry dropped) and counted. */
 const nameText = (value: unknown): string | null => {
-  if (typeof value === "string") {
-    sheetSized("name", value.length);
-  }
   if (typeof value === "string" && value.length > SHEET_BOUNDS.name) {
     longNames += 1;
   }
@@ -407,7 +347,6 @@ const argsOf = (value: unknown): Record<string, unknown> => {
     return {};
   }
   const entries = Object.entries(raw);
-  sheetSized("args", entries.length);
   if (entries.length > SHEET_BOUNDS.args) {
     cutAt("args", SHEET_BOUNDS.args, entries.length);
   }

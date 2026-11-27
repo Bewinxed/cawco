@@ -1,8 +1,10 @@
 /** What a machine's pause says: its end's clock and what it stopped. */
+import { DAY_MS } from "../time";
 
 /**
  * A machine pause's end as the fleet says it (hub machine-pause.ts): the
- * local clock, "00:57", and the weekday too when it is not today ("Fri 08:00").
+ * local clock ("00:57") when it is today, the weekday when within 6 days
+ * ("Fri 08:00"), or the calendar date beyond that ("29 Nov 08:00").
  */
 export function pauseClock(at: number, now = Date.now()): string {
   const end = new Date(at);
@@ -11,9 +13,15 @@ export function pauseClock(at: number, now = Date.now()): string {
     minute: "2-digit",
     hour12: false,
   });
-  return end.toDateString() === new Date(now).toDateString()
-    ? time
-    : `${end.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`;
+  if (end.toDateString() === new Date(now).toDateString()) {
+    return time;
+  }
+  const days = Math.abs(at - now) / DAY_MS;
+  const dateLabel =
+    days < 6
+      ? end.toLocaleDateString("en-GB", { weekday: "short" })
+      : end.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return `${dateLabel} ${time}`;
 }
 
 export const machinePauseWords = {

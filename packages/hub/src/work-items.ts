@@ -89,6 +89,7 @@ import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
 import type {
   InputNamed,
@@ -181,7 +182,6 @@ import {
   LIVE,
   type Parent,
   WAIT_ITEM_LIMIT,
-  WAIT_ITEM_MAX_MINUTES,
 } from "./work-item-state";
 import {
   type BudgetColumns,
@@ -1220,12 +1220,7 @@ const recutWaitsForAgent = (
   }
   return message === AGENT_RESTARTED_MID_REQUEST ? "restarted" : undefined;
 };
-const waitClock = (at: Date): string =>
-  at.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+const waitClock = (at: Date): string => pauseClock(at.getTime());
 
 /** A `from` request with what it cannot go with: a new workspace, cut where its source's repository is. */
 const fromProblem = (request: WorkItemRequest): string | undefined => {
@@ -5451,7 +5446,6 @@ export const createWorkItems = ({
         typeof minutes !== "number" ||
         !Number.isInteger(minutes) ||
         minutes < 1 ||
-        minutes > WAIT_ITEM_MAX_MINUTES ||
         typeof reason !== "string" ||
         !reason.trim()
       ) {

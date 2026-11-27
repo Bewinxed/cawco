@@ -53,7 +53,6 @@ const PDFJS_ASSETS = `pdfjs-${pdfjsPackage.version}/`;
 const FACES_SHEET = "/__cawco/decision/faces.css";
 
 /** The most of a text file the viewer draws, bytes. Our call: a long log reads, and the page stays a few MB. */
-// @limit recording: preview.viewed-text-bytes until 2026-12-10
 const TEXT_MOST = 2 * 1024 * 1024;
 /** How much of a file of no known type is read to tell text from bytes. */
 const SNIFF_BYTES = 8192;

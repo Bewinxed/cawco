@@ -37,10 +37,8 @@
 import { createHash } from "node:crypto";
 import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
 import type { SessionRole } from "@cawco/core/delegate-types";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { shortId } from "@cawco/core/short-id";
-import { DAY_MS } from "@cawco/core/time";
 import { cutShort } from "@cawco/core/words/helpers";
 import { namedAndMore } from "@cawco/providers/names";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -65,23 +63,11 @@ import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
 import { actionActor, sessionActor, type Tasks } from "./tasks";
 
-/** The longest the scheduler sleeps between looks. Our choice. */
+/** The longest the scheduler sleeps between looks. */
 const NAP_MS = 15_000;
 /** The soonest it looks again. */
 const MIN_GAP_MS = 250;
-/** The largest arguments a proposal carries, as JSON. Our choice. */
-// @limit recording: hub.action-args-bytes until 2026-12-10
-const ARGS_MAX = 64 * 1024;
-/** How much of the service's answer is kept. Our choice. */
-// @limit recording: hub.action-result-bytes until 2026-12-10
-const RESULT_MAX = 16 * 1024;
-/** How far ahead a run may be set. Our choice. */
-const AHEAD_MAX_MS = 366 * DAY_MS;
-/** A time this far past is a typo, not "now". Our choice. */
-const PAST_GRACE_MS = 60_000;
 const LISTED = 50;
-/** How far up a proposer's parents its routine run is looked for. */
-const ROUTINE_DEPTH = 8;
 
 /** The roles that propose: a session you started, its project's conversation among them. */
 const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker"]);
@@ -96,14 +82,6 @@ const ms = (date: Date | null): number | null => date?.getTime() ?? null;
 
 const wordsOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-/** Text cut to `max` UTF-8 bytes. */
-const capped = (text: string, max: number): string => {
-  const bytes = Buffer.from(text, "utf8");
-  return bytes.length <= max
-    ? text
-    : `${bytes.subarray(0, max).toString("utf8")}… [cut by the hub]`;
-};
 
 /** A tool result's text parts, joined: what a refusal from the service said. */
 const resultText = (content: unknown): string =>
@@ -253,7 +231,7 @@ export const createActions = ({
   // --- proposing -----------------------------------------------------------------
 
   /** When it runs, read from what the proposer wrote; a problem when it cannot be. */
-  const runAtOf = (written: string | undefined, now: number) => {
+  const runAtOf = (written: string | undefined) => {
     if (written === undefined || written.trim() === "") {
       return null;
     }
@@ -262,18 +240,6 @@ export const createActions = ({
       return problem(400, {
         code: "action-run-at-unparsed",
         detail: `run_at “${written}” is not a time; write ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00.`,
-      });
-    }
-    if (at < now - PAST_GRACE_MS) {
-      return problem(400, {
-        code: "action-run-at-passed",
-        detail: `run_at ${new Date(at).toISOString()} has passed; leave it out to run as soon as it is approved.`,
-      });
-    }
-    if (at > now + AHEAD_MAX_MS) {
-      return problem(400, {
-        code: "action-run-at-far",
-        detail: "run_at is more than a year away.",
       });
     }
     return new Date(at);
@@ -341,8 +307,10 @@ export const createActions = ({
     actor: InstanceRow
   ): { routineId: string; runId: string } | null => {
     const live = db.routines.liveRuns();
+    const seen = new Set<string>();
     let session: InstanceRow | undefined = actor;
-    for (let depth = 0; session && depth < ROUTINE_DEPTH; depth += 1) {
+    while (session && !seen.has(session.id)) {
+      seen.add(session.id);
       const { id, workItemId, parentInstanceId }: InstanceRow = session;
       const run =
         (workItemId ? db.routines.runOfItem(workItemId) : undefined) ??
@@ -390,16 +358,6 @@ export const createActions = ({
       });
     }
     const args = JSON.stringify(input.args);
-    recordLimitReading(
-      "hub.action-args-bytes",
-      Buffer.byteLength(args, "utf8")
-    );
-    if (Buffer.byteLength(args, "utf8") > ARGS_MAX) {
-      return problem(400, {
-        code: "action-args-too-large",
-        detail: `args are over ${ARGS_MAX / 1024} KB as JSON.`,
-      });
-    }
     return { projectId, reason, args };
   };
 
@@ -434,7 +392,7 @@ export const createActions = ({
     }
     const { projectId, reason, args } = filed;
     const now = Date.now();
-    const runAt = runAtOf(input.runAt, now);
+    const runAt = runAtOf(input.runAt);
     if (runAt instanceof ElysiaStatus) {
       return runAt;
     }
@@ -724,12 +682,7 @@ export const createActions = ({
       }
     );
     if (outcome.kind === "answered") {
-      const whole = JSON.stringify(outcome.result);
-      recordLimitReading(
-        "hub.action-result-bytes",
-        Buffer.byteLength(whole, "utf8")
-      );
-      const result = capped(whole, RESULT_MAX);
+      const result = JSON.stringify(outcome.result);
       const ended = outcome.result.isError
         ? file(row, {
             state: "failed",

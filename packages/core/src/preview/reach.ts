@@ -21,7 +21,6 @@
  */
 import { readWithin } from "../bounded";
 import { isRecord } from "../is-record";
-import { recordLimitReading } from "../limit-readings";
 import { PREVIEW_DOWNS, type PreviewDown } from "./protocol";
 import { PREVIEW_PING_PATH } from "./routes";
 
@@ -65,7 +64,6 @@ export const PREVIEW_HELD_HEADER = "x-cawco-held-ms";
  * being made: past any answer a server makes at once (an app's data it
  * polls), short of a step of a cold start. Ours.
  */
-// @limit recording: dashboard.preview-held-ms until 2026-12-10
 const PREVIEW_HELD_MS = 1000;
 
 /**
@@ -86,10 +84,7 @@ export async function previewHeld(origin: string): Promise<boolean> {
     return false;
   }
   await read.value.body?.cancel();
-  const held = Number(read.value.headers.get(PREVIEW_HELD_HEADER));
-  // How long the server held a request of its page as the ping saw it.
-  recordLimitReading("dashboard.preview-held-ms", held);
-  return held >= PREVIEW_HELD_MS;
+  return Number(read.value.headers.get(PREVIEW_HELD_HEADER)) >= PREVIEW_HELD_MS;
 }
 
 /**
@@ -211,7 +206,6 @@ const nextTask = (): Promise<void> =>
   });
 
 /** Our call: how long a probe waits for its page's main thread to run a task on time before it asks anyway. */
-// @limit recording: dashboard.preview-quiet-wait-ms until 2026-12-10
 const QUIET_MOST_MS = 3000;
 
 /**
@@ -222,23 +216,14 @@ const QUIET_MOST_MS = 3000;
  * ask of a block list's refusal above 10 ms, which fails one in 0.2 ms).
  */
 const quiet = async (): Promise<void> => {
-  const began = performance.now();
-  const most = began + QUIET_MOST_MS;
+  const most = performance.now() + QUIET_MOST_MS;
   while (performance.now() < most) {
     const posted = performance.now();
     await nextTask();
     if (performance.now() - posted < INSTANT_REFUSAL_MS / 2) {
-      recordLimitReading(
-        "dashboard.preview-quiet-wait-ms",
-        performance.now() - began
-      );
       return;
     }
   }
-  recordLimitReading(
-    "dashboard.preview-quiet-wait-ms",
-    performance.now() - began
-  );
 };
 
 /**

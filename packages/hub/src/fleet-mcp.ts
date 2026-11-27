@@ -13,7 +13,6 @@ import {
 } from "@cawco/core/fleet";
 import type { ConnectAccess, ConnectAccessSet } from "@cawco/core/frames";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
@@ -135,7 +134,6 @@ const identityOf = (tokens: { id_token?: unknown }): string | null => {
   );
   return said?.trim() ?? null;
 };
-// @limit recording: hub.mcp-discovery-ms until 2026-12-10
 const DISCOVERY_TIMEOUT_MS = 15_000;
 /**
  * Re-probes of a server the hub could not reach: from 30 s, doubling to 15
@@ -154,7 +152,6 @@ const REPROBES: BackoffPolicy = {
  * so an answer let go at a short deadline loses the only refresh token
  * that still works, and the next refresh spends the old one and is refused.
  */
-// @limit recording: hub.mcp-token-ms until 2026-12-10
 const TOKEN_DEADLINE_MS = 120_000;
 /** How long a request waits on a refresh before it is answered 502 to retry; the refresh itself goes on. */
 const REFRESH_WAIT_MS = 20_000;
@@ -345,7 +342,6 @@ const reachWithin = async (
   take: (response: Response) => Promise<Response>,
   deadline = DISCOVERY_TIMEOUT_MS
 ): Promise<Response> => {
-  const asked = Date.now();
   const reached = await readWithin(deadline, async (signal) => {
     let response: Response;
     try {
@@ -359,11 +355,6 @@ const reachWithin = async (
     }
     return await take(response);
   });
-  if (deadline === TOKEN_DEADLINE_MS) {
-    recordLimitReading("hub.mcp-token-ms", Date.now() - asked);
-  } else {
-    recordLimitReading("hub.mcp-discovery-ms", Date.now() - asked);
-  }
   switch (reached.kind) {
     case "answered":
       return reached.value;

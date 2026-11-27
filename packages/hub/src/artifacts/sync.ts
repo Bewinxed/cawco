@@ -38,7 +38,6 @@ import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { getMeta, setMeta } from "@cawco/core/doc-meta";
 import { DOC_REPLACED, replacedMessage } from "@cawco/core/doc-swap";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { writeStateFile } from "@cawco/core/state-file";
 import { docSwapWords } from "@cawco/core/words/doc-swap";
 import { problemResponse } from "elysia/error";
@@ -193,7 +192,6 @@ export const artifactPicture =
       });
     }
     const body = new Uint8Array(await request.arrayBuffer());
-    recordLimitReading("hub.canvas-picture-bytes", body.length);
     if (body.length > CANVAS_LIMITS.pictureBytes) {
       return problemResponse({
         status: 413,

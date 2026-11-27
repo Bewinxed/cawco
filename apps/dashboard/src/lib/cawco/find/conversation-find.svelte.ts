@@ -29,7 +29,6 @@
 import { detach } from "@cawco/core/detach";
 import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
 import { PLACES_WINDOW } from "@cawco/core/find";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { unhandled } from "@cawco/core/unhandled";
 import { findInWords } from "@cawco/core/words/find-in";
 import type { Component } from "svelte";
@@ -137,7 +136,6 @@ interface Found {
  * places at once (and is read again behind them). Our own call: a few
  * windows each, a few tens of KB.
  */
-// @limit recording: dashboard.finds-held until 2026-12-03
 const FOUND_HELD = 8;
 
 /** The words a find is held by: the engine matches without case. */
@@ -684,7 +682,6 @@ export class ConversationFind {
       },
     };
     this.#held.set(key, found);
-    recordLimitReading("dashboard.finds-held", this.#held.size);
     for (const old of this.#held.keys()) {
       if (this.#held.size <= FOUND_HELD) {
         break;

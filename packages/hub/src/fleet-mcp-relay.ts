@@ -5,7 +5,6 @@ import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
@@ -48,7 +47,6 @@ import type { HubLifetimeShape } from "./lifetime";
 /** A list kept for sessions is fetched again when a session asks after this long. */
 const LISTING_TTL_MS = 5 * 60_000;
 /** How long one of the lister's own upstream requests may take. */
-// @limit recording: hub.mcp-lister-rpc-ms until 2026-12-10
 const LISTER_TIMEOUT_MS = 30_000;
 /** A session the hub has not heard from in this long, with no stream open, is forgotten. */
 const IDLE_MS = 30 * 60_000;
@@ -996,7 +994,6 @@ function upstreamRpc(
   if (lister.protocol) {
     headers.set("MCP-Protocol-Version", lister.protocol);
   }
-  const asked = Date.now();
   // The promise edge of a request through the gate.
   return lifetime.run(
     sendTaking(
@@ -1026,12 +1023,6 @@ function upstreamRpc(
         };
       },
       LISTER_TIMEOUT_MS
-    ).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          recordLimitReading("hub.mcp-lister-rpc-ms", Date.now() - asked);
-        })
-      )
     )
   );
 }

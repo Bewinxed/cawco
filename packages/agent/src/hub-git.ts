@@ -54,7 +54,6 @@ import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { recordedPool } from "@cawco/core/object-pool";
 import { lastOutput, OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
@@ -529,7 +528,6 @@ const runOnHost = (
  * keychain); one still silent after this waits on a person (a keychain
  * prompt, an askpass window) nobody may be there to answer.
  */
-// @limit recording: agent.git-credential-fill-ms until 2026-12-10
 const CREDENTIAL_LIMIT_MS = 15_000;
 
 /** One `key=value` line of `git credential fill`'s answer (git-credential(1), "INPUT/OUTPUT FORMAT"). */
@@ -603,17 +601,14 @@ const withHostLogin = async (
   // `SSH_ASKPASS`) would open a window for every remote that needs no login;
   // set and empty, git passes all three over (prompt.c `git_prompt`), and
   // with `GIT_TERMINAL_PROMPT=0` a fill no helper answers ends at once.
-  const asked = await timed(
-    runOnHost(
-      ref,
-      ["credential", "fill"],
-      { ...env, GIT_ASKPASS: "" },
-      {
-        input: `url=${url}\n\n`,
-        silenceMs: CREDENTIAL_LIMIT_MS,
-      }
-    ),
-    (ms) => recordLimitReading("agent.git-credential-fill-ms", ms)
+  const asked = await runOnHost(
+    ref,
+    ["credential", "fill"],
+    { ...env, GIT_ASKPASS: "" },
+    {
+      input: `url=${url}\n\n`,
+      silenceMs: CREDENTIAL_LIMIT_MS,
+    }
   );
   if (asked.silent) {
     throw new Error(

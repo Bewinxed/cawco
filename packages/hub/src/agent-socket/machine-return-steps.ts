@@ -1,7 +1,6 @@
 /** What a machine's return does, one step each, listed in order by machineReturnStepsOf. */
 
 import { traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Effect } from "effect";
 import { TURN_UNRECORDED } from "../db/sends";
 import type { HubContext } from "../hub-context";
@@ -509,7 +508,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // a person, its parent or its own wait wakes it. A reboot of
     // obelisk (2026-10-23) restored every row marked running
     // whatever it was doing.
-    const candidates = settled
+    const fresh = settled
       .filter(() => custody.state === "available")
       .filter(({ row }) => !heldRows.has(row.id))
       .filter((orphan) => orphan.resumes && orphan.row.sessionId)
@@ -520,9 +519,8 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
       // `row` is the pre-settle snapshot, so this reads when the session
       // last moved, not when the settle just now touched it.
       .sort((a, b) => b.row.updatedAt.getTime() - a.row.updatedAt.getTime())
-      .filter((orphan) => orphan.row.updatedAt.getTime() >= cutoff);
-    recordLimitReading("hub.restore-candidates", candidates.length);
-    const fresh = candidates.slice(0, RESTORE_MAX);
+      .filter((orphan) => orphan.row.updatedAt.getTime() >= cutoff)
+      .slice(0, RESTORE_MAX);
     // A summariser is never brought back: a continuation that still
     // needs one reads it or replaces it itself (advanceContinuation,
     // below). One still running that no unsettled continuation

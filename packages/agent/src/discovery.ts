@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -30,7 +29,6 @@ import { runPromise } from "./daemon-runtime";
 
 /** Long enough for a responder on the link to answer, short enough to not feel stuck. */
 export const MDNS_BROWSE_MS = 2000;
-// @limit recording: agent.discovery-probe-ms until 2026-12-10
 const PROBE_TIMEOUT_MS = 1500;
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/u;
@@ -67,18 +65,15 @@ export const toWsUrl = (httpBase: string): string =>
 export const hubIdAt = (
   httpUrl: string
 ): Promise<Bounded<string | undefined>> =>
-  timed(
-    readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-      const answer = await hubClient(httpUrl, (url, init) =>
-        fetch(url, { ...init, signal })
-      ).health.get();
-      if (answer.response === undefined && signal.aborted) {
-        throw answer.error?.value;
-      }
-      return answer.data?.hubId || undefined;
-    }),
-    (ms) => recordLimitReading("agent.discovery-probe-ms", ms)
-  );
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const answer = await hubClient(httpUrl, (url, init) =>
+      fetch(url, { ...init, signal })
+    ).health.get();
+    if (answer.response === undefined && signal.aborted) {
+      throw answer.error?.value;
+    }
+    return answer.data?.hubId || undefined;
+  });
 
 /** A probe that answers true for the hub `joined` alone, and says when another hub answered or one did not answer in time. */
 const joinedHubAt =

@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { handOnAsMachine } from "../../packages/agent/src/limit-readings-hand-on";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
@@ -20,7 +19,6 @@ function required(name: string): string {
 }
 if (verb === "smoke-stack") {
   await import("./smoke-stack");
-  await handOnAsMachine();
 } else if (verb === "smoke-fixture") {
   // An existing database exactly as a hub of the build before leaves it: the
   // hub's own migrator (hub db/migrate.ts), its steps and their order, over

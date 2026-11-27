@@ -14,9 +14,7 @@ import {
   CONTROL_MOVE_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import type { Bounded } from "@cawco/core/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
 import { Effect } from "effect";
@@ -63,7 +61,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
    * How long a machine gets to put a session to sleep: the harness's own stop
    * (an interrupt, a settle, the process's exit) takes seconds.
    */
-  // @limit recording: hub.login-sleep-ms until 2026-12-26
   const SLEEP_TIMEOUT_MS = 60_000;
 
   /**
@@ -88,25 +85,20 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     // session is not at rest.
     ctx.lifetime.fork(
       "sleep request",
-      timedEffect(
-        ctx.machineCalls.askMachine(
-          row.machineId,
-          CONTROL_SLEEP,
-          [],
-          SLEEP_TIMEOUT_MS,
-          undefined,
-          row.id
-        ),
-        (ms) => recordLimitReading("hub.login-sleep-ms", ms)
+      ctx.machineCalls.askMachine(
+        row.machineId,
+        CONTROL_SLEEP,
+        [],
+        SLEEP_TIMEOUT_MS,
+        undefined,
+        row.id
       )
     );
   };
 
   /** How long a machine gets to move its login: two `claude auth status` runs and the store's own tool, or a usage read. */
-  // @limit recording: hub.login-move-ms until 2026-12-26
   const MOVE_TIMEOUT_MS = 120_000;
   /** How long a machine gets to say which of its sessions are at rest. */
-  // @limit recording: hub.login-restless-ms until 2026-12-26
   const RESTLESS_TIMEOUT_MS = 20_000;
   /** How often a pending move is tried, and what ran from a moved credential is asked to sleep. */
   const MOVE_TICK_MS = 5000;
@@ -214,7 +206,6 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   };
 
   /** How long a lender gets to refresh and lend an account's sign-in. */
-  // @limit recording: hub.login-lend-ms until 2026-12-26
   const LEND_TIMEOUT_MS = 60_000;
 
   /** The machines `accountId` is signed in on in CawCo, other than `machineId`: who could lend it there. */
@@ -259,14 +250,11 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         failures.push(lenderAway(move.accountId, lender));
         continue;
       }
-      const lent = await timed(
-        ctx.machineCalls.callAgent(
-          lender,
-          CONTROL_LEND_ACCOUNT,
-          [move.accountId],
-          LEND_TIMEOUT_MS
-        ),
-        (ms) => recordLimitReading("hub.login-lend-ms", ms)
+      const lent = await ctx.machineCalls.callAgent(
+        lender,
+        CONTROL_LEND_ACCOUNT,
+        [move.accountId],
+        LEND_TIMEOUT_MS
       );
       switch (lent.kind) {
         case "unanswered":
@@ -286,21 +274,18 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
         default:
           throw unreachable(lent);
       }
-      const answer = await timed(
-        ctx.machineCalls.callAgent(
-          move.machineId,
-          CONTROL_BORROW_ACCOUNT,
-          [
-            move.accountId,
-            lender,
-            lent.value.result,
-            store,
-            move.storeProvider,
-            move.identity,
-          ],
-          MOVE_TIMEOUT_MS
-        ),
-        (ms) => recordLimitReading("hub.login-move-ms", ms)
+      const answer = await ctx.machineCalls.callAgent(
+        move.machineId,
+        CONTROL_BORROW_ACCOUNT,
+        [
+          move.accountId,
+          lender,
+          lent.value.result,
+          store,
+          move.storeProvider,
+          move.identity,
+        ],
+        MOVE_TIMEOUT_MS
       );
       return { answer, lender };
     }
@@ -350,14 +335,11 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     if (!ctx.registry.agent(lender)) {
       return { error: lenderAway(accountId, lender) };
     }
-    const lent = await timed(
-      ctx.machineCalls.callAgent(
-        lender,
-        CONTROL_LEND_ACCOUNT,
-        [accountId],
-        LEND_TIMEOUT_MS
-      ),
-      (ms) => recordLimitReading("hub.login-lend-ms", ms)
+    const lent = await ctx.machineCalls.callAgent(
+      lender,
+      CONTROL_LEND_ACCOUNT,
+      [accountId],
+      LEND_TIMEOUT_MS
     );
     const account = ctx.db.accounts.get(accountId);
     const refused = (why: string) => ({
@@ -579,16 +561,13 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       // at rest yet, asked again next tick.
       ctx.lifetime.fork(
         "sleep request",
-        timedEffect(
-          ctx.machineCalls.askMachine(
-            machineId,
-            CONTROL_SLEEP,
-            [],
-            SLEEP_TIMEOUT_MS,
-            undefined,
-            instanceId
-          ),
-          (ms) => recordLimitReading("hub.login-sleep-ms", ms)
+        ctx.machineCalls.askMachine(
+          machineId,
+          CONTROL_SLEEP,
+          [],
+          SLEEP_TIMEOUT_MS,
+          undefined,
+          instanceId
         )
       );
     }
@@ -630,14 +609,11 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     store: HomeCredential["store"],
     ranFrom: string[]
   ): Promise<void> => {
-    const answer = await timed(
-      ctx.machineCalls.callAgent(
-        move.machineId,
-        CONTROL_MOVE_HOME_CREDENTIAL,
-        [move.accountId, store, move.storeProvider, move.identity],
-        MOVE_TIMEOUT_MS
-      ),
-      (ms) => recordLimitReading("hub.login-move-ms", ms)
+    const answer = await ctx.machineCalls.callAgent(
+      move.machineId,
+      CONTROL_MOVE_HOME_CREDENTIAL,
+      [move.accountId, store, move.storeProvider, move.identity],
+      MOVE_TIMEOUT_MS
     );
     const expired =
       answer.kind === "answered" && answer.value.ok
@@ -660,14 +636,11 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     }
     const ranFrom = liveFrom(move);
     if (ranFrom.length > 0) {
-      const restless = await timed(
-        ctx.machineCalls.callAgent(
-          machineId,
-          CONTROL_RESTLESS,
-          [ranFrom],
-          RESTLESS_TIMEOUT_MS
-        ),
-        (ms) => recordLimitReading("hub.login-restless-ms", ms)
+      const restless = await ctx.machineCalls.callAgent(
+        machineId,
+        CONTROL_RESTLESS,
+        [ranFrom],
+        RESTLESS_TIMEOUT_MS
       );
       switch (restless.kind) {
         case "unanswered":
@@ -691,15 +664,12 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     if (isCredentialStore(store)) {
       await moveCredential(move, store, ranFrom);
     } else {
-      const answer = await timed(
-        ctx.machineCalls.callAgent(
-          machineId,
-          CONTROL_MOVE_HOME_LOGIN,
-          [move.accountId, move.identity],
-          MOVE_TIMEOUT_MS,
-          store
-        ),
-        (ms) => recordLimitReading("hub.login-move-ms", ms)
+      const answer = await ctx.machineCalls.callAgent(
+        machineId,
+        CONTROL_MOVE_HOME_LOGIN,
+        [move.accountId, move.identity],
+        MOVE_TIMEOUT_MS,
+        store
       );
       await settleMove(move, answer, ranFrom);
     }

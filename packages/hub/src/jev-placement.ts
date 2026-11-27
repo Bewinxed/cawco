@@ -18,7 +18,6 @@
  *   to a stated length and every list to a stated count before it is sent.
  */
 
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   fitItems,
   JEV_WINDOW_TOKENS,
@@ -62,7 +61,6 @@ const ROWS = {
 export type PlacementRow = keyof typeof ROWS;
 
 /** A placement question is asked inside a hub action, so it is asked briefly. Our own call. */
-// @limit recording: hub.jev-placement-ms until 2026-12-10
 const PLACEMENT_TIMEOUT_MS = 20_000;
 
 /**
@@ -105,7 +103,6 @@ async function askRow<
   const named = (Array.isArray(rows) ? rows : [rows])
     .map((row) => ROWS[row])
     .join(" + ");
-  const asked = Date.now();
   const asking = await askJev(access, state, questions, {
     timeoutMs: PLACEMENT_TIMEOUT_MS,
   }).catch((error: unknown) => {
@@ -117,7 +114,6 @@ async function askRow<
       cause: error,
     });
   });
-  recordLimitReading("hub.jev-placement-ms", Date.now() - asked);
   switch (asking.kind) {
     case "answered":
       console.log(

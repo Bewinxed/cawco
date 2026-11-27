@@ -57,7 +57,6 @@ import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { LeakFound } from "@cawco/core/harness";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   commandLine,
   cpuTimeUsed,
@@ -232,8 +231,6 @@ const whereOf = async (target: LeakTarget, pid: number): Promise<string> => {
 /** One process's memory over the last readings, and the threshold multiple last told. */
 interface Climb {
   readings: number[];
-  /** Readings in a row its resident size has risen. */
-  rising?: number;
   told: number;
 }
 
@@ -325,14 +322,6 @@ interface Told {
  * A climb read once more: the words to tell when it is a leak not yet told
  * at this height, else nothing.
  */
-/** How many readings in a row a process's resident size has risen, recorded as it grows: what {@link WINDOW} must see of a leak. */
-const climbStreak = (climb: Climb, resident: number): void => {
-  const last = climb.readings.at(-1);
-  climb.rising =
-    last !== undefined && resident > last ? (climb.rising ?? 0) + 1 : 0;
-  recordLimitReading("agent.leak-climb-readings", climb.rising);
-};
-
 const climbed = async (
   row: ProcessLineage,
   resident: number,
@@ -343,8 +332,6 @@ const climbed = async (
   const key = keyOf(row);
   const climb = watching.climbs.get(key) ?? { readings: [], told: 0 };
   watching.climbs.set(key, climb);
-  climbStreak(climb, resident);
-  // @limit recording: agent.leak-climb-readings until 2026-12-10
   climb.readings = [...climb.readings, resident].slice(-(WINDOW + 1));
   const { readings } = climb;
   const first = readings[0] ?? 0;

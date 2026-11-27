@@ -21,7 +21,6 @@
  * (or dark-only): it is said `same`, and nothing more is drawn.
  */
 import { readWithin } from "@cawco/core/bounded";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
 import { eachRule, settledMedia } from "@cawco/core/scheme-media";
 import { cropPicture, groundOf, SKIPPED } from "./picture";
@@ -31,7 +30,6 @@ export type Scheme = "light" | "dark";
 /** How long the copy's sheets, images and fonts have to arrive (each from the cache the page filled). Our call. */
 const SETTLE_MS = 3000;
 /** Elements in view whose colours are compared at most; past it the page is taken to change. Our call. */
-// @limit recording: overlay.scheme-compared until 2026-12-10
 const COMPARED_MAX = 4000;
 /** What every box paints, wherever it stands. */
 const BOX_PAINT = ["background-color", "background-image", "box-shadow"];
@@ -370,7 +368,6 @@ function sameColours(view: Window, pairs: Pairs): boolean {
       continue;
     }
     compared += 1;
-    recordLimitReading("overlay.scheme-compared", compared);
     if (compared > COMPARED_MAX) {
       return false;
     }

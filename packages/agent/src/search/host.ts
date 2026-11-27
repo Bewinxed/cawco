@@ -36,19 +36,10 @@
  */
 import { dirname } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
-import {
-  type LimitReading,
-  recordLimitReading,
-  takeLimitReadings,
-} from "@cawco/core/limit-readings";
 import { transcriptIndexPath } from "@cawco/core/paths/cawco";
 import { listClaudeFiles, listPiFiles } from "@cawco/core/paths/claude";
 import { opencodeDatabases } from "@cawco/core/paths/harnesses";
-import {
-  recordLimitReadingsWith,
-  type TranscriptDoc,
-  type TranscriptFile,
-} from "@cawco/jsonl-parser";
+import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
 import {
   type ListOptions,
   matchQueries,
@@ -188,7 +179,7 @@ const runOp = <K extends SearchOp>(
 export type SearchSaid =
   | { kind: "ready"; through: number }
   | { kind: "unopened"; message: string }
-  | { kind: "beat"; readings?: LimitReading[] }
+  | { kind: "beat" }
   | { id: number; kind: "told"; value: unknown }
   | { id: number; kind: "answer"; value: unknown }
   | { code?: string; id: number; kind: "failed"; message: string };
@@ -264,13 +255,7 @@ const serve = async (): Promise<void> => {
 // The agent's channel closed (it ended, or let this process go): nothing is
 // left to answer.
 process.on("disconnect", () => process.exit(0));
-// The parser's readings of the bounds waiting on data are this process's,
-// and ride its beat to the agent, which carries them to the hub.
-recordLimitReadingsWith(recordLimitReading);
-setInterval(() => {
-  const readings = takeLimitReadings();
-  say(readings.length > 0 ? { kind: "beat", readings } : { kind: "beat" });
-}, BEAT_MS);
+setInterval(() => say({ kind: "beat" }), BEAT_MS);
 serve().catch((error: unknown) => {
   say({ kind: "unopened", ...failure(error) });
   // Ended once the line has gone out; the agent fails what waits with it.

@@ -12,11 +12,9 @@
  * and merged by its key where both do, the newer winning: each part rides
  * the beat after the daemon reads it (server.ts `heartbeatFromMachine`), so
  * dropping the older beat whole would lose a part no later beat repeats.
- * The session addresses both carry are each recorded, the older first, and
- * the bound readings both carry are added together.
+ * The session addresses both carry are each recorded, the older first.
  */
 import type { HeartbeatReads } from "@cawco/core/agent-reads";
-import { mergeLimitReadings } from "@cawco/core/limit-readings";
 
 /** `newer`'s entries over `older`'s, by `key`, the older's order kept and the newer's new ones after. */
 const byKey = <T>(
@@ -39,7 +37,6 @@ export const mergeBeats = (
   ...newer,
   custody: newer.custody ?? older.custody,
   damagedRecords: newer.damagedRecords ?? older.damagedRecords,
-  limitReadings: mergeLimitReadings(older.limitReadings, newer.limitReadings),
   harnesses:
     older.harnesses && newer.harnesses
       ? byKey(older.harnesses, newer.harnesses, (one) => one.harness)

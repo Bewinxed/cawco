@@ -40,7 +40,6 @@ import {
 } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -71,7 +70,6 @@ import {
 } from "@cawco/core/harness/opencode-wire";
 import { isRecord } from "@cawco/core/is-record";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -575,7 +573,6 @@ const cawcoMcp = () => ({
  * child boots through the keeper, on a cold machine maybe, and a false
  * timeout here starts a second server.
  */
-// @limit recording: agent.opencode-announce-ms until 2026-12-10
 const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 
 /**
@@ -584,7 +581,6 @@ const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
  * its plugin's load (30 s, `PLUGIN_LOAD_TIMEOUT_MS`) and its verification.
  * Ours, with margin.
  */
-// @limit recording: agent.opencode-config-settle-ms until 2026-12-10
 const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
 /** How long a fleet report's wait lets the config rest between two looks. Ours. */
 const CONFIG_LOOK_MS = 250;
@@ -888,11 +884,7 @@ const serverAnnounced = Effect.fnUntraced(function* (
       stop?.();
     });
   });
-  return yield* timedEffect(boundedRead(timeoutMs, announced), (ms) => {
-    if (timeoutMs === SERVER_ANNOUNCE_TIMEOUT_MS) {
-      recordLimitReading("agent.opencode-announce-ms", ms);
-    }
-  }).pipe(
+  return yield* boundedRead(timeoutMs, announced).pipe(
     Effect.catch((error) =>
       Effect.fail(
         error instanceof UnansweredRead
@@ -2004,7 +1996,6 @@ const SIGN_IN_FAULTS = opencodeRecordFile("sign-in-faults.json");
 const SIGN_IN_CHECK_MS = HOUR_MS;
 
 /** How long a key's check request may take. Ours: a list of models answers in well under a second; past this it says nothing. */
-// @limit recording: agent.opencode-key-check-ms until 2026-12-26
 const KEY_CHECK_TIMEOUT_MS = 20_000;
 
 /** Anthropic's API, where OpenCode's Anthropic provider sends when its config names no other (`@ai-sdk/anthropic`'s default). */
@@ -4195,28 +4186,25 @@ class OpencodeHarness implements Harness<"opencode"> {
     this.#keyAsked.set(id, { at: Date.now(), value: hash });
     let checked: Bounded<{ message: string; ok: boolean; status: number }>;
     try {
-      checked = await timed(
-        readWithin(KEY_CHECK_TIMEOUT_MS, async (signal) => {
-          const response = await fetch(request.url, {
-            headers: request.headers,
-            signal,
-          });
-          if (response.status !== 401 && response.status !== 403) {
-            return { ok: response.ok, status: response.status, message: "" };
-          }
-          const body: unknown = await response.json().catch(() => undefined);
-          const error = isRecord(body) ? body.error : undefined;
-          return {
-            ok: false,
-            status: response.status,
-            message:
-              isRecord(error) && typeof error.message === "string"
-                ? error.message
-                : "",
-          };
-        }),
-        (ms) => recordLimitReading("agent.opencode-key-check-ms", ms)
-      );
+      checked = await readWithin(KEY_CHECK_TIMEOUT_MS, async (signal) => {
+        const response = await fetch(request.url, {
+          headers: request.headers,
+          signal,
+        });
+        if (response.status !== 401 && response.status !== 403) {
+          return { ok: response.ok, status: response.status, message: "" };
+        }
+        const body: unknown = await response.json().catch(() => undefined);
+        const error = isRecord(body) ? body.error : undefined;
+        return {
+          ok: false,
+          status: response.status,
+          message:
+            isRecord(error) && typeof error.message === "string"
+              ? error.message
+              : "",
+        };
+      });
     } catch {
       return { state: "unknown" };
     }
@@ -7167,12 +7155,9 @@ class OpencodeHarness implements Harness<"opencode"> {
     });
     // The promise edge of the wait, one bounded read.
     return await runPromise(
-      timedEffect(
-        boundedRead(
-          CONFIG_SETTLE_TIMEOUT_MS,
-          lookUntil({ every: CONFIG_LOOK_MS }, look)
-        ),
-        (ms) => recordLimitReading("agent.opencode-config-settle-ms", ms)
+      boundedRead(
+        CONFIG_SETTLE_TIMEOUT_MS,
+        lookUntil({ every: CONFIG_LOOK_MS }, look)
       ).pipe(
         Effect.map((looked) =>
           looked.kind === "found" ? looked.value.state : undefined

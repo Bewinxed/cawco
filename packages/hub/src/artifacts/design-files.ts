@@ -19,7 +19,7 @@ import {
 } from "@cawco/core/workspace/controls";
 import { problem } from "elysia";
 import { type MachineCall, MachineProblem } from "../machine-answers";
-import { DESIGN_LIMITS, type DesignFile } from "./design-folder";
+import type { DesignFile } from "./design-folder";
 
 /** What reading a folder needs of the hub. */
 export interface DesignFilesDeps {
@@ -38,32 +38,12 @@ export interface DesignFilesDeps {
 export type FolderReader =
   { instance: InstanceRow; machineId?: string } | { machineId: string };
 
-/** The most a folder read holds: its files, and their bytes together. */
-export interface FolderLimits {
-  bytes: number;
-  files: number;
-}
-
 /** A folder that wasn't read, in the machine's words. */
 const unread = (dir: string, why: string) =>
   problem(400, {
     code: "artifact-folder-unread",
     detail: `${dir} wasn't read: ${why}`,
   });
-
-/** Why `files` (admitted) are more than `limits` hold; null when they fit. */
-const tooMuch = (
-  files: readonly InputNamed[],
-  limits: FolderLimits
-): string | null => {
-  const bytes = files.reduce((sum, one) => sum + one.size, 0);
-  if (files.length > limits.files) {
-    return `it holds ${files.length} files, and CawCo keeps ${limits.files} at most: leave out what an install makes (node_modules), a repository's .git and anything its pages don't load.`;
-  }
-  return bytes > limits.bytes
-    ? `it holds ${Math.ceil(bytes / 1024 / 1024)} MiB, and CawCo keeps ${limits.bytes / 1024 / 1024} MiB at most.`
-    : null;
-};
 
 export const createDesignFiles = (deps: DesignFilesDeps) => {
   /** Admitted `files` read off `machineId` whole, by their names; or the machine's refusal. */
@@ -116,12 +96,8 @@ export const createDesignFiles = (deps: DesignFilesDeps) => {
       ],
     };
   };
-  /** Every file of folder `dir` as `reader` reads it, by its path from `dir`, within `limits`; refused in words. */
-  return async (
-    reader: FolderReader,
-    dir: string,
-    limits: FolderLimits = DESIGN_LIMITS
-  ) => {
+  /** Every file of folder `dir` as `reader` reads it, by its path from `dir`; refused in words. */
+  return async (reader: FolderReader, dir: string) => {
     const { machineId, reach } = placeOf(reader);
     try {
       const admitted = await deps.call(machineId, CONTROL_INPUTS_ADMIT, [
@@ -132,10 +108,6 @@ export const createDesignFiles = (deps: DesignFilesDeps) => {
         return unread(dir, admitted.refused);
       }
       const { files } = admitted;
-      const over = tooMuch(files, limits);
-      if (over) {
-        return unread(dir, over);
-      }
       const pieces = await readAll(machineId, reach, files);
       if (typeof pieces === "string") {
         return unread(dir, pieces);

@@ -94,7 +94,7 @@ import {
   ownsParameter,
   type TaskTool,
 } from "./task-tools";
-import { WAIT_ITEM_LIMIT, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
+import { WAIT_ITEM_LIMIT } from "./work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "./work-items";
 
 /**
@@ -917,10 +917,7 @@ export function handoffTools(view: ToolView) {
           .number({ error: WAIT_ITEM_LIMIT })
           .int({ error: WAIT_ITEM_LIMIT })
           .min(1, { error: WAIT_ITEM_LIMIT })
-          .max(WAIT_ITEM_MAX_MINUTES, { error: WAIT_ITEM_LIMIT })
-          .describe(
-            `Whole minutes to wait, from 1 to ${WAIT_ITEM_MAX_MINUTES}.`
-          ),
+          .describe("Whole minutes to wait, at least 1."),
         reason: z
           .string({ error: WAIT_ITEM_LIMIT })
           .trim()
@@ -1061,7 +1058,6 @@ export function handoffTools(view: ToolView) {
           .number()
           .int()
           .min(1)
-          .max(WAIT_ITEM_MAX_MINUTES)
           .optional()
           .describe("How long to pause it; give this or resume."),
         resume: z

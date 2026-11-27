@@ -14,8 +14,7 @@
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
  * scripts/), cawrier's and the site's, and the design rules (scripts/lint/design) over the dashboard's
- * `src`, the limit rule (scripts/lint/limit-has-a-reason.ts) over every
- * TypeScript and Svelte file under packages/, apps/ and scripts/, each with the fixtures that prove it (scripts/lint/fixtures). The
+ * `src`, each with the fixtures that prove it (scripts/lint/fixtures). The
  * files are those git tracks or would track, narrowed to the list
  * `CAWCO_CHECK_FILES` names (one repository path a line) when it is set.
  *
@@ -29,7 +28,6 @@ import { defineConfig } from "golar/unstable";
 import { closedTextColumn } from "./scripts/lint/closed-text-column.ts";
 import { edenAnswersRead } from "./scripts/lint/eden-answers-read.ts";
 import { hubPathByHand } from "./scripts/lint/hub-path-by-hand.ts";
-import { limitHasAReason } from "./scripts/lint/limit-has-a-reason.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
 import { problemKept } from "./scripts/lint/problem-kept.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
@@ -48,8 +46,6 @@ const EDEN_ANSWERS_FIXTURES = `${LINT_FIXTURES}eden-answers.ts`;
 const CLOSED_TEXT_FIXTURES = `${LINT_FIXTURES}closed-text-column.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
-/** The numeric bounds with no reason the limit rule must refuse, and those whose tag lets them stand. */
-const LIMIT_FIXTURES = `${LINT_FIXTURES}limit/*.{svelte,ts}`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -108,43 +104,6 @@ const hubCallers = within(
     "scripts/**/*.ts"
   )
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
-// Files that shape mock data: stories, fixtures and benches. No product path
-// runs them, and a product module may not import one (biome.jsonc).
-const MOCK_DATA = [
-  /\.stories\.ts$/u,
-  /\.fixture\.svelte$/u,
-  /Fixture\.svelte$/u,
-  /\.fixtures\.ts$/u,
-  /(^|\/)fixture\.ts$/u,
-  /-fixture\.ts$/u,
-  /(^|\/)bench\//u,
-  /-bench\.svelte$/u,
-  /^packages\/hub\/scripts\/fixture-db\.ts$/u,
-  /^apps\/dashboard\/src\/routes\/\(app\)\/motion\//u,
-  /^apps\/dashboard\/src\/routes\/dev\//u,
-];
-// Every TypeScript and Svelte file under packages/, apps/ and scripts/, but
-// the paused native app's, generated code and mock data (scripts/lint/limit-has-a-reason.ts).
-const bounded = within(
-  tracked(
-    "packages/**/*.ts",
-    "packages/**/*.tsx",
-    "packages/**/*.svelte",
-    "apps/**/*.ts",
-    "apps/**/*.tsx",
-    "apps/**/*.svelte",
-    "scripts/**/*.ts"
-  )
-).filter(
-  (path) =>
-    !(
-      path.startsWith(LINT_FIXTURES) ||
-      path.startsWith("apps/apple/") ||
-      path.includes("/.svelte-kit/") ||
-      path.endsWith(".gen.ts") ||
-      MOCK_DATA.some((mock) => mock.test(path))
-    )
-);
 // The hub's source, whose helpers return Elysia's problems (scripts/lint/problem-kept.ts).
 const hub = within(tracked("packages/hub/src/**/*.ts"));
 // The hub's tables, whose closed sets are storedEnum columns (scripts/lint/closed-text-column.ts).
@@ -182,10 +141,6 @@ export default defineConfig({
       {
         files: [...hubCallers.map(literal), FETCH_ALIAS_FIXTURES],
         rules: [noFetchAlias],
-      },
-      {
-        files: [...bounded.map(literal), LIMIT_FIXTURES],
-        rules: [limitHasAReason],
       },
       {
         files: hub.map(literal),

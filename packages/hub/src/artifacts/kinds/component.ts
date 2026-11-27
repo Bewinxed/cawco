@@ -1,7 +1,6 @@
 import { relative } from "node:path";
 import { docMeta, getMeta, setMeta } from "@cawco/core/doc-meta";
 import type { LayoutRead } from "@cawco/core/layout-guides";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -1168,22 +1167,6 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           return rendered;
         }
         ({ png, undrawn, plansUnread, layout, measured } = rendered);
-        if (layout) {
-          // What a read found, past LAYOUT_LIMITS or not.
-          recordLimitReading("hub.layout-elements", layout.elements);
-          recordLimitReading(
-            "hub.layout-groups",
-            layout.groups.length + (layout.leftOut?.groups ?? 0)
-          );
-          recordLimitReading(
-            "hub.layout-near-misses",
-            layout.nearMisses.length + (layout.leftOut?.nearMisses ?? 0)
-          );
-          recordLimitReading(
-            "hub.layout-spacing",
-            layout.spacing.length + (layout.leftOut?.spacing ?? 0)
-          );
-        }
         report = drawnHeld(row, rendered.report);
       } else if (opened) {
         // A plain read: the report as the reader drew it, the reader asked where it owes one.

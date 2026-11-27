@@ -1,6 +1,5 @@
 /** A session's kept notes, by kind (limit, watch, context, machine), and where it moved from. */
 
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { and, eq, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
 import { instances, type MachineLineKind, sessionLines } from "./schema";
@@ -16,7 +15,6 @@ interface LimitNote {
 export type MachineLine = LimitNote & { kind: MachineLineKind };
 
 /** How many of a session's machine lines of each kind are kept. */
-// @limit recording: hub.machine-lines-per-session until 2026-12-03
 const LIMIT_NOTES_KEPT = 20;
 
 /** A fleet-watch line kept for a session ({@link DbShape.noteWatchLine}). */
@@ -31,7 +29,6 @@ const WATCH_LINES_KEPT = 20;
 const CONTEXT_LINES_KEPT = 26;
 
 /** How many of a session's lines about notices that ended undelivered are kept ({@link DbShape.noteUnsentLine}). */
-// @limit recording: hub.unsent-lines-per-session until 2026-12-10
 const UNSENT_LINES_KEPT = 20;
 
 /** How many of a session's recaps of the person's returns are kept ({@link DbShape.noteRecapLine}). */
@@ -119,9 +116,7 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
     line: LimitNote,
     kept: number,
     /** One already kept under its id says this now, where it stood: true for a line said again as it goes. */
-    again = false,
-    /** Told how many lines of its kind the session holds with this one, before the cut. */
-    held: (count: number) => void = () => undefined
+    again = false
   ): boolean =>
     db.transaction((tx) => {
       if (
@@ -160,18 +155,6 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
         }
         return again;
       }
-      held(
-        tx
-          .select({ id: sessionLines.id })
-          .from(sessionLines)
-          .where(
-            and(
-              eq(sessionLines.instanceId, instanceId),
-              eq(sessionLines.kind, kind)
-            )
-          )
-          .all().length
-      );
       tx.run(
         sql`DELETE FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} AND rowid NOT IN (SELECT rowid FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} ORDER BY rowid DESC LIMIT ${kept})`
       );
@@ -221,9 +204,7 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
         content,
       })),
     noteUnsentLine: (id, line) =>
-      keepLine(id, "unsent", line, UNSENT_LINES_KEPT, false, (count) =>
-        recordLimitReading("hub.unsent-lines-per-session", count)
-      ),
+      keepLine(id, "unsent", line, UNSENT_LINES_KEPT),
     noteRecapLine: (id, line) => keepLine(id, "recap", line, RECAP_LINES_KEPT),
     recapLinesOf: (id) =>
       linesOf(id, "recap").map(({ id: lineId, at, content }) => ({
@@ -238,9 +219,7 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
         content,
       })),
     noteMachineLine: (id, kind, note) =>
-      keepLine(id, kind, note, LIMIT_NOTES_KEPT, false, (count) =>
-        recordLimitReading("hub.machine-lines-per-session", count)
-      ),
+      keepLine(id, kind, note, LIMIT_NOTES_KEPT),
     machineLinesOf: (id) =>
       (["limit", "outdated", "room"] as const).flatMap((kind) =>
         linesOf(id, kind).map(({ id: lineId, at, content }) => ({

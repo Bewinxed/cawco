@@ -12,7 +12,6 @@
  * a {@link PAGE_FAULT_EVENT} on the window.
  */
 
-import { recordLimitReading } from "./limit-readings";
 import { errorReportWords } from "./words/error-report";
 
 /** One fault a page met. */
@@ -75,7 +74,6 @@ export interface PageFaultsKept {
 export const PAGE_FAULT_EVENT = "cawco:page-fault";
 
 /** How many faults a revision keeps: past them the page is broken enough to read the first ones. */
-// @limit recording: core.page-faults-per-revision until 2026-12-03
 export const PAGE_FAULTS_KEPT = 20;
 
 /** The journal line an error report is written as, before its JSON: "dashboard error: " (hub dashboard-errors.ts). */
@@ -155,10 +153,6 @@ export function faultsWith(
   if (faults.some((one) => sameFault(one, fault))) {
     return null;
   }
-  recordLimitReading(
-    "core.page-faults-per-revision",
-    faults.length + (had?.revision === revision ? (had.dropped ?? 0) : 0) + 1
-  );
   if (faults.length >= PAGE_FAULTS_KEPT) {
     return { revision, faults, dropped: (had?.dropped ?? 0) + 1 };
   }

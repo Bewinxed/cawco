@@ -5283,30 +5283,6 @@ const SessiondLimitShape = declared(
 );
 export type SessiondLimitOutput = z.output<typeof SessiondLimitShape>;
 
-const LimitReadingShape = declared(
-  z.object({
-    at: z.number(),
-    bucket: z.number(),
-    count: z.number(),
-    day: z.string(),
-    metric: z.string(),
-    value: z.number(),
-  }),
-  "LimitReading",
-  "packages/core/src/limit-readings.ts"
-);
-export type LimitReadingOutput = z.output<typeof LimitReadingShape>;
-
-const SessiondReadingsShape = declared(
-  z.object({
-    readings: z.array(LimitReadingShape),
-    type: z.literal("limit.readings"),
-  }),
-  "SessiondReadings",
-  "packages/core/src/sessiond.ts"
-);
-export type SessiondReadingsOutput = z.output<typeof SessiondReadingsShape>;
-
 const CommandAckStageShape = declared(
   z.enum(COMMAND_ACK_STAGES),
   "CommandAckStage",
@@ -5340,7 +5316,6 @@ const SessiondServerMessageShape = declared(
     SessiondResetShape,
     SessiondExitShape,
     SessiondLimitShape,
-    SessiondReadingsShape,
     SessiondAckShape,
     SessiondDrainingShape,
   ]),
@@ -5610,18 +5585,9 @@ export type SpacingReadOutput = z.output<typeof SpacingReadShape>;
 
 const LayoutReadShape = declared(
   z.object({
-    elements: z.number(),
     groups: z.array(LayoutGroupShape),
     height: z.number(),
-    leftOut: z
-      .object({
-        elements: z.number().optional(),
-        groups: z.number().optional(),
-        nearMisses: z.number().optional(),
-        sheets: z.number().optional(),
-        spacing: z.number().optional(),
-      })
-      .optional(),
+    leftOut: z.object({ sheets: z.number().optional() }).optional(),
     nearMisses: z.array(NearMissShape),
     spacing: z.array(SpacingReadShape),
     tokens: z.record(z.string(), z.number()),

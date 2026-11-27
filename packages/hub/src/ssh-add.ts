@@ -177,7 +177,6 @@ export const KEY_STEP = "giving the machine its key to this hub";
  * once connected: the script is a few kilobytes. curl(1) `--max-time`. Our
  * choice.
  */
-// @limit recording: hub.ssh-add-download-ms until 2026-12-26
 const DOWNLOAD_MAX_S = 60;
 
 /**

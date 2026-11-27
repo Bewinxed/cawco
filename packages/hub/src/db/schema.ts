@@ -920,7 +920,6 @@ export const taskMoves = sqliteTable(
 );
 
 /** How long a task's move is kept ({@link taskMoves}). */
-// @limit recording: hub.return-recap-span-ms until 2026-12-03
 export const TASK_MOVES_KEPT_DAYS = 30;
 
 /**
@@ -7474,35 +7473,4 @@ export const heldTriggers = sqliteTable(
     at: timestamp("at").notNull(),
   },
   (table) => [index("held_triggers_project").on(table.projectId, table.at)]
-);
-
-/**
- * The readings of the bounds still waiting on data (core limit-readings.ts):
- * one row per metric, machine, UTC day and bucket, holding how many
- * readings fell in the bucket and the largest of them. A day's largest is
- * the high-water mark; the buckets give its percentiles (hub
- * `GET /api/limit-readings`).
- */
-export const limitReadings = sqliteTable(
-  "limit_readings",
-  {
-    /** The metric a bound's `@limit recording:` tag names. */
-    metric: text("metric").notNull(),
-    /** Where it was read: a machine's id, or `browser` for a page's. */
-    machine: text("machine").notNull(),
-    /** The UTC day, `YYYY-MM-DD`. */
-    day: text("day").notNull(),
-    /** Its logarithmic bucket (core limit-readings.ts `bucketOf`). */
-    bucket: integer("bucket").notNull(),
-    /** The largest reading in the bucket that day. */
-    value: real("value").notNull(),
-    count: integer("count").notNull(),
-    /** When the last of them was read. */
-    at: timestamp("at").notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.metric, table.machine, table.day, table.bucket],
-    }),
-  ]
 );

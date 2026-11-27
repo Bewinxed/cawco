@@ -8,7 +8,6 @@
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import { handOnAsMachine } from "@cawco/agent/limit-readings-hand-on";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { readUpdateState, SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -902,19 +901,8 @@ const runHostEntry = async (
   return Number(process.exitCode ?? 0);
 };
 
-/** The verbs whose process stays up: a daemon, a server, the keeper. Their readings ride their own way (core limit-readings.ts). */
-const STAYS_UP: ReadonlySet<string> = new Set<string>([
-  ...SERVICE_IDS,
-  "up",
-  "pi-host",
-]);
-
-/** The verb this run is, once its arguments are read. */
-let verb: string | undefined;
-
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
-  verb = args.command;
   if (args.help || !(args.command || args.version)) {
     console.log(HELP);
     return 0;
@@ -1065,11 +1053,6 @@ const code = await run(cliArgs).catch((error: unknown) => {
   console.error(failure(error));
   return 1;
 });
-
-// A verb that ends hands the hub what it read of the bounds waiting on data.
-if (verb !== undefined && !STAYS_UP.has(verb)) {
-  await handOnAsMachine();
-}
 
 // A command that left something running — the daemon, the hub — keeps the
 // process alive on its own; exiting here would cut it off.

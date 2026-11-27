@@ -1,6 +1,5 @@
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import type { AskCard } from "./ask-presentation";
@@ -140,7 +139,6 @@ const usableOrigin = (origin: string | undefined): string | undefined => {
 };
 
 /** How many dashboard origins the hub keeps: a person's few addresses, and no more for a client that sends many. Our choice. */
-// @limit recording: hub.dashboard-origins until 2026-12-03
 const KEPT_DASHBOARD_ORIGINS = 16;
 
 /** A control whose reply never came stops being routable after this. */
@@ -266,12 +264,10 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     noteDashboardOrigin: (origin) => {
       const usable = usableOrigin(origin);
       if (usable) {
-        const heard = [
+        dashboardOrigins = [
           usable,
           ...dashboardOrigins.filter((one) => one !== usable),
-        ];
-        recordLimitReading("hub.dashboard-origins", heard.length);
-        dashboardOrigins = heard.slice(0, KEPT_DASHBOARD_ORIGINS);
+        ].slice(0, KEPT_DASHBOARD_ORIGINS);
         if (usable.startsWith("https://")) {
           lastSecureDashboardOrigin = usable;
         }

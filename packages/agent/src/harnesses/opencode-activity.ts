@@ -17,7 +17,6 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { unhandled } from "@cawco/core/unhandled";
 import { Effect } from "effect";
 import { later, runPromise, runSync } from "../daemon-runtime";
@@ -36,7 +35,6 @@ import {
  */
 type ActivityState = "busy" | "failed" | "idle" | "unobserved";
 
-// @limit recording: agent.opencode-activity-read-ms until 2026-12-10
 const READ_TIMEOUT_MS = 10_000;
 const ACTIVE_INTERVAL_MS = 5000;
 const IDLE_INTERVAL_MS = 30_000;
@@ -167,11 +165,8 @@ export class OpencodeActivity {
     const read = this.#issued;
     this.#pending = (async (): Promise<Reading> => {
       try {
-        const active = await timed(
-          readWithin(READ_TIMEOUT_MS, (signal) =>
-            client.session.active({ signal })
-          ),
-          (ms) => recordLimitReading("agent.opencode-activity-read-ms", ms)
+        const active = await readWithin(READ_TIMEOUT_MS, (signal) =>
+          client.session.active({ signal })
         );
         switch (active.kind) {
           case "answered":

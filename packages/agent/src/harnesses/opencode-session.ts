@@ -58,7 +58,6 @@ import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { OPENCODE } from "@cawco/core/harness/opencode";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
 import { opencodeRecordFile } from "@cawco/core/paths/harnesses";
@@ -165,7 +164,6 @@ import {
 import { listedSkillFiles } from "./skill-files";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
-// @limit recording: agent.opencode-recovery-read-ms until 2026-12-10
 const RECOVERY_TIMEOUT_MS = 10_000;
 
 /** A session's pending gates read back: three reads, from 250 ms apart. */
@@ -185,13 +183,10 @@ export const askOpencode = <T>(
   read: (options: { signal: AbortSignal }) => Promise<T>,
   signal?: AbortSignal
 ): Promise<Bounded<T>> =>
-  timed(
-    readWithin(
-      RECOVERY_TIMEOUT_MS,
-      (within) => read({ signal: within }),
-      signal ? { signal } : {}
-    ),
-    (ms) => recordLimitReading("agent.opencode-recovery-read-ms", ms)
+  readWithin(
+    RECOVERY_TIMEOUT_MS,
+    (within) => read({ signal: within }),
+    signal ? { signal } : {}
   );
 
 /**

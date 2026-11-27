@@ -23,7 +23,6 @@
  */
 import { backoffWait } from "./backoff";
 import { UPDATE_TRIAL_MS } from "./binary-updates";
-import { recordLimitReading } from "./limit-readings";
 
 /**
  * THE RECONNECTING WINDOW: how long a machine whose agent is away reads as on
@@ -47,7 +46,6 @@ export const RECONNECTING_MS = 60_000;
  * held by nobody, so it is neither started afresh nor let go until that
  * keeper answers or ends.
  */
-// @limit recording: core.custody-ms until 2026-12-10
 export const CUSTODY_BOUND_MS = 90_000;
 
 /**
@@ -432,8 +430,6 @@ const decideCustody = (
   }
   const complete = !(open || custody.complete);
   if (complete) {
-    // How long custody took to complete: what CUSTODY_BOUND_MS waits for.
-    recordLimitReading("core.custody-ms", Date.now() - custody.since);
     commands.push({ kind: "custody-complete", epoch: custody.epoch });
   }
   return {

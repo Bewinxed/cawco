@@ -73,7 +73,6 @@ import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { outsideFences } from "@cawco/core/markdown-code";
 import type {
   RoutineMadeBy,
@@ -1014,11 +1013,13 @@ export const createRoutines = ({
     }
     const began = Date.now();
     try {
-      const result = await timed(
-        runOnHost(placed.machineId, hostCommand(command), CHECK_LIMIT_MS, {
+      const result = await runOnHost(
+        placed.machineId,
+        hostCommand(command),
+        CHECK_LIMIT_MS,
+        {
           noWait: true,
-        }),
-        (took) => recordLimitReading("hub.routine-check-ms", took)
+        }
       );
       return answerOf(machine, result, CHECK_LIMIT_MS, Date.now() - began);
     } catch (error) {

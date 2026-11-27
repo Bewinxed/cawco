@@ -1,7 +1,6 @@
 import { type MemoryRole, modelMatches } from "./fleet";
 import type { HarnessKind } from "./harness/kinds";
 import { markerTag, readMarkerTag } from "./injected";
-import { recordLimitReading } from "./limit-readings";
 
 /**
  * Rules: standing instructions the hub enforces on every session, without the
@@ -161,7 +160,6 @@ export interface RuleRow extends Rule {
 }
 
 /** How long a body of text a rule will read. Longer than this and it reads the tail. */
-// @limit recording: core.rule-scan-chars until 2026-12-10
 const RULE_SCAN_LIMIT = 200_000;
 
 /** The most times in a row a rule fires on one session before the hub goes quiet for it. */
@@ -209,8 +207,6 @@ export function ruleHits(
   if (!expression) {
     return [];
   }
-  recordLimitReading("core.rule-scan-chars", text.length);
-  // @limit recording: core.rule-scan-chars until 2026-12-10
   const read =
     text.length > RULE_SCAN_LIMIT ? text.slice(-RULE_SCAN_LIMIT) : text;
   const found: { start: number; end: number }[] = [];
@@ -228,8 +224,6 @@ export function ruleHits(
       start: offset + match.index,
       end: offset + match.index + match[0].length,
     });
-    recordLimitReading("core.rule-hits", found.length);
-    // @limit recording: core.rule-hits until 2026-12-03
     if (found.length >= 500) {
       break;
     }

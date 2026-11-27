@@ -45,7 +45,6 @@ import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { TOOL_ANSWER_CHARS } from "@cawco/core/prompt-budget";
 import { runCaptured } from "@cawco/core/run-captured";
@@ -85,7 +84,6 @@ export const PROJECT_TRASH_DIR = join(PROJECTS_DIR, ".trash");
  * whose every version the hub keeps, read whole. A design system's fonts
  * (woff2, tens of KiB) and images fit; heavier media are not the folder's.
  */
-// @limit recording: hub.folder-file-bytes until 2026-12-10
 export const FOLDER_FILE_LIMIT = 1024 * 1024;
 
 /** How a write's content is given: words as they are, or bytes as base64 (a font, an image). */
@@ -127,7 +125,6 @@ const HISTORY_DEFAULT = 50;
 const HISTORY_LIMIT = 200;
 // @limit measured: the longest path in 15 project folders is 169 bytes (obelisk, 2026-11-26)
 const PATH_LIMIT = 1024;
-// @limit recording: hub.folder-git-ms until 2026-12-10
 const GIT_TIMEOUT_MS = 30_000;
 
 const HUB_NAME = "CawCo hub";
@@ -446,7 +443,6 @@ const run = async (root: string, args: string[]) => {
         "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again.",
     });
   }
-  const asked = Date.now();
   const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
     runCaptured(
       [
@@ -469,7 +465,6 @@ const run = async (root: string, args: string[]) => {
       { cwd: root, env: gitEnv(), signal }
     )
   );
-  recordLimitReading("hub.folder-git-ms", Date.now() - asked);
   switch (ran.kind) {
     case "answered":
       return ran.value;
@@ -973,7 +968,6 @@ export const readFolderFile = async (projectId: string, rawPath: string) => {
     return found;
   }
   const { rel, real, info } = found;
-  recordLimitReading("hub.folder-file-bytes", info.size);
   if (info.size > FOLDER_FILE_LIMIT) {
     return problem(413, {
       code: "folder-file-too-large",
@@ -1263,7 +1257,6 @@ const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 /** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
 const readAt = new Map<string, string | undefined>();
 /** How many past readings {@link readFolderFileAt} keeps. */
-// @limit recording: hub.folder-reads-at-held until 2026-12-03
 const READ_AT_LIMIT = 2000;
 
 /**
@@ -1305,7 +1298,6 @@ export const readFolderFileAt = async (
     }
   }
   readAt.set(key, content);
-  recordLimitReading("hub.folder-reads-at-held", readAt.size);
   return content;
 };
 
@@ -1495,7 +1487,6 @@ export const writeFolderFile = async (
     });
   }
   const asGiven = typeof content === "string" ? Buffer.from(content) : content;
-  recordLimitReading("hub.folder-file-bytes", asGiven.byteLength);
   if (asGiven.byteLength > FOLDER_FILE_LIMIT) {
     return problem(413, {
       code: "folder-write-too-large",
@@ -1592,7 +1583,6 @@ const toWrite = (files: { path: string; content: string | Uint8Array }[]) => {
       });
     }
     const bytes = typeof content === "string" ? Buffer.from(content) : content;
-    recordLimitReading("hub.folder-file-bytes", bytes.byteLength);
     if (bytes.byteLength > FOLDER_FILE_LIMIT) {
       return problem(413, {
         code: "folder-write-too-large",

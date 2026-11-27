@@ -34,7 +34,6 @@
 import {
   type EdgeKind,
   type GuideLine,
-  LAYOUT_LIMITS,
   type LayoutBox,
   type LayoutGroup,
   type LayoutPlace,
@@ -44,7 +43,6 @@ import {
   SAME_EDGE,
   type SpacingRead,
 } from "@cawco/core/layout-guides";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { describe, sourceOf } from "./measure";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -480,20 +478,19 @@ class LayoutReader {
   }
 
   /**
-   * Each element's box, and each surface a group of its own (up to the
-   * cap): its start and end among the edges of the group it stands in, so
-   * a card's edge and a bordered control's are scanned with the words
-   * beside them. Answers how many surfaces the cap left out.
+   * Each element's box, and each surface a group of its own: its start and
+   * end among the edges of the group it stands in, so a card's edge and a
+   * bordered control's are scanned with the words beside them.
    */
-  readSurfaces(walked: readonly Element[], all: readonly Element[]): number {
-    for (const el of walked) {
+  readSurfaces(elements: readonly Element[]): void {
+    for (const el of elements) {
       const box = this.#shown(el);
       if (!box) {
         continue;
       }
       this.#boxes.set(el, box);
       const style = this.styleOf(el);
-      if (!isSurface(style) || this.#readings.length >= LAYOUT_LIMITS.groups) {
+      if (!isSurface(style)) {
         continue;
       }
       const outer = el.parentElement ? this.#contentGroup(el.parentElement) : 0;
@@ -514,12 +511,6 @@ class LayoutReader {
         place,
       });
     }
-    return all.filter(
-      (el) =>
-        !this.#groupOf.has(el) &&
-        this.#boxes.has(el) &&
-        isSurface(this.styleOf(el))
-    ).length;
   }
 
   /** A font's ascent and descent, measured once by a canvas; a share of its size where none can be. */
@@ -723,15 +714,14 @@ export function readLayout(
   const reader = new LayoutReader(frame, drawing, root);
   const { tokens, unread: sheetsUnread } = spacingTokens(host, own);
   const elements = [...drawing.querySelectorAll("*")];
-  const walked = elements.slice(0, LAYOUT_LIMITS.elements);
-  const surfacesLeft = reader.readSurfaces(walked, elements);
+  reader.readSurfaces(elements);
   reader.readText();
   for (const id of reader.readings.keys()) {
     reader.lineEdges(id);
   }
   const misses = reader.nearMisses();
   const spacing = spacingOf(
-    walked,
+    elements,
     reader.boxes,
     reader.styleOf,
     tokens,
@@ -746,31 +736,18 @@ export function readLayout(
     text: reading.text,
   }));
   const drawn = reader.drawn();
-  const leftOut = {
-    ...(elements.length > walked.length
-      ? { elements: elements.length - walked.length }
-      : {}),
-    ...(sheetsUnread > 0 ? { sheets: sheetsUnread } : {}),
-    ...(surfacesLeft > 0 ? { groups: surfacesLeft } : {}),
-    ...(misses.length > LAYOUT_LIMITS.nearMisses
-      ? { nearMisses: misses.length - LAYOUT_LIMITS.nearMisses }
-      : {}),
-    ...(spacing.length > LAYOUT_LIMITS.spacing
-      ? { spacing: spacing.length - LAYOUT_LIMITS.spacing }
-      : {}),
-  };
+  const leftOut = sheetsUnread > 0 ? { sheets: sheetsUnread } : undefined;
   return {
-    elements: elements.length,
     width: drawn.w,
     height: drawn.h,
     tokens,
     groups,
-    nearMisses: misses.slice(0, LAYOUT_LIMITS.nearMisses),
+    nearMisses: misses,
     // Off-token first: what a reader acts on.
-    spacing: [...spacing]
-      .sort((a, b) => Number(a.token !== null) - Number(b.token !== null))
-      .slice(0, LAYOUT_LIMITS.spacing),
-    ...(Object.keys(leftOut).length > 0 ? { leftOut } : {}),
+    spacing: [...spacing].sort(
+      (a, b) => Number(a.token !== null) - Number(b.token !== null)
+    ),
+    ...(leftOut ? { leftOut } : {}),
   };
 }
 
@@ -812,7 +789,6 @@ function nearMisses(
 }
 
 /** The most surfaces standing in one group whose rows are read pair by pair. Ours: a screen's tiles, a list's first rows. */
-// @limit recording: agent.layout-row-surfaces until 2026-12-10
 const ROW_PAIRS_MAX = 60;
 
 /**
@@ -829,7 +805,6 @@ function rowMisses(
   misses: NearMiss[]
 ): void {
   const ends = (box: LayoutBox) => [box.y, box.y + box.h / 2, box.y + box.h];
-  recordLimitReading("agent.layout-row-surfaces", ids.length);
   const kept = ids.slice(0, ROW_PAIRS_MAX);
   for (const [at, one] of kept.entries()) {
     for (const other of kept.slice(at + 1)) {
@@ -1062,7 +1037,6 @@ function gapsOf(
 }
 
 /** The most children of one element whose gaps are read. Ours: a long list's first screenfuls. */
-// @limit recording: agent.layout-children until 2026-12-10
 const CHILDREN_READ = 200;
 
 /**
@@ -1109,7 +1083,6 @@ function spacingOf(
         const one = boxes.get(child);
         return one ? [{ el: child, box: one }] : [];
       });
-      recordLimitReading("agent.layout-children", children.length);
       gapsOf(el, styleOf(el), children.slice(0, CHILDREN_READ), keep);
     }
   }

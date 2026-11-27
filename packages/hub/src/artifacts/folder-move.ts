@@ -26,7 +26,6 @@ import type { ArtifactsDb } from "../db/artifacts";
 import type { HubLifetimeShape } from "../lifetime";
 import type { createDesignFiles } from "./design-files";
 import type { DesignFile } from "./design-folder";
-import { FOLDER_LIMITS } from "./preview-folder";
 
 /** Where a pin's copy stood in its state dir (agent stage-clone.ts). */
 const PINNED_FOLDER = "folder";
@@ -88,7 +87,7 @@ export const createFolderMove = (deps: FolderMoveDeps) => {
     let lost = 0;
     for (const { id, pin } of home === null ? [] : rows) {
       const copy = join(workspacesDirUnder(home ?? ""), pin, PINNED_FOLDER);
-      const files = await deps.folderFiles({ machineId }, copy, FOLDER_LIMITS);
+      const files = await deps.folderFiles({ machineId }, copy);
       if (files instanceof ElysiaStatus) {
         if (files.status !== REFUSED) {
           // Away, silent or failing: the next register tries again.

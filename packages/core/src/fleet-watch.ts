@@ -39,7 +39,6 @@ export const FLEET_WATCH_LIMITS = {
   // @limit external: three repeats mark a stuck agent, as OpenCode's doom_loop counts them (https://opencode.ai/docs/permissions); the Projects PRD asks for "same error three times"
   sameError: 3,
   /** The turns `sameError` counts over. */
-  // @limit recording: hub.fleet-watch-error-span until 2026-12-26
   errorTurns: 10,
   /** The same tool call (name and normalised input) this many times in a row. */
   // @limit external: three identical tool calls mark a stuck agent: OpenCode's doom_loop is "triggered when the same tool call repeats 3 times with identical input" (https://opencode.ai/docs/permissions)

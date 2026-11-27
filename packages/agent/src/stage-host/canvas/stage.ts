@@ -64,7 +64,6 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import type { LayoutRead } from "@cawco/core/layout-guides";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
@@ -196,7 +195,6 @@ const QUIET_MS = 250;
 /** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
 const REST_MS = 600;
 /** The longest a sweep of the canvas's other states files waits for the page to go idle, ms: a page never idle still sweeps them. */
-// @limit recording: agent.page-idle-wait-ms until 2026-12-10
 const IDLE_MOST_MS = 2000;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--spacing-space-4";
@@ -3300,15 +3298,5 @@ function bootColumn(page: Page): Mode {
 /** The page's next idle period: what waits on it runs when nothing the person does is waiting, or after {@link IDLE_MOST_MS}. */
 const idleTurn = (): Promise<void> =>
   new Promise((resolve) => {
-    const asked = performance.now();
-    requestIdleCallback(
-      () => {
-        recordLimitReading(
-          "agent.page-idle-wait-ms",
-          performance.now() - asked
-        );
-        resolve();
-      },
-      { timeout: IDLE_MOST_MS }
-    );
+    requestIdleCallback(() => resolve(), { timeout: IDLE_MOST_MS });
   });

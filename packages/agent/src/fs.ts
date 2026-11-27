@@ -7,7 +7,6 @@
 import { lstat, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   claudeHome,
   fleetAgentsDir,
@@ -31,7 +30,6 @@ export const expandHome = (path: string): string => {
 };
 
 /** A read past this is a file transfer, which this verb is not for. */
-// @limit recording: agent.fs-read-bytes until 2026-12-10
 const MAX_READ_BYTES = 512 * 1024;
 
 /**
@@ -95,7 +93,6 @@ const read = async (path: string): Promise<string> => {
   if (!(await file.exists())) {
     throw notThere(path);
   }
-  recordLimitReading("agent.fs-read-bytes", file.size);
   if (file.size > MAX_READ_BYTES) {
     throw new Error(
       `${path} is ${file.size} bytes; fs read stops at ${MAX_READ_BYTES}`

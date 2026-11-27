@@ -4,7 +4,6 @@ import type { ControlReply } from "@cawco/core/control-replies";
 import type { ControlArgs, ControlName } from "@cawco/core/control-table";
 import { makeJoin } from "@cawco/core/effect/join";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import type { InstanceRow, InstanceStatus } from "@cawco/core/protocol";
@@ -255,7 +254,6 @@ export const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
 };
 
 /** How long the report's git reads may take. */
-// @limit recording: hub.workspace-git-ms until 2026-12-10
 export const GIT_TIMEOUT_MS = 60_000;
 
 /** Runs of whitespace between the counts a git read prints. */
@@ -1945,16 +1943,13 @@ export const createWorkspaces = ({
         `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
       // The counts on the first three lines; then, each after a line of its
       // own, the newest commit subjects on no remote and the outputs folder.
-      const read = await timed(
-        command(
-          workspace.machineId,
-          workspace.path,
-          `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
-          GIT_TIMEOUT_MS,
-          refOf(workspace),
-          { noWait: true }
-        ),
-        (ms) => recordLimitReading("hub.workspace-git-ms", ms)
+      const read = await command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace),
+        { noWait: true }
       );
       const [counts = "", subjects = "", outputs = ""] = read.stdout.split(
         `${READ_PART}\n`
@@ -2910,18 +2905,15 @@ export const createWorkspaces = ({
         source.id,
       ]);
       const branch = shellQuote(workspace.branch);
-      const set = await timed(
-        command(
-          workspace.machineId,
-          workspace.path,
-          `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
-          GIT_TIMEOUT_MS,
-          refOf(workspace),
-          // A checkout: one that left a path the boundary keeps other than
-          // the commit has it fails, never passes with it dropped.
-          { moves: made.head }
-        ),
-        (ms) => recordLimitReading("hub.workspace-git-ms", ms)
+      const set = await command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace),
+        // A checkout: one that left a path the boundary keeps other than
+        // the commit has it fails, never passes with it dropped.
+        { moves: made.head }
       );
       if (set.exitCode !== 0) {
         throw new Error(
@@ -2952,16 +2944,13 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     at: string
   ): Promise<void> => {
-    const moved = await timed(
-      command(
-        workspace.machineId,
-        workspace.path,
-        `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
-        GIT_TIMEOUT_MS,
-        refOf(workspace),
-        { moves: at }
-      ),
-      (ms) => recordLimitReading("hub.workspace-git-ms", ms)
+    const moved = await command(
+      workspace.machineId,
+      workspace.path,
+      `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
+      GIT_TIMEOUT_MS,
+      refOf(workspace),
+      { moves: at }
     ).catch((error: unknown) => ({
       exitCode: 1,
       stdout: "",

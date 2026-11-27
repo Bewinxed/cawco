@@ -61,7 +61,6 @@ import { boundedRead } from "@cawco/core/effect/bounded";
 import { type Join, makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { makeFolderSync } from "@cawco/core/folders";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths/roots";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -147,7 +146,6 @@ const MASTER_POLL_MS = 250;
 /** How long a stale session gets to let the machine's port go once it is ended. Our choice. */
 const STALE_GONE_MS = 5000;
 /** The lines of `ssh`'s own output kept for the add that waits on it. */
-// @limit recording: hub.ssh-tunnel-lines until 2026-12-03
 const MAX_LINES = 40;
 
 /**
@@ -866,7 +864,6 @@ export const createSshTunnels = ({
       heard.since.push(text);
     }
     heard.lines.push(text);
-    recordLimitReading("hub.ssh-tunnel-lines", heard.lines.length);
     if (heard.lines.length > MAX_LINES) {
       heard.lines.shift();
     }

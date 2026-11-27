@@ -8,9 +8,7 @@ import { lstat, open as openFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { makeFolder } from "@cawco/core/folders";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   workspaceClaudeTmpDir,
   workspacePolicyFile,
@@ -138,10 +136,7 @@ export const readied = (
     );
     return yield* Deferred.await(outcome);
   }).pipe(Effect.scoped);
-  return timedEffect(
-    boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard),
-    (ms) => recordLimitReading("agent.boundary-start-ms", ms)
-  ).pipe(
+  return boundedRead(WORKSPACE_BOUNDARY_START_TIMEOUT_MS, heard).pipe(
     Effect.catchTag("Unanswered", () =>
       Effect.fail(
         new Unstarted({

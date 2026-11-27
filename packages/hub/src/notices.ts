@@ -16,7 +16,6 @@
  */
 import { dirname, join } from "node:path";
 import { makeFolderSync } from "@cawco/core/folders";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { DamagedHubRecord } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
@@ -32,7 +31,6 @@ import { z } from "zod";
  * kind replaces it (the next landing, the next build), so the old ids only
  * have to outlive the tabs that could still show them.
  */
-// @limit recording: hub.notices-seen until 2026-12-03
 const KEPT = 500;
 
 type NoticesRecord = { seen: string[] } | { damaged: DamagedHubRecord };
@@ -90,8 +88,6 @@ export function createNoticesSeen(options: {
           }
           const { seen } = record;
           const fresh = body.ids.filter((id) => !seen.includes(id));
-          recordLimitReading("hub.notices-seen", seen.length + fresh.length);
-          // @limit recording: hub.notices-seen until 2026-12-03
           const next =
             fresh.length > 0 ? [...seen, ...fresh].slice(-KEPT) : seen;
           if (fresh.length > 0) {

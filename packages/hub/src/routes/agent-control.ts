@@ -5,7 +5,6 @@
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
 import { maskInspection } from "@cawco/core/fleet-secrets";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { AGENT_BUSY, UPDATE_CAWCO } from "@cawco/core/protocol";
 import { CONTROL_FOLDER_COMMANDS } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
@@ -21,7 +20,6 @@ import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
 
 /** An update is a pull, an install and a dashboard build — minutes, not seconds. */
-// @limit recording: hub.agent-update-ms until 2026-12-26
 const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /**
@@ -54,9 +52,11 @@ export const agentUpdate =
   async (machineId: string, body: Static<typeof agentUpdateBody>) => {
     const { machineName } = ctx;
     const { callAgent } = ctx.machineCalls;
-    const answer = await timed(
-      callAgent(machineId, UPDATE_CAWCO, [body], UPDATE_TIMEOUT_MS),
-      (ms) => recordLimitReading("hub.agent-update-ms", ms)
+    const answer = await callAgent(
+      machineId,
+      UPDATE_CAWCO,
+      [body],
+      UPDATE_TIMEOUT_MS
     );
     switch (answer.kind) {
       case "unanswered":

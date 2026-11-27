@@ -5,13 +5,11 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
 import {
   type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
 } from "@cawco/core/fleet";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { Effect } from "effect";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
@@ -108,7 +106,6 @@ export const fleetMcpMoved = (): void => {
 };
 
 /** CawCo's own bound on the CLI starting and answering its first status read. */
-// @limit recording: agent.mcp-status-start-ms until 2026-12-10
 const START_TIMEOUT_MS = 30_000;
 /** How often a connecting server's status is read again, once the CLI is up. */
 const SETTLE_READ_MS = 250;
@@ -177,10 +174,9 @@ export const readMcpRuntime = async (
     handle: Query
   ): Effect.fn.Return<FleetSyncReport["mcp"], Error> {
     // The CLI's start: its first status.
-    const first = yield* timedEffect(
-      boundedRead(START_TIMEOUT_MS, statusOf(handle)),
-      (ms) => recordLimitReading("agent.mcp-status-start-ms", ms)
-    ).pipe(Effect.catchTag("Unanswered", () => Effect.succeed(undefined)));
+    const first = yield* boundedRead(START_TIMEOUT_MS, statusOf(handle)).pipe(
+      Effect.catchTag("Unanswered", () => Effect.succeed(undefined))
+    );
     if (first === undefined) {
       unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
       return report();

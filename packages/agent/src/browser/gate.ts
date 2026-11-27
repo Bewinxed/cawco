@@ -71,7 +71,6 @@ import { makeJoin } from "@cawco/core/effect/join";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock, makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,
@@ -202,11 +201,9 @@ const BLANK = "about:blank";
 const REOPENS = /^https?:\/\//iu;
 
 /** How many doors' closed pages are kept to open again ({@link Gate.restore}): the newest. */
-// @limit recording: agent.browser-closed-doors until 2026-12-03
 const CLOSED_KEPT = 64;
 
 /** The largest message either side sends: a full-page screenshot runs to megabytes. */
-// @limit recording: agent.browser-gate-message-bytes until 2026-12-10
 const MAX_MESSAGE = 512 * 1024 * 1024;
 
 type Json = Record<string, unknown>;
@@ -300,10 +297,8 @@ const loopbackOrigin = (url: unknown): string | undefined => {
   return loopback ? parsed.origin : undefined;
 };
 
-const said = (data: string | Buffer): string => {
-  recordLimitReading("agent.browser-gate-message-bytes", data.length);
-  return typeof data === "string" ? data : data.toString("utf8");
-};
+const said = (data: string | Buffer): string =>
+  typeof data === "string" ? data : data.toString("utf8");
 
 const parse = (data: string): Cdp | undefined => {
   let value: unknown;
@@ -697,7 +692,6 @@ export class Gate {
     const kept = Object.entries(this.#owners.closed).sort(
       ([, a], [, b]) => b.at - a.at
     );
-    recordLimitReading("agent.browser-closed-doors", kept.length);
     for (const [old] of kept.slice(CLOSED_KEPT)) {
       delete this.#owners.closed[old];
     }

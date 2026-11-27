@@ -603,7 +603,6 @@ export async function readGroup(path: string): Promise<GroupReading> {
  * well short. Ours: a runaway held at its limit reads at it, and one tenth
  * is room for what ended between the refusal and the reading.
  */
-// @limit recording: sessiond.refused-fork-share until 2026-12-26
 export const OWN_LIMIT_SHARE = 0.9;
 
 /**

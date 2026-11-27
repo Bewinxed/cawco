@@ -20,7 +20,6 @@ import {
   SlotWaitStopped,
   takeSlot,
 } from "@cawco/core/heavy-slots";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { recordedPool } from "@cawco/core/object-pool";
 import { lastOutput } from "@cawco/core/output-tail";
 import { workspaceScratchDir } from "@cawco/core/paths/workspace";
@@ -48,11 +47,9 @@ import { fromPromise } from "./rejected";
 import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
-// @limit recording: agent.hub-command-output-bytes until 2026-12-10
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
 
 /** How long a command runs when its caller names no limit. */
-// @limit recording: agent.hub-command-work-ms until 2026-12-10
 const DEFAULT_TIMEOUT_MS = 300_000;
 /** A command's limit as the hub names it (ms of its own work); none, {@link DEFAULT_TIMEOUT_MS}. */
 type Limit = number | null | undefined;
@@ -309,12 +306,6 @@ const commandClock = (
       }
       arm();
       report(showing());
-    },
-    /** The ms of its own work the command has spent, its queue waits left out. */
-    worked(): number {
-      spend();
-      since = Date.now();
-      return limitMs - workLeft;
     },
     stop() {
       clearTimeout(timer);
@@ -604,7 +595,6 @@ const spawned = ({
             return;
           }
           written += chunk.length;
-          recordLimitReading("agent.hub-command-output-bytes", written);
           if (written > OUTPUT_LIMIT) {
             stdout.length = 0;
             stderr.length = 0;
@@ -633,10 +623,6 @@ const spawned = ({
       // A stopped command's KILL still comes after its leader closes: what is
       // left of its group (a child that let go of the pipes) goes with it.
       child.on("close", (code) => {
-        if (timeoutMs === undefined || timeoutMs === null) {
-          // A command held to the default: how long its own work ran.
-          recordLimitReading("agent.hub-command-work-ms", clock.worked());
-        }
         clock.stop();
         live.delete(running);
         letGo?.();
@@ -750,14 +736,11 @@ const insideRead = async (
   workspace: WorkspaceRef,
   cmd: string
 ): Promise<{ ok: true; out: string } | { ok: false; why: string }> => {
-  const read = await timed(
-    runHubCommand(
-      workspace.path,
-      `${SAFE_GIT_SHELL}${cmd}`,
-      READ_TIMEOUT_MS,
-      workspace
-    ),
-    (ms) => recordLimitReading("agent.hub-command-read-ms", ms)
+  const read = await runHubCommand(
+    workspace.path,
+    `${SAFE_GIT_SHELL}${cmd}`,
+    READ_TIMEOUT_MS,
+    workspace
   );
   return read.exitCode === 0
     ? { ok: true, out: read.stdout }
@@ -769,7 +752,6 @@ const insideRead = async (
 };
 
 /** How long a move's reads inside the boundary may take. */
-// @limit recording: agent.hub-command-read-ms until 2026-12-10
 const READ_TIMEOUT_MS = 60_000;
 
 /** The deny paths among NUL-ended `git diff --name-only -z` output. */

@@ -34,7 +34,6 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments/anchor";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/preview/routes";
 import { EMBED_ARRIVING, EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
@@ -120,7 +119,6 @@ const innerOf = (anchor: PageAnchor): PageAnchor => {
 const keyOf = (anchor: PageAnchor): string => stable(innerOf(anchor));
 
 /** The most anchors an embed keeps watching for the page. Our call: every pin a page may hold, and a hover's chain. */
-// @limit recording: overlay.embed-watched until 2026-12-03
 const WATCHED_MOST = 256;
 
 /** What the embed's overlay reads for its parent (page.ts). */
@@ -175,7 +173,6 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
   const watch = (key: string, anchor: PageAnchor, said: string) => {
     watched.delete(key);
     watched.set(key, { anchor, said });
-    recordLimitReading("overlay.embed-watched", watched.size);
     if (watched.size > WATCHED_MOST) {
       const [oldest] = watched.keys();
       if (oldest !== undefined) {
@@ -554,10 +551,8 @@ interface Bridge {
 }
 
 /** The most stand-ins a frame holds that no pin and nothing shown holds, before they are let go. Our call. */
-// @limit recording: overlay.embed-loose until 2026-12-03
 const LOOSE_MOST = 64;
 /** The most asks for a point a frame holds unanswered: a later one overtakes the oldest. */
-// @limit recording: overlay.embed-asking until 2026-12-03
 const ASKING_MOST = 8;
 
 /** The page's side: each bridged frame's stand-ins, and the asks that make them. */
@@ -703,7 +698,6 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     const loose = [...bridge.entries].filter(
       ([, entry]) => !(entry.pinned || (entry.el && deps.inUse(entry.el)))
     );
-    recordLimitReading("overlay.embed-loose", loose.length);
     if (loose.length <= LOOSE_MOST) {
       return;
     }
@@ -925,7 +919,6 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
       const box = contentBox(frame);
       seq += 1;
       const mine = seq;
-      recordLimitReading("overlay.embed-asking", bridge.asking.size + 1);
       if (bridge.asking.size >= ASKING_MOST) {
         const [oldest] = bridge.asking;
         if (oldest) {

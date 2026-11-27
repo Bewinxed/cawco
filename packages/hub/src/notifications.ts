@@ -57,7 +57,6 @@
  */
 import { createHash } from "node:crypto";
 import { networkInterfaces } from "node:os";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   AWAY_AFTER_DEFAULT_MS,
@@ -104,7 +103,6 @@ const CLIENT_KEPT_MS = DAY_MS;
  * outlet takes from an item landing to offering it (a turn's grace, a task's
  * read).
  */
-// @limit recording: hub.front-asked-back-ms until 2026-12-10
 const FRONT_KEPT_MS = 10 * 60_000;
 /** How far back a push's `cawco.cleared` reaches, and how many it carries. */
 const CARRIED_MS = DAY_MS;
@@ -955,8 +953,6 @@ export const createNotifications = ({
   /** A client reading the session now, or one was at some moment since `since`. */
   const inFrontSince = (instanceId: string, since: number): boolean => {
     const now = Date.now();
-    // How far back an outlet asks: what FRONT_KEPT_MS must still hold.
-    recordLimitReading("hub.front-asked-back-ms", now - since);
     for (const client of clients.values()) {
       if (client.sessionId === instanceId && readUntil(client) > now) {
         return true;

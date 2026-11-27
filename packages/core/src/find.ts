@@ -149,7 +149,6 @@ export const TRANSCRIPT_SYNC_WAIT_MS =
  * when it stops waiting sooner. A search of obelisk's 1.47M-document index
  * answers in under 0.8 s (jsonl-parser fts5.ts `MARKED_CHARS`). Our call.
  */
-// @limit recording: agent.search-read-ms until 2026-12-10
 export const TRANSCRIPT_READ_LIMIT_MS = 5000;
 
 /**

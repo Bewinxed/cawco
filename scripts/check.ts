@@ -75,7 +75,6 @@ import {
   runInBackground,
   takeSlot,
 } from "../packages/core/src/heavy-slots";
-import { recordLimitReading } from "../packages/core/src/limit-readings";
 import { wireBaselines } from "../packages/hub/scripts/openapi-inputs";
 import { filesOf, inputsOf } from "./lib/check-inputs";
 import { type Check, runChecks } from "./lib/checks";
@@ -83,7 +82,6 @@ import { diskRoomOrExit } from "./lib/disk-room";
 import { INSTALL_READS, installedOrExit } from "./lib/installed";
 import { repoFiles } from "./lib/repo-files";
 import { depth, holds, targetOf } from "./lib/workspace-imports";
-import { failingRecordings } from "./lint/limit-recordings";
 
 diskRoomOrExit("bun run check");
 installedOrExit("bun run check");
@@ -136,9 +134,6 @@ const SHARE = coresPerRun(PLACE);
  * check's longest step (openapi:check, ~20 s). Nothing changed: 1.7–1.8
  * CPU-s for each.
  */
-// The builders this run's share would give golar, before the bound of 8.
-recordLimitReading("check.tsc-builders-wanted", SHARE);
-// @limit recording: check.tsc-builders-wanted until 2026-12-10
 const TSC_FLAGS = ["--builders", String(Math.min(8, SHARE)), "--checkers", "1"];
 /**
  * Checks run at once: half the cores this process may run on, 4 at least,
@@ -427,17 +422,11 @@ const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/u;
 // file they read, or a token taken away leaves its classes drawing nothing
 // unseen.
 const restyled = changed.some((p) => DASHBOARD_CSS.test(p));
-// A recording tag past its date, or whose metric nothing records any more,
-// fails where it stands whatever the change reached
-// (scripts/lint/limit-recordings.ts).
-const recordingsFailing = new Set(failingRecordings(ROOT));
 const linted = files.filter(
   (p) =>
     LINTED.test(p) &&
     present.has(p) &&
-    (reached.has(p) ||
-      recordingsFailing.has(p) ||
-      (restyled && DESIGNED.test(p)))
+    (reached.has(p) || (restyled && DESIGNED.test(p)))
 );
 {
   const key = await keyOf(

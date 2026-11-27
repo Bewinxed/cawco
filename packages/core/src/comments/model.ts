@@ -90,7 +90,6 @@ export const previewMode = (value: unknown): PreviewMode | null =>
   PREVIEW_MODES.find((mode) => mode === value) ?? null;
 
 /** The longest `writes` a Send carries, in base64 characters. Our call: a page's own picks, pins and ink are a few KB. */
-// @limit recording: hub.send-body-chars until 2026-12-10
 export const SEND_WRITES_MAX = 4 * 1024 * 1024;
 
 /** The longest send body read: the page's writes at their bound, as JSON, and the text and pins round them. */

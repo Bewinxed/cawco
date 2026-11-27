@@ -568,12 +568,6 @@ export interface HeartbeatPayload {
   homeStores?: string;
   instances: string[];
   /**
-   * The readings of the bounds still waiting on data the daemon took since
-   * its last beat, its sessiond's among them (core limit-readings.ts): on
-   * the 15s beat whenever there are any, absent when there are none.
-   */
-  limitReadings?: import("./limit-readings").LimitReading[];
-  /**
    * What the machine has installed (git, claude, opencode, pi, node, a
    * browser, a service manager) and at which version. Rides one beat per
    * connection, once its probe finishes, for the reason `harnesses` does:

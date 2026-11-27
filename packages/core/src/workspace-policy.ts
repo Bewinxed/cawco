@@ -75,7 +75,6 @@ import {
   protectedFindTests,
 } from "./clone-denies";
 import { harnessNamed } from "./harness/kinds";
-import { recordLimitReading } from "./limit-readings";
 import { alternatesText, copiedFolderSync, recordedPool } from "./object-pool";
 import {
   accountConfigDir,
@@ -216,7 +215,6 @@ export const stageCloneId = (placeId: string): string => {
 };
 
 /** The most `find` writes about a place: every path it names, NUL-separated. */
-// @limit recording: core.place-find-output-chars until 2026-12-10
 const FIND_OUTPUT_MAX = 64 * 1024 * 1024;
 
 /**
@@ -248,7 +246,6 @@ const findIn = (
           );
           return;
         }
-        recordLimitReading("core.place-find-output-chars", out.length);
         done(out.split("\0").filter(Boolean));
       }
     );
@@ -269,7 +266,6 @@ const gitIn = (
         env: { ...process.env, ...SAFE_GIT_ENV, LC_ALL: "C" },
       },
       (error, out, err) => {
-        recordLimitReading("core.place-find-output-chars", out.length);
         if (!error) {
           done({ code: 0, out, err });
           return;

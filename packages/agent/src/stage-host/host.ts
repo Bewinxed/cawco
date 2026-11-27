@@ -55,10 +55,6 @@ import { json as streamJson } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import {
-  recordLimitReading,
-  takeLimitReadings,
-} from "@cawco/core/limit-readings";
-import {
   linkedFolder as linkedFolderFrom,
   linkedRebundle,
 } from "@cawco/core/linked-rebundle";
@@ -1555,7 +1551,6 @@ const reports = new Map<
  */
 const drawingSaid = new Map<string, number>();
 /** How long a page's word that it is drawing a section holds. Ours: past a section's read held aside by the person's acts, which posts again as each section ends. */
-// @limit recording: agent.stage-drawing-said-age-ms until 2026-12-10
 const DRAWING_HELD_MS = 20_000;
 
 /** What a post says of its page's drawing: each section it posts is drawn, each file it names under `drawing` is being drawn now. */
@@ -1802,12 +1797,6 @@ async function reportOf(files: string[]): Promise<RenderReport> {
 /** The report's `drawing`: those of `files` a page said it is drawing, within {@link DRAWING_HELD_MS}. */
 function drawingOf(files: string[]): Pick<RenderReport, "drawing"> {
   const now = Date.now();
-  for (const file of files) {
-    const said = drawingSaid.get(file);
-    if (said !== undefined) {
-      recordLimitReading("agent.stage-drawing-said-age-ms", now - said);
-    }
-  }
   const drawing = files.filter(
     (file) =>
       now - (drawingSaid.get(file) ?? Number.NEGATIVE_INFINITY) <
@@ -3241,25 +3230,17 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
   /** Down from `top` while one module brings at least half of the one above it. */
   const viaOf = (top: ModuleNode): string[] => {
     const path: string[] = [];
-    const walked = new Set<ModuleNode>([top]);
-    for (let at = top; ;) {
+    for (let at = top; path.length < VIA_DEPTH;) {
       const [next] = (children.get(at) ?? []).sort(
         (a, b) => (brought.get(b) ?? 0) - (brought.get(a) ?? 0)
       );
-      if (
-        !next ||
-        walked.has(next) ||
-        (brought.get(next) ?? 0) * 2 < (brought.get(at) ?? 0)
-      ) {
+      if (!next || (brought.get(next) ?? 0) * 2 < (brought.get(at) ?? 0)) {
         break;
       }
-      walked.add(next);
       path.push(relative(root, next.file ?? next.url));
       at = next;
     }
-    recordLimitReading("agent.stage-via-depth", path.length);
-    // @limit recording: agent.stage-via-depth until 2026-12-03
-    return path.slice(0, VIA_DEPTH);
+    return path;
   };
   const own = { modules: 0, bytes: 0 };
   const deps = { modules: 0, bytes: 0 };
@@ -4964,12 +4945,7 @@ try {
         ? `node ${process.version}`
         : `bun ${Bun.version}`,
   });
-  setInterval(() => {
-    // What the host read of the bounds waiting on data rides its beat
-    // (core limit-readings.ts); the daemon carries it to the hub.
-    const readings = takeLimitReadings();
-    say("beat", readings.length > 0 ? { readings } : {});
-  }, BEAT_MS);
+  setInterval(() => say("beat"), BEAT_MS);
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       started.close().finally(() => process.exit(0));

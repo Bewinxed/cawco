@@ -44,7 +44,6 @@ import {
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES, harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import type {
   AgentHere,
@@ -114,15 +113,12 @@ export interface FolderMovesDeps {
   readonly tell: (instanceId: string, words: string) => void;
 }
 
-// @limit recording: hub.folder-move-read-ms until 2026-12-26
 const READ_TIMEOUT_MS = 60_000;
 const STEP_TIMEOUT_MS = DAY_MS;
-// @limit recording: hub.folder-move-pause-ms until 2026-12-26
 const PAUSE_TIMEOUT_MS = 90_000;
 /** How often a move waiting on a reply looks again. */
 const WAIT_LOOK_MS = 3000;
 /** How long a done or called-off move is kept for a card that was away. */
-// @limit recording: hub.folder-move-settled-read-age-ms until 2026-12-26
 const SETTLED_KEPT_MS = 30 * 60_000;
 /** Free space must cover the folder and this much more (moves.ts' own margin). */
 const ROOM_MARGIN = 1.05;
@@ -466,26 +462,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
 
   /** Both folders read: on one machine in one call, else each on its own. */
   const readBoth = async (
-    sourceMachineId: string,
-    sourcePath: string,
-    targetMachineId: string,
-    targetPath: string
-  ): Promise<[FolderMoveReading, FolderMoveReading]> => {
-    const asked = Date.now();
-    try {
-      return await askBoth(
-        sourceMachineId,
-        sourcePath,
-        targetMachineId,
-        targetPath
-      );
-    } finally {
-      recordLimitReading("hub.folder-move-read-ms", Date.now() - asked);
-    }
-  };
-
-  /** {@link readBoth}'s asks, one machine's or both machines' at once. */
-  const askBoth = async (
     sourceMachineId: string,
     sourcePath: string,
     targetMachineId: string,
@@ -938,16 +914,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
     };
   };
 
-  /** A card that came back to a settled move: how long after it settled. */
-  const settledRead = (row: FolderMoveRow): void => {
-    if (row.stage === "done" || row.stage === "calledOff") {
-      recordLimitReading(
-        "hub.folder-move-settled-read-age-ms",
-        Date.now() - row.updatedAt.getTime()
-      );
-    }
-  };
-
   /** `GET /api/folder-moves/:id`: where a move stands, or what it did. */
   const read = (id: string) => {
     const row = db.folderMoves.row(id);
@@ -957,7 +923,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         detail: folderMoveWords.over,
       });
     }
-    settledRead(row);
     return row.stage === "done" || row.stage === "calledOff"
       ? resultOf(row)
       : runOf(row);
@@ -1131,7 +1096,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         sessions.push(one);
         continue;
       }
-      const pauseAsked = Date.now();
       const answer = await deps.call(
         row.sourceMachineId,
         CONTROL_PAUSE_FOR_MOVE,
@@ -1139,7 +1103,6 @@ export const createFolderMoves = (deps: FolderMovesDeps) => {
         PAUSE_TIMEOUT_MS,
         { harness: one.harness, instanceId: one.instanceId }
       );
-      recordLimitReading("hub.folder-move-pause-ms", Date.now() - pauseAsked);
       if (answer.paused) {
         if (answer.ended) {
           db.moveEndings.put(one.instanceId, answer.ended);

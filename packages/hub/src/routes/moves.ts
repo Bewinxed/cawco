@@ -59,7 +59,7 @@ export const moveRoutes = ({ moves }: Pick<HubContext, "moves">) =>
       moves.start(params.id, body)
     )
     // The moves the hub is carrying, for a screen that connects late.
-    .get("/api/moves", () => moves.tableAsked())
+    .get("/api/moves", () => moves.table())
     // Cancel: the step in flight stops; what is done stays, in `kept`.
     .delete("/api/moves/:id", ({ params }) => moves.cancel(params.id))
     // Retry: a failed move runs its failed step again.

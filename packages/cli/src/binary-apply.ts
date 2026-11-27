@@ -99,7 +99,6 @@ import {
   machineEndpoint,
   publishKeeper,
 } from "@cawco/core/keepers";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import { unknownMigrations } from "@cawco/core/migration-state";
 import {
@@ -133,7 +132,6 @@ import { installedHubDbPath, type ServiceAction, service } from "./service";
 const HEALTH_MS = 45_000;
 // @limit measured: an update's swap to a healthy hub, migrations included, p99 40.6 s, longest 168 s over 547 updates on obelisk (apply.log, 2026-10-06 to 2026-11-26); three times the longest
 const MIGRATION_CAP_MS = 504_000;
-// @limit recording: cli.service-ms until 2026-12-10
 const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a build has to become healthy, from the swap or from a resumed helper's start, before it is rolled back (core {@link UPDATE_TRIAL_MS}). */
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
@@ -210,21 +208,18 @@ const svc = async (
   action: Extract<ServiceAction, "install" | "restart" | "uninstall">,
   ids: readonly ServiceId[]
 ): Promise<void> => {
-  const done = await timed(
-    readWithin(SERVICE_TIMEOUT_MS, () =>
-      service(action, {
-        ids,
-        mode: "prod",
-        follow: false,
-        // The fence has already answered; this is the service manager's turn.
-        force: true,
-        whenIdle: false,
-        note: (line) => console.log(`update: ${line}`),
-        // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
-        binaryLayout: binaryLayout(runtimeVersion),
-      })
-    ),
-    (ms) => recordLimitReading("cli.service-ms", ms)
+  const done = await readWithin(SERVICE_TIMEOUT_MS, () =>
+    service(action, {
+      ids,
+      mode: "prod",
+      follow: false,
+      // The fence has already answered; this is the service manager's turn.
+      force: true,
+      whenIdle: false,
+      note: (line) => console.log(`update: ${line}`),
+      // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
+      binaryLayout: binaryLayout(runtimeVersion),
+    })
   );
   switch (done.kind) {
     case "answered":
@@ -1445,10 +1440,7 @@ function putBackPins(
 
 /** One stop of the hub's unit, said; one that failed or did not answer is said and waited past by the lock. */
 async function stopHub(version: string): Promise<void> {
-  await timed(
-    readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub")),
-    (ms) => recordLimitReading("cli.service-ms", ms)
-  )
+  await readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub"))
     .then((stopped) => {
       switch (stopped.kind) {
         case "answered":

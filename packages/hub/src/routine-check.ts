@@ -34,7 +34,6 @@ import type { CheckRow } from "./db/task-triggers";
  * checks had at most, now every check's. A scan that takes longer belongs
  * in a job of its own on its machine, whose result the check reads.
  */
-// @limit recording: hub.routine-check-ms until 2026-12-10
 export const CHECK_LIMIT_MS = 10 * 60_000;
 
 /**

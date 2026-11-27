@@ -21,7 +21,6 @@
  */
 import type { Database, Statement } from "bun:sqlite";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 
 /**
  * The tables whose whole read costs the hub: the ones that grow with the
@@ -53,7 +52,6 @@ const LARGE: ReadonlySet<string> = new Set([
 ]);
 
 /** How many statements' plans are kept as explained: past it, new ones go unexplained, and the log says so once. */
-// @limit recording: hub.statements-explained until 2026-12-10
 const EXPLAINED_MOST = 5000;
 
 /** What a statement reads its rows by, as SQLite planned it (`EXPLAIN QUERY PLAN`'s `detail`). */
@@ -157,7 +155,6 @@ export const explainStatements = (client: Database): StatementPlans => {
       return;
     }
     explained.add(key);
-    recordLimitReading("hub.statements-explained", explained.size);
     const scan = scanOf(explain, sql);
     if (!scan) {
       return;

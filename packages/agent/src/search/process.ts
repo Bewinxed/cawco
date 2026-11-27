@@ -31,11 +31,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TRANSCRIPT_READ_LIMIT_MS } from "@cawco/core/find";
-import {
-  keepLimitReadings,
-  recordLimitReading,
-  timed,
-} from "@cawco/core/limit-readings";
 import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
@@ -224,7 +219,6 @@ export class SearchProcess<R extends SearchRole> {
     from.heardAt = Date.now();
     switch (said.kind) {
       case "beat":
-        keepLimitReadings(said.readings ?? []);
         return;
       case "ready":
         from.ready = true;
@@ -447,9 +441,7 @@ export class SearchProcess<R extends SearchRole> {
       this.#next();
       this.#unheld();
     }
-    return timed(answered<SearchAnswer<K>>(question), (ms) =>
-      recordLimitReading("agent.search-read-ms", ms)
-    );
+    return answered<SearchAnswer<K>>(question);
   }
 
   /** `op` run in the process to its end, `tell` hearing how far it has come. */

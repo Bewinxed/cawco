@@ -25,7 +25,6 @@ import {
   type TranscriptDoc,
   userAuthor,
 } from "./text.ts";
-import { recordLimitReading } from "./limit-readings.ts";
 
 /**
  * The prefix indexes the FTS table keeps (https://www.sqlite.org/fts5.html#prefix_indexes):
@@ -288,7 +287,6 @@ const RECENT_TIERS = [2000, 20_000];
 const PREFIX_MIN = 3;
 
 /** How many moments of one conversation a search answers with. */
-// @limit recording: parser.conversation-moments until 2026-12-03
 const MOMENTS_PER_CONVERSATION = 3;
 
 /** How much each of a conversation's moments counts in its score, best first. */
@@ -451,7 +449,6 @@ const SAID_PLACE_COLUMNS = "text thinking";
  * the find being stepped through and the words typed just before it, each
  * a few hundred KB at most (two numbers a place). Our own call.
  */
-// @limit recording: parser.place-lists-held until 2026-12-03
 const PLACE_LISTS = 4;
 
 /** Every place of one find in one conversation, oldest first, as `places` holds them between windows. */
@@ -654,7 +651,6 @@ const MARKED_CHARS = 4 * CONTEXT_CHARS;
  * found more often than this is taken to stand everywhere in the column (a
  * word as common as "the"), and the stretch is chosen by the rarer ones.
  */
-// @limit recording: parser.word-places until 2026-12-10
 const PLACES_PER_WORD = 512;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 
@@ -684,7 +680,6 @@ function stretchOf(column: string, words: readonly string[]): number {
         break;
       }
     }
-    recordLimitReading("parser.word-places", found.length);
     if (found.length > PLACES_PER_WORD) {
       everywhere += 1;
     } else {
@@ -2081,12 +2076,9 @@ export class TranscriptIndex {
       }
       const said = words.get(id);
       // The column the gist was cut from, its start.
-      const column = said ? said.text || said.output || "" : undefined;
-      if (column !== undefined) {
-        recordLimitReading("parser.hit-column-chars", column.length);
-      }
-      // @limit recording: parser.hit-column-chars until 2026-12-10
-      const context = column?.slice(0, 2 * CONTEXT_CHARS);
+      const context = said
+        ? (said.text || said.output || "").slice(0, 2 * CONTEXT_CHARS)
+        : undefined;
       const key = `${doc.harness}\u0000${doc.session_id}`;
       const hit = conversations.get(key) ?? {
         harness: doc.harness,
@@ -2327,7 +2319,6 @@ export class TranscriptIndex {
       }
     }
     this.#placeLists.set(key, list);
-    recordLimitReading("parser.place-lists-held", this.#placeLists.size);
     for (const old of this.#placeLists.keys()) {
       if (this.#placeLists.size <= PLACE_LISTS) {
         break;
@@ -2574,9 +2565,6 @@ export class TranscriptIndex {
       };
       conversations.set(key, held);
       const gist = doc.gist.replace(SPACES, " ").trim().toLowerCase();
-      if (!held.said.has(gist)) {
-        recordLimitReading("parser.conversation-moments", held.said.size + 1);
-      }
       if (held.moments.length < MOMENTS_PER_CONVERSATION && !held.said.has(gist)) {
         held.said.add(gist);
         held.moments.push(row);

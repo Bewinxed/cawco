@@ -25,10 +25,6 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { isRecord } from "@cawco/core/is-record";
-import {
-  type LimitReading,
-  LimitReadingSchema,
-} from "@cawco/core/limit-readings";
 import type { PreviewDown } from "@cawco/core/preview/protocol";
 import { isSourceKey, type Upstream } from "@cawco/core/preview/upstream";
 import { z } from "zod";
@@ -127,9 +123,7 @@ export type ServerSays =
       host: { held: boolean; why: string } | null;
     }
   /** Machine origin `key`'s listener at `upstream` didn't answer: the next request asks where it is served now. */
-  | { type: "unreachable"; key: string; upstream: Upstream }
-  /** The server's readings of the bounds waiting on data (core limit-readings.ts), kept as the hub's own. */
-  | { type: "readings"; readings: LimitReading[] };
+  | { type: "unreachable"; key: string; upstream: Upstream };
 
 /** Where a machine's preview is served now, or why not, as {@link UPSTREAM_PATH} answers. */
 export type UpstreamAnswer =
@@ -198,10 +192,6 @@ const ServerSaysSchema = z.discriminatedUnion("type", [
     type: z.literal("unreachable"),
     key: z.string(),
     upstream: UpstreamSchema,
-  }),
-  z.object({
-    type: z.literal("readings"),
-    readings: z.array(LimitReadingSchema),
   }),
 ]);
 

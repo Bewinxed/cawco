@@ -3438,6 +3438,13 @@
       "when": 1795812821808,
       "tag": "0498_catalog_read_by",
       "breakpoints": true
+    },
+    {
+      "idx": 499,
+      "version": "6",
+      "when": 1795815672703,
+      "tag": "0499_drop_limit_readings",
+      "breakpoints": true
     }
   ]
 }

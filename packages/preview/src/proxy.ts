@@ -5,7 +5,6 @@ import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
 import { fileViewerPage, fileViewOf } from "@cawco/core/file-viewer";
 import type { ControlRefusal } from "@cawco/core/frames";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
   PREVIEW_DOWN_META,
@@ -684,13 +683,11 @@ const gzippedHeaders = (answer: Response): Headers => {
 const kept = new Map<string, Uint8Array<ArrayBuffer>>();
 let keptBytes = 0;
 /** What the hub keeps of them at most. Our call: a few canvases' graphs, gzipped. */
-// @limit recording: preview.gzip-kept-bytes until 2026-12-10
 const KEPT_BYTES = 64 * 1024 * 1024;
 
 const keep = (address: string, body: Uint8Array<ArrayBuffer>): void => {
   kept.set(address, body);
   keptBytes += body.byteLength;
-  recordLimitReading("preview.gzip-kept-bytes", keptBytes);
   for (const [old, bytes] of kept) {
     if (keptBytes <= KEPT_BYTES) {
       break;
@@ -773,17 +770,12 @@ export async function fileViewerOf(
   const type = headers.get("content-type");
   const length = Number(headers.get("content-length"));
   const name = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
-  const known = size ?? (Number.isFinite(length) && length > 0 ? length : null);
-  const view = await fileViewOf(type, body);
-  if (view.kind === "text" && known !== null) {
-    recordLimitReading("preview.viewed-text-bytes", known);
-  }
   const page = fileViewerPage({
     name: name || url.hostname,
     src: `${url.pathname}${url.search}`,
     type,
-    size: known,
-    view,
+    size: size ?? (Number.isFinite(length) && length > 0 ? length : null),
+    view: await fileViewOf(type, body),
   });
   for (const header of FILE_ONLY_HEADERS) {
     headers.delete(header);

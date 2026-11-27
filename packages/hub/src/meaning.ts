@@ -1,5 +1,4 @@
 import type { Bounded } from "@cawco/core/bounded";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   cutToTail,
   JEV_WINDOW_TOKENS,
@@ -15,7 +14,6 @@ import { askJev, jevAccess, jevCost } from "./jev";
 import type { JevResult } from "./jev-types";
 
 /** A meaning rule answers inside the turn it judges, so it is asked briefly. */
-// @limit recording: hub.meaning-ms until 2026-12-10
 const MEANING_TIMEOUT_MS = 10_000;
 
 /**
@@ -169,12 +167,9 @@ export class MeaningJudge {
       );
     let result: JevResult<typeof questions>;
     try {
-      const asking = await timed(
-        askJev(access, state, questions, {
-          timeoutMs: MEANING_TIMEOUT_MS,
-        }),
-        (ms) => recordLimitReading("hub.meaning-ms", ms)
-      );
+      const asking = await askJev(access, state, questions, {
+        timeoutMs: MEANING_TIMEOUT_MS,
+      });
       switch (asking.kind) {
         case "answered":
           result = asking.value;

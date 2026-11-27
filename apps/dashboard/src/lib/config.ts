@@ -16,15 +16,12 @@ export const WS_RECONNECTS = {
 } as const;
 
 /** How long a control call waits for the frame that answers its `requestId`. */
-// @limit recording: dashboard.control-ms until 2026-12-10
 export const CONTROL_TIMEOUT_MS = 15_000;
 
 /** Discarding a spin-off removes a git worktree, which is slower disk work. */
-// @limit recording: dashboard.discard-ms until 2026-12-10
 export const DISCARD_TIMEOUT_MS = 30_000;
 
 /** Installing a tool fetches an installer and runs it — slower still. */
-// @limit recording: dashboard.install-tool-ms until 2026-12-26
 export const INSTALL_TIMEOUT_MS = 300_000;
 
 /**

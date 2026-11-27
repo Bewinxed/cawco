@@ -60,7 +60,6 @@ import {
 import { buryPin, newId, readPins } from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup, InkPoint } from "@cawco/core/ink";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { boxOf } from "@cawco/core/shapes";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
@@ -117,7 +116,6 @@ const ENCLOSE_SLACK = 8;
 /** How far either side of a line an element may reach and still be crossed whole, px: about a line of text. Our call. */
 const LINE_REACH = 24;
 /** A container of the marked elements anchors them while its box is at most this many times their reach's. Our call. */
-// @limit recording: overlay.ink-container-ratio until 2026-12-10
 const CONTAINER_MOST = 2;
 /** A pen's pressure when it reports none (a pen that does not measure it). */
 const NO_PRESSURE = 0.5;
@@ -1028,12 +1026,6 @@ export function startInk(deps: InkDeps): Ink {
     }
     const first = over[0] as Element;
     const common = over.length > 1 ? containerOf(over) : null;
-    if (common) {
-      recordLimitReading(
-        "overlay.ink-container-ratio",
-        area(boxed(common)) / Math.max(1, area(reach))
-      );
-    }
     const anchor =
       common &&
       movesWith(common, first) &&

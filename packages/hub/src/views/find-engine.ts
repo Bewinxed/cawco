@@ -56,7 +56,6 @@ import {
   type Query,
 } from "@cawco/core/find-match";
 import { harnessLabel } from "@cawco/core/harness/kinds";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import { shortId } from "@cawco/core/short-id";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
@@ -76,9 +75,7 @@ import type { ViewMachine } from "./read";
 const MAX_LIMIT = 50;
 
 /** How long an answer that asked the machines is kept for its next pages, ms. */
-// @limit recording: hub.find-page-age-ms until 2026-12-10
 const PAGE_KEPT_MS = 60_000;
-// @limit recording: hub.find-pages-held until 2026-12-03
 const PAGES_KEPT = 16;
 
 /**
@@ -990,10 +987,6 @@ export const createFindEngine = (deps: EngineDeps) => {
       request.where ?? {},
     ]);
     const kept = paging ? pages.get(key) : undefined;
-    if (kept) {
-      // A next page asked of a kept answer: how long after it was kept.
-      recordLimitReading("hub.find-page-age-ms", Date.now() - kept.at);
-    }
     // Kept while it holds what the page asks for: a machine that filled its ask has more, asked again for as many as this page reaches.
     if (
       kept &&
@@ -1020,7 +1013,6 @@ export const createFindEngine = (deps: EngineDeps) => {
         coverage: fresh.coverage,
         transcriptsMs: fresh.transcriptsMs,
       });
-      recordLimitReading("hub.find-pages-held", pages.size);
       while (pages.size > PAGES_KEPT) {
         const [oldest] = pages.keys();
         pages.delete(oldest);

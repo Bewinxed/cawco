@@ -27,7 +27,6 @@ import type {
 import { IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core/image-generation";
 import type { LandsMode } from "@cawco/core/injected";
 import { handoffMarker, withInputsLine } from "@cawco/core/injected";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   machineCalled,
   machineLabel,
@@ -1226,9 +1225,7 @@ function repeatOfRefused(
     coldRefusals.delete(key);
     return true;
   }
-  recordLimitReading("hub.cold-refusals-held", coldRefusals.size);
   // Bound warnings in memory; a newer turn also invalidates an unused repeat.
-  // @limit recording: hub.cold-refusals-held until 2026-12-03
   if (coldRefusals.size >= 256) {
     const oldest = coldRefusals.keys().next().value;
     if (oldest !== undefined) {

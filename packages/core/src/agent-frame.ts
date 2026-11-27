@@ -28,7 +28,6 @@ import { isFramePayload } from "./frame-kinds";
 import type { FramePayload } from "./frames";
 import type { ReportedHarness } from "./harness";
 import { isRecord } from "./is-record";
-import { LimitReadingSchema } from "./limit-readings";
 import type { ServingPreview } from "./preview/upstream";
 import type {
   DamagedRecordReport,
@@ -352,7 +351,6 @@ const heartbeatOf = (
     NamedMachineCapabilitiesSchema
   ),
   damagedRecords: damagedRecordsOf(said.damagedRecords),
-  limitReadings: fields.items("limitReadings", LimitReadingSchema) ?? [],
   activity: fields.field("activity", MachineActivitySchema),
   activityReadable:
     typeof said.activityReadable === "boolean"

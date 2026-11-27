@@ -14,7 +14,6 @@ import { detach } from "@cawco/core/detach";
 import type { ClientEnvelope } from "@cawco/core/envelopes";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { NamedSpawn } from "@cawco/core/protocol";
 import type { ModeAsk } from "@cawco/core/session-messages";
 import {
@@ -557,14 +556,6 @@ function bind(socket: WebSocket): void {
   const line = clientLine(socket);
   socket.onmessage = (event) => {
     lastHeard = Date.now();
-    if (heartbeatAsked !== undefined) {
-      // How long the hub took to say anything after a heartbeat.
-      recordLimitReading(
-        "dashboard.heartbeat-heard-ms",
-        lastHeard - heartbeatAsked
-      );
-      heartbeatAsked = undefined;
-    }
     line.receive(String(event.data));
   };
   startHeartbeat(socket);
@@ -733,8 +724,6 @@ function socketClosed(): void {
 
 /** When anything last arrived on the socket: the heartbeat's proof of life. */
 let lastHeard = 0;
-/** When the heartbeat now waiting on its first word was asked; undefined while none waits. */
-let heartbeatAsked: number | undefined;
 
 let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -769,15 +758,12 @@ function startHeartbeat(socket: WebSocket): void {
       return;
     }
     const asked = Date.now();
-    heartbeatAsked = asked;
     clientLine(socket).send({ type: "heartbeat" } satisfies StreamHeartbeat);
     clearTimeout(heartbeatDeadline);
     heartbeatDeadline = setTimeout(() => {
       if (lastHeard >= asked || socket !== hubHeld.socket) {
         return;
       }
-      recordLimitReading("dashboard.heartbeat-heard-ms", Date.now() - asked);
-      heartbeatAsked = undefined;
       console.warn(
         `[cawco] hub socket: nothing heard ${Date.now() - asked} ms after a heartbeat; reconnecting`
       );

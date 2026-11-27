@@ -7,8 +7,6 @@ import {
 import { sentSkeletonsRefusal } from "@cawco/core/canvas-skeleton";
 import type { MapChange } from "@cawco/core/doc-maps";
 import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
-import { timedEffect } from "@cawco/core/effect/timed";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
@@ -198,9 +196,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     }
     if (
       await ctx.deps.lifetime.run(
-        timedEffect(screenJoined(docs, row.id, CANVAS_LIMITS.convertMs), (ms) =>
-          recordLimitReading("hub.canvas-convert-ms", ms)
-        )
+        screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)
       )
     ) {
       return one;
@@ -275,14 +271,8 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       return;
     }
     const meta = docMeta(docs.doc(id));
-    const lastWrite = Date.now();
     const pictured = (event: MapChange) => {
       if (event.keysChanged.has("pictureAt")) {
-        // The picture that follows a canvas's last write: how long after.
-        recordLimitReading(
-          "hub.canvas-picture-after-write-ms",
-          Date.now() - lastWrite
-        );
         letGoHeadless(id);
       }
     };

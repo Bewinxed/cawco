@@ -103,7 +103,6 @@ export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
  * its server, claude its CLI) takes seconds; past this the machine is not
  * going to answer.
  */
-// @limit recording: hub.spawn-start-ms until 2026-12-10
 export const SPAWN_START_TIMEOUT_MS = 120_000;
 
 /**

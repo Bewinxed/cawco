@@ -3,7 +3,6 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { installedHubDbPath } from "../../../packages/cli/src/service";
 import { readInstallation } from "../../../packages/core/src/binary-installation";
-import { recordLimitReading } from "../../../packages/core/src/limit-readings";
 import type { Runner } from "../binary-tests";
 import { alone } from "./shared";
 
@@ -14,7 +13,6 @@ import { alone } from "./shared";
  * past any real database's migrations, short enough that a hang fails the
  * release while its run is still watched.
  */
-// @limit recording: release.live-database-check-ms until 2026-12-10
 const LIVE_DATABASE_LIMIT_S = 180;
 
 /**
@@ -84,7 +82,6 @@ export const liveDatabase = async (
   } finally {
     handle.close();
   }
-  const began = Date.now();
   try {
     await run(
       [process.execPath, "run", "migrations:check", "--db", copy],
@@ -97,7 +94,6 @@ export const liveDatabase = async (
       }
     );
   } finally {
-    recordLimitReading("release.live-database-check-ms", Date.now() - began);
     await rm(copy, { force: true });
   }
 };

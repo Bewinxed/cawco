@@ -65,7 +65,6 @@ export type CanvasRequestResult = { ids: string[] } | { error: string };
 /** Our bounds on a canvas, each the brief's number or our own call where marked. */
 export const CANVAS_LIMITS = {
   /** How long the tool waits for a screen to convert. */
-  // @limit recording: hub.canvas-convert-ms until 2026-12-10
   convertMs: 10_000,
   /** Pixels in a canvas's picture. */
   // @limit external: iOS Safari draws no canvas past 16,777,216 pixels, 4096 by 4096, the smallest of the browsers' limits (measured per browser at https://github.com/jhildenbiddle/canvas-size#test-results)
@@ -74,26 +73,20 @@ export const CANVAS_LIMITS = {
   // @limit external: a Retina screen draws 2 device pixels per CSS pixel (Apple's @2x), so a picture drawn sharper than that adds nothing
   pictureScale: 2,
   /** Bytes of one image file's data URL. Our call. */
-  // @limit recording: hub.canvas-file-bytes until 2026-12-10
   fileBytes: 8 * 1024 * 1024,
   /** Bytes of one image a screen adds: Excalidraw's own ceiling (its `MAX_ALLOWED_FILE_BYTES`). */
-  // @limit recording: canvas.image-bytes until 2026-12-10
   imageBytes: 4 * 1024 * 1024,
   /** Bytes of one picture. Our call. */
-  // @limit recording: hub.canvas-picture-bytes until 2026-12-10
   pictureBytes: 32 * 1024 * 1024,
   /**
    * How long the hub machine's headless screen stays on a canvas after its
    * last write, waiting for the picture that follows a quiet 2 s; the daemon
    * closes one the hub has not held on for twice this. Our call.
    */
-  // @limit recording: hub.canvas-picture-after-write-ms until 2026-12-10
   screenHoldMs: 15_000,
   /** How long the hub waits for the daemon to launch its Chromium and load the canvas page. Our call. */
-  // @limit recording: hub.canvas-screen-open-ms until 2026-12-10
   screenOpenMs: 45_000,
   /** How long the daemon gives the canvas page to load, inside {@link CANVAS_LIMITS.screenOpenMs}. Our call. */
-  // @limit recording: agent.canvas-screen-load-ms until 2026-12-10
   screenLoadMs: 30_000,
 } as const;
 

@@ -91,7 +91,6 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths/roots";
@@ -153,7 +152,6 @@ const stampingOf = (method: string, path: string): Stamping | undefined =>
 // @limit external: the engine's API server is Go's net/http, whose DefaultMaxHeaderBytes is 1 << 20, 1 MB (https://pkg.go.dev/net/http#pkg-constants)
 const HEAD_MAX = 1024 * 1024;
 /** The most a stamped body may hold: a spec or a kube YAML, never a payload. */
-// @limit recording: agent.container-create-bytes until 2026-12-26
 const CREATE_MAX = 16 * 1024 * 1024;
 const HEAD_END = Buffer.from("\r\n\r\n");
 const CRLF = Buffer.from("\r\n");
@@ -726,7 +724,6 @@ const serveConnection = (
           continue;
         }
       }
-      recordLimitReading("agent.container-create-bytes", create.size);
       if (create.size > CREATE_MAX) {
         refuse("a create whose body is over 16 MiB");
         return;

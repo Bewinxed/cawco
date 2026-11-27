@@ -22,7 +22,6 @@
  */
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { sessionTakenDir } from "@cawco/core/paths/cawco";
 import {
   DamagedRecord,
@@ -32,7 +31,6 @@ import {
 import { z } from "zod";
 
 /** How many of a session's sends are kept as taken, the latest. */
-// @limit recording: agent.taken-sends-held until 2026-12-03
 const TAKEN_KEPT = 128;
 
 const fileOf = (instanceId: string): string =>
@@ -67,8 +65,6 @@ export const noteTaken = (instanceId: string, uuids: string[]): void => {
   if (fresh.length === 0) {
     return;
   }
-  recordLimitReading("agent.taken-sends-held", taken.length + fresh.length);
-  // @limit recording: agent.taken-sends-held until 2026-12-03
   const next = [...taken, ...fresh].slice(-TAKEN_KEPT);
   writeStateFileSync(fileOf(instanceId), JSON.stringify(next));
   known.set(instanceId, next);

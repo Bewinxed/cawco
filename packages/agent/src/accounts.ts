@@ -21,11 +21,9 @@ import {
 } from "@cawco/core/accounts";
 import { boundedRead, Gone, Unanswered } from "@cawco/core/effect/bounded";
 import { makeJoin } from "@cawco/core/effect/join";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -107,7 +105,6 @@ const envFor = (account: string): Record<string, string | undefined> => ({
  * command such as `claude auth status` … exited in the middle of a token
  * refresh"), so it runs on nothing older ({@link claudeToStart}).
  */
-// @limit recording: agent.auth-status-ms until 2026-12-26
 const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 /**
@@ -250,9 +247,9 @@ export const authStatus = Effect.fn("authStatus")(function* (
       why: authStatusNotRun(dir, executable.refused),
     } satisfies AuthStatus;
   }
-  return yield* timedEffect(
-    boundedRead(AUTH_STATUS_TIMEOUT_MS, statusOfDir(executable, env, dir)),
-    (ms) => recordLimitReading("agent.auth-status-ms", ms)
+  return yield* boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    statusOfDir(executable, env, dir)
   ).pipe(
     Effect.catchTag("Unanswered", (none) =>
       Effect.succeed<AuthStatus>({
@@ -591,9 +588,9 @@ const lockReads = makeJoin<"login", boolean, Gone | LockUnread>();
 
 const loginLocked: Effect.Effect<boolean, Gone | LockUnread> = lockReads.run(
   "login",
-  timedEffect(
-    boundedRead(AUTH_STATUS_TIMEOUT_MS, keychainLockState(loginKeychainPath())),
-    (ms) => recordLimitReading("agent.auth-status-ms", ms)
+  boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    keychainLockState(loginKeychainPath())
   ).pipe(
     // The account read waiting on it ends unanswered with it.
     Effect.catchTag("Unanswered", ({ reason, after }) =>
@@ -683,7 +680,6 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
 };
 
 /** How long a probe may take to be answered at initialize. */
-// @limit recording: agent.account-probe-ms until 2026-12-26
 const PROBE_TIMEOUT_MS = 60_000;
 
 /** Why an account dir's Claude Code is not started, in a sentence. */
@@ -701,9 +697,9 @@ export const startable = Effect.fn("startable")(function* (
   account: string,
   done: string
 ) {
-  const away = yield* timedEffect(
-    boundedRead(AUTH_STATUS_TIMEOUT_MS, lockedAway(keychainService(account))),
-    (ms) => recordLimitReading("agent.auth-status-ms", ms)
+  const away = yield* boundedRead(
+    AUTH_STATUS_TIMEOUT_MS,
+    lockedAway(keychainService(account))
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }: Unanswered) =>
       Effect.fail(
@@ -721,7 +717,6 @@ export const startable = Effect.fn("startable")(function* (
 });
 
 /** How long a check's one turn may take to end. */
-// @limit recording: agent.account-check-ms until 2026-12-26
 const CHECK_TIMEOUT_MS = 90_000;
 
 /**
@@ -768,12 +763,9 @@ const heldQuery = (
 
 /** A held session's initialize response within {@link PROBE_TIMEOUT_MS}; past it, `late` is the failure. */
 const initialized = (handle: ReturnType<typeof query>, late: string) =>
-  timedEffect(
-    boundedRead(
-      PROBE_TIMEOUT_MS,
-      fromPromise(() => handle.initializationResult())
-    ),
-    (ms) => recordLimitReading("agent.account-probe-ms", ms)
+  boundedRead(
+    PROBE_TIMEOUT_MS,
+    fromPromise(() => handle.initializationResult())
   ).pipe(
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(new ClaudeUnanswered({ message: late }))
@@ -801,36 +793,33 @@ const accountCheck = Effect.fn("accountCheck")(function* (account: string) {
       systemPrompt: CHECK_PROMPT,
     },
   });
-  return yield* timedEffect(
-    boundedRead(
-      CHECK_TIMEOUT_MS,
-      fromPromise(async (): Promise<AccountCheck> => {
-        for await (const message of handle) {
-          if (
-            message.type === "assistant" &&
-            !message.parent_tool_use_id &&
-            message.error
-          ) {
-            return {
-              kind: "error",
-              error: message.error,
-              text: message.message.content
-                .flatMap((block) => (block.type === "text" ? [block.text] : []))
-                .join("\n"),
-            };
-          }
-          if (
-            message.type === "result" &&
-            message.subtype === "success" &&
-            !message.is_error
-          ) {
-            return { kind: "answered" };
-          }
+  return yield* boundedRead(
+    CHECK_TIMEOUT_MS,
+    fromPromise(async (): Promise<AccountCheck> => {
+      for await (const message of handle) {
+        if (
+          message.type === "assistant" &&
+          !message.parent_tool_use_id &&
+          message.error
+        ) {
+          return {
+            kind: "error",
+            error: message.error,
+            text: message.message.content
+              .flatMap((block) => (block.type === "text" ? [block.text] : []))
+              .join("\n"),
+          };
         }
-        throw new Error("Claude Code ended before the check's turn did");
-      })
-    ),
-    (ms) => recordLimitReading("agent.account-check-ms", ms)
+        if (
+          message.type === "result" &&
+          message.subtype === "success" &&
+          !message.is_error
+        ) {
+          return { kind: "answered" };
+        }
+      }
+      throw new Error("Claude Code ended before the check's turn did");
+    })
   ).pipe(
     Effect.catchIf(isUnanswered, () =>
       Effect.fail(

@@ -43,12 +43,6 @@
 
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
-import {
-  keepLimitReadings,
-  LimitReadingSchema,
-  recordLimitReading,
-} from "@cawco/core/limit-readings";
 import {
   CANVAS_PATH,
   CANVAS_PLAN_ID,
@@ -73,7 +67,6 @@ import { stageRenderWords as words } from "@cawco/core/words/stage-render";
 import type { Socket, TCPSocketListener } from "bun";
 import { Duration, Effect } from "effect";
 import type { Browser, BrowserContext, Page } from "playwright-core";
-import { z } from "zod";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { runPromise } from "./daemon-runtime";
@@ -87,10 +80,8 @@ const RENDER_WAIT_MS = STAGE_RENDER_MS;
 /** The end of the limit kept for the answer once the sweep is read: the stage's report and the state's picture. Ours: a pose and a screenshot of one state, on a machine under load. */
 const ANSWER_MS = 10_000;
 /** How long the page has to say where its sweep stands, each time it is asked. Ours: a read of a few fields. */
-// @limit recording: agent.sweep-said-ms until 2026-12-03
 const SAID_WAIT_MS = 5000;
 /** How often the page's sweep is read while it draws. Ours. */
-// @limit recording: agent.sweep-polls until 2026-12-03
 const POLL_MS = 250;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
 const SETTLE_MS = 600;
@@ -282,24 +273,14 @@ const sweepUntil = Effect.fnUntraced(function* (page: Page, deadline: number) {
   if (Date.now() >= deadline) {
     return last;
   }
-  let polls = 0;
-  const look = Effect.suspend(() => {
-    polls += 1;
-    return timedEffect(
-      sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, deadline - Date.now()))),
-      (ms) => recordLimitReading("agent.sweep-said-ms", ms)
-    );
-  }).pipe(
+  const look = Effect.suspend(() =>
+    sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, deadline - Date.now())))
+  ).pipe(
     Effect.map((now) => {
       if (now !== "stopped") {
         last = now;
       }
-      const drawn = last?.swept && last.reports > 0 ? last : undefined;
-      if (drawn) {
-        // The poll at which the page had drawn everything.
-        recordLimitReading("agent.sweep-polls", polls);
-      }
-      return drawn;
+      return last?.swept && last.reports > 0 ? last : undefined;
     })
   );
   const looked = yield* lookUntil(
@@ -373,18 +354,6 @@ async function openContext(
 
 /** A context closed; the shared browser closed with the last. */
 async function closeContext(context: BrowserContext): Promise<void> {
-  // Each page's readings of the bounds waiting on data, carried on this
-  // daemon's beat; a page that can't be asked keeps its own.
-  for (const page of context.pages()) {
-    const said = await page
-      .evaluate(() => {
-        const take: unknown = Reflect.get(globalThis, "__cawcoReadings");
-        return typeof take === "function" ? take() : [];
-      })
-      .catch(() => []);
-    const readings = z.array(LimitReadingSchema).safeParse(said);
-    keepLimitReadings(readings.success ? readings.data : []);
-  }
   pagesOpen -= 1;
   await context.close().catch(() => undefined);
   if (pagesOpen === 0 && shared) {
@@ -612,10 +581,7 @@ async function readKept(
       throw new Error(words.readerGone);
     }
     const now = await runPromise(
-      timedEffect(
-        sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, until - Date.now()))),
-        (ms) => recordLimitReading("agent.sweep-said-ms", ms)
-      )
+      sweepOf(page, Math.max(1, Math.min(SAID_WAIT_MS, until - Date.now())))
     );
     if (now !== "stopped") {
       said = now;

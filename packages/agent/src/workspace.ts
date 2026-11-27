@@ -34,7 +34,6 @@ import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { folderBytes } from "@cawco/core/folder-bytes";
 import { makeFolder } from "@cawco/core/folders";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { processesWithin } from "@cawco/core/live-processes";
 import {
   type CreateRecord,
@@ -1065,7 +1064,6 @@ const cutClone = async (
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);
-    recordLimitReading("agent.workspace-cut-ms", Date.now() - started);
     console.info(
       `[workspace] ${id}: cut from ${repoRoot} (a clone) at ${path} on ${branch} in ${Date.now() - started} ms`
     );

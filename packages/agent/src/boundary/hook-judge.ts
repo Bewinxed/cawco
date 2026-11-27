@@ -10,8 +10,6 @@ import { access, readFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join } from "node:path";
 import { boundedRead, type Unanswered } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { workspaceClaudeTmpDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -33,7 +31,6 @@ import { scriptText } from "./shims";
 import { refusal, stateDir } from "./state";
 
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
-// @limit recording: agent.boundary-judge-answer-ms until 2026-12-03
 export const HOOK_TIMEOUT_S = 90;
 
 /**
@@ -319,45 +316,42 @@ const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
  * connection is closed once the answer is whole, or the read let go.
  */
 const judgeSays = (socket: string): Effect.Effect<string, Unanswered> =>
-  timedEffect(
-    boundedRead(
-      HOOK_LIMIT_S * 1000,
-      Effect.gen(function* () {
-        const answer = yield* Deferred.make<string>();
-        const said = (words: string) =>
-          Deferred.doneUnsafe(answer, Effect.succeed(words));
-        yield* Effect.acquireRelease(
-          Effect.sync(() => {
-            const chunks: Buffer[] = [];
-            const connection = createConnection(socket);
-            connection.on("connect", () => {
-              connection.write(`${JUDGE_BUILD_QUESTION}\n`);
-            });
-            // Its answer is whole at its end mark (protocol.ts
-            // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
-            // macOS at times never sent.
-            connection.on("data", (chunk: Buffer) => {
-              chunks.push(chunk);
-              const read = Buffer.concat(chunks);
-              const end = read.indexOf(JUDGE_ANSWER_END);
-              if (end >= 0) {
-                said(read.subarray(0, end).toString("utf8"));
-              }
-            });
-            connection.on("end", () => {
-              said(Buffer.concat(chunks).toString("utf8"));
-            });
-            connection.on("error", (error) => {
-              said(`nothing (${error.message})`);
-            });
-            return connection;
-          }),
-          (connection) => Effect.sync(() => connection.destroy())
-        );
-        return yield* Deferred.await(answer);
-      }).pipe(Effect.scoped)
-    ),
-    (ms) => recordLimitReading("agent.boundary-judge-answer-ms", ms)
+  boundedRead(
+    HOOK_LIMIT_S * 1000,
+    Effect.gen(function* () {
+      const answer = yield* Deferred.make<string>();
+      const said = (words: string) =>
+        Deferred.doneUnsafe(answer, Effect.succeed(words));
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const chunks: Buffer[] = [];
+          const connection = createConnection(socket);
+          connection.on("connect", () => {
+            connection.write(`${JUDGE_BUILD_QUESTION}\n`);
+          });
+          // Its answer is whole at its end mark (protocol.ts
+          // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
+          // macOS at times never sent.
+          connection.on("data", (chunk: Buffer) => {
+            chunks.push(chunk);
+            const read = Buffer.concat(chunks);
+            const end = read.indexOf(JUDGE_ANSWER_END);
+            if (end >= 0) {
+              said(read.subarray(0, end).toString("utf8"));
+            }
+          });
+          connection.on("end", () => {
+            said(Buffer.concat(chunks).toString("utf8"));
+          });
+          connection.on("error", (error) => {
+            said(`nothing (${error.message})`);
+          });
+          return connection;
+        }),
+        (connection) => Effect.sync(() => connection.destroy())
+      );
+      return yield* Deferred.await(answer);
+    }).pipe(Effect.scoped)
   );
 
 /** A judge's answer, or that it gave none in time, in words a law's line quotes. */

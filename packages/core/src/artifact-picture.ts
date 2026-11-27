@@ -66,7 +66,6 @@ export const PICTURE_LIMITS = {
    * `STAGE_READY_MS`, 60 s), then the page loads and is waited on until
    * it is ready: one bound for both. Our call.
    */
-  // @limit recording: agent.picture-load-ms until 2026-12-10
   loadMs: 75_000,
   /**
    * How long a page stands ready before its picture: content painted and
@@ -74,12 +73,9 @@ export const PICTURE_LIMITS = {
    * and the hello that places its pins (agent artifact-picture.ts
    * `watchReadiness`), within `loadMs`, as Files waits on a page.
    */
-  // @limit recording: agent.picture-ready-ms until 2026-12-10
   settleMs: 1000,
   /** The picture itself, once the page settled. Our call. */
-  // @limit recording: agent.picture-shot-ms until 2026-12-10
   shotMs: 15_000,
   /** How long the hub waits for the daemon's answer, launch to picture: the load, the settle and the picture, with room for the launch. Our call. */
-  // @limit recording: hub.picture-ask-ms until 2026-12-10
   askMs: 100_000,
 } as const;

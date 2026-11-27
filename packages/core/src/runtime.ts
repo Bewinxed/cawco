@@ -60,12 +60,14 @@ export const runtimeCommit =
  * `written` with its provider, host, container and what it made, which the
  * hub's write door records (hub writes.ts); an epoch-9 agent refuses the op
  * as no write it knows, and an epoch-9 hub sends a `write` and reads a
- * `made`, which an epoch-10 agent refuses. A hub sends a launch only to an
+ * `made`, which an epoch-10 agent refuses. Epoch 11: the hub keeps no
+ * bound readings, so it answers no `POST /api/limit-readings/:machine`,
+ * which an epoch-10 agent's verbs call as they end. A hub sends a launch only to an
  * agent whose range holds its own, and a joined machine installs only a
  * build whose range overlaps its hub's.
  */
 // @limit external: the wire protocol's own version
-export const protocolRange = { min: 10, max: 10 } as const;
+export const protocolRange = { min: 11, max: 11 } as const;
 /**
  * The folder every build's runtime folder sits in, one per build by its
  * version, beside the binary root's `versions/` (binary-installation.ts

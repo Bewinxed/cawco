@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { recordLimitReading } from "@cawco/core/limit-readings";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * A block an agent drew inside its reply: an OpenUI Lang program over the
@@ -129,7 +128,6 @@
 
   /** How long a drawing stands with nothing changing before it counts as settled, and the most a settle waits. */
   const QUIET_MS = 250;
-  // @limit recording: dashboard.block-settle-ms until 2026-12-10
   const SETTLE_MAX_MS = 3000;
 
   /**
@@ -144,16 +142,11 @@
     }
     let gone = false;
     let quiet: ReturnType<typeof setTimeout> | undefined;
-    const began = performance.now();
     const give = () => {
       if (gone) {
         return;
       }
       gone = true;
-      recordLimitReading(
-        "dashboard.block-settle-ms",
-        performance.now() - began
-      );
       watch.disconnect();
       clearTimeout(cap);
       const drawn = body.cloneNode(true);

@@ -16,7 +16,6 @@ import { detach } from "@cawco/core/detach";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { harnessName } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type { StarterPlace } from "@cawco/core/starters";
 import { pictureWords } from "@cawco/core/words/pictures";
 import { SvelteSet } from "svelte/reactivity";
@@ -26,7 +25,6 @@ import type { SendExtras } from "../send-store";
 import { uploadFile } from "./file-upload";
 
 /** A paste longer than this rides as a named attachment, not inline text. */
-// @limit recording: dashboard.paste-chars until 2026-12-10
 const LARGE_PASTE = 1200;
 
 /** The largest file that rides as text, folded into the turn. */
@@ -530,7 +528,6 @@ export class ComposerDraft {
       return true;
     }
     const text = data.getData("text/plain");
-    recordLimitReading("dashboard.paste-chars", text.length);
     if (text.length > LARGE_PASTE && this.byReference) {
       detach(
         this.attach(

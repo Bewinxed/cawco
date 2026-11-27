@@ -14,7 +14,6 @@
 import { join, posix } from "node:path";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import type { FolderWeight } from "@cawco/core/preview/protocol";
-import type { FolderLimits } from "./design-files";
 import type { DesignFile } from "./design-folder";
 
 /** The folder a folder preview's files stand in, under its artifact's own. */
@@ -23,18 +22,6 @@ const PREVIEW_FOLDER = "folder";
 /** Where folder preview `id`'s files stand under artifacts root `root`. */
 export const previewFolderOf = (root: string, id: string): string =>
   join(root, id, PREVIEW_FOLDER);
-
-/**
- * The most a folder preview holds, ours: a page or a built app with the
- * scripts, styles, fonts and pictures it loads, never a project's tree. The
- * hub reads every byte of it off the agent's machine and keeps it.
- */
-export const FOLDER_LIMITS: FolderLimits = {
-  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
-  bytes: 256 * 1024 * 1024,
-  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
-  files: 10_000,
-};
 
 const QUERY_OR_HASH = /[?#]/u;
 const LEADING_SLASHES = /^\/+/u;

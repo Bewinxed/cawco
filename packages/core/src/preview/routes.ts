@@ -123,14 +123,6 @@ export const OVERLAY_PATH = "/__cawco/overlay.js";
 export const PREVIEW_ERRORS_PATH = "/__cawco/errors";
 
 /**
- * Where the preview overlay hands its readings of the bounds still waiting
- * on data (core limit-readings.ts): the hub's own path there, kept as its
- * `POST /api/limit-readings/browser` keeps the dashboard's (hub
- * limit-readings.ts).
- */
-export const PREVIEW_READINGS_PATH = "/__cawco/limit-readings";
-
-/**
  * The way into a preview (hub preview-access.ts). Every request to a
  * preview origin, a host-mode name or an origin's own port, needs the
  * browser's pass ({@link PREVIEW_PASS_COOKIE}, {@link PREVIEW_PORT_PASS_COOKIE}),

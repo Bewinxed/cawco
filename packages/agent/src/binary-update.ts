@@ -76,7 +76,6 @@ import {
   machineEndpoint,
   publishKeeper,
 } from "@cawco/core/keepers";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import type { UpdateReport } from "@cawco/core/protocol";
 import { verifyManifest } from "@cawco/core/release-manifest";
@@ -207,7 +206,6 @@ const RETIRED_FIELDS = z.object({
 /** The lease of the fence an install raises: the helper restarts the services well within it. */
 const INSTALL_FENCE_MS = 10 * 60_000;
 /** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
-// @limit recording: agent.update-commands-seen until 2026-12-03
 const COMMANDS_KEPT = 20;
 /**
  * A failed download or verification of one build, tried again: from 2 min
@@ -946,11 +944,8 @@ export class BinaryUpdater {
         skipped: `command ${id} was already acted on; it is not acted on again`,
       };
     }
-    const commands = [...(this.#state.commands ?? []), id];
-    recordLimitReading("agent.update-commands-seen", commands.length);
     await this.#set({
-      // @limit recording: agent.update-commands-seen until 2026-12-03
-      commands: commands.slice(-COMMANDS_KEPT),
+      commands: [...(this.#state.commands ?? []), id].slice(-COMMANDS_KEPT),
     });
     this.#flags.commanded = true;
     this.#flags.fresh = true;

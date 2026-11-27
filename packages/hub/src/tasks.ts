@@ -73,7 +73,6 @@ import type {
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { closeFences, someLineOutsideFences } from "@cawco/core/markdown-code";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -963,7 +962,6 @@ const acceptanceOf = (text: string) => {
     return criteria;
   }
   const named = criteriaOf(criteria).length;
-  recordLimitReading("hub.task-criteria", named);
   if (named > CRITERIA_MAX) {
     return problem(400, {
       code: "task-text-too-long",

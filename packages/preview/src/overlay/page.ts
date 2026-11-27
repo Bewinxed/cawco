@@ -34,7 +34,6 @@ import {
 import type { DocMap } from "@cawco/core/doc-maps";
 import { readFileSpot } from "@cawco/core/file-spot";
 import type { InkGroup } from "@cawco/core/ink";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { VIEW_SCREENS } from "@cawco/core/page-wire";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import type { PreviewElement } from "@cawco/core/preview/protocol";
@@ -2244,7 +2243,6 @@ function waiting(anchor: PageAnchor): boolean {
 }
 
 /** The most anchors {@link locate} keeps what it found of. Our call: every pin a page may hold, and a draft. */
-// @limit recording: overlay.anchors-found until 2026-12-03
 const FOUND_MOST = 512;
 
 /**
@@ -2514,7 +2512,6 @@ function locate(anchor: PageAnchor): AnchorFound<Element> | null {
   const found = findAnchorHere(anchor) ?? stillThere(anchor, was);
   foundBy.delete(key);
   foundBy.set(key, { doc, found, seen });
-  recordLimitReading("overlay.anchors-found", foundBy.size);
   if (foundBy.size > FOUND_MOST) {
     const [oldest] = foundBy.keys();
     if (oldest !== undefined) {
@@ -2968,7 +2965,6 @@ function pressedOn(el: Element | null, clientX: number, clientY: number) {
 }
 
 /** The most of an element's ancestors its composer's target chip offers, before the whole page. Our call. */
-// @limit recording: overlay.chain-ancestors until 2026-12-03
 const CHAIN_MOST = 5;
 
 /**
@@ -2978,15 +2974,6 @@ const CHAIN_MOST = 5;
  * In an embed of another origin, what holds `el` there as its embed read it
  * (embeds.ts), then its frame and what holds that here.
  */
-/** How many elements stand between `el` and `root`. */
-const ancestorsOf = (el: Element, root: Element): number => {
-  let count = 0;
-  for (let at = el.parentElement; at && at !== root; at = at.parentElement) {
-    count += 1;
-  }
-  return count;
-};
-
 function chainOf(el: Element): Element[] {
   const standIn = embeds.read(el);
   if (standIn) {
@@ -3002,7 +2989,6 @@ function chainOf(el: Element): Element[] {
     return [root];
   }
   const chain: Element[] = [el];
-  recordLimitReading("overlay.chain-ancestors", ancestorsOf(el, root));
   let last = rectOf(el);
   for (
     let at = el.parentElement;

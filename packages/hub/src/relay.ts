@@ -57,7 +57,6 @@ import type { BackoffPolicy } from "@cawco/core/backoff";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { backoffSchedule } from "@cawco/core/effect/backoff-schedule";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -113,7 +112,6 @@ import type { RelayCreated } from "./relay-created";
 // @limit external: GitHub caps a webhook payload at 25 MB, the most a relay's sender delivers (https://docs.github.com/en/webhooks/webhook-events-and-payloads#payload-cap)
 const RELAY_BODY_MAX = 25 * 1024 * 1024;
 /** Deliveries one relay takes a minute: the token bucket's size and its refill. */
-// @limit recording: hub.relay-bucket-drawn until 2026-12-03
 const PER_MINUTE = 60;
 /**
  * The wanted state applied again while a relay isn't live: from a minute,
@@ -477,8 +475,6 @@ export const createRelay = ({
       PER_MINUTE,
       bucket.tokens + ((now - bucket.at) / 60_000) * PER_MINUTE
     );
-    // How much of its bucket a relay has drawn: its deliveries' rate.
-    recordLimitReading("hub.relay-bucket-drawn", PER_MINUTE - tokens);
     const left = tokens >= 1 ? tokens - 1 : tokens;
     buckets.set(id, { at: now, tokens: left });
     return tokens >= 1;

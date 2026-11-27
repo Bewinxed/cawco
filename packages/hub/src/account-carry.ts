@@ -10,7 +10,6 @@ import { lookUntil } from "@cawco/core/effect/poll";
 import { CODEX } from "@cawco/core/harness/codex";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { APART_SIGNIN_HARNESSES, traitsOf } from "@cawco/core/harness/traits";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import type {
   CarrySessionOutcome,
   CarrySessionRequest,
@@ -73,7 +72,6 @@ export type AccountCarryContext = Pick<
 
 export const createAccountCarry = (ctx: AccountCarryContext) => {
   /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
-  // @limit recording: hub.carry-ms until 2026-12-10
   const CARRY_TIMEOUT_MS = 120_000;
 
   /**
@@ -437,14 +435,11 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     if (requests.length === 0) {
       return new Map();
     }
-    const answer = await timed(
-      ctx.machineCalls.callAgent(
-        machineId,
-        CONTROL_CARRY_SESSIONS,
-        [requests],
-        CARRY_TIMEOUT_MS
-      ),
-      (ms) => recordLimitReading("hub.carry-ms", ms)
+    const answer = await ctx.machineCalls.callAgent(
+      machineId,
+      CONTROL_CARRY_SESSIONS,
+      [requests],
+      CARRY_TIMEOUT_MS
     );
     // Unanswered or refused, every row stays where it is (moveRowsToAccount
     // `kept`), with why in the outcome's words.

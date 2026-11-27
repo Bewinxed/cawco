@@ -26,8 +26,6 @@ import {
 import { docMeta, setMeta } from "@cawco/core/doc-meta";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { secondsOf } from "@cawco/core/time";
 import { injectOverlay } from "@cawco/preview/proxy";
 import { DateTime, Deferred, Duration, Effect } from "effect";
@@ -279,15 +277,12 @@ export const convertOnScreen = Effect.fnUntraced(function* (
     request.set("at", new Date().toISOString());
     requests.set(id, request);
   });
-  return yield* timedEffect(
-    boundedRead(
-      CANVAS_LIMITS.convertMs,
-      heardOn(request, () => {
-        const value = REQUEST_RESULT.safeParse(request.get("result"));
-        return value.success ? value.data : undefined;
-      })
-    ),
-    (ms) => recordLimitReading("hub.canvas-convert-ms", ms)
+  return yield* boundedRead(
+    CANVAS_LIMITS.convertMs,
+    heardOn(request, () => {
+      const value = REQUEST_RESULT.safeParse(request.get("result"));
+      return value.success ? value.data : undefined;
+    })
   ).pipe(
     Effect.map((result) =>
       "error" in result ? unconverted(result.error) : result.ids

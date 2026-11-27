@@ -179,7 +179,6 @@ export const WHITESPACE = /\s+/u;
 /** The line the runner prints once a command can be handed to it. */
 export const READY = "cawco-boundary-ready";
 
-// @limit recording: agent.boundary-stop-ms until 2026-12-10
 export const STOP_TIMEOUT_MS = 5000;
 
 /** Linux: where the srt host names the sandbox it runs now ({@link Place}): `sandbox` in its working dir. */

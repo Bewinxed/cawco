@@ -8,7 +8,6 @@
  * dashboard's do through its own.
  */
 
-import { carryPageReadings } from "@cawco/core/limit-readings-page";
 import { mount } from "svelte";
 import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
 import { reportErrorsTo } from "../../error-report.js";
@@ -22,8 +21,6 @@ import { darkOn } from "./scheme.svelte.js";
 declare const CAWCO_HOST_BUILD: string;
 
 reportErrorsTo("preview", CAWCO_HOST_BUILD);
-// Its readings of the bounds waiting on data go the same way.
-carryPageReadings();
 // The faces of the page's references, heard from now on.
 startReferenceFaces();
 takeServed(document);

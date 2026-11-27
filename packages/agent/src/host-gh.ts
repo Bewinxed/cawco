@@ -16,8 +16,6 @@ import type {
   GhRepoLookup,
 } from "@cawco/core/connections";
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { workspaceScratchRoot } from "@cawco/core/paths/roots";
 import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import { repoIdentity } from "@cawco/core/protocol";
@@ -401,7 +399,6 @@ const githubRepo = async (
 };
 
 /** How long a repository's web page has to answer {@link pageSays}. */
-// @limit recording: agent.gh-page-ms until 2026-12-10
 const PAGE_TIMEOUT_MS = 4000;
 const OG_FIELD = /^og:(?:description|image)$/u;
 const WEB_URL = /^https?:$/u;
@@ -434,15 +431,12 @@ const pageSays = async (url: string): Promise<PageSays> => {
   page.username = "";
   page.password = "";
   return await runPromise(
-    timedEffect(
-      boundedRead(
-        PAGE_TIMEOUT_MS,
-        Effect.tryPromise({
-          try: (signal) => readPage(page, signal),
-          catch: (cause) => new PageUnread({ cause }),
-        })
-      ),
-      (ms) => recordLimitReading("agent.gh-page-ms", ms)
+    boundedRead(
+      PAGE_TIMEOUT_MS,
+      Effect.tryPromise({
+        try: (signal) => readPage(page, signal),
+        catch: (cause) => new PageUnread({ cause }),
+      })
     ).pipe(
       Effect.catchTag("Unanswered", () => Effect.succeed(none)),
       // A page that fails says nothing: the row stands on what its URL holds.

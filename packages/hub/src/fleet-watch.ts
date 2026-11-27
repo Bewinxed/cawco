@@ -63,7 +63,6 @@ import {
 import type { PermissionMode } from "@cawco/core/harness/modes";
 import { fleetWatchNudge } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { isMachineSilence } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
@@ -105,15 +104,12 @@ import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-item-state";
 
 /** Triage runs at once, fleet-wide; the rest wait their turn. */
-// @limit recording: hub.triage-waiting until 2026-12-10
 const TRIAGE_MAX_RUNNING = 2;
 /** A triage run that has not ended its turn by then is ended and its slot freed. */
-// @limit recording: hub.triage-turn-ms until 2026-12-10
 const TRIAGE_DEADLINE_MS = 10 * 60_000;
 /** How often running turns are looked at for a stall. */
 const STALL_SWEEP_MS = 60_000;
 /** Jev answers inside a minute or the question is over. */
-// @limit recording: hub.fleet-watch-jev-ms until 2026-12-10
 const JEV_TIMEOUT_MS = 60_000;
 /**
  * What Jev and triage read, dealt out of Jev's window, the smaller of the
@@ -576,7 +572,6 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const signals = together(watch);
     const seen = takeSlice(watch);
     log(row, row.id, `asked Jev about: ${signals}`);
-    const asked = Date.now();
     askJev(
       access,
       {
@@ -594,7 +589,6 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       { timeoutMs: JEV_TIMEOUT_MS }
     )
       .then((asking) => {
-        recordLimitReading("hub.fleet-watch-jev-ms", Date.now() - asked);
         episode.jevInFlight = false;
         switch (asking.kind) {
           case "answered":
@@ -659,8 +653,6 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   ) => {
     episode.settled = true;
     queue.push({ watched: row.id, episode: episode.id, seen });
-    // How many wait while the running ones run.
-    recordLimitReading("hub.triage-waiting", queue.length);
     log(row, row.id, `triage queued: ${together(watch)}`);
     drain();
   };
@@ -704,7 +696,6 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       gone: () => undefined,
     };
     running.set(id, triage);
-    const started = Date.now();
     // The run's answer is the end of its turn, within the deadline.
     const turn = Deferred.makeUnsafe<void, Gone>();
     triage.ended = () => {
@@ -721,15 +712,11 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       ).pipe(
         Effect.match({
           onSuccess: () => {
-            recordLimitReading("hub.triage-turn-ms", Date.now() - started);
             if (running.get(id) === triage) {
               finish(triage, "its turn ended first");
             }
           },
           onFailure: ({ after, reason }) => {
-            if (reason !== "dead") {
-              recordLimitReading("hub.triage-turn-ms", Date.now() - started);
-            }
             if (running.get(id) !== triage) {
               return;
             }
@@ -1003,14 +990,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         ...watch.errors.filter((each) => each.turn > since),
         { key, turn: watch.turn },
       ];
-      const repeats = watch.errors.filter((each) => each.key === key);
-      const same = repeats.length;
+      const same = watch.errors.filter((each) => each.key === key).length;
       if (same >= FLEET_WATCH_LIMITS.sameError) {
-        // The turns holding the repeats: what the window must span.
-        recordLimitReading(
-          "hub.fleet-watch-error-span",
-          watch.turn - (repeats[0]?.turn ?? watch.turn) + 1
-        );
         openSignal(
           id,
           watch,

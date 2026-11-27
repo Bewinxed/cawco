@@ -57,7 +57,6 @@ import {
 import { detach } from "@cawco/core/detach";
 import { boundedRead } from "@cawco/core/effect/bounded";
 import { lookUntil } from "@cawco/core/effect/poll";
-import { timedEffect } from "@cawco/core/effect/timed";
 import type {
   DaemonFrame,
   MachineIdentity,
@@ -98,10 +97,6 @@ import {
 import { crashOnBrokenLaw, invariant } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
-import {
-  recordLimitReading,
-  takeLimitReadings,
-} from "@cawco/core/limit-readings";
 import { endProcess } from "@cawco/core/listeners";
 import { createLoopProfiler, loopMinute } from "@cawco/core/loop-profile";
 import { phase, syncSection, watchLoop } from "@cawco/core/loop-watch";
@@ -212,7 +207,7 @@ import {
   CONTROL_WORKSPACE_WORK_END,
 } from "@cawco/core/workspace/controls";
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
-import { recordLimitReadingsWith, setSectionMarker } from "@cawco/jsonl-parser";
+import { setSectionMarker } from "@cawco/jsonl-parser";
 import { namedAndMore } from "@cawco/providers/names";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
@@ -1340,7 +1335,6 @@ class HubLine {
  * "connecting", and never reaches the reconnect below. Our choice: a
  * healthy hub answers in milliseconds.
  */
-// @limit recording: agent.hub-open-ms until 2026-12-10
 const OPEN_TIMEOUT_MS = 30_000;
 
 /** The hub's first frame on a connection: what its register proves this machine's key against. */
@@ -1413,9 +1407,7 @@ const open = (url: string) =>
       ready();
       return Effect.sync(settle);
     });
-    return timedEffect(boundedRead(OPEN_TIMEOUT_MS, challenged), (ms) =>
-      recordLimitReading("agent.hub-open-ms", ms)
-    ).pipe(
+    return boundedRead(OPEN_TIMEOUT_MS, challenged).pipe(
       Effect.map((read) => ({ socket, challenge: read })),
       Effect.catchTag("Unanswered", () =>
         Effect.fail(
@@ -3189,15 +3181,9 @@ const attach = (
             ...activityNow(),
             activityReadable: desktopReadable(),
           } satisfies Partial<HeartbeatPayload>;
-          // The bound readings taken since the last beat ride it, and stay
-          // held while the link is down.
-          const readings =
-            socket.readyState === WebSocket.OPEN ? takeLimitReadings() : [];
           // A connection waiting to be admitted says nothing more until it is
           // (`send`).
-          beat(
-            readings.length > 0 ? { ...part, limitReadings: readings } : part
-          );
+          beat(part);
         }),
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
@@ -3716,7 +3702,6 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(BROWSER_INJECT_ADVERT, async (args) => {
       const { key, serviceData, capturedAt } = args;
 
-      recordLimitReading("core.passkey-advert-age-ms", Date.now() - capturedAt);
       // Drop stale adverts.
       if (Date.now() - capturedAt > PASSKEY_ADVERT_MAX_AGE_MS) {
         return true;
@@ -4085,8 +4070,6 @@ export const runDaemon = (rediscover = false): void => {
   // its own reads of the hub back, and it says so (core fetch-cap.ts).
   sayFetchCap("agent");
   setSectionMarker(syncSection);
-  // The parser's readings, where it runs in this process, ride this beat.
-  recordLimitReadingsWith(recordLimitReading);
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.
   crashOnBrokenLaw((code) => process.exit(code));

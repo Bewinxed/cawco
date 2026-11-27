@@ -42,18 +42,6 @@ export interface DesignFile {
 }
 
 /**
- * The most a design folder holds of the agent's files, ours: a page and the
- * code, styles and pictures it loads, never a project's tree. Its
- * dependencies are its stage's install's.
- */
-export const DESIGN_LIMITS = {
-  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
-  bytes: 64 * 1024 * 1024,
-  // @limit measured: the largest artifact folder is 27.6 MiB and the most files one holds is 115, of 464 (obelisk, 2026-11-26)
-  files: 4000,
-} as const;
-
-/**
  * The latest release of Vite and of its framework plugins and their
  * frameworks, as npm published them (read 2026-11-22), each a caret range:
  * what a design's package.json names where it names none of them.
@@ -101,8 +89,7 @@ export const designFolderOf = (root: string, tree: string): string =>
 
 /**
  * Why `files` can't be a design, one sentence the agent acts on; null when
- * they can: a page at each of `pages`, nothing an install makes, within
- * {@link DESIGN_LIMITS}.
+ * they can: a page at each of `pages`, nothing an install makes.
  */
 export function designFilesProblem(
   files: readonly DesignFile[],
@@ -113,13 +100,6 @@ export function designFilesProblem(
   );
   if (carried) {
     return `${carried.path} is in an install's or a repository's folder: a design carries its pages and code, and its stage installs what its package.json names. Leave node_modules, .git and .cawco out of dir.`;
-  }
-  if (files.length > DESIGN_LIMITS.files) {
-    return `A design holds at most ${DESIGN_LIMITS.files} files; this one has ${files.length}.`;
-  }
-  const bytes = files.reduce((sum, one) => sum + one.bytes.byteLength, 0);
-  if (bytes > DESIGN_LIMITS.bytes) {
-    return `A design holds at most ${DESIGN_LIMITS.bytes / 1024 / 1024} MiB; this one has ${Math.ceil(bytes / 1024 / 1024)} MiB.`;
   }
   const paths = new Set(files.map((one) => one.path));
   const missing = pages.find((page) => !paths.has(page));

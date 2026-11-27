@@ -82,7 +82,6 @@ import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { inFlight } from "@cawco/core/loop-watch";
 import type { InboundRefusal } from "@cawco/core/machine-inbound";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -540,7 +539,6 @@ const refusalOf = (error: unknown, message: string): ControlRefusal => {
 };
 
 /** How many requests the hub let go before they began here are kept, to refuse each as it begins. */
-// @limit recording: agent.let-go-held until 2026-12-03
 const LET_GO_KEPT = 256;
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
@@ -578,19 +576,13 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   const workspace = await cloneHolding(dir);
   const git = async (args: string) =>
     workspace
-      ? await timed(
-          runHubCommand(
-            dir,
-            `${SAFE_GIT_SHELL}git ${args}`,
-            GIT_CHANGES_TIMEOUT_MS,
-            workspace
-          ),
-          (ms) => recordLimitReading("agent.git-changes-ms", ms)
+      ? await runHubCommand(
+          dir,
+          `${SAFE_GIT_SHELL}git ${args}`,
+          GIT_CHANGES_TIMEOUT_MS,
+          workspace
         )
-      : await timed(
-          runHubCommand(dir, `${SAFE_GIT} ${args}`, GIT_CHANGES_TIMEOUT_MS),
-          (ms) => recordLimitReading("agent.git-changes-ms", ms)
-        );
+      : await runHubCommand(dir, `${SAFE_GIT} ${args}`, GIT_CHANGES_TIMEOUT_MS);
   const status = await git("status --porcelain");
   if (status.exitCode === GIT_NOT_A_REPO) {
     return { repo: false };
@@ -612,7 +604,6 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
 };
 
 /** How long each of {@link gitChanges}' two git commands may take. */
-// @limit recording: agent.git-changes-ms until 2026-12-10
 const GIT_CHANGES_TIMEOUT_MS = 30_000;
 
 /** git's own exit code for "not a git repository". */
@@ -683,7 +674,6 @@ const CATALOG_READS = [
 const TRANSCRIPT_READS_AT_ONCE = 8;
 
 /** How long the transcripts stay still before the hub is told they moved ({@link SessionSupervisor.#catalogMoved}). */
-// @limit recording: agent.catalog-move-gap-ms until 2026-12-03
 const CATALOG_QUIET_MS = 2000;
 /** The longest moving transcripts go untold ({@link SessionSupervisor.#catalogMoved}). */
 const CATALOG_TOLD_MS = 10_000;
@@ -1072,8 +1062,6 @@ export class SessionSupervisor {
   #movedTimer: ReturnType<typeof setTimeout> | undefined;
   /** When the first move not yet told was heard. */
   #movedSince = 0;
-  /** When the catalog last heard a transcript move. */
-  #movedAt: number | undefined;
 
   /**
    * Tells the hub the stored transcripts that moved, each as it reads now
@@ -1085,14 +1073,6 @@ export class SessionSupervisor {
    * machine.
    */
   #catalogMoved(moved: MovedTranscript): void {
-    if (this.#movedAt !== undefined) {
-      // The quiet between two moves: what CATALOG_QUIET_MS waits out.
-      recordLimitReading(
-        "agent.catalog-move-gap-ms",
-        Date.now() - this.#movedAt
-      );
-    }
-    this.#movedAt = Date.now();
     if (this.#movedSessions.size === 0) {
       this.#movedSince = Date.now();
     }
@@ -1363,7 +1343,6 @@ export class SessionSupervisor {
       return { stopped: true };
     }
     this.#letGo.add(requestId);
-    recordLimitReading("agent.let-go-held", this.#letGo.size);
     if (this.#letGo.size > LET_GO_KEPT) {
       const oldest = this.#letGo.values().next().value;
       if (oldest !== undefined) {

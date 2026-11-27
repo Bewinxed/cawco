@@ -19,7 +19,6 @@
  * left out, as the timed read leaves them.
  */
 
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import type {
   ForcedAt,
   FrameCall,
@@ -55,10 +54,8 @@ const SAMPLED = "disabled-by-default-v8.cpu_profiler";
 const INVALIDATIONS =
   "disabled-by-default-devtools.timeline.invalidationTracking";
 /** The most functions and tasks a frame names: the rest are the long tail. */
-// @limit recording: agent.frame-named until 2026-12-10
 const MOST_NAMED = 8;
 /** The most calls a task names, longest first. */
-// @limit recording: agent.task-calls-named until 2026-12-10
 const MOST_CALLS = 3;
 /** Less than this, ms, a function or a task is noise in a frame. */
 const LEAST_MS = 0.1;
@@ -537,12 +534,11 @@ function scriptOf(read: Read, places: Map<string, ForcedAt>): FrameScript[] {
       });
     }
   }
-  const named = [...script.values()]
+  return [...script.values()]
     .map((one) => ({ ...one, ms: tenths(one.ms) }))
     .filter((one) => one.ms >= LEAST_MS)
-    .sort((a, b) => b.ms - a.ms);
-  recordLimitReading("agent.frame-named", named.length);
-  return named.slice(0, MOST_NAMED);
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, MOST_NAMED);
 }
 
 const PACKAGE = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u;
@@ -602,14 +598,13 @@ function tasksOf(read: Read, places: Map<string, ForcedAt>): FrameTask[] {
       ]);
     }
   }
-  recordLimitReading("agent.frame-named", read.tasks.length);
   return [...read.tasks]
     .sort((a, b) => b.ms - a.ms)
     .slice(0, MOST_NAMED)
     .map((task) => {
-      const all = calls.get(task.node) ?? [];
-      recordLimitReading("agent.task-calls-named", all.length);
-      const its = all.sort((a, b) => b.ms - a.ms).slice(0, MOST_CALLS);
+      const its = (calls.get(task.node) ?? [])
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, MOST_CALLS);
       return {
         for: task.for,
         ms: task.ms,

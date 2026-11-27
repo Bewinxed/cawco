@@ -45,7 +45,6 @@ import {
   surrogateSafeEnd,
   textPieces,
 } from "./json-stream";
-import { recordLimitReading } from "./limit-readings";
 
 /**
  * Characters of a message's JSON per part. Our choice: one deflated part costs
@@ -59,7 +58,6 @@ export const WIRE_PART_CHARS = 1024 * 1024;
  * largest message the fleet sends (a long session's transcript, tens of MB),
  * with room for an outlier.
  */
-// @limit recording: core.wire-message-chars until 2026-12-10
 export const WIRE_MESSAGE_LIMIT_BYTES = 512 * 1024 * 1024;
 
 /**
@@ -313,10 +311,6 @@ export class WireAssembler {
     }
     open.next += 1;
     open.chars += frame.text.length;
-    if (last || open.chars > WIRE_MESSAGE_LIMIT_BYTES) {
-      // An assembled message's size, or how far one got past the bound.
-      recordLimitReading("core.wire-message-chars", open.chars);
-    }
     if (open.chars > WIRE_MESSAGE_LIMIT_BYTES) {
       this.#open.delete(id);
       throw new WireError(

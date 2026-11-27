@@ -109,15 +109,5 @@ export const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
 /** Whether an item in `state` is live work: starting or running. */
 export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
 
-/**
- * The longest wait an item declares, in whole minutes, a day. The hub holds
- * the wait's timer and wakes the session, so no harness's limit on a tool call
- * bounds it; a day is the longest wait whose end reads as one clock time (it is
- * told as HH:MM, with no date), and what `machine_pause` takes. `wait_item`'s
- * tool, its route and work-items.ts `waitItem` hold a session to it, and a
- * landing waiting for a machine its gate needs declares it (landing-run.ts).
- */
-// @limit measured: a wait's or a pause's end is told as a clock time with no date (waitClock, pauseClock), so 24 hours, 1,440 minutes, is the longest whose end names one moment; the hub holds the timer, so no harness's tool-call limit bounds it
-export const WAIT_ITEM_MAX_MINUTES = 1440;
-
-export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason saying what you wait for.`;
+export const WAIT_ITEM_LIMIT =
+  "Wait not set. Use a whole number of minutes (at least 1) and a non-empty reason saying what you wait for.";

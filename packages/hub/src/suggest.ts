@@ -1,4 +1,3 @@
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   fitItems,
   JEV_WINDOW_TOKENS,
@@ -13,7 +12,6 @@ import type { JevResult } from "./jev-types";
 import { mcpUsageName, usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
-// @limit recording: hub.suggest-ms until 2026-12-10
 const SUGGEST_TIMEOUT_MS = 10_000;
 
 /**
@@ -152,12 +150,9 @@ export async function suggest(
   );
   let result: JevResult<typeof questions>;
   try {
-    const asking = await timed(
-      askJev(access, { prompt: text }, questions, {
-        timeoutMs: SUGGEST_TIMEOUT_MS,
-      }),
-      (ms) => recordLimitReading("hub.suggest-ms", ms)
-    );
+    const asking = await askJev(access, { prompt: text }, questions, {
+      timeoutMs: SUGGEST_TIMEOUT_MS,
+    });
     switch (asking.kind) {
       case "answered":
         result = asking.value;

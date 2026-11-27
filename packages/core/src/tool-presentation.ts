@@ -17,7 +17,6 @@
 
 import { fitsQuote, QUOTE_CHARS } from "@cawco/providers/quote";
 import { keysOf } from "./keys-of";
-import { recordLimitReading } from "./limit-readings";
 import { lineCounts, linesOf } from "./line-diff";
 import { answerShare, TOOL_ANSWER_CHARS } from "./prompt-budget";
 import { isRegistrableDomain } from "./registrable-domain";
@@ -833,7 +832,6 @@ const readParts = new Map<
 >();
 const readKinds = new Map<string, ToolKind>();
 /** The most names kept; past it the table starts again. */
-// @limit recording: core.tool-names-read until 2026-12-03
 const MOST_NAMES = 4096;
 function remember<Value>(
   table: Map<string, Value>,
@@ -844,7 +842,6 @@ function remember<Value>(
     table.clear();
   }
   table.set(name, value);
-  recordLimitReading("core.tool-names-read", table.size);
 }
 
 /** The sentence a call's row reads as, and the body it opens. */

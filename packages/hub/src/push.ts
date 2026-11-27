@@ -75,13 +75,11 @@ import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import { harnessName } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { type Install, installName } from "@cawco/core/install";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineLabel } from "@cawco/core/machine-names";
 import { DESK_ACK_MS, type DeskAlertFrame } from "@cawco/core/notifications";
 import {
@@ -142,7 +140,6 @@ const SAME_MOMENT_MS = 10_000;
  * tasks makes one tool call every few seconds (2026-10-15: six moves to
  * Review in about 25 s, six pushes), so a quiet of two such calls ends it.
  */
-// @limit recording: hub.push-arrival-gap-ms until 2026-12-03
 const QUIET_MS = 10_000;
 /** And at most this long from its first: nothing held waits longer for the owner. */
 const BURST_MS = 30_000;
@@ -150,7 +147,6 @@ const BURST_MS = 30_000;
 const COVER_KEPT_MS = DAY_MS;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
-// @limit recording: hub.cawrier-request-ms until 2026-12-10
 const REQUEST_TIMEOUT_MS = 10_000;
 /** At most one background push per device in this window (Apple: "two or three per hour"). */
 const BACKGROUND_GAP_MS = 20 * 60_000;
@@ -813,33 +809,30 @@ const post = (
         expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
         ...made,
       });
-      return timedEffect(
-        boundedRead(
-          REQUEST_TIMEOUT_MS,
-          Effect.tryPromise(async (signal) => {
-            const response = await fetch(`${CAWRIER}/v1/push`, {
-              method: "POST",
-              headers: {
-                authorization: `Bearer ${device.secret}`,
-                "content-type": "application/json",
-              },
-              body: sent,
-              signal,
-            });
-            if (response.ok) {
-              return { status: response.status, reason: null };
-            }
-            const read = CAWRIER_REFUSAL.safeParse(
-              await response.json().catch(() => ({}))
-            );
-            const answer = read.success ? read.data : {};
-            return {
-              status: response.status,
-              reason: answer.reason ?? answer.error ?? null,
-            };
-          })
-        ),
-        (ms) => recordLimitReading("hub.cawrier-request-ms", ms)
+      return boundedRead(
+        REQUEST_TIMEOUT_MS,
+        Effect.tryPromise(async (signal) => {
+          const response = await fetch(`${CAWRIER}/v1/push`, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${device.secret}`,
+              "content-type": "application/json",
+            },
+            body: sent,
+            signal,
+          });
+          if (response.ok) {
+            return { status: response.status, reason: null };
+          }
+          const read = CAWRIER_REFUSAL.safeParse(
+            await response.json().catch(() => ({}))
+          );
+          const answer = read.success ? read.data : {};
+          return {
+            status: response.status,
+            reason: answer.reason ?? answer.error ?? null,
+          };
+        })
       );
     }),
     Effect.catchTag("Unanswered", ({ after }) =>
@@ -863,30 +856,27 @@ const removeDevice = (
   if (!device) {
     return Effect.succeed(false);
   }
-  return timedEffect(
-    boundedRead(
-      REQUEST_TIMEOUT_MS,
-      Effect.tryPromise(async (signal) => {
-        const response = await fetch(`${CAWRIER}/v1/unenroll`, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${device.secret}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ pairingId }),
-          signal,
-        });
-        if (response.status === 204) {
-          return;
-        }
-        const read = CAWRIER_REFUSAL.safeParse(
-          await response.json().catch(() => ({}))
-        );
-        const answer = read.success ? read.data : {};
-        return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
-      })
-    ),
-    (ms) => recordLimitReading("hub.cawrier-request-ms", ms)
+  return boundedRead(
+    REQUEST_TIMEOUT_MS,
+    Effect.tryPromise(async (signal) => {
+      const response = await fetch(`${CAWRIER}/v1/unenroll`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${device.secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ pairingId }),
+        signal,
+      });
+      if (response.status === 204) {
+        return;
+      }
+      const read = CAWRIER_REFUSAL.safeParse(
+        await response.json().catch(() => ({}))
+      );
+      const answer = read.success ? read.data : {};
+      return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
+    })
   ).pipe(
     Effect.catchTag("Unanswered", ({ after }) =>
       Effect.succeed(cawrierSilent(after))
@@ -1417,9 +1407,6 @@ export const createPush = ({
     };
   };
 
-  /** When the last item that needs you arrived. */
-  let lastArrivalAt: number | undefined;
-
   /**
    * An item that needs you joins the open burst, or opens one; the burst
    * goes out {@link QUIET_MS} after its last arrival, at most
@@ -1432,11 +1419,6 @@ export const createPush = ({
   const arrive = (item: Arrival, once = true): void => {
     const { collapseId } = item.notification;
     const now = Date.now();
-    if (lastArrivalAt !== undefined) {
-      // The quiet between two items: what QUIET_MS must outlast for a burst.
-      recordLimitReading("hub.push-arrival-gap-ms", now - lastArrivalAt);
-    }
-    lastArrivalAt = now;
     for (const [id, at] of recent) {
       if (now - at > SAME_MOMENT_MS) {
         recent.delete(id);

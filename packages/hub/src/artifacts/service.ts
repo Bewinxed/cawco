@@ -214,7 +214,7 @@ import {
 } from "./needs";
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
-import { FOLDER_LIMITS, folderProblem, folderWeight } from "./preview-folder";
+import { folderProblem, folderWeight } from "./preview-folder";
 import { type Question, stillAsked } from "./questions";
 import { servedOf, serverOf, sheetOf } from "./served";
 import {
@@ -3818,20 +3818,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A folder preview's files as session `instance` hands them, read off
-   * machine `machineId` from its `dir` (design-files.ts, within
-   * preview-folder.ts `FOLDER_LIMITS`), with their weight; refused in words
-   * when they can't be read, or hold no page at its `path`.
+   * machine `machineId` from its `dir` (design-files.ts), with their weight;
+   * refused in words when they can't be read, or hold no page at its `path`.
    */
   const folderRead = async (
     instance: InstanceRow,
     machineId: string,
     source: { dir: string; path?: string }
   ) => {
-    const files = await deps.folderFiles(
-      { instance, machineId },
-      source.dir,
-      FOLDER_LIMITS
-    );
+    const files = await deps.folderFiles({ instance, machineId }, source.dir);
     if (files instanceof ElysiaStatus) {
       return files;
     }

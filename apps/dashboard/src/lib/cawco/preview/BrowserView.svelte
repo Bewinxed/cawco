@@ -56,7 +56,6 @@
    * link lost or refused, the stream that found no way here (the stream
    * relay's settings), a codec this browser can't play.
    */
-  import { recordLimitReading } from "@cawco/core/limit-readings";
   import { FORMS, screenHeight } from "@cawco/core/stage";
   import { browserWords } from "@cawco/core/words/browser";
   import { commonWords } from "@cawco/core/words/common";
@@ -322,9 +321,6 @@
     if (w <= 0 || h <= 0) {
       return null;
     }
-    recordLimitReading("dashboard.device-pixel-ratio", window.devicePixelRatio);
-    recordLimitReading("dashboard.takeover-phone-side", w);
-    recordLimitReading("dashboard.takeover-phone-side", h);
     return {
       form: "phone",
       width: w,

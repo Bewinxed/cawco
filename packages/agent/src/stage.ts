@@ -83,10 +83,6 @@ import { makeJoin } from "@cawco/core/effect/join";
 import { lookUntil } from "@cawco/core/effect/poll";
 import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
-import {
-  keepLimitReadings,
-  LimitReadingSchema,
-} from "@cawco/core/limit-readings";
 import { OUTPUT_TAIL_KEPT } from "@cawco/core/output-tail";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
@@ -1509,7 +1505,6 @@ function sleep(stage: Stage): void {
 const HostWordSchema = z.object({
   cawco: z.string(),
   errors: z.array(StageErrorSchema).optional(),
-  readings: z.array(LimitReadingSchema).optional(),
   message: z.string().optional(),
   restartsOn: z.array(z.string()).optional(),
 });
@@ -1553,9 +1548,6 @@ const up = Effect.fnUntraced(function* (stage: Stage, life: Scope.Scope) {
 
 /** What the host said, kept and told to the hub; whether it said it serves. */
 const heard = (stage: Stage, word: HostWord): boolean => {
-  if (word.readings) {
-    keepLimitReadings(word.readings);
-  }
   if (word.cawco === "ready") {
     stage.restartsOn = word.restartsOn ?? [];
     return true;

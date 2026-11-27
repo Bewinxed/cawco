@@ -47,7 +47,6 @@ import {
   launchdLogsDir,
   unxml,
 } from "@cawco/core/launchd";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { loopbackBeside } from "@cawco/core/loopback-binds";
 import { unknownMigrations } from "@cawco/core/migration-state";
 import { hubDbPath, previewServerSocket } from "@cawco/core/paths/hub";
@@ -361,7 +360,6 @@ const dashboardSockets = (): SocketSpec[] => {
 };
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
-// @limit recording: cli.liveness-probe-ms until 2026-12-26
 const PROBE_TIMEOUT_MS = 2000;
 
 const hubOrigin = (): string =>
@@ -385,21 +383,18 @@ const probe = <T>(
   init: RequestInit = {},
   via: Fetcher = (target, options) => fetch(target, options)
 ): Promise<Bounded<T>> =>
-  timed(
-    readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-      const response = await via(url, { ...init, signal }).catch(
-        (error: unknown) => {
-          throw signal.aborted
-            ? error
-            : new Gone(
-                `${url}: ${error instanceof Error ? error.message : String(error)}`
-              );
-        }
-      );
-      return read(response);
-    }),
-    (ms) => recordLimitReading("cli.liveness-probe-ms", ms)
-  );
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const response = await via(url, { ...init, signal }).catch(
+      (error: unknown) => {
+        throw signal.aborted
+          ? error
+          : new Gone(
+              `${url}: ${error instanceof Error ? error.message : String(error)}`
+            );
+      }
+    );
+    return read(response);
+  });
 
 /** A 2xx answer's JSON body, or the status that refused it. */
 const jsonBody =
@@ -445,40 +440,37 @@ const askedHub = <A extends HubAnswer>(
   url: string,
   ask: (client: HubClient) => Promise<A>
 ): Promise<Bounded<Said<HubData<A>>>> =>
-  timed(
-    readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-      const answer = await ask(
-        hubClient(hub, (target, init) => asMachine(target, { ...init, signal }))
-      );
-      if (answer.response === undefined && answer.error !== null) {
-        throw signal.aborted
-          ? answer.error.value
-          : new Gone(
-              `${url}: ${refusalText({ status: 0, value: answer.error.value })}`
-            );
-      }
-      if (!succeeded(answer)) {
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const answer = await ask(
+      hubClient(hub, (target, init) => asMachine(target, { ...init, signal }))
+    );
+    if (answer.response === undefined && answer.error !== null) {
+      throw signal.aborted
+        ? answer.error.value
+        : new Gone(
+            `${url}: ${refusalText({ status: 0, value: answer.error.value })}`
+          );
+    }
+    if (!succeeded(answer)) {
+      return {
+        ok: false,
+        status: answer.status,
+        said: `HTTP ${answer.status}`,
+      };
+    }
+    try {
+      return { ok: true, value: dataOf(answer) };
+    } catch (error) {
+      if (error instanceof HubNotAnswering) {
         return {
           ok: false,
           status: answer.status,
-          said: `HTTP ${answer.status}`,
+          said: `HTTP ${answer.status} with a body that is not JSON`,
         };
       }
-      try {
-        return { ok: true, value: dataOf(answer) };
-      } catch (error) {
-        if (error instanceof HubNotAnswering) {
-          return {
-            ok: false,
-            status: answer.status,
-            said: `HTTP ${answer.status} with a body that is not JSON`,
-          };
-        }
-        throw error;
-      }
-    }),
-    (ms) => recordLimitReading("cli.liveness-probe-ms", ms)
-  );
+      throw error;
+    }
+  });
 
 /** The HTTP status `url` answers with, its body left unread. */
 const probeStatus = (url: string): Promise<Bounded<number>> =>
@@ -1308,7 +1300,6 @@ const restartDecision = ({
 
 /** How often `--when-idle` asks again, and how long it keeps asking. */
 const IDLE_POLL_MS = 2000;
-// @limit recording: cli.idle-wait-ms until 2026-12-26
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 /**
  * How long the agent's fence stands for the restart this verb is about to
@@ -1398,7 +1389,6 @@ const clearToRestart = async (
       } else if (force || id !== "agent") {
         return false;
       } else if (await fencedLook(whenIdle)) {
-        recordLimitReading("cli.idle-wait-ms", Date.now() - began);
         if (waited) {
           note("nothing left that a restart would cut");
         }

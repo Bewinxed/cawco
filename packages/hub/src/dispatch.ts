@@ -122,7 +122,6 @@ import {
   POST_OUTPUT_RULE,
 } from "@cawco/core/deliverables";
 import type { LandsMode } from "@cawco/core/injected";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { outputTail } from "@cawco/core/output-tail";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -349,10 +348,6 @@ const NO_LEAD =
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
-// @limit measured: of 30 routine runs that failed once, 4 passed at the second attempt and none ran a third (task_runs, to 2026-11-26)
-const MAX_ATTEMPTS_LIMIT = 20;
-// @limit measured: a page; the next page's cursor rides the answer. 100 is the rows one page returns
-const REVIEW_LIMIT_LIMIT = 100;
 
 /**
  * The commit an attempt's work landed as, as its task's move names it: on
@@ -866,14 +861,11 @@ const partsSection = (parts: string[]): string =>
 const RESULT_LINE = "Before finish_item, hand your work in with task_result.";
 
 /** The most comments a brief carries: the newest. */
-// @limit recording: hub.brief-comments until 2026-12-03
 const BRIEF_COMMENTS_MAX = 20;
 
 /** The comments left on the task since its last attempt started, batched into the brief (§5.3). */
 const commentsSection = (comments: TaskComment[]): string => {
-  recordLimitReading("hub.brief-comments", comments.length);
   const older = Math.max(0, comments.length - BRIEF_COMMENTS_MAX);
-  // @limit recording: hub.brief-comments until 2026-12-03
   return `## Comments since the last attempt\n\n${older > 0 ? `${judgedWords.olderComments(older)}\n\n` : ""}${comments
     .slice(-BRIEF_COMMENTS_MAX)
     .map(
@@ -907,15 +899,14 @@ const retrySection = (
   ].join("\n\n");
 };
 
-/** Why a count setting cannot be `value`: it is a whole number from 1 to `max`. */
+/** Why a count setting cannot be `value`: it is a whole number of at least 1. */
 const countProblem = (
   name: string,
-  value: number | undefined,
-  max: number
+  value: number | undefined
 ): string | undefined =>
-  value === undefined || (Number.isInteger(value) && value >= 1 && value <= max)
+  value === undefined || (Number.isInteger(value) && value >= 1)
     ? undefined
-    : `${name} is a whole number from 1 to ${max}.`;
+    : `${name} is a whole number of at least 1.`;
 
 /**
  * Why a dispatch change cannot be written as asked: a count out of range, or
@@ -927,8 +918,8 @@ export const dispatchProblem = ({
   maxAttempts,
   reviewLimit,
 }: DispatchChange): string | undefined =>
-  countProblem("maxAttempts", maxAttempts, MAX_ATTEMPTS_LIMIT) ??
-  countProblem("reviewLimit", reviewLimit, REVIEW_LIMIT_LIMIT) ??
+  countProblem("maxAttempts", maxAttempts) ??
+  countProblem("reviewLimit", reviewLimit) ??
   (budget ? budgetProblem(budget) : undefined);
 
 /** `1 task waits`, `3 tasks wait`. */

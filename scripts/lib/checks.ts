@@ -8,9 +8,6 @@
  * passes: the key of the inputs it passed on, which check.ts reads to skip
  * it on inputs it passed on (the last few kept).
  */
-
-import { handOnAsMachine } from "../../packages/agent/src/limit-readings-hand-on";
-import { recordLimitReading } from "../../packages/core/src/limit-readings";
 import {
   type Pid,
   signalGroup,
@@ -126,7 +123,6 @@ const run = async (check: Check): Promise<Outcome> => {
 };
 
 /** How many passes a stamp keeps: a change undone finds the pass before it. */
-// @limit recording: check.passes-held until 2026-12-03
 const PASSES_KEPT = 16;
 
 /** Adds `key` to the passes `file` keeps, newest last. */
@@ -135,8 +131,6 @@ const keepPass = async (file: string, key: string): Promise<void> => {
   const kept = (await stamp.exists())
     ? (await stamp.text()).split("\n").filter((line) => line && line !== key)
     : [];
-  recordLimitReading("check.passes-held", kept.length + 1);
-  // @limit recording: check.passes-held until 2026-12-03
   await Bun.write(file, [...kept, key].slice(-PASSES_KEPT).join("\n"));
 };
 
@@ -228,10 +222,8 @@ export const runChecks = async (
     console.error(
       `${what}: ${failed.length} of ${checks.length} checks failed in ${wall}s: ${failed.map((outcome) => outcome.check.name).join(", ")}`
     );
-    await handOnAsMachine();
     process.exit(1);
   }
   console.log(`${what}: ${checks.length} checks passed in ${wall}s${tail}`);
-  await handOnAsMachine();
   process.exit(0);
 };

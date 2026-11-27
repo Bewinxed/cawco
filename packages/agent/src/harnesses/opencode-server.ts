@@ -11,7 +11,6 @@ import {
   opencodeV1Statuses,
 } from "@cawco/core/harness/opencode-wire";
 import { makeLock } from "@cawco/core/keyed-lock";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import {
   commandLines,
   listeningPorts,
@@ -42,7 +41,6 @@ import { fromPromise, type Rejected } from "../rejected";
 import type { SessiondClient } from "../sessiond-client";
 import { OpencodeServerRecordSchema } from "../stored-shapes";
 
-// @limit recording: agent.opencode-cutover-ms until 2026-12-26
 const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 
 /**
@@ -108,7 +106,6 @@ export type V1Activity =
 const NEXT_CURSOR = "x-next-cursor";
 
 /** How long one read of a 1.x server may take. Ours: it boots each directory it reads, which can take a while on a cold one. */
-// @limit recording: agent.opencode-v1-read-ms until 2026-12-10
 const V1_READ_TIMEOUT_MS = 60_000;
 
 /**
@@ -135,8 +132,9 @@ export const readV1Activity = async (
         authorization: `Basic ${Buffer.from(`opencode:${identity.password}`).toString("base64")}`,
       }
     : {};
-  const read = await timed(
-    readWithin(V1_READ_TIMEOUT_MS, async (signal): Promise<V1Activity> => {
+  const read = await readWithin(
+    V1_READ_TIMEOUT_MS,
+    async (signal): Promise<V1Activity> => {
       const get = async (path: string): Promise<Response> =>
         await fetch(new URL(path, identity.url), { headers, signal });
       try {
@@ -169,8 +167,7 @@ export const readV1Activity = async (
           reason: error instanceof Error ? error.message : String(error),
         };
       }
-    }),
-    (ms) => recordLimitReading("agent.opencode-v1-read-ms", ms)
+    }
   );
   switch (read.kind) {
     case "answered":
@@ -844,11 +841,8 @@ export class OpencodeServerOwner {
       }
       let launched: Bounded<ServerIdentity>;
       try {
-        launched = await timed(
-          readWithin(SERVER_CUTOVER_TIMEOUT_MS, (signal) =>
-            this.#launch(launch, signal)
-          ),
-          (ms) => recordLimitReading("agent.opencode-cutover-ms", ms)
+        launched = await readWithin(SERVER_CUTOVER_TIMEOUT_MS, (signal) =>
+          this.#launch(launch, signal)
         );
       } catch (error) {
         this.#refused = {

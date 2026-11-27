@@ -6,7 +6,6 @@
  */
 
 import { fnv1a } from "@cawco/core/fnv1a";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import {
   type AnimationRead,
   MODULES_PATH,
@@ -82,14 +81,10 @@ export function sourceOf(el: Element, root: string): string | null {
 }
 
 /** The elements of a frame's body a reading walks: at most this many. Ours: a screen's first screenful. */
-// @limit recording: agent.measure-elements until 2026-12-10
 const ELEMENTS_READ = 600;
 
-const elementsOf = (body: Element): Element[] => {
-  const all = [...body.querySelectorAll("*")];
-  recordLimitReading("agent.measure-elements", all.length);
-  return all.slice(0, ELEMENTS_READ);
-};
+const elementsOf = (body: Element): Element[] =>
+  [...body.querySelectorAll("*")].slice(0, ELEMENTS_READ);
 
 /** How many elements the body held and how many a reading walks of them, when it holds more than it walks. */
 export const elementsUnread = (
@@ -180,7 +175,6 @@ export const firstWords = (body: HTMLElement): string =>
   derivedName(body.innerText ?? "");
 
 /** The most elements a frame's look reads; past it the frame has none. Ours: well past a whole settings page. */
-// @limit recording: agent.look-elements until 2026-12-10
 const LOOK_LIMIT = 6000;
 
 /** What a reading of the engine can't see the picture of: moving pictures, a page of its own. A 2D canvas is read by its pixels ({@link canvasPixels}). */
@@ -238,7 +232,6 @@ function controlState(el: Element): string {
  */
 export function lookOf(body: HTMLElement): string | null {
   const elements = [...body.querySelectorAll("*")];
-  recordLimitReading("agent.look-elements", elements.length);
   if (
     elements.length > LOOK_LIMIT ||
     body.querySelector(UNREAD_LOOK) ||
@@ -342,7 +335,6 @@ export function snapshot(body: Element): Snapshot {
 }
 
 /** The deltas between two snapshots of the same elements: at most this many elements. */
-// @limit recording: agent.measure-deltas until 2026-12-03
 const DELTAS_KEPT = 24;
 
 export function deltaOf(
@@ -366,7 +358,6 @@ export function deltaOf(
       }
     });
     if (Object.keys(changed).length > 0) {
-      recordLimitReading("agent.measure-deltas", deltas.length + more + 1);
       if (deltas.length >= DELTAS_KEPT) {
         more += 1;
         continue;

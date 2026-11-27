@@ -3,7 +3,6 @@
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { descriptorOf } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
-  import { recordLimitReading } from "@cawco/core/limit-readings";
   import {
     type ParkedDirection,
     type ParkedItem,
@@ -993,7 +992,6 @@
    * Try again. The slowest install the host runs saw took about a minute
    * (npm moving a package, `claude update`); our call.
    */
-  // @limit recording: dashboard.install-read-wait-ms until 2026-12-10
   const WAIT_BOUND_MS = 90_000;
   /** The waiting read whose bound passed ({@link WAIT_BOUND_MS}). */
   let waitLapsed = $state.raw<ReadFault | null>(null);
@@ -1142,15 +1140,10 @@
     if (!(now?.reason === "refused" && now.updating) || waitedCell) {
       return;
     }
-    const began = Date.now();
     const timer = setTimeout(() => {
       waitLapsed = now;
     }, WAIT_BOUND_MS);
-    return () => {
-      // How long a read that said an install runs was waited on.
-      recordLimitReading("dashboard.install-read-wait-ms", Date.now() - began);
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   });
 
   /**

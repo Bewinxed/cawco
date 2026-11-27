@@ -1324,7 +1324,6 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
 };
 
 /** The most acceptance criteria one task states: one judgement reads that many (jev-placement.ts `jevJudged`), so a task past it is refused when written (tasks.ts `acceptanceOf`). */
-// @limit recording: hub.task-criteria until 2026-12-10
 export const CRITERIA_MAX = 20;
 
 /** A task's acceptance criteria, one each: its list items, else the whole text as one. */

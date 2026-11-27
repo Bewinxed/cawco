@@ -3,7 +3,6 @@ import {
   RESUMABLE_CAWCO_TOOLS,
   TOOL_CALL_KEY_HEADER,
 } from "@cawco/core/binary-updates";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { portHolder } from "@cawco/core/live-processes";
 import { watchFromItsOwnThread } from "@cawco/core/loop-watch";
 import { mcpGatewayPort } from "@cawco/core/ports";
@@ -353,7 +352,6 @@ function notStarted(body: ArrayBuffer | undefined): Response {
 }
 
 /** The most a restart fence may stand without being raised again; a longer ask is refused, not shortened. */
-// @limit recording: agent.restart-fence-asked-ms until 2026-12-26
 const RESTART_FENCE_MAX_MS = 5 * 60_000;
 
 /**
@@ -370,9 +368,6 @@ async function restartRoute(
   }
   if (request.method === "POST") {
     const ms = fieldOf(await request.json().catch(() => undefined), "ms");
-    if (typeof ms === "number") {
-      recordLimitReading("agent.restart-fence-asked-ms", ms);
-    }
     if (typeof ms === "number" && ms > RESTART_FENCE_MAX_MS) {
       return Response.json(
         {

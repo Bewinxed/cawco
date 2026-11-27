@@ -15,7 +15,6 @@ import {
   INSTALL_LIST_LIMIT_MS,
 } from "@cawco/core/install";
 import { INSTALL_STEP_PREFIX, JOIN_WAIT_STEP } from "@cawco/core/join";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -109,7 +108,6 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
           );
         }
         if (answer.value.row?.status === "online") {
-          recordLimitReading("install.list-wait-ms", Date.now() - since);
           return;
         }
         break;

@@ -8,10 +8,8 @@
  */
 import { createInterface, type Interface } from "node:readline";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
-import { recordLimitReading, timed } from "@cawco/core/limit-readings";
 import { unhandled } from "@cawco/core/unhandled";
 
-// @limit recording: cli.answer-ms until 2026-12-10
 const ANSWER_TIMEOUT_MS = 60_000;
 
 let ended = false;
@@ -52,27 +50,20 @@ async function ask(
   const { rl, lines } = open();
   rl.setPrompt(text);
   rl.prompt();
-  const answer = await timed(
-    readWithin(timeoutMs, async (signal) => {
-      waiting ??= lines.next();
-      const next = await waiting;
-      if (signal.aborted) {
-        // This question was let go: the line stays for the next one.
-        return "";
-      }
-      waiting = undefined;
-      if (next.done) {
-        ended = true;
-        throw new Gone("standard input ended");
-      }
-      return next.value;
-    }),
-    (ms) => {
-      if (timeoutMs === ANSWER_TIMEOUT_MS) {
-        recordLimitReading("cli.answer-ms", ms);
-      }
+  const answer = await readWithin(timeoutMs, async (signal) => {
+    waiting ??= lines.next();
+    const next = await waiting;
+    if (signal.aborted) {
+      // This question was let go: the line stays for the next one.
+      return "";
     }
-  );
+    waiting = undefined;
+    if (next.done) {
+      ended = true;
+      throw new Gone("standard input ended");
+    }
+    return next.value;
+  });
   // Paused between questions, so a command run in between has the terminal to itself.
   if (!ended) {
     rl.pause();

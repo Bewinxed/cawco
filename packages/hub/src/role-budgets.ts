@@ -1,10 +1,6 @@
 /**
- * Each role's tool budget, measured (Projects spec §5.3: "Each role has a
- * tool budget measured in tokens"). A role's size is what its `tools/list`
- * answers a typical session in that role — the same `toolsFor` the MCP
- * server lists from — as JSON, in tokens by core's own estimate
- * (`estimateTokens`, the continuation's measure). `bun run roles:check`
- * prints each and fails over {@link ROLE_TOOL_BUDGET}.
+ * Each role's listed tools (`listRoleTools`), and their measured token count
+ * (`measureRoles`), read from the tool definitions alone.
  */
 import { estimateTokens } from "@cawco/core/continuation";
 import {
@@ -22,331 +18,10 @@ import {
 } from "./delegation-mcp";
 
 /**
- * Tokens a role's listed tool definitions may take: each is its size as
- * last measured when it was raised deliberately, plus a little room. A role
- * that outgrows it splits a tool or trims a description before it ships.
- * Every raise and what it bought is in this block's history (`git log -L`
- * on it), from slice 9's first measure on.
- * 2026-10-30: one kind of session. The project's own tools (view_draft,
- * view_query, folder_read, folder_write, project_setup, project_settings,
- * a routine run's answer since folded into task_result, the memory write
- * tool since removed) are a worker's wherever its folder is in a
- * project, and the conversation tools of a separate role are gone (worker
- * 27,907 measured). The worker's budget is lowered to it.
- * 2026-10-31: a canvas's elements say that text wraps at its width and a
- * childless frame takes what it covers, which agents had worked out by hand
- * (worker 27,968 measured).
- * 2026-10-31: every role lists no_reply_needed, the one way Claude Code takes
- * a turn with no text (worker 28,065, curator 1,292 measured).
- * 2026-10-31: the prompt audit gave the bare parameters of task_read,
- * task_result, machine_pause, answer_delegate and forge_post their contracts,
- * and no_reply_needed and open_items theirs (worker 28,665, delegate 10,716,
- * curator 1,332 measured).
- * 2026-10-31: only a session that talks with the person lists no_reply_needed,
- * so no work item and no triage run does (worker 28,632, delegate 10,550,
- * curator 1,166 measured). The delegate's and curator's budgets are lowered to it.
- * 2026-10-31: admin_subagents_read and admin_subagents_write, so a fleet
- * subagent is changed with the owner's approval like every other kind of
- * fleet configuration (worker 29,065 measured).
- * 2026-11-02: delegate_list takes a `target` (and its steps' `page`): one
- * delegate in full, its steps, context, made so far and last words, in
- * place of reading its transcript by hand; 143 tokens (worker 29,221
- * measured, from 29,078). Only a session that may start delegates lists it,
- * so the delegate's role is unchanged.
- * 2026-11-02: a project's setup and a view's ask carry the person's words
- * alone; their procedures moved to the project-setup and project-view skills
- * and their facts to tools: project_setup answers data, project_name names a
- * project made from New project's words, view_guide answers how a view is
- * written (worker 29,365 measured).
- * 2026-11-04: generate_image takes a `provider` (ChatGPT by default, the
- * Antigravity CLI on asking), so an agent can make an image through the
- * owner's Gemini subscription too, and says a JPEG lands as .jpg (worker
- * 29,456 measured).
- * 2026-11-04: generate_image's provider may be the Gemini API on a held
- * key, which takes a `model` of its four, and its default is the fleet's
- * setting (worker 29,540, delegate 10,569 measured).
- * 2026-11-05: every session settles its own questions to the person:
- * open_items lists each question its tree put to him, open or answered,
- * paged (`cursor`, `response_format`), and question_close takes or
- * withdraws one (231 tokens); artifact_list loses `waiting`, the list it
- * overlapped (worker 29,514, delegate 10,821 measured). A delegate puts
- * pages and canvases to the person as a worker does, so it lists both; its
- * budget is raised to it.
- * 2026-11-05: artifact_create takes a required `title` and artifact_update
- * changes it: every surface names an artifact to the person by the title
- * its agent wrote, and its slug `name` stays for tools and URLs (worker
- * 29,588, delegate 10,896 measured).
- * 2026-11-05: list_sessions answers which sessions stopped at a usage limit,
- * whose, and in what order they were touched, across every machine, in one
- * call: `role`, `stopped`, `sort`, `since`, `limit` and `cursor`, and a
- * description that tells it from delegate_list and find, in place of the
- * hub's database and transcripts read by hand (300 tokens; worker 29,888,
- * delegate 11,196 measured).
- * 2026-11-06: artifact_create's kind, does, program, html, port and serve
- * each say what they take, its description now naming none of them, and
- * words cut from generate_image, artifact_read, todo_write, delegate and
- * artifact_create's `to`, so the room comes from words, not the budgets
- * (worker 29,820, delegate 11,142 measured).
- * 2026-11-08: delegate takes `clean`, which the owner asked for to compare
- * a delegate started without the instruction context against one started
- * with it, described in one line (worker 29,932, delegate 11,164 measured:
- * a leaf is listed no delegate).
- * 2026-11-09: fitted to Prompting Claude Fable 5.2. delegate's description
- * says what a delegate costs and how to brief one ("Set expectations for
- * subagents"), and finish_item's says who reads the report ("Make reports
- * easy to follow") (worker 30,040, delegate 11,206 measured).
- * 2026-11-11: calls_by_role, which skills and MCP servers each role's
- * sessions called (capability-calls.ts), so the routine that proposes
- * trimming each role's starting set reads a count, not transcripts
- * (worker 30,358 measured; a delegate is listed none).
- * 2026-11-11: project_settings takes set_starting_set and its
- * `starting_set`: the skills and servers a project's sessions start with
- * (tsk-336), changed as the project's other settings are (worker 30,465
- * measured).
- * 2026-11-11: trimmer, a run of the unused skills and servers routine
- * (unused-trim.ts): set_title, finish_item, calls_by_role and trim_propose.
- * 2026-11-11: project_settings' description says a starting set can be
- * proposed again at any time (tsk-348), the owner's "with the option to
- * change it later" on card `role-starting-set#own-sessions` (worker 30,502
- * measured).
- * 2026-11-11: Caw turns the hub's unused skills and servers routine on when
- * the person sends the empty Routines page's chip for it: routine_list names
- * it while the project has none, routine_update with enabled: true alone
- * turns it on, and routine_create points there instead of a second routine
- * (worker 30,579 measured).
- * 2026-11-13: artifact_create's `kind` says an agent looks at UI it builds
- * on the design graph and that a preview's app holds no CawCo sign-in
- * (the rule lived only in the owner's private memory documents; worker
- * 30,613, delegate 11,278 measured).
- * 2026-11-13: admin_mcp_servers' `config` says how a connector secret reads
- * and is written (it reads as set and is never read back; the owner approved
- * write-only secrets that day), the one place an agent learns that a put keeps
- * what it leaves out (worker 30,641 measured).
- * 2026-11-13: call mechanics the owner's memory documents carried move into
- * the tools they are about: a fork's workspace is cut from the default
- * branch or where `from` says, the merge checks are the project's gate.md, a
- * wait may be on the parent's check and ends when its minutes run out or a
- * message arrives, everything else in $TMPDIR is deleted with a workspace,
- * ship notes tell the person updating what changed, delegate_list shows
- * which session is warm, find reaches unlanded work (worker 30,692, delegate
- * 11,331, curator 1,209 measured).
- * 2026-11-14: the memory write tool takes `card` and `drop`, so a session
- * carries out the person's own pick on a card about memory notes without a
- * second ask (tsk-369, card `note-settle`); its description says what they
- * do and when they are accepted (worker 30,799, curator 1,316 measured).
- * 2026-11-14: action_list and event_route_list take `skip`, so an agent reads
- * the older actions and events a page leaves out (their answers say how many
- * and which skip reads on) (worker 30,828 measured).
- * 2026-11-15: what a task's hand-in holds is said by task_result itself and
- * no longer by a line in every task's brief (the owner's rule that a tool's
- * instructions live in the tool, decisions/memory-tool-lines); its fields say
- * the loose ends that are the person's and the thing itself (delegate 11,383
- * measured).
- * 2026-11-16: artifact_update's `patch` takes each JSON Patch operation as
- * its op's shape (`from` on a move or copy, `value` on an add, replace or
- * test), as the route and rfc6902 take it, so an op missing either is
- * refused at the call (worker 30,917, delegate 11,402 measured).
- * 2026-11-17: a note marked fleet-wide becomes the person's approval card
- * for a fleet memory document (the person's pick that day): memory_note
- * takes `fleet`, the memory write tool takes `fleet` for a fleet document,
- * and the curator's memory_read reads the fleet's documents with `fleet`
- * (worker 30,973, delegate 11,430, curator 1,372 measured).
- * 2026-11-17: finish_item and delegate say the hub lands by rebase and push
- * and the delegate runs its project's checks itself, and finish_item takes
- * no `ship` (the owner that day: "this whole gate thing is made up")
- * (worker 30,961, delegate 11,346 measured).
- * 2026-11-17: Codex joins the harnesses (tsk-387): every tool schema that
- * names a harness lists `codex` beside the others (worker 30,996
- * measured).
- * 2026-11-19: account_read and account_move, which the owner asked for that
- * day ("a cawco tool available to sessions for the orchestrators to be able
- * to switch accounts for delegates or see the usage data at a glance"): the
- * router's own view of the accounts and of each delegate, and a move of one
- * to an account the person named, through the router's decision; a session
- * that may start delegates lists them (worker 31,274, delegate 11,683
- * measured).
- * 2026-11-19: the nightly memory run (memory-run.ts): the curator lists
- * memory_read and memory_apply, whose operations name a source by handle,
- * and no session lists a memory write tool; memory_note takes no `fleet`
- * (worker 30,865, curator 1,295 measured). The curator's budget is lowered
- * to it.
- * 2026-11-19: artifact_create takes `directions`, two or more directions of
- * one design opened in one design graph, a switch between them and the
- * person's pick read back as `picked` (tsk-405: directions leave decision
- * pages for the graph) (worker 30,977, delegate 11,807 measured); the
- * worker's budget holds it, the delegate's is raised to it.
- * 2026-11-19: memory_apply's add takes an `anchor`, a file of the repository
- * and a literal string in it, which the hub reads to bear an agent's lesson
- * out and reads again each night (the memory build's step 8) (curator 1,355
- * measured).
- * 2026-11-19: memory_apply takes `check`, a rule a tool can test, which the
- * hub files as a task that builds its check (the memory build's step 9)
- * (curator 1,493 measured).
- * 2026-11-19: memory_apply's add takes a `probe`, a situation and what a
- * right answer does, with which the hub re-tests a rule when the project's
- * sessions move to a new model (the memory build's step 10) (curator 1,528
- * measured).
- * 2026-11-20: artifact_create takes `reading`, an artifact its maker makes
- * to read alone, which is never handed up and holds no workspace, so a
- * workspace stays only while the person is owed what it serves (delegate
- * 11,850 measured); the delegate's budget is raised to it.
- * 2026-11-20: a task and a plan step wait on a routine's condition
- * (`routine:<handle>`, tsk-430, the owner's "a routine returning true"):
- * every wait list names it, and routine_create, routine_update and
- * routine_result take a condition, its deadline and a run's verdict
- * (worker 31,293, delegate 11,858 measured); the delegate's budget is
- * raised to it.
- * 2026-11-20: a routine's target may be `command`, a sandboxed shell command
- * whose exit code answers its condition (tsk-431), and routine_create says
- * a session whose mode asks before shell commands gets the owner's approval
- * first (the owner's "it depends on the permission mode" on card
- * `condition-waits#who`) (worker 31,327 measured); the worker's budget is
- * raised to it.
- * 2026-11-21: memory_withdraw, so a session takes back a wrong note of its
- * own before the nightly run reads it (the owner that day); paid for by
- * memory_note's answer becoming a sentence and artifact_update pointing at
- * artifact_create's elements and ask in place of repeating them (worker
- * 31,314, delegate 11,845 measured). No budget is raised.
- * 2026-11-22: a delegation tree writes one artifact (artifact_create's name
- * and artifact_update say whoever in the tree made it, the later write
- * winning), and a reading is deleted when its maker's work item ends, so
- * one screen reaches the owner once (his "One per screen" on card "Stop the
- * duplicate stories?") (worker 31,346, delegate 11,877 measured); both
- * budgets are raised to it.
- * 2026-11-22: artifact_create's design graph takes an HTML page (`html` or
- * `dir`, and each direction's), for what is not in the codebase yet or a
- * throwaway mockup (the owner's pick on design-workspace-release#html),
- * paid for in part by `does` no longer naming a page where no stage runs
- * (worker 31,365, delegate 11,896 measured); both budgets are raised to it.
- * 2026-11-22: project_create, so a session makes a new project when the
- * person asks for one in chat (session 39baa754, "make a project for my
- * homelab"): POST /api/projects' own ask, made with Caw from the person's
- * words, its conversation's link answered (worker 31,676 measured; a
- * delegate is listed none). The worker's budget is raised to it.
- * 2026-11-22: the design graph takes a design folder the hub runs on Vite
- * (one page, a folder of files, or a folder of code), and artifact_update
- * changes it in place with `dir` and `directions` beside `html` (the
- * owner's pins on graph-general-canvas: "the agent should choose as it
- * needs", "hot reload, no versions") (worker 31,840, delegate 12,060
- * measured); both budgets are raised to it.
- * 2026-11-22: artifact_create and artifact_update take `content`, an
- * agent's mark that its design folder is a document, chart or deck, which
- * the graph shows at its own size without widths or schemes (the owner's
- * pin on graph-general-canvas#content) (worker 31,924, delegate 12,145
- * measured); both budgets are raised to it.
- * 2026-11-22: routines are tasks (the owner's "a routine is a task that
- * starts on its own"): the six routine tools are gone, task_create and
- * task_update take a routine's trigger, stop condition and how its runs go,
- * task_result takes a run's keep, stop or ask (`run`, `routine`), and
- * event_route_create names a routine's task (worker 31,469, delegate 12,285
- * measured); the worker's budget is lowered to it, the delegate's raised.
- * 2026-11-22: artifact_create's `serve.cwd` names the app's folder, absolute
- * or from the session's, which a port preview is staged from (hub
- * artifact-events.ts `placeFor`): a session in its home folder previews an
- * app in any folder (worker 31,477, delegate 12,293 measured); both budgets
- * are raised to it.
- * 2026-11-22: artifact_read takes `layout`, a design graph frame's
- * alignment guides drawn on its picture and their numbers, the layout gate
- * the redesign skill asks for (the owner's pick on tsk-473: guides "native
- * to the design graph so that the agent can use it to debug"), its legend
- * and findings said in the answer rather than the description (worker
- * 31,527, delegate 12,344 measured); both budgets are raised to it.
- * 2026-11-22: a routine's check (the owner's pick of Hermes Agent's wake
- * gate that day): task_create and task_update take `check` and `check_on`,
- * a command run on named machines before each run whose output alone wakes
- * it, in place of the `command` target, which is gone (worker 31,689
- * measured; a delegate makes no routines). The worker's budget is raised
- * to it.
- * 2026-11-23: project_settings takes `set_decides` with `decides` and
- * `member`, how a project's sessions propose a Who decides change for the
- * person to approve (the owner's pick that day, in place of the set_review
- * that left with review becoming the `done` kind), and its description
- * says so (worker 31,766 measured; a delegate has no project_settings).
- * The worker's budget is raised to it.
- * 2026-11-23: record_pick, a pick recorded on a decision card from the
- * person's own words (his pin on the page or a message he typed, quoted),
- * which the hub checks are his; the owner's "Yes, from my own words" that
- * day in cockpit#8eabb628, when his comment plainly answered a card and an
- * agent had no proper way to record it (worker 32,071 with set_decides, delegate 12,649
- * measured); both budgets are raised to it.
- * 2026-11-23: Claude Code's Auto is a mode a session may name (core
- * `SESSION_CHOSEN_MODES`; the owner that day: "for claude, offer 'auto'
- * mode as an additional one"), one more value in each mode enum of
- * start_session, continue_session and the routine and route tools (worker
- * 32,083 measured; the delegate's tools name no mode). The worker's budget
- * is raised to it.
- * 2026-11-24: project_settings takes `set_caw` and `set_trigger` with
- * `trigger`, `harness`, `model` and `mode`, what Caw's chat and each kind
- * of trigger run as, behind Caw's settings panel's switch (the owner's
- * pick of 2026-11-23, "this panel only"), and `set_decides` with
- * `decides` and `member` is gone: Who decides is the person's alone
- * (worker 32,119 measured; a delegate has no project_settings). The
- * worker's budget is raised to it.
- * 2026-11-24: memory_rule, so a session removes, rewords or adds one of its
- * project's rules at once when the person asks, where a note waited for
- * the nightly run (the owner that day called rule L-28939a's overnight
- * wait a CawCo gap) (worker 32,331, delegate 12,861 measured); both budgets
- * are raised to it.
- * 2026-11-24: artifact_read takes `measure`, one move of a design graph
- * measured on its stage through the DevTools Protocol (frames, style and
- * layout work, animations kept off the compositor, memory over repeats),
- * the owner's go on perf-read that day, with `speed` the agent's pick per
- * call (his pick on its `speed` card) (worker 32,839, delegate 13,370
- * measured); both budgets are raised to it.
- * 2026-11-24: artifact_create and artifact_update take `pick`, quick or
- * enlarged, where the person makes a pick a design graph's directions or a
- * decision page's cards put to them, its description saying how the agent
- * judges it (the owner that day: the agent knows which picks suit a quick
- * version in the composer and which an enlarged one in the panel) (worker
- * 32,980, delegate 13,511 measured); both budgets are raised to it.
- * 2026-11-25: usability_feedback, listed while the person allows agents to
- * report trouble with CawCo's own tools (the owner's asks ask_6c6a3972,
- * ask_27921e94, ask_f10aaf6f), its `tool` an enum of every CawCo tool's
- * name so a report on anything else is refused by its schema, and
- * memory_note's line pointing there; measured on (worker 33,849, delegate
- * 14,380 measured). Both budgets are raised to it.
- * 2026-11-25: project_settings takes `outsiders` (`set_outsiders`), the
- * project's rule for an event from someone an outside service does not
- * vouch for, held for the person or started on (provider spec §2.5, the
- * owner's decision on outsiders that day: readable and settable through
- * the project's settings tools) (worker 33,865 measured); the worker's
- * budget is raised to it.
- * 2026-11-26: a raise to the person must hold a question (tsk-519):
- * `comment_reply` takes its `question` in `ask`'s shape in place of the
- * `asks` flag, `ask` takes the task it is about and the question it
- * replaces, `record_pick` takes a session question's answers,
- * `question_close` the evidence that another session's question was
- * overtaken, and `answer_delegate` a `forward` to the person (worker
- * 34,139, delegate 14,631 measured); both budgets are raised to it.
- * 2026-11-26: Antigravity joins the harnesses (tsk-340): every tool schema
- * that names a harness lists `agy` beside the others (worker 34,149
- * measured).
- * 2026-11-26: a project's memory is its rules file (tsk-578): memory_note
- * and memory_withdraw leave every list, the curator role and its
- * memory_read and memory_apply go, and memory_rule says it changes a rule
- * at the person's word (worker 33,360, delegate 13,945 measured); both
- * budgets are lowered to it.
- * 2026-11-27: the knowledge move's facts in delegate (`account`,
- * `workspace`), task_start, artifact_read and the dial names (worker
- * 33,463, delegate 14,009 measured) fit the memory cut's budgets once
- * artifact_update and task_update point to their create's examples and
- * routine check, and a dial's name says its rule in its refusal (worker
- * 33,312, delegate 13,937 measured); both budgets stay.
- */
-const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 33_360,
-  delegate: 13_945,
-  overseer: 770,
-  "web-facing": 3400,
-  trimmer: 1400,
-};
-
-/**
  * A typical session of each role: a session you started, a leaf work item,
  * triage, a web-facing work item, a trim run. The worker and the
  * delegate are in a project: one in none is listed fewer tools
- * (delegation-mcp.ts `PROJECT_ONLY`, roles.ts `allows`), and the budget holds
- * the most a role is listed.
+ * (delegation-mcp.ts `PROJECT_ONLY`, roles.ts `allows`).
  */
 const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
   worker: { projectId: "project" },
@@ -373,7 +48,6 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
 };
 
 export interface RoleSize {
-  budget: number;
   /** Each listed tool's own tokens, by the same measure, largest first. */
   byTool: { name: string; tokens: number }[];
   role: SessionRole;
@@ -387,13 +61,12 @@ export interface RoleTools {
   tools: { name: string; inputSchema: unknown }[];
 }
 
-/** Each role's listed tools, their count and size against its budget, on Claude Code. */
+/** Each role's listed tools, their count and size in tokens, on Claude Code. */
 export const measureRoles = (): RoleSize[] =>
   listRoleTools().map(({ role, tools }) => ({
     role,
     tools: tools.length,
     tokens: estimateTokens(JSON.stringify(tools).length),
-    budget: ROLE_TOOL_BUDGET[role],
     byTool: tools
       .map((tool) => ({
         name: tool.name,
