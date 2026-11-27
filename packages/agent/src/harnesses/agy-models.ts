@@ -36,26 +36,29 @@ const READ_MS = 30_000;
 
 /**
  * How long agy has to state a model's window once the session opens on it
- * or is set to it. agy 1.5.18 sends ACP's `usage_update`, whose `size` is
- * "Total context window size in tokens", then: "the value is sent when a
- * session starts or is reloaded, after each model call, and after a model
- * or thinking level change" (its changelog, compiled into the binary).
+ * or is resumed on it. agy 1.5.18 sends ACP's `usage_update`, whose `size`
+ * is "Total context window size in tokens", when a session starts and each
+ * time it is resumed, about 10 ms after the resume's answer; after a model
+ * change it sends one only when the window differs from the last it sent on
+ * that session, so a change alone cannot be read for a model's window.
  */
-// @limit external: agy answers a model change from its own catalog, in well under this
+// @limit external: agy restates the window on resume in well under this
 const WINDOW_MS = 5000;
 
 /**
  * Each model's context window as agy states it in session `sessionId`
  * (opened as `answer`): the window `sizes` carries first is the open
- * model's; each other model is set on the session in turn, and its window
- * is the next `sizes` carries. The session is set back to the model it
- * opened on. A model agy will not set is left out, and once agy states no
- * window for a model in time, so is every model after it: unknown, never a
- * guess. None when agy states none for the model it opened on.
+ * model's; each other model is set on the session in turn, the session is
+ * resumed, and its window is the next `sizes` carries after the set's
+ * answer. The session is set back to the model it opened on. A model agy
+ * will not set, will not resume on, or states no window for in time is left
+ * out alone: unknown, never a guess. None when agy states none for the model
+ * it opened on.
  */
 const windowsOf = (
   connection: ClientConnection,
   sessionId: string,
+  home: string,
   answer: unknown,
   sizes: Queue.Queue<number>
 ) =>
@@ -79,21 +82,28 @@ const windowsOf = (
           value,
         })
       ).pipe(Effect.option);
+    const resume = fromPromise(() =>
+      connection.agent.request(methods.agent.session.resume, {
+        sessionId,
+        cwd: home,
+        mcpServers: [],
+      })
+    ).pipe(Effect.option);
     for (const { value } of modelsOf(answer)) {
       if (windows.has(value)) {
         continue;
       }
-      yield* Queue.clear(sizes);
       if (Option.isNone(yield* setModel(value))) {
         continue;
       }
-      const size = yield* stated;
-      if (Option.isNone(size)) {
-        // agy stated none on a change: it states none on the next either,
-        // and the read's own time is not spent waiting on each.
-        break;
+      yield* Queue.clear(sizes);
+      if (Option.isNone(yield* resume)) {
+        continue;
       }
-      windows.set(value, size.value);
+      const size = yield* stated;
+      if (Option.isSome(size)) {
+        windows.set(value, size.value);
+      }
     }
     yield* setModel(opened);
     return windows;
@@ -158,6 +168,7 @@ export const agyAccountModels = async (
           const windows = yield* windowsOf(
             connection,
             sessionId,
+            home,
             answer,
             sizes
           );
