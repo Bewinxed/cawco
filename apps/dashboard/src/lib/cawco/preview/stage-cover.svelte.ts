@@ -15,6 +15,7 @@ import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
 import type { PreviewReach } from "./preview-reach.svelte";
+import { type WellState, wellState } from "./well-state";
 
 export interface StageCoverDeps {
   readonly instanceId: () => string;
@@ -53,15 +54,19 @@ export class StageCover {
    * (`connected`, its overlay's `cawco:ready`), whatever the doc last said of
    * the stage. The doc's word is the agent's last frame, which can trail the
    * stage (a frame missed, a version opened over another's); a page that
-   * answered is the stage serving. One that answered and then went silent is
-   * the proxy's `down`, never a wait again. Nor while the hub says the page
-   * can't be shown, or this tab can't reach the page's origin: no frame
-   * stands, and the pane says that cause in the frame's place; the stage's
-   * time starts again once a frame is made.
+   * answered is the stage serving. Nor once the frame settled without it: the
+   * proxy's page or the hub named a hop that is `down`, or the frame loaded
+   * and its page never said a word (`notLoaded`); the pane says that at once,
+   * and the never-drawn time stops. Nor while the hub opened no origin, or
+   * this tab can't reach the page's origin: no frame stands, and the pane
+   * says that cause in the frame's place; the stage's time starts again once
+   * a frame is made.
    */
   readonly awaited = $derived.by(() =>
     this.#deps.previewFrame.connected ||
-    this.#deps.previewFrame.hubHeld ||
+    this.#deps.previewFrame.down !== null ||
+    this.#deps.previewFrame.notLoaded ||
+    this.#deps.previewReach.unopened ||
     this.#deps.previewReach.unreached
       ? null
       : this.staged
@@ -120,10 +125,6 @@ export class StageCover {
    * out, never an endless cover.
    */
   readonly waitingFor = $derived.by(() => {
-    // A failure the proxy named says its own words (`down`).
-    if (this.#deps.previewFrame.down) {
-      return null;
-    }
     switch (this.awaited?.status) {
       case "starting":
         return STAGE_CLONE_MS + STAGE_READY_MS;
@@ -139,6 +140,27 @@ export class StageCover {
   });
 
   neverDrawn = $state(false);
+
+  /** What occupies the well, one state at a time (well-state.ts): PreviewPane draws from it alone. */
+  readonly well = $derived.by((): WellState =>
+    wellState({
+      framed: !(
+        this.#deps.paneSubject.isCanvas || this.#deps.paneSubject.isBrowser
+      ),
+      unrecordedDown: this.unrecordedDown,
+      hubHeld: this.#deps.previewFrame.hubHeld,
+      down: this.#deps.previewFrame.down,
+      staged: this.staged,
+      neverDrawn: this.neverDrawn,
+      unopened: this.#deps.previewReach.unopened,
+      unreached: this.#deps.previewReach.unreached,
+      notLoaded: this.#deps.previewFrame.notLoaded,
+      waiting: this.stageWaiting,
+      drawn:
+        this.#deps.previewFrame.loaded ||
+        this.#deps.previewFrame.standing !== null,
+    })
+  );
 
   /** What the stage last said of a page never drawn: its own message, else the first compile error's reason. */
   readonly stageSaid = $derived(
@@ -172,6 +194,14 @@ export class StageCover {
   constructor(deps: StageCoverDeps) {
     this.#deps = deps;
     this.stageDetailsId = `${this.#deps.paneId()}-stage-details`;
+    // The cover is opaque while it waits: a frame standing in for the next
+    // one bridges no paint under it, so it goes, and only the frame the
+    // cover waits on stays mounted.
+    $effect.pre(() => {
+      if (this.stageWaiting && this.#deps.previewFrame.standing !== null) {
+        this.#deps.previewFrame.standing = null;
+      }
+    });
     $effect(() => {
       const budget = this.waitingFor;
       // Read so that a Try again (`reload`) or another artifact starts the wait over.
@@ -185,6 +215,8 @@ export class StageCover {
       }
       const timer = setTimeout(() => {
         this.neverDrawn = true;
+        // A Try again still pending has its outcome: the page never drew.
+        this.#deps.previewFrame.retrying = false;
       }, budget);
       return () => {
         clearTimeout(timer);

@@ -317,6 +317,10 @@
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
+  /** What occupies the well, one state at a time. */
+  const well = $derived(stageCover.well);
+  /** What the cover says while the page is on its way. */
+  const waiting = $derived(well.kind === "loading" ? well.waiting : null);
 
   /** What brings a stopped server back, for its down state's line: its stage starts it again by itself, its session is asked from here, or the person starts it. */
   const serverBack = $derived.by(() => {
@@ -1220,74 +1224,7 @@
       machine={paneBrowser.browserMachine}
       bind:viewing={paneBrowser.browserViewing}
     />
-  {:else if previewReach.unopened}
-    <!-- The hub opened no origin for it (every preview port in use): its
-         words, and Try again asks it again. -->
-    <div
-      data-slot="down"
-      data-unopened
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
-      role="alert"
-      transition:appear
-    >
-      <EmptyState icon={IconAlert} title={previewWords.notOpenedTitle}>
-        {#snippet line()}
-          {previewReach.unopened}
-        {/snippet}
-        {#snippet action()}
-          <Button
-            icon={IconRefresh}
-            label={commonWords.tryAgain}
-            onclick={() => {
-              previewReach.addressTries += 1;
-            }}
-            pending={previewReach.addressAsking}
-            pendingLabel={commonWords.tryingAgain}
-            size="sm"
-            variant="outline"
-          />
-        {/snippet}
-      </EmptyState>
-    </div>
-  {:else if previewReach.unreached}
-    <!-- This tab can't reach the preview's own origin: what failed, by its
-         own cause, its fix, and where to switch how previews are reached. -->
-    <div
-      data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
-      role="alert"
-      transition:appear
-    >
-      <EmptyState icon={IconAlert} title={previewWords.cantBeReached}>
-        {#snippet line()}
-          {previewReach.unreachedBy?.said}
-          {previewWords.tryingAgain}
-        {/snippet}
-        {#snippet action()}
-          <div class="flex flex-wrap items-center gap-space-2">
-            <Button
-              icon={IconRefresh}
-              label={commonWords.tryAgain}
-              onclick={() => {
-                previewReach.probe += 1;
-              }}
-              pending={previewReach.probing}
-              pendingLabel={commonWords.tryingAgain}
-              size="sm"
-              variant="outline"
-            />
-            <Button
-              href="/config/previews"
-              pad="none"
-              label={previewWords.previewSettings}
-              size="sm"
-              variant="link"
-            />
-          </div>
-        {/snippet}
-      </EmptyState>
-    </div>
-  {:else}
+  {:else if !(previewReach.unopened || previewReach.unreached)}
     <!-- The frame loads once its origin answered the probe; the cover stands
          meanwhile. A component artifact's frame stands in its design graph's
          stage (the graph's chrome round it, the panel's DOM). -->
@@ -1341,20 +1278,15 @@
       {@render frameTags()}
     {/if}
     <div
-      data-ready={((previewFrame.loaded || previewFrame.standing !== null) &&
-        !stageCover.stageWaiting) ||
-        undefined}
+      data-ready={well.kind !== "loading" || undefined}
       data-slot="cover"
-      aria-hidden={stageCover.stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-0"
-      role={stageCover.stageWaiting ? "status" : undefined}
+      aria-hidden={waiting ? undefined : "true"}
+      class="group/cover absolute inset-0 pt-(--side-room,0px) bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-0"
+      role={waiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
         // the frame comes out of its blur on the same clock (motion/curves).
-        if (!(
-          (previewFrame.loaded || previewFrame.standing !== null) &&
-          !stageCover.stageWaiting
-        )) {
+        if (well.kind === "loading") {
           coverStood = true;
         } else if (coverStood) {
           coverStood = false;
@@ -1369,24 +1301,94 @@
            (The Real Wait Rule); held still, pulse and all, once the cover is
            ready and fading out. The wrapper carries the wait, so the
            skeleton's own opacity is its pulse's. -->
-      <div
-        class="animate-wait-grace-in group-data-ready/cover:animation-paused"
-      >
-        <Skeleton
-          class="w-2/5"
-          data-slot="block"
-          hold="cover"
-          line="body"
-          radius="text"
-        />
+      <div class="p-space-5">
+        <div
+          class="animate-wait-grace-in group-data-ready/cover:animation-paused"
+        >
+          <Skeleton
+            class="w-2/5"
+            data-slot="block"
+            hold="cover"
+            line="body"
+            radius="text"
+          />
+        </div>
+        {#if waiting}
+          <CoverState {waiting} />
+        {/if}
       </div>
-      {#if stageCover.stageWaiting}
-        <CoverState waiting={stageCover.stageWaiting} />
-      {/if}
     </div>
   {/if}
-  {#if stageCover.staged?.status === "error" && !previewFrame.hubHeld}
-    {@const staged = stageCover.staged}
+  <!-- What occupies the well over the frame, or in its place: one state at a time (well-state.ts). -->
+  {#if well.kind === "unopened"}
+    <!-- The hub opened no origin for it (every preview port in use): its
+         words, and Try again asks it again. -->
+    <div
+      data-slot="down"
+      data-unopened
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={previewWords.notOpenedTitle}>
+        {#snippet line()}
+          {well.said}
+        {/snippet}
+        {#snippet action()}
+          <Button
+            icon={IconRefresh}
+            label={commonWords.tryAgain}
+            onclick={() => {
+              previewReach.addressTries += 1;
+            }}
+            pending={previewReach.addressAsking}
+            pendingLabel={commonWords.tryingAgain}
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
+    </div>
+  {:else if well.kind === "unreached"}
+    <!-- This tab can't reach the preview's own origin: what failed, by its
+         own cause, its fix, and where to switch how previews are reached. -->
+    <div
+      data-slot="down"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={previewWords.cantBeReached}>
+        {#snippet line()}
+          {previewReach.unreachedBy?.said}
+          {previewWords.tryingAgain}
+        {/snippet}
+        {#snippet action()}
+          <div class="flex flex-wrap items-center gap-space-2">
+            <Button
+              icon={IconRefresh}
+              label={commonWords.tryAgain}
+              onclick={() => {
+                previewReach.probe += 1;
+              }}
+              pending={previewReach.probing}
+              pendingLabel={commonWords.tryingAgain}
+              size="sm"
+              variant="outline"
+            />
+            <Button
+              href="/config/previews"
+              pad="none"
+              label={previewWords.previewSettings}
+              size="sm"
+              variant="link"
+            />
+          </div>
+        {/snippet}
+      </EmptyState>
+    </div>
+  {:else if well.kind === "stage-error"}
+    {@const staged = well.staged}
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
@@ -1417,8 +1419,7 @@
         {/snippet}
       </EmptyState>
     </div>
-  {/if}
-  {#if stageCover.neverDrawn && stageCover.staged?.status !== "error"}
+  {:else if well.kind === "never-drawn"}
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
@@ -1453,8 +1454,7 @@
         {/snippet}
       </EmptyState>
     </div>
-  {/if}
-  {#if stageCover.unrecordedDown}
+  {:else if well.kind === "unrecorded"}
     <!-- Its server stopped, and no command to start it was kept: no Try again, only its session making it again. -->
     <div
       data-slot="down"
@@ -1473,13 +1473,12 @@
         {/snippet}
       </EmptyState>
     </div>
-  {/if}
-  {#if previewFrame.down && (previewFrame.hubHeld || (!stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn))}
-    <!-- What happened, why and the way back, where the page would be (every frame's down state): the hub's word before any frame, else the proxy's page in it; a stage in error says it above. -->
+  {:else if well.kind === "down"}
+    <!-- What happened, why and the way back, where the page would be (every frame's down state): the hub's word before any frame, else the proxy's page in it. -->
     <FrameDown
       action={downAction}
       class="absolute inset-0 pt-(--side-room,0px)"
-      down={previewFrame.down}
+      down={well.down}
       names={{
         machine: downMachine,
         port: paneSubject.downPort,
@@ -1487,8 +1486,7 @@
       }}
       why={previewFrame.downWhy}
     />
-  {/if}
-  {#if previewFrame.notLoaded && !previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
+  {:else if well.kind === "not-loaded"}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
