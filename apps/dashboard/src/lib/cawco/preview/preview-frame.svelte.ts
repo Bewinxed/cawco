@@ -109,7 +109,12 @@ export class PreviewFrame {
     () => `${this.#deps.paneSubject.preview?.revision}:${this.reload}`
   );
 
-  // The old paint bridges navigation only until the replacement stands drawn.
+  /**
+   * The frame the current one replaces, kept mounted so its paint bridges a
+   * new revision's load until the replacement stands drawn. Only while no
+   * cover is drawn: a Reload or Try again drops it at once, and so does the
+   * stage's cover as it waits (StageCover).
+   */
   standing = $state<string | null>(null);
 
   /** No page yet: mounted off screen, it loads once its tab is first shown; the cover waits for that load. */
@@ -159,15 +164,19 @@ export class PreviewFrame {
   });
 
   /**
-   * Try again after a frame failure: reload the frame. Pending until the
-   * reloaded page says it is ready, which clears the failure, or states a
-   * new one.
+   * Try again after a frame failure: reload the frame, the failed one gone
+   * at once. Pending until the reloaded page reaches an outcome: it says it
+   * is ready (`letIn`), the proxy names a hop that is down (`heardDown`), it
+   * loads and says nothing (`loadedFrame`), the page says an error, the
+   * stage's time runs out (StageCover `neverDrawn`), or the frame is taken
+   * down (the hub's word, the origin unreached).
    */
   retrying = $state(false);
 
   retry = () => {
     this.retrying = true;
     this.refusedEntries = 0;
+    this.standing = null;
     this.reload += 1;
   };
 
@@ -337,11 +346,12 @@ export class PreviewFrame {
     null
   );
 
-  /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
+  /** Reload: a canvas's stage frame from its address, any other page by a new frame, the old one gone at once. */
   reloadPage = () => {
     if (this.#deps.paneSubject.isCanvas && this.#deps.paneCanvas.stage?.frame) {
       this.#deps.paneCanvas.stage.frame.src = this.#deps.paneCanvas.stage.src;
     } else {
+      this.standing = null;
       this.reload += 1;
     }
   };
@@ -430,6 +440,7 @@ export class PreviewFrame {
       if (this.hubHeld) {
         untrack(() => {
           this.standing = null;
+          this.retrying = false;
           this.reload += 1;
         });
       }
@@ -444,6 +455,7 @@ export class PreviewFrame {
       if (this.#deps.previewReach.unreached) {
         untrack(() => {
           this.standing = null;
+          this.retrying = false;
           this.reload += 1;
         });
       }
