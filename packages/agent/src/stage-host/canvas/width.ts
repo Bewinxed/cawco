@@ -21,7 +21,12 @@
  * and {@link SCREEN_VH}. Read off the window, an `h-dvh` app stood as tall
  * as the render's window in every frame, a phone's included, and grew with
  * it as the picture's pose grew the window for its room, so it never had
- * the room (frame-picture.ts `poseState`). Outside a frame with a width
+ * the room (frame-picture.ts `poseState`). That is a width picked: the
+ * design graph's Adapt (core page-wire.ts `ViewScreen`, `window`) draws at
+ * the panel's width, and its screen is the panel's too, the room the
+ * page's own window gives the drawing ({@link windowDown}): made up from
+ * its width, an `h-dvh` board in a 529px panel stood 900px tall at 1440
+ * and 1600 at 1200, its foot out of reach. Outside a frame with a width
  * each unit is the window's, as written.
  */
 
@@ -283,6 +288,11 @@ const CONVERTED = new WeakSet<CSSRule>();
 /** One hundredth of the frame's screen across and down, px: set on each body with a width (runtime.ts `sizeBody`). */
 export const SCREEN_VW = "--cawco-vw";
 export const SCREEN_VH = "--cawco-vh";
+/** What the page keeps round a drawing above and below it, px (the stage's gutters and the panel's head, page-style.ts): none on a page that keeps none. */
+export const WINDOW_INSET = "--cawco-window-inset";
+/** One hundredth of the room the page's own window gives a drawing down, for {@link SCREEN_VH}: its height less {@link WINDOW_INSET}. */
+export const windowDown = (): string =>
+  `calc((100dvh - var(${WINDOW_INSET}, 0px)) / 100)`;
 
 /** A length in a viewport unit (CSS Values 4 §6.1.2): its number, its `s`/`l`/`d` size, its axis. */
 const VIEWPORT_LENGTH =

@@ -115,6 +115,7 @@ import {
   SCREEN_VW,
   splitWidth,
   WIDTH_CONTAINER,
+  windowDown,
 } from "./width";
 import "./window-events";
 import {
@@ -135,7 +136,7 @@ const sectionOfPath = (path: string): string | null => {
   return encoded ? decodeURIComponent(encoded) : null;
 };
 
-/** The view the page's URL asks for. */
+/** The view the page's URL asks for: a render's (stage-render.ts), each width a device's screen. */
 function viewOf(params: URLSearchParams): View {
   const scheme = params.get("scheme");
   const width = params.get("width");
@@ -150,6 +151,7 @@ function viewOf(params: URLSearchParams): View {
       scheme === "light" || scheme === "dark" || scheme === "both"
         ? scheme
         : "page",
+    screen: "device",
     widths: widths.length > 0 ? widths : null,
     motion: params.get("motion") === "reduce" ? "reduce" : "on",
     fit: params.get("fit") !== "0",
@@ -832,12 +834,20 @@ export function bootPage(
     }
   }
 
+  /** One hundredth of the screen down a body `width` wide stands in, as the view's screen says. */
+  const screenDown = (width: number): string =>
+    view.screen === "window" ? windowDown() : `${screenHeight(width) / 100}px`;
+
   /**
    * A body at `width`: that width, the container its width rules answer,
-   * and its screen (width.ts `SCREEN_VW`, `SCREEN_VH`: the device's at that
-   * width, core `screenHeight`), which its viewport lengths answer; `fills`:
-   * as tall as that screen, for a story with no height of its own
-   * ({@link fillsScreen}). None of them with no width: the page's.
+   * and its screen (width.ts `SCREEN_VW`, `SCREEN_VH`), which its viewport
+   * lengths answer: as wide as `width`, and as tall as the view's screen
+   * says (`View.screen`): a device's at that width (core `screenHeight`),
+   * or the room the page's own window gives the drawing (width.ts
+   * `windowDown`: the design graph's Adapt, where the width is the panel's
+   * and so is the height). `fills`: as tall as that screen, for a story
+   * with no height of its own ({@link fillsScreen}). None of them with no
+   * width: the page's.
    */
   function sizeBody(
     body: HTMLElement,
@@ -847,10 +857,10 @@ export function bootPage(
     body.style.width = width === null ? "" : `${width}px`;
     body.style.container =
       width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
-    const screen = width === null ? null : { w: width, h: screenHeight(width) };
-    body.style.setProperty(SCREEN_VW, screen ? `${screen.w / 100}px` : "");
-    body.style.setProperty(SCREEN_VH, screen ? `${screen.h / 100}px` : "");
-    body.style.blockSize = screen && fills ? `${screen.h}px` : "";
+    body.style.setProperty(SCREEN_VW, width === null ? "" : `${width / 100}px`);
+    body.style.setProperty(SCREEN_VH, width === null ? "" : screenDown(width));
+    body.style.blockSize =
+      width !== null && fills ? `calc(100 * var(${SCREEN_VH}))` : "";
   }
 
   /**
@@ -1197,6 +1207,7 @@ export function bootPage(
     const motionWas = view.motion;
     Object.assign(view, {
       ...(next.scheme ? { scheme: next.scheme } : {}),
+      ...(next.screen ? { screen: next.screen } : {}),
       ...("widths" in next ? { widths: next.widths ?? null } : {}),
       ...(next.motion ? { motion: next.motion } : {}),
       ...(typeof next.fit === "boolean" ? { fit: next.fit } : {}),

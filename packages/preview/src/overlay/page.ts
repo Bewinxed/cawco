@@ -35,6 +35,7 @@ import type { DocMap } from "@cawco/core/doc-maps";
 import { readFileSpot } from "@cawco/core/file-spot";
 import type { InkGroup } from "@cawco/core/ink";
 import { recordLimitReading } from "@cawco/core/limit-readings";
+import { VIEW_SCREENS } from "@cawco/core/page-wire";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import type { PreviewElement } from "@cawco/core/preview/protocol";
 import {
@@ -3858,12 +3859,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         })
       );
     },
-    // A component artifact's stage view from the design graph's view card: its scheme, the width he picked, motion.
+    // A component artifact's stage view from the design graph's view card: its scheme, the width he picked and the screen it stands for, motion.
     "cawco:canvas-view": (message) => {
       const view = message.view as Record<string, unknown> | undefined;
       if (!view || typeof view !== "object") {
         return;
       }
+      const screen = VIEW_SCREENS.find((one) => one === view.screen);
       const widths = Array.isArray(view.widths)
         ? view.widths.filter(
             (one): one is number =>
@@ -3876,6 +3878,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
             ...(PREVIEW_SCHEMES.some((scheme) => scheme === view.scheme)
               ? { scheme: view.scheme }
               : {}),
+            ...(screen ? { screen } : {}),
             ...("widths" in view
               ? { widths: widths?.length ? widths : null }
               : {}),

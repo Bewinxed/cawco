@@ -9,7 +9,7 @@
  * page and hands each word here.
  */
 import type { MadeView } from "@cawco/core/comments/made-view";
-import type { FrameSays } from "@cawco/core/page-wire";
+import type { FrameSays, ViewScreen } from "@cawco/core/page-wire";
 import type { SheetOnPage } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
@@ -41,11 +41,12 @@ import {
 import { untrack } from "svelte";
 import type { SheetInspector } from "#lib/cawco/preview/sheet-inspector.svelte.js";
 
-/** The stage's view, as the view card picks it: its scheme, the width he picked (none: its own), reduced motion, and whether a width wider than the stage is scaled to fit it (`fit`) or drawn 1:1. */
+/** The stage's view, as the view card picks it: its scheme, the width he picked (none: its own) and the screen it stands for (a device's, or the panel's own under Adapt), reduced motion, and whether a width wider than the stage is scaled to fit it (`fit`) or drawn 1:1. */
 export interface StageView {
   fit: boolean;
   motion: "on" | "reduce";
   scheme: "light" | "dark";
+  screen: ViewScreen;
   width: number | null;
 }
 
@@ -216,12 +217,13 @@ export class StageLink {
     this.#post({ type: STAGE_REVEAL, what });
   }
 
-  /** The stage's view: its scheme, the width he picked, motion. */
+  /** The stage's view: its scheme, the width he picked and its screen, motion. */
   view(view: StageView): void {
     this.#post({
       type: "cawco:canvas-view",
       view: {
         scheme: view.scheme,
+        screen: view.screen,
         widths: view.width === null ? null : [view.width],
         motion: view.motion,
         fit: view.fit,

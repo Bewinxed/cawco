@@ -8,6 +8,8 @@
  * agent's dials) are the panel's, never this page's.
  */
 
+import { WINDOW_INSET } from "./width";
+
 /** The page's own rules: the page, a section that didn't load, the skeleton, the rig, the stage and its rings. */
 const PAGE_CSS = `
 html.cawco-canvas-page { color-scheme: light dark; }
@@ -66,7 +68,10 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
    than the page scrolls sideways. No scrollbar's gutter stands empty beside the drawing (the preview proxy's floor keeps
    one): a strip of the panel showed through it. */
 html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--color-surface-page);
-  scroll-padding-block-start: var(--stage-room, 0px); }
+  scroll-padding-block-start: var(--stage-room, 0px);
+  /* What the column keeps above and below the drawing (its padding below): a drawing whose screen is the window's (width.ts
+     \`windowDown\`, the design graph's Adapt) stands as tall as the room left, so an h-dvh app fills the stage under the head. */
+  ${WINDOW_INSET}: calc(2 * var(--spacing-space-4) + var(--stage-room, 0px)); }
 /* The stage's floating head (the panel's StagePane) over the page's top: the column pads its top by its room (--stage-room,
    said by the panel), so the drawing at rest stands clear of it and scrolls beneath it, and the scroll edge effect under it
    blurs and fades what scrolls there into the page's ground, clear at rest (DESIGN.md, The Title Bars Follow Liquid Glass Rule). */

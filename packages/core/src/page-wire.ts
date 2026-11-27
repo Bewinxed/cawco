@@ -94,11 +94,23 @@ export interface FrameInset {
   top?: number;
 }
 
-/** The stage's view as the pane sets it: scheme, the widths picked, motion, fit. */
+/**
+ * What a drawing's viewport lengths (`100dvh`, `50vw`) and the height of a
+ * story with none of its own answer: `device`, the whole screen its width
+ * names (core stage.ts `screenHeight`: a width he picked, Phone to Wide, is
+ * that device's screen); `window`, the room the page's own window gives it
+ * (the design graph's Adapt and a design folder's content: the width the
+ * panel's, the height the panel's below its head).
+ */
+export const VIEW_SCREENS = ["device", "window"] as const;
+export type ViewScreen = (typeof VIEW_SCREENS)[number];
+
+/** The stage's view as the pane sets it: scheme, the widths picked, the screen they stand for, motion, fit. */
 export interface CanvasView {
   fit: boolean;
   motion: "on" | "reduce";
   scheme: Scheme | "both" | "page";
+  screen: ViewScreen;
   /** Null: each story at its own form. */
   widths: number[] | null;
 }

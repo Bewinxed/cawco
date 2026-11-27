@@ -680,6 +680,11 @@ export function bootStage(page: Page): Mode {
    */
   const framed = window.top !== window;
   document.documentElement.classList.add("cawco-stage-page");
+  // The stage's scroll is its own: a drawing opened afresh stands at its
+  // top (`open`), a mark is brought into view when asked. Left to the
+  // browser, a reload put the page back where the last load stood, and
+  // the board laid out tall while it loaded let it land at its foot.
+  history.scrollRestoration = "manual";
   // The scroll edge effect under the panel's floating head shows once the
   // page has scrolled: clear at rest (page-style.ts).
   const edge = () =>

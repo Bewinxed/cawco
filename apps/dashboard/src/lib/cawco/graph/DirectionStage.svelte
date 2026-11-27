@@ -244,7 +244,13 @@
     greeted = true;
     post({
       type: "cawco:canvas-view",
-      view: { scheme: theme.resolved, widths: null, motion: "on", fit: true },
+      view: {
+        scheme: theme.resolved,
+        screen: "device",
+        widths: null,
+        motion: "on",
+        fit: true,
+      },
     } satisfies FrameSays);
     if (reaching) {
       reach(reaching);
