@@ -7,6 +7,6 @@
 
 **The screen rule: mount parts, never redraw them.** A screen is a real component that composes components. Its states file imports the screen; the screen imports its parts. Before writing markup, look the part up: if the map has it, import it and pass its props. A frame's `parts` (in `artifact_read` with `state`) is the proof: a screen whose frame shows a button's markup with no `Button` in its parts redrew it. `parts` reads the story's root: a part drawn only inside a layer portalled out of it (a popover's rows) is listed in that part's own states file.
 
-**Used in is where a piece ships.** Follow used in up from the piece to the screen it lives on: a live story mounts that screen with the piece in its place, so the person meets it where the product has it.
+**Used in is where a piece ships.** Follow used in up from the piece as far as its context reaches (`SKILL.md` step 3): the live story mounts that surface with the piece in its place, so the person meets it where the product has it.
 
 A part changed once changes everywhere it is used: an instance is an import. Check `usedIn` before changing a part's props, and read each screen that uses it again.
