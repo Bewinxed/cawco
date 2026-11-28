@@ -83,6 +83,7 @@ import { drawnHere } from "./made-view";
 import type { Pins } from "./pins-types";
 import type { InkChrome, Pick } from "./radial";
 import { scrollerRound, scrollsContent } from "./scrollers";
+import { steadyFrame } from "./steady-frame";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -449,8 +450,6 @@ let keptRoom = 0;
 
 /** What hears the page's root and body change size while a layer holds a mark ({@link sizeHolding}); null while none does. */
 let pageResized: ResizeObserver | null = null;
-/** A frame is asked for that sizes the layers to the page again. */
-let resizedFrame = 0;
 /** The body {@link pageResized} watches: a page that puts a new body in place is watched again. */
 let watchedBody: HTMLElement | null = null;
 
@@ -517,9 +516,11 @@ const sizeHolding = () => {
 /**
  * The page's root and body watched for their size. The layers stand at the
  * root's origin, positioned, so sizing them changes neither box and no
- * delivery follows its own write. Sized in the next frame, as changes.ts
- * draws: written inside the delivery, the layout it forces is one the
- * delivery had already passed.
+ * delivery follows its own write. Sized in the next frame the window's size
+ * holds in (steady-frame.ts), as changes.ts draws: written inside the
+ * delivery, the layout it forces is one the delivery had already passed;
+ * sized on each frame of a window's resize, the page was laid out twice a
+ * frame, folded and unfolded, for layers that hold where they stand.
  */
 const watchPageSize = () => {
   const { body } = document;
@@ -527,14 +528,7 @@ const watchPageSize = () => {
     return;
   }
   pageResized?.disconnect();
-  pageResized = new ResizeObserver(() => {
-    if (!resizedFrame) {
-      resizedFrame = requestAnimationFrame(() => {
-        resizedFrame = 0;
-        sizeHolding();
-      });
-    }
-  });
+  pageResized = new ResizeObserver(() => steadyFrame(sizeHolding));
   pageResized.observe(document.documentElement);
   if (body) {
     pageResized.observe(body);
@@ -1397,31 +1391,32 @@ export function startInk(deps: InkDeps): Ink {
   /** {@link whereNow} as the last draw left the marks. */
   let drawnWhere: Where = { ink: "", pins: "" };
 
-  let frame = 0;
   /** A draw is due on the next frame whatever {@link whereNow} reads ({@link drawSoon}). */
   let wanted = false;
+  /** The marks drawn again where what they stand on moved ({@link later}). */
+  const placeAgain = () => {
+    const now = whereNow();
+    const pinsDue = wanted || now.pins !== drawnWhere.pins;
+    const inkDue = wanted || now.ink !== drawnWhere.ink;
+    wanted = false;
+    if (pinsDue || inkDue) {
+      draw(pinsDue);
+    }
+  };
   /**
-   * Placed again on the next frame, once, if what the marks stand on moved
+   * Placed again on the next frame the window's size holds in
+   * (steady-frame.ts), once, if what the marks stand on moved
    * ({@link whereNow}). A change anywhere in the page asks: a class, a
    * style, an attribute, a transition's end. Most move nothing a mark stands
    * on (a hover's colour, a control's state). The ink is drawn again when
    * its groups' elements moved; the pins only when what they stand on
    * changed, never for a move alone (a pin on a group is moved with it,
-   * `draw(true)`).
+   * `draw(true)`). Read on each frame of a resize, every pin's anchor was
+   * looked for afresh (a resize counts as a change of the page, page.ts
+   * `changesSeen`) while the browser moved each pill by its anchor already.
    */
   function later() {
-    if (!frame) {
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        const now = whereNow();
-        const pinsDue = wanted || now.pins !== drawnWhere.pins;
-        const inkDue = wanted || now.ink !== drawnWhere.ink;
-        wanted = false;
-        if (pinsDue || inkDue) {
-          draw(pinsDue);
-        }
-      });
-    }
+    steadyFrame(placeAgain);
   }
   /** A draw on the next frame wherever the marks stand: the overlay wrote where a mark stands itself, a write that wakes no draw of its own. */
   function drawSoon() {

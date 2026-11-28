@@ -645,11 +645,16 @@
   const content = $derived(spec.content !== undefined);
   /** Under this the drawing is said to stand scaled: a scale a pixel's rounding short of 1:1 is 1:1. */
   const SCALED_UNDER = 0.995;
-  /** The stage's own width, px: what Adapt draws at. */
+  /** The stage's own width, px: what Adapt draws at, the tools fold by, and a comment's view is read against. */
   let stageAcross = $state(0);
-  /** A device's width he picked; null under Adapt and for content, which draw at the stage's own. */
+  /**
+   * A device's width he picked; null under Adapt and for content, which
+   * draw at the page's own window (stage.ts `roomWidth`): the page lays
+   * itself out in its own resize, in the frame the panel moves in. Said as
+   * the stage's width each frame of a split's drag, every width queued
+   * behind the panel's, and the drawing stepped through them after it.
+   */
   const device = $derived(widthPick !== "adapt" && !content ? widthPick : null);
-  const width = $derived(device ?? (stageAcross > 0 ? stageAcross : null));
   /**
    * The screen the drawing's viewport lengths answer: a device's picked
    * (its `screenHeight`), else the stage's own, Adapt fitting the panel's
@@ -764,7 +769,7 @@
       }
       if (found.width !== undefined) {
         widthPick = found.width ?? "adapt";
-      } else if (refOf(on, found.pick, width).story !== wish.story) {
+      } else if (refOf(on, found.pick, device).story !== wish.story) {
         // At a width it has a story of its own for, the state as written is that story: back to Adapt.
         widthPick = "adapt";
       }
@@ -804,7 +809,7 @@
     const view = {
       scheme: content ? theme.resolved : scheme,
       screen,
-      width,
+      width: device,
       motion: reduce ? "reduce" : "on",
       fit: !actual,
     } as const;
@@ -887,7 +892,7 @@
     const pick = kept;
     const { loads } = link;
     const again = reachAgain;
-    const to = on && pick ? refOf(on, pick, width) : null;
+    const to = on && pick ? refOf(on, pick, device) : null;
     untrack(() => {
       // Every way a state comes to be kept (a row's press, a step, the
       // ask's state, a new ask, a state saved as new, a width's own story,
@@ -1187,7 +1192,7 @@
     const asked = comparing ? against : null;
     const id = againstId;
     const other = againstReview;
-    const atWidth = width;
+    const atWidth = device;
     const show = flipped ? "compared" : "kept";
     const { loads } = link;
     untrack(() => {
@@ -1330,11 +1335,15 @@
   });
   /** The room the stage's floating head takes over the stage page's top, px (StagePane). */
   let stageRoom = $state(0);
-  // The page pads its top by it: told as it changes, and again as the page
-  // lays a drawing out (a frame loaded afresh has heard nothing yet).
+  /** The page has laid a drawing out since it loaded: its stage listens by then. */
+  const pageLaid = $derived(link.laid !== null);
+  // The page pads its top by it: told as it changes, as a page loads, and
+  // again once it lays its first drawing out (a frame loaded afresh has
+  // heard nothing yet). Told on each of the page's layouts, a split's drag
+  // said it every frame.
   $effect(() => {
     const px = stageRoom;
-    track(link.laid);
+    track(link.loads, pageLaid);
     if (px > 0) {
       untrack(() => link.room(px));
     }
@@ -1360,7 +1369,7 @@
       return;
     }
     // The page stands at its from state first, whatever stood (stage.ts `standFor`).
-    const ref = refOf(review, { state: fromId, variant: null }, width);
+    const ref = refOf(review, { state: fromId, variant: null }, device);
     chosenFrom = { id: fromId, ref };
     if (kept?.state === toId && kept.variant === null) {
       reachAgain += 1;

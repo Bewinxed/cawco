@@ -151,6 +151,7 @@ import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 import { scrollerRound } from "./scrollers";
 import { spotName } from "./spot-name";
+import { steadyFrame } from "./steady-frame";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
@@ -2377,12 +2378,13 @@ function pageFootNow(): number {
 }
 let pageFootTold = -1;
 let pageFootAsked = false;
+/** The page's foot read and told in the next frame the window's size holds in (steady-frame.ts): read on each frame of a drag, it laid the page out ahead of the frame's own layout. */
 function tellPageFoot() {
   if (pageFootAsked) {
     return;
   }
   pageFootAsked = true;
-  requestAnimationFrame(() => {
+  steadyFrame(() => {
     pageFootAsked = false;
     const px = pageFootNow();
     if (px !== pageFootTold) {

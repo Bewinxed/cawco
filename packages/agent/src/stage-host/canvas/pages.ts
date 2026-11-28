@@ -36,6 +36,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { VIEW_SCREENS, type ViewScreen } from "@cawco/core/page-wire";
 import {
   eachRule,
   type MediaScheme,
@@ -135,12 +136,13 @@ frame.title = names[files[0] ?? ""] ?? "";
 holder.append(frame);
 document.body.append(holder);
 
-/** The view the graph last set: its scheme, its width (none: the room's), whether a wider width is scaled to fit. */
+/** The view the graph last set: its scheme, its width (none: the room's), the screen it stands for, whether a wider width is scaled to fit. */
 const view: {
   fit: boolean;
   scheme: MediaScheme | null;
+  screen: ViewScreen;
   width: number | null;
-} = { fit: true, scheme: null, width: null };
+} = { fit: true, scheme: null, screen: "device", width: null };
 /** The room the panel's head takes over the page's top, px. */
 let room = 0;
 /** The page the frame shows, by its file; null before the first reach. */
@@ -151,13 +153,25 @@ let loaded = false;
 /** The page's width for the frame: its own, inside any scrollbar. */
 const across = () => document.documentElement.clientWidth;
 
+/**
+ * The frame laid out at the width the graph picked; under Adapt (no width,
+ * the window's screen) at the page's own, read here in its own resize, so
+ * the frame moves in the frame the panel does; else the desk's up to the
+ * room. The room is read once, before the writes: read after them, each
+ * read laid the page out again.
+ */
 function laid(): void {
+  const wide = across();
+  const adapting = view.width === null && view.screen === "window";
   // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
   const width =
-    view.width ?? Math.min(FORMS.desk, Math.max(0, across() - 2 * GUTTER));
+    view.width ??
+    (adapting && wide > 0
+      ? wide
+      : Math.min(FORMS.desk, Math.max(0, wide - 2 * GUTTER)));
   const scale =
-    view.fit && view.width !== null && across() > 0 && width > across()
-      ? across() / width
+    view.fit && view.width !== null && wide > 0 && width > wide
+      ? wide / width
       : 1;
   const tall = Math.max(0, innerHeight - room);
   frame.style.width = `${width}px`;
@@ -167,7 +181,7 @@ function laid(): void {
   holder.style.height = `${tall}px`;
   document.body.style.paddingTop = `${room}px`;
   const laidOut: StageLaid = {
-    need: Math.ceil(width * scale + 2 * GUTTER + innerWidth - across()),
+    need: Math.ceil(width * scale + 2 * GUTTER + innerWidth - wide),
     tall: Math.ceil(tall),
     fit: null,
     scale,
@@ -406,6 +420,11 @@ addEventListener("cawco:canvas-view", (event) => {
   if ("widths" in set) {
     const [width] = Array.isArray(set.widths) ? set.widths : [];
     view.width = typeof width === "number" && width > 0 ? width : null;
+  }
+  const screen = "screen" in set ? set.screen : undefined;
+  const known = VIEW_SCREENS.find((one) => one === screen);
+  if (known) {
+    view.screen = known;
   }
   if ("fit" in set && typeof set.fit === "boolean") {
     view.fit = set.fit;

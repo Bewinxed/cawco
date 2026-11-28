@@ -795,8 +795,13 @@ export function bootStage(page: Page): Mode {
   let reaching: Promise<unknown> = Promise.resolve();
   /** The things the last reach moved, by the ids its clips name them by. */
   let moved = new Map<string, Element>();
-  /** The drawing's own width where it stands narrower than the width it was laid out at, by states file and width picked; only ever widened. */
-  const fitOf = new Map<string, number>();
+  /**
+   * The drawing's own width where it stood narrower than the width it was
+   * laid out at (`at`), by states file and width picked (`fitKey`): it
+   * stands for every width up to `at`, and is only ever widened there; a
+   * wider width is laid out whole and read afresh.
+   */
+  const fitOf = new Map<string, { at: number; fit: number }>();
   let laidSaid = "";
   /** The state a picture stands the drawing at, and its forced interaction. */
   let posed: { interaction: Interaction; key: string } | null = null;
@@ -825,17 +830,50 @@ export function bootStage(page: Page): Mode {
 
   const scheme = (): Column["scheme"] =>
     view.scheme === "both" ? "light" : view.scheme;
+  /**
+   * The window's room ({@link windowRoom}) as the task laying the drawing
+   * out first read it, before its writes. The root's `clientWidth` lays the
+   * page out to answer: read again after a write (the drawing's width, its
+   * frame's), each read laid the whole drawing out in the middle of a
+   * resize, and the frame laid it out once more.
+   */
+  let roomRead: number | null = null;
+  const roomNow = (): number => {
+    if (roomRead === null) {
+      roomRead = windowRoom();
+      queueMicrotask(() => {
+        roomRead = null;
+      });
+    }
+    return roomRead;
+  };
   /** The page's room for the drawing: its own width inside its scroller's gutters, less its gutters. */
-  const room = () => windowRoom() - 2 * tokenPx(GUTTER);
-  /** The width a story is laid out at: his pick, else its own, else the desk's up to the page's room. */
-  // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
-  const roomWidth = (story: Story): number =>
-    view.widths?.[0] ??
-    story.form?.width ??
-    Math.min(FORMS.desk, room() > 0 ? room() : FORMS.desk);
+  const room = () => roomNow() - 2 * tokenPx(GUTTER);
+  /** The view draws at the page's own window: the design graph's Adapt, and a design folder's content (core `ViewScreen`, no width picked). */
+  const adapting = () => view.widths === null && view.screen === "window";
+  /**
+   * The width a story is laid out at: his pick; under Adapt the page's own
+   * window, read in its own resize, so the drawing moves in the frame the
+   * panel does; else its own, else the desk's up to the page's room.
+   */
+  const roomWidth = (story: Story): number => {
+    const [picked] = view.widths ?? [];
+    if (picked !== undefined) {
+      return picked;
+    }
+    const across = roomNow();
+    if (adapting() && across > 0) {
+      return across;
+    }
+    if (story.form) {
+      return story.form.width;
+    }
+    // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
+    return Math.min(FORMS.desk, room() > 0 ? room() : FORMS.desk);
+  };
   /** The page's gutter beside a drawing standing `across` px wide: the token's where the window has room for it, else what room it has. */
   const gutterBeside = (across: number): number =>
-    Math.max(0, Math.min(tokenPx(GUTTER), (windowRoom() - across) / 2));
+    Math.max(0, Math.min(tokenPx(GUTTER), (roomNow() - across) / 2));
   const columnOf = (story: Story): Column => ({
     interaction: "rest",
     scheme: scheme(),
@@ -1462,10 +1500,25 @@ export function bootStage(page: Page): Mode {
   /* --- What the panel's split sizes the stage by --------------------------- */
 
   /**
+   * The drawing's own width as kept for `width` (`fitOf`): one read at
+   * that width or a wider one; null where none was, and the drawing is
+   * laid out at the whole width.
+   */
+  const fitFor = (key: string, width: number): number | null => {
+    const known = fitOf.get(key);
+    return known !== undefined && width <= known.at ? known.fit : null;
+  };
+
+  /**
    * The drawing's own width where it stands narrower than `width`, kept
-   * by `key` (its states file and the width picked) and only ever widened;
-   * null where it fills the width. Read inside a delivery of
-   * {@link layoutRead}, on the layout that frame has just done.
+   * by `key` (`fitKey`); null where it fills the width. Laid out narrowed
+   * to a fit kept, the fit is only ever widened: read at its own narrowed
+   * width, a drawing as wide as half its room halved again each read.
+   * Laid out whole, a narrower read is kept for this width and those
+   * under it: a panel widened lays the drawing out whole again, so a
+   * component that answers its room never stays at a narrow width's fit.
+   * Read inside a delivery of {@link layoutRead}, on the layout that frame
+   * has just done.
    */
   function fitAt(key: string, width: number): number | null {
     const own = ownRoot(drawing);
@@ -1476,16 +1529,20 @@ export function bootStage(page: Page): Mode {
         Math.max(own.getBoundingClientRect().width / zoomed, own.scrollWidth)
       );
       const known = fitOf.get(key);
-      if (known === undefined ? read < width - 1 : read > known) {
-        fitOf.set(key, Math.min(width, read));
+      if (known !== undefined && width <= known.at) {
+        if (read > known.fit) {
+          fitOf.set(key, { at: known.at, fit: Math.min(known.at, read) });
+        }
+      } else if (read < width - 1) {
+        fitOf.set(key, { at: width, fit: read });
       }
     }
-    return fitOf.get(key) ?? null;
+    return fitFor(key, width);
   }
 
-  /** The key a drawing's own width is kept by: its states file and the width picked. */
+  /** The key a drawing's own width is kept by: its states file and the width picked, the page's window under Adapt. */
   const fitKey = (on: Live) =>
-    `${on.section.file}@${view.widths?.[0] ?? "own"}`;
+    `${on.section.file}@${view.widths?.[0] ?? (adapting() ? "window" : "own")}`;
 
   /**
    * The drawing laid out at the width the panel's room or his pick gives
@@ -1500,7 +1557,7 @@ export function bootStage(page: Page): Mode {
       return;
     }
     const width = roomWidth(live.story);
-    const fit = fitOf.get(fitKey(live)) ?? null;
+    const fit = fitFor(fitKey(live), width);
     const drawn = fit === null ? width : Math.min(width, fit);
     drawnWidth = drawn;
     frame.style.setProperty("--frame-w", `${drawn}px`);
@@ -1578,7 +1635,7 @@ export function bootStage(page: Page): Mode {
    * the only sign.
    */
   function scaleOf(drawn: number): number {
-    const across = windowRoom();
+    const across = roomNow();
     return view.fit &&
       view.widths?.[0] !== undefined &&
       across > 0 &&
@@ -1655,15 +1712,26 @@ export function bootStage(page: Page): Mode {
     layoutSoon();
   }
 
-  /** {@link inkInView}'s read and scroll, inside a delivery of {@link layoutRead}. */
+  /**
+   * {@link inkInView}'s read and scroll, inside a delivery of
+   * {@link layoutRead}. Where nothing stands past the window across, the
+   * page can't scroll that way and nothing is read: {@link inkOf} lays out
+   * every element and text run of the drawing, what a
+   * `content-visibility: auto` section skips off screen included, and on
+   * every frame of a split's drag it laid out a whole board to move
+   * nothing.
+   */
   function scrollInkIntoView(): void {
-    const ink = live && !frame.hidden ? inkOf(drawing) : null;
+    const scroller = document.scrollingElement ?? document.documentElement;
     // The window's own width: what the drawing reads as `innerWidth` is the frame's (viewport.ts).
     const across = windowRoom();
+    if (!live || frame.hidden || scroller.scrollWidth <= across) {
+      return;
+    }
+    const ink = inkOf(drawing);
     if (!ink || (ink.left >= 0 && ink.right <= across)) {
       return;
     }
-    const scroller = document.scrollingElement ?? document.documentElement;
     const width = ink.right - ink.left;
     const margin = Math.max(tokenPx(GUTTER), (across - width) / 2);
     stageScroll(() =>

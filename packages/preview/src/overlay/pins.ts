@@ -114,6 +114,7 @@ import {
   pageScrolls,
   unpadFoot,
 } from "./scrollers";
+import { steadyFrame } from "./steady-frame";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -1550,22 +1551,16 @@ export function startPins(deps: PinsDeps): Pins {
   );
   // The viewport's width crossed one of the page's breakpoints: which pins
   // this view judges, and why it draws none of the rest, may have changed.
-  // Where each pill stands, CSS keeps.
-  let resized = 0;
-  addEventListener(
-    "resize",
-    () => {
-      if (!resized) {
-        resized = requestAnimationFrame(() => {
-          resized = 0;
-          if (judgedNow() !== judgedAt) {
-            draw();
-          }
-        });
-      }
-    },
-    { passive: true }
-  );
+  // Where each pill stands, CSS keeps. Judged once the window's size holds
+  // (steady-frame.ts): on each frame of a drag, every pin was judged again.
+  const judgeAgain = () => {
+    if (judgedNow() !== judgedAt) {
+      draw();
+    }
+  };
+  addEventListener("resize", () => steadyFrame(judgeAgain), {
+    passive: true,
+  });
   // Asking for less motion stops a live dot's breath at once, and asking
   // for it again starts it, in step (DESIGN.md, The Reduced Motion Rule).
   matchMedia("(prefers-reduced-motion: no-preference)").addEventListener(

@@ -43,6 +43,7 @@ import {
 } from "./anchor-names";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
+import { steadyFrame } from "./steady-frame";
 
 /** A ring's ping, as `getAnimations()` names it. */
 const PING = "cawco-change-ping";
@@ -122,15 +123,10 @@ export function startChanges(deps: ChangesDeps): Changes {
   // the page out again where the delivery had already passed, and WebKit
   // reported "ResizeObserver loop completed with undelivered notifications"
   // (a decision page's embed, its root 0×0).
-  let laidOut = 0;
-  const sized = new ResizeObserver(() => {
-    if (!laidOut) {
-      laidOut = requestAnimationFrame(() => {
-        laidOut = 0;
-        draw();
-      });
-    }
-  });
+  // Drawn in the next frame the window's size holds in (steady-frame.ts):
+  // drawn on each frame of a drag, every pin's anchor was looked for and
+  // every stop's box read ahead of the frame's own layout.
+  const sized = new ResizeObserver(() => steadyFrame(draw));
   sized.observe(document.documentElement);
   /** The elements the host's anchors name, each watched for its box (`sized`); observed once, since observing again delivers again. */
   const watched = new Set<Element>();
@@ -387,7 +383,7 @@ export function startChanges(deps: ChangesDeps): Changes {
     },
     { capture: true, passive: true }
   );
-  addEventListener("resize", () => draw(), { passive: true });
+  addEventListener("resize", () => steadyFrame(draw), { passive: true });
 
   return {
     layer,
