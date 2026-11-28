@@ -553,10 +553,16 @@ export const insetFoot = (px: number) => {
  * (`cawco:foot-room`: Changed since you looked at the well's foot), as iOS
  * insets a scroll view under a floating bottom bar, so the page's last line
  * scrolls clear of it; 0 when nothing floats there. The page's own layout is
- * never touched. Takes hold at the next {@link fitToPage}.
+ * never touched. Takes hold at the next {@link fitToPage}. Whether the
+ * room kept changed: the same room told again needs no new fit.
  */
-export const keepFoot = (px: number) => {
-  keptRoom = Math.max(0, px);
+export const keepFoot = (px: number): boolean => {
+  const room = Math.max(0, px);
+  if (room === keptRoom) {
+    return false;
+  }
+  keptRoom = room;
+  return true;
 };
 
 /** Whether the host keeps room under the page's foot: the layer then holds the page's height with no pin on it. */

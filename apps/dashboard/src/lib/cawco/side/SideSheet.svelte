@@ -625,7 +625,11 @@
   $effect(() => {
     const node = content;
     const frame = host;
-    if (!node) {
+    // A sheet whose tab is off screen (`away`) measures nothing and hears
+    // nothing: a split's drag resized every off-screen tab's sheet with the
+    // pane, and each measured on every frame. Back on screen, it measures
+    // afresh as this runs again.
+    if (!node || away) {
       return;
     }
     // The lower stop's floor is the top of the composer standing over this

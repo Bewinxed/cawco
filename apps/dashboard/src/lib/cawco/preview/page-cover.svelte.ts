@@ -60,23 +60,29 @@ export class PageCover {
         this.#deps.previewFrame.post({ type: "cawco:covered", boxes: [] });
         return;
       }
-      // Said in the next frame (frameObserver), whatever moved it.
+      // Said in the next frame (frameObserver), whatever moved it, and only
+      // when the boxes differ from the last ones said to this frame: a
+      // split's drag resizes the frame on every frame and moves none of them.
+      let told = "";
       const sayNow = () => {
         const framed = frame.getBoundingClientRect();
         const left = framed.left + frame.clientLeft;
         const top = framed.top + frame.clientTop;
-        this.#deps.previewFrame.post({
-          type: "cawco:covered",
-          boxes: covering.map((el) => {
-            const r = el.getBoundingClientRect();
-            return {
-              x: r.left - left,
-              y: r.top - top,
-              w: r.width,
-              h: r.height,
-            };
-          }),
+        const boxes = covering.map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            x: r.left - left,
+            y: r.top - top,
+            w: r.width,
+            h: r.height,
+          };
         });
+        const said = JSON.stringify(boxes);
+        if (said === told) {
+          return;
+        }
+        told = said;
+        this.#deps.previewFrame.post({ type: "cawco:covered", boxes });
       };
       const sized = frameObserver(sayNow);
       for (const el of covering) {
@@ -107,15 +113,20 @@ export class PageCover {
         return;
       }
       const gap = numberOf("--spacing-space-2");
+      // Said only when the room differs from the last said to this frame: a
+      // split's drag resizes the frame across, which leaves the room as it was.
+      let told = -1;
       const sayNow = () => {
         const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
-        this.#deps.previewFrame.post({
-          type: "cawco:foot-room",
-          px: Math.max(
-            0,
-            Math.ceil(foot - tag.getBoundingClientRect().top + gap)
-          ),
-        });
+        const px = Math.max(
+          0,
+          Math.ceil(foot - tag.getBoundingClientRect().top + gap)
+        );
+        if (px === told) {
+          return;
+        }
+        told = px;
+        this.#deps.previewFrame.post({ type: "cawco:foot-room", px });
       };
       const sized = frameObserver(sayNow);
       sized.observe(tag);

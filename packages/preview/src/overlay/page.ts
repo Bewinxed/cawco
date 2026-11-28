@@ -4062,11 +4062,14 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
     // What the host's chrome floats over the page's foot (Changed since you
     // looked), px: the page scrolls that much further, so its last line
-    // comes clear of it.
+    // comes clear of it. Fit to the page in the next frame the window's size
+    // holds in (steady-frame.ts), and only for a room that changed: drawn
+    // here, every frame of a split's drag laid the page out mid-resize.
     "cawco:foot-room": (message) => {
       const px = typeof message.px === "number" ? message.px : 0;
-      keepFoot(Number.isFinite(px) ? Math.min(px, FOOT_ROOM_MOST) : 0);
-      pins.draw();
+      if (keepFoot(Number.isFinite(px) ? Math.min(px, FOOT_ROOM_MOST) : 0)) {
+        steadyFrame(pins.draw);
+      }
     },
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
