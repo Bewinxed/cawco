@@ -14,8 +14,8 @@
  * - **Overtaken** (`question_close` from another session of the project):
  *   with evidence the hub checks: the task it held done or dropped or
  *   gone, a to-do of it ticked or gone, the step it was asked at ticked or
- *   gone from its asker's plan, or a newer open question of the project on
- *   the same thing. Its asker reads why in a quiet note (asks.ts
+ *   gone from its asker's plan, or a newer open or answered question of the
+ *   project on the same thing. Its asker reads why in a quiet note (asks.ts
  *   `overtaken`).
  */
 
@@ -91,7 +91,7 @@ export const createAskCloses = (deps: AskClosesDeps) => {
     return { ask, asker, projectId };
   };
 
-  /** Why the question `said` names is no newer open one of the project's; undefined when it is. */
+  /** Why the question `said` names is no newer open or answered one of the project's; undefined when it is. */
   const newerRefused = (
     ask: AskRecord,
     projectId: string,
@@ -100,13 +100,13 @@ export const createAskCloses = (deps: AskClosesDeps) => {
     const newer = deps.db.asks.get(said);
     const [by] = newer ? deps.db.getInstancesByIds([newer.instanceId]) : [];
     const fits =
-      newer?.state === "open" &&
+      (newer?.state === "open" || newer?.state === "answered") &&
       newer.raisedAt > ask.raisedAt &&
       by !== undefined &&
       recordsProjectOf(deps.db, by) === projectId;
     return fits
       ? undefined
-      : `${said} is no open question of this project asked after it.`;
+      : `${said} is no open or answered question of this project asked after it.`;
   };
 
   /** Why the step `ask` was asked at still stands in its asker's plan; undefined once it was ticked or removed. */
