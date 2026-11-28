@@ -153,22 +153,64 @@ let loaded = false;
 /** The page's width for the frame: its own, inside any scrollbar. */
 const across = () => document.documentElement.clientWidth;
 
+/** The view draws at the page's own window: Adapt (no width, the window's screen). */
+const adapting = () => view.width === null && view.screen === "window";
+
+/** The layout last told the graph, as said. */
+let laidSaid = "";
+/** `laidOut` told the graph, unless it is what was told last. */
+function tellLaid(laidOut: StageLaid): void {
+  const now = JSON.stringify(laidOut);
+  if (now !== laidSaid) {
+    laidSaid = now;
+    tell(STAGE_LAID, laidOut);
+  }
+}
+
 /**
- * The frame laid out at the width the graph picked; under Adapt (no width,
- * the window's screen) at the page's own, read here in its own resize, so
- * the frame moves in the frame the panel does; else the desk's up to the
- * room. The room is read once, before the writes: read after them, each
- * read laid the page out again.
+ * Under Adapt, the frame's box as the browser laid it out for the window's
+ * resize, told the graph: as wide as the window, so it needs the window and
+ * the gutters beside it, and as tall as the room under the panel's head.
+ */
+const adapted = new ResizeObserver(([entry]) => {
+  const [box] = entry?.contentBoxSize ?? [];
+  if (box && adapting()) {
+    tellLaid({
+      need: Math.ceil(innerWidth + 2 * GUTTER),
+      tall: Math.ceil(box.blockSize),
+      fit: null,
+      scale: 1,
+    });
+  }
+});
+
+/**
+ * The frame laid out at the width the graph picked; under Adapt at the
+ * page's own window by CSS, as wide as the page and as tall as the room
+ * under the panel's head, so the browser lays it out again in the layout
+ * that resizes the window and nothing here reads the window for it (read
+ * here on each resize, every step of a split's drag laid the page out
+ * before the frame's own layout did); else the desk's up to the room. The
+ * room is read once, before the writes: read after them, each read laid
+ * the page out again.
  */
 function laid(): void {
+  document.body.style.paddingTop = `${room}px`;
+  if (adapting()) {
+    frame.style.width = "100%";
+    frame.style.height = "100%";
+    frame.style.transform = "";
+    holder.style.width = "100%";
+    holder.style.height = "100%";
+    // Observed anew, so the box as it now stands is told whether or not it moved.
+    adapted.unobserve(holder);
+    adapted.observe(holder);
+    return;
+  }
   const wide = across();
-  const adapting = view.width === null && view.screen === "window";
   // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
   const width =
-    view.width ??
-    (adapting && wide > 0
-      ? wide
-      : Math.min(FORMS.desk, Math.max(0, wide - 2 * GUTTER)));
+    view.width ?? Math.min(FORMS.desk, Math.max(0, wide - 2 * GUTTER));
   const scale =
     view.fit && view.width !== null && wide > 0 && width > wide
       ? wide / width
@@ -179,14 +221,12 @@ function laid(): void {
   frame.style.transform = scale < 1 ? `scale(${scale})` : "";
   holder.style.width = `${width * scale}px`;
   holder.style.height = `${tall}px`;
-  document.body.style.paddingTop = `${room}px`;
-  const laidOut: StageLaid = {
+  tellLaid({
     need: Math.ceil(width * scale + 2 * GUTTER + innerWidth - wide),
     tall: Math.ceil(tall),
     fit: null,
     scale,
-  };
-  tell(STAGE_LAID, laidOut);
+  });
 }
 
 /* --- The scheme ------------------------------------------------------------ */
@@ -446,6 +486,11 @@ addEventListener(STAGE_DIALS, (event) => {
     turn();
   }
 });
-addEventListener("resize", laid);
+// Under Adapt CSS follows the window, and `adapted` tells what it laid out.
+addEventListener("resize", () => {
+  if (!adapting()) {
+    laid();
+  }
+});
 
 laid();

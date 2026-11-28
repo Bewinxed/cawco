@@ -293,6 +293,16 @@ export const WINDOW_INSET = "--cawco-window-inset";
 /** One hundredth of the room the page's own window gives a drawing down, for {@link SCREEN_VH}: its height less {@link WINDOW_INSET}. */
 export const windowDown = (): string =>
   `calc((100dvh - var(${WINDOW_INSET}, 0px)) / 100)`;
+/**
+ * One hundredth of the page's own window across, inside its scroller's
+ * gutters, for {@link SCREEN_VW} on a body drawn at that window (the design
+ * graph's Adapt, runtime.ts `sizeBody`): `1cqi` of the stage page's body,
+ * its query container (page-style.ts). A registered length (page-style.ts
+ * `@property`), so it computes to px on the body it is set on: `1cqi`
+ * carried in {@link SCREEN_VW} itself answered each container a story lays
+ * out inside its body.
+ */
+export const WINDOW_VW = "--cawco-window-vw";
 
 /** A length in a viewport unit (CSS Values 4 §6.1.2): its number, its `s`/`l`/`d` size, its axis. */
 const VIEWPORT_LENGTH =

@@ -192,6 +192,9 @@ export function readerOf(page: Page): Reader {
     if (width === null) {
       return "fit";
     }
+    if (width === "window") {
+      return "window";
+    }
     const preset = Object.entries(FORMS).find(([, one]) => one === width)?.[0];
     return `${preset ?? "width"} ${width}`;
   };

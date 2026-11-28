@@ -593,6 +593,8 @@ export function startPins(deps: PinsDeps): Pins {
 
   /** Each pin standing on the page: where, and its pill. */
   const placed = new Map<string, Placed>();
+  /** Each pin the last draw looked for, placed or not (`placedOn`). */
+  let looked = new Set<string>();
   /** The comment being written: where it stands, and its pill. */
   let drafted: (DraftTarget & { spot?: Spot; pill?: HTMLElement }) | null =
     null;
@@ -1318,6 +1320,7 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const { all, moves } = pinsNow(following);
+    looked = new Set(all.map((pin) => pin.id));
     if (!following) {
       fitToPage(room, insetFor !== null || footKept());
       judgedAt = judgedNow();
@@ -1377,6 +1380,7 @@ export function startPins(deps: PinsDeps): Pins {
   /** No pill on the page: each layer holds its styles alone, and every row's name is off its element. */
   const drawNothing = () => {
     placed.clear();
+    looked = new Set();
     for (const held of layers.values()) {
       holdIn(held, held.firstElementChild ? [held.firstElementChild] : []);
     }
@@ -1808,8 +1812,14 @@ export function startPins(deps: PinsDeps): Pins {
           )
         : [],
     placedOn: (id) => {
-      const el = placed.get(id)?.el;
-      return el?.isConnected ? el : null;
+      if (!looked.has(id)) {
+        return null;
+      }
+      const el = placed.get(id)?.el ?? null;
+      if (!el) {
+        return { el: null };
+      }
+      return el.isConnected ? { el } : null;
     },
     standingOn: () => [
       ...[...placed.values()].map(({ el }) => el),

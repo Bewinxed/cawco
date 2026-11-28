@@ -218,7 +218,11 @@ export const FORCED: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
 /** The class a probe's body carries while its values are read: nothing in it moves (page-style.ts PAGE_CSS). */
 export const HELD = "cawco-held";
 
-export type WidthSlot = number | "own";
+/** Where a body's width comes from: px, the story's own form, or the page's own window (the design graph's Adapt), which CSS lays it out at as the window resizes. */
+export type WidthSlot = number | "own" | "window";
+
+/** A body's width as it is sized (runtime.ts `sizeBody`): px, the page's own window, or none (its content's). */
+export type BodyWidth = number | "window" | null;
 
 export interface View {
   /** The stage: a width picked wider than the page's room is scaled to fit it; off, it is drawn 1:1 and the page scrolls across it. */
@@ -533,7 +537,7 @@ export interface Page {
   schemeOf: (column: Column) => Scheme;
   sectionOf: (file: string) => Section | undefined;
   readonly sections: Section[];
-  sizeBody: (body: HTMLElement, width: number | null, fills?: boolean) => void;
+  sizeBody: (body: HTMLElement, width: BodyWidth, fills?: boolean) => void;
   readonly spec: CanvasSpec;
   readonly state: CanvasState;
   /** The page's own sheet: a mode's rules, its duration tokens. */
@@ -541,5 +545,7 @@ export interface Page {
   /** Each story whose drawing threw, until it mounts again. */
   threwNow: () => StoryThrew[];
   readonly view: View;
-  widthOf: (story: Story, slot: WidthSlot) => number | null;
+  widthOf: (story: Story, slot: WidthSlot) => BodyWidth;
+  /** The width `body` was sized at (`sizeBody`); null for one sized at none, or never sized. */
+  widthOfBody: (body: HTMLElement) => BodyWidth;
 }

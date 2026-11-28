@@ -25,8 +25,9 @@
  * The host steps through them (its tag, `‹ ›`, a To check row, a chip):
  * this answers where each stands in the page (`cawco:change-stops`), a pin
  * whose element is in, holds or is inside a changed one standing with it
- * as one stop, in page order; and a step brings its element into view and
- * chooses it, the one 1px line (`cawco:step-change`), and pings its ring.
+ * as one stop, in the page's document order; and a step brings its
+ * element into view and chooses it, the one 1px line
+ * (`cawco:step-change`), and pings its ring.
  * A press on a ringed element in Interact mode is a look at it
  * (`cawco:change-pressed`).
  */
@@ -56,8 +57,8 @@ export interface ChangesDeps {
   locate: (anchor: PageAnchor) => { el: Element } | null;
   /** `el` chosen in the overlay (The One Target Rule), or none. */
   outline: (el: Element | null) => void;
-  /** The element pin `id` stands on as the pins' last draw placed it (pins.ts `placedOn`); null for one it placed nowhere. */
-  placedOn: (id: string) => Element | null;
+  /** Where the pins' last draw placed pin `id` (pins.ts `placedOn`): on `el`, or nowhere; null for one no draw looked for. */
+  placedOn: (id: string) => { el: Element | null } | null;
   post: (type: string, payload?: object) => void;
 }
 
@@ -83,6 +84,54 @@ interface Stop {
   anchors: string[];
   el: Element | null;
   pin: string | null;
+}
+
+/** What holds `el`'s tree in the one round it: its shadow root's host, else its document's frame; null in the page's own document. */
+const holderOf = (el: Element): Element | null => {
+  const root = el.getRootNode();
+  // Read by name, not `instanceof`: a frame's document has its own ShadowRoot.
+  return "host" in root
+    ? (root as ShadowRoot).host
+    : (el.ownerDocument.defaultView?.frameElement ?? null);
+};
+
+/**
+ * The trees from this page's document down to `el`, outermost first: each
+ * frame or shadow host that holds the next, then `el`.
+ */
+function treesTo(el: Element): Element[] {
+  const path = [el];
+  let up = holderOf(el);
+  while (up) {
+    path.unshift(up);
+    up = holderOf(up);
+  }
+  return path;
+}
+
+/**
+ * `a` before `b` in the page's document order, through the frames and
+ * shadow roots that hold either: the order a reader and the keyboard meet
+ * them in. Read off the tree, it lays nothing out: ordered by their boxes,
+ * each draw laid out every section `content-visibility: auto` skipped off
+ * screen to read a box there, on every release of a split's drag.
+ */
+function pageOrder(a: Element, b: Element): number {
+  const from = treesTo(a);
+  const to = treesTo(b);
+  for (let at = 0; at < Math.min(from.length, to.length); at += 1) {
+    const one = from[at] as Element;
+    const other = to[at] as Element;
+    if (one !== other) {
+      // An element inside `one` follows it; one holding it precedes it.
+      // biome-ignore lint/suspicious/noBitwiseOperators: compareDocumentPosition answers a bitmask
+      return one.compareDocumentPosition(other) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+        ? -1
+        : 1;
+    }
+  }
+  return from.length - to.length;
 }
 
 /** The element an anchor names in the page; null when it names none, or names it wrongly. */
@@ -298,17 +347,19 @@ export function startChanges(deps: ChangesDeps): Changes {
   const together = (a: Element, b: Element) => a.contains(b) || b.contains(a);
 
   /**
-   * The pin `id`'s element: the one the pins' draw placed it on, else where
-   * its anchor stands now. Located afresh, every draw searched the page's
-   * text once per pin for elements the pins stand on already.
+   * The pin `id`'s element: where the pins' last draw placed it, on an
+   * element or nowhere; where its anchor stands now only for a pin no draw
+   * looked for. Located afresh, every draw searched the page's text once per
+   * pin for elements the pins stand on already, and for each pin they had
+   * found nowhere (another story's, hidden in this view).
    */
   function pinEl(
     id: string,
     pins: ReturnType<typeof readPins>
   ): Element | null {
-    const placedOn = deps.placedOn(id);
-    if (placedOn) {
-      return placedOn;
+    const placed = deps.placedOn(id);
+    if (placed) {
+      return placed.el;
     }
     const pin = pins.get(id);
     return pin && "selector" in pin.anchor
@@ -316,7 +367,7 @@ export function startChanges(deps: ChangesDeps): Changes {
       : null;
   }
 
-  /** The stops in page order: each change with the pins in, holding or inside it; each other pin; changes not on the page last. */
+  /** The stops in the page's document order ({@link pageOrder}): each change with the pins in, holding or inside it; each other pin; changes not on the page last. */
   function tellStops() {
     const pins = readPins(artifact.doc());
     const stops: Stop[] = anchors.map((anchor) => ({
@@ -337,16 +388,15 @@ export function startChanges(deps: ChangesDeps): Changes {
         stops.push({ anchors: [], el, pin: id });
       }
     }
-    // Each box read once, then sorted: read in the comparator, each was read
-    // once per comparison.
-    const placed = stops.flatMap((stop) =>
-      stop.el ? [{ stop, box: stop.el.getBoundingClientRect() }] : []
+    const placed = stops.filter(
+      (stop): stop is Stop & { el: Element } => stop.el !== null
     );
-    placed.sort((a, b) => a.box.top - b.box.top || a.box.left - b.box.left);
+    placed.sort((a, b) => pageOrder(a.el, b.el));
     const rest = stops.filter((stop) => !stop.el);
-    const told = [...placed.map(({ stop }) => stop), ...rest].map(
-      ({ anchors: of, pin }) => ({ anchors: of, pin })
-    );
+    const told = [...placed, ...rest].map(({ anchors: of, pin }) => ({
+      anchors: of,
+      pin,
+    }));
     // Said again only when the order moved: a page drawing itself late (a decision page's cards) moves it.
     const said = JSON.stringify(told);
     if (said !== lastSaid) {

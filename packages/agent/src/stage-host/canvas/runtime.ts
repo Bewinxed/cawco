@@ -74,6 +74,7 @@ import { holdPageScroll } from "./held-scroll";
 import { fromRoot, pageError } from "./measure";
 import { ownModulesOf } from "./own";
 import {
+  type BodyWidth,
   type BootOptions,
   type Bridge,
   type CanvasState,
@@ -115,6 +116,7 @@ import {
   SCREEN_VW,
   splitWidth,
   WIDTH_CONTAINER,
+  WINDOW_VW,
   windowDown,
 } from "./width";
 import "./window-events";
@@ -696,7 +698,7 @@ export function bootPage(
     return failed;
   }
 
-  const widthOf = (story: Story, slot: WidthSlot): number | null =>
+  const widthOf = (story: Story, slot: WidthSlot): BodyWidth =>
     slot === "own" ? (story.form?.width ?? null) : slot;
 
   /** A column's scheme: its own, or the page's (scheme.ts: the host's theme, else the system's). */
@@ -766,6 +768,11 @@ export function bootPage(
    */
   const thrown = new Map<string, StoryThrew>();
 
+  /** Each body's width as {@link sizeBody} sized it last. */
+  const bodyWidths = new WeakMap<HTMLElement, number | "window">();
+  const widthOfBody = (body: HTMLElement): BodyWidth =>
+    bodyWidths.get(body) ?? null;
+
   /** Mounts one story into `body`, its failure kept on `into`. */
   function mountInto(
     body: HTMLElement,
@@ -786,9 +793,9 @@ export function bootPage(
       return;
     }
     const was = mounting;
-    // What the story's script asks of matchMedia while it mounts, its body answers.
-    const width = Number.parseFloat(body.style.width);
-    mounting = Number.isFinite(width) ? width : null;
+    // What the story's script asks of matchMedia while it mounts, its body answers; one at the page's own window, the window.
+    const width = widthOfBody(body);
+    mounting = typeof width === "number" ? width : null;
     // A throw its framework catches after the mount (an edit applied in place, an effect) is said in the story's place by the mode; one during the mount, by whoever mounted it.
     let returned = false;
     const key = `${section.file}|${name}`;
@@ -820,8 +827,10 @@ export function bootPage(
   }
 
   /** One hundredth of the screen down a body `width` wide stands in, as the view's screen says. */
-  const screenDown = (width: number): string =>
-    view.screen === "window" ? windowDown() : `${screenHeight(width) / 100}px`;
+  const screenDown = (width: number | "window"): string =>
+    width === "window" || view.screen === "window"
+      ? windowDown()
+      : `${screenHeight(width) / 100}px`;
 
   /**
    * A body at `width`: that width, the container its width rules answer,
@@ -833,16 +842,35 @@ export function bootPage(
    * and so is the height). `fills`: as tall as that screen, for a story
    * with no height of its own ({@link fillsScreen}). None of them with no
    * width: the page's.
+   *
+   * At the page's own window (`window`, Adapt) every one of them is CSS the
+   * browser answers in the layout that resizes the window: as wide as the
+   * stage page's body (`100cqi`, its query container, page-style.ts), its
+   * screen across one hundredth of that ({@link WINDOW_VW}). Written in px
+   * from the window's width read in its resize, each step of a split's
+   * drag laid the whole drawing out before the frame's own layout did.
    */
-  function sizeBody(
-    body: HTMLElement,
-    width: number | null,
-    fills = false
-  ): void {
-    body.style.width = width === null ? "" : `${width}px`;
+  function sizeBody(body: HTMLElement, width: BodyWidth, fills = false): void {
+    if (width === null) {
+      bodyWidths.delete(body);
+    } else {
+      bodyWidths.set(body, width);
+    }
+    const across = width === "window";
+    let inline = "";
+    let screenAcross = "";
+    if (across) {
+      inline = "100cqi";
+      screenAcross = `var(${WINDOW_VW})`;
+    } else if (width !== null) {
+      inline = `${width}px`;
+      screenAcross = `${width / 100}px`;
+    }
+    body.style.width = inline;
     body.style.container =
       width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
-    body.style.setProperty(SCREEN_VW, width === null ? "" : `${width / 100}px`);
+    body.style.setProperty(WINDOW_VW, across ? "1cqi" : "");
+    body.style.setProperty(SCREEN_VW, screenAcross);
     body.style.setProperty(SCREEN_VH, width === null ? "" : screenDown(width));
     body.style.blockSize =
       width !== null && fills ? `calc(100 * var(${SCREEN_VH}))` : "";
@@ -875,8 +903,11 @@ export function bootPage(
     body: HTMLElement
   ): boolean => {
     const key = fillKey(section.file, story.name);
-    const width = Number.parseFloat(body.style.width);
-    if (screenFilled.has(key) || !Number.isFinite(width) || !heightless(body)) {
+    if (
+      screenFilled.has(key) ||
+      widthOfBody(body) === null ||
+      !heightless(body)
+    ) {
       return false;
     }
     screenFilled.add(key);
@@ -1454,6 +1485,7 @@ export function bootPage(
     sizeBody,
     threwNow: () => [...thrown.values()],
     widthOf,
+    widthOfBody,
   };
   window.__cawcoCanvas = state;
   reader = readerOf?.(page) ?? null;

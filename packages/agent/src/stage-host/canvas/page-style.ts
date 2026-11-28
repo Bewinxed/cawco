@@ -8,10 +8,13 @@
  * agent's dials) are the panel's, never this page's.
  */
 
-import { WINDOW_INSET } from "./width";
+import { WINDOW_INSET, WINDOW_VW } from "./width";
 
 /** The page's own rules: the page, a section that didn't load, the skeleton, the rig, the stage and its rings. */
 const PAGE_CSS = `
+/* A body at the page's own window carries its screen across as this (width.ts WINDOW_VW): registered, it computes to px on
+   that body, so a container a story lays out inside it answers no viewport length. */
+@property ${WINDOW_VW} { syntax: "<length>"; inherits: false; initial-value: 0px; }
 html.cawco-canvas-page { color-scheme: light dark; }
 html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
@@ -81,7 +84,9 @@ html.cawco-stage-page::before { content: ""; position: fixed; inset-inline: 0; i
   backdrop-filter: blur(var(--spacing-space-2)); mask-image: linear-gradient(to bottom, black 50%, transparent);
   transition: opacity var(--duration-control, 150ms) ease-out; }
 html.cawco-stage-page.cawco-stage-scrolled::before { opacity: 1; }
-html.cawco-stage-page body { margin: 0; min-block-size: 100%; }
+/* The page's body is the query container a drawing at the page's own window sizes itself by (runtime.ts sizeBody, Adapt):
+   \`100cqi\` is the window's width inside its scroller's gutters, answered by the browser in the layout that resizes the window. */
+html.cawco-stage-page body { margin: 0; min-block-size: 100%; container-type: inline-size; }
 html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; align-items: flex-start; gap: var(--spacing-space-3);
   box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh;
   padding: calc(var(--spacing-space-4) + var(--stage-room, 0px)) var(--stage-gutter, var(--spacing-space-4)) var(--spacing-space-4); }

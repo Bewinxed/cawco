@@ -853,17 +853,18 @@ export function bootStage(page: Page): Mode {
   const adapting = () => view.widths === null && view.screen === "window";
   /**
    * The width a story is laid out at: his pick; under Adapt the page's own
-   * window, read in its own resize, so the drawing moves in the frame the
-   * panel does; else its own, else the desk's up to the page's room.
+   * window (`window`), which CSS lays the drawing out at in the layout that
+   * resizes the window (runtime.ts `sizeBody`, {@link laid}), so it moves
+   * in the frame the panel does and nothing here reads the window for it;
+   * else its own, else the desk's up to the page's room.
    */
-  const roomWidth = (story: Story): number => {
+  const slotOf = (story: Story): number | "window" => {
     const [picked] = view.widths ?? [];
     if (picked !== undefined) {
       return picked;
     }
-    const across = roomNow();
-    if (adapting() && across > 0) {
-      return across;
+    if (adapting()) {
+      return "window";
     }
     if (story.form) {
       return story.form.width;
@@ -871,13 +872,25 @@ export function bootStage(page: Page): Mode {
     // @limit measured: the desk form's width on screen, FORMS.desk; a window wider than it draws the form, not the window
     return Math.min(FORMS.desk, room() > 0 ? room() : FORMS.desk);
   };
+  /**
+   * The page's own window across inside its scroller's gutters, as the
+   * last delivery of {@link layoutRead} found it laid out (the page's
+   * body's content box, which `100cqi` answers): what a drawing at the
+   * window stands at, read off a layout the browser did for its resize.
+   */
+  let windowAcross = 0;
+  /** The width in px a measured move of `story` is laid out at: at the page's own window, the window's, read once for the measure (a measuring page reads no layout of its own, {@link layoutRead}). */
+  const measuredAt = (story: Story): number => {
+    const slot = slotOf(story);
+    return slot === "window" ? windowRoom() : slot;
+  };
   /** The page's gutter beside a drawing standing `across` px wide: the token's where the window has room for it, else what room it has. */
   const gutterBeside = (across: number): number =>
     Math.max(0, Math.min(tokenPx(GUTTER), (roomNow() - across) / 2));
   const columnOf = (story: Story): Column => ({
     interaction: "rest",
     scheme: scheme(),
-    width: roomWidth(story),
+    width: slotOf(story),
   });
 
   /** A state named by the panel, resolved; or why it can't be, in words. */
@@ -899,9 +912,11 @@ export function bootStage(page: Page): Mode {
     rootStyle.colorScheme = drawing.style.colorScheme;
   };
 
-  /** The drawing's own marks, at the width it is laid out at. */
-  const mark = (target: Target) =>
-    markDrawing(drawing, target, scheme(), roomWidth(target.story));
+  /** The drawing's own marks, at the width it is laid out at; none at the page's own window, which its box says as it stands (overlay made-view.ts `frameWidth`). */
+  const mark = (target: Target) => {
+    const slot = slotOf(target.story);
+    markDrawing(drawing, target, scheme(), slot === "window" ? null : slot);
+  };
 
   /* --- Coming to rest --------------------------------------------------- */
 
@@ -1018,7 +1033,11 @@ export function bootStage(page: Page): Mode {
         dress(drawing, target);
         ground();
         mark(target);
-        frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
+        const slot = slotOf(target.story);
+        frame.style.setProperty(
+          "--frame-w",
+          slot === "window" ? "100cqi" : `${slot}px`
+        );
         waiting.remove();
       });
       return live;
@@ -1386,7 +1405,7 @@ export function bootStage(page: Page): Mode {
   const settableTo = (target: Target): boolean =>
     !!live &&
     live.story.component === target.story.component &&
-    roomWidth(live.story) === roomWidth(target.story);
+    slotOf(live.story) === slotOf(target.story);
 
   /**
    * Where the drawing stands before a reach acts: its from state, mounted
@@ -1544,6 +1563,9 @@ export function bootStage(page: Page): Mode {
   const fitKey = (on: Live) =>
     `${on.section.file}@${view.widths?.[0] ?? (adapting() ? "window" : "own")}`;
 
+  /** The drawing's own narrower width {@link laid} wrote at the page's own window (`min(100cqi, fit)`); null: it stands the window's whole width. */
+  let laidFit: number | null = null;
+
   /**
    * The drawing laid out at the width the panel's room or his pick gives
    * it, narrowed to its own width where that is known (`fitOf`), and
@@ -1556,9 +1578,13 @@ export function bootStage(page: Page): Mode {
     if (!live || frame.hidden) {
       return;
     }
-    const width = roomWidth(live.story);
-    const fit = fitFor(fitKey(live), width);
-    const drawn = fit === null ? width : Math.min(width, fit);
+    const slot = slotOf(live.story);
+    if (slot === "window") {
+      laidAtWindow(live);
+      return;
+    }
+    const fit = fitFor(fitKey(live), slot);
+    const drawn = fit === null ? slot : Math.min(slot, fit);
     drawnWidth = drawn;
     frame.style.setProperty("--frame-w", `${drawn}px`);
     const scale = scaleOf(drawn);
@@ -1570,32 +1596,67 @@ export function bootStage(page: Page): Mode {
     layoutSoon();
   }
 
+  /**
+   * The drawing at the page's own window, laid out by CSS: its frame as
+   * wide as the window (`100cqi` of the page's body), or its own narrower
+   * width kept where that is the less, and the gutter beside it what the
+   * window has left of the token's, so the browser lays all of it out
+   * again in the layout that resizes the window and a split's drag runs
+   * none of this. Its width is read in the next delivery of
+   * {@link layoutRead}, which writes again only where its own width kept
+   * changed.
+   */
+  function laidAtWindow(on: Live): void {
+    const fit = fitFor(fitKey(on), windowAcross);
+    laidFit = fit;
+    drawnWidth = fit === null ? windowAcross : Math.min(windowAcross, fit);
+    frame.style.setProperty(
+      "--frame-w",
+      fit === null ? "100cqi" : `min(100cqi, ${fit}px)`
+    );
+    frame.style.zoom = "";
+    canvas.style.setProperty(
+      STAGE_GUTTER_VAR,
+      fit === null
+        ? "0px"
+        : `clamp(0px, (100cqi - ${fit}px) / 2, var(${GUTTER}))`
+    );
+    layoutSoon();
+  }
+
   /** The drawing's words and controls brought into view in the next delivery of {@link layoutRead} (`inkInView`). */
   let inkDue = false;
   /** A frame callback is asked for that lays the drawing out again at the own width a read found. */
   let relayFrame = 0;
 
-  /** The drawing's layout read in the next delivery of {@link layoutRead}, whatever resized. */
+  /** The drawing's layout read in the next delivery of {@link layoutRead}, whatever resized: the page's body with it, whose width the window's is. */
   function layoutSoon(): void {
-    layoutRead.unobserve(drawing);
-    layoutRead.observe(drawing);
+    for (const el of [document.body, drawing]) {
+      layoutRead.unobserve(el);
+      layoutRead.observe(el);
+    }
   }
 
   /**
    * What {@link laid} wrote, read on the layout the delivery reports: the
    * drawing's own width (laid out again in the next frame where it is
    * narrower than the width written), its height, told the panel when it
-   * changed, and its words brought into view where asked.
+   * changed, and its words brought into view where asked. At the page's
+   * own window the width is the window's as the delivery found it
+   * (`windowAcross`), and only the own width kept is written again: CSS
+   * follows the window.
    */
   function readLaid(): void {
     if (!live || frame.hidden) {
       inkDue = false;
       return;
     }
-    const width = roomWidth(live.story);
+    const slot = slotOf(live.story);
+    const atWindow = slot === "window";
+    const width = atWindow ? windowAcross : slot;
     const fit = fitAt(fitKey(live), width);
     const drawn = fit === null ? width : Math.min(width, fit);
-    if (drawn !== drawnWidth) {
+    if (atWindow ? fit !== laidFit : drawn !== drawnWidth) {
       // Written in the next frame's callbacks, which that frame lays out and
       // delivers again: written here, inside the delivery, the drawing's
       // resize would be held back to the frame after.
@@ -1603,10 +1664,13 @@ export function bootStage(page: Page): Mode {
       relayFrame = requestAnimationFrame(() => laid());
       return;
     }
+    drawnWidth = drawn;
     const scale = scaleOf(drawn);
+    // The window's own width inside its scroller's gutters: at the window, the one the delivery found.
+    const inside = atWindow ? windowAcross : windowRoom();
     const laidOut: StageLaid = {
       need: Math.ceil(
-        drawn * scale + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
+        drawn * scale + 2 * tokenPx(GUTTER) + windowWidth() - inside
       ),
       tall: Math.ceil(drawing.offsetHeight * scale),
       fit,
@@ -1635,13 +1699,11 @@ export function bootStage(page: Page): Mode {
    * the only sign.
    */
   function scaleOf(drawn: number): number {
+    if (!view.fit || view.widths?.[0] === undefined) {
+      return 1;
+    }
     const across = roomNow();
-    return view.fit &&
-      view.widths?.[0] !== undefined &&
-      across > 0 &&
-      drawn > across
-      ? across / drawn
-      : 1;
+    return across > 0 && drawn > across ? across / drawn : 1;
   }
 
   /**
@@ -1733,10 +1795,13 @@ export function bootStage(page: Page): Mode {
    * whole board to move nothing.
    */
   function scrollInkIntoView(): void {
+    if (!live || frame.hidden || adapting()) {
+      return;
+    }
     const scroller = document.scrollingElement ?? document.documentElement;
     // The window's own width: what the drawing reads as `innerWidth` is the frame's (viewport.ts).
     const across = windowRoom();
-    if (!live || frame.hidden || adapting() || scroller.scrollWidth <= across) {
+    if (scroller.scrollWidth <= across) {
       return;
     }
     const ink = inkOf(drawing);
@@ -2332,16 +2397,32 @@ export function bootStage(page: Page): Mode {
    * which lays out for no panel: there the drawing's resizes are its
    * component's work alone.
    */
-  const layoutRead = new ResizeObserver(() => {
+  const layoutRead = new ResizeObserver((entries) => {
     if (page.measuring) {
-      layoutRead.unobserve(drawing);
+      layoutRead.disconnect();
+    }
+    for (const entry of entries) {
+      const [box] = entry.contentBoxSize;
+      if (entry.target === document.body && box) {
+        windowAcross = box.inlineSize;
+      }
     }
     readLaid();
   });
   if (!page.measuring) {
+    layoutRead.observe(document.body);
     layoutRead.observe(drawing);
   }
-  addEventListener("resize", () => relay());
+  // At a width of its own the drawing is laid out again for the window's
+  // room. At the page's own window CSS lays it out in the layout that
+  // resizes the window, and the delivery that follows reads it: relaid
+  // here, each step of a split's drag read the window's width and wrote
+  // the drawing's ahead of the frame's own layout.
+  addEventListener("resize", () => {
+    if (!adapting()) {
+      relay();
+    }
+  });
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
   drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
 
@@ -2654,7 +2735,7 @@ export function bootStage(page: Page): Mode {
       from: played.start.ref.story,
       to: ask.move.by === "play" ? story : null,
       on: ready.on,
-      width: roomWidth(played.start.story),
+      width: measuredAt(played.start.story),
     });
   }
 
@@ -2838,8 +2919,11 @@ export function bootStage(page: Page): Mode {
           ]
         : []),
     ],
-    mediaWidth: () =>
-      live && !frame.hidden ? Number.parseFloat(drawing.style.width) : null,
+    // A drawing at the page's own window answers as the window does (null): its body is the window's width.
+    mediaWidth: () => {
+      const width = page.widthOfBody(drawing);
+      return live && !frame.hidden && typeof width === "number" ? width : null;
+    },
     overridden: (section, story) => {
       const now = live;
       if (now && now.section === section && now.story.name === story) {
@@ -3028,8 +3112,11 @@ function bootColumn(page: Page): Mode {
     scheme: scheme(),
     width: view.widths?.[0] ?? "own",
   });
-  const widthOf = (one: InColumn) =>
-    page.widthOf(one.target.story, columnOf().width);
+  /** A column drawing's width: each at its own or the width picked, never the page's window (`columnOf`). */
+  const widthOf = (one: InColumn): number | null => {
+    const width = page.widthOf(one.target.story, columnOf().width);
+    return typeof width === "number" ? width : null;
+  };
 
   /** A drawing dressed as it stands: its scheme, its width, its marks. */
   function dress(one: InColumn): void {
