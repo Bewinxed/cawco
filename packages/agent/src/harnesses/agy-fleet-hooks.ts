@@ -40,6 +40,7 @@ import {
   type AgyHookInput,
   type AgySession,
   agyAnswer,
+  inCommandEnv,
   NO_DECISION,
 } from "./agy-judge";
 
@@ -194,7 +195,7 @@ export class AgyFleetHooks {
     return answer;
   }
 
-  /** The judge's answer to a call, then the fleet's `PreToolUse` hooks' on one the judge lets run. */
+  /** The judge's answer to a call, then the fleet's `PreToolUse` hooks' on one the judge lets run, a host's command line then opened in the session's command environment (agy-judge.ts `inCommandEnv`). */
   async #before(call: AgyHookInput, session: AgySession): Promise<AgyAnswer> {
     const judged = agyAnswer(call, session);
     if (judged.decision === "deny") {
@@ -211,16 +212,23 @@ export class AgyFleetHooks {
     }
     // A workspace's call runs as its judge judged it: no fleet hook's
     // rewrite is taken there (core `hookWorkspaceWords`).
-    if (!verdict.updatedInput || session.workspace) {
+    if (session.workspace) {
       return judged;
     }
-    return {
-      ...judged,
-      overwrite: {
-        ...rewriteOf(call, verdict.updatedInput),
-        ...judged.overwrite,
-      },
-    };
+    // A host's command runs in the session's command environment, opened
+    // on the line the fleet's hooks rewrote.
+    return inCommandEnv(
+      call,
+      verdict.updatedInput
+        ? {
+            ...judged,
+            overwrite: {
+              ...rewriteOf(call, verdict.updatedInput),
+              ...judged.overwrite,
+            },
+          }
+        : judged
+    );
   }
 
   /** The fleet's `PostToolUse` or `PostToolUseFailure` hooks, by how the call ended; what they say goes to the log. */

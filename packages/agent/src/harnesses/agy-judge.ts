@@ -27,6 +27,7 @@
  * is the hook's `toolCall.id` (`pb-default`).
  */
 import { isAbsolute, relative, resolve } from "node:path";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { deniedToolsBy } from "@cawco/core/delegate-types";
 import {
   AGY,
@@ -279,12 +280,25 @@ const classOf = (
 };
 
 /**
+ * What every command line of a session opens with: the lines that give the
+ * command the environment a Claude Code session's command gets, in place of
+ * agy's own (agy-launch.ts `withCommandEnv`: the person's config dir and
+ * session bus, no sign-in switches, openers or method key of agy's), which
+ * agy hands every command it runs. Evaluated in the shell agy runs the
+ * command line in, so a persistent terminal keeps them for its later
+ * commands, where the variable is gone and its evaluation does nothing.
+ */
+const COMMAND_ENV = `eval "$${CAWCO_ENV.agyCommandEnv}"; `;
+
+/**
  * `command` as this workspace's executor runs it (boundary/exec.ts
- * `--session`): the executor shows the workspace's notice and runs it inside
- * the boundary, in the directory agy started its shell in.
+ * `--session`), in the session's command environment ({@link COMMAND_ENV}),
+ * which the executor carries into the boundary under its own variables: the
+ * executor shows the workspace's notice and runs it inside the boundary, in
+ * the directory agy started its shell in.
  */
 const wrapped = (exec: string, command: string): string =>
-  `${shellQuote(exec)} --session ${shellQuote(command)}`;
+  `${COMMAND_ENV}${shellQuote(exec)} --session ${shellQuote(command)}`;
 
 /** One single-quoted POSIX shell word, as {@link shellQuote} writes one. */
 const QUOTED_WORD = /^'(?:[^']|'\\'')*'$/u;
@@ -296,7 +310,7 @@ const QUOTED_WORD = /^'(?:[^']|'\\'')*'$/u;
  * be wrapped again, never run outside.
  */
 const isWrapped = (exec: string, command: string): boolean => {
-  const head = `${shellQuote(exec)} --session `;
+  const head = `${COMMAND_ENV}${shellQuote(exec)} --session `;
   return (
     command.startsWith(head) && QUOTED_WORD.test(command.slice(head.length))
   );
@@ -321,6 +335,31 @@ const throughExecutor = (
     return args.RunPersistent === true ? { RunPersistent: false } : undefined;
   }
   return { CommandLine: wrapped(exec, command), RunPersistent: false };
+};
+
+/**
+ * `answer` to a host session's call, its command line, as the judge and the
+ * fleet's hooks left it, opened with {@link COMMAND_ENV}; a call that is no
+ * command, a denial, and a line already opened that way (a hook agy ran
+ * twice for one call, issue #1462) as they are. A workspace's command lines
+ * get it in their executor's form ({@link wrapped}).
+ */
+export const inCommandEnv = (
+  call: AgyHookInput,
+  answer: AgyAnswer
+): AgyAnswer => {
+  if (answer.decision === "deny" || AGY_TOOLS[call.toolCall.name] !== "shell") {
+    return answer;
+  }
+  const command =
+    answer.overwrite?.CommandLine ?? call.toolCall.args?.CommandLine;
+  if (typeof command !== "string" || command.startsWith(COMMAND_ENV)) {
+    return answer;
+  }
+  return {
+    ...answer,
+    overwrite: { ...answer.overwrite, CommandLine: `${COMMAND_ENV}${command}` },
+  };
 };
 
 /** The model's words for a call the mode asks about while no turn of the person's is running. */

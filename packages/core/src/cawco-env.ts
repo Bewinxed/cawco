@@ -150,6 +150,15 @@ export const CAWCO_ENV = {
    * hook reads it in perl, so cawco itself never does.
    */
   agyJudge: "CAWCO_AGY_JUDGE",
+  /**
+   * One agy session's command environment, set on its `agy acp` process: the
+   * shell lines that turn agy's own environment back into the one every
+   * command of the session runs in (agent harnesses/agy-launch.ts
+   * `withCommandEnv`), which the judge's rewrite of each command line
+   * evaluates first (agent harnesses/agy-judge.ts `COMMAND_ENV`). A shell
+   * evaluates it, so cawco itself never reads it.
+   */
+  agyCommandEnv: "CAWCO_AGY_COMMAND_ENV",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

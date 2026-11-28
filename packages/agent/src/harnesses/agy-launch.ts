@@ -9,6 +9,7 @@ import {
   PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk";
 import { unlessGone } from "@cawco/core/absent";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { makeFolder } from "@cawco/core/folders";
 import {
   AGY_METHODS,
@@ -29,6 +30,7 @@ import {
 } from "@cawco/core/paths/harnesses";
 import { agyJudgeSocket } from "@cawco/core/paths/hub";
 import { sessionEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
@@ -223,7 +225,8 @@ const droppedForAgy = (name: string): boolean => {
  * Set on every method's launch: a key account's home then holds no Google
  * login, so agy never falls back to one (agy changelog 1.5.9). Never
  * `SSH_CONNECTION`, which gives the same file but makes ACP `authenticate`
- * refuse a browser sign-in.
+ * refuse a browser sign-in. agy's own process alone: a session's commands
+ * get the person's config dir and bus back ({@link withCommandEnv}).
  */
 const HOME_SIGN_IN = (home: string): Record<string, string> => ({
   AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "1",
@@ -299,6 +302,78 @@ const withOpeners = (
     CAWCO_AGY_OPENED: opened,
   };
 };
+
+/**
+ * The names a shell keeps for itself, which the command environment's lines
+ * leave as the shell has them: its working dirs, its depth, its last
+ * argument, and PATH, which agy may give a command from the person's login
+ * shell (agy 1.5.18 `shellenv.LoginShellPATH`), so only the openers' dir
+ * CawCo put first is taken off it.
+ */
+const SHELL_OWN = new Set(["PATH", "PWD", "OLDPWD", "SHLVL", "_"]);
+
+/** A name a POSIX shell can `export` or `unset`. */
+const SHELL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+
+/**
+ * The shell lines that turn agy's environment `agy` into `commands`, the
+ * one a command of the session runs in: each variable agy has and the
+ * commands do not, unset; each the commands hold at another value, or agy
+ * lacks, exported; the openers' dir `openers` taken off the front of PATH;
+ * and the variable carrying these lines unset last, so a command never
+ * sees it.
+ */
+const commandEnvLines = (
+  agy: Readonly<Record<string, string>>,
+  commands: Readonly<Record<string, string>>,
+  openers: string
+): string => {
+  const names = [
+    ...new Set([...Object.keys(agy), ...Object.keys(commands)]),
+  ].sort();
+  const lines = names.flatMap((name) => {
+    if (SHELL_OWN.has(name) || !SHELL_NAME.test(name)) {
+      return [];
+    }
+    const value = commands[name];
+    if (value === undefined) {
+      return [`unset ${name}`];
+    }
+    return value === agy[name] ? [] : [`export ${name}=${shellQuote(value)}`];
+  });
+  return [
+    ...lines,
+    `PATH=\${PATH#${shellQuote(`${openers}${delimiter}`)}}`,
+    `unset ${CAWCO_ENV.agyCommandEnv}`,
+  ].join("\n");
+};
+
+/**
+ * agy's environment `agy` for a session in `home`, with the lines that give
+ * each command it runs the environment a Claude Code session's command
+ * gets on this machine: the host's as a session gets it (core
+ * `sessionEnvironment`) with the session's own `commands` (command-env.ts
+ * `commandEnv`). agy hands every command it runs its own environment
+ * (`bash -c`, the project's `assets/338276e4/p0d.execve.txt`), so the
+ * sign-in store's switches ({@link HOME_SIGN_IN}), the dead bus, the
+ * openers and the method's key would reach gh, git's credential helpers
+ * and everything else that reads `~/.config`, the session bus or a
+ * browser. The judge opens every command line with these lines
+ * (agy-judge.ts `COMMAND_ENV`), in a workspace before its executor, whose
+ * own variables then go over them.
+ */
+const withCommandEnv = (
+  agy: Readonly<Record<string, string>>,
+  commands: Readonly<Record<string, string>>,
+  home: string
+): Record<string, string> => ({
+  ...agy,
+  [CAWCO_ENV.agyCommandEnv]: commandEnvLines(
+    agy,
+    commands,
+    agyOpeners(home).dir
+  ),
+});
 
 /** The variable the method's credential is handed in, with its value; none for a method agy signs in itself. */
 const credentialOf = (signIn: AgySignIn): Record<string, string> => {
@@ -503,8 +578,9 @@ const ownTmp = (home: string, instanceId: string): string =>
 
 /**
  * What session `instanceId` on account `accountId` runs as: the installed
- * agy, its argv, its environment whole, its home, its judge's socket and
- * the method `authenticate` names. A session (`place`) runs in a dir of
+ * agy, its argv, its environment whole (its commands' own carried in it,
+ * {@link withCommandEnv}; `extras` are the commands' too), its home, its
+ * judge's socket and the method `authenticate` names. A session (`place`) runs in a dir of
  * its own ({@link prepareAgySession}); a run of the account's own (an
  * image run) in the account's home. A workspace session (`bounded`) runs
  * agy on a temp dir of its own ({@link ownTmp}). Refused before anything
@@ -534,11 +610,15 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
   const launch: AgyLaunch = {
     bin: agy.bin,
     args: agyArgs(dir, home),
-    env: agyEnvironment(signIn, home, {
-      ...extras,
-      ...judge,
-      ...(tmp ? { TMPDIR: tmp } : {}),
-    }),
+    env: withCommandEnv(
+      agyEnvironment(signIn, home, {
+        ...extras,
+        ...judge,
+        ...(tmp ? { TMPDIR: tmp } : {}),
+      }),
+      { ...sessionEnvironment(process.env), ...extras },
+      home
+    ),
     home,
     judgeSocket,
     methodId: signIn.method,
