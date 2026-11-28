@@ -29,13 +29,11 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { boundedRead } from "@cawco/core/effect/bounded";
-import { timedEffect } from "@cawco/core/effect/timed";
 import { makeFolder } from "@cawco/core/folders";
 import {
   AGY_MODEL_GROUPS,
   agyMethodKind,
 } from "@cawco/core/harness/agy-account";
-import { recordLimitReading } from "@cawco/core/limit-readings";
 import { AGY_APP_DATA } from "@cawco/core/paths/harnesses";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import type { LimitWindow } from "@cawco/core/usage/types";
@@ -270,30 +268,27 @@ export const agyUsage = Effect.fn("agyUsage")(function* (accountId: string) {
   const logs = join(dirname(home.success), "agy-usage");
   const log = join(logs, `${randomUUID()}.log`);
   yield* Effect.promise(() => makeFolder(logs, { mode: 0o700 }));
-  const ran = yield* timedEffect(
-    boundedRead(
-      READ_MS,
-      runAgy({
-        bin: started.success.bin,
-        args: [
-          "--gemini_dir",
-          home.success,
-          "--app_data_dir",
-          AGY_APP_DATA,
-          "--log-file",
-          log,
-          "-p",
-          "/usage",
-          "--output-format",
-          "json",
-          "--print-timeout",
-          `${READ_MS / 1000}s`,
-        ],
-        env: withNoRoute(env),
-        cwd: home.success,
-      })
-    ),
-    (ms) => recordLimitReading("agent.agy-usage-ms", ms)
+  const ran = yield* boundedRead(
+    READ_MS,
+    runAgy({
+      bin: started.success.bin,
+      args: [
+        "--gemini_dir",
+        home.success,
+        "--app_data_dir",
+        AGY_APP_DATA,
+        "--log-file",
+        log,
+        "-p",
+        "/usage",
+        "--output-format",
+        "json",
+        "--print-timeout",
+        `${READ_MS / 1000}s`,
+      ],
+      env: withNoRoute(env),
+      cwd: home.success,
+    })
   ).pipe(
     Effect.result,
     // agy's log, read for the hosts it found no route to, then removed
