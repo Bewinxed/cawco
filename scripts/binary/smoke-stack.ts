@@ -1,5 +1,6 @@
 /** Live integration exercise run by the compiled test binary, never a release. */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { QUIET_MS, readWithin } from "../../packages/core/src/bounded";
@@ -350,8 +351,8 @@ const parsed = () =>
   );
 /** Set by smoke-test.sh's browser step: the stack stays up until that file exists. */
 const browserDone = process.env.CAWCO_TEST_BROWSER_DONE;
-/** The session's stub dev server, and the open that shows it as its preview. */
-let devServer: Bun.Server<undefined> | undefined;
+/** The session's preview folder and open, awaited before PASS. */
+let previewDir: string | undefined;
 let previewShown: Promise<unknown> | undefined;
 /**
  * The test's session once it is asked for: stopped through the hub as the
@@ -607,20 +608,18 @@ try {
         frame.type === "stream.event" && frame.event?.sessionId === sessionId
     )
   );
-  // A preview, as a session opens one on its dev server: a stub server here,
-  // shown through the hub, so the socket carries a real PreviewFrame. The
-  // open waits for a view to say it shows it (the browser step's, or none
-  // within the hub's wait), so it is read last, before PASS.
-  devServer = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () =>
-      new Response(
-        "<!doctype html><title>Binary test preview</title><p>binary test preview</p>",
-        { headers: { "content-type": "text/html; charset=utf-8" } }
-      ),
-  });
-  const previewPort = devServer.port;
+  // A folder preview, as a session opens one on its output folder: written
+  // outside HOME (a credential store) and served through the hub, so the
+  // socket carries a real PreviewFrame without needing a workspace boundary
+  // in the smoke container. The open waits for a view to say it shows it
+  // (the browser step's, or none within the hub's wait), so it is read last,
+  // before PASS.
+  previewDir = join(tmpdir(), "cawco-binary-test-preview");
+  mkdirSync(previewDir, { recursive: true });
+  writeFileSync(
+    join(previewDir, "index.html"),
+    "<!doctype html><title>Binary test preview</title><p>binary test preview</p>\n"
+  );
   previewShown = post((client) =>
     client.api.instances({ id: sessionId }).artifacts.post({
       kind: "preview",
@@ -628,7 +627,7 @@ try {
       title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "binary-test",
-      port: previewPort,
+      dir: previewDir,
     })
   );
   let previewAnswer = "no answer yet";
@@ -746,7 +745,9 @@ try {
       `the test's session ${started?.sessionId} may outlive the run: ${left}`
     );
   }
-  devServer?.stop(true);
+  if (previewDir) {
+    rmSync(previewDir, { recursive: true, force: true });
+  }
   // A child that exited already is cleaned up; the rest are asked to end.
   for (const child of children) {
     if (child.exitCode === null) {
