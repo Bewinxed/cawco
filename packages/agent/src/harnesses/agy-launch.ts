@@ -24,6 +24,7 @@ import {
   AGY_SIGN_IN_FILE,
   agyAccountHome,
   agyAccountRecord,
+  agyOwnCommandEnvFile,
   agyOwnHome,
   agySessionDir,
   agySignInFile,
@@ -319,14 +320,14 @@ const SHELL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
  * The shell lines that turn agy's environment `agy` into `commands`, the
  * one a command of the session runs in: each variable agy has and the
  * commands do not, unset; each the commands hold at another value, or agy
- * lacks, exported; the openers' dir `openers` taken off the front of PATH;
- * and the variable carrying these lines unset last, so a command never
- * sees it.
+ * lacks, exported; the openers' dir `openers`, where agy's PATH has one,
+ * taken off the front of PATH; and the variable carrying these lines unset
+ * last, so a command never sees it.
  */
 const commandEnvLines = (
   agy: Readonly<Record<string, string>>,
   commands: Readonly<Record<string, string>>,
-  openers: string
+  openers: string | undefined
 ): string => {
   const names = [
     ...new Set([...Object.keys(agy), ...Object.keys(commands)]),
@@ -343,7 +344,9 @@ const commandEnvLines = (
   });
   return [
     ...lines,
-    `PATH=\${PATH#${shellQuote(`${openers}${delimiter}`)}}`,
+    ...(openers === undefined
+      ? []
+      : [`PATH=\${PATH#${shellQuote(`${openers}${delimiter}`)}}`]),
     `unset ${CAWCO_ENV.agyCommandEnv}`,
   ].join("\n");
 };
@@ -360,19 +363,17 @@ const commandEnvLines = (
  * and everything else that reads `~/.config`, the session bus or a
  * browser. The judge opens every command line with these lines
  * (agy-judge.ts `COMMAND_ENV`), in a workspace before its executor, whose
- * own variables then go over them.
+ * own variables then go over them; in agy's own default home, where no
+ * judge runs, bash's startup file does ({@link OWN_COMMAND_ENV}). `openers`
+ * is the openers' dir agy's PATH starts with, where it has one.
  */
 const withCommandEnv = (
   agy: Readonly<Record<string, string>>,
   commands: Readonly<Record<string, string>>,
-  home: string
+  openers: string | undefined
 ): Record<string, string> => ({
   ...agy,
-  [CAWCO_ENV.agyCommandEnv]: commandEnvLines(
-    agy,
-    commands,
-    agyOpeners(home).dir
-  ),
+  [CAWCO_ENV.agyCommandEnv]: commandEnvLines(agy, commands, openers),
 });
 
 /** The variable the method's credential is handed in, with its value; none for a method agy signs in itself. */
@@ -617,7 +618,7 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
         ...(tmp ? { TMPDIR: tmp } : {}),
       }),
       { ...sessionEnvironment(process.env), ...extras },
-      home
+      agyOpeners(home).dir
     ),
     home,
     judgeSocket,
@@ -631,22 +632,45 @@ export const agyLaunch = Effect.fn("agyLaunch")(function* (
 });
 
 /**
+ * What every command of a session in agy's own default home sources before
+ * it runs ({@link agyOwnLaunch}): the session's command environment
+ * ({@link withCommandEnv}), whose lines also give `BASH_ENV` back the value
+ * the commands hold, or take it away; then the person's own `BASH_ENV`,
+ * where they have one, as bash would have read it.
+ */
+const OWN_COMMAND_ENV = `eval "\${${CAWCO_ENV.agyCommandEnv}-}"
+if [ -n "\${BASH_ENV-}" ]; then . "$BASH_ENV"; fi
+`;
+
+/**
  * What session `instanceId` runs as to continue a conversation of agy's own
  * default home (tsk-340 story 14): agy as the person runs it in a terminal,
  * on that home, its own settings and its own sign-in, with telemetry off.
  * CawCo writes nothing into that home, so no hook of CawCo's runs there and
  * no judge is asked: agy asks its own permissions, which reach the person
- * as CawCo's asks.
+ * as CawCo's asks. With no judge to open its command lines, its commands
+ * get the environment a Claude Code session's command gets through bash's
+ * own startup file: agy runs each one as `bash -c` (the project's
+ * `assets/338276e4/p0d.execve.txt`), which sources the file `BASH_ENV`
+ * names ({@link OWN_COMMAND_ENV}) first.
  */
 export const agyOwnLaunch = Effect.fn("agyOwnLaunch")(function* (
   instanceId: string,
   extras: Readonly<Record<string, string>>
 ): Effect.fn.Return<AgyLaunch, AgyStartRefused> {
   const agy = yield* agyToStart();
+  const file = agyOwnCommandEnvFile();
+  yield* fromPromise(() =>
+    writeStateFile(file, OWN_COMMAND_ENV, { mode: 0o600 })
+  ).pipe(refusedBy);
   const launch: AgyLaunch = {
     bin: agy.bin,
     args: ["acp", "--disable-telemetry"],
-    env: agyOwnEnvironment(extras),
+    env: withCommandEnv(
+      { ...agyOwnEnvironment(extras), BASH_ENV: file },
+      { ...sessionEnvironment(process.env), ...extras },
+      undefined
+    ),
     home: agyOwnHome(),
     judgeSocket: agyJudgeSocket(instanceId),
     ...(agy.version ? { version: agy.version } : {}),

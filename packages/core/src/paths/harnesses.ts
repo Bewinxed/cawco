@@ -292,3 +292,12 @@ export const agySessionNotes = (): string =>
  * its account's home: agy's own home is never written.
  */
 export const agyOwnCarryHome = (): string => join(cawcoDataDir(), "agy-own");
+
+/**
+ * The file every command of a session in agy's own default home sources
+ * first, through `BASH_ENV` (agent harnesses/agy-launch.ts
+ * `agyOwnLaunch`): it turns agy's environment into the commands'. Kept
+ * with CawCo's other files for that home, never in it.
+ */
+export const agyOwnCommandEnvFile = (): string =>
+  join(agyOwnCarryHome(), "command-env.sh");

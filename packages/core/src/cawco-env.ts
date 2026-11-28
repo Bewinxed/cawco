@@ -155,8 +155,10 @@ export const CAWCO_ENV = {
    * shell lines that turn agy's own environment back into the one every
    * command of the session runs in (agent harnesses/agy-launch.ts
    * `withCommandEnv`), which the judge's rewrite of each command line
-   * evaluates first (agent harnesses/agy-judge.ts `COMMAND_ENV`). A shell
-   * evaluates it, so cawco itself never reads it.
+   * evaluates first (agent harnesses/agy-judge.ts `COMMAND_ENV`), or, in
+   * agy's own default home, where no judge runs, the file `BASH_ENV` names
+   * (agy-launch.ts `OWN_COMMAND_ENV`). A shell evaluates it, so cawco itself
+   * never reads it.
    */
   agyCommandEnv: "CAWCO_AGY_COMMAND_ENV",
 } as const;

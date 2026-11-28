@@ -234,7 +234,13 @@ launch keeps the host from signing it in behind the account's back (agent
 and agy's own variables stripped, `--disable-telemetry`,
 `AGY_CLI_FORCE_FILE_TOKEN_STORAGE` so the sign-in lives in the home, a
 session bus that is never there so no keyring is reached, and opener
-stand-ins first on its `PATH` so no browser opens on the machine.
+stand-ins first on its `PATH` so no browser opens on the machine. That
+isolation is agy's own process alone: every command it runs gets the
+environment a Claude Code session's command gets (`withCommandEnv`), from
+the judge's rewrite of its command line, or, for a conversation of agy's
+own home, where no judge runs, from the file `BASH_ENV` names
+(`agyOwnLaunch`). A fleet MCP server with a command runs in the session's
+gate, never under agy (`agy-sessiond.ts` `mcpServersOf`).
 
 **Fleet config placement.** The hub's fleet config (skills, memory, hooks,
 MCP servers, plugins, subagents) lands in files of CawCo's own under its data
