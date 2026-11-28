@@ -16,6 +16,8 @@ export interface SideExpand {
   readonly collapse: () => boolean;
   /** The surface has the whole split; the conversation is put away. */
   readonly expanded: boolean;
+  /** The split's handle is being dragged: the surface's width moves on each step until it is let go. */
+  readonly resizing: boolean;
   readonly toggle: () => void;
 }
 

@@ -185,6 +185,9 @@
     get backLabel() {
       return backLabel;
     },
+    get resizing() {
+      return resizing;
+    },
     toggle: () => setExpanded(!expanded),
     collapse: () => {
       if (!expanded) {

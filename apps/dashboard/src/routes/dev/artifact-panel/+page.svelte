@@ -399,6 +399,7 @@
     backLabel: "Back to conversation",
     collapse: () => false,
     expanded: false,
+    resizing: false,
     toggle: () => undefined,
   });
 

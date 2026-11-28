@@ -70,6 +70,8 @@ export interface Pins {
   pinInk: (group: InkGroup, elements: PinnedElement[] | string[]) => void;
   /** Pin `id` placed again on `el` at the viewport's `x`, `y`: out of the moved tray. */
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
+  /** The element pin `id` stands on as the last draw placed it, while it is in its document; null for a pin no draw placed. */
+  placedOn: (id: string) => Element | null;
   /** Where on `el`'s box the viewport's `x`, `y` lands, as fractions. */
   pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
   /** The room under the page's foot, an svg the overlay's layers size (ink.ts `fitToPage`): a re-publish keeps it. */

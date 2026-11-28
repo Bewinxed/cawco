@@ -1807,6 +1807,10 @@ export function startPins(deps: PinsDeps): Pins {
               : []
           )
         : [],
+    placedOn: (id) => {
+      const el = placed.get(id)?.el;
+      return el?.isConnected ? el : null;
+    },
     standingOn: () => [
       ...[...placed.values()].map(({ el }) => el),
       ...(drafted ? [drafted.el] : []),

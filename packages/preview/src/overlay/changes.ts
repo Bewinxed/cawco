@@ -56,6 +56,8 @@ export interface ChangesDeps {
   locate: (anchor: PageAnchor) => { el: Element } | null;
   /** `el` chosen in the overlay (The One Target Rule), or none. */
   outline: (el: Element | null) => void;
+  /** The element pin `id` stands on as the pins' last draw placed it (pins.ts `placedOn`); null for one it placed nowhere. */
+  placedOn: (id: string) => Element | null;
   post: (type: string, payload?: object) => void;
 }
 
@@ -295,6 +297,25 @@ export function startChanges(deps: ChangesDeps): Changes {
   /** Whether `a` and `b` are one stop: one is the other, holds it or is inside it. */
   const together = (a: Element, b: Element) => a.contains(b) || b.contains(a);
 
+  /**
+   * The pin `id`'s element: the one the pins' draw placed it on, else where
+   * its anchor stands now. Located afresh, every draw searched the page's
+   * text once per pin for elements the pins stand on already.
+   */
+  function pinEl(
+    id: string,
+    pins: ReturnType<typeof readPins>
+  ): Element | null {
+    const placedOn = deps.placedOn(id);
+    if (placedOn) {
+      return placedOn;
+    }
+    const pin = pins.get(id);
+    return pin && "selector" in pin.anchor
+      ? (deps.locate(pin.anchor)?.el ?? null)
+      : null;
+  }
+
   /** The stops in page order: each change with the pins in, holding or inside it; each other pin; changes not on the page last. */
   function tellStops() {
     const pins = readPins(artifact.doc());
@@ -304,11 +325,7 @@ export function startChanges(deps: ChangesDeps): Changes {
       pin: null,
     }));
     for (const id of pinIds) {
-      const pin = pins.get(id);
-      const el =
-        pin && "selector" in pin.anchor
-          ? (deps.locate(pin.anchor)?.el ?? null)
-          : null;
+      const el = pinEl(id, pins);
       const joined = el
         ? stops.find(
             (stop) => stop.el && stop.pin === null && together(stop.el, el)
@@ -320,17 +337,16 @@ export function startChanges(deps: ChangesDeps): Changes {
         stops.push({ anchors: [], el, pin: id });
       }
     }
-    const placed = stops.filter((stop) => stop.el);
-    placed.sort((a, b) => {
-      const ra = (a.el as Element).getBoundingClientRect();
-      const rb = (b.el as Element).getBoundingClientRect();
-      return ra.top - rb.top || ra.left - rb.left;
-    });
+    // Each box read once, then sorted: read in the comparator, each was read
+    // once per comparison.
+    const placed = stops.flatMap((stop) =>
+      stop.el ? [{ stop, box: stop.el.getBoundingClientRect() }] : []
+    );
+    placed.sort((a, b) => a.box.top - b.box.top || a.box.left - b.box.left);
     const rest = stops.filter((stop) => !stop.el);
-    const told = [...placed, ...rest].map(({ anchors: of, pin }) => ({
-      anchors: of,
-      pin,
-    }));
+    const told = [...placed.map(({ stop }) => stop), ...rest].map(
+      ({ anchors: of, pin }) => ({ anchors: of, pin })
+    );
     // Said again only when the order moved: a page drawing itself late (a decision page's cards) moves it.
     const said = JSON.stringify(told);
     if (said !== lastSaid) {

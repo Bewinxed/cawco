@@ -54,6 +54,7 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { directionItems } from "../graph/graph-head";
+  import { sideExpand } from "../side/expand";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -269,8 +270,11 @@
     pinHover,
     changeTour,
   });
+  /** The split this pane stands in, whose drag the page is told of; none in a sheet or the artifact's own tab. */
+  const split = sideExpand();
   const pageCover = new PageCover({
     inset: () => inset,
+    resizing: () => !!split?.resizing,
     paneLayout,
     previewFrame,
     pinComposer,

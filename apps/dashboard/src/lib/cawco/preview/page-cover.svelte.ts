@@ -17,6 +17,8 @@ export interface PageCoverDeps {
   readonly pinComposer: PinComposer;
   readonly pinThread: PinThread;
   readonly previewFrame: PreviewFrame;
+  /** The split's handle is being dragged across the page's frame (Split `resizing`). */
+  readonly resizing: () => boolean;
 }
 export class PageCover {
   readonly #deps: PageCoverDeps;
@@ -133,6 +135,29 @@ export class PageCover {
       sized.observe(frame);
       sized.request();
       return () => sized.disconnect();
+    });
+    /**
+     * The split's handle dragged across the page's frame, told to its
+     * overlay (`cawco:resizing`) as it begins and as it is let go: the
+     * overlay reads the page after a resize once the drag ends
+     * (steady-frame.ts). The steps of a drag come 40 to 240 ms apart, so
+     * the overlay could not tell a step's pause from the drag's end. A page
+     * that loads mid-drag is told it as it connects.
+     */
+    $effect(() => {
+      if (!(
+        this.#deps.previewFrame.iframe &&
+        this.#deps.previewFrame.connected &&
+        this.#deps.resizing()
+      )) {
+        return;
+      }
+      this.#deps.previewFrame.post({ type: "cawco:resizing", resizing: true });
+      return () =>
+        this.#deps.previewFrame.post({
+          type: "cawco:resizing",
+          resizing: false,
+        });
     });
     /**
      * The head's room over the page's top as the head is laid out now

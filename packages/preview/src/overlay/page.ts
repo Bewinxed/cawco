@@ -151,7 +151,7 @@ import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 import { scrollerRound } from "./scrollers";
 import { spotName } from "./spot-name";
-import { steadyFrame } from "./steady-frame";
+import { setResizing, steadyFrame } from "./steady-frame";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
@@ -559,6 +559,7 @@ const changes: Changes = startChanges({
   interacting: () => modeNow === "interact",
   locate,
   outline: (el) => outline(el),
+  placedOn: (id) => pins.placedOn(id),
   post,
 });
 
@@ -4071,6 +4072,10 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         steadyFrame(pins.draw);
       }
     },
+    // The host's split is dragged across the page's window (`resizing`), or
+    // let go: what reads the page after a resize waits for the drag's end
+    // (steady-frame.ts).
+    "cawco:resizing": (message) => setResizing(message.resizing === true),
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
     // A picture that throws is answered too, with why: unanswered, the host

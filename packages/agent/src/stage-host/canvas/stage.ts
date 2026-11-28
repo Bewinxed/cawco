@@ -1644,7 +1644,13 @@ export function bootStage(page: Page): Mode {
       : 1;
   }
 
-  /** The drawing laid out again at the width the page's room or his pick now gives it, in the scheme he picked: nothing remounts. */
+  /**
+   * The drawing laid out again at the width the page's room or his pick now
+   * gives it, in the scheme he picked: nothing remounts. Its words are
+   * brought into view by what changed what it shows ({@link open}, his
+   * view), never by the window's resize: a split's drag resizes it on every
+   * step, and each read the drawing's whole ink.
+   */
   function relay(): void {
     if (!live) {
       return;
@@ -1656,7 +1662,6 @@ export function bootStage(page: Page): Mode {
     ground();
     mark(live);
     laid();
-    inkInView();
   }
 
   /**
@@ -1705,27 +1710,33 @@ export function bootStage(page: Page): Mode {
    * stage) whose popover stands at the frame's far edge opened on a blank
    * stage, the page scrolled to the frame's start. Where they stand in view
    * already, his scroll is kept; where they fit, they stand in the middle
-   * of the view, else from its start.
+   * of the view, else from its start. Under Adapt none is asked: the
+   * drawing is laid out at the window's width, never wider than the stage.
    */
   function inkInView(): void {
+    if (adapting()) {
+      return;
+    }
     inkDue = true;
     layoutSoon();
   }
 
   /**
    * {@link inkInView}'s read and scroll, inside a delivery of
-   * {@link layoutRead}. Where nothing stands past the window across, the
-   * page can't scroll that way and nothing is read: {@link inkOf} lays out
-   * every element and text run of the drawing, what a
-   * `content-visibility: auto` section skips off screen included, and on
-   * every frame of a split's drag it laid out a whole board to move
-   * nothing.
+   * {@link layoutRead}. Under Adapt nothing is read: the drawing is laid
+   * out at the window's own width, so its words stand in it, and a section
+   * overflowing it by a few px (a board's table) made the page scroll
+   * across. Nor where nothing stands past the window across, as the page
+   * can't scroll that way. {@link inkOf} lays out every element and text
+   * run of the drawing, what a `content-visibility: auto` section skips off
+   * screen included, and on every frame of a split's drag it laid out a
+   * whole board to move nothing.
    */
   function scrollInkIntoView(): void {
     const scroller = document.scrollingElement ?? document.documentElement;
     // The window's own width: what the drawing reads as `innerWidth` is the frame's (viewport.ts).
     const across = windowRoom();
-    if (!live || frame.hidden || scroller.scrollWidth <= across) {
+    if (!live || frame.hidden || adapting() || scroller.scrollWidth <= across) {
       return;
     }
     const ink = inkOf(drawing);
@@ -2922,7 +2933,12 @@ export function bootStage(page: Page): Mode {
         page.quietly(queue(() => open(now, false)));
       }
     },
-    redressed: () => relay(),
+    // His view changed (a width, Fit, the scheme): what the drawing shows
+    // may stand past the stage now.
+    redressed: () => {
+      relay();
+      inkInView();
+    },
     selected: () => undefined,
   };
 }
