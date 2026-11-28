@@ -1,10 +1,14 @@
 <script lang="ts">
-  import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
+  import {
+    LogoClaude as ClaudeIcon,
+    LogoAntigravity,
+  } from "@cawco/icons/marks";
   /**
    * The usage strip, in the rail's footer and, always, under the phone
    * home's status line, drawn as Rings (the owner's double dial): a cell for
-   * Claude, then one for opencode. Claude's cell is its mark, one ring per
-   * account in carrying order (who carries you now first), the time until
+   * Claude, then one for opencode, then one per Antigravity model group.
+   * Claude's cell is its mark, one ring per account in carrying order (who
+   * carries you now first), the time until
    * nothing can carry your new sessions ("3h 10m", "5h+"), and under it who
    * takes over next ("then Work"), or when you're back ("back in 2h 10m").
    * A ring's inner disc is what is left of the account's 5-hour window, its
@@ -25,7 +29,7 @@
    * Live: the forecast is read whenever the hub says an account moved
    * (usage/forecast.svelte.ts), and the words move on once a minute.
    */
-  import { untrack } from "svelte";
+  import { type Component, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -101,8 +105,54 @@
 
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
+  const antigravity = $derived(usage.antigravity);
   const now = $derived(usage.now);
-  const shown = $derived(Boolean(claude || openCode));
+
+  /**
+   * The plans beside Claude's accounts, by provider, each a cell of the Go
+   * plan's recipe led by its provider's mark: opencode Go's plan, then each
+   * Antigravity model group, named by its scope. `said`: its name read out.
+   */
+  interface PlanCell {
+    mark: Component<{ class?: string }>;
+    name: string;
+    ring: RingAccount;
+    said: string;
+  }
+  const planGroups = $derived<{ id: string; plans: PlanCell[] }[]>([
+    ...(openCode
+      ? [
+          {
+            id: "opencode",
+            plans: [
+              {
+                ring: openCode,
+                name: "opencode Go",
+                said: "opencode Go",
+                mark: OpenCodeLogo,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(antigravity.length > 0
+      ? [
+          {
+            id: "antigravity",
+            plans: antigravity.map((ring) => ({
+              ring,
+              name: ring.name,
+              said: `Antigravity · ${ring.name}`,
+              mark: LogoAntigravity,
+            })),
+          },
+        ]
+      : []),
+  ]);
+  const plans = $derived(planGroups.flatMap((group) => group.plans));
+  /** A plan's cell by its ring's id; none for a Claude account. */
+  const planOf = (id: string) => plans.find((plan) => plan.ring.id === id);
+  const shown = $derived(Boolean(claude || plans.length > 0));
 
   /** Touch, or a phone's width: the limits open in the house bottom sheet. */
   const touch = new MediaQuery(
@@ -431,20 +481,25 @@
           Object.values(usageStore.openCodeGoLimits)
         ),
       },
+      {
+        id: "antigravity",
+        mark: LogoAntigravity,
+        text: noteOf(
+          "Antigravity",
+          antigravity.length > 0,
+          Object.values(usageStore.agyLimits)
+        ),
+      },
     ].filter((note) => note.text !== null && !(gap && note.id === "Claude"))
   );
 
-  /** The Go plan's time and week in the strip, as its popover cell says them. */
-  const goTime = $derived.by(() => {
-    if (!openCode) {
-      return null;
-    }
-    const time = cellTime(openCode, null, now);
+  /** A plan's time in the strip, as its popover cell says it. */
+  const planTime = (ring: RingAccount): CellTime => {
+    const time = cellTime(ring, null, now);
     return time.kind === "stop" && time.guess
       ? { ...time, figure: `~${time.figure}` }
       : time;
-  });
-  const goWeek = $derived(openCode ? weekLeft(openCode) : null);
+  };
   /** Claude's figure in the strip and the head: the stop, or when it's back. */
   const stop = $derived(claude ? stopFigure(claude, now, nameOf) : null);
 
@@ -459,8 +514,8 @@
         `Claude · ${stop.said} · ${plain(caption(claude, now, nameOf))}`
       );
     }
-    if (openCode) {
-      said.push(cellLabel(openCode, null, "opencode Go"));
+    for (const plan of plans) {
+      said.push(cellLabel(plan.ring, null, plan.said));
     }
     return `${said.join(". ")}. Show every limit.`;
   });
@@ -596,51 +651,56 @@
           >
         </span>
       {/if}
-      {#if openCode}
-        <span
-          class="flex h-c-usage-strip-row flex-none flex-col justify-center gap-space-1"
-          data-cell="opencode"
-        >
+      {#each planGroups as group (group.id)}
+        {#each group.plans as plan (plan.ring.id)}
+          {@const time = planTime(plan.ring)}
+          {@const week = weekLeft(plan.ring)}
+          {@const Mark = plan.mark}
           <span
-            class="flex h-icon-md min-w-0 items-center gap-space-2 whitespace-nowrap"
+            class="flex h-c-usage-strip-row flex-none flex-col justify-center gap-space-1"
+            data-cell={group.id}
           >
             <span
-              data-slot="mark"
-              aria-hidden="true"
-              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
-              ><OpenCodeLogo class="size-full" /></span
+              class="flex h-icon-md min-w-0 items-center gap-space-2 whitespace-nowrap"
             >
-            <Rings reveal ring={openCode} size={16} />
-            <!-- As its popover cell says it: how long it lasts, or at its
+              <span
+                data-slot="mark"
+                aria-hidden="true"
+                class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+                ><Mark class="size-full" /></span
+              >
+              <Rings reveal ring={plan.ring} size={16} />
+              <!-- As its popover cell says it: how long it lasts, or at its
                  limit the refresh mark and when it's back: 12px, Solar
                  duotone, muted. -->
-            {#if goTime?.kind === "back"}
+              {#if time.kind === "back"}
+                <span
+                  aria-hidden="true"
+                  class="inline-grid flex-none text-ink-muted"
+                  ><IconRefresh class="size-icon-sm" /></span
+                >
+              {/if}
               <span
-                aria-hidden="true"
-                class="inline-grid flex-none text-ink-muted"
-                ><IconRefresh class="size-icon-sm" /></span
+                class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong"
+                data-strip-go-time
+                ><span class="mono-figure"
+                  ><Figure text={time.figure ?? ""} /></span
+                ></span
+              >
+            </span>
+            {#if week !== null}
+              <!-- mark-line: one clamped line of text; the week ring stands in
+                 it on vertical-align: middle, the x-height's middle -->
+              <span
+                class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+                data-strip-go-week
+                ><WeekMark ring={plan.ring} />
+                <span class="mono-figure">{week}%</span></span
               >
             {/if}
-            <span
-              class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong"
-              data-strip-go-time
-              ><span class="mono-figure"
-                ><Figure text={goTime?.figure ?? ""} /></span
-              ></span
-            >
           </span>
-          {#if goWeek !== null}
-            <!-- mark-line: one clamped line of text; the week ring stands in
-                 it on vertical-align: middle, the x-height's middle -->
-            <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
-              data-strip-go-week
-              ><WeekMark ring={openCode} />
-              <span class="mono-figure">{goWeek}%</span></span
-            >
-          {/if}
-        </span>
-      {/if}
+        {/each}
+      {/each}
     </span>
   {/if}
 {/snippet}
@@ -781,9 +841,9 @@
        slot, how long it lasts, the week's mark and its share on the second.
        Read out whole with the words its marks stand for. A re-ranking slides
        it to its new place (motion/rows). -->
-  {@const go = c === null}
-  {@const name = go
-    ? { local: "opencode Go", domain: "" }
+  {@const plan = c === null ? planOf(ring.id) : undefined}
+  {@const name = plan
+    ? { local: plan.name, domain: "" }
     : (names.get(ring.id) ?? { local: ring.name, domain: "" })}
   {@const shown = `${name.local}${name.domain}`}
   <!-- A cell: one row on its column's five tracks (subgrid), space-1 in on
@@ -799,7 +859,7 @@
   <div
     data-usage-cell
     {...props}
-    aria-label={cellLabel(ring, c, shown)}
+    aria-label={cellLabel(ring, c, plan?.said ?? shown)}
     class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-row-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
@@ -821,12 +881,13 @@
     <span
       class="col-span-3 col-start-3 row-1 flex h-auto min-w-0 items-center gap-space-1 whitespace-normal"
     >
-      {#if go}
+      {#if plan}
+        {@const Mark = plan.mark}
         <span
           data-slot="mark"
           aria-hidden="true"
           class="inline-flex size-icon-md flex-none overflow-hidden rounded-xs"
-          ><OpenCodeLogo class="size-full" /></span
+          ><Mark class="size-full" /></span
         >
       {/if}
       <!-- The name strong, the domain's stem (where it is needed) quiet
@@ -1017,28 +1078,31 @@
                 {/each}
               </div>
             {/each}
-            {#if openCode}
-              <!-- The Go plan on the same grid, so its marks stand on
-                   Claude's x's: a cell of the same recipe on the first
-                   column, named by its provider, after the hairline that
-                   parts the providers, drawn edge to edge. -->
-              <div data-slot="block" class="contents" data-org-group="opencode">
+            {#each planGroups as group (group.id)}
+              <!-- The plans on the same grid, so their marks stand on
+                   Claude's x's: cells of the same recipe from the first
+                   column, each named by its provider (an Antigravity group
+                   by its scope, after Antigravity's mark), after the
+                   hairline that parts the providers, drawn edge to edge. -->
+              <div data-slot="block" class="contents" data-org-group={group.id}>
                 <!-- The providers' hairline, inside the wall's grid: across
                      the whole popover, edge to edge, as a section's edge
                      is: `border: 0`, then its top edge. -->
                 <hr
                   class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-border-hairline"
                 />
-                {@render cell(openCode, null, sideFor())}
+                {#each group.plans as plan (plan.ring.id)}
+                  {@render cell(plan.ring, null, sideFor())}
+                {/each}
               </div>
-            {/if}
+            {/each}
           </div>
         </div>
       {/if}
-      {#if openCode && !claude}
-        <!-- The Go plan: a cell of the same recipe on the wall's first
-             column, named by its provider; the hairline before it parts it
-             from Claude's. -->
+      {#if plans.length > 0 && !claude}
+        <!-- The plans: cells of the same recipe from the wall's first
+             column, each named by its provider; the hairline between two
+             providers parts them. -->
         <section
           data-slot="group"
           class="group flex flex-col gap-space-2 px-space-3 py-space-2"
@@ -1049,7 +1113,18 @@
             data-flyover-span
             style:--wall-cols={"repeat(2, auto var(--spacing-icon-sm) minmax(0, 1fr) var(--spacing-icon-sm) auto)"}
           >
-            {@render cell(openCode, null, sideFor())}
+            {#each planGroups as group, i (group.id)}
+              <div data-slot="block" class="contents" data-org-group={group.id}>
+                {#if i > 0}
+                  <hr
+                    class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-border-hairline"
+                  />
+                {/if}
+                {#each group.plans as plan (plan.ring.id)}
+                  {@render cell(plan.ring, null, sideFor())}
+                {/each}
+              </div>
+            {/each}
           </div>
         </section>
       {/if}

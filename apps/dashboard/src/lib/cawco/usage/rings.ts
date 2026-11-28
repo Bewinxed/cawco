@@ -21,6 +21,7 @@ import {
   type NameableAccount,
   type ProviderForecast,
   type ProviderRouting,
+  scopeBears,
   type WindowForecast,
 } from "@cawco/core/accounts";
 import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
@@ -502,17 +503,90 @@ export function claudeRings(input: {
   };
 }
 
+/** A plan's windows as a reading carries them: opencode Go's, an Antigravity group's. */
+interface PlanReading {
+  fetchedAt: number;
+  stale?: boolean;
+  windows: LimitWindow[];
+}
+
 /**
  * Opencode's plan as one ring: its own 5-hour, week and month windows. It
  * goes by amber unless a Claude account shown beside it (`worn`) does.
  */
 export function openCodeRing(
-  reading: { fetchedAt: number; stale?: boolean; windows: LimitWindow[] },
+  reading: PlanReading,
   live: InstanceRow[],
   now: number,
   worn: readonly AccountHue[]
 ): RingAccount {
   const [hue = "amber"] = shownHues(["amber"], worn);
+  return planRing({ id: "opencode", name: "Go plan", hue }, reading, live, now);
+}
+
+/** An Antigravity account as {@link antigravityRings} reads it. */
+export interface AgyRingAccount {
+  hue: AccountHue;
+  id: string;
+  /** What it is called among the Antigravity accounts shown. */
+  name: string;
+}
+
+/**
+ * Each Antigravity account's model groups as rings, the Go plan's recipe
+ * each: a group's own 5-hour and week windows, named by its scope ("Gemini",
+ * "Claude and GPT"; with more than one account, after the account's name),
+ * its sessions the live ones on the account whose model the group holds
+ * (core `scopeBears`). The account's own hue goes to its first group; each
+ * ring after takes one nobody shown beside it (`worn`) wears.
+ */
+export function antigravityRings(
+  accounts: readonly { account: AgyRingAccount; reading: PlanReading }[],
+  live: InstanceRow[],
+  now: number,
+  worn: readonly AccountHue[]
+): RingAccount[] {
+  const groups = accounts.flatMap(({ account, reading }) =>
+    [
+      ...new Set(
+        reading.windows.flatMap((w) => (w.scopeLabel ? [w.scopeLabel] : []))
+      ),
+    ].map((scope) => ({ account, reading, scope }))
+  );
+  const hues = shownHues(
+    groups.map((group) => group.account.hue),
+    worn
+  );
+  return groups.map(({ account, reading, scope }, i) =>
+    planRing(
+      {
+        id: `${account.id}:${scope}`,
+        name: accounts.length > 1 ? `${account.name} · ${scope}` : scope,
+        hue: hues[i] ?? account.hue,
+      },
+      {
+        ...reading,
+        windows: reading.windows.filter((w) => w.scopeLabel === scope),
+      },
+      live.filter(
+        (row) =>
+          row.accountId === account.id &&
+          isLive(row) &&
+          scopeBears(scope, row.model ?? null)
+      ),
+      now
+    )
+  );
+}
+
+/** A plan's windows as one ring: its 5-hour, week and month, by their groups. */
+function planRing(
+  plan: { hue: AccountHue; id: string; name: string },
+  reading: PlanReading,
+  live: InstanceRow[],
+  now: number
+): RingAccount {
+  const { hue } = plan;
   const win = (group: string): RingWindow | null => {
     const w = reading.windows.find((one) => one.group === group);
     if (!w) {
@@ -550,10 +624,10 @@ export function openCodeRing(
     limitOn = spent[0] === "5h" ? "5h" : "week";
   }
   return {
-    id: "opencode",
-    name: "Go plan",
+    id: plan.id,
+    name: plan.name,
     // The plan has no email; it goes by its name.
-    nick: "Go plan",
+    nick: plan.name,
     email: null,
     org: null,
     hue,

@@ -129,6 +129,10 @@ export const usageStore = {
   get accountLimits(): Readonly<Record<string, ClaudeLimits>> {
     return { ...usageState.usageLimits, ...usageState.agyLimits };
   },
+  /** Every Antigravity account's own limits, by account id. */
+  get agyLimits(): Readonly<Record<string, ClaudeLimits>> {
+    return usageState.agyLimits;
+  },
   /** Every machine's OpenCode Go windows, by machineId. */
   get openCodeGoLimits(): Readonly<Record<string, OpenCodeGoLimits>> {
     return usageState.openCodeGoLimits;

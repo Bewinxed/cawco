@@ -11,7 +11,12 @@
  * place, with nothing animated for it.
  */
 
-import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
+import {
+  accountNames,
+  type CarrySpan,
+  type ProviderForecast,
+} from "@cawco/core/accounts";
+import { AGY_PROVIDER } from "@cawco/core/harness/agy-account";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hub } from "#lib/platform/hub.js";
 import { hubAsk } from "#lib/platform/hub-read.js";
@@ -21,6 +26,7 @@ import { boardStore } from "../stores/board.svelte";
 import { usageStore } from "../stores/usage.svelte";
 import { speakingReading } from "../usage";
 import {
+  antigravityRings,
   type ClaudeRings,
   claudeRings,
   openCodeRing,
@@ -141,6 +147,43 @@ const openCode = $derived.by((): RingAccount | null => {
   );
 });
 
+/**
+ * Antigravity's accounts as rings, one per model group (rings.ts
+ * `antigravityRings`), in the accounts' order; none without a reading.
+ */
+const antigravity = $derived.by((): RingAccount[] => {
+  if (staged) {
+    return [];
+  }
+  const view = accountsStore.accounts;
+  if (!view) {
+    return [];
+  }
+  const accounts = view.accounts.filter(
+    (account) => account.provider === AGY_PROVIDER
+  );
+  const names = accountNames(accounts);
+  const read = accounts.flatMap((account) => {
+    const reading = usageStore.agyLimits[account.id];
+    return reading && reading.windows.length > 0
+      ? [
+          {
+            account: {
+              id: account.id,
+              hue: account.hue,
+              name: names.get(account.id) ?? account.id,
+            },
+            reading,
+          },
+        ]
+      : [];
+  });
+  return antigravityRings(read, boardStore.runningInstances, state.now, [
+    ...(claude?.accounts.map((ring) => ring.hue) ?? []),
+    ...(openCode ? [openCode.hue] : []),
+  ]);
+});
+
 export const usage = {
   /** Claude's accounts as Rings, and the carry answer; null without a reading. */
   get claude() {
@@ -149,6 +192,10 @@ export const usage = {
   /** Opencode Go's plan as one ring; null without a reading. */
   get openCode() {
     return openCode;
+  },
+  /** Antigravity's accounts as rings, one per model group; empty without a reading. */
+  get antigravity() {
+    return antigravity;
   },
   /** Who carries your new sessions across the 5-hour horizon, span by span. */
   get spans(): CarrySpan[] {

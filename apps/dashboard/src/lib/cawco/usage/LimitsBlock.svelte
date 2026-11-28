@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { InstanceRow } from "@cawco/core/protocol";
-  import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
+  import {
+    LogoClaude as ClaudeIcon,
+    LogoAntigravity,
+  } from "@cawco/icons/marks";
   /**
    * The page's lead, as Rings: can you keep going, on which account, what
    * happens when it runs out, and when an account is back. It leads with
@@ -8,7 +11,8 @@
    * sentence; then one tile per Claude account in carrying order, each its
    * double dial (the disc its 5-hour window, the rim its week, filled with
    * what is left), its figure, a sentence, its key and the sessions running
-   * on it; then opencode's plan the same way.
+   * on it; then opencode's plan the same way, then each Antigravity model
+   * group.
    *
    * Live: the forecast is read whenever the hub says an account moved
    * (usage/forecast.svelte.ts), and the words move on once a minute.
@@ -49,6 +53,7 @@
 
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
+  const antigravity = $derived(usage.antigravity);
   const now = $derived(usage.now);
   const read = $derived(usage.read && usageStore.usageLimitsRead);
 
@@ -66,9 +71,9 @@
   );
 
   /**
-   * The lead: Claude's answer, or opencode's when it is the only plan, in
-   * the popover's words; at opencode's limit, the refresh mark and how long
-   * until it's back.
+   * The lead: Claude's answer, or opencode's when it is the only plan, or
+   * else Antigravity's first group, in the popover's words; at the plan's
+   * limit, the refresh mark and how long until it's back.
    */
   const lead = $derived.by(
     (): { back: boolean; figure: string; of: string; say: Part[] } | null => {
@@ -81,13 +86,14 @@
           say: leadSentence(claude, now),
         };
       }
-      if (openCode) {
-        const go = openCodeFigure(openCode, now);
+      const plan = openCode ?? antigravity[0];
+      if (plan) {
+        const go = openCodeFigure(plan, now);
         return {
           back: go.back,
           figure: go.figure,
           of: go.back ? "until it’s back" : go.label,
-          say: openCodeSentence(openCode, now),
+          say: openCodeSentence(plan, now),
         };
       }
       return null;
@@ -364,6 +370,33 @@
             >
           </p>
         {/if}
+      {/if}
+
+      {#if antigravity.length > 0}
+        <div
+          class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+        >
+          <span
+            data-slot="glyph"
+            aria-hidden="true"
+            class="inline-flex size-icon-md"
+            data-box><LogoAntigravity class="size-full" /></span
+          >
+          <span data-slot="name">Antigravity</span>
+        </div>
+        <div
+          data-slot="grid"
+          class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+        >
+          {#each antigravity as ring, i (ring.id)}
+            {@render tile(
+              ring,
+              i,
+              openCodeFigure(ring, now),
+              openCodeSentence(ring, now)
+            )}
+          {/each}
+        </div>
       {/if}
     </div>
   {/if}
