@@ -1,11 +1,11 @@
 /**
  * One scrim, however many held surfaces stand open (DESIGN.md, Materials:
- * "the page's own background at 72% with a 2px blur, behind dialogs and
- * sheets"). A dialog opened over a sheet (a document over Caw's sheet)
+ * "the page's own background at its share, behind dialogs and sheets",
+ * no blur). A dialog opened over a sheet (a document over Caw's sheet)
  * brought a second scrim, and the page lay under 92% of its background and
- * two blurs. Every kit scrim (the dialog's, alert dialog's, sheet's and
+ * two fills. Every kit scrim (the dialog's, alert dialog's, sheet's and
  * drawer's) joins this stack as it mounts: while one mounted before it is
- * still open, it is `data-stacked`, and draws no fill and no blur
+ * still open, it is `data-stacked`, and draws no fill
  * (`scrimVariants`), still taking the presses outside its surface. When the
  * one under it closes, it draws the scrim.
  */

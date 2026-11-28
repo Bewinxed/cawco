@@ -11,9 +11,6 @@
     --pswp-error-text-color: var(--color-ink-muted);
     color: var(--color-ink-strong);
 
-    & .pswp__bg {
-      backdrop-filter: blur(var(--scrim-blur));
-    }
     & .pswp__top-bar {
       gap: var(--spacing-space-2);
       padding: var(--spacing-space-2);
