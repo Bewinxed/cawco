@@ -151,6 +151,7 @@ import {
 } from "./measure";
 import { nameOf, thingOf } from "./names";
 import {
+  type BodyWidth,
   type Column,
   canvasOf,
   detailsOf,
@@ -554,14 +555,25 @@ const idsIn = (layer: Element): string[] =>
  * tooltip's), as a layer portalled out of its drawing (bits-ui's Portal,
  * to the body) is named; else at the one drawing with a trigger open
  * (`aria-expanded`), else the one last pressed or focused in, else the
- * only one. A drawing of no width of its own answers the window's, as
- * does a layer of none of `drawings` (a hidden drawing read against the
- * stage's, the rig's probes).
+ * only one. A drawing sized at no px width (its content's, or the page's
+ * own window under Adapt, where the drawing is the window) answers the
+ * window's, as does a layer of none of `drawings` (a hidden drawing read
+ * against the stage's, the rig's probes). Its width is the px it was sized
+ * at (`widthOf`, runtime.ts `sizeBody`) times `scale`, the zoom it stands
+ * at on screen, so `innerWidth` and the root's client width read no layout
+ * (a drawer reads `innerWidth` in each `resize`); only the visual
+ * viewport reads its box, for its left.
  */
-function drawingsAsViewport(drawings: () => HTMLElement[]): void {
-  /** The drawings that answer as a viewport: drawn, with a width of their own. */
+function drawingsAsViewport(
+  drawings: () => HTMLElement[],
+  widthOf: (body: HTMLElement) => BodyWidth,
+  scale: () => number
+): void {
+  /** The drawings that answer as a viewport: drawn, sized at a px width of their own. */
   const widthy = () =>
-    drawings().filter((body) => body.isConnected && body.style.width !== "");
+    drawings().filter(
+      (body) => body.isConnected && typeof widthOf(body) === "number"
+    );
   /** The drawing last pressed or focused in, where a menu or a popover opens from. */
   let touched: HTMLElement | null = null;
   /** The person has pressed, typed or scrolled here: a focus from then on is theirs. */
@@ -645,9 +657,15 @@ function drawingsAsViewport(drawings: () => HTMLElement[]): void {
     }
     return open.length === 0 && among.length === 1 ? (among[0] ?? null) : null;
   };
-  frameAsViewport(
-    (layer) => (layerDrawing(layer) ?? asked())?.getBoundingClientRect() ?? null
-  );
+  const answering = (layer: Element | null) => layerDrawing(layer) ?? asked();
+  frameAsViewport({
+    width: (layer) => {
+      const body = answering(layer);
+      const width = body ? widthOf(body) : null;
+      return typeof width === "number" ? width * scale() : null;
+    },
+    box: (layer) => answering(layer)?.getBoundingClientRect() ?? null,
+  });
 }
 
 /** Every element `queries` find that `on` names, by the query a play would make (core stage-play.ts). */
@@ -2424,7 +2442,11 @@ export function bootStage(page: Page): Mode {
     }
   });
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
-  drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
+  drawingsAsViewport(
+    () => (live && !frame.hidden ? [drawing] : []),
+    page.widthOfBody,
+    () => Number(frame.style.zoom) || 1
+  );
 
   window.addEventListener(STAGE_REACH, (event) => {
     const asking = stageReachOf(event.detail);
@@ -3384,8 +3406,10 @@ function bootColumn(page: Page): Mode {
   }
 
   // Each layer a drawing opens collides with that drawing, as with the app's window at its width.
-  drawingsAsViewport(() =>
-    drawn().flatMap((one) => (one.live && !one.fault ? [one.body] : []))
+  drawingsAsViewport(
+    () => drawn().flatMap((one) => (one.live && !one.fault ? [one.body] : [])),
+    page.widthOfBody,
+    () => zoom
   );
   if (!embed) {
     new ResizeObserver(() => fit()).observe(canvas);

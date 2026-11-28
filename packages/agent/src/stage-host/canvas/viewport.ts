@@ -95,15 +95,23 @@ function asFrame(real: VisualViewport, frame: DOMRect): VisualViewport {
   };
 }
 
+/** Where a frame stands as a viewport to the element that asks, each part read only where it is asked. */
+export interface FrameViewport {
+  /** Its box on screen, for the visual viewport's left alone. Null: the window's own. */
+  box: (asking: Element | null) => DOMRect | null;
+  /** Its width on screen, from what it is sized at: no layout is read for it. Null: the window's own. */
+  width: (asking: Element | null) => number | null;
+}
+
 /**
- * Has the viewport answer at `frame(asking)`'s box, where it names one
- * (null: the window's own), `asking` the element that asks (the layer
- * floating-ui places): the visual viewport, the root's client width and
- * `innerWidth`, at the frame's own left and right.
+ * Has the viewport answer at `frame`'s, where it names one (null: the
+ * window's own), `asking` the element that asks (the layer floating-ui
+ * places): `innerWidth` and the root's client width at the frame's width,
+ * read from what it is sized at, so a read inside the window's `resize`
+ * (a drawer's snap points) lays nothing out; the visual viewport at the
+ * frame's box, its own left and right.
  */
-export function frameAsViewport(
-  frame: (asking: Element | null) => DOMRect | null
-): void {
+export function frameAsViewport(frame: FrameViewport): void {
   Object.defineProperty(Element.prototype, "ownerDocument", {
     configurable: true,
     get(this: Element) {
@@ -111,23 +119,22 @@ export function frameAsViewport(
       return ownerDocumentOf(this);
     },
   });
-  const box = (): DOMRect | null => frame(asking);
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
-    get: () => box()?.width ?? windowWidth(),
+    get: () => frame.width(asking) ?? windowWidth(),
   });
   Object.defineProperty(window, "visualViewport", {
     configurable: true,
     get: () => {
       const real = visualViewportOf(window);
-      const at = box();
+      const at = frame.box(asking);
       return real && at ? asFrame(real, at) : real;
     },
   });
   Object.defineProperty(document.documentElement, "clientWidth", {
     configurable: true,
     get(this: HTMLElement) {
-      return box()?.width ?? clientWidthOf(this);
+      return frame.width(asking) ?? clientWidthOf(this);
     },
   });
 }
